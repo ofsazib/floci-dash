@@ -13,17 +13,24 @@ export default function ServiceCard({ serviceKey, status }: Props) {
   const isRunning = status === "running";
   const accent = isRunning ? "#037f0c" : "#d89914";
 
+  const handleClick = () => {
+    navigate(`/services/${serviceKey}`);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      navigate(`/services/${serviceKey}`);
+    }
+  };
+
   return (
     <div
       role="button"
       tabIndex={0}
-      onClick={() => navigate(`/services/${serviceKey}`)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          navigate(`/services/${serviceKey}`);
-        }
-      }}
+      onClick={handleClick}
+      onKeyDown={handleKeyDown}
+      aria-label={`Open ${label}`}
       style={{
         cursor: "pointer",
         padding: "16px 18px",
@@ -35,11 +42,12 @@ export default function ServiceCard({ serviceKey, status }: Props) {
         gap: 12,
         transition: "all 0.15s ease",
         outline: "none",
+        userSelect: "none",
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = `${accent}88`;
+        e.currentTarget.style.borderColor = accent;
         e.currentTarget.style.transform = "translateY(-1px)";
-        e.currentTarget.style.boxShadow = `0 3px 10px ${accent}18`;
+        e.currentTarget.style.boxShadow = `0 3px 12px ${accent}28`;
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.borderColor = `${accent}33`;

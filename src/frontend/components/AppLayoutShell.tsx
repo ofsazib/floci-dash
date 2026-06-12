@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { AppLayout, SideNavigation, TopNavigation } from "@cloudscape-design/components";
-import { applyMode, Mode } from "@cloudscape-design/global-styles";
 import type { SideNavigationProps } from "@cloudscape-design/components";
 import { useHealth } from "../hooks/useSystem";
 import { useSettings } from "../stores/settings";
@@ -20,9 +19,9 @@ export default function AppLayoutShell({ children }: Props) {
   const { data: health } = useHealth();
   const { darkMode, toggleDarkMode } = useSettings();
 
-  // Apply dark mode using Cloudscape's stable public API
   useEffect(() => {
-    applyMode(darkMode ? Mode.Dark : Mode.Light);
+    document.body.classList.toggle("awsui-dark-mode", darkMode);
+    document.documentElement.classList.toggle("awsui-dark-mode", darkMode);
   }, [darkMode]);
 
   const currentPath = location.pathname;
@@ -30,8 +29,7 @@ export default function AppLayoutShell({ children }: Props) {
   const total = health?.stats?.total ?? 0;
 
   const navItems: SideNavigationProps.Item[] = [
-    { type: "link", text: "Dashboard", href: "/" },
-    { type: "link", text: `Services (${running}/${total})`, href: "/" },
+    { type: "link", text: "Dashboard", href: "/#/" },
     { type: "divider" },
   ];
 
@@ -42,12 +40,12 @@ export default function AppLayoutShell({ children }: Props) {
         .map((s) => ({
           type: "link" as const,
           text: SERVICE_LABELS[s] || s,
-          href: `/services/${s}`,
+          href: `/#/services/${s}`,
         }));
       if (items.length > 0) {
         navItems.push({
           type: "section-group" as const,
-          title: category,
+          title: `${category} (${items.length})`,
           items: items as SectionItem[],
         });
       }
@@ -55,28 +53,26 @@ export default function AppLayoutShell({ children }: Props) {
   }
 
   navItems.push({ type: "divider" });
-  navItems.push({ type: "link", text: "Settings", href: "/settings" });
+  navItems.push({ type: "link", text: "Settings", href: "/#/settings" });
 
   return (
     <>
       <div id="header">
         <TopNavigation
           identity={{
-            href: "/",
-            title: "Floci Dashboard",
-            logo: {
-              src: "/favicon.svg",
-              alt: "Floci",
-            },
+            href: "/#/",
+            title: "Floci",
+            logo: { src: "/favicon.svg", alt: "Floci" },
           }}
           utilities={[
             {
               type: "button",
-              text: darkMode ? "Light" : "Dark",
+              text: darkMode ? "Light mode" : "Dark mode",
               onClick: toggleDarkMode,
               iconName: "settings",
             },
           ]}
+          i18nStrings={{ searchIconAriaLabel: "Search", overflowMenuTriggerText: "More" }}
         />
       </div>
       <AppLayout
@@ -85,8 +81,13 @@ export default function AppLayoutShell({ children }: Props) {
         onNavigationChange={(e) => setNavOpen(e.detail.open)}
         navigation={
           <SideNavigation
-            header={{ text: "Services", href: "/" }}
+            header={{ text: `Floci (${running}/${total})`, href: "/#/" }}
             activeHref={currentPath || "/"}
+            onFollow={(e) => {
+              e.preventDefault();
+              const path = e.detail.href.replace("/#", "");
+              navigate(path || "/");
+            }}
             items={navItems}
           />
         }

@@ -15,18 +15,14 @@ export default function ServiceGrid({ services }: Props) {
 
         return (
           <div key={category}>
-            <Box
-              variant="h3"
-              padding={{ bottom: "s" }}
-              color="text-body-secondary"
-            >
+            <Box variant="h3" padding={{ bottom: "m" }} color="text-body-secondary">
               {category}
             </Box>
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
-                gap: "10px",
+                gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+                gap: "12px",
               }}
             >
               {categoryServices.map((key) => (
