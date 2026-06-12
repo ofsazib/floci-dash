@@ -16,6 +16,8 @@ import {
   StatusIndicator,
   Spinner,
   Alert,
+  Tabs,
+  ColumnLayout,
 } from "@cloudscape-design/components";
 import { useHealth } from "../hooks/useSystem";
 import { getServiceLabel } from "../types/services";
@@ -35,7 +37,6 @@ export default function ServicePage() {
   const navigate = useNavigate();
   const { data: health } = useHealth();
 
-  // S3 state (must come before hook calls that reference state)
   const [selectedBucket, setSelectedBucket] = useState<string | null>(null);
   const [selectedObject, setSelectedObject] = useState<string | null>(null);
   const [showCreateBucket, setShowCreateBucket] = useState(false);
@@ -44,7 +45,6 @@ export default function ServicePage() {
   const [uploadKey, setUploadKey] = useState("");
   const [uploadBody, setUploadBody] = useState("");
 
-  // S3 mutations
   const createBucket = useS3CreateBucket();
   const uploadObject = useS3UploadObject(selectedBucket || "");
 
@@ -60,7 +60,7 @@ export default function ServicePage() {
           <SpaceBetween size="xs">
             <BreadcrumbGroup
               items={[
-                { text: "All Services", href: "/#/" },
+                { text: "Dashboard", href: "/#/" },
                 { text: label, href: `/#/services/${service}` },
               ]}
               onFollow={(e) => {
@@ -84,14 +84,15 @@ export default function ServicePage() {
     );
   }
 
-  // S3 service
+  const s3Status = (health?.services["s3"] || "available") as "running" | "available";
+
   return (
     <ContentLayout
       header={
         <SpaceBetween size="xs">
           <BreadcrumbGroup
             items={[
-              { text: "All Services", href: "/#/" },
+              { text: "Dashboard", href: "/#/" },
               ...(selectedBucket
                 ? [
                     { text: "S3", href: "/#/services/s3" },
@@ -109,33 +110,46 @@ export default function ServicePage() {
               }
             }}
           />
-          <Header variant="h1">
-            S3{" "}
-            <StatusBadge status={(health?.services["s3"] || "available") as "running" | "available"} />
+          <Header
+            variant="h1"
+            description="Scalable object storage — manage buckets and objects"
+            info={<StatusBadge status={s3Status} />}
+          >
+            S3
           </Header>
         </SpaceBetween>
       }
     >
-      {selectedBucket ? (
-        <S3ObjectBrowser
-          bucket={selectedBucket}
-          selectedObject={selectedObject}
-          onSelectObject={setSelectedObject}
-          onBack={() => { setSelectedBucket(null); setSelectedObject(null); }}
-          onUploadClick={() => setShowUploadObject(true)}
-        />
-      ) : (
-        <S3BucketList
-          onSelectBucket={(name) => setSelectedBucket(name)}
-          onCreateClick={() => setShowCreateBucket(true)}
-        />
-      )}
+      <Tabs
+        tabs={[
+          {
+            label: "Buckets",
+            id: "buckets",
+            content: selectedBucket ? (
+              <S3ObjectBrowser
+                bucket={selectedBucket}
+                selectedObject={selectedObject}
+                onSelectObject={setSelectedObject}
+                onBack={() => { setSelectedBucket(null); setSelectedObject(null); }}
+                onUploadClick={() => setShowUploadObject(true)}
+              />
+            ) : (
+              <S3BucketList
+                onSelectBucket={setSelectedBucket}
+                onCreateClick={() => setShowCreateBucket(true)}
+              />
+            ),
+          },
+          { label: "Overview", id: "overview", content: <S3Overview /> },
+        ]}
+      />
 
       {/* Create Bucket Modal */}
       <Modal
         visible={showCreateBucket}
         onDismiss={() => { setShowCreateBucket(false); setNewBucketName(""); }}
         header="Create Bucket"
+        size="medium"
         footer={
           <Box float="right">
             <SpaceBetween direction="horizontal" size="xs">
@@ -151,7 +165,7 @@ export default function ServicePage() {
                   }
                 }}
               >
-                Create
+                Create bucket
               </Button>
             </SpaceBetween>
           </Box>
@@ -159,10 +173,17 @@ export default function ServicePage() {
       >
         <Form>
           {createBucket.isError && (
-            <Alert type="error">{(createBucket.error as Error)?.message || "Failed to create bucket"}</Alert>
+            <Alert type="error" dismissible>{(createBucket.error as Error)?.message || "Failed to create bucket"}</Alert>
           )}
-          <FormField label="Bucket name">
-            <Input value={newBucketName} onChange={(e) => setNewBucketName(e.detail.value)} placeholder="my-bucket" />
+          <FormField
+            label="Bucket name"
+            description="Must be globally unique. Use lowercase letters, numbers, and hyphens."
+          >
+            <Input
+              value={newBucketName}
+              onChange={(e) => setNewBucketName(e.detail.value)}
+              placeholder="my-bucket"
+            />
           </FormField>
         </Form>
       </Modal>
@@ -171,7 +192,8 @@ export default function ServicePage() {
       <Modal
         visible={showUploadObject}
         onDismiss={() => { setShowUploadObject(false); setUploadKey(""); setUploadBody(""); }}
-        header="Upload Object"
+        header={`Upload to ${selectedBucket}`}
+        size="large"
         footer={
           <Box float="right">
             <SpaceBetween direction="horizontal" size="xs">
@@ -195,13 +217,13 @@ export default function ServicePage() {
       >
         <Form>
           {uploadObject.isError && (
-            <Alert type="error">{(uploadObject.error as Error)?.message || "Failed to upload object"}</Alert>
+            <Alert type="error" dismissible>{(uploadObject.error as Error)?.message || "Failed to upload"}</Alert>
           )}
-          <FormField label="Object key">
-            <Input value={uploadKey} onChange={(e) => setUploadKey(e.detail.value)} placeholder="folder/file.txt" />
+          <FormField label="Key" description="Object key, e.g. folder/file.txt">
+            <Input value={uploadKey} onChange={(e) => setUploadKey(e.detail.value)} placeholder="path/to/file.txt" />
           </FormField>
           <FormField label="Content">
-            <Textarea value={uploadBody} onChange={(e) => setUploadBody(e.detail.value)} rows={8} placeholder="Enter object content..." />
+            <Textarea value={uploadBody} onChange={(e) => setUploadBody(e.detail.value)} rows={10} placeholder="Enter content..." />
           </FormField>
         </Form>
       </Modal>
@@ -209,37 +231,89 @@ export default function ServicePage() {
   );
 }
 
-// Sub-component: Bucket List
+// S3 Overview tab
+function S3Overview() {
+  const { data } = useS3Buckets();
+  const bucketCount = data?.total ?? 0;
+
+  return (
+    <Box padding={{ top: "l" }}>
+      <ColumnLayout columns={3} variant="text-grid">
+        <div style={{ padding: 20, borderRadius: 10, border: "1px solid #539fe533" }}>
+          <Box variant="small" color="text-body-secondary">Buckets</Box>
+          <Box variant="h1" padding={{ top: "xxs" }}>
+            <span style={{ color: "#539fe5" }}>{bucketCount}</span>
+          </Box>
+        </div>
+        <div style={{ padding: 20, borderRadius: 10, border: "1px solid #037f0c33" }}>
+          <Box variant="small" color="text-body-secondary">Status</Box>
+          <Box variant="h4" padding={{ top: "xxs" }}>
+            <StatusIndicator type="success">Active</StatusIndicator>
+          </Box>
+        </div>
+        <div style={{ padding: 20, borderRadius: 10, border: "1px solid #a066ff33" }}>
+          <Box variant="small" color="text-body-secondary">Region</Box>
+          <Box variant="p" padding={{ top: "xxs" }}>
+            <span style={{ color: "#a066ff" }}>us-east-1</span>
+          </Box>
+        </div>
+      </ColumnLayout>
+    </Box>
+  );
+}
+
+// Bucket List
 function S3BucketList({ onSelectBucket, onCreateClick }: { onSelectBucket: (name: string) => void; onCreateClick: () => void }) {
   const { data, isLoading, isError, error } = useS3Buckets();
   const deleteBucket = useS3DeleteBucket();
 
   return (
     <Table
+      variant="full-page"
       header={
         <Header
+          variant="h2"
+          counter={`(${data?.total ?? 0})`}
           actions={
-            <SpaceBetween direction="horizontal" size="xs">
-              <Button variant="primary" onClick={onCreateClick}>Create bucket</Button>
-            </SpaceBetween>
+            <Button variant="primary" onClick={onCreateClick}>
+              Create bucket
+            </Button>
           }
         >
-          Buckets ({data?.total ?? 0})
+          Buckets
         </Header>
       }
       columnDefinitions={[
-        { id: "name", header: "Name", cell: (item: any) => <Button variant="link" onClick={() => onSelectBucket(item.name)}>{item.name}</Button>, isRowHeader: true },
-        { id: "created", header: "Created", cell: (item: any) => item.createdAt ? new Date(item.createdAt).toLocaleString() : "-" },
+        {
+          id: "name",
+          header: "Name",
+          cell: (item: any) => (
+            <Button variant="link" onClick={() => onSelectBucket(item.name)}>
+              {item.name}
+            </Button>
+          ),
+          isRowHeader: true,
+          width: 400,
+        },
+        {
+          id: "created",
+          header: "Created",
+          cell: (item: any) =>
+            item.createdAt ? new Date(item.createdAt).toLocaleString() : "—",
+        },
         {
           id: "actions",
           header: "",
+          width: 80,
           cell: (item: any) => (
             <Button
               variant="icon"
               iconName="remove"
+              ariaLabel={`Delete ${item.name}`}
               loading={deleteBucket.isPending && deleteBucket.variables === item.name}
               onClick={() => {
-                if (confirm(`Delete bucket "${item.name}"?`)) deleteBucket.mutate(item.name);
+                if (confirm(`Permanently delete bucket "${item.name}"?`))
+                  deleteBucket.mutate(item.name);
               }}
             />
           ),
@@ -250,13 +324,20 @@ function S3BucketList({ onSelectBucket, onCreateClick }: { onSelectBucket: (name
       loadingText="Loading buckets..."
       empty={
         isError ? (
-          <Box textAlign="center">
-            <StatusIndicator type="error">{(error as Error)?.message || "Failed to load buckets"}</StatusIndicator>
+          <Box textAlign="center" padding={{ top: "xl" }}>
+            <StatusIndicator type="error">
+              {(error as Error)?.message || "Failed to load buckets"}
+            </StatusIndicator>
           </Box>
         ) : (
-          <Box textAlign="center" padding={{ top: "l" }}>
-            <Box variant="p" padding={{ bottom: "s" }}>No buckets found</Box>
-            <Button onClick={onCreateClick}>Create your first bucket</Button>
+          <Box textAlign="center" padding={{ top: "xxl", bottom: "xxl" }}>
+            <Box variant="h3" padding={{ bottom: "s" }}>No buckets</Box>
+            <Box variant="p" color="text-body-secondary" padding={{ bottom: "l" }}>
+              Create your first bucket to start storing objects in S3.
+            </Box>
+            <Button variant="primary" onClick={onCreateClick}>
+              Create bucket
+            </Button>
           </Box>
         )
       }
@@ -264,7 +345,7 @@ function S3BucketList({ onSelectBucket, onCreateClick }: { onSelectBucket: (name
   );
 }
 
-// Sub-component: Object Browser
+// Object Browser
 function S3ObjectBrowser({
   bucket,
   selectedObject,
@@ -282,69 +363,86 @@ function S3ObjectBrowser({
   const deleteObject = useS3DeleteObject(bucket);
 
   if (selectedObject) {
-    return (
-      <S3ObjectViewer
-        bucket={bucket}
-        objectKey={selectedObject}
-        onBack={() => onSelectObject(null)}
-      />
-    );
+    return <S3ObjectViewer bucket={bucket} objectKey={selectedObject} onBack={() => onSelectObject(null)} />;
   }
 
   return (
-    <SpaceBetween size="l">
-      <Box>
-        <SpaceBetween direction="horizontal" size="s">
-          <Button variant="link" onClick={onBack}>← Buckets</Button>
-          <Box variant="h3">{bucket}</Box>
-        </SpaceBetween>
-      </Box>
-      <Table
-        header={
-          <Header
-            actions={
-              <SpaceBetween direction="horizontal" size="xs">
-                <Button variant="primary" onClick={onUploadClick}>Upload object</Button>
-              </SpaceBetween>
-            }
-          >
-            Objects ({data?.total ?? 0})
-          </Header>
-        }
-        columnDefinitions={[
-          { id: "key", header: "Key", cell: (item: any) => <Button variant="link" onClick={() => onSelectObject(item.key)}>{item.key}</Button>, isRowHeader: true },
-          { id: "size", header: "Size", cell: (item: any) => formatBytes(item.size) },
-          { id: "modified", header: "Last Modified", cell: (item: any) => item.lastModified ? new Date(item.lastModified).toLocaleString() : "-" },
-          {
-            id: "actions",
-            header: "",
-            cell: (item: any) => (
-              <Button
-                variant="icon"
-                iconName="remove"
-                loading={deleteObject.isPending && deleteObject.variables === item.key}
-                onClick={() => {
-                  if (confirm(`Delete "${item.key}"?`)) deleteObject.mutate(item.key);
-                }}
-              />
-            ),
-          },
-        ]}
-        items={data?.objects || []}
-        loading={isLoading}
-        loadingText="Loading objects..."
-        empty={
-          <Box textAlign="center" padding={{ top: "l" }}>
-            <Box variant="p" padding={{ bottom: "s" }}>No objects in this bucket</Box>
-            <Button onClick={onUploadClick}>Upload your first object</Button>
+    <Table
+      variant="full-page"
+      header={
+        <Header
+          variant="h2"
+          counter={`(${data?.total ?? 0})`}
+          actions={
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="normal" onClick={onBack}>← Buckets</Button>
+              <Button variant="primary" onClick={onUploadClick}>Upload</Button>
+            </SpaceBetween>
+          }
+          description={bucket}
+        >
+          Objects
+        </Header>
+      }
+      columnDefinitions={[
+        {
+          id: "key",
+          header: "Key",
+          cell: (item: any) => (
+            <Button variant="link" onClick={() => onSelectObject(item.key)}>
+              {item.key}
+            </Button>
+          ),
+          isRowHeader: true,
+          width: 500,
+        },
+        {
+          id: "size",
+          header: "Size",
+          cell: (item: any) => formatBytes(item.size),
+        },
+        {
+          id: "modified",
+          header: "Last modified",
+          cell: (item: any) =>
+            item.lastModified
+              ? new Date(item.lastModified).toLocaleString()
+              : "—",
+        },
+        {
+          id: "actions",
+          header: "",
+          width: 80,
+          cell: (item: any) => (
+            <Button
+              variant="icon"
+              iconName="remove"
+              ariaLabel={`Delete ${item.key}`}
+              loading={deleteObject.isPending && deleteObject.variables === item.key}
+              onClick={() => {
+                if (confirm(`Delete "${item.key}"?`)) deleteObject.mutate(item.key);
+              }}
+            />
+          ),
+        },
+      ]}
+      items={data?.objects || []}
+      loading={isLoading}
+      loadingText="Loading objects..."
+      empty={
+        <Box textAlign="center" padding={{ top: "xxl", bottom: "xxl" }}>
+          <Box variant="h3" padding={{ bottom: "s" }}>No objects</Box>
+          <Box variant="p" color="text-body-secondary" padding={{ bottom: "l" }}>
+            This bucket is empty. Upload your first object.
           </Box>
-        }
-      />
-    </SpaceBetween>
+          <Button variant="primary" onClick={onUploadClick}>Upload object</Button>
+        </Box>
+      }
+    />
   );
 }
 
-// Sub-component: Object Viewer
+// Object Viewer
 function S3ObjectViewer({
   bucket,
   objectKey,
@@ -356,12 +454,12 @@ function S3ObjectViewer({
 }) {
   const { data, isLoading, isError, error } = useS3ObjectDetail(bucket, objectKey);
 
-  if (isLoading) return <Spinner />;
+  if (isLoading) return <Spinner size="large" />;
   if (isError) {
     return (
-      <Box>
+      <Box padding={{ top: "l" }}>
         <Button variant="link" onClick={onBack}>← Back</Button>
-        <StatusIndicator type="error">{(error as Error)?.message || "Failed to load object"}</StatusIndicator>
+        <StatusIndicator type="error">{(error as Error)?.message || "Failed to load"}</StatusIndicator>
       </Box>
     );
   }
@@ -369,19 +467,31 @@ function S3ObjectViewer({
   return (
     <SpaceBetween size="l">
       <Box>
-        <SpaceBetween direction="horizontal" size="s">
-          <Button variant="link" onClick={onBack}>← Objects</Button>
-          <Box variant="h3">{objectKey}</Box>
-        </SpaceBetween>
+        <Button variant="link" onClick={onBack}>← Objects</Button>
+        <Box variant="h2" padding={{ top: "s" }}>{objectKey}</Box>
       </Box>
+      <ColumnLayout columns={3} variant="text-grid">
+        <div style={{ padding: 16, borderRadius: 8, border: "1px solid #539fe533" }}>
+          <Box variant="small" color="text-body-secondary">Size</Box>
+          <Box variant="p" padding={{ top: "xxs" }} fontWeight="bold">{data?.size != null ? formatBytes(data.size) : "—"}</Box>
+        </div>
+        <div style={{ padding: 16, borderRadius: 8, border: "1px solid #a066ff33" }}>
+          <Box variant="small" color="text-body-secondary">Type</Box>
+          <Box variant="p" padding={{ top: "xxs" }} fontWeight="bold">{data?.contentType || "—"}</Box>
+        </div>
+        <div style={{ padding: 16, borderRadius: 8, border: "1px solid #d8991433" }}>
+          <Box variant="small" color="text-body-secondary">Modified</Box>
+          <Box variant="p" padding={{ top: "xxs" }} fontWeight="bold">{data?.lastModified ? new Date(data.lastModified).toLocaleString() : "—"}</Box>
+        </div>
+      </ColumnLayout>
       <Box>
-        <SpaceBetween size="xs">
-          <Box variant="small">Size: {data?.size != null ? formatBytes(data.size) : "-"} | Type: {data?.contentType || "-"} | Modified: {data?.lastModified ? new Date(data.lastModified).toLocaleString() : "-"}</Box>
-        </SpaceBetween>
-      </Box>
-      <Box>
-        <Box variant="h4" padding={{ bottom: "xs" }}>Content</Box>
-        <Box variant="code">{data?.body}</Box>
+        <Box variant="h3" padding={{ bottom: "s" }}>Content</Box>
+        <Box
+          variant="code"
+          padding={{ top: "m", bottom: "m", left: "m", right: "m" }}
+        >
+          {data?.body || "[Empty]"}
+        </Box>
       </Box>
     </SpaceBetween>
   );
