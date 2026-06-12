@@ -33,10 +33,8 @@ if (isProd) {
 
 const port = Number(process.env.PORT) || 3000;
 
-if (process.argv[1]?.endsWith("index.js") || process.argv[1]?.endsWith("index.ts")) {
-  serve({ fetch: app.fetch, port }, (info: any) => {
-    console.log(`Floci Dashboard running on http://localhost:${info.port}`);
-  });
-}
+serve({ fetch: app.fetch, port }, (info: any) => {
+  console.log(`Floci Dashboard running on http://localhost:${info.port}`);
+});
 
 export default app;

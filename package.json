@@ -6,12 +6,19 @@
   "scripts": {
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:backend": "tsx watch src/backend/index.ts",
-    "dev:frontend": "vite",
+    "dev:frontend": "vite --host 0.0.0.0",
     "build": "npm run build:frontend && npm run build:backend",
     "build:frontend": "vite build",
     "build:backend": "tsc -p tsconfig.backend.json",
     "start": "node dist/backend/index.js",
-    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.backend.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.backend.json",
+    "docker:dev": "docker compose -f docker-compose.dev.yml up --build",
+    "docker:dev:bg": "docker compose -f docker-compose.dev.yml up --build -d",
+    "docker:down": "docker compose -f docker-compose.dev.yml down",
+    "docker:typecheck": "docker compose -f docker-compose.dev.yml run --rm --no-deps dashboard npm run typecheck",
+    "docker:build": "docker compose -f docker-compose.dev.yml run --rm --no-deps dashboard npm run build",
+    "docker:prod": "docker compose up --build",
+    "docker:prod:bg": "docker compose up --build -d"
   },
   "dependencies": {
     "@cloudscape-design/collection-hooks": "^1.0.0",

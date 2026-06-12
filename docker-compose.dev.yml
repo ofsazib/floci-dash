@@ -1,0 +1,34 @@
+services:
+  floci:
+    image: ghcr.io/hectorvent/floci:latest
+    ports:
+      - "4566:4566"
+    environment:
+      - FLOCI_SERVICES=s3,dynamodb,sqs,sns,lambda,iam,ec2,ecs,eks,ecr,rds,elasticache,neptune,kms,secretsmanager,cloudformation,eventbridge,ssm,kinesis,cloudwatch,cognito,acm,route53,cloudfront,apigateway,apigatewayv2,athena,glue,firehose,stepfunctions,msk,opensearch,ses,cloudmap,scheduler,pipes,backup,transfer,cloudtrail,appconfig,bedrock-runtime,textract,transcribe,pricing,ce,cur,bcm-data-exports,resource-groups-tagging,autoscaling,codebuild,codedeploy,appsync,config,sts
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_floci/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  dashboard:
+    build:
+      context: .
+      target: dev
+    ports:
+      - "3000:3000"
+      - "5173:5173"
+    environment:
+      - FLOCI_URL=http://floci:4566
+      - AWS_REGION=us-east-1
+    volumes:
+      - ./src:/app/src
+      - ./vite.config.ts:/app/vite.config.ts
+      - ./tsconfig.json:/app/tsconfig.json
+      - ./tsconfig.backend.json:/app/tsconfig.backend.json
+      - ./public:/app/public
+      - /app/node_modules
+    depends_on:
+      floci:
+        condition: service_healthy
