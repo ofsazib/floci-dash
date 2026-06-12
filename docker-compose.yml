@@ -1,0 +1,17 @@
+services:
+  floci:
+    image: ghcr.io/hectorvent/floci:latest
+    ports:
+      - "4566:4566"
+    environment:
+      - FLOCI_SERVICES=s3,dynamodb,sqs,sns,lambda,iam,ec2,ecs,eks,ecr,rds,elasticache,neptune,kms,secretsmanager,cloudformation,eventbridge,ssm,kinesis,cloudwatch,cognito,acm,route53,cloudfront,apigateway,apigatewayv2,athena,glue,firehose,stepfunctions,msk,opensearch,ses,cloudmap,scheduler,pipes,backup,transfer,cloudtrail,appconfig,bedrock-runtime,textract,transcribe,pricing,ce,cur,bcm-data-exports,resource-groups-tagging,autoscaling,codebuild,codedeploy,appsync,config,sts
+
+  dashboard:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - FLOCI_URL=http://floci:4566
+      - AWS_REGION=us-east-1
+    depends_on:
+      - floci
