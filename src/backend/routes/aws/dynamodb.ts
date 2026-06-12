@@ -10,6 +10,8 @@ import {
   GetItemCommand,
   PutItemCommand,
   DeleteItemCommand,
+  KeyType,
+  ScalarAttributeType,
 } from "@aws-sdk/client-dynamodb";
 import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
 import { getAwsConfig } from "../../clients/aws";
@@ -37,16 +39,16 @@ router.post("/tables", async (c: Context) => {
   }>();
   if (!name || !hashKey) return c.json({ error: "Table name and hash key are required" }, 400);
 
-  const keySchema: { AttributeName: string; KeyType: string }[] = [
-    { AttributeName: hashKey, KeyType: "HASH" },
+  const keySchema: Array<{ AttributeName: string; KeyType: typeof KeyType.HASH | typeof KeyType.RANGE }> = [
+    { AttributeName: hashKey, KeyType: KeyType.HASH },
   ];
-  const attributeDefinitions: { AttributeName: string; AttributeType: string }[] = [
-    { AttributeName: hashKey, AttributeType: hashType || "S" },
+  const attributeDefinitions: Array<{ AttributeName: string; AttributeType: ScalarAttributeType }> = [
+    { AttributeName: hashKey, AttributeType: (hashType as ScalarAttributeType) || ScalarAttributeType.S },
   ];
 
   if (rangeKey) {
-    keySchema.push({ AttributeName: rangeKey, KeyType: "RANGE" });
-    attributeDefinitions.push({ AttributeName: rangeKey, AttributeType: rangeType || "S" });
+    keySchema.push({ AttributeName: rangeKey, KeyType: KeyType.RANGE });
+    attributeDefinitions.push({ AttributeName: rangeKey, AttributeType: (rangeType as ScalarAttributeType) || ScalarAttributeType.S });
   }
 
   await ddb().send(
