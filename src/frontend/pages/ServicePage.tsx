@@ -35,11 +35,7 @@ export default function ServicePage() {
   const navigate = useNavigate();
   const { data: health } = useHealth();
 
-  // S3 mutations (called at top level per hooks rules)
-  const createBucket = useS3CreateBucket();
-  const uploadObject = useS3UploadObject(selectedBucketForUpload());
-
-  // S3 state
+  // S3 state (must come before hook calls that reference state)
   const [selectedBucket, setSelectedBucket] = useState<string | null>(null);
   const [selectedObject, setSelectedObject] = useState<string | null>(null);
   const [showCreateBucket, setShowCreateBucket] = useState(false);
@@ -48,9 +44,9 @@ export default function ServicePage() {
   const [uploadKey, setUploadKey] = useState("");
   const [uploadBody, setUploadBody] = useState("");
 
-  function selectedBucketForUpload(): string {
-    return selectedBucket || "";
-  }
+  // S3 mutations
+  const createBucket = useS3CreateBucket();
+  const uploadObject = useS3UploadObject(selectedBucket || "");
 
   if (!service) return null;
 
