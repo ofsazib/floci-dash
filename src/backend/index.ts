@@ -9,7 +9,7 @@ import awsRoutes from "./routes/aws/index";
 
 const app = new Hono();
 
-app.use("*", cors({ origin: ["http://localhost:5173", "http://localhost:3000"] }));
+app.use("*", cors({ origin: ["http://localhost:5173", "http://localhost:3000", "http://localhost:9876", "http://localhost:9877"] }));
 
 app.onError((err: Error, c: any) => {
   console.error("Unhandled error:", err);

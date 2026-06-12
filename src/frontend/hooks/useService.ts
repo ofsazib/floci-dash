@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "../api/client";
+import { api } from "../lib/client";
 
 export function useServiceList<T>(service: string, key: string) {
   return useQuery<T>({

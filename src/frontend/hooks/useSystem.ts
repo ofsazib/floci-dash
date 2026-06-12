@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { api } from "../api/client";
+import { api } from "../lib/client";
 import type { HealthResponse, InitResponse } from "../types/api";
 
 export function useHealth() {
