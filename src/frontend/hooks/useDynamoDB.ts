@@ -97,6 +97,47 @@ export function useDynamoDBPutItem(table: string) {
   });
 }
 
+export interface ScanResult {
+  table: string;
+  items: Record<string, any>[];
+  count: number;
+  scannedCount: number;
+  lastEvaluatedKey?: Record<string, any>;
+}
+
+export interface FilterParams {
+  filters: Array<{ attribute: string; operator: string; value: any }>;
+  logic: "AND" | "OR";
+}
+
+export function useDynamoDBFilteredScan(
+  table: string | null,
+  filterParams: FilterParams | null,
+  exclusiveStartKey?: Record<string, any> | null
+) {
+  const hasFilters = filterParams && filterParams.filters.length > 0;
+  return useQuery<ScanResult>({
+    queryKey: ["aws", "dynamodb", "items", table, filterParams, exclusiveStartKey],
+    queryFn: () =>
+      hasFilters
+        ? api(`/aws/dynamodb/tables/${table}/items/query`, {
+            method: "POST",
+            body: JSON.stringify({
+              filters: filterParams!.filters,
+              filterLogic: filterParams!.logic,
+              exclusiveStartKey: exclusiveStartKey || undefined,
+            }),
+          })
+        : (() => {
+            const params = new URLSearchParams();
+            if (exclusiveStartKey) params.set("exclusiveStartKey", JSON.stringify(exclusiveStartKey));
+            return api(`/aws/dynamodb/tables/${table}/items?${params.toString()}`);
+          })(),
+    enabled: !!table,
+    refetchInterval: exclusiveStartKey || hasFilters ? false : 10000,
+  });
+}
+
 export function useDynamoDBDeleteItem(table: string) {
   const qc = useQueryClient();
   return useMutation({

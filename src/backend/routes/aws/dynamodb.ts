@@ -82,6 +82,19 @@ router.get("/tables/:name", async (c: Context) => {
     keySchema: t.KeySchema,
     arn: t.TableArn,
     createdAt: t.CreationDateTime?.toISOString(),
+    globalSecondaryIndexes: (t.GlobalSecondaryIndexes || []).map((gsi) => ({
+      indexName: gsi.IndexName,
+      indexStatus: gsi.IndexStatus,
+      itemCount: gsi.ItemCount,
+      indexSizeBytes: gsi.IndexSizeBytes,
+      keySchema: gsi.KeySchema,
+      projection: gsi.Projection,
+    })),
+    localSecondaryIndexes: (t.LocalSecondaryIndexes || []).map((lsi) => ({
+      indexName: lsi.IndexName,
+      keySchema: lsi.KeySchema,
+      projection: lsi.Projection,
+    })),
   });
 });
 
@@ -89,9 +102,117 @@ router.get("/tables/:name", async (c: Context) => {
 router.get("/tables/:name/items", async (c: Context) => {
   const name = c.req.param("name");
   const limit = parseInt(c.req.query("limit") || "50");
-  const result = await ddb().send(new ScanCommand({ TableName: name, Limit: limit }));
+
+  const params: any = { TableName: name, Limit: limit };
+
+  const eskRaw = c.req.query("exclusiveStartKey");
+  if (eskRaw) {
+    try {
+      const esk = JSON.parse(eskRaw);
+      params.ExclusiveStartKey = marshall(esk);
+    } catch {
+      return c.json({ error: "Invalid exclusiveStartKey" }, 400);
+    }
+  }
+
+  const result = await ddb().send(new ScanCommand(params));
   const items = (result.Items || []).map((item) => unmarshall(item));
-  return c.json({ table: name, items, count: result.Count, scannedCount: result.ScannedCount });
+  return c.json({
+    table: name,
+    items,
+    count: result.Count,
+    scannedCount: result.ScannedCount,
+    lastEvaluatedKey: result.LastEvaluatedKey ? unmarshall(result.LastEvaluatedKey) : undefined,
+  });
+});
+
+// Query items with filter
+router.post("/tables/:name/items/query", async (c: Context) => {
+  const name = c.req.param("name");
+  const { filters, exclusiveStartKey, filterLogic } = await c.req.json<{
+    filters: Array<{ attribute: string; operator: string; value: any }>;
+    exclusiveStartKey?: Record<string, any>;
+    filterLogic?: "AND" | "OR";
+  }>();
+
+  const limit = 50;
+  const params: any = { TableName: name, Limit: limit };
+
+  if (exclusiveStartKey) {
+    params.ExclusiveStartKey = marshall(exclusiveStartKey);
+  }
+
+  if (filters && filters.length > 0) {
+    const expressionAttributeNames: Record<string, string> = {};
+    const expressionAttributeValues: Record<string, any> = {};
+    const conditions: string[] = [];
+
+    filters.forEach((f, i) => {
+      const nameKey = `#${i}`;
+      const valueKey = `:${i}`;
+      expressionAttributeNames[nameKey] = f.attribute;
+
+      switch (f.operator) {
+        case "=":
+          expressionAttributeValues[valueKey] = f.value;
+          conditions.push(`${nameKey} = ${valueKey}`);
+          break;
+        case "<>":
+          expressionAttributeValues[valueKey] = f.value;
+          conditions.push(`${nameKey} <> ${valueKey}`);
+          break;
+        case "<":
+          expressionAttributeValues[valueKey] = f.value;
+          conditions.push(`${nameKey} < ${valueKey}`);
+          break;
+        case ">":
+          expressionAttributeValues[valueKey] = f.value;
+          conditions.push(`${nameKey} > ${valueKey}`);
+          break;
+        case "<=":
+          expressionAttributeValues[valueKey] = f.value;
+          conditions.push(`${nameKey} <= ${valueKey}`);
+          break;
+        case ">=":
+          expressionAttributeValues[valueKey] = f.value;
+          conditions.push(`${nameKey} >= ${valueKey}`);
+          break;
+        case "BEGINS_WITH":
+          expressionAttributeValues[valueKey] = f.value;
+          conditions.push(`begins_with(${nameKey}, ${valueKey})`);
+          break;
+        case "EXISTS":
+          conditions.push(`attribute_exists(${nameKey})`);
+          break;
+        case "NOT_EXISTS":
+          conditions.push(`attribute_not_exists(${nameKey})`);
+          break;
+        case "CONTAINS":
+          expressionAttributeValues[valueKey] = f.value;
+          conditions.push(`contains(${nameKey}, ${valueKey})`);
+          break;
+        default:
+          // Unsupported operator, skip
+          break;
+      }
+    });
+
+    if (conditions.length > 0) {
+      params.FilterExpression = conditions.join(filterLogic === "OR" ? " OR " : " AND ");
+      params.ExpressionAttributeNames = expressionAttributeNames;
+      params.ExpressionAttributeValues = marshall(expressionAttributeValues);
+    }
+  }
+
+  const result = await ddb().send(new ScanCommand(params));
+  const items = (result.Items || []).map((item) => unmarshall(item));
+  return c.json({
+    table: name,
+    items,
+    count: result.Count,
+    scannedCount: result.ScannedCount,
+    lastEvaluatedKey: result.LastEvaluatedKey ? unmarshall(result.LastEvaluatedKey) : undefined,
+  });
 });
 
 // Get item
