@@ -5,6 +5,7 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { readFile } from "node:fs/promises";
 import systemRoutes from "./routes/system";
 import inspectionRoutes from "./routes/inspection";
+import activeRoutes from "./routes/active";
 import awsRoutes from "./routes/aws/index";
 
 const app = new Hono();
@@ -17,6 +18,7 @@ app.onError((err: Error, c: any) => {
 });
 
 app.route("/api/system", systemRoutes);
+app.route("/api/active", activeRoutes);
 app.route("/api/inspect", inspectionRoutes);
 app.route("/api/aws", awsRoutes);
 

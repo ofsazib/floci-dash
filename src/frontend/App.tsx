@@ -1,8 +1,14 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HashRouter, Routes, Route } from "react-router-dom";
 import AppLayoutShell from "./components/AppLayoutShell";
+import { ToastProvider } from "./components/Toast";
 import DashboardHome from "./pages/DashboardHome";
 import ServicePage from "./pages/ServicePage";
+import S3Page from "./pages/S3Page";
+import EC2Page from "./pages/EC2Page";
+import SQSPage from "./pages/SQSPage";
+import SNSPage from "./pages/SNSPage";
+import EventsPage from "./pages/EventsPage";
 import Settings from "./pages/Settings";
 
 const queryClient = new QueryClient();
@@ -10,15 +16,22 @@ const queryClient = new QueryClient();
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <HashRouter>
-        <AppLayoutShell>
-          <Routes>
-            <Route path="/" element={<DashboardHome />} />
-            <Route path="/services/:service" element={<ServicePage />} />
-            <Route path="/settings" element={<Settings />} />
-          </Routes>
-        </AppLayoutShell>
-      </HashRouter>
+      <ToastProvider>
+        <HashRouter>
+          <AppLayoutShell>
+            <Routes>
+              <Route path="/" element={<DashboardHome />} />
+              <Route path="/services/s3" element={<S3Page />} />
+              <Route path="/services/ec2" element={<EC2Page />} />
+              <Route path="/services/sqs" element={<SQSPage />} />
+              <Route path="/services/sns" element={<SNSPage />} />
+              <Route path="/services/events" element={<EventsPage />} />
+              <Route path="/services/:service" element={<ServicePage />} />
+              <Route path="/settings" element={<Settings />} />
+            </Routes>
+          </AppLayoutShell>
+        </HashRouter>
+      </ToastProvider>
     </QueryClientProvider>
   );
 }

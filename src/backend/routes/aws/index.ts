@@ -1,15 +1,31 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
 import s3Routes from "./s3";
+import s3ConfigRoutes from "./s3-config";
+import s3ObjectRoutes from "./s3-objects";
 import dynamodbRoutes from "./dynamodb";
+import dynamodbAdvancedRoutes from "./dynamodb-advanced";
+import rdsRoutes from "./rds";
+import ec2Routes from "./ec2";
+import sqsRoutes from "./sqs";
+import snsRoutes from "./sns";
+import eventsRoutes from "./events";
 
 const router = new Hono();
 
 router.route("/s3", s3Routes);
+router.route("/s3", s3ConfigRoutes);
+router.route("/s3", s3ObjectRoutes);
 router.route("/dynamodb", dynamodbRoutes);
+router.route("/dynamodb", dynamodbAdvancedRoutes);
+router.route("/rds", rdsRoutes);
+router.route("/ec2", ec2Routes);
+router.route("/sqs", sqsRoutes);
+router.route("/sns", snsRoutes);
+router.route("/events", eventsRoutes);
 
 router.get("/", (c: Context) => {
-  return c.json({ message: "AWS routes available. Services registered: s3, dynamodb" });
+  return c.json({ message: "AWS routes available. Services registered: s3, dynamodb, rds, ec2, sqs, sns, events" });
 });
 
 export default router;
