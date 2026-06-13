@@ -5,6 +5,5 @@ dist/
 .env.local
 *.log
 .DS_Store
-README.md
 PLAN.md
 AGENTS.md

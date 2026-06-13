@@ -1,43 +1,35 @@
 .DEFAULT_GOAL := help
 
 SHELL := /bin/bash
-COMPOSE_DEV := docker compose -f docker-compose.dev.yml
-COMPOSE_PROD := docker compose
+COMPOSE := docker compose
 
 .PHONY: help install setup dev dev-backend dev-frontend build build-frontend \
         build-backend typecheck start clean test \
-        docker-dev docker-dev-bg docker-down docker-clean docker-restart \
-        docker-build docker-typecheck docker-prod docker-prod-bg docker-prod-down \
-        docker-logs docker-logs-floci docker-logs-dashboard docker-ps \
-        docker-shell docker-shell-floci
-
-# ─────────────────────────────────────────────────────
-#  Floci Dashboard — Makefile
-#  Native targets run on host (need Node.js).
-#  Docker targets run everything in containers.
-# ─────────────────────────────────────────────────────
+        up up-bg down restart rebuild logs logs-floci logs-dashboard \
+        ps shell shell-floci prod prod-bg prod-down \
+        typecheck-docker build-docker clean-all
 
 help: ## Show this help
 	@echo ""
 	@echo "  Floci Dashboard"
 	@echo "  ──────────────"
 	@echo ""
-	@echo "  Native (no Docker):"
-	@grep -E '^[a-z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -v '^docker-' | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}'
+	@echo "  Native (requires Node.js 22+):"
+	@grep -E '^[a-z][a-z_-]*:.*?## .*$$' $(MAKEFILE_LIST) | grep -vE '^(up|up-bg|down|restart|rebuild|logs|ps|shell|prod|typecheck-docker|build-docker|clean-all)' | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "    \033[36m%-24s\033[0m %s\n", $$1, $$2}'
 	@echo ""
-	@echo "  Docker:"
-	@grep -E '^docker-[a-z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}'
+	@echo "  Docker (all you need is Docker):"
+	@grep -E '^(up|up-bg|down|restart|rebuild|logs|logs-floci|logs-dashboard|ps|shell|shell-floci|prod|prod-bg|prod-down|typecheck-docker|build-docker|clean-all):.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "    \033[36m%-24s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 
-# ─── Native Targets (no Docker required) ────────────
+# ─── Native Targets (requires Node.js 22+) ──────────
 
 install: ## Install npm dependencies
 	npm install
 
 setup: install typecheck ## First-time setup (install + typecheck)
-	@echo "Setup complete."
+	@echo "✓ Setup complete."
 
-dev: ## Start dev server (backend on :3000, frontend on :5173)
+dev: ## Start dev servers (backend :3000, frontend :5173)
 	npm run dev
 
 dev-backend: ## Start backend only (tsx watch, port 3000)
@@ -46,7 +38,7 @@ dev-backend: ## Start backend only (tsx watch, port 3000)
 dev-frontend: ## Start frontend only (Vite HMR, port 5173)
 	npm run dev:frontend
 
-build: ## Build frontend + backend for production
+build: typecheck ## Build frontend + backend for production
 	npm run build
 
 build-frontend: ## Build frontend only (vite build)
@@ -68,52 +60,55 @@ test: ## Run tests
 	@echo "No tests defined yet."
 
 # ─── Docker Targets ─────────────────────────────────
+# All Docker targets use docker-compose.yml (production stack).
+# Floci uses the official ghcr.io image — no local build needed.
 
-docker-dev: ## Start dev environment (Floci + Dashboard, hot reload)
-	$(COMPOSE_DEV) up --build
+up: ## Start Floci + Dashboard (build if needed, foreground)
+	$(COMPOSE) up --build
 
-docker-dev-bg: ## Start dev environment in background
-	$(COMPOSE_DEV) up --build -d
+up-bg: ## Start Floci + Dashboard in background
+	$(COMPOSE) up --build -d
 
-docker-down: ## Stop all containers
-	$(COMPOSE_DEV) down
+down: ## Stop and remove all containers
+	$(COMPOSE) down
 
-docker-clean: ## Stop containers and remove volumes
-	$(COMPOSE_DEV) down -v
+restart: down up-bg ## Stop, then start in background
 
-docker-restart: ## Restart dev environment
-	$(COMPOSE_DEV) down
-	$(COMPOSE_DEV) up --build -d
+rebuild: ## Force rebuild Dashboard image (no cache)
+	$(COMPOSE) build --no-cache dashboard
+	$(COMPOSE) up -d dashboard
 
-docker-build: ## Compile project inside Docker container
-	$(COMPOSE_DEV) run --rm --no-deps dashboard npm run build
+logs: ## Tail all container logs
+	$(COMPOSE) logs -f
 
-docker-typecheck: ## Run typecheck inside container
-	$(COMPOSE_DEV) run --rm --no-deps dashboard npm run typecheck
+logs-floci: ## Tail Floci container logs
+	$(COMPOSE) logs -f floci
 
-docker-prod: ## Start production stack (Floci + built Dashboard)
-	$(COMPOSE_PROD) up --build
+logs-dashboard: ## Tail Dashboard container logs
+	$(COMPOSE) logs -f dashboard
 
-docker-prod-bg: ## Start production stack in background
-	$(COMPOSE_PROD) up --build -d
+ps: ## Show container status
+	$(COMPOSE) ps
 
-docker-prod-down: ## Stop production stack
-	$(COMPOSE_PROD) down
+shell: ## Open shell in dashboard container
+	$(COMPOSE) exec dashboard sh
 
-docker-logs: ## Tail all logs
-	$(COMPOSE_DEV) logs -f
+shell-floci: ## Open shell in Floci container
+	$(COMPOSE) exec floci sh
 
-docker-logs-floci: ## Tail Floci logs
-	$(COMPOSE_DEV) logs -f floci
+prod: up ## Alias for 'up' (production is the default)
 
-docker-logs-dashboard: ## Tail dashboard logs
-	$(COMPOSE_DEV) logs -f dashboard
+prod-bg: up-bg ## Alias for 'up-bg'
 
-docker-ps: ## Show container status
-	$(COMPOSE_DEV) ps
+prod-down: down ## Alias for 'down'
 
-docker-shell: ## Open shell in dashboard container
-	$(COMPOSE_DEV) exec dashboard sh
+typecheck-docker: ## Run typecheck inside Docker container
+	$(COMPOSE) run --rm --no-deps dashboard npm run typecheck
 
-docker-shell-floci: ## Open shell in Floci container
-	$(COMPOSE_DEV) exec floci sh
+build-docker: ## Run build inside Docker container
+	$(COMPOSE) run --rm --no-deps dashboard npm run build
+
+clean-all: down ## Stop containers + remove volumes + local artifacts
+	$(COMPOSE) down -v --rmi local
+	rm -rf node_modules dist
+	@echo "✓ Cleaned everything."

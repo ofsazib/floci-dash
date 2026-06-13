@@ -9,18 +9,21 @@
     "dev:frontend": "vite --host 0.0.0.0",
     "build": "npm run build:frontend && npm run build:backend",
     "build:frontend": "vite build",
-    "build:backend": "tsc -p tsconfig.backend.json",
+    "build:backend": "tsc -p tsconfig.backend.json && echo '{\"type\":\"commonjs\"}' > dist/backend/package.json",
     "start": "node dist/backend/index.js",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.backend.json",
-    "docker:dev": "docker compose -f docker-compose.dev.yml up --build",
-    "docker:dev:bg": "docker compose -f docker-compose.dev.yml up --build -d",
-    "docker:down": "docker compose -f docker-compose.dev.yml down",
-    "docker:typecheck": "docker compose -f docker-compose.dev.yml run --rm --no-deps dashboard npm run typecheck",
-    "docker:build": "docker compose -f docker-compose.dev.yml run --rm --no-deps dashboard npm run build",
-    "docker:prod": "docker compose up --build",
-    "docker:prod:bg": "docker compose up --build -d"
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.0.0",
+    "@aws-sdk/client-ec2": "^3.1068.0",
+    "@aws-sdk/client-eventbridge": "^3.1068.0",
+    "@aws-sdk/client-rds": "^3.1068.0",
+    "@aws-sdk/client-s3": "^3.0.0",
+    "@aws-sdk/client-sns": "^3.1068.0",
+    "@aws-sdk/client-sqs": "^3.1068.0",
+    "@aws-sdk/util-dynamodb": "^3.996.4",
     "@cloudscape-design/collection-hooks": "^1.0.0",
     "@cloudscape-design/components": "^3.0.0",
     "@cloudscape-design/global-styles": "^1.0.0",
@@ -33,13 +36,18 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.0.0",
     "concurrently": "^9.0.0",
+    "jsdom": "^29.1.1",
     "tsx": "^4.0.0",
     "typescript": "^5.5.0",
-    "vite": "^6.0.0"
+    "vite": "^6.0.0",
+    "vitest": "^4.1.8"
   }
 }
