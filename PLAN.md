@@ -1087,6 +1087,11 @@ if (service === "sqs") return <SQSQueues />;
 | 7.23 | Frontend: Key Pairs, Elastic IPs, Volumes, Launch Templates, Subnets, NAT Gateways, Route Tables, Internet Gateways tabs — each with list + create + delete | Done | 2025-06-13 |
 | 7.24 | Frontend: Network topology view (VPC -> Subnets -> Instances visual) | Pending | |
 | 7.25 | Verify: typecheck + build pass | Done | 2025-06-13 |
+| 7.26 | Backend: EC2 web terminal — WebSocket server + Docker Engine API with Tty=true for interactive bash | Done | 2025-06-14 |
+| 7.27 | Frontend: EC2Terminal component — xterm.js terminal with WebSocket, resize, reconnect | Done | 2025-06-14 |
+| 7.28 | Frontend: Instance detail "Connect" button + terminal modal | Done | 2025-06-14 |
+| 7.29 | Frontend: Filter terminated instances from list view | Done | 2025-06-14 |
+| 7.30 | Verify: typecheck + build + terminal works interactively | Done | 2025-06-14 |
 
 #### 3C — ECS (50+ operations)
 

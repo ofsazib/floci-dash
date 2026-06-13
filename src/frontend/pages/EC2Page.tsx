@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ContentLayout,
@@ -15,8 +15,11 @@ import {
   Button,
   Alert,
   Tabs,
+  Container,
+  Icon,
   type TabsProps,
 } from "@cloudscape-design/components";
+import EC2Terminal from "../components/EC2Terminal";
 import {
   useEC2Instances,
   useEC2RunInstance,
@@ -217,17 +220,19 @@ export function EC2InstanceList({ onSelect }: { onSelect: (id: string) => void }
     }
   }, [showCreate]);
 
-  const items = (data?.instances || []).map((i) => ({
-    id: i.id,
-    state: i.state,
-    instanceType: i.instanceType,
-    privateIp: i.privateIp,
-    publicIp: i.publicIp,
-    vpcId: i.vpcId,
-    subnetId: i.subnetId,
-    launchTime: i.launchTime,
-    keyName: i.keyName,
-  }));
+  const items = (data?.instances || [])
+    .filter((i) => i.state !== "terminated")
+    .map((i) => ({
+      id: i.id,
+      state: i.state,
+      instanceType: i.instanceType,
+      privateIp: i.privateIp,
+      publicIp: i.publicIp,
+      vpcId: i.vpcId,
+      subnetId: i.subnetId,
+      launchTime: i.launchTime,
+      keyName: i.keyName,
+    }));
 
   function handleCreate() {
     if (!form.imageId) return;
@@ -341,6 +346,7 @@ function EC2InstanceDetail({ id, onBack }: { id: string; onBack: () => void }) {
   const stopInstance = useEC2StopInstance();
   const rebootInstance = useEC2RebootInstance();
   const terminateInstance = useEC2TerminateInstance();
+  const [showTerminal, setShowTerminal] = useState(false);
 
   if (isLoading) return <StatusIndicator type="loading">Loading instance details...</StatusIndicator>;
   if (isError) return <StatusIndicator type="error">{(error as Error)?.message || "Failed to load"}</StatusIndicator>;
@@ -353,6 +359,9 @@ function EC2InstanceDetail({ id, onBack }: { id: string; onBack: () => void }) {
         variant="h2"
         description={`${data.instanceType} — ${data.state}`}
         actions={<SpaceBetween direction="horizontal" size="xs">
+          {data.state === "running" && (
+            <Button iconName="contact" onClick={() => setShowTerminal(true)}>Connect</Button>
+          )}
           {data.state === "stopped" && <Button iconName="play" loading={startInstance.isPending} onClick={() => startInstance.mutate(id)}>Start</Button>}
           {data.state === "running" && <>
             <Button iconName="undo" loading={stopInstance.isPending} onClick={() => stopInstance.mutate(id)}>Stop</Button>
@@ -363,6 +372,17 @@ function EC2InstanceDetail({ id, onBack }: { id: string; onBack: () => void }) {
       >
         {data.id}
       </Header>
+
+      {/* Web Terminal Modal */}
+      <Modal
+        visible={showTerminal}
+        onDismiss={() => setShowTerminal(false)}
+        header={`Terminal — ${id}`}
+        size="max"
+      >
+        <EC2Terminal instanceId={id} onClose={() => setShowTerminal(false)} />
+      </Modal>
+
       <Box variant="div">
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <tbody>
@@ -394,6 +414,30 @@ function EC2InstanceDetail({ id, onBack }: { id: string; onBack: () => void }) {
           </tbody>
         </table>
       </Box>
+
+      {/* Connection Info Panel */}
+      <Container header={<Header variant="h3">Connection Info</Header>}>
+        <SpaceBetween size="s">
+          <div>
+            <Box color="text-label" fontSize="body-s" fontWeight="bold" padding={{ bottom: "xxs" }}>
+              <Icon name="script" /> Docker Exec
+            </Box>
+            <CommandBox command={`docker exec -it floci-ec2-${id} bash`} />
+          </div>
+          <div>
+            <Box color="text-label" fontSize="body-s" fontWeight="bold" padding={{ bottom: "xxs" }}>
+              <Icon name="search" /> Find SSH Port
+            </Box>
+            <CommandBox command={`docker port floci-ec2-${id} 22`} />
+          </div>
+          <div>
+            <Box color="text-label" fontSize="body-s" fontWeight="bold" padding={{ bottom: "xxs" }}>
+              <Icon name="keyboard" /> SSH (replace PORT with output above)
+            </Box>
+            <CommandBox command="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@localhost -p PORT" />
+          </div>
+        </SpaceBetween>
+      </Container>
     </SpaceBetween>
   );
 }
@@ -1069,6 +1113,47 @@ function EC2AmiList() {
         filterPlaceholder="Find AMIs by ID or name" filterFunction={(item: any, t: string) => item.id.toLowerCase().includes(t.toLowerCase()) || (item.name || "").toLowerCase().includes(t.toLowerCase())}
       />
     </>
+  );
+}
+
+// ─── CONNECTION INFO HELPERS ───────────────────────────
+
+function CommandBox({ command }: { command: string }) {
+  const [copied, setCopied] = useState(false);
+  const inputRef = useRef(null);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(command);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback: select the input text
+      if (inputRef.current) {
+        (inputRef.current as any).select();
+      }
+    }
+  };
+
+  return (
+    <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+      <Input
+        ref={inputRef}
+        readOnly
+        value={command}
+        onFocus={(e: any) => {
+          // Try to select text in the native input element
+          const nativeInput = e.target?.querySelector?.("input") || e.target;
+          nativeInput.select?.();
+        }}
+      />
+      <Button
+        variant="icon"
+        iconName={copied ? "status-positive" : "copy"}
+        ariaLabel={copied ? "Copied" : "Copy to clipboard"}
+        onClick={handleCopy}
+      />
+    </div>
   );
 }
 

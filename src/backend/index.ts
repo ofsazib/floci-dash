@@ -1,12 +1,14 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { serve } from "@hono/node-server";
+import { createAdaptorServer } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { readFile } from "node:fs/promises";
 import systemRoutes from "./routes/system";
 import inspectionRoutes from "./routes/inspection";
 import activeRoutes from "./routes/active";
 import awsRoutes from "./routes/aws/index";
+import { setupTerminalWebSocket } from "./routes/aws/ec2-terminal";
+import type { Server as HttpServer } from "node:http";
 
 const app = new Hono();
 
@@ -35,8 +37,14 @@ if (isProd) {
 
 const port = Number(process.env.PORT) || 3000;
 
-serve({ fetch: app.fetch, port }, (info: any) => {
-  console.log(`Floci Dashboard running on http://localhost:${info.port}`);
+// Use createAdaptorServer to get the raw Node.js HTTP server for WebSocket support
+const httpServer = createAdaptorServer({ fetch: app.fetch }) as HttpServer;
+
+httpServer.listen(port, () => {
+  console.log(`Floci Dashboard running on http://localhost:${port}`);
 });
+
+// Attach WebSocket server for EC2 terminal access
+setupTerminalWebSocket(httpServer);
 
 export default app;

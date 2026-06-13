@@ -32,7 +32,8 @@
 
 - **AWS Console look and feel** — Built with [Cloudscape Design System](https://cloudscape.design/), the same component library used by the real AWS Management Console
 - **55+ AWS services** — Full navigation and status for every service Floci supports
-- **Deep resource management** — Browse, create, and delete resources for implemented services (S3, DynamoDB, more coming)
+- **Deep resource management** — Browse, create, and delete resources for implemented services (S3, DynamoDB, EC2, RDS, SQS, SNS, EventBridge)
+- **EC2 web terminal** — Interactive bash shell inside running EC2 instances directly from the browser (xterm.js + Docker Engine API with PTY)
 - **Dark mode** — Toggle between light and dark themes
 - **Real-time health** — Dashboard shows live Floci service status (running/available counts)
 - **Zero host dependencies** — Everything runs in Docker, no Node.js or AWS CLI needed locally
@@ -132,9 +133,14 @@ src/
       StatusBadge.tsx      Service status badges
       DynamoDBTableDetail.tsx  DynamoDB item browser
       S3BucketConfig.tsx   S3 bucket configuration
+      EC2Terminal.tsx       EC2 web terminal (xterm.js + WebSocket)
     pages/                 Route pages
       DashboardHome.tsx    Home with stats + service grid
       S3Page.tsx           Dedicated S3 browser
+      EC2Page.tsx          EC2 resource manager + terminal
+      SQSPage.tsx          SQS queue manager
+      SNSPage.tsx          SNS topic manager
+      EventsPage.tsx       EventBridge manager
       ServicePage.tsx      Dynamic service pages
       Settings.tsx         Dark mode, refresh interval
     hooks/                 TanStack Query hooks
@@ -142,6 +148,11 @@ src/
       useS3Config.ts       S3 bucket config
       useDynamoDB.ts       DynamoDB operations
       useDynamoDBAdvanced.ts  DynamoDB advanced ops
+      useEC2.ts            EC2 operations
+      useRDS.ts            RDS operations
+      useSQS.ts            SQS operations
+      useSNS.ts            SNS operations
+      useEvents.ts         EventBridge operations
       useService.ts        Generic service hook
       useSystem.ts         Health, active services
     lib/                   Utilities
@@ -168,6 +179,12 @@ src/
         s3-config.ts       S3 bucket configuration
         dynamodb.ts        DynamoDB table/item CRUD
         dynamodb-advanced.ts  DynamoDB advanced ops
+        rds.ts             RDS operations
+        ec2.ts             EC2 operations (81 endpoints)
+        ec2-terminal.ts    EC2 web terminal (WebSocket + Docker API)
+        sqs.ts             SQS operations
+        sns.ts             SNS operations
+        events.ts          EventBridge operations
     index.ts               Hono app entry point
     types.ts               Shared backend types
 ```
@@ -183,7 +200,7 @@ These services have full CRUD operations in both backend and frontend:
 | **S3** | List buckets, create/delete bucket, list objects, upload (multipart), download, delete objects, bucket configuration |
 | **DynamoDB** | List tables, create/delete table, scan items, query, filter, put item, delete item |
 | **RDS** | List/create/delete/modify/reboot DB instances, list/create/delete DB clusters, list/create/delete parameter groups & cluster parameter groups, view/modify parameters |
-| **EC2** | 13 resource types: Instances (run/start/stop/reboot/terminate), VPCs (CIDR association, endpoints), Subnets, Security Groups (ingress/egress rules), Key Pairs (import), AMIs, Tags, Internet Gateways (attach/detach), Route Tables (routes, subnet association), NAT Gateways, Elastic IPs (associate/disassociate), Launch Templates (versions), Volumes, Regions/AZs, Instance Types, Network Interfaces |
+| **EC2** | 13 resource types: Instances (run/start/stop/reboot/terminate, **web terminal** via Docker Engine API with PTY), VPCs (CIDR association, endpoints), Subnets, Security Groups (ingress/egress rules), Key Pairs (import), AMIs, Tags, Internet Gateways (attach/detach), Route Tables (routes, subnet association), NAT Gateways, Elastic IPs (associate/disassociate), Launch Templates (versions), Volumes, Regions/AZs, Instance Types, Network Interfaces |
 | **SQS** | List queues, create (standard/FIFO, attributes, tags), delete, view messages (via inspection API), send message (single/batch, FIFO group/dedup), delete message, purge queue, get/set attributes, tags CRUD, dead letter source queues |
 | **SNS** | List topics, create (standard/FIFO, display name, tags), delete, get/set attributes, subscriptions (subscribe/unsubscribe, 7 protocols), publish message (single, FIFO group/dedup), tags CRUD, platform applications (list, create, delete), platform endpoints (list, create, delete), SMS inbox + push notification inspection viewers |
 | **EventBridge** | Event buses (list, create, delete), rules (list, create with schedule/event pattern, delete, enable/disable toggle), targets (add/remove per rule), send events (PutEvents), archives (list, create, delete), replays (list) |
