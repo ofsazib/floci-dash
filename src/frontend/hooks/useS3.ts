@@ -19,7 +19,9 @@ export interface S3ObjectDetail {
   contentType: string;
   size: number;
   lastModified: string;
+  etag: string;
   body: string;
+  bodyEncoding: "utf-8" | "base64";
 }
 
 export function useS3Buckets() {
@@ -65,14 +67,38 @@ export function useS3DeleteBucket() {
   });
 }
 
-export function useS3UploadObject(bucket: string) {
+export interface S3UploadResult {
+  key: string;
+  size: number;
+  status: "uploaded" | "error";
+  error?: string;
+}
+
+export interface S3UploadFilesResponse {
+  bucket: string;
+  prefix: string;
+  uploaded: number;
+  failed: number;
+  results: S3UploadResult[];
+}
+
+export function useS3UploadFiles(bucket: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { key: string; body: string; contentType?: string }) =>
-      api(`/aws/s3/buckets/${bucket}/objects`, {
-        method: "PUT",
-        body: JSON.stringify(data),
-      }),
+    mutationFn: async ({ files, prefix }: { files: File[]; prefix?: string }) => {
+      const fd = new FormData();
+      for (const f of files) fd.append("files", f, f.name);
+      const qs = prefix ? `?prefix=${encodeURIComponent(prefix)}` : "";
+      const res = await fetch(`/api/aws/s3/buckets/${bucket}/objects/upload${qs}`, {
+        method: "POST",
+        body: fd,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Upload failed: ${res.statusText}`);
+      }
+      return res.json() as Promise<S3UploadFilesResponse>;
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "s3", "objects", bucket] }),
   });
 }
