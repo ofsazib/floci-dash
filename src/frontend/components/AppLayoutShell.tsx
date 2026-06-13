@@ -1,22 +1,63 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { AppLayout, SideNavigation, TopNavigation } from "@cloudscape-design/components";
+import { AppLayout, SideNavigation, TopNavigation, StatusIndicator, Badge } from "@cloudscape-design/components";
 import type { SideNavigationProps } from "@cloudscape-design/components";
-import { useHealth } from "../hooks/useSystem";
+import { useHealth, useActiveServices } from "../hooks/useSystem";
 import { useSettings } from "../stores/settings";
-import { SERVICE_CATEGORIES, SERVICE_LABELS } from "../types/services";
+import { SERVICE_LABELS } from "../types/services";
 
 interface Props {
   children: React.ReactNode;
 }
 
-type SectionItem = SideNavigationProps.Link | SideNavigationProps.Section | SideNavigationProps.LinkGroup | SideNavigationProps.ExpandableLinkGroup;
+type NavItem = SideNavigationProps.Link | SideNavigationProps.ExpandableLinkGroup;
+
+const FLOCI_LOGO_SVG = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#00d4ff"/><stop offset="100%" stop-color="#0073e6"/></linearGradient></defs><rect width="32" height="32" rx="7" fill="url(#g)"/><text x="16" y="23" font-size="20" font-weight="bold" fill="#fff" text-anchor="middle" font-family="Arial,sans-serif">F</text></svg>'
+)}`;
+
+const CATEGORY_ORDER = [
+  "Compute",
+  "Storage",
+  "Database",
+  "Networking",
+  "Messaging",
+  "Security",
+  "Management",
+  "Analytics",
+  "ML/AI",
+  "Billing",
+  "Developer Tools",
+  "Migration",
+] as const;
+
+const SERVICE_CATEGORY_MAP: Record<string, string> = {
+  ec2: "Compute", lambda: "Compute", ecs: "Compute", eks: "Compute", autoscaling: "Compute",
+  s3: "Storage", ecr: "Storage",
+  dynamodb: "Database", rds: "Database", neptune: "Database", elasticache: "Database",
+  elasticloadbalancing: "Networking", route53: "Networking", cloudfront: "Networking",
+  apigateway: "Networking", apigatewayv2: "Networking", appsync: "Networking",
+  sqs: "Messaging", sns: "Messaging", events: "Messaging", kinesis: "Messaging",
+  pipes: "Messaging", scheduler: "Messaging", email: "Messaging",
+  iam: "Security", sts: "Security", "cognito-idp": "Security", kms: "Security",
+  secretsmanager: "Security", acm: "Security",
+  cloudformation: "Management", monitoring: "Management", logs: "Management", ssm: "Management",
+  config: "Management", appconfig: "Management", appconfigdata: "Management",
+  cloudtrail: "Management", servicediscovery: "Management",
+  athena: "Analytics", glue: "Analytics", firehose: "Analytics", states: "Analytics",
+  kafka: "Analytics", es: "Analytics",
+  "bedrock-runtime": "ML/AI", textract: "ML/AI", transcribe: "ML/AI",
+  ce: "Billing", cur: "Billing", "bcm-data-exports": "Billing", pricing: "Billing", tagging: "Billing",
+  codedeploy: "Developer Tools", codebuild: "Developer Tools",
+  backup: "Migration", transfer: "Migration",
+};
 
 export default function AppLayoutShell({ children }: Props) {
   const [navOpen, setNavOpen] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
   const { data: health } = useHealth();
+  const { data: active } = useActiveServices();
   const { darkMode, toggleDarkMode } = useSettings();
 
   useEffect(() => {
@@ -24,36 +65,80 @@ export default function AppLayoutShell({ children }: Props) {
     document.documentElement.classList.toggle("awsui-dark-mode", darkMode);
   }, [darkMode]);
 
-  const currentPath = location.pathname;
-  const running = health?.stats?.running ?? 0;
-  const total = health?.stats?.total ?? 0;
+  const currentHref = location.pathname ? `/#${location.pathname}` : "/#/";
 
-  const navItems: SideNavigationProps.Item[] = [
-    { type: "link", text: "Dashboard", href: "/#/" },
-    { type: "divider" },
-  ];
+  const navItems = useMemo(() => {
+    const items: SideNavigationProps.Item[] = [
+      { type: "link" as const, text: "Dashboard", href: "/#/", info: undefined },
+      { type: "divider" as const },
+    ];
 
-  if (health) {
-    for (const [category, services] of Object.entries(SERVICE_CATEGORIES)) {
-      const items = services
-        .filter((s) => health.services[s])
-        .map((s) => ({
-          type: "link" as const,
-          text: SERVICE_LABELS[s] || s,
-          href: `/#/services/${s}`,
-        }));
-      if (items.length > 0) {
-        navItems.push({
-          type: "section-group" as const,
-          title: `${category} (${items.length})`,
-          items: items as SectionItem[],
-        });
-      }
+    if (!health?.services) {
+      return items;
     }
-  }
 
-  navItems.push({ type: "divider" });
-  navItems.push({ type: "link", text: "Settings", href: "/#/settings" });
+    const flociServices = Object.keys(health.services);
+
+    const grouped: Record<string, Array<{ key: string; label: string; status: string }>> = {};
+    for (const svc of flociServices) {
+      const category = SERVICE_CATEGORY_MAP[svc] || "Other";
+      if (!grouped[category]) grouped[category] = [];
+      grouped[category].push({
+        key: svc,
+        label: SERVICE_LABELS[svc] || svc,
+        status: health.services[svc],
+      });
+    }
+
+    const activeSet = new Set(active?.activeServices || []);
+
+    for (const cat of CATEGORY_ORDER) {
+      const svcs = grouped[cat];
+      if (!svcs || svcs.length === 0) continue;
+      items.push({
+        type: "expandable-link-group" as const,
+        text: cat,
+        href: `/#/category/${cat.toLowerCase()}`,
+        items: svcs
+          .sort((a, b) => a.label.localeCompare(b.label))
+          .map((s) => ({
+            type: "link" as const,
+            text: s.label,
+            href: `/#/services/${s.key}`,
+            info: activeSet.has(s.key)
+              ? <Badge color="green">●</Badge>
+              : s.status === "running"
+              ? undefined
+              : undefined,
+          })),
+      } as SideNavigationProps.ExpandableLinkGroup);
+    }
+
+    const other = grouped["Other"];
+    if (other && other.length > 0) {
+      items.push({
+        type: "expandable-link-group" as const,
+        text: "Other",
+        href: "/#/category/other",
+        items: other.map((s) => ({
+          type: "link" as const,
+          text: s.label,
+          href: `/#/services/${s.key}`,
+        })),
+      } as SideNavigationProps.ExpandableLinkGroup);
+    }
+
+    items.push({ type: "divider" as const });
+    items.push({ type: "link" as const, text: "Settings", href: "/#/settings" });
+
+    return items;
+  }, [health, active]);
+
+  const handleFollow = (e: CustomEvent<{ href: string }>) => {
+    e.preventDefault();
+    const path = e.detail.href.replace("/#", "");
+    navigate(path || "/");
+  };
 
   return (
     <>
@@ -61,8 +146,8 @@ export default function AppLayoutShell({ children }: Props) {
         <TopNavigation
           identity={{
             href: "/#/",
-            title: "Floci",
-            logo: { src: "/favicon.svg", alt: "Floci" },
+            title: "Floci Dashboard",
+            logo: { src: FLOCI_LOGO_SVG, alt: "Floci" },
           }}
           utilities={[
             {
@@ -81,13 +166,14 @@ export default function AppLayoutShell({ children }: Props) {
         onNavigationChange={(e) => setNavOpen(e.detail.open)}
         navigation={
           <SideNavigation
-            header={{ text: `Floci (${running}/${total})`, href: "/#/" }}
-            activeHref={currentPath || "/"}
-            onFollow={(e) => {
-              e.preventDefault();
-              const path = e.detail.href.replace("/#", "");
-              navigate(path || "/");
+            header={{
+              text: health
+                ? `Floci (${health.stats.running}/${health.stats.total})`
+                : "Floci",
+              href: "/#/",
             }}
+            activeHref={currentHref}
+            onFollow={handleFollow as any}
             items={navItems}
           />
         }

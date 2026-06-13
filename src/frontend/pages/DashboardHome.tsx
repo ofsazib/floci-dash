@@ -1,19 +1,16 @@
-import { Box, ColumnLayout, Container, Header, SpaceBetween, Spinner, StatusIndicator } from "@cloudscape-design/components";
-import { useHealth } from "../hooks/useSystem";
+import { useNavigate } from "react-router-dom";
+import { Box, Button, ColumnLayout, Container, Header, SpaceBetween, Spinner, StatusIndicator } from "@cloudscape-design/components";
+import { useHealth, useActiveServices } from "../hooks/useSystem";
 import ServiceGrid from "../components/ServiceGrid";
+import StatCard from "../components/StatCard";
 
 export default function DashboardHome() {
+  const navigate = useNavigate();
   const { data: health, isLoading, isError, error } = useHealth();
+  const { data: active } = useActiveServices();
 
   return (
-    <div style={{ padding: "0 24px", maxWidth: 1200, margin: "0 auto" }}>
-      <Header
-        variant="h1"
-        description="Local AWS emulator — manage services, buckets, tables, and more"
-      >
-        Floci Dashboard
-      </Header>
-
+    <div style={{ padding: "0 24px", maxWidth: 1280, margin: "0 auto" }}>
       {isLoading ? (
         <Box textAlign="center" padding={{ top: "xxxl", bottom: "xxxl" }}>
           <Spinner size="large" />
@@ -31,36 +28,61 @@ export default function DashboardHome() {
           </Box>
         </Box>
       ) : health ? (
-        <SpaceBetween size="l">
+        <SpaceBetween size="xl">
+          <Header
+            variant="h1"
+            description="Local AWS emulator — manage services, buckets, tables, and more"
+            actions={
+              <StatusIndicator type="success">
+                Connected — v{health.version}
+              </StatusIndicator>
+            }
+          >
+            Floci Dashboard
+          </Header>
+
           <ColumnLayout columns={4} variant="text-grid">
             <StatCard
               label="Available Services"
               value={health.stats.total}
-              accent="#539fe5"
+              variant="info"
+              subtext="Total services Floci offers"
+            />
+            <StatCard
+              label="Active"
+              value={active?.activeCount ?? "—"}
+              variant="success"
+              subtext={active?.activeServices?.length ? active.activeServices.join(", ") : "Services with resources"}
             />
             <StatCard
               label="Running"
               value={health.stats.running}
-              accent="#037f0c"
+              variant="warning"
+              subtext={`${health.stats.available} inactive`}
             />
             <StatCard
-              label="Inactive"
-              value={health.stats.available}
-              accent="#d89914"
-            />
-            <StatCard
-              label="Floci Version"
-              value={health.version}
-              accent="#a066ff"
+              label="Edition"
+              value={health.edition}
+              variant="default"
+              subtext={`v${health.version}`}
               isText
             />
           </ColumnLayout>
+
+          <Container header={<Header variant="h3">Quick actions</Header>}>
+            <SpaceBetween direction="horizontal" size="s">
+              <Button variant="primary" onClick={() => navigate("/services/s3")}>Open S3</Button>
+              <Button variant="normal" onClick={() => navigate("/services/dynamodb")}>Open DynamoDB</Button>
+              <Button variant="normal" onClick={() => navigate("/services/ec2")}>Open EC2</Button>
+              <Button variant="normal" onClick={() => navigate("/services/iam")}>Open IAM</Button>
+            </SpaceBetween>
+          </Container>
 
           <Container
             header={
               <Header
                 variant="h2"
-                description={`${health.stats.running} of ${health.stats.total} services active`}
+                description={`${health.stats.running} of ${health.stats.total} services enabled`}
               >
                 Services
               </Header>
@@ -70,51 +92,6 @@ export default function DashboardHome() {
           </Container>
         </SpaceBetween>
       ) : null}
-    </div>
-  );
-}
-
-function StatCard({
-  label,
-  value,
-  accent,
-  isText,
-}: {
-  label: string;
-  value: string | number;
-  accent: string;
-  isText?: boolean;
-}) {
-  return (
-    <div
-      style={{
-        borderRadius: 12,
-        padding: "24px 28px",
-        border: `1px solid ${accent}33`,
-        display: "flex",
-        flexDirection: "column",
-        gap: 8,
-        transition: "transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease",
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.transform = "translateY(-2px)";
-        e.currentTarget.style.borderColor = accent;
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.transform = "";
-        e.currentTarget.style.borderColor = `${accent}33`;
-      }}
-    >
-      <Box variant="small" color="text-body-secondary">
-        {label}
-      </Box>
-      <Box
-        variant={isText ? "h4" : "h1"}
-        color="inherit"
-        padding={{ top: "xxs" }}
-      >
-        <span style={{ color: accent, fontWeight: 700 }}>{value}</span>
-      </Box>
     </div>
   );
 }

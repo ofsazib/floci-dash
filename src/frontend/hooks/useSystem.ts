@@ -17,3 +17,16 @@ export function useInit() {
     refetchInterval: 30000,
   });
 }
+
+export interface ActiveServicesResponse {
+  activeCount: number;
+  activeServices: string[];
+}
+
+export function useActiveServices() {
+  return useQuery<ActiveServicesResponse>({
+    queryKey: ["system", "active"],
+    queryFn: () => api("/active"),
+    refetchInterval: 15000,
+  });
+}

@@ -1,0 +1,101 @@
+/* ─── Dark-mode-safe utility classes ─── */
+/* Use these instead of hardcoded hex colors in inline styles */
+
+/* Tag/chip background */
+.fd-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: var(--color-background-container-secondary, #f2f3f3);
+}
+
+.awsui-dark-mode .fd-tag-chip {
+  background: var(--color-background-container-secondary, #1a1d21);
+}
+
+/* Card with accent border */
+.fd-accent-card {
+  padding: 20px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border-divider-default, #e9ebed);
+}
+
+.awsui-dark-mode .fd-accent-card {
+  border-color: var(--color-border-divider-default, #3c4246);
+}
+
+/* Divider lines */
+.fd-divider-bottom {
+  border-bottom: 1px solid var(--color-border-divider-default, #e9ebed);
+}
+
+.awsui-dark-mode .fd-divider-bottom {
+  border-color: var(--color-border-divider-default, #3c4246);
+}
+
+.fd-divider-top {
+  border-top: 1px solid var(--color-border-divider-default, #e9ebed);
+}
+
+.awsui-dark-mode .fd-divider-top {
+  border-color: var(--color-border-divider-default, #3c4246);
+}
+
+/* Upload result row */
+.fd-upload-success {
+  background: var(--color-background-status-success, rgba(3, 127, 12, 0.08));
+  border: 1px solid var(--color-border-status-success, #037f0c33);
+}
+
+.fd-upload-error {
+  background: var(--color-background-status-error, rgba(216, 57, 0, 0.08));
+  border: 1px solid var(--color-border-status-error, #d8390033);
+}
+
+/* Muted text */
+.fd-text-muted {
+  color: var(--color-text-body-secondary, #545b64);
+}
+
+.awsui-dark-mode .fd-text-muted {
+  color: var(--color-text-body-secondary, #9ba7b6);
+}
+
+/* Accents */
+.fd-accent-info { color: var(--color-text-status-info, #0073bb); }
+.fd-accent-success { color: var(--color-text-status-success, #037f0c); }
+.fd-accent-warning { color: var(--color-text-status-warning, #d89914); }
+.fd-accent-purple { color: var(--color-text-accent, #a066ff); }
+
+.awsui-dark-mode .fd-accent-info { color: var(--color-text-status-info, #44b9d6); }
+.awsui-dark-mode .fd-accent-success { color: var(--color-text-status-success, #1e8e3e); }
+.awsui-dark-mode .fd-accent-warning { color: var(--color-text-status-warning, #d89914); }
+.awsui-dark-mode .fd-accent-purple { color: var(--color-text-accent, #bf8afc); }
+
+/* Pre / code blocks */
+.fd-code-block {
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 500px;
+  overflow: auto;
+}
+
+/* Skeleton loading */
+.fd-skeleton {
+  background: var(--color-skeleton-row, linear-gradient(90deg, #e9ebed 25%, #f2f3f3 50%, #e9ebed 75%));
+  background-size: 200% 100%;
+  animation: fd-shimmer 1.5s infinite;
+  border-radius: 4px;
+}
+
+.awsui-dark-mode .fd-skeleton {
+  background: var(--color-skeleton-row, linear-gradient(90deg, #2a2e33 25%, #3c4246 50%, #2a2e33 75%));
+  background-size: 200% 100%;
+}
+
+@keyframes fd-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
