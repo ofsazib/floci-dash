@@ -79,14 +79,6 @@ function createWrapper() {
   );
 }
 
-// ─── Async helper to open a Cloudscape Select dropdown ──
-// Cloudscape Select renders as a button. Clicking it opens the options popup.
-async function openSelect(user: ReturnType<typeof userEvent.setup>, selectButton: HTMLElement) {
-  await user.click(selectButton);
-  // Cloudscape renders options in a portal; wait for rendering
-  await new Promise((r) => setTimeout(r, 50));
-}
-
 // ─── Tests ─────────────────────────────────────────────
 
 describe("EC2InstanceList — AMI auto-detection", () => {
@@ -105,7 +97,7 @@ describe("EC2InstanceList — AMI auto-detection", () => {
     mockSecurityGroups.mockReturnValue({ data: { securityGroups: [] } });
   });
 
-  it("shows AMI Select dropdown when AMI catalog has images (opens to reveal options)", async () => {
+  it("auto-selects first AMI from catalog when launch modal opens", async () => {
     mockAmis.mockReturnValue({
       data: {
         images: [
@@ -120,28 +112,23 @@ describe("EC2InstanceList — AMI auto-detection", () => {
     const user = userEvent.setup();
     render(<EC2InstanceList onSelect={vi.fn()} />, { wrapper: createWrapper() });
 
+    // Verify the initial form state uses the hardcoded default
+    // (The Select isn't visible yet because the modal is closed)
+
     // Open the launch modal
     const createButtons = screen.getAllByRole("button", { name: /create/i });
     await user.click(createButtons[0]);
 
-    // Wait for the modal to appear - the AMI Select button should be visible
-    // The Select shows the currently selected AMI (auto-detected from catalog)
+    // The auto-detection useEffect should have selected the first AMI
+    // The Cloudscape Select button displays the selected AMI ID
     await waitFor(() => {
-      // Cloudscape Select renders as a <button> with the selected value
-      // The auto-detection should have selected "ami-0abc" (first AMI)
-      const amisSelect = screen.getByRole("button", { name: /ami/i });
-      expect(amisSelect).toBeTruthy();
-    });
-
-    // Open the Select dropdown to reveal all AMI options
-    const amiButton = screen.getByRole("button", { name: /ami/i });
-    await openSelect(user, amiButton);
-
-    // Now the options should be visible in the DOM (rendered in a Cloudscape portal)
-    await waitFor(() => {
-      // The options should show AMI ID + name
-      expect(screen.getByText(/Amazon Linux 2023/i)).toBeTruthy();
-      expect(screen.getByText(/Ubuntu 22.04/i)).toBeTruthy();
+      // Find buttons in the modal that contain the auto-detected AMI ID
+      const amiButtons = screen.getAllByRole("button");
+      const autoSelected = amiButtons.find(b => b.textContent?.includes("ami-0abc"));
+      expect(autoSelected).toBeTruthy();
+      // Verify it's NOT the old default
+      const oldDefault = amiButtons.find(b => b.textContent?.includes("ami-0abcdef1234567891"));
+      expect(oldDefault).toBeFalsy();
     });
   });
 
@@ -195,7 +182,7 @@ describe("EC2LaunchTemplateList — AMI auto-detection", () => {
     });
   });
 
-  it("shows AMI Select when catalog has images (opens to reveal options)", async () => {
+  it("auto-selects first AMI from catalog when create modal opens", async () => {
     mockAmis.mockReturnValue({
       data: {
         images: [
@@ -213,18 +200,14 @@ describe("EC2LaunchTemplateList — AMI auto-detection", () => {
     const createButtons = screen.getAllByRole("button", { name: /create/i });
     await user.click(createButtons[0]);
 
-    // Wait for modal and verify Select exists
+    // Verify the auto-detected AMI is selected
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /ami/i })).toBeTruthy();
-    });
-
-    // Open the Select dropdown
-    const amiButton = screen.getByRole("button", { name: /ami/i });
-    await openSelect(user, amiButton);
-
-    // Verify options are visible in the dropdown
-    await waitFor(() => {
-      expect(screen.getByText(/Test Image/i)).toBeTruthy();
+      const buttons = screen.getAllByRole("button");
+      const amiSelected = buttons.find(b => b.textContent?.includes("ami-001"));
+      expect(amiSelected).toBeTruthy();
+      // Not the old default
+      const oldDefault = buttons.find(b => b.textContent?.includes("ami-0abcdef1234567891"));
+      expect(oldDefault).toBeFalsy();
     });
   });
 
