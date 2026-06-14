@@ -10,6 +10,8 @@ import ec2Routes from "./ec2";
 import sqsRoutes from "./sqs";
 import snsRoutes from "./sns";
 import eventsRoutes from "./events";
+import logsRoutes from "./logs";
+import lambdaRoutes from "./lambda";
 
 const router = new Hono();
 
@@ -23,9 +25,11 @@ router.route("/ec2", ec2Routes);
 router.route("/sqs", sqsRoutes);
 router.route("/sns", snsRoutes);
 router.route("/events", eventsRoutes);
+router.route("/logs", logsRoutes);
+router.route("/lambda", lambdaRoutes);
 
 router.get("/", (c: Context) => {
-  return c.json({ message: "AWS routes available. Services registered: s3, dynamodb, rds, ec2, sqs, sns, events" });
+  return c.json({ message: "AWS routes available. Services registered: s3, dynamodb, rds, ec2, sqs, sns, events, logs, lambda" });
 });
 
 export default router;

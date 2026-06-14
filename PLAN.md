@@ -1040,23 +1040,23 @@ if (service === "sqs") return <SQSQueues />;
 
 | # | Task | Status | Date |
 |---|------|--------|------|
-| 6.1 | Consult Floci Lambda source for supported operations | Pending | |
-| 6.2 | Backend: Function CRUD (list, create, get, update config, update code, delete) | Pending | |
-| 6.3 | Backend: POST /api/aws/lambda/functions/:name/invocations (invoke sync/async/dry-run) | Pending | |
-| 6.4 | Backend: Event source mapping CRUD (list, create, update, delete) | Pending | |
-| 6.5 | Backend: Version + alias management (publish, list, create/update/delete alias) | Pending | |
-| 6.6 | Backend: Layer management (publish version, list, get, delete) | Pending | |
-| 6.7 | Backend: Function URL config CRUD | Pending | |
-| 6.8 | Backend: Tags + concurrency + event invoke config + resource policy | Pending | |
-| 6.9 | Frontend: useLambda hooks | Pending | |
-| 6.10 | Frontend: Lambda page — Functions tab (list with runtime/timeout/memory, create, delete) | Pending | |
-| 6.11 | Frontend: Function detail — Configuration tab (env vars, timeout, memory, handler, runtime) | Pending | |
-| 6.12 | Frontend: Function detail — Invoke tab (payload input, invocation type selector, response viewer) | Pending | |
-| 6.13 | Frontend: Function detail — Event sources tab (list, create, enable/disable) | Pending | |
-| 6.14 | Frontend: Function detail — Versions tab + Aliases tab | Pending | |
-| 6.15 | Frontend: Function detail — Layers tab (publish, browse versions) | Pending | |
-| 6.16 | Frontend: Function detail — URL config tab + Concurrency + Tags | Pending | |
-| 6.17 | Verify: typecheck + build pass | Pending | |
+| 6.1 | Consult Floci Lambda source for supported operations | Done | 2025-06-14 |
+| 6.2 | Backend: Function CRUD (list, create, get, update config, update code, delete) | Done | 2025-06-14 |
+| 6.3 | Backend: POST /api/aws/lambda/functions/:name/invocations (invoke sync/async/dry-run) | Done | 2025-06-14 |
+| 6.4 | Backend: Event source mapping CRUD (list, create, update, delete) | Done | 2025-06-14 |
+| 6.5 | Backend: Version + alias management (publish, list, create/update/delete alias) | Done | 2025-06-14 |
+| 6.6 | Backend: Layer management (publish version, list, get, delete) | Done | 2025-06-14 |
+| 6.7 | Backend: Function URL config CRUD | Done | 2025-06-14 |
+| 6.8 | Backend: Tags + concurrency + event invoke config + resource policy | Done | 2025-06-14 |
+| 6.9 | Frontend: useLambda hooks | Done | 2025-06-14 |
+| 6.10 | Frontend: Lambda page — Functions tab (list with runtime/timeout/memory, create, delete) | Done | 2025-06-14 |
+| 6.11 | Frontend: Function detail — Configuration tab (env vars, timeout, memory, handler, runtime) | Done | 2025-06-14 |
+| 6.12 | Frontend: Function detail — Invoke tab (payload input, invocation type selector, response viewer) | Done | 2025-06-14 |
+| 6.13 | Frontend: Function detail — Event sources tab (list, create, enable/disable) | Done | 2025-06-14 |
+| 6.14 | Frontend: Function detail — Versions tab + Aliases tab | Done | 2025-06-14 |
+| 6.15 | Frontend: Function detail — Layers tab (publish, browse versions) | Done | 2025-06-14 |
+| 6.16 | Frontend: Function detail — URL config tab + Concurrency + Tags | Done | 2025-06-14 |
+| 6.17 | Verify: typecheck + build pass | Done | 2025-06-14 |
 
 #### 3B — EC2 (81 operations — dedicated page)
 
@@ -1203,18 +1203,32 @@ if (service === "sqs") return <SQSQueues />;
 
 ### Phase 6: Management & Monitoring Services
 
-#### 6A — CloudWatch (logs + monitoring)
+#### 6A — CloudWatch Logs (18 operations) — DONE
 
 | # | Task | Status | Date |
 |---|------|--------|------|
-| 14.1 | Consult Floci CloudWatch Logs source for supported operations | Pending | |
-| 14.2 | Backend: GET /api/aws/logs/log-groups | Pending | |
-| 14.3 | Backend: POST /api/aws/logs/log-groups | Pending | |
-| 14.4 | Backend: DELETE /api/aws/logs/log-groups/:name | Pending | |
-| 14.5 | Backend: GET /api/aws/logs/log-groups/:name/logs (log events) | Pending | |
-| 14.6 | Frontend: useLogs hooks | Pending | |
-| 14.7 | Frontend: CloudWatch Logs page (log groups + events) | Pending | |
-| 14.8 | Verify: typecheck + build pass | Pending | |
+| 14.1 | Consult Floci CloudWatch Logs source for supported operations | Done | 2025-06-14 |
+| 14.2 | Backend: GET /api/aws/logs/log-groups (list, prefix filter) | Done | 2025-06-14 |
+| 14.3 | Backend: POST /api/aws/logs/log-groups (create with tags/KMS) | Done | 2025-06-14 |
+| 14.4 | Backend: DELETE /api/aws/logs/log-groups/:name | Done | 2025-06-14 |
+| 14.5 | Backend: PUT/DELETE /api/aws/logs/log-groups/:name/retention | Done | 2025-06-14 |
+| 14.6 | Backend: GET /api/aws/logs/log-groups/:name/streams (list, prefix, order by LastEventTime) | Done | 2025-06-14 |
+| 14.7 | Backend: POST/DELETE stream CRUD | Done | 2025-06-14 |
+| 14.8 | Backend: GET events (with pagination, time range, limit) | Done | 2025-06-14 |
+| 14.9 | Backend: POST log events (put with sequence token) | Done | 2025-06-14 |
+| 14.10 | Backend: POST filter-events (pattern, time range, stream names) | Done | 2025-06-14 |
+| 14.11 | Backend: Subscription filters (list, create, delete) | Done | 2025-06-14 |
+| 14.12 | Backend: Tags CRUD (list, tag, untag) | Done | 2025-06-14 |
+| 14.13 | Frontend: useLogs hooks (17 hooks: groups, streams, events, filters, tags) | Done | 2025-06-14 |
+| 14.14 | Frontend: Log groups list with search, create modal, delete | Done | 2025-06-14 |
+| 14.15 | Frontend: Log group detail — streams tab (list, create, delete) | Done | 2025-06-14 |
+| 14.16 | Frontend: Log stream detail — Live log viewer (timestamped, auto-refresh, auto-scroll, refresh, limit selector) | Done | 2025-06-14 |
+| 14.17 | Frontend: Retention config tab (selector with all durations, save/remove) | Done | 2025-06-14 |
+| 14.18 | Frontend: Subscription filters tab (list, create with destination ARN, delete) | Done | 2025-06-14 |
+| 14.19 | Frontend: Tags tab (table viewer, add tag, remove tag) | Done | 2025-06-14 |
+| 14.20 | Verify: typecheck passes | Done | 2025-06-14 |
+
+**What's next:** CloudWatch Metrics (monitoring) — alarms, metric data, charts
 
 #### 6B — CloudFormation
 

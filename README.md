@@ -32,7 +32,7 @@
 
 - **AWS Console look and feel** — Built with [Cloudscape Design System](https://cloudscape.design/), the same component library used by the real AWS Management Console
 - **55+ AWS services** — Full navigation and status for every service Floci supports
-- **Deep resource management** — Browse, create, and delete resources for implemented services (S3, DynamoDB, EC2, RDS, SQS, SNS, EventBridge)
+- **Deep resource management** — Browse, create, and delete resources for implemented services (S3, DynamoDB, EC2, RDS, SQS, SNS, EventBridge, CloudWatch Logs, Lambda)
 - **EC2 web terminal** — Interactive bash shell inside running EC2 instances directly from the browser (xterm.js + Docker Engine API with PTY)
 - **Dark mode** — Toggle between light and dark themes
 - **Real-time health** — Dashboard shows live Floci service status (running/available counts)
@@ -141,6 +141,7 @@ src/
       SQSPage.tsx          SQS queue manager
       SNSPage.tsx          SNS topic manager
       EventsPage.tsx       EventBridge manager
+      LambdaPage.tsx       Lambda functions, layers, invoke, versions/aliases
       ServicePage.tsx      Dynamic service pages
       Settings.tsx         Dark mode, refresh interval
     hooks/                 TanStack Query hooks
@@ -153,6 +154,7 @@ src/
       useSQS.ts            SQS operations
       useSNS.ts            SNS operations
       useEvents.ts         EventBridge operations
+      useLambda.ts         Lambda operations
       useService.ts        Generic service hook
       useSystem.ts         Health, active services
     lib/                   Utilities
@@ -185,6 +187,7 @@ src/
         sqs.ts             SQS operations
         sns.ts             SNS operations
         events.ts          EventBridge operations
+        lambda.ts          Lambda operations
     index.ts               Hono app entry point
     types.ts               Shared backend types
 ```
@@ -204,6 +207,8 @@ These services have full CRUD operations in both backend and frontend:
 | **SQS** | List queues, create (standard/FIFO, attributes, tags), delete, view messages (via inspection API), send message (single/batch, FIFO group/dedup), delete message, purge queue, get/set attributes, tags CRUD, dead letter source queues |
 | **SNS** | List topics, create (standard/FIFO, display name, tags), delete, get/set attributes, subscriptions (subscribe/unsubscribe, 7 protocols), publish message (single, FIFO group/dedup), tags CRUD, platform applications (list, create, delete), platform endpoints (list, create, delete), SMS inbox + push notification inspection viewers |
 | **EventBridge** | Event buses (list, create, delete), rules (list, create with schedule/event pattern, delete, enable/disable toggle), targets (add/remove per rule), send events (PutEvents), archives (list, create, delete), replays (list) |
+| **CloudWatch Logs** | Log groups (list, create, delete, retention policy), log streams (list, create, delete), log events (live viewer with auto-refresh/auto-scroll/limit selector, put events), subscription filters (list, create, delete), tags CRUD |
+| **Lambda** | Functions (list, create with zip/S3 code, delete, get configuration, update config, update code), invoke (sync/async/dry-run with response viewer), versions (list, publish), aliases (list, create, delete), event source mappings (list, delete), layers (list versions, delete), function URL config, concurrency config, tags |
 
 ### Navigation + status (55 services)
 

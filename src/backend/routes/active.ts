@@ -4,6 +4,7 @@ import { S3Client, ListBucketsCommand } from "@aws-sdk/client-s3";
 import { DynamoDBClient, ListTablesCommand } from "@aws-sdk/client-dynamodb";
 import { RDSClient, DescribeDBInstancesCommand } from "@aws-sdk/client-rds";
 import { EC2Client, DescribeInstancesCommand } from "@aws-sdk/client-ec2";
+import { LambdaClient, ListFunctionsCommand } from "@aws-sdk/client-lambda";
 import { getAwsConfig } from "../clients/aws";
 
 const router = new Hono();
@@ -54,6 +55,16 @@ router.get("/", async (c: Context) => {
     if (totalInstances > 0) {
       activeCount++;
       activeServices.push("ec2");
+    }
+  } catch { /* service not available */ }
+
+  // Check Lambda
+  try {
+    const lambda = new LambdaClient(config);
+    const functions = await lambda.send(new ListFunctionsCommand({}));
+    if ((functions.Functions?.length ?? 0) > 0) {
+      activeCount++;
+      activeServices.push("lambda");
     }
   } catch { /* service not available */ }
 
