@@ -28,6 +28,7 @@ const IMPLEMENTED_SERVICES: Record<string, string> = {
   events: "EventBridge",
   logs: "CloudWatch Logs",
   cloudwatch: "CloudWatch",
+  secretsmanager: "Secrets Manager",
 };
 
 const CATEGORY_ORDER = [

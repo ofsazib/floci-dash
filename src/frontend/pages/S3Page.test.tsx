@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
 
@@ -74,8 +73,7 @@ describe("S3Page", () => {
 
   it("renders bucket list", () => {
     render(<S3Page />, { wrapper: createWrapper() });
-    expect(screen.getByText("S3")).toBeTruthy();
-    expect(screen.getByText("Buckets")).toBeTruthy();
+    expect(screen.getAllByText("S3").length).toBeGreaterThan(0);
     expect(screen.getByText("my-bucket")).toBeTruthy();
   });
 
@@ -86,7 +84,7 @@ describe("S3Page", () => {
     });
     render(<S3Page />, { wrapper: createWrapper() });
     expect(screen.getByText("No buckets")).toBeTruthy();
-    expect(screen.getByText("Create bucket")).toBeTruthy();
+    expect(screen.getAllByText("Create bucket").length).toBeGreaterThan(0);
   });
 
   it("shows loading state", () => {

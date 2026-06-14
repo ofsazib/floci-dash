@@ -32,7 +32,7 @@
 
 - **AWS Console look and feel** — Built with [Cloudscape Design System](https://cloudscape.design/), the same component library used by the real AWS Management Console
 - **55+ AWS services** — Full navigation and status for every service Floci supports
-- **Deep resource management** — Browse, create, and delete resources for implemented services (S3, DynamoDB, EC2, RDS, SQS, SNS, EventBridge, CloudWatch Logs, CloudWatch Metrics, Lambda, IAM)
+- **Deep resource management** — Browse, create, and delete resources for implemented services (S3, DynamoDB, EC2, RDS, SQS, SNS, EventBridge, CloudWatch Logs, CloudWatch Metrics, Lambda, IAM, Secrets Manager)
 - **EC2 web terminal** — Interactive bash shell inside running EC2 instances directly from the browser (xterm.js + Docker Engine API with PTY)
 - **Dark mode** — Toggle between light and dark themes
 - **Real-time health** — Dashboard shows live Floci service status (running/available counts)
@@ -144,6 +144,7 @@ src/
       LambdaPage.tsx       Lambda functions, layers, invoke, versions/aliases
       CloudWatchPage.tsx   CloudWatch metrics, alarms, statistics
       IAMPage.tsx          IAM users, roles, policies, groups
+      SecretsManagerPage.tsx  Secrets Manager secrets, values, versions
       ServicePage.tsx      Dynamic service pages
       Settings.tsx         Dark mode, refresh interval
     hooks/                 TanStack Query hooks
@@ -159,6 +160,7 @@ src/
       useLambda.ts         Lambda operations
       useCloudWatch.ts     CloudWatch metrics + alarms operations
       useIAM.ts            IAM operations
+      useSecrets.ts        Secrets Manager operations
       useService.ts        Generic service hook
       useSystem.ts         Health, active services
     lib/                   Utilities
@@ -194,6 +196,7 @@ src/
         lambda.ts          Lambda operations
         cloudwatch.ts      CloudWatch metrics + alarms operations
         iam.ts             IAM operations
+        secretsmanager.ts  Secrets Manager operations
     index.ts               Hono app entry point
     types.ts               Shared backend types
 ```
@@ -217,6 +220,7 @@ These services have full CRUD operations in both backend and frontend:
 | **Lambda** | Functions (list, create with zip/S3 code, delete, get configuration, update config, update code), invoke (sync/async/dry-run with response viewer), versions (list, publish), aliases (list, create, delete), event source mappings (list, delete), layers (list versions, delete), function URL config, concurrency config, tags |
 | **CloudWatch** | Metrics (list, put metric data, get statistics with sparkline charts), alarms (list, create with threshold/comparison/statistic, delete, set state OK/ALARM), tags |
 | **IAM** | Users (list, create, delete, detail with groups/policies/access keys, create access keys), roles (list, create, delete, detail with trust policy/attached policies/tags), groups (list, create, delete), policies (list by scope, create, delete, detail with version document viewer), instance profiles (list) |
+| **Secrets Manager** | Secrets (list, create with value, delete, restore, detail with value reveal/version history), put secret value (new versions), random password generator |
 
 ### Navigation + status (55 services)
 
