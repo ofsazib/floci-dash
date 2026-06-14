@@ -32,7 +32,7 @@
 
 - **AWS Console look and feel** — Built with [Cloudscape Design System](https://cloudscape.design/), the same component library used by the real AWS Management Console
 - **55+ AWS services** — Full navigation and status for every service Floci supports
-- **Deep resource management** — Browse, create, and delete resources for implemented services (S3, DynamoDB, EC2, RDS, SQS, SNS, EventBridge, CloudWatch Logs, Lambda)
+- **Deep resource management** — Browse, create, and delete resources for implemented services (S3, DynamoDB, EC2, RDS, SQS, SNS, EventBridge, CloudWatch Logs, CloudWatch Metrics, Lambda)
 - **EC2 web terminal** — Interactive bash shell inside running EC2 instances directly from the browser (xterm.js + Docker Engine API with PTY)
 - **Dark mode** — Toggle between light and dark themes
 - **Real-time health** — Dashboard shows live Floci service status (running/available counts)
@@ -142,6 +142,7 @@ src/
       SNSPage.tsx          SNS topic manager
       EventsPage.tsx       EventBridge manager
       LambdaPage.tsx       Lambda functions, layers, invoke, versions/aliases
+      CloudWatchPage.tsx   CloudWatch metrics, alarms, statistics
       ServicePage.tsx      Dynamic service pages
       Settings.tsx         Dark mode, refresh interval
     hooks/                 TanStack Query hooks
@@ -155,6 +156,7 @@ src/
       useSNS.ts            SNS operations
       useEvents.ts         EventBridge operations
       useLambda.ts         Lambda operations
+      useCloudWatch.ts     CloudWatch metrics + alarms operations
       useService.ts        Generic service hook
       useSystem.ts         Health, active services
     lib/                   Utilities
@@ -188,6 +190,7 @@ src/
         sns.ts             SNS operations
         events.ts          EventBridge operations
         lambda.ts          Lambda operations
+        cloudwatch.ts      CloudWatch metrics + alarms operations
     index.ts               Hono app entry point
     types.ts               Shared backend types
 ```
@@ -209,6 +212,7 @@ These services have full CRUD operations in both backend and frontend:
 | **EventBridge** | Event buses (list, create, delete), rules (list, create with schedule/event pattern, delete, enable/disable toggle), targets (add/remove per rule), send events (PutEvents), archives (list, create, delete), replays (list) |
 | **CloudWatch Logs** | Log groups (list, create, delete, retention policy), log streams (list, create, delete), log events (live viewer with auto-refresh/auto-scroll/limit selector, put events), subscription filters (list, create, delete), tags CRUD |
 | **Lambda** | Functions (list, create with zip/S3 code, delete, get configuration, update config, update code), invoke (sync/async/dry-run with response viewer), versions (list, publish), aliases (list, create, delete), event source mappings (list, delete), layers (list versions, delete), function URL config, concurrency config, tags |
+| **CloudWatch** | Metrics (list, put metric data, get statistics with sparkline charts), alarms (list, create with threshold/comparison/statistic, delete, set state OK/ALARM), tags |
 
 ### Navigation + status (55 services)
 

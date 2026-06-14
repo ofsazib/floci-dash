@@ -10,6 +10,7 @@ import SQSPage from "./pages/SQSPage";
 import SNSPage from "./pages/SNSPage";
 import EventsPage from "./pages/EventsPage";
 import LambdaPage from "./pages/LambdaPage";
+import CloudWatchPage from "./pages/CloudWatchPage";
 import Settings from "./pages/Settings";
 
 const queryClient = new QueryClient();
@@ -28,6 +29,7 @@ export default function App() {
               <Route path="/services/sns" element={<SNSPage />} />
               <Route path="/services/events" element={<EventsPage />} />
               <Route path="/services/lambda" element={<LambdaPage />} />
+              <Route path="/services/cloudwatch" element={<CloudWatchPage />} />
               <Route path="/services/:service" element={<ServicePage />} />
               <Route path="/settings" element={<Settings />} />
             </Routes>

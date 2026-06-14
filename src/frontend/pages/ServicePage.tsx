@@ -1583,11 +1583,6 @@ function CloudWatchLogGroupList({ onSelect }: { onSelect: (name: string) => void
     return `${days} days`;
   }
 
-  function formatBytesLocal(bytes?: number): string {
-    if (!bytes) return "0 B";
-    return formatBytes(bytes);
-  }
-
   function handleCreate() {
     if (!groupName) return;
     createGroup.mutate(
@@ -1633,7 +1628,7 @@ function CloudWatchLogGroupList({ onSelect }: { onSelect: (name: string) => void
           {
             id: "size",
             header: "Stored bytes",
-            cell: (item: any) => formatBytesLocal(item.storedBytes),
+            cell: (item: any) => formatBytes(item.storedBytes ?? 0),
           },
           {
             id: "actions",

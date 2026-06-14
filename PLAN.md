@@ -1302,7 +1302,7 @@ Each remaining service gets a standard list + create + delete pattern.
 | 17.37 | CodeBuild | Pending | Pending | Pending | |
 | 17.38 | Backup | Pending | Pending | Pending | |
 | 17.39 | Transfer Family | Pending | Pending | Pending | |
-| 17.40 | CloudWatch Metrics (monitoring) | Pending | Pending | Pending | |
+| 17.40 | CloudWatch Metrics (monitoring) | Done | Done | Done | 2025-06-14 |
 | 17.41 | AppConfig Data (appconfigdata) | Pending | Pending | Pending | |
 | 17.42 | Resource Groups Tagging (tagging) | Pending | Pending | Pending | |
 | 17.43 | EC2 Messages (ec2messages) | Pending | Pending | Pending | |

@@ -25,6 +25,8 @@ const IMPLEMENTED_SERVICES: Record<string, string> = {
   sqs: "SQS",
   sns: "SNS",
   events: "EventBridge",
+  logs: "CloudWatch Logs",
+  cloudwatch: "CloudWatch",
 };
 
 const CATEGORY_ORDER = [
