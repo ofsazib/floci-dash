@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
 
@@ -8,21 +9,25 @@ const mockEventBuses = vi.fn();
 const mockEventRules = vi.fn();
 const mockEventTargets = vi.fn();
 const mockEventArchives = vi.fn();
+const mockPutRuleMutate = vi.fn();
+const mockCreateBusMutate = vi.fn();
+const mockCreateArchiveMutate = vi.fn();
+const mockPutEventsMutate = vi.fn();
 
 vi.mock("../hooks/useEvents", () => ({
   useEventBuses: (...args: any[]) => mockEventBuses(...args),
   useEventRules: (...args: any[]) => mockEventRules(...args),
   useEventTargets: (...args: any[]) => mockEventTargets(...args),
   useEventArchives: (...args: any[]) => mockEventArchives(...args),
-  useCreateEventBus: () => ({ mutate: vi.fn(), isPending: false }),
+  useCreateEventBus: () => ({ mutate: mockCreateBusMutate, isPending: false }),
   useDeleteEventBus: () => ({ mutate: vi.fn(), isPending: false }),
-  usePutEventRule: () => ({ mutate: vi.fn(), isPending: false }),
+  usePutEventRule: () => ({ mutate: mockPutRuleMutate, isPending: false }),
   useDeleteEventRule: () => ({ mutate: vi.fn(), isPending: false }),
   useToggleEventRule: () => ({ enable: { mutate: vi.fn() }, disable: { mutate: vi.fn() } }),
-  usePutEvents: () => ({ mutate: vi.fn(), isPending: false }),
+  usePutEvents: () => ({ mutate: mockPutEventsMutate, isPending: false }),
   usePutEventTargets: () => ({ mutate: vi.fn(), isPending: false }),
   useRemoveEventTarget: () => ({ mutate: vi.fn(), isPending: false }),
-  useCreateEventArchive: () => ({ mutate: vi.fn(), isPending: false }),
+  useCreateEventArchive: () => ({ mutate: mockCreateArchiveMutate, isPending: false }),
   useDeleteEventArchive: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
@@ -53,6 +58,8 @@ describe("EventsPage", () => {
     mockEventArchives.mockReturnValue({ data: { archives: [] }, isLoading: false });
   });
 
+  // ─── Render State Tests ─────────────────────────────────
+
   it("renders rules tab by default", () => {
     render(<EventsPage />, { wrapper: createWrapper() });
     expect(screen.getByText("EventBridge")).toBeTruthy();
@@ -79,5 +86,33 @@ describe("EventsPage", () => {
   it("shows archives tab", () => {
     render(<EventsPage />, { wrapper: createWrapper() });
     expect(screen.getByText("Archives")).toBeTruthy();
+  });
+
+  // ─── Interaction Tests ──────────────────────────────────
+
+  it("opens create rule modal from rules tab", async () => {
+    const user = userEvent.setup();
+    render(<EventsPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Create rule"));
+    await waitFor(() => {
+      expect(screen.getByText("Create rule")).toBeTruthy();
+    });
+    expect(screen.getByPlaceholderText("my-rule")).toBeTruthy();
+    expect(screen.getByText("Enabled")).toBeTruthy();
+  });
+
+  it("calls putRule when create rule form is submitted", async () => {
+    const user = userEvent.setup();
+    render(<EventsPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Create rule"));
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("my-rule")).toBeTruthy();
+    });
+    const input = screen.getByPlaceholderText("my-rule");
+    await user.type(input, "test-rule");
+    const createBtns = screen.getAllByText("Create");
+    const modalBtn = createBtns[createBtns.length - 1];
+    await user.click(modalBtn);
+    expect(mockPutRuleMutate).toHaveBeenCalled();
   });
 });

@@ -5,6 +5,8 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
 
+const mockToggleDarkMode = vi.fn();
+const mockSetRefreshInterval = vi.fn();
 const mockUseSettings = vi.fn();
 
 vi.mock("../stores/settings", () => ({
@@ -25,15 +27,15 @@ function createWrapper() {
 describe("Settings", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-  });
-
-  it("renders settings with default values", () => {
     mockUseSettings.mockReturnValue({
       darkMode: false,
       refreshInterval: 10000,
-      toggleDarkMode: vi.fn(),
-      setRefreshInterval: vi.fn(),
+      toggleDarkMode: mockToggleDarkMode,
+      setRefreshInterval: mockSetRefreshInterval,
     });
+  });
+
+  it("renders settings with default values", () => {
     render(<Settings />, { wrapper: createWrapper() });
     expect(screen.getByText("Settings")).toBeTruthy();
     expect(screen.getByText("Appearance")).toBeTruthy();
@@ -48,11 +50,33 @@ describe("Settings", () => {
     mockUseSettings.mockReturnValue({
       darkMode: true,
       refreshInterval: 5000,
-      toggleDarkMode: vi.fn(),
-      setRefreshInterval: vi.fn(),
+      toggleDarkMode: mockToggleDarkMode,
+      setRefreshInterval: mockSetRefreshInterval,
     });
     render(<Settings />, { wrapper: createWrapper() });
     const toggle = screen.getByLabelText("Dark mode");
     expect(toggle).toBeTruthy();
+  });
+
+  // ─── Interaction Tests ──────────────────────────────────
+
+  it("calls toggleDarkMode when dark mode toggle is clicked", async () => {
+    const user = userEvent.setup();
+    render(<Settings />, { wrapper: createWrapper() });
+    const toggle = screen.getByLabelText("Dark mode");
+    await user.click(toggle);
+    expect(mockToggleDarkMode).toHaveBeenCalledOnce();
+  });
+
+  it("calls setRefreshInterval when a refresh option is selected", async () => {
+    const user = userEvent.setup();
+    render(<Settings />, { wrapper: createWrapper() });
+    // The refresh interval Select shows "10 seconds"
+    const refreshSelect = screen.getByText("10 seconds");
+    await user.click(refreshSelect);
+    // Cloudscape Select should open options
+    await screen.findByText("30 seconds");
+    await user.click(screen.getByText("30 seconds"));
+    expect(mockSetRefreshInterval).toHaveBeenCalledWith(30000);
   });
 });

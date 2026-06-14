@@ -1,16 +1,17 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
 
 const mockIAMUsers = vi.fn();
 const mockIAMUser = vi.fn();
-const mockCreateUser = vi.fn();
+const mockCreateUserMutate = vi.fn();
 const mockDeleteUser = vi.fn();
 const mockIAMRoles = vi.fn();
 const mockIAMRole = vi.fn();
-const mockCreateRole = vi.fn();
+const mockCreateRoleMutate = vi.fn();
 const mockDeleteRole = vi.fn();
 const mockIAMGroups = vi.fn();
 const mockCreateGroup = vi.fn();
@@ -18,7 +19,7 @@ const mockDeleteGroup = vi.fn();
 const mockIAMPolicies = vi.fn();
 const mockIAMPolicy = vi.fn();
 const mockPolicyVersion = vi.fn();
-const mockCreatePolicy = vi.fn();
+const mockCreatePolicyMutate = vi.fn();
 const mockDeletePolicy = vi.fn();
 const mockCreateAccessKey = vi.fn();
 const mockInstanceProfiles = vi.fn();
@@ -26,11 +27,11 @@ const mockInstanceProfiles = vi.fn();
 vi.mock("../hooks/useIAM", () => ({
   useIAMUsers: (...args: any[]) => mockIAMUsers(...args),
   useIAMUser: (...args: any[]) => mockIAMUser(...args),
-  useCreateUser: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useCreateUser: () => ({ mutateAsync: mockCreateUserMutate, isPending: false }),
   useDeleteUser: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useIAMRoles: (...args: any[]) => mockIAMRoles(...args),
   useIAMRole: (...args: any[]) => mockIAMRole(...args),
-  useCreateRole: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useCreateRole: () => ({ mutateAsync: mockCreateRoleMutate, isPending: false }),
   useDeleteRole: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useIAMGroups: (...args: any[]) => mockIAMGroups(...args),
   useCreateGroup: () => ({ mutate: vi.fn(), isPending: false }),
@@ -38,7 +39,7 @@ vi.mock("../hooks/useIAM", () => ({
   useIAMPolicies: (...args: any[]) => mockIAMPolicies(...args),
   useIAMPolicy: (...args: any[]) => mockIAMPolicy(...args),
   usePolicyVersion: (...args: any[]) => mockPolicyVersion(...args),
-  useCreatePolicy: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useCreatePolicy: () => ({ mutateAsync: mockCreatePolicyMutate, isPending: false }),
   useDeletePolicy: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useCreateAccessKey: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useInstanceProfiles: () => ({ data: { instanceProfiles: [] }, isLoading: false }),
@@ -71,6 +72,8 @@ describe("IAMPage", () => {
     mockPolicyVersion.mockReturnValue({ data: { document: null }, isLoading: false });
   });
 
+  // ─── Render State Tests ─────────────────────────────────
+
   it("renders roles tab by default", () => {
     render(<IAMPage />, { wrapper: createWrapper() });
     expect(screen.getByText("IAM")).toBeTruthy();
@@ -97,5 +100,43 @@ describe("IAMPage", () => {
   it("renders groups tab", () => {
     render(<IAMPage />, { wrapper: createWrapper() });
     expect(screen.getAllByText("Groups").length).toBeGreaterThan(0);
+  });
+
+  // ─── Interaction Tests ──────────────────────────────────
+
+  it("opens create role modal and submits", async () => {
+    const user = userEvent.setup();
+    render(<IAMPage />, { wrapper: createWrapper() });
+    const createBtns = screen.getAllByText("Create role");
+    await user.click(createBtns[0]);
+    await waitFor(() => {
+      expect(screen.getByText("Create role")).toBeTruthy();
+    });
+    // Fill role name
+    const inputs = screen.getAllByRole("textbox");
+    await user.type(inputs[0], "test-role");
+    const modalBtns = screen.getAllByText("Create");
+    await user.click(modalBtns[modalBtns.length - 1]);
+    expect(mockCreateRoleMutate).toHaveBeenCalled();
+  });
+
+  it("opens create user modal from users tab", async () => {
+    const user = userEvent.setup();
+    render(<IAMPage />, { wrapper: createWrapper() });
+    // Switch to users tab
+    await user.click(screen.getByText("Users"));
+    await waitFor(() => {
+      expect(screen.getAllByText("Users").length).toBeGreaterThan(0);
+    });
+    await user.click(screen.getByText("Create user"));
+    await waitFor(() => {
+      expect(screen.getByText("Create user")).toBeTruthy();
+    });
+    // Fill user name
+    const inputs = screen.getAllByRole("textbox");
+    await user.type(inputs[0], "new-user");
+    const modalBtns = screen.getAllByText("Create");
+    await user.click(modalBtns[modalBtns.length - 1]);
+    expect(mockCreateUserMutate).toHaveBeenCalled();
   });
 });

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
 
@@ -9,10 +10,11 @@ const mockLogStreams = vi.fn();
 const mockLogEvents = vi.fn();
 const mockSubFilters = vi.fn();
 const mockLogGroupTags = vi.fn();
+const mockCreateLogGroupMutate = vi.fn();
 
 vi.mock("../hooks/useLogs", () => ({
   useLogGroups: (...args: any[]) => mockLogGroups(...args),
-  useCreateLogGroup: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
+  useCreateLogGroup: () => ({ mutate: mockCreateLogGroupMutate, isPending: false, isError: false, error: null }),
   useDeleteLogGroup: () => ({ mutate: vi.fn(), isPending: false, variables: null }),
   usePutRetentionPolicy: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
   useDeleteRetentionPolicy: () => ({ mutate: vi.fn(), isPending: false }),
@@ -91,6 +93,8 @@ describe("ServicePage — CloudWatch Logs", () => {
     mockLogGroupTags.mockReturnValue({ data: { tags: { env: "test" } }, isLoading: false, isError: false, error: null });
   });
 
+  // ─── Render State Tests ─────────────────────────────────
+
   it("renders logs service page with log groups", () => {
     render(<ServicePage />, { wrapper: createWrapper() });
     expect(screen.getAllByText("CloudWatch Logs").length).toBeGreaterThan(0);
@@ -115,5 +119,34 @@ describe("ServicePage — CloudWatch Logs", () => {
     mockLogGroups.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: new Error("Failed") });
     render(<ServicePage />, { wrapper: createWrapper() });
     expect(screen.getByText("Failed")).toBeTruthy();
+  });
+
+  // ─── Interaction Tests ──────────────────────────────────
+
+  it("opens create log group modal when 'Create' button is clicked", async () => {
+    const user = userEvent.setup();
+    render(<ServicePage />, { wrapper: createWrapper() });
+    // Find and click the Create button for log groups
+    const createBtns = screen.getAllByText("Create");
+    await user.click(createBtns[0]);
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("/aws/lambda/my-function")).toBeTruthy();
+    });
+    expect(screen.getByText("Create log group")).toBeTruthy();
+  });
+
+  it("calls createLogGroup when create log group form is submitted", async () => {
+    const user = userEvent.setup();
+    render(<ServicePage />, { wrapper: createWrapper() });
+    const createBtns = screen.getAllByText("Create");
+    await user.click(createBtns[0]);
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("/aws/lambda/my-function")).toBeTruthy();
+    });
+    const input = screen.getByPlaceholderText("/aws/lambda/my-function");
+    await user.type(input, "/test/new-group");
+    const modalBtns = screen.getAllByText("Create log group");
+    await user.click(modalBtns[modalBtns.length - 1]);
+    expect(mockCreateLogGroupMutate).toHaveBeenCalled();
   });
 });

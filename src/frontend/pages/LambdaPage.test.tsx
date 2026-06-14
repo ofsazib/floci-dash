@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
 
 const mockFunctions = vi.fn();
 const mockFunctionDetail = vi.fn();
-const mockCreateFunction = vi.fn();
+const mockCreateFunctionMutate = vi.fn();
 const mockDeleteFunction = vi.fn();
 const mockInvokeFunction = vi.fn();
 const mockLambdaVersions = vi.fn();
@@ -21,7 +22,7 @@ const mockFunctionConcurrency = vi.fn();
 vi.mock("../hooks/useLambda", () => ({
   useLambdaFunctions: (...args: any[]) => mockFunctions(...args),
   useLambdaFunction: (...args: any[]) => mockFunctionDetail(...args),
-  useCreateFunction: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
+  useCreateFunction: () => ({ mutate: mockCreateFunctionMutate, isPending: false, isError: false, error: null }),
   useDeleteFunction: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useInvokeFunction: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null, data: null }),
   useLambdaVersions: (...args: any[]) => mockLambdaVersions(...args),
@@ -59,6 +60,8 @@ describe("LambdaPage", () => {
     mockFunctionConcurrency.mockReturnValue({ data: {} });
   });
 
+  // ─── Render State Tests ─────────────────────────────────
+
   it("renders function list", () => {
     render(<LambdaPage />, { wrapper: createWrapper() });
     expect(screen.getAllByText("Lambda").length).toBeGreaterThan(0);
@@ -87,5 +90,27 @@ describe("LambdaPage", () => {
   it("renders layers tab", () => {
     render(<LambdaPage />, { wrapper: createWrapper() });
     expect(screen.getByText("Layers")).toBeTruthy();
+  });
+
+  // ─── Interaction Tests ──────────────────────────────────
+
+  it("opens create function modal and fills form", async () => {
+    const user = userEvent.setup();
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    const createBtns = screen.getAllByText("Create");
+    await user.click(createBtns[0]); // "Create" button in function list
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("my-function")).toBeTruthy();
+    });
+    // Fill function name
+    const nameInput = screen.getByPlaceholderText("my-function");
+    await user.type(nameInput, "test-fn");
+    // Fill handler
+    const handlerInput = screen.getByPlaceholderText("index.handler");
+    await user.type(handlerInput, "index.handler");
+    // Submit
+    const modalBtns = screen.getAllByText("Create");
+    await user.click(modalBtns[modalBtns.length - 1]);
+    expect(mockCreateFunctionMutate).toHaveBeenCalled();
   });
 });

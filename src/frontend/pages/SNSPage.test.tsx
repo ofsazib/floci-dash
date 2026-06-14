@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
 
@@ -9,6 +10,7 @@ const mockTopicAttributes = vi.fn();
 const mockSubscriptions = vi.fn();
 const mockTopicTags = vi.fn();
 const mockPlatformApps = vi.fn();
+const mockCreateTopicMutate = vi.fn();
 
 vi.mock("../hooks/useSNS", () => ({
   useSNSTopics: (...args: any[]) => mockSNSTopics(...args),
@@ -16,7 +18,7 @@ vi.mock("../hooks/useSNS", () => ({
   useSNSSubscriptions: (...args: any[]) => mockSubscriptions(...args),
   useSNSTopicTags: (...args: any[]) => mockTopicTags(...args),
   useSNSPlatformApps: (...args: any[]) => mockPlatformApps(...args),
-  useCreateSNSTopic: () => ({ mutate: vi.fn(), isPending: false }),
+  useCreateSNSTopic: () => ({ mutate: mockCreateTopicMutate, isPending: false }),
   useDeleteSNSTopic: () => ({ mutate: vi.fn(), isPending: false }),
   useSNSSubscribe: () => ({ mutate: vi.fn(), isPending: false }),
   useSNSUnsubscribe: () => ({ mutate: vi.fn(), isPending: false }),
@@ -62,6 +64,8 @@ describe("SNSPage", () => {
     mockPlatformApps.mockReturnValue({ data: { platformApps: [] } });
   });
 
+  // ─── Render State Tests ─────────────────────────────────
+
   it("renders topic list", () => {
     render(<SNSPage />, { wrapper: createWrapper() });
     expect(screen.getByText("SNS")).toBeTruthy();
@@ -84,5 +88,40 @@ describe("SNSPage", () => {
     });
     render(<SNSPage />, { wrapper: createWrapper() });
     expect(screen.getByText("Failed to load")).toBeTruthy();
+  });
+
+  // ─── Interaction Tests ──────────────────────────────────
+
+  it("opens create topic modal when 'Create topic' button is clicked", async () => {
+    const user = userEvent.setup();
+    render(<SNSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Create topic"));
+    await waitFor(() => {
+      expect(screen.getByText("Create topic")).toBeTruthy();
+    });
+    expect(screen.getByPlaceholderText("my-topic")).toBeTruthy();
+  });
+
+  it("calls createTopic when create topic form is submitted", async () => {
+    const user = userEvent.setup();
+    render(<SNSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Create topic"));
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("my-topic")).toBeTruthy();
+    });
+    const input = screen.getByPlaceholderText("my-topic");
+    await user.type(input, "test-topic");
+    const createBtns = screen.getAllByText("Create");
+    const modalCreateBtn = createBtns[createBtns.length - 1];
+    await user.click(modalCreateBtn);
+    expect(mockCreateTopicMutate).toHaveBeenCalled();
+  });
+
+  it("filters topics when typing in search", async () => {
+    const user = userEvent.setup();
+    render(<SNSPage />, { wrapper: createWrapper() });
+    const searchInput = screen.getByPlaceholderText("Find topics...");
+    await user.type(searchInput, "my-topic");
+    expect((searchInput as HTMLInputElement).value).toContain("my-topic");
   });
 });

@@ -13,6 +13,7 @@ import LambdaPage from "./pages/LambdaPage";
 import CloudWatchPage from "./pages/CloudWatchPage";
 import IAMPage from "./pages/IAMPage";
 import SecretsManagerPage from "./pages/SecretsManagerPage";
+import CloudFormationPage from "./pages/CloudFormationPage";
 import Settings from "./pages/Settings";
 
 const queryClient = new QueryClient();
@@ -34,6 +35,7 @@ export default function App() {
               <Route path="/services/cloudwatch" element={<CloudWatchPage />} />
               <Route path="/services/iam" element={<IAMPage />} />
               <Route path="/services/secretsmanager" element={<SecretsManagerPage />} />
+              <Route path="/services/cloudformation" element={<CloudFormationPage />} />
               <Route path="/services/:service" element={<ServicePage />} />
               <Route path="/settings" element={<Settings />} />
             </Routes>

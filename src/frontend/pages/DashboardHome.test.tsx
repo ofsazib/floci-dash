@@ -7,6 +7,7 @@ import React from "react";
 
 const mockHealth = vi.fn();
 const mockActive = vi.fn();
+const mockNavigate = vi.fn();
 
 vi.mock("../hooks/useSystem", () => ({
   useHealth: (...args: any[]) => mockHealth(...args),
@@ -14,7 +15,7 @@ vi.mock("../hooks/useSystem", () => ({
 }));
 
 vi.mock("react-router-dom", () => ({
-  useNavigate: () => vi.fn(),
+  useNavigate: () => mockNavigate,
 }));
 
 import DashboardHome from "./DashboardHome";
@@ -31,6 +32,19 @@ function createWrapper() {
 describe("DashboardHome", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockHealth.mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: {
+        version: "1.5.22",
+        edition: "Community",
+        stats: { total: 50, running: 30, available: 20 },
+        services: { s3: "running", ec2: "running" },
+      },
+    });
+    mockActive.mockReturnValue({
+      data: { activeCount: 5, activeServices: ["s3", "ec2", "sqs"] },
+    });
   });
 
   it("shows loading spinner while connecting", () => {
@@ -49,19 +63,6 @@ describe("DashboardHome", () => {
   });
 
   it("renders dashboard with health data", () => {
-    mockHealth.mockReturnValue({
-      isLoading: false,
-      isError: false,
-      data: {
-        version: "1.5.22",
-        edition: "Community",
-        stats: { total: 50, running: 30, available: 20 },
-        services: { s3: "running", ec2: "running" },
-      },
-    });
-    mockActive.mockReturnValue({
-      data: { activeCount: 5, activeServices: ["s3", "ec2", "sqs"] },
-    });
     render(<DashboardHome />, { wrapper: createWrapper() });
     expect(screen.getByText("Floci Dashboard")).toBeTruthy();
     expect(screen.getByText("Connected — v1.5.22")).toBeTruthy();
@@ -70,5 +71,35 @@ describe("DashboardHome", () => {
     expect(screen.getByText("Community")).toBeTruthy();
     expect(screen.getByText("Open S3")).toBeTruthy();
     expect(screen.getByText("Open EC2")).toBeTruthy();
+  });
+
+  // ─── Interaction Tests ──────────────────────────────────
+
+  it("navigates to S3 when 'Open S3' button is clicked", async () => {
+    const user = userEvent.setup();
+    render(<DashboardHome />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Open S3"));
+    expect(mockNavigate).toHaveBeenCalledWith("/services/s3");
+  });
+
+  it("navigates to DynamoDB when 'Open DynamoDB' button is clicked", async () => {
+    const user = userEvent.setup();
+    render(<DashboardHome />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Open DynamoDB"));
+    expect(mockNavigate).toHaveBeenCalledWith("/services/dynamodb");
+  });
+
+  it("navigates to EC2 when 'Open EC2' button is clicked", async () => {
+    const user = userEvent.setup();
+    render(<DashboardHome />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Open EC2"));
+    expect(mockNavigate).toHaveBeenCalledWith("/services/ec2");
+  });
+
+  it("navigates to IAM when 'Open IAM' button is clicked", async () => {
+    const user = userEvent.setup();
+    render(<DashboardHome />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Open IAM"));
+    expect(mockNavigate).toHaveBeenCalledWith("/services/iam");
   });
 });

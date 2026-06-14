@@ -1268,7 +1268,7 @@ Each remaining service gets a standard list + create + delete pattern.
 | 17.3 | Auto Scaling | Pending | Pending | Pending | |
 | 17.4 | RDS | Done | Done | Done | 2025-06-13 |
 | 17.5 | Neptune | Pending | Pending | Pending | |
-| 17.6 | Secrets Manager | Done | Done | Done | 2025-06-14 |
+| 17.6 | CloudFormation | Done | Done | Done | 2025-06-14 |
 | 17.7 | ELB | Pending | Pending | Pending | |
 | 17.8 | CloudFront | Pending | Pending | Pending | |
 | 17.9 | API Gateway V2 | Pending | Pending | Pending | |

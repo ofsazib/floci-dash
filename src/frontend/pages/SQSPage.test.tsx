@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
 
@@ -9,6 +10,7 @@ const mockSQSAttributes = vi.fn();
 const mockSQSMessages = vi.fn();
 const mockSQSQueueTags = vi.fn();
 const mockSQSDLQSources = vi.fn();
+const mockCreateQueueMutate = vi.fn();
 
 vi.mock("../hooks/useSQS", () => ({
   useSQSQueues: (...args: any[]) => mockSQSQueues(...args),
@@ -16,7 +18,7 @@ vi.mock("../hooks/useSQS", () => ({
   useSQSMessages: (...args: any[]) => mockSQSMessages(...args),
   useSQSQueueTags: (...args: any[]) => mockSQSQueueTags(...args),
   useSQSDLQSources: (...args: any[]) => mockSQSDLQSources(...args),
-  useCreateSQSQueue: () => ({ mutate: vi.fn(), isPending: false }),
+  useCreateSQSQueue: () => ({ mutate: mockCreateQueueMutate, isPending: false }),
   useDeleteSQSQueue: () => ({ mutate: vi.fn(), isPending: false }),
   usePurgeSQSQueue: () => ({ mutate: vi.fn(), isPending: false }),
   useSendSQSMessage: () => ({ mutate: vi.fn(), isPending: false }),
@@ -65,6 +67,8 @@ describe("SQSPage", () => {
     mockSQSDLQSources.mockReturnValue({ data: { queueUrls: [] }, isLoading: false });
   });
 
+  // ─── Render State Tests ─────────────────────────────────
+
   it("renders queue list", () => {
     render(<SQSPage />, { wrapper: createWrapper() });
     expect(screen.getByText("SQS")).toBeTruthy();
@@ -95,5 +99,19 @@ describe("SQSPage", () => {
     });
     render(<SQSPage />, { wrapper: createWrapper() });
     expect(screen.getByText("Failed to load queues")).toBeTruthy();
+  });
+
+  // ─── Interaction Tests ──────────────────────────────────
+
+  it("opens create queue modal when Create queue button is clicked", async () => {
+    const user = userEvent.setup();
+    render(<SQSPage />, { wrapper: createWrapper() });
+    // Use role-based selector to find the Create queue button
+    const createBtns = screen.getAllByRole("button", { name: /create queue/i });
+    await user.click(createBtns[0]);
+    await waitFor(() => {
+      const inputs = screen.getAllByPlaceholderText("my-queue");
+      expect(inputs.length).toBeGreaterThan(0);
+    });
   });
 });
