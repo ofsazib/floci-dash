@@ -1118,26 +1118,26 @@ if (service === "sqs") return <SQSQueues />;
 
 | # | Task | Status | Date |
 |---|------|--------|------|
-| 9.1 | Consult Floci IAM source for supported operations | Pending | |
-| 9.2 | Backend: User CRUD (list, create, get, update, delete, tags) | Pending | |
-| 9.3 | Backend: Group CRUD (list, create, get, delete, add/remove user) | Pending | |
-| 9.4 | Backend: Role CRUD (list, create, get, update, delete, update assume role policy, tags) | Pending | |
-| 9.5 | Backend: Managed policy CRUD (list, create, get, delete, version CRUD, set default, tags) | Pending | |
-| 9.6 | Backend: Policy attachments (attach/detach/list for user, group, role) | Pending | |
-| 9.7 | Backend: Inline policy CRUD (put/get/delete/list for user, group, role) | Pending | |
-| 9.8 | Backend: Access keys (create, delete, list, update status per user) | Pending | |
-| 9.9 | Backend: Instance profiles (create, get, delete, list, add/remove role) | Pending | |
+| 9.1 | Consult Floci IAM source for supported operations | Done | 2025-06-14 |
+| 9.2 | Backend: User CRUD (list, create, get, update, delete, tags) | Done | 2025-06-14 |
+| 9.3 | Backend: Group CRUD (list, create, get, delete, add/remove user) | Done | 2025-06-14 |
+| 9.4 | Backend: Role CRUD (list, create, get, update, delete, update assume role policy, tags) | Done | 2025-06-14 |
+| 9.5 | Backend: Managed policy CRUD (list, create, get, delete, version CRUD, set default, tags) | Done | 2025-06-14 |
+| 9.6 | Backend: Policy attachments (attach/detach/list for user, group, role) | Done | 2025-06-14 |
+| 9.7 | Backend: Inline policy CRUD (put/get/delete/list for user, group, role) | Done | 2025-06-14 |
+| 9.8 | Backend: Access keys (create, delete, list, update status per user) | Done | 2025-06-14 |
+| 9.9 | Backend: Instance profiles (create, get, delete, list, add/remove role) | Done | 2025-06-14 |
 | 9.10 | Backend: Permission boundaries (put/delete for user and role) | Pending | |
 | 9.11 | Backend: STS operations (get caller identity, assume role, session token) | Pending | |
-| 9.12 | Frontend: useIAM hooks | Pending | |
-| 9.13 | Frontend: IAM dedicated page with tabs (Users, Groups, Roles, Policies) | Pending | |
-| 9.14 | Frontend: Users tab — List, create, detail (groups, attached policies, inline policies, access keys, tags) | Pending | |
-| 9.15 | Frontend: Groups tab — List, create, detail (members, attached policies, inline policies) | Pending | |
-| 9.16 | Frontend: Roles tab — List, create, detail (trust policy editor, attached policies, inline policies, instance profiles) | Pending | |
-| 9.17 | Frontend: Policies tab — List (All/AWS/Local scope), create (JSON editor), detail (versions, attachments) | Pending | |
-| 9.18 | Frontend: Access key create modal (show secret once with copy) | Pending | |
-| 9.19 | Frontend: JSON policy editor component (shared across all tabs) | Pending | |
-| 9.20 | Verify: typecheck + build pass | Pending | |
+| 9.12 | Frontend: useIAM hooks | Done | 2025-06-14 |
+| 9.13 | Frontend: IAM dedicated page with tabs (Users, Groups, Roles, Policies) | Done | 2025-06-14 |
+| 9.14 | Frontend: Users tab — List, create, detail (groups, attached policies, inline policies, access keys, tags) | Done | 2025-06-14 |
+| 9.15 | Frontend: Groups tab — List, create, detail (members, attached policies, inline policies) | Done | 2025-06-14 |
+| 9.16 | Frontend: Roles tab — List, create, detail (trust policy editor, attached policies, inline policies, instance profiles) | Done | 2025-06-14 |
+| 9.17 | Frontend: Policies tab — List (All/AWS/Local scope), create (JSON editor), detail (versions, attachments) | Done | 2025-06-14 |
+| 9.18 | Frontend: Access key create modal (show secret once with copy) | Done | 2025-06-14 |
+| 9.19 | Frontend: JSON policy editor component (shared across all tabs) | Done | 2025-06-14 |
+| 9.20 | Verify: typecheck + build pass | Done | 2025-06-14 |
 
 #### 4B — KMS (35 operations)
 

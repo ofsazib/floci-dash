@@ -13,6 +13,7 @@ import eventsRoutes from "./events";
 import logsRoutes from "./logs";
 import lambdaRoutes from "./lambda";
 import cloudwatchRoutes from "./cloudwatch";
+import iamRoutes from "./iam";
 
 const router = new Hono();
 
@@ -29,9 +30,10 @@ router.route("/events", eventsRoutes);
 router.route("/logs", logsRoutes);
 router.route("/lambda", lambdaRoutes);
 router.route("/cloudwatch", cloudwatchRoutes);
+router.route("/iam", iamRoutes);
 
 router.get("/", (c: Context) => {
-  return c.json({ message: "AWS routes available. Services registered: s3, dynamodb, rds, ec2, sqs, sns, events, logs, lambda, cloudwatch" });
+  return c.json({ message: "AWS routes available. Services registered: s3, dynamodb, rds, ec2, sqs, sns, events, logs, lambda, cloudwatch, iam" });
 });
 
 export default router;

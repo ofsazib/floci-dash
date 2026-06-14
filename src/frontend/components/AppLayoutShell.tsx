@@ -19,6 +19,7 @@ const FLOCI_LOGO_SVG = `data:image/svg+xml,${encodeURIComponent(
 const IMPLEMENTED_SERVICES: Record<string, string> = {
   ec2: "EC2",
   lambda: "Lambda",
+  iam: "IAM",
   s3: "S3",
   dynamodb: "DynamoDB",
   rds: "RDS",
