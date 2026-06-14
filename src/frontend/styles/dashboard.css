@@ -1,6 +1,17 @@
 /* ─── Dark-mode-safe utility classes ─── */
 /* Use these instead of hardcoded hex colors in inline styles */
 
+/* Sidebar health indicator */
+.fd-nav-health {
+  color: var(--color-text-body-secondary, #545b64);
+  border-bottom: 1px solid var(--color-border-divider-default, #e9ebed);
+}
+
+.awsui-dark-mode .fd-nav-health {
+  color: var(--color-text-body-secondary, #9ba7b6);
+  border-color: var(--color-border-divider-default, #3c4246);
+}
+
 /* Tag/chip background */
 .fd-tag-chip {
   display: inline-flex;

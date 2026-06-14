@@ -1,11 +1,10 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { AppLayout, SideNavigation, TopNavigation, StatusIndicator, Badge } from "@cloudscape-design/components";
+import { AppLayout, SideNavigation, TopNavigation, StatusIndicator } from "@cloudscape-design/components";
 import type { SideNavigationProps } from "@cloudscape-design/components";
 import { useHealth, useActiveServices } from "../hooks/useSystem";
 import { useSettings } from "../stores/settings";
 import { SERVICE_LABELS } from "../types/services";
-
 interface Props {
   children: React.ReactNode;
 }
@@ -15,6 +14,17 @@ type NavItem = SideNavigationProps.Link | SideNavigationProps.ExpandableLinkGrou
 const FLOCI_LOGO_SVG = `data:image/svg+xml,${encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#00d4ff"/><stop offset="100%" stop-color="#0073e6"/></linearGradient></defs><rect width="32" height="32" rx="7" fill="url(#g)"/><text x="16" y="23" font-size="20" font-weight="bold" fill="#fff" text-anchor="middle" font-family="Arial,sans-serif">F</text></svg>'
 )}`;
+
+// Services with full management UI (dedicated pages)
+const IMPLEMENTED_SERVICES: Record<string, string> = {
+  ec2: "EC2",
+  s3: "S3",
+  dynamodb: "DynamoDB",
+  rds: "RDS",
+  sqs: "SQS",
+  sns: "SNS",
+  events: "EventBridge",
+};
 
 const CATEGORY_ORDER = [
   "Compute",
@@ -52,6 +62,21 @@ const SERVICE_CATEGORY_MAP: Record<string, string> = {
   backup: "Migration", transfer: "Migration",
 };
 
+function ActiveDot() {
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        width: "6px",
+        height: "6px",
+        borderRadius: "50%",
+        backgroundColor: "#037f0c",
+        flexShrink: 0,
+      }}
+    />
+  );
+}
+
 export default function AppLayoutShell({ children }: Props) {
   const [navOpen, setNavOpen] = useState(true);
   const navigate = useNavigate();
@@ -69,18 +94,41 @@ export default function AppLayoutShell({ children }: Props) {
 
   const navItems = useMemo(() => {
     const items: SideNavigationProps.Item[] = [
-      { type: "link" as const, text: "Dashboard", href: "/#/", info: undefined },
+      { type: "link" as const, text: "Dashboard", href: "/#/" },
       { type: "divider" as const },
     ];
 
+    // ── Implemented services (full management UI) ──
+    const activeSet = new Set(active?.activeServices || []);
+    const implementedKeys = Object.keys(IMPLEMENTED_SERVICES);
+
+    // Only show implemented services that Floci reports
+    const flociServices = health?.services ? Object.keys(health.services) : [];
+    const availableImplemented = implementedKeys.filter((k) => flociServices.includes(k));
+
+    if (availableImplemented.length > 0) {
+      items.push({
+        type: "section" as const,
+        text: "Resources",
+        items: availableImplemented.map((key) => ({
+          type: "link" as const,
+          text: IMPLEMENTED_SERVICES[key],
+          href: `/#/services/${key}`,
+          info: activeSet.has(key) ? <ActiveDot /> : undefined,
+        })) as SideNavigationProps.Item[],
+      });
+    }
+
+    // ── All services by category ──
     if (!health?.services) {
       return items;
     }
 
-    const flociServices = Object.keys(health.services);
+    items.push({ type: "divider" as const });
 
     const grouped: Record<string, Array<{ key: string; label: string; status: string }>> = {};
     for (const svc of flociServices) {
+      if (IMPLEMENTED_SERVICES[svc]) continue; // Skip already shown
       const category = SERVICE_CATEGORY_MAP[svc] || "Other";
       if (!grouped[category]) grouped[category] = [];
       grouped[category].push({
@@ -89,8 +137,6 @@ export default function AppLayoutShell({ children }: Props) {
         status: health.services[svc],
       });
     }
-
-    const activeSet = new Set(active?.activeServices || []);
 
     for (const cat of CATEGORY_ORDER) {
       const svcs = grouped[cat];
@@ -105,11 +151,6 @@ export default function AppLayoutShell({ children }: Props) {
             type: "link" as const,
             text: s.label,
             href: `/#/services/${s.key}`,
-            info: activeSet.has(s.key)
-              ? <Badge color="green">●</Badge>
-              : s.status === "running"
-              ? undefined
-              : undefined,
           })),
       } as SideNavigationProps.ExpandableLinkGroup);
     }
@@ -140,6 +181,10 @@ export default function AppLayoutShell({ children }: Props) {
     navigate(path || "/");
   };
 
+  const running = health?.stats?.running ?? 0;
+  const total = health?.stats?.total ?? 0;
+  const allHealthy = running === total;
+
   return (
     <>
       <div id="header">
@@ -152,9 +197,8 @@ export default function AppLayoutShell({ children }: Props) {
           utilities={[
             {
               type: "button",
-              text: darkMode ? "Light mode" : "Dark mode",
+              text: darkMode ? "\u2600 Light" : "\u263D Dark",
               onClick: toggleDarkMode,
-              iconName: "settings",
             },
           ]}
           i18nStrings={{ searchIconAriaLabel: "Search", overflowMenuTriggerText: "More" }}
@@ -165,17 +209,36 @@ export default function AppLayoutShell({ children }: Props) {
         navigationOpen={navOpen}
         onNavigationChange={(e) => setNavOpen(e.detail.open)}
         navigation={
-          <SideNavigation
-            header={{
-              text: health
-                ? `Floci (${health.stats.running}/${health.stats.total})`
-                : "Floci",
-              href: "/#/",
-            }}
-            activeHref={currentHref}
-            onFollow={handleFollow as any}
-            items={navItems}
-          />
+          <div>
+            <div
+              className="fd-nav-health"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "10px 20px 6px",
+                fontSize: "12px",
+              }}
+            >
+              <span
+                style={{
+                  width: "8px",
+                  height: "8px",
+                  borderRadius: "50%",
+                  flexShrink: 0,
+                  backgroundColor: allHealthy ? "#037f0c" : "#d89914",
+                  boxShadow: allHealthy ? "0 0 6px #037f0c66" : "0 0 6px #d8991466",
+                }}
+              />
+              {running} / {total} services running
+            </div>
+            <SideNavigation
+              header={{ text: "Floci", href: "/#/" }}
+              activeHref={currentHref}
+              onFollow={handleFollow as any}
+              items={navItems}
+            />
+          </div>
         }
         toolsHide
         navigationWidth={260}
