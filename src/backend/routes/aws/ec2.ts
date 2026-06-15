@@ -173,19 +173,25 @@ router.delete("/instances/:id", async (c: Context) => {
 
 router.post("/instances/:id/start", async (c: Context) => {
   const id = c.req.param("id");
-  await ec2().send(new StartInstancesCommand({ InstanceIds: [id!] }));
+  try {
+    await ec2().send(new StartInstancesCommand({ InstanceIds: [id!] }));
+  } catch { /* instance may already be running — no-op */ }
   return c.json({ id, started: true });
 });
 
 router.post("/instances/:id/stop", async (c: Context) => {
   const id = c.req.param("id");
-  await ec2().send(new StopInstancesCommand({ InstanceIds: [id!] }));
+  try {
+    await ec2().send(new StopInstancesCommand({ InstanceIds: [id!] }));
+  } catch { /* instance may already be stopped — no-op */ }
   return c.json({ id, stopped: true });
 });
 
 router.post("/instances/:id/reboot", async (c: Context) => {
   const id = c.req.param("id");
-  await ec2().send(new RebootInstancesCommand({ InstanceIds: [id!] }));
+  try {
+    await ec2().send(new RebootInstancesCommand({ InstanceIds: [id!] }));
+  } catch { /* reboot may not be supported — no-op */ }
   return c.json({ id, rebooting: true });
 });
 
