@@ -69,6 +69,12 @@ jobs:
           path: coverage/
           retention-days: 7
 
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          directory: coverage/
+          fail_ci_if_error: false
+
   docker:
     needs: test
     if: github.ref == 'refs/heads/main'

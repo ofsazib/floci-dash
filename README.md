@@ -15,6 +15,7 @@
   <img src="https://img.shields.io/badge/Hono-4.x-e36002?logo=hono&logoColor=white" alt="Hono" />
   <img src="https://img.shields.io/badge/Docker-ready-2496ed?logo=docker&logoColor=white" alt="Docker" />
   <img src="https://github.com/ofsazib/floci-dash/actions/workflows/ci.yml/badge.svg" alt="CI" />
+  <a href="https://codecov.io/gh/ofsazib/floci-dash"><img src="https://codecov.io/gh/ofsazib/floci-dash/branch/main/graph/badge.svg" alt="Codecov" /></a>
 </p>
 
 <p align="center">
