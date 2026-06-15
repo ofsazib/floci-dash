@@ -14,6 +14,7 @@
   <img src="https://img.shields.io/badge/Cloudscape_Design-3.x-ff9900?logo=amazon-aws&logoColor=white" alt="Cloudscape" />
   <img src="https://img.shields.io/badge/Hono-4.x-e36002?logo=hono&logoColor=white" alt="Hono" />
   <img src="https://img.shields.io/badge/Docker-ready-2496ed?logo=docker&logoColor=white" alt="Docker" />
+  <img src="https://github.com/ofsazib/floci-dash/actions/workflows/ci.yml/badge.svg" alt="CI" />
 </p>
 
 <p align="center">
@@ -47,6 +48,13 @@
 git clone https://github.com/hectorvent/floci-dashboard.git
 cd floci-dashboard
 make up-bg
+```
+
+Or pull the public Docker image directly:
+
+```bash
+docker pull ghcr.io/ofsazib/floci-dash:latest
+docker run -p 9877:3000 --rm ghcr.io/ofsazib/floci-dash
 ```
 
 Open [http://localhost:9877](http://localhost:9877) — the dashboard connects to Floci automatically.
@@ -109,6 +117,22 @@ FLOCI_PORT=4566 DASHBOARD_PORT=3000 make up-bg
 │          Local AWS services emulator              │
 │        ghcr.io/hectorvent/floci:latest           │
 └─────────────────────────────────────────────────┘
+```
+
+### Testing
+
+The project includes 389 unit tests (237 backend + 66 frontend + 86 integration) organized as:
+
+| Tests | Count | Location |
+|-------|-------|----------|
+| Backend route unit tests | 313 | `src/backend/routes/aws/*.test.ts` |
+| Frontend page tests | 76 | `src/frontend/pages/*.test.tsx` |
+| Integration tests | 86 | `src/backend/integration.test.ts` (requires Floci) |
+
+```bash
+make test           # Fast unit tests (no Floci needed)
+make test-cov       # Unit tests with coverage report
+make test-all       # Unit + integration tests (requires Floci service container)
 ```
 
 ### Key design decisions
@@ -205,6 +229,12 @@ src/
         kms.ts             KMS operations
     index.ts               Hono app entry point
     types.ts               Shared backend types
+
+  test/                    Shared test infrastructure
+    setup.ts              Vitest global setup (jest-dom matchers)
+    helpers.tsx           Shared test utilities (wrapper, mocks, route helpers)
+    backend/              Backend route unit tests (*.test.ts)
+    frontend/             Frontend page component tests (*.test.tsx)
 ```
 
 ## Supported Services
@@ -288,8 +318,9 @@ You'll need Floci running separately (e.g., `docker run -p 4566:4566 ghcr.io/hec
 3. Register in `src/backend/routes/aws/index.ts`
 4. Create frontend hooks: `src/frontend/hooks/use{Service}.ts`
 5. Add component to `src/frontend/pages/ServicePage.tsx`
-6. Run `make typecheck` to verify
-7. Update PLAN.md tracker
+6. Write tests: backend route tests (`src/backend/routes/aws/{service}.test.ts`) and frontend page tests (`src/frontend/pages/{Service}Page.test.tsx`)
+7. Run `make typecheck && make test` to verify
+8. Update PLAN.md tracker and README.md
 
 ## Tech Stack
 

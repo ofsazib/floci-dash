@@ -1343,8 +1343,24 @@ Each remaining service gets a standard list + create + delete pattern.
 | 19.6 | Security: Sanitize all user inputs on backend | Pending | |
 | 19.7 | Docker: Optimize production image size | Pending | |
 | 19.8 | Docker: Add health check endpoint to dashboard container | Pending | |
-| 19.9 | CI: Add GitHub Actions for typecheck + build | Pending | |
+| 19.9 | CI: Add GitHub Actions for typecheck + build | Done | 2025-06-15 |
 | 19.10 | Final: Full docker:prod test with all services | Pending | |
+
+---
+
+### Phase 10: Test Infrastructure & CI/CD
+
+| # | Task | Status | Date |
+|---|------|--------|------|
+| 20.1 | Create shared test infrastructure (setup.ts, helpers.tsx) | Done | 2025-06-15 |
+| 20.2 | Update vitest config (setup files, coverage thresholds) | Done | 2025-06-15 |
+| 20.3 | Refactor existing tests to use shared helpers | Done | 2025-06-15 |
+| 20.4 | Add 4 missing backend test files (cloudformation, cloudwatch, kms, logs) | Done | 2025-06-15 |
+| 20.5 | Add 3 missing frontend test files (CloudFormationPage, KMSPage, SecretsManagerPage) | Done | 2025-06-15 |
+| 20.6 | Update CI workflow with Docker build + publish job | Done | 2025-06-15 |
+| 20.7 | Create release workflow for GHCR semver tags | Done | 2025-06-15 |
+| 20.8 | Update README with CI badge, Docker pull instructions, test section | Done | 2025-06-15 |
+| 20.9 | Verify: typecheck + 389 tests pass + coverage thresholds met | Done | 2025-06-15 |
 
 ---
 

@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { clickButton, createWrapper } from "../../test/helpers";
 import React from "react";
 
 const mockFunctions = vi.fn();
@@ -36,14 +36,6 @@ vi.mock("../hooks/useLambda", () => ({
 }));
 
 import LambdaPage from "./LambdaPage";
-
-function createWrapper() {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return ({ children }: { children: React.ReactNode }) => (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-  );
-}
-
 describe("LambdaPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -97,8 +89,7 @@ describe("LambdaPage", () => {
   it("opens create function modal and fills form", async () => {
     const user = userEvent.setup();
     render(<LambdaPage />, { wrapper: createWrapper() });
-    const createBtns = screen.getAllByText("Create");
-    await user.click(createBtns[0]); // "Create" button in function list
+    await clickButton(user, /Create/i);
     await waitFor(() => {
       expect(screen.getByPlaceholderText("my-function")).toBeTruthy();
     });
@@ -109,8 +100,7 @@ describe("LambdaPage", () => {
     const handlerInput = screen.getByPlaceholderText("index.handler");
     await user.type(handlerInput, "index.handler");
     // Submit
-    const modalBtns = screen.getAllByText("Create");
-    await user.click(modalBtns[modalBtns.length - 1]);
+    await clickButton(user, /Create/i, { last: true });
     expect(mockCreateFunctionMutate).toHaveBeenCalled();
   });
 });

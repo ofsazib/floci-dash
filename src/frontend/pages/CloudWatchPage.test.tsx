@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { clickButton, createWrapper } from "../../test/helpers";
 import React from "react";
 
 const mockCloudWatchMetrics = vi.fn();
@@ -29,14 +29,6 @@ vi.mock("../components/Toast", () => ({
 }));
 
 import CloudWatchPage from "./CloudWatchPage";
-
-function createWrapper() {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return ({ children }: { children: React.ReactNode }) => (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-  );
-}
-
 describe("CloudWatchPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -70,25 +62,23 @@ describe("CloudWatchPage", () => {
   it("opens create alarm modal when 'Create alarm' button is clicked", async () => {
     const user = userEvent.setup();
     render(<CloudWatchPage />, { wrapper: createWrapper() });
-    await user.click(screen.getByText("Create alarm"));
+    await clickButton(user, /Create alarm/i);
     await waitFor(() => {
-      expect(screen.getByText("Create alarm")).toBeTruthy();
+      expect(screen.getByPlaceholderText("CPUUtilization")).toBeTruthy();
     });
-    expect(screen.getByPlaceholderText("CPUUtilization")).toBeTruthy();
   });
 
   it("calls createAlarm when alarm form is submitted", async () => {
     const user = userEvent.setup();
     render(<CloudWatchPage />, { wrapper: createWrapper() });
-    await user.click(screen.getByText("Create alarm"));
+    await clickButton(user, /Create alarm/i);
     await waitFor(() => {
       expect(screen.getByPlaceholderText("AWS/EC2")).toBeTruthy();
     });
     // Fill alarm name
     const nameInput = screen.getAllByRole("textbox")[0];
     await user.type(nameInput, "test-alarm");
-    const createBtns = screen.getAllByText("Create");
-    await user.click(createBtns[createBtns.length - 1]);
+    await clickButton(user, /Create/i, { last: true });
     expect(mockCreateAlarmMutate).toHaveBeenCalled();
   });
 });

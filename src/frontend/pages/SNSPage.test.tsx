@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { clickButton, createWrapper } from "../../test/helpers";
 import React from "react";
 
 const mockSNSTopics = vi.fn();
@@ -43,14 +43,6 @@ vi.mock("react-router-dom", () => ({
 }));
 
 import SNSPage from "./SNSPage";
-
-function createWrapper() {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return ({ children }: { children: React.ReactNode }) => (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-  );
-}
-
 describe("SNSPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -95,25 +87,23 @@ describe("SNSPage", () => {
   it("opens create topic modal when 'Create topic' button is clicked", async () => {
     const user = userEvent.setup();
     render(<SNSPage />, { wrapper: createWrapper() });
-    await user.click(screen.getByText("Create topic"));
+    await clickButton(user, /^Create topic$/i);
     await waitFor(() => {
-      expect(screen.getByText("Create topic")).toBeTruthy();
+      expect(screen.getByPlaceholderText("my-topic")).toBeTruthy();
     });
-    expect(screen.getByPlaceholderText("my-topic")).toBeTruthy();
+    expect(screen.getByRole("dialog")).toBeTruthy();
   });
 
   it("calls createTopic when create topic form is submitted", async () => {
     const user = userEvent.setup();
     render(<SNSPage />, { wrapper: createWrapper() });
-    await user.click(screen.getByText("Create topic"));
+    await clickButton(user, /^Create topic$/i);
     await waitFor(() => {
       expect(screen.getByPlaceholderText("my-topic")).toBeTruthy();
     });
     const input = screen.getByPlaceholderText("my-topic");
     await user.type(input, "test-topic");
-    const createBtns = screen.getAllByText("Create");
-    const modalCreateBtn = createBtns[createBtns.length - 1];
-    await user.click(modalCreateBtn);
+    await clickButton(user, /^Create$/i);
     expect(mockCreateTopicMutate).toHaveBeenCalled();
   });
 

@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { clickButton, createWrapper } from "../../test/helpers";
 import React from "react";
 
 // ─── Mock useEC2 hooks ─────────────────────────────────
@@ -68,17 +68,6 @@ vi.mock("../hooks/useEC2", () => ({
 
 import { EC2InstanceList, EC2LaunchTemplateList } from "./EC2Page";
 
-// ─── Helper to create wrapper ──────────────────────────
-
-function createWrapper() {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  return ({ children }: { children: React.ReactNode }) => (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-  );
-}
-
 // ─── Tests ─────────────────────────────────────────────
 
 describe("EC2InstanceList — AMI auto-detection", () => {
@@ -116,8 +105,7 @@ describe("EC2InstanceList — AMI auto-detection", () => {
     // (The Select isn't visible yet because the modal is closed)
 
     // Open the launch modal
-    const createButtons = screen.getAllByRole("button", { name: /create/i });
-    await user.click(createButtons[0]);
+    await clickButton(user, /create/i);
 
     // The auto-detection useEffect should have selected the first AMI
     // The Cloudscape Select button displays the selected AMI ID
@@ -142,8 +130,7 @@ describe("EC2InstanceList — AMI auto-detection", () => {
     render(<EC2InstanceList onSelect={vi.fn()} />, { wrapper: createWrapper() });
 
     // Open the launch modal
-    const createButtons = screen.getAllByRole("button", { name: /create/i });
-    await user.click(createButtons[0]);
+    await clickButton(user, /create/i);
 
     // When no AMIs, the component renders an Input with placeholder "ami-xxx"
     await waitFor(() => {
@@ -160,8 +147,7 @@ describe("EC2InstanceList — AMI auto-detection", () => {
     const user = userEvent.setup();
     render(<EC2InstanceList onSelect={vi.fn()} />, { wrapper: createWrapper() });
 
-    const createButtons = screen.getAllByRole("button", { name: /create/i });
-    await user.click(createButtons[0]);
+    await clickButton(user, /create/i);
 
     // While loading, no images means we show the Input fallback
     await waitFor(() => {
@@ -197,8 +183,7 @@ describe("EC2LaunchTemplateList — AMI auto-detection", () => {
     render(<EC2LaunchTemplateList />, { wrapper: createWrapper() });
 
     // Open the create modal
-    const createButtons = screen.getAllByRole("button", { name: /create/i });
-    await user.click(createButtons[0]);
+    await clickButton(user, /create/i);
 
     // Verify the auto-detected AMI is selected
     await waitFor(() => {

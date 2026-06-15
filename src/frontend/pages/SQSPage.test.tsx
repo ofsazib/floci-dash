@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { clickButton, createWrapper } from "../../test/helpers";
 import React from "react";
 
 const mockSQSQueues = vi.fn();
@@ -46,14 +46,6 @@ vi.mock("react-router-dom", () => ({
 }));
 
 import SQSPage from "./SQSPage";
-
-function createWrapper() {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return ({ children }: { children: React.ReactNode }) => (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-  );
-}
-
 describe("SQSPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -106,9 +98,7 @@ describe("SQSPage", () => {
   it("opens create queue modal when Create queue button is clicked", async () => {
     const user = userEvent.setup();
     render(<SQSPage />, { wrapper: createWrapper() });
-    // Use role-based selector to find the Create queue button
-    const createBtns = screen.getAllByRole("button", { name: /create queue/i });
-    await user.click(createBtns[0]);
+    await clickButton(user, /create queue/i);
     await waitFor(() => {
       const inputs = screen.getAllByPlaceholderText("my-queue");
       expect(inputs.length).toBeGreaterThan(0);

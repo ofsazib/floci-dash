@@ -4,7 +4,8 @@ SHELL := /bin/bash
 COMPOSE := docker compose
 
 .PHONY: help install setup dev dev-backend dev-frontend build build-frontend \
-        build-backend typecheck start clean test \
+        build-backend typecheck start clean test test-cov test-all integration-test \
+        _ensure-floci \
         up up-bg down restart rebuild logs logs-floci logs-dashboard \
         ps shell shell-floci prod prod-bg prod-down \
         typecheck-docker build-docker clean-all
@@ -22,6 +23,9 @@ help: ## Show this help
 	@echo ""
 
 # ─── Native Targets (requires Node.js 22+) ──────────
+
+# Port for Floci — matches docker-compose.yml default
+FLOCI_PORT ?= 9878
 
 install: ## Install npm dependencies
 	npm install
@@ -56,8 +60,37 @@ start: ## Start production server (needs build first)
 clean: ## Remove node_modules and dist
 	rm -rf node_modules dist
 
-test: ## Run tests
-	@echo "No tests defined yet."
+test: ## Run unit tests only (fast, no Floci needed)
+	npm run test:unit
+
+test-cov: ## Run unit tests with coverage report (no Floci needed)
+	npm run test:cov
+
+test-all: ## Run all tests including integration (requires Floci)
+	$(MAKE) _ensure-floci
+	FLOCI_URL=http://localhost:$(FLOCI_PORT) npm run test
+
+integration-test: ## Run integration tests against Floci (starts Floci if not running)
+	$(MAKE) _ensure-floci
+	FLOCI_URL=http://localhost:$(FLOCI_PORT) npx vitest run src/backend/integration.test.ts
+
+_ensure-floci:
+	@echo "Checking Floci availability..."
+	@if ! curl -s http://localhost:$(FLOCI_PORT)/_floci/health > /dev/null 2>&1; then \
+		echo "Floci not running. Starting Floci via Docker..."; \
+		FLOCI_PORT=$(FLOCI_PORT) $(COMPOSE) up -d floci; \
+		echo "Waiting up to 90s for Floci to be healthy..."; \
+		for i in $$(seq 1 45); do \
+			if curl -s http://localhost:$(FLOCI_PORT)/_floci/health > /dev/null 2>&1; then \
+				echo "✓ Floci is ready!"; \
+				exit 0; \
+			fi; \
+			sleep 2; \
+		done; \
+		echo "✗ Timed out waiting for Floci"; \
+		exit 1; \
+	fi; \
+	echo "✓ Floci is already running."
 
 # ─── Docker Targets ─────────────────────────────────
 # All Docker targets use docker-compose.yml (production stack).

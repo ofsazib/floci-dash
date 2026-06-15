@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { clickButton, createWrapper } from "../../test/helpers";
 import React from "react";
 
 const mockIAMUsers = vi.fn();
@@ -51,14 +51,6 @@ vi.mock("../components/Toast", () => ({
 }));
 
 import IAMPage from "./IAMPage";
-
-function createWrapper() {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return ({ children }: { children: React.ReactNode }) => (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-  );
-}
-
 describe("IAMPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -107,16 +99,15 @@ describe("IAMPage", () => {
   it("opens create role modal and submits", async () => {
     const user = userEvent.setup();
     render(<IAMPage />, { wrapper: createWrapper() });
-    const createBtns = screen.getAllByText("Create role");
-    await user.click(createBtns[0]);
+    await clickButton(user, /Create role/i);
     await waitFor(() => {
-      expect(screen.getByText("Create role")).toBeTruthy();
+      // Modal should show the default trust policy textarea
+      expect(screen.getByText(/AssumeRolePolicyDocument/i)).toBeTruthy();
     });
     // Fill role name
     const inputs = screen.getAllByRole("textbox");
     await user.type(inputs[0], "test-role");
-    const modalBtns = screen.getAllByText("Create");
-    await user.click(modalBtns[modalBtns.length - 1]);
+    await clickButton(user, /Create/i, { last: true });
     expect(mockCreateRoleMutate).toHaveBeenCalled();
   });
 
@@ -128,15 +119,14 @@ describe("IAMPage", () => {
     await waitFor(() => {
       expect(screen.getAllByText("Users").length).toBeGreaterThan(0);
     });
-    await user.click(screen.getByText("Create user"));
+    await clickButton(user, /Create user/i);
     await waitFor(() => {
-      expect(screen.getByText("Create user")).toBeTruthy();
+      expect(screen.getByDisplayValue("/")).toBeTruthy();
     });
     // Fill user name
     const inputs = screen.getAllByRole("textbox");
     await user.type(inputs[0], "new-user");
-    const modalBtns = screen.getAllByText("Create");
-    await user.click(modalBtns[modalBtns.length - 1]);
+    await clickButton(user, /Create/i, { last: true });
     expect(mockCreateUserMutate).toHaveBeenCalled();
   });
 });

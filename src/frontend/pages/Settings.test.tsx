@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { createWrapper } from "../../test/helpers";
 import React from "react";
 
 const mockToggleDarkMode = vi.fn();
@@ -14,15 +14,6 @@ vi.mock("../stores/settings", () => ({
 }));
 
 import Settings from "./Settings";
-
-function createWrapper() {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  return ({ children }: { children: React.ReactNode }) => (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-  );
-}
 
 describe("Settings", () => {
   beforeEach(() => {

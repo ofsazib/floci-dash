@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { clickButton, createWrapper } from "../../test/helpers";
 import React from "react";
 
 const mockBuckets = vi.fn();
@@ -49,14 +49,6 @@ vi.mock("react-router-dom", () => ({
 }));
 
 import S3Page from "./S3Page";
-
-function createWrapper() {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return ({ children }: { children: React.ReactNode }) => (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-  );
-}
-
 describe("S3Page", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -111,9 +103,7 @@ describe("S3Page", () => {
   it("opens create bucket modal and submits", async () => {
     const user = userEvent.setup();
     render(<S3Page />, { wrapper: createWrapper() });
-    // Find "Create bucket" buttons by role and click the first one
-    const createBtns = screen.getAllByRole("button", { name: /create bucket/i });
-    await user.click(createBtns[0]);
+    await clickButton(user, /create bucket/i);
     // Verify modal opened - look for the modal header
     await waitFor(() => {
       const bucketInputs = screen.getAllByPlaceholderText("my-bucket");
@@ -124,9 +114,7 @@ describe("S3Page", () => {
   it("calls createBucket when create bucket form is submitted", async () => {
     const user = userEvent.setup();
     render(<S3Page />, { wrapper: createWrapper() });
-    // Open create bucket modal
-    const createBtns = screen.getAllByRole("button", { name: /create bucket/i });
-    await user.click(createBtns[0]);
+    await clickButton(user, /create bucket/i);
     // Fill bucket name and submit
     await waitFor(() => {
       const inputs = screen.getAllByPlaceholderText("my-bucket");
@@ -135,8 +123,7 @@ describe("S3Page", () => {
     const input = screen.getAllByPlaceholderText("my-bucket")[0];
     await user.type(input, "test-bucket-123");
     // Find and click Create bucket button in modal footer
-    const modalBtns = screen.getAllByRole("button", { name: /create bucket/i });
-    await user.click(modalBtns[modalBtns.length - 1]);
+    await clickButton(user, /create bucket/i, { last: true });
     expect(mockCreateBucketMutate).toHaveBeenCalled();
   });
 });

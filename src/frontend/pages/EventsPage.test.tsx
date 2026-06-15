@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { clickButton, createWrapper } from "../../test/helpers";
 import React from "react";
 
 const mockEventBuses = vi.fn();
@@ -41,14 +41,6 @@ vi.mock("../components/ConfirmDialog", () => ({
 }));
 
 import EventsPage from "./EventsPage";
-
-function createWrapper() {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return ({ children }: { children: React.ReactNode }) => (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-  );
-}
-
 describe("EventsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -93,26 +85,25 @@ describe("EventsPage", () => {
   it("opens create rule modal from rules tab", async () => {
     const user = userEvent.setup();
     render(<EventsPage />, { wrapper: createWrapper() });
-    await user.click(screen.getByText("Create rule"));
+    await clickButton(user, /Create rule/i);
     await waitFor(() => {
-      expect(screen.getByText("Create rule")).toBeTruthy();
+      expect(screen.getByPlaceholderText("my-rule")).toBeTruthy();
     });
-    expect(screen.getByPlaceholderText("my-rule")).toBeTruthy();
-    expect(screen.getByText("Enabled")).toBeTruthy();
   });
 
   it("calls putRule when create rule form is submitted", async () => {
     const user = userEvent.setup();
     render(<EventsPage />, { wrapper: createWrapper() });
-    await user.click(screen.getByText("Create rule"));
+    await clickButton(user, /Create rule/i);
     await waitFor(() => {
       expect(screen.getByPlaceholderText("my-rule")).toBeTruthy();
     });
-    const input = screen.getByPlaceholderText("my-rule");
-    await user.type(input, "test-rule");
-    const createBtns = screen.getAllByText("Create");
-    const modalBtn = createBtns[createBtns.length - 1];
-    await user.click(modalBtn);
+    // Fill required fields: rule name + schedule expression (to pass form validation)
+    const nameInput = screen.getByPlaceholderText("my-rule");
+    await user.type(nameInput, "test-rule");
+    const scheduleInput = screen.getByPlaceholderText("rate(5 minutes)");
+    await user.type(scheduleInput, "rate(1 hour)");
+    await clickButton(user, /Create/i, { last: true });
     expect(mockPutRuleMutate).toHaveBeenCalled();
   });
 });

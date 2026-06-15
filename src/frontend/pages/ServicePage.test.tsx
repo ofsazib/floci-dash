@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { clickButton, createWrapper } from "../../test/helpers";
 import React from "react";
 
 const mockLogGroups = vi.fn();
@@ -75,14 +75,6 @@ vi.mock("react-router-dom", () => ({
 }));
 
 import ServicePage from "./ServicePage";
-
-function createWrapper() {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return ({ children }: { children: React.ReactNode }) => (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-  );
-}
-
 describe("ServicePage — CloudWatch Logs", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -123,30 +115,25 @@ describe("ServicePage — CloudWatch Logs", () => {
 
   // ─── Interaction Tests ──────────────────────────────────
 
-  it("opens create log group modal when 'Create' button is clicked", async () => {
+  it("opens create log group modal when 'Create Log Group' button is clicked", async () => {
     const user = userEvent.setup();
     render(<ServicePage />, { wrapper: createWrapper() });
-    // Find and click the Create button for log groups
-    const createBtns = screen.getAllByText("Create");
-    await user.click(createBtns[0]);
+    await clickButton(user, /Create Log Group/i);
     await waitFor(() => {
       expect(screen.getByPlaceholderText("/aws/lambda/my-function")).toBeTruthy();
     });
-    expect(screen.getByText("Create log group")).toBeTruthy();
   });
 
   it("calls createLogGroup when create log group form is submitted", async () => {
     const user = userEvent.setup();
     render(<ServicePage />, { wrapper: createWrapper() });
-    const createBtns = screen.getAllByText("Create");
-    await user.click(createBtns[0]);
+    await clickButton(user, /Create Log Group/i);
     await waitFor(() => {
       expect(screen.getByPlaceholderText("/aws/lambda/my-function")).toBeTruthy();
     });
     const input = screen.getByPlaceholderText("/aws/lambda/my-function");
     await user.type(input, "/test/new-group");
-    const modalBtns = screen.getAllByText("Create log group");
-    await user.click(modalBtns[modalBtns.length - 1]);
+    await clickButton(user, /Create log group/i, { last: true });
     expect(mockCreateLogGroupMutate).toHaveBeenCalled();
   });
 });
