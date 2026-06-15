@@ -30,6 +30,7 @@ const IMPLEMENTED_SERVICES: Record<string, string> = {
   cloudwatch: "CloudWatch",
   secretsmanager: "Secrets Manager",
   cloudformation: "CloudFormation",
+  kms: "KMS",
 };
 
 const CATEGORY_ORDER = [

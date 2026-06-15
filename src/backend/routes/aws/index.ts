@@ -16,6 +16,7 @@ import cloudwatchRoutes from "./cloudwatch";
 import iamRoutes from "./iam";
 import secretsmanagerRoutes from "./secretsmanager";
 import cloudformationRoutes from "./cloudformation";
+import kmsRoutes from "./kms";
 
 const router = new Hono();
 
@@ -35,9 +36,10 @@ router.route("/cloudwatch", cloudwatchRoutes);
 router.route("/iam", iamRoutes);
 router.route("/secretsmanager", secretsmanagerRoutes);
 router.route("/cloudformation", cloudformationRoutes);
+router.route("/kms", kmsRoutes);
 
 router.get("/", (c: Context) => {
-  return c.json({ message: "AWS routes available. Services registered: s3, dynamodb, rds, ec2, sqs, sns, events, logs, lambda, cloudwatch, iam, secretsmanager, cloudformation" });
+  return c.json({ message: "AWS routes available. Services registered: s3, dynamodb, rds, ec2, sqs, sns, events, logs, lambda, cloudwatch, iam, secretsmanager, cloudformation, kms" });
 });
 
 export default router;

@@ -13,6 +13,8 @@
     "start": "node dist/backend/index.js",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.backend.json",
     "test": "vitest run",
+    "test:unit": "vitest run --exclude src/backend/integration.test.ts",
+    "test:cov": "vitest run --coverage --exclude src/backend/integration.test.ts",
     "test:watch": "vitest"
   },
   "dependencies": {
@@ -23,6 +25,7 @@
     "@aws-sdk/client-ec2": "^3.1068.0",
     "@aws-sdk/client-eventbridge": "^3.1068.0",
     "@aws-sdk/client-iam": "^3.1068.0",
+    "@aws-sdk/client-kms": "^3.1068.0",
     "@aws-sdk/client-lambda": "^3.1068.0",
     "@aws-sdk/client-rds": "^3.1068.0",
     "@aws-sdk/client-s3": "^3.0.0",
@@ -55,6 +58,7 @@
     "@types/react-dom": "^19.0.0",
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^4.0.0",
+    "@vitest/coverage-v8": "^4.1.8",
     "concurrently": "^9.0.0",
     "jsdom": "^29.1.1",
     "tsx": "^4.0.0",

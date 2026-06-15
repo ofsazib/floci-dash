@@ -32,7 +32,7 @@
 
 - **AWS Console look and feel** — Built with [Cloudscape Design System](https://cloudscape.design/), the same component library used by the real AWS Management Console
 - **55+ AWS services** — Full navigation and status for every service Floci supports
-- **Deep resource management** — Browse, create, and delete resources for implemented services (S3, DynamoDB, EC2, RDS, SQS, SNS, EventBridge, CloudWatch Logs, CloudWatch Metrics, Lambda, IAM, Secrets Manager, CloudFormation)
+- **Deep resource management** — Browse, create, and delete resources for implemented services (S3, DynamoDB, EC2, RDS, SQS, SNS, EventBridge, CloudWatch Logs, CloudWatch Metrics, Lambda, IAM, Secrets Manager, CloudFormation, KMS)
 - **EC2 web terminal** — Interactive bash shell inside running EC2 instances directly from the browser (xterm.js + Docker Engine API with PTY)
 - **Dark mode** — Toggle between light and dark themes
 - **Real-time health** — Dashboard shows live Floci service status (running/available counts)
@@ -146,6 +146,7 @@ src/
       IAMPage.tsx          IAM users, roles, policies, groups
       SecretsManagerPage.tsx  Secrets Manager secrets, values, versions
       CloudFormationPage.tsx  CloudFormation stacks, resources, events, templates
+      KMSPage.tsx           KMS keys, aliases, grants, crypto playground
       ServicePage.tsx      Dynamic service pages
       Settings.tsx         Dark mode, refresh interval
     hooks/                 TanStack Query hooks
@@ -163,6 +164,7 @@ src/
       useIAM.ts            IAM operations
       useSecrets.ts        Secrets Manager operations
       useCloudFormation.ts CloudFormation operations
+      useKMS.ts            KMS operations
       useService.ts        Generic service hook
       useSystem.ts         Health, active services
     lib/                   Utilities
@@ -200,6 +202,7 @@ src/
         iam.ts             IAM operations
         secretsmanager.ts  Secrets Manager operations
         cloudformation.ts  CloudFormation operations
+        kms.ts             KMS operations
     index.ts               Hono app entry point
     types.ts               Shared backend types
 ```
@@ -225,6 +228,7 @@ These services have full CRUD operations in both backend and frontend:
 | **IAM** | Users (list, create, delete, detail with groups/policies/access keys, create access keys), roles (list, create, delete, detail with trust policy/attached policies/tags), groups (list, create, delete), policies (list by scope, create, delete, detail with version document viewer), instance profiles (list) |
 | **Secrets Manager** | Secrets (list, create with value, delete, restore, detail with value reveal/version history), put secret value (new versions), random password generator |
 | **CloudFormation** | Stacks (list, create with YAML/JSON template, delete, detail with outputs/parameters/tags), resources (per-stack list with status), events (timeline with status), template viewer, template validator, exports |
+| **KMS** | Keys (list, create with usage/spec, detail with state/rotation/aliases/grants/tags), key management (enable/disable, schedule/cancel deletion, rotation toggle, update description), crypto playground (encrypt/decrypt), aliases (list, create, delete), data key generation, random bytes |
 
 ### Navigation + status (55 services)
 

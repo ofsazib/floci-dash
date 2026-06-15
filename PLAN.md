@@ -1143,18 +1143,18 @@ if (service === "sqs") return <SQSQueues />;
 
 | # | Task | Status | Date |
 |---|------|--------|------|
-| 10.1 | Consult Floci KMS source for supported operations | Pending | |
-| 10.2 | Backend: Key CRUD (create, describe, list, schedule deletion, cancel deletion) | Pending | |
-| 10.3 | Backend: Key management (update description, enable/disable, rotation) | Pending | |
-| 10.4 | Backend: Alias CRUD (create, delete, list) | Pending | |
-| 10.5 | Backend: Grant CRUD (create, list, revoke, retire) | Pending | |
-| 10.6 | Backend: Crypto operations (encrypt, decrypt, re-encrypt, generate data key, sign, verify, generate MAC, verify MAC, generate random, get public key) | Pending | |
-| 10.7 | Backend: Key policy + tags | Pending | |
-| 10.8 | Frontend: useKMS hooks | Pending | |
-| 10.9 | Frontend: KMS page — Keys tab (list, create, detail with state/rotation) | Pending | |
-| 10.10 | Frontend: Key detail — Aliases tab, Grants tab, Tags tab, Policy tab | Pending | |
-| 10.11 | Frontend: Key detail — Crypto playground (encrypt/decrypt, sign/verify, MAC, generate random) | Pending | |
-| 10.12 | Verify: typecheck + build pass | Pending | |
+| 10.1 | Consult Floci KMS source for supported operations | Done | 2025-06-14 |
+| 10.2 | Backend: Key CRUD (create, describe, list, schedule deletion, cancel deletion) | Done | 2025-06-14 |
+| 10.3 | Backend: Key management (update description, enable/disable, rotation) | Done | 2025-06-14 |
+| 10.4 | Backend: Alias CRUD (create, delete, list) | Done | 2025-06-14 |
+| 10.5 | Backend: Grant CRUD (create, list, revoke, retire) | Done | 2025-06-14 |
+| 10.6 | Backend: Crypto operations (encrypt, decrypt, re-encrypt, generate data key, sign, verify, generate MAC, verify MAC, generate random, get public key) | Done | 2025-06-14 |
+| 10.7 | Backend: Key policy + tags | Done | 2025-06-14 |
+| 10.8 | Frontend: useKMS hooks | Done | 2025-06-14 |
+| 10.9 | Frontend: KMS page — Keys tab (list, create, detail with state/rotation) | Done | 2025-06-14 |
+| 10.10 | Frontend: Key detail — Aliases tab, Grants tab, Tags tab, Policy tab | Done | 2025-06-14 |
+| 10.11 | Frontend: Key detail — Crypto playground (encrypt/decrypt, sign/verify, MAC, generate random) | Done | 2025-06-14 |
+| 10.12 | Verify: typecheck + build pass | Done | 2025-06-14 |
 
 #### 4C — Secrets Manager (18 operations)
 
