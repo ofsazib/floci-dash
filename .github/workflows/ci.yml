@@ -97,13 +97,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Generate version tag
+        id: version
+        run: echo "tag=0.0.${{ github.run_number }}" >> $GITHUB_OUTPUT
+
       - name: Extract metadata (tags, labels)
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/ofsazib/floci-dash
           tags: |
-            type=sha,prefix=sha-,format=short
+            type=raw,value=${{ steps.version.outputs.tag }}
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: Build and push
