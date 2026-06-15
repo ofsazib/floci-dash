@@ -1,0 +1,60 @@
+# ─── Combined Floci + Dashboard Image ───
+# Single container running both Floci (port 4566) and the Dashboard (port 3000).
+# Uses floci/floci:latest native binary on top of Node.js slim (Debian-based).
+#
+# Build:
+#   docker build -f docker/Dockerfile.combined -t floci-dash:combined .
+#
+# Run:
+#   docker run -p 3000:3000 -p 4566:4566 -v /var/run/docker.sock:/var/run/docker.sock \
+#     floci-dash:combined
+
+# Stage 1 — Build dashboard
+FROM node:22-alpine AS dashboard-builder
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+# Stage 2 — Combined runtime (Node.js slim = Debian-based, has Node.js + glibc)
+FROM node:22-slim
+USER root
+
+# Install runtime tools (curl for health checks)
+RUN apt-get update && apt-get install -y --no-install-recommends curl && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy Floci native binary + support files from the official image
+COPY --from=floci/floci:latest /app/application /app/application
+COPY --from=floci/floci:latest /usr/local/bin/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+COPY --from=floci/floci:latest /usr/local/bin/localstack-parity.sh /usr/local/bin/localstack-parity.sh
+COPY --from=floci/floci:latest /usr/local/bin/gosu /usr/local/bin/gosu
+
+# Create floci user matching the original image
+RUN groupadd -g 1001 floci && \
+    useradd -r -u 1001 -g floci -d /app -s /sbin/nologin floci && \
+    mkdir -p /app/data && \
+    chown -R floci:floci /app && \
+    chmod -R g+rwX /app
+
+# Copy dashboard artifacts
+WORKDIR /app/dashboard
+COPY --from=dashboard-builder /app/dist ./dist
+COPY --from=dashboard-builder /app/package.json /app/package-lock.json ./
+RUN npm ci --omit=dev && \
+    chown -R floci:floci /app/dashboard && \
+    chmod -R a+rX /app/dashboard
+
+# Combined startup script
+COPY docker/combined-start.sh /usr/local/bin/combined-start.sh
+RUN chmod +x /usr/local/bin/combined-start.sh
+
+EXPOSE 3000 4566
+
+WORKDIR /app
+
+# Reuse Floci's entrypoint which handles docker socket permissions,
+# drops to the floci user via gosu, then exec's our CMD.
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["/usr/local/bin/combined-start.sh"]

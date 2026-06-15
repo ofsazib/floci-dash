@@ -51,14 +51,25 @@ cd floci-dashboard
 make up-bg
 ```
 
-Or pull the public Docker image directly:
+Or pull the public Docker image. Two variants are published:
+
+| Image | Tag example | Contains |
+|-------|-------------|----------|
+| Dashboard only | `ghcr.io/ofsazib/floci-dash:latest` | Dashboard only — pair with external Floci |
+| Combined | `ghcr.io/ofsazib/floci-dash:latest-combined` | Floci + Dashboard in one container |
 
 ```bash
+# Dashboard only (needs Floci running separately on :4566)
 docker pull ghcr.io/ofsazib/floci-dash:latest
 docker run -p 9877:3000 --rm ghcr.io/ofsazib/floci-dash
+
+# Combined (Floci + Dashboard, single container)
+docker pull ghcr.io/ofsazib/floci-dash:latest-combined
+docker run -p 3000:3000 -p 4566:4566 -v /var/run/docker.sock:/var/run/docker.sock \
+  --rm ghcr.io/ofsazib/floci-dash:latest-combined
 ```
 
-Open [http://localhost:9877](http://localhost:9877) — the dashboard connects to Floci automatically.
+Open [http://localhost:9877](http://localhost:9877) — the dashboard connects to Floci automatically. For the combined image, use [http://localhost:3000](http://localhost:3000).
 
 Floci runs on [http://localhost:9878](http://localhost:9878) (standard LocalStack-compatible endpoint).
 

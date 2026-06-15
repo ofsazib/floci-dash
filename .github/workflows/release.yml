@@ -77,7 +77,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract semver tags
+      - name: Extract semver tags — dashboard-only
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -88,12 +88,34 @@ jobs:
             type=semver,pattern={{major}}
             type=raw,value=latest
 
-      - name: Build and push
+      - name: Build and push — dashboard-only
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Extract semver tags — combined image
+        id: meta-combined
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/ofsazib/floci-dash
+          tags: |
+            type=semver,pattern={{version}}-combined
+            type=semver,pattern={{major}}.{{minor}}-combined
+            type=semver,pattern={{major}}-combined
+            type=raw,value=latest-combined
+
+      - name: Build and push — combined (Floci + Dashboard)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.combined
+          push: true
+          tags: ${{ steps.meta-combined.outputs.tags }}
+          labels: ${{ steps.meta-combined.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
