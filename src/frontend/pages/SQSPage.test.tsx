@@ -11,6 +11,7 @@ const mockSQSMessages = vi.fn();
 const mockSQSQueueTags = vi.fn();
 const mockSQSDLQSources = vi.fn();
 const mockCreateQueueMutate = vi.fn();
+const mockSearchParams = vi.fn();
 
 vi.mock("../hooks/useSQS", () => ({
   useSQSQueues: (...args: any[]) => mockSQSQueues(...args),
@@ -42,7 +43,7 @@ vi.mock("../components/ConfirmDialog", () => ({
 }));
 
 vi.mock("react-router-dom", () => ({
-  useSearchParams: () => [new URLSearchParams(), vi.fn()],
+  useSearchParams: (...args: any[]) => mockSearchParams(...args),
 }));
 
 import SQSPage from "./SQSPage";
@@ -57,6 +58,7 @@ describe("SQSPage", () => {
     mockSQSMessages.mockReturnValue({ data: { messages: [] }, isLoading: false });
     mockSQSQueueTags.mockReturnValue({ data: { tags: {} }, isLoading: false });
     mockSQSDLQSources.mockReturnValue({ data: { queueUrls: [] }, isLoading: false });
+    mockSearchParams.mockReturnValue([new URLSearchParams(), vi.fn()]);
   });
 
   // ─── Render State Tests ─────────────────────────────────
@@ -102,6 +104,68 @@ describe("SQSPage", () => {
     await waitFor(() => {
       const inputs = screen.getAllByPlaceholderText("my-queue");
       expect(inputs.length).toBeGreaterThan(0);
+    });
+  });
+
+  it("submits create queue form", async () => {
+    const user = userEvent.setup();
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await clickButton(user, /create queue/i);
+    await waitFor(() => {
+      expect(screen.getAllByPlaceholderText("my-queue").length).toBeGreaterThan(0);
+    });
+    const inputs = screen.getAllByRole("textbox");
+    await user.type(inputs[0], "test-queue");
+    await clickButton(user, /Create/i, { last: true });
+    expect(mockCreateQueueMutate).toHaveBeenCalled();
+  });
+
+  // ─── Queue Detail Tests ─────────────────────────────────
+
+  it("renders queue detail with tabs", () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("?queueUrl=http://localhost:4566/000000000000/my-queue"), vi.fn()]);
+    render(<SQSPage />, { wrapper: createWrapper() });
+    expect(screen.getAllByText("Attributes").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Messages").length).toBeGreaterThan(0);
+  });
+
+  it("shows queue attributes in detail view", () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("?queueUrl=http://localhost:4566/000000000000/my-queue"), vi.fn()]);
+    mockSQSAttributes.mockReturnValue({
+      data: { attributes: { QueueArn: "arn:aws:sqs:us-east-1:000000000000:my-queue", VisibilityTimeout: "60", ApproximateNumberOfMessages: "5" } },
+      isLoading: false,
+    });
+    render(<SQSPage />, { wrapper: createWrapper() });
+    expect(screen.getByText("arn:aws:sqs:us-east-1:000000000000:my-queue")).toBeTruthy();
+    expect(screen.getByText("5")).toBeTruthy();
+  });
+
+  it("shows messages in detail view", async () => {
+    const user = userEvent.setup();
+    mockSearchParams.mockReturnValue([new URLSearchParams("?queueUrl=http://localhost:4566/000000000000/my-queue"), vi.fn()]);
+    mockSQSMessages.mockReturnValue({
+      data: { messages: [{ MessageId: "abc123def456", Body: "Hello world message", MD5OfBody: "md5hash", ReceiptHandle: "handle123", Attributes: { ApproximateReceiveCount: "1", SentTimestamp: "1700000000000" } }] },
+      isLoading: false,
+    });
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Messages"));
+    await waitFor(() => {
+      expect(screen.getByText("Hello world message")).toBeTruthy();
+    });
+  });
+
+  it("shows tags in detail view", async () => {
+    const user = userEvent.setup();
+    mockSearchParams.mockReturnValue([new URLSearchParams("?queueUrl=http://localhost:4566/000000000000/my-queue"), vi.fn()]);
+    mockSQSQueueTags.mockReturnValue({
+      data: { tags: { Environment: "production" } },
+      isLoading: false,
+    });
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Tags"));
+    await waitFor(() => {
+      expect(screen.getByText("Environment")).toBeTruthy();
+      expect(screen.getByText("production")).toBeTruthy();
     });
   });
 });

@@ -230,3 +230,158 @@ describe("EC2LaunchTemplateList — AMI auto-detection", () => {
     });
   });
 });
+
+describe("EC2InstanceList — list states", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    mockInstances.mockReturnValue({
+      data: { instances: [], total: 0 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
+    mockSubnets.mockReturnValue({ data: { subnets: [] } });
+    mockSecurityGroups.mockReturnValue({ data: { securityGroups: [] } });
+    mockAmis.mockReturnValue({ data: { images: [] }, isLoading: false });
+  });
+
+  it("renders instances from data", () => {
+    mockInstances.mockReturnValue({
+      data: {
+        instances: [
+          {
+            id: "i-0abc123",
+            state: "running",
+            instanceType: "t2.micro",
+            privateIp: "10.0.0.1",
+            publicIp: "54.0.0.1",
+            launchTime: "2024-01-01T00:00:00Z",
+            keyName: "my-key",
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    render(<EC2InstanceList onSelect={vi.fn()} />, { wrapper: createWrapper() });
+
+    expect(screen.getAllByText("i-0abc123").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("t2.micro").length).toBeGreaterThan(0);
+  });
+
+  it("shows empty state when no instances", () => {
+    mockInstances.mockReturnValue({
+      data: { instances: [], total: 0 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    render(<EC2InstanceList onSelect={vi.fn()} />, { wrapper: createWrapper() });
+
+    expect(screen.getByText("No instances found")).toBeTruthy();
+  });
+
+  it("shows error state when loading fails", () => {
+    mockInstances.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new Error("boom-instances"),
+    });
+
+    render(<EC2InstanceList onSelect={vi.fn()} />, { wrapper: createWrapper() });
+
+    expect(screen.getByText("boom-instances")).toBeTruthy();
+  });
+
+  it("shows loading state while instances load", () => {
+    mockInstances.mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+      error: null,
+    });
+
+    render(<EC2InstanceList onSelect={vi.fn()} />, { wrapper: createWrapper() });
+
+    expect(screen.getByText("Loading resources...")).toBeTruthy();
+  });
+});
+
+describe("EC2LaunchTemplateList — list states", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    mockLaunchTemplates.mockReturnValue({
+      data: { launchTemplates: [], total: 0 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockAmis.mockReturnValue({ data: { images: [] }, isLoading: false });
+  });
+
+  it("renders launch templates from data", () => {
+    mockLaunchTemplates.mockReturnValue({
+      data: {
+        launchTemplates: [
+          { name: "my-template", id: "lt-0abc", creationDate: "2024-01-01" },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    render(<EC2LaunchTemplateList />, { wrapper: createWrapper() });
+
+    expect(screen.getAllByText("my-template").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("lt-0abc").length).toBeGreaterThan(0);
+  });
+
+  it("shows empty state when no launch templates", () => {
+    mockLaunchTemplates.mockReturnValue({
+      data: { launchTemplates: [], total: 0 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    render(<EC2LaunchTemplateList />, { wrapper: createWrapper() });
+
+    expect(screen.getByText("No launch templates")).toBeTruthy();
+  });
+
+  it("shows error state when loading fails", () => {
+    mockLaunchTemplates.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new Error("boom-templates"),
+    });
+
+    render(<EC2LaunchTemplateList />, { wrapper: createWrapper() });
+
+    expect(screen.getByText("boom-templates")).toBeTruthy();
+  });
+
+  it("shows loading state while launch templates load", () => {
+    mockLaunchTemplates.mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+      error: null,
+    });
+
+    render(<EC2LaunchTemplateList />, { wrapper: createWrapper() });
+
+    expect(screen.getByText("Loading resources...")).toBeTruthy();
+  });
+});

@@ -14,6 +14,7 @@ const mockUploadFiles = vi.fn();
 const mockDeleteObject = vi.fn();
 const mockObjectTags = vi.fn();
 const mockUpdateObjectTags = vi.fn();
+const mockSearchParams = vi.fn();
 
 vi.mock("../hooks/useS3", () => ({
   useS3Buckets: (...args: any[]) => mockBuckets(...args),
@@ -45,13 +46,14 @@ vi.mock("../components/ConfirmDialog", () => ({
 
 vi.mock("react-router-dom", () => ({
   useNavigate: () => vi.fn(),
-  useSearchParams: () => [new URLSearchParams(), vi.fn()],
+  useSearchParams: (...args: any[]) => mockSearchParams(...args),
 }));
 
 import S3Page from "./S3Page";
 describe("S3Page", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockSearchParams.mockReturnValue([new URLSearchParams(), vi.fn()]);
     mockBuckets.mockReturnValue({
       data: { buckets: [{ name: "my-bucket", createdAt: "2024-01-01T00:00:00Z" }], total: 1 },
       isLoading: false, isError: false, error: null,
@@ -125,5 +127,92 @@ describe("S3Page", () => {
     // Find and click Create bucket button in modal footer
     await clickButton(user, /create bucket/i, { last: true });
     expect(mockCreateBucketMutate).toHaveBeenCalled();
+  });
+
+  // ─── Object Browser Tests ──────────────────────────────
+
+  it("renders object browser when bucket is selected", () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("?bucket=my-bucket"), vi.fn()]);
+    mockObjects.mockReturnValue({
+      data: { objects: [{ key: "file.txt", size: 1024, lastModified: "2024-01-01T00:00:00Z" }], total: 1 },
+      isLoading: false,
+    });
+    render(<S3Page />, { wrapper: createWrapper() });
+    expect(screen.getAllByText("Objects").length).toBeGreaterThan(0);
+    expect(screen.getByText("file.txt")).toBeTruthy();
+  });
+
+  it("shows empty state in object browser for empty bucket", () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("?bucket=my-bucket"), vi.fn()]);
+    mockObjects.mockReturnValue({ data: { objects: [], total: 0 }, isLoading: false });
+    render(<S3Page />, { wrapper: createWrapper() });
+    expect(screen.getByText("No objects")).toBeTruthy();
+  });
+
+  it("shows loading state in object browser", () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("?bucket=my-bucket"), vi.fn()]);
+    mockObjects.mockReturnValue({ data: undefined, isLoading: true });
+    render(<S3Page />, { wrapper: createWrapper() });
+    expect(screen.getByText("Loading objects...")).toBeTruthy();
+  });
+
+  // ─── Overview Tab Tests ─────────────────────────────────
+
+  it("renders overview tab with stats", () => {
+    render(<S3Page />, { wrapper: createWrapper() });
+    // Overview tab is visible in the tabs list alongside Buckets
+    expect(screen.getByText("Overview")).toBeTruthy();
+    expect(screen.getAllByText("Buckets").length).toBeGreaterThan(0);
+  });
+
+  // ─── Object Detail Tests ────────────────────────────────
+
+  it("renders object viewer when object is selected", async () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("?bucket=my-bucket&object=file.txt"), vi.fn()]);
+    mockObjectDetail.mockReturnValue({
+      data: { size: 1024, contentType: "text/plain", lastModified: "2024-01-01T00:00:00Z", etag: "abc123" },
+      isLoading: false, isError: false, error: null,
+    });
+    mockObjectTags.mockReturnValue({ data: { tags: [{ Key: "env", Value: "prod" }], total: 1 } });
+
+    // Mock fetch for text preview
+    const mockFetch = vi.fn().mockResolvedValue({ text: () => Promise.resolve("file contents") });
+    vi.stubGlobal("fetch", mockFetch);
+
+    render(<S3Page />, { wrapper: createWrapper() });
+    expect(screen.getByText("file.txt")).toBeTruthy();
+    expect(screen.getByText("Actions")).toBeTruthy();
+    expect(screen.getByText("env")).toBeTruthy();
+
+    vi.unstubAllGlobals();
+  });
+
+  it("shows spinner when object detail is loading", () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("?bucket=my-bucket&object=file.txt"), vi.fn()]);
+    mockObjectDetail.mockReturnValue({ data: undefined, isLoading: true });
+
+    const { container } = render(<S3Page />, { wrapper: createWrapper() });
+    // The object viewer shows a Spinner when loading
+    expect(container.querySelector("svg")).toBeTruthy();
+  });
+
+  it("shows error when object detail fails to load", () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("?bucket=my-bucket&object=file.txt"), vi.fn()]);
+    mockObjectDetail.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: new Error("Not found") });
+
+    render(<S3Page />, { wrapper: createWrapper() });
+    expect(screen.getByText("Not found")).toBeTruthy();
+  });
+
+  it("renders preview not available for unknown content type", () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("?bucket=my-bucket&object=file.txt"), vi.fn()]);
+    mockObjectDetail.mockReturnValue({
+      data: { size: 1024, contentType: "application/octet-stream", lastModified: "2024-01-01T00:00:00Z", etag: "abc123" },
+      isLoading: false, isError: false, error: null,
+    });
+    mockObjectTags.mockReturnValue({ data: { tags: [], total: 0 } });
+
+    render(<S3Page />, { wrapper: createWrapper() });
+    expect(screen.getByText(/Preview not available/i)).toBeTruthy();
   });
 });

@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { createWrapper } from "../../test/helpers";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { clickButton, createWrapper } from "../../test/helpers";
 import React from "react";
 
 const mockKeys = vi.fn();
@@ -21,7 +22,7 @@ const mockDecrypt = vi.fn();
 vi.mock("../hooks/useKMS", () => ({
   useKMSKeys: (...args: any[]) => mockKeys(...args),
   useKMSKey: (...args: any[]) => mockKeyDetail(...args),
-  useCreateKey: () => ({ mutate: mockCreateKey, isPending: false, isError: false, error: null }),
+  useCreateKey: () => ({ mutate: mockCreateKey, mutateAsync: mockCreateKey, isPending: false, isError: false, error: null }),
   useScheduleKeyDeletion: () => ({ mutate: mockScheduleKeyDeletion, isPending: false }),
   useCancelKeyDeletion: () => ({ mutate: mockCancelKeyDeletion, isPending: false }),
   useToggleKey: () => ({ mutate: mockToggleKey, isPending: false }),
@@ -30,8 +31,8 @@ vi.mock("../hooks/useKMS", () => ({
   useKMSAliases: (...args: any[]) => mockAliases(...args),
   useCreateAlias: () => ({ mutate: mockCreateAlias, isPending: false }),
   useDeleteAlias: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useEncrypt: () => ({ mutate: mockEncrypt, isPending: false, data: null }),
-  useDecrypt: () => ({ mutate: mockDecrypt, isPending: false, data: null }),
+  useEncrypt: () => ({ mutate: mockEncrypt, mutateAsync: vi.fn(), isPending: false, data: null }),
+  useDecrypt: () => ({ mutate: mockDecrypt, mutateAsync: vi.fn(), isPending: false, data: null }),
 }));
 
 vi.mock("../components/Toast", () => ({
@@ -84,5 +85,51 @@ describe("KMSPage", () => {
     mockKeys.mockReturnValue({ data: undefined, isLoading: true, isError: false, error: null });
     render(<KMSPage />, { wrapper: createWrapper() });
     expect(screen.getByRole("heading", { name: /KMS Keys/i, level: 2 })).toBeTruthy();
+  });
+
+  it("renders without crashing in error state", () => {
+    mockKeys.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: new Error("Failed to load keys") });
+    render(<KMSPage />, { wrapper: createWrapper() });
+    expect(screen.getByRole("heading", { name: /KMS Keys/i, level: 2 })).toBeTruthy();
+  });
+
+  it("opens key detail modal when View is clicked", async () => {
+    const user = userEvent.setup();
+    render(<KMSPage />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => {
+      expect(screen.getAllByText(/KMS Key:/i).length).toBeGreaterThan(0);
+    });
+  });
+
+  it("renders aliases tab with alias data", async () => {
+    const user = userEvent.setup();
+    render(<KMSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Aliases/i }));
+    await waitFor(() => {
+      expect(screen.getAllByText("alias/my-key").length).toBeGreaterThan(0);
+    });
+  });
+
+  it("opens create key modal when Create key is clicked", async () => {
+    const user = userEvent.setup();
+    render(<KMSPage />, { wrapper: createWrapper() });
+    await clickButton(user, /Create key/i);
+    await waitFor(() => {
+      expect(screen.getAllByPlaceholderText("My encryption key").length).toBeGreaterThan(0);
+    });
+  });
+
+  it("shows enable action button for a disabled key in detail modal", async () => {
+    const user = userEvent.setup();
+    mockKeyDetail.mockReturnValue({
+      data: { key: { keyId: "1234-abcd", keyState: "Disabled", description: "My key" }, tags: {}, aliases: [], grants: [], rotationEnabled: false },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<KMSPage />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => {
+      expect(screen.getAllByRole("button", { name: /Enable/i }).length).toBeGreaterThan(0);
+    });
   });
 });

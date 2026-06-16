@@ -11,6 +11,9 @@ const mockLogEvents = vi.fn();
 const mockSubFilters = vi.fn();
 const mockLogGroupTags = vi.fn();
 const mockCreateLogGroupMutate = vi.fn();
+const mockParams = vi.fn();
+const mockDynamoTables = vi.fn();
+const mockRDSInstances = vi.fn();
 
 vi.mock("../hooks/useLogs", () => ({
   useLogGroups: (...args: any[]) => mockLogGroups(...args),
@@ -32,7 +35,7 @@ vi.mock("../hooks/useLogs", () => ({
 }));
 
 vi.mock("../hooks/useRDS", () => ({
-  useRDSDBInstances: () => ({ data: { instances: [] }, isLoading: false }),
+  useRDSDBInstances: (...args: any[]) => mockRDSInstances(...args),
   useRDSCreateDBInstance: () => ({ mutate: vi.fn(), isPending: false }),
   useRDSDeleteDBInstance: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useRDSRebootDBInstance: () => ({ mutate: vi.fn(), isPending: false }),
@@ -51,7 +54,7 @@ vi.mock("../hooks/useRDS", () => ({
 }));
 
 vi.mock("../hooks/useDynamoDB", () => ({
-  useDynamoDBTables: () => ({ data: { tables: [] }, isLoading: false }),
+  useDynamoDBTables: (...args: any[]) => mockDynamoTables(...args),
   useDynamoDBCreateTable: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
   useDynamoDBDeleteTable: () => ({ mutateAsync: vi.fn(), isPending: false, variables: null }),
 }));
@@ -69,7 +72,7 @@ vi.mock("../lib/utils", () => ({
 }));
 
 vi.mock("react-router-dom", () => ({
-  useParams: () => ({ service: "logs" }),
+  useParams: (...args: any[]) => mockParams(...args),
   useNavigate: () => vi.fn(),
   useSearchParams: () => [new URLSearchParams(), vi.fn()],
 }));
@@ -78,6 +81,7 @@ import ServicePage from "./ServicePage";
 describe("ServicePage — CloudWatch Logs", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockParams.mockReturnValue({ service: "logs" });
     mockLogGroups.mockReturnValue({ data: { logGroups: [{ logGroupName: "/test/group", retentionInDays: 7, storedBytes: 1024 }], total: 1 }, isLoading: false, isError: false, error: null });
     mockLogStreams.mockReturnValue({ data: { logStreams: [] }, isLoading: false, isError: false, error: null });
     mockLogEvents.mockReturnValue({ data: { events: [] }, isLoading: false, isError: false, error: null, refetch: vi.fn() });
@@ -135,5 +139,93 @@ describe("ServicePage — CloudWatch Logs", () => {
     await user.type(input, "/test/new-group");
     await clickButton(user, /Create log group/i, { last: true });
     expect(mockCreateLogGroupMutate).toHaveBeenCalled();
+  });
+});
+
+describe("ServicePage — DynamoDB", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockParams.mockReturnValue({ service: "dynamodb" });
+  });
+
+  it("renders dynamodb service page with table list", () => {
+    mockDynamoTables.mockReturnValue({
+      data: { tables: ["my-table"], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<ServicePage />, { wrapper: createWrapper() });
+    expect(screen.getAllByText("Tables").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("my-table").length).toBeGreaterThan(0);
+  });
+
+  it("shows empty table state", () => {
+    mockDynamoTables.mockReturnValue({
+      data: { tables: [], total: 0 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<ServicePage />, { wrapper: createWrapper() });
+    expect(screen.getAllByText("Tables").length).toBeGreaterThan(0);
+    expect(screen.getByText("No tables found")).toBeTruthy();
+  });
+});
+
+describe("ServicePage — RDS", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockParams.mockReturnValue({ service: "rds" });
+  });
+
+  it("renders rds service page with db instance list", () => {
+    mockRDSInstances.mockReturnValue({
+      data: {
+        instances: [
+          {
+            id: "db-prod-1",
+            engine: "postgres",
+            engineVersion: "16",
+            status: "available",
+            dbInstanceClass: "db.t3.micro",
+            allocatedStorage: 20,
+            masterUsername: "admin",
+            endpoint: { address: "localhost", port: 5432 },
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<ServicePage />, { wrapper: createWrapper() });
+    expect(screen.getAllByText("DB Instances").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("db-prod-1").length).toBeGreaterThan(0);
+  });
+
+  it("shows empty db instance state", () => {
+    mockRDSInstances.mockReturnValue({
+      data: { instances: [], total: 0 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<ServicePage />, { wrapper: createWrapper() });
+    expect(screen.getAllByText("DB Instances").length).toBeGreaterThan(0);
+    expect(screen.getByText("No DB instances found")).toBeTruthy();
+  });
+});
+
+describe("ServicePage — Unknown service", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockParams.mockReturnValue({ service: "ecs" });
+  });
+
+  it("shows coming soon for unknown service", () => {
+    render(<ServicePage />, { wrapper: createWrapper() });
+    expect(screen.getAllByText("Coming soon").length).toBeGreaterThan(0);
   });
 });

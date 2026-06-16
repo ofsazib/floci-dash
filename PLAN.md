@@ -1376,8 +1376,8 @@ Each remaining service gets a standard list + create + delete pattern.
 | 21.6 | Update CI/CD to build + push combined image with -combined tags | Done | 2025-06-15 |
 | 21.7 | Verify: combined image builds and runs both services | Done | 2025-06-15 |
 | 21.8 | Remaining 0%-coverage files: ec2-terminal.ts (10 tests), dynamodb-advanced.ts (19 tests), rds.ts (29 tests), s3-config.ts (47 tests), s3-objects.ts (12 tests) | Done | 2025-06-16 |
-| 21.9 | Deepen low-coverage frontend pages: EC2Page (9.3%), ServicePage (9.6%), SQSPage (15.5%), KMSPage (14.9%), S3Page (19.2%) | Pending | |
-| 21.a | Coverage: 52.33% stmts / 33.87% branch / 34.50% funcs / 54.35% lines — thresholds: 20% / 15% / 15% / 20% | Done | 2025-06-16 |
+| 21.9 | Deepen low-coverage frontend pages: S3Page, SQSPage, KMSPage, ServicePage, EC2Page | Done | 2025-06-16 |
+| 21.a | Coverage: 56.22% stmts / 39.74% branch / 37.90% funcs / 58.33% lines — thresholds: 20% / 15% / 15% / 20% | Done | 2025-06-16 |
 
 ---
 
