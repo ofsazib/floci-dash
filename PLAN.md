@@ -1380,6 +1380,23 @@ Each remaining service gets a standard list + create + delete pattern.
 | 21.a | Coverage: 64.07% stmts / 49.35% branch / 48.60% funcs / 66.67% lines — thresholds: 45% / 40% / 35% / 45% | Done | 2025-06-16 |
 | 21.b | Deepen remaining frontend pages: EventsPage, SecretsManagerPage, CloudFormationPage, SNSPage, IAMPage, LambdaPage | Done | 2025-06-16 |
 
+### Phase 12: Deep Coverage (Hooks + Components + Expanded Include)
+
+| # | Task | Status | Date |
+|---|------|--------|------|
+| 22.1 | Expand coverage include to all source files, fix PARSE_ERROR with extension-specific globs | Done | 2026-06-16 |
+| 22.2 | Write tests for frontend shared lib: utils.ts (12 tests), client.ts (7 tests) | Done | 2026-06-16 |
+| 22.3 | Deepen backend route tests: dynamodb query (14), s3 upload/edge (6), iam depth (13), sns depth (13), lambda depth (7), sqs depth (12) | Done | 2026-06-16 |
+| 22.4 | Deepen frontend pages: CloudWatchPage (+8, total 13), EC2Page (+68, total 82), ServicePage (+35, total 46) | Done | 2026-06-16 |
+| 22.5 | Write hook test files for all 18 hooks (383 tests across useKMS, useCloudWatch, useEC2, useS3, useDynamoDB, useRDS, useSNS, useSQS, useLambda, useIAM, useLogs, useEvents, useService, useSystem, useSecrets, useKMS, useCloudFormation, useS3Config, useDynamoDBAdvanced) | Done | 2026-06-16 |
+| 22.6 | Fix useCloudWatch `useMetricStatistics` test timeout (vi.waitFor vs waitFor from testing-library) | Done | 2026-06-16 |
+| 22.7 | Switch coverage provider from v8 to istanbul and back — v8 fixed with extension-specific include patterns | Done | 2026-06-16 |
+| 22.8 | Raise coverage thresholds: 55/45/38/57 → 68/48/60/70 to lock in gains | Done | 2026-06-16 |
+| 22.9 | Verify: 1247 unit tests pass, typecheck clean, coverage thresholds met | Done | 2026-06-16 |
+| 22.a | Write component tests for high-impact files (DynamoDBTableDetail, S3BucketConfig, AppLayoutShell) | Pending | |
+| 22.b | Write tests for backend entry files (index.ts, types.ts) | Pending | |
+| 22.c | Re-check Codecov number, iterate if below target | Pending | |
+
 ---
 
 ## Conventions

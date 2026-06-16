@@ -58,6 +58,7 @@
     "@types/react-dom": "^19.0.0",
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^4.0.0",
+    "@vitest/coverage-istanbul": "^4.1.9",
     "@vitest/coverage-v8": "^4.1.8",
     "concurrently": "^9.0.0",
     "jsdom": "^29.1.1",
