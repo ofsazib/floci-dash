@@ -1375,9 +1375,9 @@ Each remaining service gets a standard list + create + delete pattern.
 | 21.5 | Create combined startup script (docker/combined-start.sh) | Done | 2025-06-15 |
 | 21.6 | Update CI/CD to build + push combined image with -combined tags | Done | 2025-06-15 |
 | 21.7 | Verify: combined image builds and runs both services | Done | 2025-06-15 |
-| 21.8 | Remaining 0%-coverage files: ec2-terminal.ts (0%), dynamodb-advanced.ts (10.3%), rds.ts (18%), s3-config.ts (15.6%), s3-objects.ts (11.9%) | Pending | |
+| 21.8 | Remaining 0%-coverage files: ec2-terminal.ts (10 tests), dynamodb-advanced.ts (19 tests), rds.ts (29 tests), s3-config.ts (47 tests), s3-objects.ts (12 tests) | Done | 2025-06-16 |
 | 21.9 | Deepen low-coverage frontend pages: EC2Page (9.3%), ServicePage (9.6%), SQSPage (15.5%), KMSPage (14.9%), S3Page (19.2%) | Pending | |
-| 21.a | Coverage: 42.24% stmts / 25.25% branch / 28.15% funcs / 43.99% lines — thresholds: 20% / 15% / 15% / 20% | In Progress | 2025-06-15 |
+| 21.a | Coverage: 52.33% stmts / 33.87% branch / 34.50% funcs / 54.35% lines — thresholds: 20% / 15% / 15% / 20% | Done | 2025-06-16 |
 
 ---
 
