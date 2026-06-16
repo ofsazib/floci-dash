@@ -1364,6 +1364,23 @@ Each remaining service gets a standard list + create + delete pattern.
 
 ---
 
+### Phase 11: Coverage Improvements & CI Versioning
+
+| # | Task | Status | Date |
+|---|------|--------|------|
+| 21.1 | Write tests for small 0% files (system.ts, inspection.ts, active.ts, aws/index.ts) | Done | 2025-06-15 |
+| 21.2 | Verify: 18 new tests pass (407 total), typecheck passes | Done | 2025-06-15 |
+| 21.3 | Change CI Docker tag from sha-<short> to auto-incrementing 0.0.x (${{ github.run_number }}) | Done | 2025-06-15 |
+| 21.4 | Create combined Floci+Dashboard Dockerfile (docker/Dockerfile.combined) | Done | 2025-06-15 |
+| 21.5 | Create combined startup script (docker/combined-start.sh) | Done | 2025-06-15 |
+| 21.6 | Update CI/CD to build + push combined image with -combined tags | Done | 2025-06-15 |
+| 21.7 | Verify: combined image builds and runs both services | Done | 2025-06-15 |
+| 21.8 | Remaining 0%-coverage files: ec2-terminal.ts (0%), dynamodb-advanced.ts (10.3%), rds.ts (18%), s3-config.ts (15.6%), s3-objects.ts (11.9%) | Pending | |
+| 21.9 | Deepen low-coverage frontend pages: EC2Page (9.3%), ServicePage (9.6%), SQSPage (15.5%), KMSPage (14.9%), S3Page (19.2%) | Pending | |
+| 21.a | Coverage: 42.24% stmts / 25.25% branch / 28.15% funcs / 43.99% lines — thresholds: 20% / 15% / 15% / 20% | In Progress | 2025-06-15 |
+
+---
+
 ## Conventions
 
 - **Look up Floci first.** Before implementing any service feature, consult `../floci/src/main/java/io/github/hectorvent/floci/services/{service}/`.

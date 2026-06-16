@@ -84,7 +84,7 @@ router.get("/buckets/:name/objects/*/attributes", async (c: Context) => {
 
 // ─── Head Bucket (check existence) ────────────────────────────────
 
-router.on("HEAD", "/buckets/:name", async (c: Context) => {
+router.get("/buckets/:name/head", async (c: Context) => {
   const name = c.req.param("name");
   try {
     await s3().send(new HeadBucketCommand({ Bucket: name }));
@@ -102,10 +102,10 @@ router.on("HEAD", "/buckets/:name", async (c: Context) => {
 
 // ─── Head Object (metadata without body) ──────────────────────────
 
-router.on("HEAD", "/buckets/:name/objects/*", async (c: Context) => {
+router.get("/buckets/:name/objects/*/head", async (c: Context) => {
   const bucket = c.req.param("name");
   const path = new URL(c.req.url).pathname;
-  const key = decodeURIComponent(path.split("/objects/")[1] || "");
+  const key = decodeURIComponent(path.split("/objects/")[1]?.split("/head")[0] || "");
   if (!key) return c.json({ error: "Object key is required" }, 400);
   try {
     const result = await s3().send(new HeadObjectCommand({ Bucket: bucket, Key: key }));

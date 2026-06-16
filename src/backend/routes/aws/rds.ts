@@ -64,6 +64,7 @@ router.get("/db-instances", async (c: Context) => {
     preferredMaintenanceWindow: i.PreferredMaintenanceWindow,
     backupRetentionPeriod: i.BackupRetentionPeriod,
     copyTagsToSnapshot: i.CopyTagsToSnapshot,
+    tags: (i.TagList || []).map((t: any) => ({ key: t.Key, value: t.Value })),
   }));
   return c.json({ instances, total: instances.length });
 });
