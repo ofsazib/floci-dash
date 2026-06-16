@@ -320,5 +320,95 @@ describe("SQS Routes", () => {
       const res = await del("/queues/messages/item?queueUrl=test");
       expect(res.status).toBe(400);
     });
+
+    it("POST /queues/messages/batch — sends batch", async () => {
+      mockSend.mockResolvedValueOnce({
+        Successful: [{ Id: "1", MessageId: "m1" }],
+        Failed: [],
+      });
+      const res = await post(
+        "/queues/messages/batch?queueUrl=http://localhost:4566/000000000000/my-queue",
+        { entries: [{ Id: "1", MessageBody: "hi" }] }
+      );
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.successful).toHaveLength(1);
+    });
+
+    it("POST /queues/messages/batch — 400 when queueUrl missing", async () => {
+      const res = await post("/queues/messages/batch", { entries: [] });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /queues/messages/visibility — changes visibility timeout", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post(
+        "/queues/messages/visibility?queueUrl=http://localhost:4566/000000000000/my-queue",
+        { receiptHandle: "rh-123", visibilityTimeout: 60 }
+      );
+      expect(res.status).toBe(200);
+      expect((await res.json()).updated).toBe(true);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.ReceiptHandle).toBe("rh-123");
+      expect(cmd.VisibilityTimeout).toBe(60);
+    });
+
+    it("POST /queues/messages/visibility — 400 when queueUrl missing", async () => {
+      const res = await post("/queues/messages/visibility", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /queues/messages/visibility-batch — changes batch visibility", async () => {
+      mockSend.mockResolvedValueOnce({
+        Successful: [{ Id: "1" }],
+        Failed: [],
+      });
+      const res = await post(
+        "/queues/messages/visibility-batch?queueUrl=http://localhost:4566/000000000000/my-queue",
+        { entries: [{ Id: "1", ReceiptHandle: "rh", VisibilityTimeout: 30 }] }
+      );
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.successful).toHaveLength(1);
+    });
+
+    it("POST /queues/messages/visibility-batch — 400 when queueUrl missing", async () => {
+      const res = await post("/queues/messages/visibility-batch", {});
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe("Permissions", () => {
+    it("POST /queues/permissions — adds permission", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post(
+        "/queues/permissions?queueUrl=http://localhost:4566/000000000000/my-queue",
+        { label: "cross-account", awsAccountIds: ["123456789012"], actions: ["SendMessage"] }
+      );
+      expect(res.status).toBe(200);
+      expect((await res.json()).added).toBe(true);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.Label).toBe("cross-account");
+      expect(cmd.AWSAccountIds).toEqual(["123456789012"]);
+    });
+
+    it("POST /queues/permissions — 400 when queueUrl missing", async () => {
+      const res = await post("/queues/permissions", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE /queues/permissions — removes permission", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del(
+        "/queues/permissions?queueUrl=http://localhost:4566/000000000000/my-queue&label=cross-account"
+      );
+      expect(res.status).toBe(200);
+      expect((await res.json()).removed).toBe(true);
+    });
+
+    it("DELETE /queues/permissions — 400 when params missing", async () => {
+      const res = await del("/queues/permissions?queueUrl=only-url");
+      expect(res.status).toBe(400);
+    });
   });
 });

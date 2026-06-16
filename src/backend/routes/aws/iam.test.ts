@@ -128,6 +128,20 @@ describe("IAM Routes", () => {
       expect(body.total).toBe(0);
     });
 
+    it("GET /users/:name/tags — lists user tags", async () => {
+      mockSend.mockResolvedValueOnce({
+        Tags: [
+          { Key: "env", Value: "prod" },
+          { Key: "team", Value: "infra" },
+        ],
+      });
+      const res = await get("/users/admin/tags");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.tags).toEqual({ env: "prod", team: "infra" });
+      expect(mockSend.mock.calls[0][0].UserName).toBe("admin");
+    });
+
     it("POST /users — creates a user", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await post("/users", { name: "new-user", path: "/" });
@@ -189,6 +203,53 @@ describe("IAM Routes", () => {
     it("DELETE /users/:name/access-keys/:id — deletes access key", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await del("/users/admin/access-keys/AKIA123");
+      expect(res.status).toBe(200);
+      expect((await res.json()).deleted).toBe(true);
+    });
+
+    it("PUT /users/:name/access-keys/:id — updates access key status", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/users/admin/access-keys/AKIA123", { status: "Inactive" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.status).toBe("Inactive");
+      expect(mockSend.mock.calls[0][0].Status).toBe("Inactive");
+    });
+
+    it("GET /users/:name/inline-policies/:policyName — gets inline policy document", async () => {
+      mockSend.mockResolvedValueOnce({
+        PolicyDocument: encodeURIComponent(JSON.stringify({ Version: "2012-10-17" })),
+      });
+      const res = await get("/users/admin/inline-policies/my-policy");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.policyName).toBe("my-policy");
+      expect(body.document).toContain("2012-10-17");
+    });
+
+    it("GET /users/:name/inline-policies/:policyName — null document when absent", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/users/admin/inline-policies/empty");
+      const body = await res.json();
+      expect(body.document).toBeNull();
+    });
+
+    it("PUT /users/:name/inline-policies — puts inline policy", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/users/admin/inline-policies", {
+        policyName: "my-policy",
+        document: '{"Version":"2012-10-17"}',
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.put).toBe(true);
+      expect(body.policyName).toBe("my-policy");
+      expect(mockSend.mock.calls[0][0].PolicyName).toBe("my-policy");
+    });
+
+    it("DELETE /users/:name/inline-policies/:policyName — deletes inline policy", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/users/admin/inline-policies/my-policy");
       expect(res.status).toBe(200);
       expect((await res.json()).deleted).toBe(true);
     });
@@ -313,6 +374,67 @@ describe("IAM Routes", () => {
       expect(res.status).toBe(200);
       expect((await res.json()).created).toBe(true);
     });
+
+    it("GET /policies/detail — returns policy + versions", async () => {
+      mockSend
+        .mockResolvedValueOnce({
+          Policy: {
+            PolicyName: "AdminPolicy",
+            Arn: "arn:aws:iam::000000000000:policy/AdminPolicy",
+            PolicyId: "P1",
+            DefaultVersionId: "v1",
+          },
+        })
+        .mockResolvedValueOnce({
+          Versions: [
+            { VersionId: "v1", IsDefaultVersion: true, CreateDate: new Date("2025-01-01") },
+            { VersionId: "v2", IsDefaultVersion: false, CreateDate: new Date("2025-02-01") },
+          ],
+        });
+      const res = await get("/policies/detail?arn=arn:aws:iam::000000000000:policy/AdminPolicy");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.policy.name).toBe("AdminPolicy");
+      expect(body.versions).toHaveLength(2);
+    });
+
+    it("GET /policies/detail — null policy when not found", async () => {
+      mockSend.mockResolvedValue({ Policy: null, Versions: [] });
+      const res = await get("/policies/detail?arn=missing");
+      const body = await res.json();
+      expect(body.policy).toBeNull();
+    });
+
+    it("GET /policies/version — returns decoded document", async () => {
+      mockSend.mockResolvedValueOnce({
+        PolicyVersion: {
+          Document: encodeURIComponent(JSON.stringify({ Version: "2012-10-17" })),
+          IsDefaultVersion: true,
+        },
+      });
+      const res = await get("/policies/version?arn=arn-x&versionId=v1");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.versionId).toBe("v1");
+      expect(body.isDefaultVersion).toBe(true);
+      expect(body.document).toContain("2012-10-17");
+    });
+
+    it("GET /policies/version — null document when absent", async () => {
+      mockSend.mockResolvedValueOnce({ PolicyVersion: {} });
+      const res = await get("/policies/version?arn=arn-x&versionId=v1");
+      const body = await res.json();
+      expect(body.document).toBeNull();
+    });
+
+    it("DELETE /policies — deletes policy by arn", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/policies?arn=arn:aws:iam::000000000000:policy/Old");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deleted).toBe(true);
+      expect(mockSend.mock.calls[0][0].PolicyArn).toBe("arn:aws:iam::000000000000:policy/Old");
+    });
   });
 
   describe("Instance Profiles", () => {
@@ -348,6 +470,40 @@ describe("IAM Routes", () => {
       const res = await del("/instance-profiles/web-profile");
       expect(res.status).toBe(200);
       expect((await res.json()).deleted).toBe(true);
+    });
+
+    it("POST /instance-profiles/:name/roles/:roleName — adds role to profile", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/instance-profiles/web-profile/roles/ec2-role");
+      expect(res.status).toBe(200);
+      expect((await res.json()).added).toBe(true);
+      expect(mockSend.mock.calls[0][0].InstanceProfileName).toBe("web-profile");
+      expect(mockSend.mock.calls[0][0].RoleName).toBe("ec2-role");
+    });
+
+    it("DELETE /instance-profiles/:name/roles/:roleName — removes role from profile", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/instance-profiles/web-profile/roles/ec2-role");
+      expect(res.status).toBe(200);
+      expect((await res.json()).removed).toBe(true);
+    });
+
+    it("GET /instance-profiles — maps roles in instance profile", async () => {
+      mockSend.mockResolvedValueOnce({
+        InstanceProfiles: [
+          {
+            InstanceProfileName: "with-roles",
+            Arn: "arn:x",
+            InstanceProfileId: "IP2",
+            Path: "/",
+            CreateDate: new Date("2025-01-01"),
+            Roles: [{ RoleName: "r1" }, { RoleName: "r2" }],
+          },
+        ],
+      });
+      const res = await get("/instance-profiles");
+      const body = await res.json();
+      expect(body.instanceProfiles[0].roles).toEqual(["r1", "r2"]);
     });
   });
 });

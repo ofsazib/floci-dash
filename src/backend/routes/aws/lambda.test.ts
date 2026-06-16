@@ -158,6 +158,30 @@ describe("Lambda Routes", () => {
       expect(cmd.Timeout).toBe(10);
     });
 
+    it("PUT /functions/:name/code — updates code from zipFile", async () => {
+      mockSend.mockResolvedValueOnce({ ...mockFunction });
+      const res = await put("/functions/my-function/code", {
+        zipFile: Buffer.from("new code").toString("base64"),
+      });
+      expect(res.status).toBe(200);
+      expect((await res.json()).updated).toBe(true);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.ZipFile).toBeDefined();
+    });
+
+    it("PUT /functions/:name/code — updates code from S3", async () => {
+      mockSend.mockResolvedValueOnce({ ...mockFunction });
+      const res = await put("/functions/my-function/code", {
+        s3Bucket: "my-bucket",
+        s3Key: "lambda.zip",
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.S3Bucket).toBe("my-bucket");
+      expect(cmd.S3Key).toBe("lambda.zip");
+      expect(cmd.ZipFile).toBeUndefined();
+    });
+
     it("DELETE /functions/:name — deletes a function", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await del("/functions/my-function");
@@ -234,6 +258,15 @@ describe("Lambda Routes", () => {
       expect(res.status).toBe(200);
       expect((await res.json()).created).toBe(true);
     });
+
+    it("DELETE /functions/:name/aliases/:aliasName — deletes alias", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/functions/my-function/aliases/staging");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deleted).toBe(true);
+      expect(body.name).toBe("staging");
+    });
   });
 
   describe("Layers", () => {
@@ -265,6 +298,20 @@ describe("Lambda Routes", () => {
       expect(res.status).toBe(200);
       expect((await res.json()).deleted).toBe(true);
     });
+
+    it("GET /layers/:name/versions — lists layer versions", async () => {
+      mockSend.mockResolvedValueOnce({
+        LayerVersions: [
+          { Version: 2, Description: "v2", CodeSize: 600, CompatibleRuntimes: ["nodejs22.x"] },
+          { Version: 1, Description: "v1", CodeSize: 500, CompatibleRuntimes: ["nodejs20.x"] },
+        ],
+      });
+      const res = await get("/layers/my-layer/versions");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(2);
+      expect(body.versions[0].version).toBe(2);
+    });
   });
 
   describe("Event Source Mappings", () => {
@@ -287,6 +334,13 @@ describe("Lambda Routes", () => {
       expect(body.total).toBe(1);
       expect(body.eventSourceMappings[0].uuid).toBe("uuid-001");
     });
+
+    it("DELETE /event-source-mappings/:uuid — deletes mapping", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/event-source-mappings/uuid-001");
+      expect(res.status).toBe(200);
+      expect((await res.json()).deleted).toBe(true);
+    });
   });
 
   describe("Tags", () => {
@@ -307,6 +361,54 @@ describe("Lambda Routes", () => {
       });
       expect(res.status).toBe(200);
       expect((await res.json()).tagged).toBe(true);
+    });
+
+    it("DELETE /tags/:arn — untags resource", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/tags/arn:aws:lambda:...:function:my-function?tagKeys=env&tagKeys=team");
+      expect(res.status).toBe(200);
+      expect((await res.json()).untagged).toBe(true);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.TagKeys).toEqual(["env", "team"]);
+    });
+  });
+
+  describe("Function URLs & Concurrency", () => {
+    it("GET /functions/:name/url — gets function URL config", async () => {
+      mockSend.mockResolvedValueOnce({
+        FunctionUrl: "https://abc.lambda-url.us-east-1.on.aws/",
+        AuthType: "AWS_IAM",
+        Cors: { AllowMethods: ["GET"] },
+        InvokeMode: "BUFFERED",
+      });
+      const res = await get("/functions/my-function/url");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.url).toContain("lambda-url");
+      expect(body.authType).toBe("AWS_IAM");
+    });
+
+    it("DELETE /functions/:name/url — deletes function URL config", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/functions/my-function/url");
+      expect(res.status).toBe(200);
+      expect((await res.json()).deleted).toBe(true);
+    });
+
+    it("GET /functions/:name/concurrency — returns reserved concurrency", async () => {
+      mockSend.mockResolvedValueOnce({ ReservedConcurrentExecutions: 10 });
+      const res = await get("/functions/my-function/concurrency");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.reservedConcurrentExecutions).toBe(10);
+    });
+
+    it("GET /functions/:name/concurrency — undefined when not configured", async () => {
+      mockSend.mockRejectedValueOnce(new Error("ResourceNotFoundException"));
+      const res = await get("/functions/my-function/concurrency");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.reservedConcurrentExecutions).toBeUndefined();
     });
   });
 });

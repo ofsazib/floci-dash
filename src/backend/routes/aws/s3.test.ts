@@ -230,5 +230,90 @@ describe("S3 Routes", () => {
       const res = await get("/buckets/my-bucket/objects/empty-key.txt/raw");
       expect(res.status).toBe(200);
     });
+
+    it("GET /buckets/:name/objects/* — falls back to base64 when text decode fails", async () => {
+      const bodyContent = new Uint8Array([0xff, 0xfe]);
+      mockSend.mockResolvedValueOnce({
+        ContentType: "text/plain",
+        ContentLength: 2,
+        Body: {
+          transformToByteArray: () => Promise.resolve(bodyContent),
+          transformToString: () => Promise.reject(new Error("bad decode")),
+        },
+      });
+      const res = await get("/buckets/my-bucket/objects/broken.txt");
+      const data = await res.json();
+      expect(data.bodyEncoding).toBe("base64");
+    });
+
+    it("GET /buckets/:name/objects/* — returns empty body when no Body", async () => {
+      mockSend.mockResolvedValueOnce({
+        ContentType: "text/plain",
+        ContentLength: 0,
+      });
+      const res = await get("/buckets/my-bucket/objects/empty");
+      const data = await res.json();
+      expect(data.body).toBe("");
+      expect(data.bodyEncoding).toBe("utf-8");
+    });
+  });
+
+  describe("Upload", () => {
+    async function uploadMultipart(path: string, files: File[]) {
+      const form = new FormData();
+      for (const f of files) form.append("files", f);
+      return router.request(path, { method: "POST", body: form });
+    }
+
+    it("POST upload — uploads a single file", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const file = new File(["hello"], "hello.txt", { type: "text/plain" });
+      const res = await uploadMultipart("/buckets/my-bucket/objects/upload", [file]);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.uploaded).toBe(1);
+      expect(body.failed).toBe(0);
+      expect(body.results[0].status).toBe("uploaded");
+      expect(body.results[0].key).toBe("hello.txt");
+      expect(mockSend.mock.calls[0][0].Bucket).toBe("my-bucket");
+      expect(mockSend.mock.calls[0][0].Key).toBe("hello.txt");
+    });
+
+    it("POST upload — applies prefix query param", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const file = new File(["x"], "x.txt");
+      await uploadMultipart("/buckets/my-bucket/objects/upload?prefix=logs/", [file]);
+      expect(mockSend.mock.calls[0][0].Key).toBe("logs/x.txt");
+    });
+
+    it("POST upload — 400 when no files provided", async () => {
+      const form = new FormData();
+      const res = await router.request("/buckets/my-bucket/objects/upload", {
+        method: "POST",
+        body: form,
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST upload — returns error result for oversized file", async () => {
+      const huge = new File([new Uint8Array(51 * 1024 * 1024)], "big.bin");
+      const res = await uploadMultipart("/buckets/my-bucket/objects/upload", [huge]);
+      const body = await res.json();
+      expect(body.failed).toBe(1);
+      expect(body.results[0].status).toBe("error");
+      expect(body.results[0].error).toContain("MB limit");
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("POST upload — returns error result when PutObject throws", async () => {
+      mockSend.mockRejectedValueOnce(new Error("AccessDenied"));
+      const file = new File(["x"], "x.txt");
+      const res = await uploadMultipart("/buckets/my-bucket/objects/upload", [file]);
+      const body = await res.json();
+      expect(body.uploaded).toBe(0);
+      expect(body.failed).toBe(1);
+      expect(body.results[0].status).toBe("error");
+      expect(body.results[0].error).toBe("AccessDenied");
+    });
   });
 });

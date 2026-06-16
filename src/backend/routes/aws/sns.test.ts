@@ -28,6 +28,9 @@ vi.mock("@aws-sdk/client-sns", () => ({
   ListSubscriptionsByTopicCommand: createCmd("ListSubscriptionsByTopicCommand"),
   SubscribeCommand: createCmd("SubscribeCommand"),
   UnsubscribeCommand: createCmd("UnsubscribeCommand"),
+  GetSubscriptionAttributesCommand: createCmd("GetSubscriptionAttributesCommand"),
+  SetSubscriptionAttributesCommand: createCmd("SetSubscriptionAttributesCommand"),
+  ConfirmSubscriptionCommand: createCmd("ConfirmSubscriptionCommand"),
   PublishCommand: createCmd("PublishCommand"),
   PublishBatchCommand: createCmd("PublishBatchCommand"),
   TagResourceCommand: createCmd("TagResourceCommand"),
@@ -199,6 +202,21 @@ describe("SNS Routes", () => {
       expect(cmd.Message).toBe("Hello!");
       expect(cmd.Subject).toBe("Test");
     });
+
+    it("POST /topics/publish-batch — publishes batch", async () => {
+      mockSend.mockResolvedValueOnce({
+        Successful: [{ Id: "1", MessageId: "m1" }],
+        Failed: [{ Id: "2", ErrorCode: "Invalid" }],
+      });
+      const res = await post("/topics/publish-batch", {
+        topicArn: "arn:aws:sns:...:my-topic",
+        entries: [{ Id: "1", Message: "a" }, { Id: "2", Message: "b" }],
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.successful).toHaveLength(1);
+      expect(body.failed).toHaveLength(1);
+    });
   });
 
   describe("Subscriptions", () => {
@@ -256,6 +274,36 @@ describe("SNS Routes", () => {
       const res = await del("/subscriptions");
       expect(res.status).toBe(400);
     });
+
+    it("GET /subscriptions/attributes — gets subscription attributes", async () => {
+      mockSend.mockResolvedValueOnce({
+        Attributes: { Endpoint: "arn:aws:sqs:...:q", RawMessageDelivery: "true" },
+      });
+      const res = await get("/subscriptions/attributes?subscriptionArn=arn:aws:sns:...:sub");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.attributes.RawMessageDelivery).toBe("true");
+    });
+
+    it("GET /subscriptions/attributes — 400 when arn missing", async () => {
+      const res = await get("/subscriptions/attributes");
+      expect(res.status).toBe(400);
+    });
+
+    it("PUT /subscriptions/attributes — updates subscription attribute", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/subscriptions/attributes?subscriptionArn=arn:aws:sns:...:sub", {
+        attributeName: "RawMessageDelivery",
+        attributeValue: "true",
+      });
+      expect(res.status).toBe(200);
+      expect((await res.json()).updated).toBe(true);
+    });
+
+    it("PUT /subscriptions/attributes — 400 when arn missing", async () => {
+      const res = await put("/subscriptions/attributes", {});
+      expect(res.status).toBe(400);
+    });
   });
 
   describe("Platform Apps", () => {
@@ -300,6 +348,44 @@ describe("SNS Routes", () => {
       const res = await del("/platform-apps");
       expect(res.status).toBe(400);
     });
+
+    it("GET /platform-apps/endpoints — lists endpoints", async () => {
+      mockSend.mockResolvedValueOnce({
+        Endpoints: [{ EndpointArn: "arn:aws:sns:...:endpoint/123" }],
+      });
+      const res = await get("/platform-apps/endpoints?arn=arn:aws:sns:...:app/GCM/my-app");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.endpoints).toHaveLength(1);
+    });
+
+    it("GET /platform-apps/endpoints — 400 when arn missing", async () => {
+      const res = await get("/platform-apps/endpoints");
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /platform-apps/endpoints — creates endpoint", async () => {
+      mockSend.mockResolvedValueOnce({ EndpointArn: "arn:aws:sns:...:endpoint/new" });
+      const res = await post("/platform-apps/endpoints", {
+        platformApplicationArn: "arn:aws:sns:...:app/GCM/my-app",
+        token: "device-token",
+      });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.endpointArn).toContain("endpoint/new");
+    });
+
+    it("DELETE /platform-apps/endpoints — deletes endpoint", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/platform-apps/endpoints?arn=arn:aws:sns:...:endpoint/123");
+      expect(res.status).toBe(200);
+      expect((await res.json()).deleted).toBe(true);
+    });
+
+    it("DELETE /platform-apps/endpoints — 400 when arn missing", async () => {
+      const res = await del("/platform-apps/endpoints");
+      expect(res.status).toBe(400);
+    });
   });
 
   describe("Inspect SMS & Push", () => {
@@ -317,6 +403,23 @@ describe("SNS Routes", () => {
       const res = await del("/inspect/sms");
       expect(res.status).toBe(200);
       expect((await res.json()).cleared).toBe(true);
+    });
+
+    it("GET /inspect/push — fetches push data via flociFetch", async () => {
+      mockFlociFetch.mockResolvedValueOnce({ pushNotifications: [] });
+      const res = await get("/inspect/push");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.pushNotifications).toEqual([]);
+      expect(mockFlociFetch).toHaveBeenCalledWith("/_aws/sns/push-notifications");
+    });
+
+    it("DELETE /inspect/push — clears push data", async () => {
+      mockFlociFetch.mockResolvedValueOnce({});
+      const res = await del("/inspect/push");
+      expect(res.status).toBe(200);
+      expect((await res.json()).cleared).toBe(true);
+      expect(mockFlociFetch).toHaveBeenCalledWith("/_aws/sns/push-notifications", { method: "DELETE" });
     });
   });
 });

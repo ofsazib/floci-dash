@@ -276,4 +276,158 @@ describe("DynamoDB Routes", () => {
       expect(res.status).toBe(400);
     });
   });
+
+  describe("Query (filtered scan)", () => {
+    function queryParamsForSend() {
+      const call = mockSend.mock.calls[0][0];
+      return call;
+    }
+
+    it("POST query — no filters returns items", async () => {
+      mockSend.mockResolvedValueOnce({
+        Items: [{ id: { S: "1" } }],
+        Count: 1,
+        ScannedCount: 1,
+      });
+      const res = await post("/tables/users/items/query", {});
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.count).toBe(1);
+      expect(body.table).toBe("users");
+      expect(queryParamsForSend().FilterExpression).toBeUndefined();
+    });
+
+    it("POST query — '=' operator", async () => {
+      mockSend.mockResolvedValueOnce({ Items: [], Count: 0, ScannedCount: 0 });
+      await post("/tables/users/items/query", {
+        filters: [{ attribute: "status", operator: "=", value: "active" }],
+      });
+      const p = queryParamsForSend();
+      expect(p.FilterExpression).toBe("#0 = :0");
+    });
+
+    it("POST query — '<>' operator", async () => {
+      mockSend.mockResolvedValueOnce({ Items: [], Count: 0, ScannedCount: 0 });
+      await post("/tables/users/items/query", {
+        filters: [{ attribute: "status", operator: "<>", value: "x" }],
+      });
+      expect(queryParamsForSend().FilterExpression).toBe("#0 <> :0");
+    });
+
+    it("POST query — '<' operator", async () => {
+      mockSend.mockResolvedValueOnce({ Items: [], Count: 0, ScannedCount: 0 });
+      await post("/tables/users/items/query", {
+        filters: [{ attribute: "age", operator: "<", value: 5 }],
+      });
+      expect(queryParamsForSend().FilterExpression).toBe("#0 < :0");
+    });
+
+    it("POST query — '>' operator", async () => {
+      mockSend.mockResolvedValueOnce({ Items: [], Count: 0, ScannedCount: 0 });
+      await post("/tables/users/items/query", {
+        filters: [{ attribute: "age", operator: ">", value: 5 }],
+      });
+      expect(queryParamsForSend().FilterExpression).toBe("#0 > :0");
+    });
+
+    it("POST query — '<=' operator", async () => {
+      mockSend.mockResolvedValueOnce({ Items: [], Count: 0, ScannedCount: 0 });
+      await post("/tables/users/items/query", {
+        filters: [{ attribute: "age", operator: "<=", value: 5 }],
+      });
+      expect(queryParamsForSend().FilterExpression).toBe("#0 <= :0");
+    });
+
+    it("POST query — '>=' operator", async () => {
+      mockSend.mockResolvedValueOnce({ Items: [], Count: 0, ScannedCount: 0 });
+      await post("/tables/users/items/query", {
+        filters: [{ attribute: "age", operator: ">=", value: 5 }],
+      });
+      expect(queryParamsForSend().FilterExpression).toBe("#0 >= :0");
+    });
+
+    it("POST query — 'BEGINS_WITH' operator", async () => {
+      mockSend.mockResolvedValueOnce({ Items: [], Count: 0, ScannedCount: 0 });
+      await post("/tables/users/items/query", {
+        filters: [{ attribute: "name", operator: "BEGINS_WITH", value: "Al" }],
+      });
+      expect(queryParamsForSend().FilterExpression).toBe("begins_with(#0, :0)");
+    });
+
+    it("POST query — 'EXISTS' operator (no value)", async () => {
+      mockSend.mockResolvedValueOnce({ Items: [], Count: 0, ScannedCount: 0 });
+      await post("/tables/users/items/query", {
+        filters: [{ attribute: "email", operator: "EXISTS" }],
+      });
+      expect(queryParamsForSend().FilterExpression).toBe("attribute_exists(#0)");
+    });
+
+    it("POST query — 'NOT_EXISTS' operator (no value)", async () => {
+      mockSend.mockResolvedValueOnce({ Items: [], Count: 0, ScannedCount: 0 });
+      await post("/tables/users/items/query", {
+        filters: [{ attribute: "email", operator: "NOT_EXISTS" }],
+      });
+      expect(queryParamsForSend().FilterExpression).toBe("attribute_not_exists(#0)");
+    });
+
+    it("POST query — 'CONTAINS' operator", async () => {
+      mockSend.mockResolvedValueOnce({ Items: [], Count: 0, ScannedCount: 0 });
+      await post("/tables/users/items/query", {
+        filters: [{ attribute: "name", operator: "CONTAINS", value: "li" }],
+      });
+      expect(queryParamsForSend().FilterExpression).toBe("contains(#0, :0)");
+    });
+
+    it("POST query — unknown operator is skipped", async () => {
+      mockSend.mockResolvedValueOnce({ Items: [], Count: 0, ScannedCount: 0 });
+      await post("/tables/users/items/query", {
+        filters: [{ attribute: "name", operator: "WEIRD", value: "x" }],
+      });
+      // No valid conditions → no FilterExpression
+      expect(queryParamsForSend().FilterExpression).toBeUndefined();
+    });
+
+    it("POST query — multiple filters joined with AND by default", async () => {
+      mockSend.mockResolvedValueOnce({ Items: [], Count: 0, ScannedCount: 0 });
+      await post("/tables/users/items/query", {
+        filters: [
+          { attribute: "a", operator: "=", value: 1 },
+          { attribute: "b", operator: "<", value: 2 },
+        ],
+      });
+      expect(queryParamsForSend().FilterExpression).toBe("#0 = :0 AND #1 < :1");
+    });
+
+    it("POST query — multiple filters joined with OR", async () => {
+      mockSend.mockResolvedValueOnce({ Items: [], Count: 0, ScannedCount: 0 });
+      await post("/tables/users/items/query", {
+        filters: [
+          { attribute: "a", operator: "=", value: 1 },
+          { attribute: "b", operator: "=", value: 2 },
+        ],
+        filterLogic: "OR",
+      });
+      expect(queryParamsForSend().FilterExpression).toBe("#0 = :0 OR #1 = :1");
+    });
+
+    it("POST query — passes exclusiveStartKey", async () => {
+      mockSend.mockResolvedValueOnce({ Items: [], Count: 0, ScannedCount: 0 });
+      await post("/tables/users/items/query", {
+        exclusiveStartKey: { id: "5" },
+      });
+      expect(queryParamsForSend().ExclusiveStartKey).toEqual({ id: "5" });
+    });
+
+    it("POST query — returns lastEvaluatedKey when present", async () => {
+      mockSend.mockResolvedValueOnce({
+        Items: [{ id: { S: "1" } }],
+        Count: 1,
+        ScannedCount: 2,
+        LastEvaluatedKey: { id: { S: "1" } },
+      });
+      const res = await post("/tables/users/items/query", {});
+      const body = await res.json();
+      expect(body.lastEvaluatedKey).toBeDefined();
+    });
+  });
 });
