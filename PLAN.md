@@ -1393,7 +1393,7 @@ Each remaining service gets a standard list + create + delete pattern.
 | 22.7 | Switch coverage provider from v8 to istanbul and back — v8 fixed with extension-specific include patterns | Done | 2026-06-16 |
 | 22.8 | Raise coverage thresholds: 55/45/38/57 → 68/48/60/70 to lock in gains | Done | 2026-06-16 |
 | 22.9 | Verify: 1247 unit tests pass, typecheck clean, coverage thresholds met | Done | 2026-06-16 |
-| 22.a | Write component tests for high-impact files (DynamoDBTableDetail, S3BucketConfig, AppLayoutShell) | Pending | |
+| 22.a | Write component tests for high-impact files: DynamoDBTableDetail (22 tests), S3BucketConfig (24 tests), AppLayoutShell (14 tests) | Done | 2026-06-16 |
 | 22.b | Write tests for backend entry files (index.ts, types.ts) | Pending | |
 | 22.c | Re-check Codecov number, iterate if below target | Pending | |
 
