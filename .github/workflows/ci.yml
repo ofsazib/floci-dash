@@ -109,6 +109,7 @@ jobs:
           tags: |
             type=raw,value=${{ steps.version.outputs.tag }}
             type=raw,value=edge,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: Build and push — dashboard-only
         uses: docker/build-push-action@v6
@@ -117,8 +118,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ github.sha }}
-          cache-to: type=gha,mode=max,scope=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Extract metadata — combined image
         id: meta-combined
@@ -128,6 +129,7 @@ jobs:
           tags: |
             type=raw,value=${{ steps.version.outputs.tag }}-combined
             type=raw,value=edge-combined,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=latest-combined,enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: Build and push — combined (Floci + Dashboard)
         uses: docker/build-push-action@v6
@@ -137,5 +139,5 @@ jobs:
           push: true
           tags: ${{ steps.meta-combined.outputs.tags }}
           labels: ${{ steps.meta-combined.outputs.labels }}
-          cache-from: type=gha,scope=${{ github.sha }}
-          cache-to: type=gha,mode=max,scope=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
