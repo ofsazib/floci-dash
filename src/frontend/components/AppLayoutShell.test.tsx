@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -74,7 +74,9 @@ describe("AppLayoutShell — rendering", () => {
       </AppLayoutShell>,
       { wrapper: createWrapper() },
     );
-    expect(screen.getByText("Floci Dashboard")).toBeTruthy();
+    // Cloudscape may render the title in more than one responsive slot, so
+    // assert presence rather than uniqueness.
+    expect(screen.getAllByText("Floci Dashboard").length).toBeGreaterThan(0);
   });
 
   it("renders children content", () => {

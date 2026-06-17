@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 
-// Polyfill localStorage for jsdom environments where it's not globally available
+// Polyfill localStorage when the test DOM doesn't expose it globally
 if (typeof globalThis.localStorage === "undefined") {
   const store: Record<string, string> = {};
   globalThis.localStorage = {
@@ -21,11 +21,11 @@ if (typeof globalThis.localStorage === "undefined") {
   } as Storage;
 }
 
-// Stub HTMLCanvasElement.getContext in jsdom. Cloudscape (and chart/sparkline
-// components) touch canvas internally; jsdom doesn't implement it and logs a
-// noisy "Not implemented: HTMLCanvasElement.getContext()" error on every render.
-// Returning null is what a real browser does when a context is unavailable, and
-// it skips jsdom's slow not-implemented code path.
+// Stub HTMLCanvasElement.getContext in the test DOM. Cloudscape (and
+// chart/sparkline components) touch canvas internally, which the headless DOM
+// doesn't implement and logs noisy "Not implemented" errors for on every
+// render. Returning null matches real-browser behavior when no context is
+// available.
 if (typeof HTMLCanvasElement !== "undefined") {
   HTMLCanvasElement.prototype.getContext = (() => null) as never;
 }

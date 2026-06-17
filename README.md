@@ -58,6 +58,8 @@ Or pull the public Docker image. Two variants are published:
 | Dashboard only | `ghcr.io/ofsazib/floci-dash:latest` | Dashboard only — pair with external Floci |
 | Combined | `ghcr.io/ofsazib/floci-dash:latest-combined` | Floci + Dashboard in one container |
 
+**Tag scheme:** `latest` / `latest-combined` always point at the most recent **stable release** (a `v*` git tag). Every push to `main` also publishes `edge` / `edge-combined` (bleeding-edge) plus an immutable `0.0.<build>` tag. To pin a specific version, use a release tag such as `:1.2.3` (or `:1.2.3-combined`).
+
 ```bash
 # Dashboard only (needs Floci running separately on :4566)
 docker pull ghcr.io/ofsazib/floci-dash:latest
