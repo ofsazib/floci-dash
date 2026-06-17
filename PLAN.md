@@ -1273,7 +1273,7 @@ Each remaining service gets a standard list + create + delete pattern.
 | 17.7 | ELB | Pending | Pending | Pending | |
 | 17.8 | CloudFront | Pending | Pending | Pending | |
 | 17.9 | API Gateway V2 | Pending | Pending | Pending | |
-| 17.10 | AppSync | Pending | Pending | Pending | |
+| 17.10 | AppSync | Done | Done | Done | 2025-06-17 |
 | 17.11 | Kinesis | Pending | Pending | Pending | |
 | 17.12 | EventBridge Pipes | Pending | Pending | Pending | |
 | 17.13 | EventBridge Scheduler | Pending | Pending | Pending | |

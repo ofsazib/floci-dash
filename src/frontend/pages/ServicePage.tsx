@@ -111,6 +111,23 @@ import {
   useAPIGatewayDeployments,
 } from "../hooks/useAPIGateway";
 import { useToast } from "../components/Toast";
+import {
+  useAppSyncApis,
+  useAppSyncApi,
+  useCreateAppSyncApi,
+  useDeleteAppSyncApi,
+  useAppSyncDataSources,
+  useCreateAppSyncDataSource,
+  useDeleteAppSyncDataSource,
+  useAppSyncResolvers,
+  useAppSyncFunctions,
+  useCreateAppSyncFunction,
+  useDeleteAppSyncFunction,
+  useAppSyncApiKeys,
+  useCreateAppSyncApiKey,
+  useDeleteAppSyncApiKey,
+  useAppSyncTypes,
+} from "../hooks/useAppSync";
 
 const KEY_TYPE_OPTIONS: SelectProps.Option[] = [
   { label: "String (S)", value: "S" },
@@ -151,7 +168,7 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
 ];
 
 /** Services with a fully implemented backend that can show a resource list */
-const IMPLEMENTED_SERVICES = new Set(["dynamodb", "rds", "logs", "ecs", "ssm", "route53", "apigateway"]);
+const IMPLEMENTED_SERVICES = new Set(["dynamodb", "rds", "logs", "ecs", "ssm", "route53", "apigateway", "appsync"]);
 
 export default function ServicePage() {
   const { service } = useParams<{ service: string }>();
@@ -217,6 +234,7 @@ function ServiceResourceList({ service }: { service: string }) {
   if (service === "ssm") return <SSMDashboard />;
   if (service === "route53") return <Route53Dashboard />;
   if (service === "apigateway") return <APIGatewayDashboard />;
+  if (service === "appsync") return <AppSyncDashboard />;
   return null;
 }
 
@@ -2677,6 +2695,477 @@ function APIGatewayApiDetail({ apiId, onBack }: { apiId: string; onBack: () => v
           />
         </Container>
       </SpaceBetween>
+    </SpaceBetween>
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  AppSync
+// ────────────────────────────────────────────────────────
+
+const APPSYNC_AUTH_OPTIONS: SelectProps.Option[] = [
+  { label: "API_KEY", value: "API_KEY" },
+  { label: "AWS_IAM", value: "AWS_IAM" },
+  { label: "AMAZON_COGNITO_USER_POOLS", value: "AMAZON_COGNITO_USER_POOLS" },
+  { label: "OPENID_CONNECT", value: "OPENID_CONNECT" },
+  { label: "AWS_LAMBDA", value: "AWS_LAMBDA" },
+];
+
+const APPSYNC_DS_TYPE_OPTIONS: SelectProps.Option[] = [
+  { label: "NONE", value: "NONE" },
+  { label: "AWS_LAMBDA", value: "AWS_LAMBDA" },
+  { label: "AMAZON_DYNAMODB", value: "AMAZON_DYNAMODB" },
+  { label: "HTTP", value: "HTTP" },
+  { label: "AMAZON_EVENTBRIDGE", value: "AMAZON_EVENTBRIDGE" },
+  { label: "RELATIONAL_DATABASE", value: "RELATIONAL_DATABASE" },
+  { label: "AMAZON_OPENSEARCH_SERVICE", value: "AMAZON_OPENSEARCH_SERVICE" },
+];
+
+function AppSyncDashboard() {
+  const { data, isLoading, isError, error } = useAppSyncApis();
+  const createApi = useCreateAppSyncApi();
+  const deleteApi = useDeleteAppSyncApi();
+  const [selectedApi, setSelectedApi] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [form, setForm] = useState({ name: "", authenticationType: "API_KEY" });
+
+  const apis = data?.apis || [];
+
+  const columns = [
+    { id: "name", header: "Name", cell: (item: any) => item.name, isRowHeader: true },
+    { id: "apiId", header: "API ID", cell: (item: any) => item.apiId },
+    { id: "auth", header: "Auth", cell: (item: any) => item.authenticationType || "—" },
+    { id: "type", header: "Type", cell: (item: any) => item.apiType || "GRAPHQL" },
+    { id: "dns", header: "GraphQL URL", cell: (item: any) => item.uris?.GRAPHQL || item.uris?.REALTIME || "—" },
+    {
+      id: "actions",
+      header: "",
+      cell: (item: any) => (
+        <SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setSelectedApi(item.apiId)}>
+            View
+          </Button>
+          <DeleteButton
+            itemName={item.name}
+            resourceType="GraphQL API"
+            loading={deleteApi.isPending}
+            onDelete={() => deleteApi.mutateAsync(item.apiId)}
+          />
+        </SpaceBetween>
+      ),
+    },
+  ];
+
+  if (selectedApi) {
+    return <AppSyncApiDetail apiId={selectedApi} onBack={() => setSelectedApi(null)} />;
+  }
+
+  return (
+    <>
+      <ResourceTable
+        resourceName="GraphQL API"
+        headerTitle="AppSync GraphQL APIs"
+        headerCounter={data?.total}
+        items={apis}
+        columns={columns}
+        loading={isLoading}
+        emptyMessage="No GraphQL APIs found. Create one to get started."
+        filterEnabled
+        filterPlaceholder="Find APIs by name"
+        filterFunction={(item: any, searchText: string) =>
+          (item.name || "").toLowerCase().includes(searchText.toLowerCase())
+        }
+        onCreate={() => setShowCreate(true)}
+      />
+
+      <Modal
+        visible={showCreate}
+        onDismiss={() => setShowCreate(false)}
+        header="Create GraphQL API"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreate(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                loading={createApi.isPending}
+                disabled={!form.name.trim()}
+                onClick={() => {
+                  createApi.mutate(form, {
+                    onSuccess: () => {
+                      setShowCreate(false);
+                      setForm({ name: "", authenticationType: "API_KEY" });
+                    },
+                  });
+                }}
+              >
+                Create
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          {createApi.isError && (
+            <Alert type="error" dismissible>
+              {(createApi.error as Error)?.message || "Failed to create GraphQL API"}
+            </Alert>
+          )}
+          <SpaceBetween size="m">
+            <FormField label="API name" description="A descriptive name for your GraphQL API.">
+              <Input
+                value={form.name}
+                onChange={({ detail }) => setForm((p) => ({ ...p, name: detail.value }))}
+                placeholder="my-graphql-api"
+              />
+            </FormField>
+            <FormField label="Authentication type">
+              <Select
+                selectedOption={{ label: form.authenticationType, value: form.authenticationType }}
+                onChange={({ detail }) =>
+                  setForm((p) => ({ ...p, authenticationType: detail.selectedOption?.value || "API_KEY" }))
+                }
+                options={APPSYNC_AUTH_OPTIONS}
+              />
+            </FormField>
+          </SpaceBetween>
+        </Form>
+      </Modal>
+    </>
+  );
+}
+
+function AppSyncApiDetail({ apiId, onBack }: { apiId: string; onBack: () => void }) {
+  const { data: apiData, isLoading: apiLoading } = useAppSyncApi(apiId);
+  const { data: dsData, isLoading: dsLoading } = useAppSyncDataSources(apiId);
+  const { data: resolverData, isLoading: resolverLoading } = useAppSyncResolvers(apiId);
+  const { data: funcData, isLoading: funcLoading } = useAppSyncFunctions(apiId);
+  const { data: keyData, isLoading: keyLoading } = useAppSyncApiKeys(apiId);
+  const { data: typeData, isLoading: typeLoading } = useAppSyncTypes(apiId);
+  const createDs = useCreateAppSyncDataSource();
+  const deleteDs = useDeleteAppSyncDataSource();
+  const createFunc = useCreateAppSyncFunction();
+  const deleteFunc = useDeleteAppSyncFunction();
+  const createKey = useCreateAppSyncApiKey();
+  const deleteKey = useDeleteAppSyncApiKey();
+  const { showToast } = useToast();
+  const [showCreateDs, setShowCreateDs] = useState(false);
+  const [showCreateFunc, setShowCreateFunc] = useState(false);
+  const [dsForm, setDsForm] = useState({ name: "", type: "NONE", description: "" });
+  const [funcForm, setFuncForm] = useState({ name: "", dataSourceName: "", code: "" });
+
+  const api = apiData?.api;
+  const dataSources = dsData?.dataSources || [];
+  const resolvers = resolverData?.resolvers || [];
+  const functions = funcData?.functions || [];
+  const apiKeys = keyData?.apiKeys || [];
+  const types = typeData?.types || [];
+
+  const tabs: TabsProps.Tab[] = [
+    {
+      label: `Data Sources (${dataSources.length})`,
+      id: "data-sources",
+      content: (
+        <ResourceTable
+          resourceName="Data Source"
+          headerTitle="Data Sources"
+          headerCounter={dataSources.length}
+          items={dataSources}
+          columns={[
+            { id: "name", header: "Name", cell: (item: any) => item.name, isRowHeader: true },
+            { id: "type", header: "Type", cell: (item: any) => item.type || "—" },
+            { id: "desc", header: "Description", cell: (item: any) => item.description || "—" },
+            {
+              id: "actions",
+              header: "",
+              cell: (item: any) => (
+                <DeleteButton
+                  itemName={item.name}
+                  resourceType="data source"
+                  loading={deleteDs.isPending}
+                  onDelete={() => deleteDs.mutateAsync({ apiId, name: item.name })}
+                />
+              ),
+            },
+          ]}
+          loading={dsLoading}
+          emptyMessage="No data sources."
+          onCreate={() => setShowCreateDs(true)}
+        />
+      ),
+    },
+    {
+      label: `Resolvers (${resolvers.length})`,
+      id: "resolvers",
+      content: (
+        <ResourceTable
+          resourceName="Resolver"
+          headerTitle="Resolvers"
+          headerCounter={resolvers.length}
+          items={resolvers}
+          columns={[
+            { id: "field", header: "Field", cell: (item: any) => item.fieldName, isRowHeader: true },
+            { id: "type", header: "Type", cell: (item: any) => item.typeName },
+            { id: "ds", header: "Data Source", cell: (item: any) => item.dataSourceName || "—" },
+            { id: "kind", header: "Kind", cell: (item: any) => item.kind || "UNIT" },
+            { id: "runtime", header: "Runtime", cell: (item: any) => item.runtime?.name || "—" },
+          ]}
+          loading={resolverLoading}
+          emptyMessage="No resolvers."
+        />
+      ),
+    },
+    {
+      label: `Functions (${functions.length})`,
+      id: "functions",
+      content: (
+        <ResourceTable
+          resourceName="Function"
+          headerTitle="Functions"
+          headerCounter={functions.length}
+          items={functions}
+          columns={[
+            { id: "name", header: "Name", cell: (item: any) => item.name, isRowHeader: true },
+            { id: "id", header: "Function ID", cell: (item: any) => item.functionId },
+            { id: "ds", header: "Data Source", cell: (item: any) => item.dataSourceName || "—" },
+            { id: "version", header: "Version", cell: (item: any) => item.functionVersion || "—" },
+            {
+              id: "actions",
+              header: "",
+              cell: (item: any) => (
+                <DeleteButton
+                  itemName={item.name}
+                  resourceType="function"
+                  loading={deleteFunc.isPending}
+                  onDelete={() => deleteFunc.mutateAsync({ apiId, functionId: item.functionId })}
+                />
+              ),
+            },
+          ]}
+          loading={funcLoading}
+          emptyMessage="No functions."
+          onCreate={() => setShowCreateFunc(true)}
+        />
+      ),
+    },
+    {
+      label: `API Keys (${apiKeys.length})`,
+      id: "api-keys",
+      content: (
+        <ResourceTable
+          resourceName="API Key"
+          headerTitle="API Keys"
+          headerCounter={apiKeys.length}
+          items={apiKeys}
+          columns={[
+            { id: "id", header: "Key ID", cell: (item: any) => item.id, isRowHeader: true },
+            { id: "desc", header: "Description", cell: (item: any) => item.description || "—" },
+            {
+              id: "expires",
+              header: "Expires",
+              cell: (item: any) => (item.expires ? new Date(item.expires * 1000).toLocaleString() : "—"),
+            },
+            {
+              id: "actions",
+              header: "",
+              cell: (item: any) => (
+                <DeleteButton
+                  itemName={item.id}
+                  resourceType="API key"
+                  loading={deleteKey.isPending}
+                  onDelete={() => deleteKey.mutateAsync({ apiId, id: item.id })}
+                />
+              ),
+            },
+          ]}
+          loading={keyLoading}
+          emptyMessage="No API keys."
+          onCreate={() =>
+            createKey.mutate(
+              { apiId },
+              {
+                onSuccess: () => showToast("success", "API key created"),
+                onError: (err) => showToast("error", (err as Error).message),
+              }
+            )
+          }
+        />
+      ),
+    },
+    {
+      label: `Types (${types.length})`,
+      id: "types",
+      content: (
+        <ResourceTable
+          resourceName="Type"
+          headerTitle="Types"
+          headerCounter={types.length}
+          items={types}
+          columns={[
+            { id: "name", header: "Name", cell: (item: any) => item.name, isRowHeader: true },
+            { id: "format", header: "Format", cell: (item: any) => item.format || "SDL" },
+          ]}
+          loading={typeLoading}
+          emptyMessage="No types defined."
+        />
+      ),
+    },
+  ];
+
+  return (
+    <SpaceBetween size="l">
+      <Button variant="link" iconName="arrow-left" onClick={onBack}>
+        Back to GraphQL APIs
+      </Button>
+
+      <Header variant="h2" description={api?.apiId ? `API ID: ${api.apiId}` : undefined}>
+        {apiLoading ? "Loading…" : api?.name || "GraphQL API"}
+      </Header>
+
+      {api && (
+        <ColumnLayout columns={3}>
+          <Container header={<Header variant="h3">Authentication</Header>}>
+            <Box>{api.authenticationType || "—"}</Box>
+          </Container>
+          <Container header={<Header variant="h3">API Type</Header>}>
+            <Box>{api.apiType || "GRAPHQL"}</Box>
+          </Container>
+          <Container header={<Header variant="h3">X-Ray</Header>}>
+            <Box>{api.xrayEnabled ? "Enabled" : "Disabled"}</Box>
+          </Container>
+        </ColumnLayout>
+      )}
+
+      <Tabs tabs={tabs} />
+
+      <Modal
+        visible={showCreateDs}
+        onDismiss={() => setShowCreateDs(false)}
+        header="Create data source"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreateDs(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                loading={createDs.isPending}
+                disabled={!dsForm.name.trim()}
+                onClick={() => {
+                  createDs.mutate(
+                    { apiId, ...dsForm },
+                    {
+                      onSuccess: () => {
+                        setShowCreateDs(false);
+                        setDsForm({ name: "", type: "NONE", description: "" });
+                      },
+                      onError: (err) => showToast("error", (err as Error).message),
+                    }
+                  );
+                }}
+              >
+                Create
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          <SpaceBetween size="m">
+            <FormField label="Name">
+              <Input
+                value={dsForm.name}
+                onChange={({ detail }) => setDsForm((p) => ({ ...p, name: detail.value }))}
+                placeholder="my-datasource"
+              />
+            </FormField>
+            <FormField label="Type">
+              <Select
+                selectedOption={{ label: dsForm.type, value: dsForm.type }}
+                onChange={({ detail }) => setDsForm((p) => ({ ...p, type: detail.selectedOption?.value || "NONE" }))}
+                options={APPSYNC_DS_TYPE_OPTIONS}
+              />
+            </FormField>
+            <FormField label="Description (optional)">
+              <Input
+                value={dsForm.description}
+                onChange={({ detail }) => setDsForm((p) => ({ ...p, description: detail.value }))}
+              />
+            </FormField>
+          </SpaceBetween>
+        </Form>
+      </Modal>
+
+      <Modal
+        visible={showCreateFunc}
+        onDismiss={() => setShowCreateFunc(false)}
+        header="Create function"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreateFunc(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                loading={createFunc.isPending}
+                disabled={!funcForm.name.trim() || !funcForm.dataSourceName.trim()}
+                onClick={() => {
+                  createFunc.mutate(
+                    { apiId, ...funcForm },
+                    {
+                      onSuccess: () => {
+                        setShowCreateFunc(false);
+                        setFuncForm({ name: "", dataSourceName: "", code: "" });
+                      },
+                      onError: (err) => showToast("error", (err as Error).message),
+                    }
+                  );
+                }}
+              >
+                Create
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          <SpaceBetween size="m">
+            <FormField label="Name">
+              <Input
+                value={funcForm.name}
+                onChange={({ detail }) => setFuncForm((p) => ({ ...p, name: detail.value }))}
+                placeholder="my-function"
+              />
+            </FormField>
+            <FormField label="Data source name">
+              <Select
+                selectedOption={
+                  funcForm.dataSourceName
+                    ? { label: funcForm.dataSourceName, value: funcForm.dataSourceName }
+                    : { label: "Select data source", value: "" }
+                }
+                onChange={({ detail }) =>
+                  setFuncForm((p) => ({ ...p, dataSourceName: detail.selectedOption?.value || "" }))
+                }
+                options={dataSources.map((ds: any) => ({ label: ds.name, value: ds.name }))}
+                placeholder="Select data source"
+                filteringType="auto"
+              />
+            </FormField>
+            <FormField label="Code (optional)" description="JavaScript runtime code (APPSYNC_JS).">
+              <Input
+                value={funcForm.code}
+                onChange={({ detail }) => setFuncForm((p) => ({ ...p, code: detail.value }))}
+                placeholder="export function request(ctx) { return {}; }"
+              />
+            </FormField>
+          </SpaceBetween>
+        </Form>
+      </Modal>
     </SpaceBetween>
   );
 }

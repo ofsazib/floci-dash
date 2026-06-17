@@ -22,6 +22,7 @@ import ssmRoutes from "./ssm";
 import route53Routes from "./route53";
 import apiGatewayRoutes from "./apigateway";
 import stsRoutes from "./sts";
+import appsyncRoutes from "./appsync";
 
 const router = new Hono();
 
@@ -47,9 +48,10 @@ router.route("/ssm", ssmRoutes);
 router.route("/route53", route53Routes);
 router.route("/apigateway", apiGatewayRoutes);
 router.route("/sts", stsRoutes);
+router.route("/appsync", appsyncRoutes);
 
 router.get("/", (c: Context) => {
-  return c.json({ message: "AWS routes available. Services registered: s3, dynamodb, rds, ec2, sqs, sns, events, logs, lambda, cloudwatch, iam, secretsmanager, cloudformation, kms, ecs, ssm, route53, apigateway, sts" });
+  return c.json({ message: "AWS routes available. Services registered: s3, dynamodb, rds, ec2, sqs, sns, events, logs, lambda, cloudwatch, iam, secretsmanager, cloudformation, kms, ecs, ssm, route53, apigateway, sts, appsync" });
 });
 
 export default router;
