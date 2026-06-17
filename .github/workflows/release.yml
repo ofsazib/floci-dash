@@ -82,11 +82,15 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/ofsazib/floci-dash
+          # latest=auto moves `latest` only for stable releases — a prerelease
+          # tag (v1.2.3-rc.1, -beta, ...) publishes its semver tag but leaves
+          # `latest` pointing at the last stable version.
+          flavor: |
+            latest=auto
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-            type=raw,value=latest
 
       - name: Build and push — dashboard-only
         uses: docker/build-push-action@v6
@@ -103,11 +107,15 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/ofsazib/floci-dash
+          # suffix=-combined appends to every tag (incl. latest); onlatest=true
+          # makes `latest-combined` follow the same stable-only rule as above.
+          flavor: |
+            latest=auto
+            suffix=-combined,onlatest=true
           tags: |
-            type=semver,pattern={{version}}-combined
-            type=semver,pattern={{major}}.{{minor}}-combined
-            type=semver,pattern={{major}}-combined
-            type=raw,value=latest-combined
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
 
       - name: Build and push — combined (Floci + Dashboard)
         uses: docker/build-push-action@v6

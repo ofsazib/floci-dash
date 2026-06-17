@@ -51,16 +51,13 @@ jobs:
       - name: TypeScript typecheck
         run: make typecheck
 
-      - name: Unit tests (fast fail — no Floci needed)
-        run: make test
+      - name: Unit tests + coverage (no Floci needed)
+        run: make test-cov
 
-      - name: Full test suite (unit + integration with Floci)
-        run: make test-all
+      - name: Integration tests (against Floci service container)
+        run: make integration-test
         env:
           FLOCI_URL: http://localhost:9878
-
-      - name: Generate coverage report
-        run: make test-cov
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v7
@@ -109,7 +106,7 @@ jobs:
           images: ghcr.io/ofsazib/floci-dash
           tags: |
             type=raw,value=${{ steps.version.outputs.tag }}
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=edge,enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: Build and push — dashboard-only
         uses: docker/build-push-action@v6
@@ -128,7 +125,7 @@ jobs:
           images: ghcr.io/ofsazib/floci-dash
           tags: |
             type=raw,value=${{ steps.version.outputs.tag }}-combined
-            type=raw,value=latest-combined,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=edge-combined,enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: Build and push — combined (Floci + Dashboard)
         uses: docker/build-push-action@v6
