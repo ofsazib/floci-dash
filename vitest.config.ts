@@ -13,13 +13,15 @@ export default defineConfig({
       include: [
         "src/frontend/**/*.{ts,tsx,js,jsx}",
         "src/backend/**/*.{ts,tsx,js,jsx}",
-        "src/test/helpers.ts",
       ],
       exclude: [
         "src/**/*.test.ts",
         "src/**/*.test.tsx",
         "src/**/*.d.ts",
-        "src/test/setup.ts",
+        // Test infrastructure — not application code, must not be measured.
+        "src/test/**",
+        // Bootstrap entry — a single createRoot().render() call, nothing to test.
+        "src/frontend/main.tsx",
       ],
       reportsDirectory: "./coverage",
       reportOnFailure: true,
