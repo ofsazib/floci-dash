@@ -31,6 +31,7 @@ import {
   useS3DeleteBucket,
   useS3UploadFiles,
   useS3DeleteObject,
+  useS3CreateFolder,
   type S3UploadResult,
 } from "../hooks/useS3";
 import {
@@ -461,9 +462,12 @@ function S3ObjectBrowser({ bucket, selectedObject, onSelectObject, onBack, onUpl
   const [prefix, setPrefix] = useState("");
   const { data, isLoading } = useS3Objects(bucket, prefix);
   const deleteObject = useS3DeleteObject(bucket);
+  const createFolder = useS3CreateFolder(bucket);
   const { showToast } = useToast();
   const { confirm, dialog } = useConfirmDialog();
   const [searchTerm, setSearchTerm] = useState("");
+  const [createFolderOpen, setCreateFolderOpen] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
 
   const folders = data?.folders || [];
   const allObjects = data?.objects || [];
@@ -518,6 +522,7 @@ function S3ObjectBrowser({ bucket, selectedObject, onSelectObject, onBack, onUpl
             actions={
               <SpaceBetween direction="horizontal" size="xs">
                 <Button variant="normal" onClick={onBack}>← Buckets</Button>
+                <Button variant="normal" onClick={() => setCreateFolderOpen(true)}>Create folder</Button>
                 <Button variant="primary" onClick={onUploadClick}>Upload</Button>
               </SpaceBetween>
             }
@@ -620,6 +625,45 @@ function S3ObjectBrowser({ bucket, selectedObject, onSelectObject, onBack, onUpl
         }
       />
       {dialog}
+      <Modal
+        visible={createFolderOpen}
+        onDismiss={() => { setCreateFolderOpen(false); setNewFolderName(""); }}
+        header="Create folder"
+        footer={
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button variant="link" onClick={() => { setCreateFolderOpen(false); setNewFolderName(""); }}>Cancel</Button>
+            <Button
+              variant="primary"
+              disabled={!newFolderName.trim()}
+              loading={createFolder.isPending}
+              onClick={() => {
+                const folderPrefix = `${prefix}${newFolderName.trim()}/`;
+                createFolder.mutate(folderPrefix, {
+                  onSuccess: () => {
+                    showToast("success", `Folder "${newFolderName.trim()}" created`);
+                    setCreateFolderOpen(false);
+                    setNewFolderName("");
+                  },
+                  onError: (err) => showToast("error", err.message),
+                });
+              }}
+            >
+              Create
+            </Button>
+          </SpaceBetween>
+        }
+      >
+        <Form>
+          <FormField label="Folder name">
+            <Input
+              value={newFolderName}
+              onChange={({ detail }) => setNewFolderName(detail.value)}
+              placeholder="e.g. logs/2024"
+              autoFocus
+            />
+          </FormField>
+        </Form>
+      </Modal>
     </>
   );
 }

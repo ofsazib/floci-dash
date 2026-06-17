@@ -931,10 +931,10 @@ if (service === "sqs") return <SQSQueues />;
 | 1.12 | Frontend: Overview tab with stats | Done | 2025-06-12 |
 | 1.13 | Frontend: useS3 hooks (buckets, objects, upload, delete) | Done | 2025-06-12 |
 | 1.14 | Verify: typecheck + build pass | Done | 2025-06-12 |
-| 1.15 | Backend: PUT /api/aws/s3/buckets/:name/folders (create zero-byte folder marker object) | Pending | |
-| 1.16 | Frontend: S3 folder browser — create folder button in S3ObjectBrowser (uses current prefix) | Pending | |
-| 1.17 | Frontend: useS3 hooks — useCreateFolder mutation | Pending | |
-| 1.18 | Verify: typecheck + build pass | Pending | |
+| 1.15 | Backend: PUT /api/aws/s3/buckets/:name/folders (create zero-byte folder marker object) | Done | 2025-06-17 |
+| 1.16 | Frontend: S3 folder browser — create folder button in S3ObjectBrowser (uses current prefix) | Done | 2025-06-17 |
+| 1.17 | Frontend: useS3 hooks — useCreateFolder mutation | Done | 2025-06-17 |
+| 1.18 | Verify: typecheck + build pass | Done | 2025-06-17 |
 
 #### 1B — DynamoDB (ServicePage Integration)
 

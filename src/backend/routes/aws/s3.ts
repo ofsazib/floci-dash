@@ -193,6 +193,15 @@ router.post("/buckets/:name/objects/upload", async (c: Context) => {
   return c.json({ bucket, prefix, uploaded, failed, results });
 });
 
+// Create folder (zero-byte marker object with trailing /)
+router.put("/buckets/:name/folders", async (c: Context) => {
+  const bucket = c.req.param("name");
+  const { prefix } = await c.req.json<{ prefix: string }>();
+  if (!prefix) return c.json({ error: "prefix is required" }, 400);
+  await s3().send(new PutObjectCommand({ Bucket: bucket, Key: prefix, Body: "" }));
+  return c.json({ bucket, prefix, created: true });
+});
+
 // Delete object (supports keys with slashes)
 router.delete("/buckets/:name/objects/*", async (c: Context) => {
   const bucket = c.req.param("name");

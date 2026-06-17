@@ -17,6 +17,7 @@ import {
   useS3DeleteBucket,
   useS3UploadFiles,
   useS3DeleteObject,
+  useS3CreateFolder,
 } from "./useS3";
 
 function createWrapper() {
@@ -219,5 +220,36 @@ describe("useS3UploadFiles", () => {
     await expect(
       result.current.mutateAsync({ files: [] })
     ).rejects.toThrow("Upload failed: Internal Server Error");
+  });
+});
+
+// ─── CREATE FOLDER ────────────────────────────────────────
+
+describe("useS3CreateFolder", () => {
+  it("calls api with PUT method, bucket in path, and prefix in body", async () => {
+    mockApi.mockResolvedValueOnce({ bucket: "my-bucket", prefix: "logs/2024/", created: true });
+    const { result } = renderHook(() => useS3CreateFolder("my-bucket"), {
+      wrapper: createWrapper(),
+    });
+    await result.current.mutateAsync("logs/2024/");
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/s3/buckets/my-bucket/folders",
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({ prefix: "logs/2024/" }),
+      })
+    );
+  });
+
+  it("invalidates objects query on success", async () => {
+    mockApi.mockResolvedValueOnce({ bucket: "my-bucket", prefix: "a/", created: true });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useS3CreateFolder("my-bucket"), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync("a/");
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["aws", "s3", "objects", "my-bucket"] });
   });
 });

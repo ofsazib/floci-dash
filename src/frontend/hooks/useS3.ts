@@ -122,3 +122,15 @@ export function useS3DeleteObject(bucket: string) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "s3", "objects", bucket] }),
   });
 }
+
+export function useS3CreateFolder(bucket: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (prefix: string) =>
+      api(`/aws/s3/buckets/${bucket}/folders`, {
+        method: "PUT",
+        body: JSON.stringify({ prefix }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "s3", "objects", bucket] }),
+  });
+}

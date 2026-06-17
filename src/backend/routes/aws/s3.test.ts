@@ -53,6 +53,14 @@ async function del(path: string) {
   return router.request(path, { method: "DELETE" });
 }
 
+async function put(path: string, body?: any) {
+  return router.request(path, {
+    method: "PUT",
+    body: body != null ? JSON.stringify(body) : undefined,
+    headers: body != null ? { "content-type": "application/json" } : undefined,
+  });
+}
+
 beforeEach(() => {
   mockSend.mockReset();
   mockS3Client.mockClear();
@@ -314,6 +322,33 @@ describe("S3 Routes", () => {
       expect(body.failed).toBe(1);
       expect(body.results[0].status).toBe("error");
       expect(body.results[0].error).toBe("AccessDenied");
+    });
+  });
+
+  describe("Folders", () => {
+    it("PUT /buckets/:name/folders — creates folder marker", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/buckets/my-bucket/folders", { prefix: "logs/2024/" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.created).toBe(true);
+      expect(body.prefix).toBe("logs/2024/");
+      expect(mockSend.mock.calls[0][0].Bucket).toBe("my-bucket");
+      expect(mockSend.mock.calls[0][0].Key).toBe("logs/2024/");
+      expect(mockSend.mock.calls[0][0].Body).toBe("");
+    });
+
+    it("PUT /buckets/:name/folders — 400 when prefix missing", async () => {
+      const res = await put("/buckets/my-bucket/folders", {});
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("prefix");
+    });
+
+    it("PUT /buckets/:name/folders — propagates SDK error", async () => {
+      mockSend.mockRejectedValueOnce(new Error("AccessDenied"));
+      const res = await put("/buckets/my-bucket/folders", { prefix: "noaccess/" });
+      expect(res.status).toBe(500);
     });
   });
 });
