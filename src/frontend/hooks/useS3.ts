@@ -32,10 +32,19 @@ export function useS3Buckets() {
   });
 }
 
-export function useS3Objects(bucket: string | null) {
-  return useQuery<{ bucket: string; objects: S3Object[]; total: number }>({
-    queryKey: ["aws", "s3", "objects", bucket],
-    queryFn: () => api(`/aws/s3/buckets/${bucket}/objects`),
+export interface S3Folder {
+  prefix: string;
+  name: string;
+}
+
+export function useS3Objects(bucket: string | null, prefix?: string) {
+  const p = prefix || "";
+  return useQuery<{ bucket: string; objects: S3Object[]; folders: S3Folder[]; total: number }>({
+    queryKey: ["aws", "s3", "objects", bucket, p],
+    queryFn: () => {
+      const qs = p ? `?prefix=${encodeURIComponent(p)}` : "";
+      return api(`/aws/s3/buckets/${bucket}/objects${qs}`);
+    },
     enabled: !!bucket,
     refetchInterval: 10000,
   });

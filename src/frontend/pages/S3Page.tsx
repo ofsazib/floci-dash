@@ -59,6 +59,7 @@ export default function S3Page() {
   const [newBucketName, setNewBucketName] = useState("");
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [uploadPrefix, setUploadPrefix] = useState("");
+  const [currentPrefix, setCurrentPrefix] = useState("");
   const [uploadResults, setUploadResults] = useState<S3UploadResult[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
@@ -135,7 +136,8 @@ export default function S3Page() {
               selectedObject={selectedObject}
               onSelectObject={selectObject}
               onBack={() => selectBucket(null)}
-              onUploadClick={() => setShowUploadObject(true)}
+              onUploadClick={() => { setUploadPrefix(currentPrefix); setShowUploadObject(true); }}
+              onPrefixChange={setCurrentPrefix}
             />
           ),
         },
@@ -453,71 +455,170 @@ function S3BucketList({ onSelectBucket, onCreateClick }: { onSelectBucket: (name
   );
 }
 
-function S3ObjectBrowser({ bucket, selectedObject, onSelectObject, onBack, onUploadClick }: {
-  bucket: string; selectedObject: string | null; onSelectObject: (key: string | null) => void; onBack: () => void; onUploadClick: () => void;
+function S3ObjectBrowser({ bucket, selectedObject, onSelectObject, onBack, onUploadClick, onPrefixChange }: {
+  bucket: string; selectedObject: string | null; onSelectObject: (key: string | null) => void; onBack: () => void; onUploadClick: () => void; onPrefixChange?: (prefix: string) => void;
 }) {
-  const { data, isLoading } = useS3Objects(bucket);
+  const [prefix, setPrefix] = useState("");
+  const { data, isLoading } = useS3Objects(bucket, prefix);
   const deleteObject = useS3DeleteObject(bucket);
   const { showToast } = useToast();
   const { confirm, dialog } = useConfirmDialog();
   const [searchTerm, setSearchTerm] = useState("");
 
-  const filteredObjects = (data?.objects || []).filter(
-    (o) => !searchTerm || o.key.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const folders = data?.folders || [];
+  const allObjects = data?.objects || [];
+  const filteredObjects = searchTerm
+    ? allObjects.filter((o) => o.key.toLowerCase().includes(searchTerm.toLowerCase()))
+    : allObjects;
+
+  function navigateToFolder(folderPrefix: string) {
+    setPrefix(folderPrefix);
+    setSearchTerm("");
+  }
+
+  function navigateUp() {
+    const parts = prefix.replace(/\/$/, "").split("/");
+    parts.pop();
+    const parent = parts.length > 0 ? parts.join("/") + "/" : "";
+    setPrefix(parent);
+    setSearchTerm("");
+  }
+
+  function handlePrefixChange(newPrefix: string) {
+    setPrefix(newPrefix);
+    onPrefixChange?.(newPrefix);
+  }
+
+  const breadcrumbItems: Array<{ text: string; href: string; prefix?: string }> = [
+    { text: bucket, href: "#" },
+    ...prefix
+      .replace(/\/$/, "")
+      .split("/")
+      .filter(Boolean)
+      .map((part, i, arr) => ({
+        text: part,
+        href: "#",
+        prefix: arr.slice(0, i + 1).join("/") + "/",
+      })),
+  ];
 
   if (selectedObject) return <S3ObjectViewer bucket={bucket} objectKey={selectedObject} onBack={() => onSelectObject(null)} />;
+
+  const totalCount = folders.length + filteredObjects.length;
 
   return (
     <>
       <Table
         variant="full-page"
         header={
-          <Header variant="h2" counter={`(${data?.total ?? 0})`} description={bucket}
-            actions={<SpaceBetween direction="horizontal" size="xs"><Button variant="normal" onClick={onBack}>← Buckets</Button><Button variant="primary" onClick={onUploadClick}>Upload</Button></SpaceBetween>}
-          >Objects</Header>
-      }
-      filter={
-        <TextFilter
-          filteringPlaceholder="Find objects by key prefix"
-          filteringText={searchTerm}
-          onChange={({ detail }) => setSearchTerm(detail.filteringText)}
-          countText={`${filteredObjects.length} match${filteredObjects.length === 1 ? "" : "es"}`}
-        />
-      }
-      columnDefinitions={[
-        { id: "key", header: "Key", cell: (item: any) => <Button variant="link" onClick={() => onSelectObject(item.key)}>{item.key}</Button>, isRowHeader: true, width: 500 },
-        { id: "size", header: "Size", cell: (item: any) => formatBytes(item.size) },
-        { id: "modified", header: "Last modified", cell: (item: any) => item.lastModified ? new Date(item.lastModified).toLocaleString() : "—" },
-        { id: "actions", header: "", width: 80, cell: (item: any) => (
-          <Button variant="icon" iconName="remove" ariaLabel={`Delete ${item.key}`} loading={deleteObject.isPending && deleteObject.variables === item.key}
-            onClick={async () => {
-              const ok = await confirm({ title: "Delete object", message: `Delete "${item.key}" from bucket "${bucket}"?`, confirmText: "Delete", variant: "danger" });
-              if (ok) deleteObject.mutate(item.key, {
-                onSuccess: () => showToast("success", `Object "${item.key}" deleted`),
-                onError: (err) => showToast("error", err.message),
-              });
-            }} />
-        )},
-      ]}
-      items={filteredObjects}
-      loading={isLoading}
-      loadingText="Loading objects..."
-      empty={
-        searchTerm ? (
-          <Box textAlign="center" padding={{ top: "xxl", bottom: "xxl" }}>
-            <Box variant="h3" padding={{ bottom: "s" }}>No matches</Box>
-            <Box variant="p" color="text-body-secondary">No objects match "{searchTerm}". Try a different search term.</Box>
-          </Box>
-        ) : (
-          <Box textAlign="center" padding={{ top: "xxl", bottom: "xxl" }}>
-            <Box variant="h3" padding={{ bottom: "s" }}>No objects</Box>
-            <Box variant="p" color="text-body-secondary" padding={{ bottom: "l" }}>This bucket is empty. Upload your first object.</Box>
-            <Button variant="primary" onClick={onUploadClick}>Upload object</Button>
-          </Box>
-        )
-      }
-    />
+          <Header
+            variant="h2"
+            counter={`(${totalCount})`}
+            description={bucket}
+            actions={
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button variant="normal" onClick={onBack}>← Buckets</Button>
+                <Button variant="primary" onClick={onUploadClick}>Upload</Button>
+              </SpaceBetween>
+            }
+          >
+            {prefix ? (
+              <SpaceBetween direction="horizontal" size="xs" alignItems="center">
+                <Button variant="link" iconName="arrow-left" onClick={navigateUp}>
+                  Back
+                </Button>
+                <span style={{ fontSize: "0.85em" }}>
+                  {breadcrumbItems.map((item, i) => (
+                    <span key={i}>
+                      {i > 0 && <span style={{ margin: "0 4px", color: "#aab3b0" }}>/</span>}
+                      {item.prefix != null ? (
+                        <Button variant="link" onClick={() => navigateToFolder(item.prefix!)}>
+                          {item.text}
+                        </Button>
+                      ) : (
+                        <span style={{ fontWeight: i === 0 ? 600 : 400 }}>{item.text}</span>
+                      )}
+                    </span>
+                  ))}
+                </span>
+              </SpaceBetween>
+            ) : (
+              "Objects"
+            )}
+          </Header>
+        }
+        filter={
+          <TextFilter
+            filteringPlaceholder="Filter by name"
+            filteringText={searchTerm}
+            onChange={({ detail }) => setSearchTerm(detail.filteringText)}
+            countText={`${totalCount} item${totalCount === 1 ? "" : "s"}`}
+          />
+        }
+        columnDefinitions={[
+          {
+            id: "name", header: "Name", isRowHeader: true, width: 500,
+            cell: (item: any) => {
+              if (item._isFolder) {
+                return (
+                  <Button variant="link" iconName="folder" onClick={() => navigateToFolder(item._folderPrefix)}>
+                    {item._folderName}/
+                  </Button>
+                );
+              }
+              const displayName = prefix ? item.key.replace(prefix, "") : item.key;
+              return (
+                <Button variant="link" onClick={() => onSelectObject(item.key)}>
+                  {displayName}
+                </Button>
+              );
+            },
+          },
+          { id: "size", header: "Size", cell: (item: any) => item._isFolder ? "—" : formatBytes(item.size) },
+          { id: "modified", header: "Last modified", cell: (item: any) => item._isFolder ? "—" : (item.lastModified ? new Date(item.lastModified).toLocaleString() : "—") },
+          { id: "actions", header: "", width: 80, cell: (item: any) => item._isFolder ? null : (
+            <Button variant="icon" iconName="remove" ariaLabel={`Delete ${item.key}`} loading={deleteObject.isPending && deleteObject.variables === item.key}
+              onClick={async () => {
+                const ok = await confirm({ title: "Delete object", message: `Delete "${item.key}" from bucket "${bucket}"?`, confirmText: "Delete", variant: "danger" });
+                if (ok) deleteObject.mutate(item.key, {
+                  onSuccess: () => showToast("success", `Object "${item.key}" deleted`),
+                  onError: (err) => showToast("error", err.message),
+                });
+              }} />
+          )},
+        ]}
+        items={[
+          ...folders.map((f) => ({ _isFolder: true, _folderPrefix: f.prefix, _folderName: f.name, key: f.prefix })),
+          ...filteredObjects,
+        ]}
+        loading={isLoading}
+        loadingText="Loading objects..."
+        empty={
+          prefix ? (
+            <Box textAlign="center" padding={{ top: "xxl", bottom: "xxl" }}>
+              <Box variant="h3" padding={{ bottom: "s" }}>Empty folder</Box>
+              <Box variant="p" color="text-body-secondary" padding={{ bottom: "l" }}>This folder is empty. Upload an object or go back.</Box>
+              <Box textAlign="center">
+                <SpaceBetween direction="horizontal" size="xs">
+                  <Button onClick={navigateUp}>← Back</Button>
+                  <Button variant="primary" onClick={onUploadClick}>Upload object</Button>
+                </SpaceBetween>
+              </Box>
+            </Box>
+          ) : searchTerm ? (
+            <Box textAlign="center" padding={{ top: "xxl", bottom: "xxl" }}>
+              <Box variant="h3" padding={{ bottom: "s" }}>No matches</Box>
+              <Box variant="p" color="text-body-secondary">No objects match "{searchTerm}". Try a different search term.</Box>
+            </Box>
+          ) : (
+            <Box textAlign="center" padding={{ top: "xxl", bottom: "xxl" }}>
+              <Box variant="h3" padding={{ bottom: "s" }}>No objects</Box>
+              <Box variant="p" color="text-body-secondary" padding={{ bottom: "l" }}>This bucket is empty. Upload your first object.</Box>
+              <Button variant="primary" onClick={onUploadClick}>Upload object</Button>
+            </Box>
+          )
+        }
+      />
       {dialog}
     </>
   );

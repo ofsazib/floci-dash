@@ -47,20 +47,31 @@ router.delete("/buckets/:name", async (c: Context) => {
   return c.json({ name, deleted: true });
 });
 
-// List objects in a bucket
+// List objects in a bucket (with folder support via delimiter)
 router.get("/buckets/:name/objects", async (c: Context) => {
   const name = c.req.param("name");
   const prefix = c.req.query("prefix") || "";
+  const delimiter = c.req.query("delimiter") || "/";
   const result = await s3().send(
-    new ListObjectsV2Command({ Bucket: name, Prefix: prefix || undefined })
+    new ListObjectsV2Command({
+      Bucket: name,
+      Prefix: prefix || undefined,
+      Delimiter: delimiter || undefined,
+    })
   );
-  const objects = (result.Contents || []).map((o: { Key?: string; Size?: number; LastModified?: Date; ETag?: string }) => ({
-    key: o.Key,
-    size: o.Size,
-    lastModified: o.LastModified?.toISOString() || null,
-    etag: o.ETag?.replace(/"/g, ""),
+  const objects = (result.Contents || [])
+    .filter((o) => o.Key !== prefix)
+    .map((o: { Key?: string; Size?: number; LastModified?: Date; ETag?: string }) => ({
+      key: o.Key,
+      size: o.Size,
+      lastModified: o.LastModified?.toISOString() || null,
+      etag: o.ETag?.replace(/"/g, ""),
+    }));
+  const folders = (result.CommonPrefixes || []).map((p: { Prefix?: string }) => ({
+    prefix: p.Prefix || "",
+    name: (p.Prefix || "").replace(prefix, "").replace(/\/$/, ""),
   }));
-  return c.json({ bucket: name, prefix, objects, total: objects.length, truncated: result.IsTruncated });
+  return c.json({ bucket: name, prefix, objects, folders, total: objects.length, truncated: result.IsTruncated });
 });
 
 // Stream raw object content with correct Content-Type — used for "Open in browser"
