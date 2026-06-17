@@ -117,8 +117,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ github.sha }}
+          cache-to: type=gha,mode=max,scope=${{ github.sha }}
 
       - name: Extract metadata — combined image
         id: meta-combined
@@ -137,5 +137,5 @@ jobs:
           push: true
           tags: ${{ steps.meta-combined.outputs.tags }}
           labels: ${{ steps.meta-combined.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ github.sha }}
+          cache-to: type=gha,mode=max,scope=${{ github.sha }}
