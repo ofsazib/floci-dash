@@ -20,3 +20,12 @@ if (typeof globalThis.localStorage === "undefined") {
     },
   } as Storage;
 }
+
+// Stub HTMLCanvasElement.getContext in jsdom. Cloudscape (and chart/sparkline
+// components) touch canvas internally; jsdom doesn't implement it and logs a
+// noisy "Not implemented: HTMLCanvasElement.getContext()" error on every render.
+// Returning null is what a real browser does when a context is unavailable, and
+// it skips jsdom's slow not-implemented code path.
+if (typeof HTMLCanvasElement !== "undefined") {
+  HTMLCanvasElement.prototype.getContext = (() => null) as never;
+}
