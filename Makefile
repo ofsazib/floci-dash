@@ -27,52 +27,52 @@ help: ## Show this help
 # Port for Floci — matches docker-compose.yml default
 FLOCI_PORT ?= 9878
 
-install: ## Install npm dependencies
-	npm install
+install: ## Install dependencies
+	pnpm install
 
 setup: install typecheck ## First-time setup (install + typecheck)
 	@echo "✓ Setup complete."
 
 dev: ## Start dev servers (backend :3000, frontend :5173)
-	npm run dev
+	pnpm run dev
 
 dev-backend: ## Start backend only (tsx watch, port 3000)
-	npm run dev:backend
+	pnpm run dev:backend
 
 dev-frontend: ## Start frontend only (Vite HMR, port 5173)
-	npm run dev:frontend
+	pnpm run dev:frontend
 
 build: typecheck ## Build frontend + backend for production
-	npm run build
+	pnpm run build
 
 build-frontend: ## Build frontend only (vite build)
-	npm run build:frontend
+	pnpm run build:frontend
 
 build-backend: ## Build backend only (tsc)
-	npm run build:backend
+	pnpm run build:backend
 
 typecheck: ## Run TypeScript type checking
-	npm run typecheck
+	pnpm run typecheck
 
 start: ## Start production server (needs build first)
-	npm run start
+	pnpm run start
 
 clean: ## Remove node_modules and dist
 	rm -rf node_modules dist
 
 test: ## Run unit tests only (fast, no Floci needed)
-	npm run test:unit
+	pnpm run test:unit
 
 test-cov: ## Run unit tests with coverage report (no Floci needed)
-	npm run test:cov
+	pnpm run test:cov
 
 test-all: ## Run all tests including integration (requires Floci)
 	$(MAKE) _ensure-floci
-	FLOCI_URL=http://localhost:$(FLOCI_PORT) npm run test
+	FLOCI_URL=http://localhost:$(FLOCI_PORT) pnpm run test
 
 integration-test: ## Run integration tests against Floci (starts Floci if not running)
 	$(MAKE) _ensure-floci
-	FLOCI_URL=http://localhost:$(FLOCI_PORT) npx vitest run src/backend/integration.test.ts
+	FLOCI_URL=http://localhost:$(FLOCI_PORT) pnpm exec vitest run src/backend/integration.test.ts
 
 _ensure-floci:
 	@echo "Checking Floci availability..."
@@ -136,10 +136,10 @@ prod-bg: up-bg ## Alias for 'up-bg'
 prod-down: down ## Alias for 'down'
 
 typecheck-docker: ## Run typecheck inside Docker container
-	$(COMPOSE) run --rm --no-deps dashboard npm run typecheck
+	$(COMPOSE) run --rm --no-deps dashboard pnpm run typecheck
 
 build-docker: ## Run build inside Docker container
-	$(COMPOSE) run --rm --no-deps dashboard npm run build
+	$(COMPOSE) run --rm --no-deps dashboard pnpm run build
 
 clean-all: down ## Stop containers + remove volumes + local artifacts
 	$(COMPOSE) down -v --rmi local

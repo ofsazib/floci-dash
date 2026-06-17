@@ -44,9 +44,9 @@ An AWS Console-style web dashboard for Floci, the local AWS emulator. The dashbo
 
 | Operation | Command | Where it runs |
 |-----------|---------|---------------|
-| Start dev environment | `npm run dev` or `npm run docker:dev` | Docker (Floci + Dashboard with hot reload) |
-| Typecheck | `npm run typecheck` or `npm run docker:typecheck` | Docker (one-off container) |
-| Build for production | `npm run build` or `npm run docker:build` | Docker (builder stage) |
+| Start dev environment | `pnpm run dev` or `npm run docker:dev` | Docker (Floci + Dashboard with hot reload) |
+| Typecheck | `pnpm run typecheck` or `npm run docker:typecheck` | Docker (one-off container) |
+| Build for production | `pnpm run build` or `npm run docker:build` | Docker (builder stage) |
 | Start production | `npm run docker:prod` | Docker (Floci + built Dashboard) |
 | Stop everything | `npm run docker:down` | — |
 
@@ -352,8 +352,8 @@ if (service === "sqs") return <SQSQueues />;
 4. Register route in `aws/index.ts`
 5. Create frontend hooks file
 6. Add service-specific component to ServicePage.tsx
-7. Test: `npm run typecheck`
-8. Test: `npm run build`
+7. Test: `pnpm run typecheck`
+8. Test: `pnpm run build`
 
 ---
 
@@ -859,7 +859,7 @@ if (service === "sqs") return <SQSQueues />;
 1. Read this tracker before starting work
 2. Update task status as work progresses (Pending -> In Progress -> Done)
 3. Mark tasks with the date when completed
-4. Never mark a task Done without running `npm run typecheck` successfully
+4. Never mark a task Done without running `pnpm run typecheck` successfully
 5. Never skip verification steps
 
 ### Status Legend
@@ -931,6 +931,10 @@ if (service === "sqs") return <SQSQueues />;
 | 1.12 | Frontend: Overview tab with stats | Done | 2025-06-12 |
 | 1.13 | Frontend: useS3 hooks (buckets, objects, upload, delete) | Done | 2025-06-12 |
 | 1.14 | Verify: typecheck + build pass | Done | 2025-06-12 |
+| 1.15 | Backend: PUT /api/aws/s3/buckets/:name/folders (create zero-byte folder marker object) | Pending | |
+| 1.16 | Frontend: S3 folder browser — create folder button in S3ObjectBrowser (uses current prefix) | Pending | |
+| 1.17 | Frontend: useS3 hooks — useCreateFolder mutation | Pending | |
+| 1.18 | Verify: typecheck + build pass | Pending | |
 
 #### 1B — DynamoDB (ServicePage Integration)
 
@@ -1408,7 +1412,7 @@ Each remaining service gets a standard list + create + delete pattern.
 - **One service at a time.** S3 -> DynamoDB -> SQS -> SNS -> Lambda -> ...
 - **Backend first, verify, then frontend.** Write routes, run typecheck, then build UI.
 - **Commits:** Conventional commits.
-- **Verify after each service:** `npm run typecheck` must pass before moving to next service.
+- **Verify after each service:** `pnpm run typecheck` must pass before moving to next service.
 
 ---
 
@@ -1416,16 +1420,16 @@ Each remaining service gets a standard list + create + delete pattern.
 
 ```bash
 # Start development (Floci + Dashboard with hot reload)
-npm run dev
+pnpm run dev
 
 # Run typecheck
-npm run typecheck
+pnpm run typecheck
 
 # Build for production
-npm run build
+pnpm run build
 
 # Start production
-npm start
+pnpm start
 
 # Docker development
 npm run docker:dev

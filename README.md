@@ -75,7 +75,7 @@ Open [http://localhost:9877](http://localhost:9877) — the dashboard connects t
 
 Floci runs on [http://localhost:9878](http://localhost:9878) (standard LocalStack-compatible endpoint).
 
-That's it. No `npm install`, no `.env` files, no AWS credentials.
+That's it. No `pnpm install`, no `.env` files, no AWS credentials.
 
 ## Usage
 

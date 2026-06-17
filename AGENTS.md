@@ -2,7 +2,7 @@
 
 ## MANDATORY: Use the Makefile
 
-**Every build, run, stop, and Docker operation MUST use `make` commands.** Never call `docker compose` or `npm run` directly for project operations.
+**Every build, run, stop, and Docker operation MUST use `make` commands.** Never call `docker compose` or `pnpm run` directly for project operations.
 
 | Do | Don't |
 |----|-------|
