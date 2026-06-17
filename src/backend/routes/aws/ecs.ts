@@ -56,6 +56,7 @@ router.get("/clusters/:clusterName", async (c: Context) => {
 
 router.post("/clusters", async (c: Context) => {
   const body = await c.req.json();
+  if (!body.clusterName) return c.json({ error: "clusterName is required" }, 400);
   const client = getClient();
   const result = await client.send(
     new CreateClusterCommand({ clusterName: body.clusterName, tags: body.tags })
@@ -226,6 +227,7 @@ router.get("/tasks", async (c: Context) => {
 
 router.post("/tasks/run", async (c: Context) => {
   const body = await c.req.json();
+  if (!body.cluster || !body.taskDefinition) return c.json({ error: "cluster and taskDefinition are required" }, 400);
   const client = getClient();
   const result = await client.send(
     new RunTaskCommand({

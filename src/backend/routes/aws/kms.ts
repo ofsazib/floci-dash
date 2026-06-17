@@ -59,7 +59,7 @@ function mapKey(k: any) {
     signingAlgorithms: k.SigningAlgorithms,
     macAlgorithms: k.MacAlgorithms,
     pendingDeletionWindowInDays: k.PendingDeletionWindowInDays,
-    automaticRotationEnabled: k.AutonomousKeyStore,
+    automaticRotationEnabled: k.AutomaticRotationEnabled,
   };
 }
 

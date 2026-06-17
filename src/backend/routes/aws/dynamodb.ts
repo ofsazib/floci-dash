@@ -73,7 +73,8 @@ router.delete("/tables/:name", async (c: Context) => {
 router.get("/tables/:name", async (c: Context) => {
   const name = c.req.param("name");
   const result = await ddb().send(new DescribeTableCommand({ TableName: name }));
-  const t = result.Table!;
+  if (!result.Table) return c.json({ error: "Table not found" }, 404);
+  const t = result.Table;
   return c.json({
     name: t.TableName,
     status: t.TableStatus,

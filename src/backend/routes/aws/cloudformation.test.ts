@@ -209,6 +209,15 @@ describe("CloudFormation Routes", () => {
       expect(body.deleted).toBe(true);
       expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteChangeSetCommand");
     });
+
+    it("DELETE /change-sets — 400 when name or stack missing", async () => {
+      const res1 = await router.request("/change-sets", { method: "DELETE" });
+      expect(res1.status).toBe(400);
+      const res2 = await router.request("/change-sets?name=foo", { method: "DELETE" });
+      expect(res2.status).toBe(400);
+      const res3 = await router.request("/change-sets?stack=bar", { method: "DELETE" });
+      expect(res3.status).toBe(400);
+    });
   });
 
   describe("Exports", () => {

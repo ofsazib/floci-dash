@@ -58,6 +58,7 @@ router.get("/queues", async (c: Context) => {
 
 router.post("/queues", async (c: Context) => {
   const body = await c.req.json();
+  if (!body.queueName) return c.json({ error: "queueName is required" }, 400);
   const client = getClient();
   const cmd = new CreateQueueCommand({
     QueueName: body.queueName,

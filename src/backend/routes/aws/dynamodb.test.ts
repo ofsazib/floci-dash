@@ -171,6 +171,12 @@ describe("DynamoDB Routes", () => {
       expect(body.globalSecondaryIndexes[0].indexName).toBe("email-index");
     });
 
+    it("GET /tables/:name — returns 404 when table not found", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/tables/missing");
+      expect(res.status).toBe(404);
+    });
+
     it("DELETE /tables/:name — deletes a table", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await del("/tables/users");

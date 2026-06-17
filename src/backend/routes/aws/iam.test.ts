@@ -435,6 +435,25 @@ describe("IAM Routes", () => {
       expect(body.deleted).toBe(true);
       expect(mockSend.mock.calls[0][0].PolicyArn).toBe("arn:aws:iam::000000000000:policy/Old");
     });
+
+    it("GET /policies/detail — 400 when arn missing", async () => {
+      const res = await get("/policies/detail");
+      expect(res.status).toBe(400);
+    });
+
+    it("GET /policies/version — 400 when arn or versionId missing", async () => {
+      const res1 = await get("/policies/version");
+      expect(res1.status).toBe(400);
+      const res2 = await get("/policies/version?arn=foo");
+      expect(res2.status).toBe(400);
+      const res3 = await get("/policies/version?versionId=v1");
+      expect(res3.status).toBe(400);
+    });
+
+    it("DELETE /policies — 400 when arn missing", async () => {
+      const res = await del("/policies");
+      expect(res.status).toBe(400);
+    });
   });
 
   describe("Instance Profiles", () => {

@@ -125,6 +125,28 @@ describe("KMS Routes", () => {
       expect(body.rotationEnabled).toBe(true);
     });
 
+    it("GET /keys/:id — returns automaticRotationEnabled as boolean", async () => {
+      mockSend
+        .mockResolvedValueOnce({
+          KeyMetadata: {
+            KeyId: "key-1",
+            AutomaticRotationEnabled: true,
+            KeyState: "Enabled",
+            KeyManager: "CUSTOMER",
+            Origin: "AWS_KMS",
+          },
+        })
+        .mockResolvedValueOnce({ Tags: [] })
+        .mockResolvedValueOnce({ Aliases: [] })
+        .mockResolvedValueOnce({ Grants: [] })
+        .mockResolvedValueOnce({ KeyRotationEnabled: true });
+      const res = await get("/keys/key-1");
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.key.automaticRotationEnabled).toBe(true);
+      expect(typeof data.key.automaticRotationEnabled).toBe("boolean");
+    });
+
     it("POST /keys — creates a key", async () => {
       mockSend.mockResolvedValueOnce({ KeyMetadata: { KeyId: "new-key", Arn: "arn:..." } });
       const res = await post("/keys", { description: "Test key" });

@@ -44,6 +44,7 @@ router.get("/topics", async (c: Context) => {
 
 router.post("/topics", async (c: Context) => {
   const body = await c.req.json();
+  if (!body.name) return c.json({ error: "name is required" }, 400);
   const client = getClient();
   const result = await client.send(
     new CreateTopicCommand({
@@ -124,6 +125,7 @@ router.get("/subscriptions", async (c: Context) => {
 
 router.post("/subscriptions", async (c: Context) => {
   const body = await c.req.json();
+  if (!body.topicArn || !body.protocol || !body.endpoint) return c.json({ error: "topicArn, protocol, and endpoint are required" }, 400);
   const client = getClient();
   const result = await client.send(
     new SubscribeCommand({
@@ -169,6 +171,7 @@ router.put("/subscriptions/attributes", async (c: Context) => {
 
 router.post("/topics/publish", async (c: Context) => {
   const body = await c.req.json();
+  if (!body.topicArn || !body.message) return c.json({ error: "topicArn and message are required" }, 400);
   const client = getClient();
   const result = await client.send(
     new PublishCommand({

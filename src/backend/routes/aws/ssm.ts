@@ -39,6 +39,7 @@ router.get("/parameters/:name", async (c: Context) => {
 
 router.post("/parameters", async (c: Context) => {
   const body = await c.req.json();
+  if (!body.name || !body.value) return c.json({ error: "name and value are required" }, 400);
   const client = getClient();
   const result = await client.send(
     new PutParameterCommand({

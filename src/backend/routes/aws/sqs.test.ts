@@ -132,6 +132,11 @@ describe("SQS Routes", () => {
       expect(cmd.Attributes.VisibilityTimeout).toBe("30");
     });
 
+    it("POST /queues — 400 when queueName missing", async () => {
+      const res = await post("/queues", {});
+      expect(res.status).toBe(400);
+    });
+
     it("DELETE /queues — deletes a queue", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await del(

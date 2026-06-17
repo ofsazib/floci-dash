@@ -121,6 +121,11 @@ describe("SNS Routes", () => {
       expect(cmd.Name).toBe("new-topic");
     });
 
+    it("POST /topics — 400 when name missing", async () => {
+      const res = await post("/topics", {});
+      expect(res.status).toBe(400);
+    });
+
     it("DELETE /topics — deletes a topic", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await del(
@@ -203,6 +208,11 @@ describe("SNS Routes", () => {
       expect(cmd.Subject).toBe("Test");
     });
 
+    it("POST /topics/publish — 400 when topicArn or message missing", async () => {
+      const res = await post("/topics/publish", {});
+      expect(res.status).toBe(400);
+    });
+
     it("POST /topics/publish-batch — publishes batch", async () => {
       mockSend.mockResolvedValueOnce({
         Successful: [{ Id: "1", MessageId: "m1" }],
@@ -259,6 +269,13 @@ describe("SNS Routes", () => {
       expect(res.status).toBe(201);
       const body = await res.json();
       expect(body.subscriptionArn).toContain("sub-new");
+    });
+
+    it("POST /subscriptions — 400 when topicArn, protocol, or endpoint missing", async () => {
+      const res = await post("/subscriptions", {});
+      expect(res.status).toBe(400);
+      const res2 = await post("/subscriptions", { topicArn: "arn" });
+      expect(res2.status).toBe(400);
     });
 
     it("DELETE /subscriptions — deletes subscription", async () => {

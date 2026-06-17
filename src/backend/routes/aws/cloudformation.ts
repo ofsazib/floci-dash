@@ -228,8 +228,9 @@ router.post("/change-sets/execute", async (c: Context) => {
 });
 
 router.delete("/change-sets", async (c: Context) => {
-  const changeSetName = c.req.query("name")!;
-  const stackName = c.req.query("stack")!;
+  const changeSetName = c.req.query("name");
+  const stackName = c.req.query("stack");
+  if (!changeSetName || !stackName) return c.json({ error: "name and stack query parameters required" }, 400);
   await cfn().send(new DeleteChangeSetCommand({ ChangeSetName: changeSetName, StackName: stackName }));
   return c.json({ deleted: true });
 });

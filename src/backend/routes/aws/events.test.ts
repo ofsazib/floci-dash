@@ -95,6 +95,11 @@ describe("Events (EventBridge) Routes", () => {
       expect(cmd.Name).toBe("custom");
     });
 
+    it("POST /buses — 400 when name missing", async () => {
+      const res = await post("/buses", {});
+      expect(res.status).toBe(400);
+    });
+
     it("DELETE /buses — deletes an event bus", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await del("/buses?name=custom");
@@ -165,11 +170,21 @@ describe("Events (EventBridge) Routes", () => {
       expect((await res.json()).enabled).toBe(true);
     });
 
+    it("POST /rules/enable — 400 when name missing", async () => {
+      const res = await post("/rules/enable", {});
+      expect(res.status).toBe(400);
+    });
+
     it("POST /rules/disable — disables a rule", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await post("/rules/disable", { name: "my-rule", eventBusName: "default" });
       expect(res.status).toBe(200);
       expect((await res.json()).disabled).toBe(true);
+    });
+
+    it("POST /rules/disable — 400 when name missing", async () => {
+      const res = await post("/rules/disable", {});
+      expect(res.status).toBe(400);
     });
   });
 
@@ -199,6 +214,11 @@ describe("Events (EventBridge) Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.failedEntries).toBe(0);
+    });
+
+    it("POST /targets — 400 when rule or targets missing", async () => {
+      const res = await post("/targets", {});
+      expect(res.status).toBe(400);
     });
 
     it("DELETE /targets — removes targets", async () => {

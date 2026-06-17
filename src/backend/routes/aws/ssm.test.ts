@@ -116,6 +116,11 @@ describe("SSM routes — Parameters", () => {
     expect(res.status).toBe(201);
   });
 
+  it("POST /parameters — 400 when name or value missing", async () => {
+    const res = await post("/parameters", {});
+    expect(res.status).toBe(400);
+  });
+
   it("POST /parameters — defaults type to String", async () => {
     mockSend.mockResolvedValueOnce({ Version: 1 });
     await post("/parameters", { name: "/app/x", value: "y" });

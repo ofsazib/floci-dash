@@ -124,6 +124,11 @@ describe("ECS routes — Clusters", () => {
     expect(res.status).toBe(201);
   });
 
+  it("POST /clusters — 400 when clusterName missing", async () => {
+    const res = await post("/clusters", {});
+    expect(res.status).toBe(400);
+  });
+
   it("DELETE /clusters — deletes cluster", async () => {
     mockSend.mockResolvedValueOnce({});
     const res = await del("/clusters?cluster=arn:cluster1");
@@ -328,6 +333,11 @@ describe("ECS routes — Tasks", () => {
     const json = await res.json();
     expect(json.tasks).toHaveLength(1);
     expect(res.status).toBe(201);
+  });
+
+  it("POST /tasks/run — 400 when cluster or taskDefinition missing", async () => {
+    const res = await post("/tasks/run", {});
+    expect(res.status).toBe(400);
   });
 
   it("POST /tasks/stop — stops task", async () => {

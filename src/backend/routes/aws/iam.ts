@@ -276,7 +276,8 @@ router.get("/policies", async (c: Context) => {
 });
 
 router.get("/policies/detail", async (c: Context) => {
-  const policyArn = c.req.query("arn")!;
+  const policyArn = c.req.query("arn");
+  if (!policyArn) return c.json({ error: "arn query parameter required" }, 400);
 
   const [policyRes, versionsRes] = await Promise.all([
     iam().send(new GetPolicyCommand({ PolicyArn: policyArn })),
@@ -294,8 +295,9 @@ router.get("/policies/detail", async (c: Context) => {
 });
 
 router.get("/policies/version", async (c: Context) => {
-  const policyArn = c.req.query("arn")!;
-  const versionId = c.req.query("versionId")!;
+  const policyArn = c.req.query("arn");
+  const versionId = c.req.query("versionId");
+  if (!policyArn || !versionId) return c.json({ error: "arn and versionId query parameters required" }, 400);
   const result = await iam().send(
     new GetPolicyVersionCommand({ PolicyArn: policyArn, VersionId: versionId })
   );
@@ -326,7 +328,8 @@ router.post("/policies", async (c: Context) => {
 });
 
 router.delete("/policies", async (c: Context) => {
-  const policyArn = c.req.query("arn")!;
+  const policyArn = c.req.query("arn");
+  if (!policyArn) return c.json({ error: "arn query parameter required" }, 400);
   await iam().send(new DeletePolicyCommand({ PolicyArn: policyArn }));
   return c.json({ arn: policyArn, deleted: true });
 });
