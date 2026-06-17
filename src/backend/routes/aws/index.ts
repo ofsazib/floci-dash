@@ -19,6 +19,7 @@ import cloudformationRoutes from "./cloudformation";
 import kmsRoutes from "./kms";
 import ecsRoutes from "./ecs";
 import ssmRoutes from "./ssm";
+import route53Routes from "./route53";
 
 const router = new Hono();
 
@@ -41,9 +42,10 @@ router.route("/cloudformation", cloudformationRoutes);
 router.route("/kms", kmsRoutes);
 router.route("/ecs", ecsRoutes);
 router.route("/ssm", ssmRoutes);
+router.route("/route53", route53Routes);
 
 router.get("/", (c: Context) => {
-  return c.json({ message: "AWS routes available. Services registered: s3, dynamodb, rds, ec2, sqs, sns, events, logs, lambda, cloudwatch, iam, secretsmanager, cloudformation, kms, ecs, ssm" });
+  return c.json({ message: "AWS routes available. Services registered: s3, dynamodb, rds, ec2, sqs, sns, events, logs, lambda, cloudwatch, iam, secretsmanager, cloudformation, kms, ecs, ssm, route53" });
 });
 
 export default router;

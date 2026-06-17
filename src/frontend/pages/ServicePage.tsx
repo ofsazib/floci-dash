@@ -92,6 +92,14 @@ import {
   useDeleteSSMParameter,
   useSSMParameterHistory,
 } from "../hooks/useSSM";
+import {
+  useRoute53HostedZones,
+  useCreateRoute53HostedZone,
+  useDeleteRoute53HostedZone,
+  useRoute53RecordSets,
+  useCreateRoute53RecordSet,
+  useDeleteRoute53RecordSet,
+} from "../hooks/useRoute53";
 
 const KEY_TYPE_OPTIONS: SelectProps.Option[] = [
   { label: "String (S)", value: "S" },
@@ -132,7 +140,7 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
 ];
 
 /** Services with a fully implemented backend that can show a resource list */
-const IMPLEMENTED_SERVICES = new Set(["dynamodb", "rds", "logs", "ecs", "ssm"]);
+const IMPLEMENTED_SERVICES = new Set(["dynamodb", "rds", "logs", "ecs", "ssm", "route53"]);
 
 export default function ServicePage() {
   const { service } = useParams<{ service: string }>();
@@ -196,6 +204,7 @@ function ServiceResourceList({ service }: { service: string }) {
   if (service === "logs") return <CloudWatchLogsDashboard />;
   if (service === "ecs") return <ECSDashboard />;
   if (service === "ssm") return <SSMDashboard />;
+  if (service === "route53") return <Route53Dashboard />;
   return null;
 }
 
@@ -1509,6 +1518,309 @@ function RDSParameterGroupParametersView({
                     p ? { ...p, parameterValue: detail.value } : null
                   )
                 }
+              />
+            </FormField>
+          </SpaceBetween>
+        </Form>
+      </Modal>
+    </SpaceBetween>
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  Route 53 (DNS — Hosted Zones + Record Sets)
+// ────────────────────────────────────────────────────────
+
+const RECORD_TYPE_OPTIONS: SelectProps.Option[] = [
+  { label: "A", value: "A" },
+  { label: "AAAA", value: "AAAA" },
+  { label: "CNAME", value: "CNAME" },
+  { label: "MX", value: "MX" },
+  { label: "NS", value: "NS" },
+  { label: "PTR", value: "PTR" },
+  { label: "SOA", value: "SOA" },
+  { label: "SPF", value: "SPF" },
+  { label: "SRV", value: "SRV" },
+  { label: "TXT", value: "TXT" },
+];
+
+function Route53Dashboard() {
+  const { data, isLoading, isError, error } = useRoute53HostedZones();
+  const createZone = useCreateRoute53HostedZone();
+  const deleteZone = useDeleteRoute53HostedZone();
+  const [showCreate, setShowCreate] = useState(false);
+  const [selectedZone, setSelectedZone] = useState<string | null>(null);
+
+  const [form, setForm] = useState({ name: "", comment: "" });
+
+  const zones = data?.hostedZones || [];
+
+  const columns = [
+    { id: "name", header: "Domain Name", cell: (item: any) => item.Name, isRowHeader: true },
+    { id: "id", header: "Hosted Zone ID", cell: (item: any) => (item.Id || "").replace("/hostedzone/", "") },
+    {
+      id: "records",
+      header: "Record Sets",
+      cell: (item: any) => item.ResourceRecordSetCount ?? 0,
+    },
+    { id: "comment", header: "Comment", cell: (item: any) => item.Config?.Comment || "—" },
+    { id: "private", header: "Private", cell: (item: any) => (item.Config?.PrivateZone ? "Yes" : "No") },
+    {
+      id: "actions",
+      header: "",
+      cell: (item: any) => (
+        <SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setSelectedZone(item.Id.replace("/hostedzone/", ""))}>
+            View
+          </Button>
+          <DeleteButton
+            itemName={item.Name}
+            resourceType="hosted zone"
+            loading={deleteZone.isPending}
+            onDelete={() => deleteZone.mutateAsync(item.Id.replace("/hostedzone/", ""))}
+          />
+        </SpaceBetween>
+      ),
+    },
+  ];
+
+  if (selectedZone) {
+    return <Route53ZoneDetail zoneId={selectedZone} onBack={() => setSelectedZone(null)} />;
+  }
+
+  return (
+    <>
+      <ResourceTable
+        resourceName="Hosted Zone"
+        headerTitle="Route 53 Hosted Zones"
+        headerCounter={data?.total}
+        items={zones}
+        columns={columns}
+        loading={isLoading}
+        emptyMessage="No hosted zones found. Create one to get started."
+        filterEnabled
+        filterPlaceholder="Find zones by name"
+        filterFunction={(item: any, searchText: string) =>
+          (item.Name || "").toLowerCase().includes(searchText.toLowerCase())
+        }
+        onCreate={() => setShowCreate(true)}
+      />
+
+      <Modal
+        visible={showCreate}
+        onDismiss={() => setShowCreate(false)}
+        header="Create hosted zone"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreate(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                loading={createZone.isPending}
+                disabled={!form.name.trim()}
+                onClick={() => {
+                  createZone.mutate(form, {
+                    onSuccess: () => {
+                      setShowCreate(false);
+                      setForm({ name: "", comment: "" });
+                    },
+                  });
+                }}
+              >
+                Create
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          {createZone.isError && (
+            <Alert type="error" dismissible>
+              {(createZone.error as Error)?.message || "Failed to create hosted zone"}
+            </Alert>
+          )}
+          <SpaceBetween size="m">
+            <FormField label="Domain name" description="The name of the domain (e.g. example.com.)">
+              <Input
+                value={form.name}
+                onChange={({ detail }) => setForm((p) => ({ ...p, name: detail.value }))}
+                placeholder="example.com."
+              />
+            </FormField>
+            <FormField label="Comment (optional)">
+              <Input
+                value={form.comment}
+                onChange={({ detail }) => setForm((p) => ({ ...p, comment: detail.value }))}
+              />
+            </FormField>
+          </SpaceBetween>
+        </Form>
+      </Modal>
+    </>
+  );
+}
+
+function Route53ZoneDetail({ zoneId, onBack }: { zoneId: string; onBack: () => void }) {
+  const { data, isLoading, isError, error } = useRoute53RecordSets(zoneId);
+  const createRecord = useCreateRoute53RecordSet();
+  const deleteRecord = useDeleteRoute53RecordSet();
+  const [showCreate, setShowCreate] = useState(false);
+
+  const [form, setForm] = useState({
+    name: "",
+    type: "A",
+    ttl: 300,
+    value: "",
+  });
+
+  const records = data?.recordSets || [];
+
+  const columns = [
+    { id: "name", header: "Name", cell: (item: any) => item.Name, isRowHeader: true },
+    { id: "type", header: "Type", cell: (item: any) => item.Type || "—" },
+    { id: "ttl", header: "TTL", cell: (item: any) => item.TTL ?? "—" },
+    {
+      id: "value",
+      header: "Value",
+      cell: (item: any) => {
+        if (item.ResourceRecords) {
+          return (
+            <span style={{ fontFamily: "monospace", fontSize: "0.85em" }}>
+              {item.ResourceRecords.map((r: any) => r.Value).join(", ")}
+            </span>
+          );
+        }
+        if (item.AliasTarget) {
+          return <span style={{ fontFamily: "monospace", fontSize: "0.85em" }}>{item.AliasTarget.DNSName}</span>;
+        }
+        return "—";
+      },
+    },
+    {
+      id: "actions",
+      header: "",
+      cell: (item: any) =>
+        item.Type === "NS" && item.Name === records[0]?.Name ? null : (
+          <DeleteButton
+            itemName={item.Name}
+            resourceType="record"
+            loading={deleteRecord.isPending}
+            onDelete={() =>
+              deleteRecord.mutateAsync({ zoneId, name: item.Name, type: item.Type })
+            }
+          />
+        ),
+    },
+  ];
+
+  return (
+    <SpaceBetween size="l">
+      <Button variant="link" iconName="arrow-left" onClick={onBack}>
+        Back to Hosted Zones
+      </Button>
+
+      <Header variant="h2" description={`Hosted zone: ${zoneId}`}>
+        Resource Record Sets
+      </Header>
+
+      {isError && (
+        <StatusIndicator type="error">
+          {(error as Error)?.message || "Failed to load record sets"}
+        </StatusIndicator>
+      )}
+
+      <ResourceTable
+        resourceName="Record"
+        headerTitle="Record Sets"
+        headerCounter={data?.total}
+        items={records}
+        columns={columns}
+        loading={isLoading}
+        emptyMessage="No record sets found."
+        filterEnabled
+        filterPlaceholder="Find records by name"
+        filterFunction={(item: any, searchText: string) =>
+          (item.Name || "").toLowerCase().includes(searchText.toLowerCase())
+        }
+        onCreate={() => setShowCreate(true)}
+      />
+
+      <Modal
+        visible={showCreate}
+        onDismiss={() => setShowCreate(false)}
+        header="Create record"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreate(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                loading={createRecord.isPending}
+                disabled={!form.name.trim() || !form.value.trim()}
+                onClick={() => {
+                  createRecord.mutate(
+                    {
+                      zoneId,
+                      action: "CREATE",
+                      name: form.name,
+                      type: form.type,
+                      ttl: Number(form.ttl),
+                      resourceRecords: [{ Value: form.value }],
+                    },
+                    {
+                      onSuccess: () => {
+                        setShowCreate(false);
+                        setForm({ name: "", type: "A", ttl: 300, value: "" });
+                      },
+                    }
+                  );
+                }}
+              >
+                Create
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          {createRecord.isError && (
+            <Alert type="error" dismissible>
+              {(createRecord.error as Error)?.message || "Failed to create record"}
+            </Alert>
+          )}
+          <SpaceBetween size="m">
+            <FormField label="Record name">
+              <Input
+                value={form.name}
+                onChange={({ detail }) => setForm((p) => ({ ...p, name: detail.value }))}
+                placeholder="www.example.com."
+              />
+            </FormField>
+            <FormField label="Record type">
+              <Select
+                selectedOption={{ label: form.type, value: form.type }}
+                onChange={({ detail }) =>
+                  setForm((p) => ({ ...p, type: detail.selectedOption?.value || "A" }))
+                }
+                options={RECORD_TYPE_OPTIONS}
+              />
+            </FormField>
+            <FormField label="TTL (seconds)">
+              <Input
+                type="number"
+                value={String(form.ttl)}
+                onChange={({ detail }) => setForm((p) => ({ ...p, ttl: Number(detail.value) }))}
+              />
+            </FormField>
+            <FormField label="Value">
+              <Input
+                value={form.value}
+                onChange={({ detail }) => setForm((p) => ({ ...p, value: detail.value }))}
+                placeholder="192.168.1.1"
               />
             </FormField>
           </SpaceBetween>

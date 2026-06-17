@@ -1177,14 +1177,14 @@ if (service === "sqs") return <SQSQueues />;
 
 | # | Task | Status | Date |
 |---|------|--------|------|
-| 12.1 | Consult Floci Route53 source for supported operations | Pending | |
-| 12.2 | Backend: GET /api/aws/route53/hosted-zones | Pending | |
-| 12.3 | Backend: POST /api/aws/route53/hosted-zones | Pending | |
-| 12.4 | Backend: DELETE /api/aws/route53/hosted-zones/:id | Pending | |
-| 12.5 | Backend: GET /api/aws/route53/hosted-zones/:id/record-sets | Pending | |
-| 12.6 | Frontend: useRoute53 hooks | Pending | |
-| 12.7 | Frontend: Route53 page (hosted zones + record sets) | Pending | |
-| 12.8 | Verify: typecheck + build pass | Pending | |
+| 12.1 | Consult Floci Route53 source for supported operations | Done | 2025-06-17 |
+| 12.2 | Backend: GET /api/aws/route53/hosted-zones | Done | 2025-06-17 |
+| 12.3 | Backend: POST /api/aws/route53/hosted-zones | Done | 2025-06-17 |
+| 12.4 | Backend: DELETE /api/aws/route53/hosted-zones/:id | Done | 2025-06-17 |
+| 12.5 | Backend: GET /api/aws/route53/hosted-zones/:id/record-sets | Done | 2025-06-17 |
+| 12.6 | Frontend: useRoute53 hooks | Done | 2025-06-17 |
+| 12.7 | Frontend: Route53 page (hosted zones + record sets) | Done | 2025-06-17 |
+| 12.8 | Verify: typecheck + build pass | Done | 2025-06-17 |
 
 #### 5B — API Gateway
 

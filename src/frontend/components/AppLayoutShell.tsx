@@ -33,6 +33,7 @@ const IMPLEMENTED_SERVICES: Record<string, string> = {
   kms: "KMS",
   ecs: "ECS",
   ssm: "Systems Manager",
+  route53: "Route 53",
 };
 
 const CATEGORY_ORDER = [
