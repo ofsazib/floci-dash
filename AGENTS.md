@@ -39,6 +39,53 @@ The README is the first thing users see. Keep it comprehensive, current, and wel
 
 The tracker uses these status values: `Done`, `In Progress`, `Pending`, `Blocked`
 
+## MANDATORY: Tests & Codecov Coverage
+
+**Every feature implementation MUST include tests before committing.** No feature is "done" without tests.
+
+### Required steps after implementing any feature:
+
+1. **Write backend route tests** (`src/backend/routes/aws/{service}.test.ts`)
+   - Mock the AWS SDK client and all command constructors using the `vi.hoisted` + `createCmd` pattern (see `kms.test.ts` or `ecs.test.ts` for reference)
+   - Test every endpoint: happy path, empty results, error/400 validation cases
+   - Target: **>90% statement coverage** on new route files
+
+2. **Write frontend hook tests** (`src/frontend/hooks/use{Service}.test.ts`)
+   - Mock `api()` from `../lib/client`
+   - Test every query hook: correct URL called, `enabled` gate when param is null
+   - Test every mutation hook: correct method/URL/body, invalidation on success
+   - Target: **100% statement coverage** on new hook files
+
+3. **Write component/page tests** for non-trivial UI components
+   - Use happy-dom environment (`// @vitest-environment happy-dom`)
+   - Use `createWrapper()` from test helpers for React Query context
+   - Test user flows: render, click, fill forms, verify API calls
+
+4. **Run coverage verification before committing:**
+   ```bash
+   npx vitest run --coverage
+   ```
+   - Verify new files have **>90% statement coverage**
+   - Verify overall coverage **does not decrease** below current thresholds in `vitest.config.ts`
+   - If coverage drops, add more tests — do not lower thresholds
+
+5. **Codecov best practices:**
+   - `codecov.yml` enforces a **75% patch target** — new code must meet this bar
+   - Test both success AND error branches (e.g., empty arrays, missing params → 400)
+   - Cover edge cases: URL encoding, optional params, default values
+   - Never skip tests to save time — incomplete test coverage is technical debt
+   - Prefer many small focused tests over one large test
+   - Each test should verify one behavior (`it("does X when Y")`)
+
+### Existing test patterns to follow:
+
+| Pattern | Reference file |
+|---------|---------------|
+| Backend route mock | `src/backend/routes/aws/kms.test.ts` |
+| ECS backend mock (`create()` factory) | `src/backend/routes/aws/ecs.test.ts` |
+| Frontend hook test | `src/frontend/hooks/useKMS.test.ts` |
+| ServicePage component test | `src/frontend/pages/ServicePage.test.tsx` |
+
 ## Project
 
 Floci Dashboard is a Dockerized, full-stack web app providing an AWS Console-style UI for the Floci local AWS emulator. This project is open source — write code and docs accordingly.
@@ -95,9 +142,11 @@ All commands use `make`. Run `make help` for the full list.
 3. Register in `src/backend/routes/aws/index.ts`
 4. Create `src/frontend/hooks/use{Service}.ts` with query/mutation hooks
 5. Add service component to `src/frontend/pages/ServicePage.tsx`
-6. Run `make typecheck` to verify
-7. Update the tracker in PLAN.md
-8. **Update README.md** — add the service to the "Fully implemented" table
+6. **Write tests** — backend route tests + frontend hook tests (see MANDATORY section above)
+7. Run `make typecheck` to verify
+8. Run `npx vitest run --coverage` — verify >90% coverage on new files
+9. Update the tracker in PLAN.md
+10. **Update README.md** — add the service to the "Fully implemented" table
 
 ## Conventions
 
