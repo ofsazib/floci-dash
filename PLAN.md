@@ -1276,7 +1276,7 @@ Each remaining service gets a standard list + create + delete pattern.
 | 17.10 | AppSync | Done | Done | Done | 2025-06-17 |
 | 17.11 | Kinesis | Pending | Pending | Pending | |
 | 17.12 | EventBridge Pipes | Pending | Pending | Pending | |
-| 17.13 | EventBridge Scheduler | Pending | Pending | Pending | |
+| 17.13 | EventBridge Scheduler | Done | Done | Done | 2025-06-17 |
 | 17.14 | SES (email) | Pending | Pending | Pending | |
 | 17.15 | STS | Pending | Pending | Pending | |
 | 17.16 | Cognito | Pending | Pending | Pending | |

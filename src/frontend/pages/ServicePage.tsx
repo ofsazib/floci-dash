@@ -128,6 +128,14 @@ import {
   useDeleteAppSyncApiKey,
   useAppSyncTypes,
 } from "../hooks/useAppSync";
+import {
+  useSchedulerGroups,
+  useCreateSchedulerGroup,
+  useDeleteSchedulerGroup,
+  useSchedules,
+  useCreateSchedule,
+  useDeleteSchedule,
+} from "../hooks/useScheduler";
 
 const KEY_TYPE_OPTIONS: SelectProps.Option[] = [
   { label: "String (S)", value: "S" },
@@ -168,7 +176,7 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
 ];
 
 /** Services with a fully implemented backend that can show a resource list */
-const IMPLEMENTED_SERVICES = new Set(["dynamodb", "rds", "logs", "ecs", "ssm", "route53", "apigateway", "appsync"]);
+const IMPLEMENTED_SERVICES = new Set(["dynamodb", "rds", "logs", "ecs", "ssm", "route53", "apigateway", "appsync", "scheduler"]);
 
 export default function ServicePage() {
   const { service } = useParams<{ service: string }>();
@@ -235,6 +243,7 @@ function ServiceResourceList({ service }: { service: string }) {
   if (service === "route53") return <Route53Dashboard />;
   if (service === "apigateway") return <APIGatewayDashboard />;
   if (service === "appsync") return <AppSyncDashboard />;
+  if (service === "scheduler") return <SchedulerDashboard />;
   return null;
 }
 
@@ -3161,6 +3170,312 @@ function AppSyncApiDetail({ apiId, onBack }: { apiId: string; onBack: () => void
                 value={funcForm.code}
                 onChange={({ detail }) => setFuncForm((p) => ({ ...p, code: detail.value }))}
                 placeholder="export function request(ctx) { return {}; }"
+              />
+            </FormField>
+          </SpaceBetween>
+        </Form>
+      </Modal>
+    </SpaceBetween>
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  EventBridge Scheduler
+// ────────────────────────────────────────────────────────
+
+function SchedulerDashboard() {
+  const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
+
+  if (selectedGroup) {
+    return (
+      <SchedulerGroupDetail
+        groupName={selectedGroup}
+        onBack={() => setSelectedGroup(null)}
+      />
+    );
+  }
+
+  return <SchedulerGroupList onSelectGroup={(name) => setSelectedGroup(name)} />;
+}
+
+function SchedulerGroupList({ onSelectGroup }: { onSelectGroup: (name: string) => void }) {
+  const { data, isLoading, isError, error } = useSchedulerGroups();
+  const createGroup = useCreateSchedulerGroup();
+  const deleteGroup = useDeleteSchedulerGroup();
+  const [showCreate, setShowCreate] = useState(false);
+  const [groupName, setGroupName] = useState("");
+
+  const groups = data?.groups || [];
+
+  const columns = [
+    { id: "name", header: "Group Name", cell: (item: any) => item.Name, isRowHeader: true },
+    {
+      id: "state",
+      header: "State",
+      cell: (item: any) => <StatusBadge status={item.State || "ACTIVE"} />,
+    },
+    {
+      id: "created",
+      header: "Created",
+      cell: (item: any) =>
+        item.CreationDate ? new Date(item.CreationDate).toLocaleString() : "—",
+    },
+    {
+      id: "schedules",
+      header: "Schedules",
+      cell: (item: any) => <GroupScheduleCount groupName={item.Name} />,
+    },
+    {
+      id: "actions",
+      header: "",
+      cell: (item: any) => (
+        <SpaceBetween direction="horizontal" size="xs">
+          {item.Name !== "default" && (
+            <DeleteButton
+              itemName={item.Name}
+              resourceType="schedule group"
+              loading={deleteGroup.isPending}
+              onDelete={() => deleteGroup.mutateAsync(item.Name)}
+            />
+          )}
+        </SpaceBetween>
+      ),
+    },
+  ];
+
+  return (
+    <>
+      <ResourceTable
+        resourceName="Schedule Group"
+        headerTitle="EventBridge Scheduler — Schedule Groups"
+        headerCounter={data?.total}
+        items={groups}
+        columns={columns}
+        loading={isLoading}
+        emptyMessage="No schedule groups found."
+        filterEnabled
+        filterPlaceholder="Find groups by name"
+        filterFunction={(item: any, s: string) =>
+          (item.Name || "").toLowerCase().includes(s.toLowerCase())
+        }
+        onCreate={() => setShowCreate(true)}
+      />
+
+      <Modal
+        visible={showCreate}
+        onDismiss={() => setShowCreate(false)}
+        header="Create schedule group"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreate(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                loading={createGroup.isPending}
+                disabled={!groupName.trim()}
+                onClick={() => {
+                  createGroup.mutate(
+                    { name: groupName.trim() },
+                    {
+                      onSuccess: () => {
+                        setShowCreate(false);
+                        setGroupName("");
+                      },
+                    }
+                  );
+                }}
+              >
+                Create
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          {createGroup.isError && (
+            <Alert type="error" dismissible>
+              {(createGroup.error as Error)?.message || "Failed to create schedule group"}
+            </Alert>
+          )}
+          <FormField label="Group name">
+            <Input
+              value={groupName}
+              onChange={({ detail }) => setGroupName(detail.value)}
+              placeholder="my-schedule-group"
+            />
+          </FormField>
+        </Form>
+      </Modal>
+    </>
+  );
+}
+
+function GroupScheduleCount({ groupName }: { groupName: string }) {
+  const { data } = useSchedules(groupName);
+  return <span>{data?.total ?? "…"}</span>;
+}
+
+function SchedulerGroupDetail({
+  groupName,
+  onBack,
+}: {
+  groupName: string;
+  onBack: () => void;
+}) {
+  const { data, isLoading } = useSchedules(groupName);
+  const createSchedule = useCreateSchedule();
+  const deleteSchedule = useDeleteSchedule();
+  const [showCreate, setShowCreate] = useState(false);
+  const [form, setForm] = useState({
+    name: "",
+    scheduleExpression: "rate(1 minute)",
+    description: "",
+    targetArn: "",
+    targetRoleArn: "",
+  });
+
+  const schedules = data?.schedules || [];
+
+  const columns = [
+    { id: "name", header: "Schedule Name", cell: (item: any) => item.Name, isRowHeader: true },
+    { id: "expr", header: "Expression", cell: (item: any) => (
+      <span style={{ fontFamily: "monospace", fontSize: "0.85em" }}>{item.ScheduleExpression}</span>
+    ) },
+    { id: "state", header: "State", cell: (item: any) => <StatusBadge status={item.State || "ENABLED"} /> },
+    { id: "target", header: "Target", cell: (item: any) => item.Target?.Arn?.split(":").pop() || item.Target?.Arn || "—" },
+    {
+      id: "actions",
+      header: "",
+      cell: (item: any) => (
+        <DeleteButton
+          itemName={item.Name}
+          resourceType="schedule"
+          loading={deleteSchedule.isPending}
+          onDelete={() => deleteSchedule.mutateAsync({ name: item.Name, group: groupName })}
+        />
+      ),
+    },
+  ];
+
+  return (
+    <SpaceBetween size="l">
+      <Button variant="link" iconName="arrow-left" onClick={onBack}>
+        Back to Schedule Groups
+      </Button>
+
+      <Header variant="h2" description={`Group: ${groupName}`}>
+        Schedules
+      </Header>
+
+      <ResourceTable
+        resourceName="Schedule"
+        headerTitle="Schedules"
+        headerCounter={data?.total}
+        items={schedules}
+        columns={columns}
+        loading={isLoading}
+        emptyMessage="No schedules in this group."
+        filterEnabled
+        filterPlaceholder="Find schedules by name"
+        filterFunction={(item: any, s: string) =>
+          (item.Name || "").toLowerCase().includes(s.toLowerCase())
+        }
+        onCreate={() => setShowCreate(true)}
+      />
+
+      <Modal
+        visible={showCreate}
+        onDismiss={() => setShowCreate(false)}
+        header="Create schedule"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreate(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                loading={createSchedule.isPending}
+                disabled={!form.name.trim() || !form.targetArn.trim()}
+                onClick={() => {
+                  createSchedule.mutate(
+                    {
+                      name: form.name.trim(),
+                      groupName,
+                      scheduleExpression: form.scheduleExpression.trim(),
+                      description: form.description.trim() || undefined,
+                      target: {
+                        arn: form.targetArn.trim(),
+                        roleArn: form.targetRoleArn.trim() || undefined,
+                      },
+                    },
+                    {
+                      onSuccess: () => {
+                        setShowCreate(false);
+                        setForm({
+                          name: "",
+                          scheduleExpression: "rate(1 minute)",
+                          description: "",
+                          targetArn: "",
+                          targetRoleArn: "",
+                        });
+                      },
+                    }
+                  );
+                }}
+              >
+                Create
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          {createSchedule.isError && (
+            <Alert type="error" dismissible>
+              {(createSchedule.error as Error)?.message || "Failed to create schedule"}
+            </Alert>
+          )}
+          <SpaceBetween size="m">
+            <FormField label="Schedule name">
+              <Input
+                value={form.name}
+                onChange={({ detail }) => setForm((p) => ({ ...p, name: detail.value }))}
+                placeholder="my-schedule"
+              />
+            </FormField>
+            <FormField
+              label="Schedule expression"
+              description="rate(1 minute), cron(0 12 * * ? *), or at(2024-01-01T00:00:00)"
+            >
+              <Input
+                value={form.scheduleExpression}
+                onChange={({ detail }) =>
+                  setForm((p) => ({ ...p, scheduleExpression: detail.value }))
+                }
+                placeholder="rate(5 minutes)"
+              />
+            </FormField>
+            <FormField label="Target ARN" description="Lambda function, SQS queue, SNS topic, or Step Function ARN.">
+              <Input
+                value={form.targetArn}
+                onChange={({ detail }) => setForm((p) => ({ ...p, targetArn: detail.value }))}
+                placeholder="arn:aws:lambda:us-east-1:123456789012:function:my-fn"
+              />
+            </FormField>
+            <FormField label="Role ARN (optional)" description="IAM role for the scheduler to assume.">
+              <Input
+                value={form.targetRoleArn}
+                onChange={({ detail }) => setForm((p) => ({ ...p, targetRoleArn: detail.value }))}
+                placeholder="arn:aws:iam::123456789012:role/scheduler-role"
+              />
+            </FormField>
+            <FormField label="Description (optional)">
+              <Input
+                value={form.description}
+                onChange={({ detail }) => setForm((p) => ({ ...p, description: detail.value }))}
               />
             </FormField>
           </SpaceBetween>
