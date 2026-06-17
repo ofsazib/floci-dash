@@ -105,6 +105,49 @@ FLOCI_PORT=4566 DASHBOARD_PORT=3000 make up-bg
 | `FLOCI_PORT` | `9878` | Host port for Floci |
 | `DASHBOARD_PORT` | `9877` | Host port for Dashboard |
 
+### Data persistence
+
+> **The dashboard is stateless** — it stores nothing itself. Every bucket, table, queue, etc. lives inside **Floci**. Data persistence is therefore entirely a Floci setting.
+
+**Default behavior:** Out of the box, Floci runs in **in-memory mode** (`FLOCI_STORAGE_MODE=memory`) — fast, but **all data is lost when the Floci container stops or restarts**. This is why a created S3 bucket disappears after recreating the container.
+
+This `docker-compose.yml` overrides that default to **`hybrid`** and mounts a named volume (`floci-data`) at Floci's data path, so your resources survive restarts:
+
+```yaml
+floci:
+  environment:
+    - FLOCI_STORAGE_MODE=hybrid     # survives restarts
+  volumes:
+    - floci-data:/app/data          # durable storage
+```
+
+Pick a mode with the `FLOCI_STORAGE_MODE` env var:
+
+| Mode | Durability | Notes |
+|------|-----------|-------|
+| `memory` | ❌ none (Floci default) | In-memory only; lost on stop/restart |
+| `hybrid` | ✅ survives restarts | In-memory speed, async flush to disk every ~5s (**this repo's default**) |
+| `persistent` | ✅✅ flush on every write | Safest, slightly slower |
+| `wal` | ✅✅✅ write-ahead log | Highest durability |
+
+```bash
+# Override the mode at launch
+FLOCI_STORAGE_MODE=persistent make up-bg
+```
+
+> ⚠️ **`make down` keeps your data** (it only stops containers — the `floci-data` volume survives). **`make clean-all` deletes it** (it runs `docker compose down -v`, removing volumes). Use `down`, not `clean-all`, when you want to keep state.
+
+For the **combined image**, set the mode and mount a volume yourself:
+
+```bash
+docker run -p 3000:3000 -p 4566:4566 \
+  -e FLOCI_STORAGE_MODE=hybrid -v floci-data:/app/data \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  --rm ghcr.io/ofsazib/floci-dash:latest-combined
+```
+
+(For LocalStack compatibility, Floci also accepts `PERSISTENCE=1`, which it auto-translates to `FLOCI_STORAGE_MODE=persistent`.)
+
 ## Architecture
 
 ```
@@ -366,6 +409,7 @@ You'll need Floci running separately (e.g., `docker run -p 4566:4566 ghcr.io/hec
 | `NODE_ENV` | `production` | Node environment |
 | `FLOCI_PORT` | `9878` | Host port for Floci (docker-compose) |
 | `DASHBOARD_PORT` | `9877` | Host port for Dashboard (docker-compose) |
+| `FLOCI_STORAGE_MODE` | `hybrid` (this repo) / `memory` (Floci default) | Floci storage mode — see [Data persistence](#data-persistence) |
 
 ## License
 

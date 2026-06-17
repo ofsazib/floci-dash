@@ -17,6 +17,12 @@ services:
     ports:
       - "${FLOCI_PORT:-9878}:4566"
     environment:
+      # Persist state across restarts. Floci defaults to in-memory storage
+      # (FLOCI_STORAGE_MODE=memory), which is lost on stop/restart. "hybrid"
+      # keeps in-memory speed and async-flushes to FLOCI_STORAGE_PERSISTENT_PATH
+      # (/app/data, backed by the floci-data volume below) every ~5s. Use
+      # "persistent" to flush on every write, or "wal" for a write-ahead log.
+      - FLOCI_STORAGE_MODE=${FLOCI_STORAGE_MODE:-hybrid}
       - FLOCI_SERVICES=s3,dynamodb,sqs,sns,lambda,iam,ec2,ecs,eks,ecr,rds,elasticache,neptune,kms,secretsmanager,cloudformation,eventbridge,ssm,kinesis,cloudwatch,cognito,acm,route53,cloudfront,apigateway,apigatewayv2,athena,glue,firehose,stepfunctions,msk,opensearch,ses,cloudmap,scheduler,pipes,backup,transfer,cloudtrail,appconfig,bedrock-runtime,textract,transcribe,pricing,ce,cur,bcm-data-exports,resource-groups-tagging,autoscaling,codebuild,codedeploy,appsync,config,sts
     volumes:
       - floci-data:/app/data
