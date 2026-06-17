@@ -34,6 +34,7 @@ const IMPLEMENTED_SERVICES: Record<string, string> = {
   ecs: "ECS",
   ssm: "Systems Manager",
   route53: "Route 53",
+  apigateway: "API Gateway",
 };
 
 const CATEGORY_ORDER = [

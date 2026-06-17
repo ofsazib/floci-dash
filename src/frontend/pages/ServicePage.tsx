@@ -100,6 +100,14 @@ import {
   useCreateRoute53RecordSet,
   useDeleteRoute53RecordSet,
 } from "../hooks/useRoute53";
+import {
+  useAPIGatewayApis,
+  useAPIGatewayApi,
+  useCreateAPIGatewayApi,
+  useDeleteAPIGatewayApi,
+  useAPIGatewayResources,
+  useAPIGatewayDeployments,
+} from "../hooks/useAPIGateway";
 
 const KEY_TYPE_OPTIONS: SelectProps.Option[] = [
   { label: "String (S)", value: "S" },
@@ -140,7 +148,7 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
 ];
 
 /** Services with a fully implemented backend that can show a resource list */
-const IMPLEMENTED_SERVICES = new Set(["dynamodb", "rds", "logs", "ecs", "ssm", "route53"]);
+const IMPLEMENTED_SERVICES = new Set(["dynamodb", "rds", "logs", "ecs", "ssm", "route53", "apigateway"]);
 
 export default function ServicePage() {
   const { service } = useParams<{ service: string }>();
@@ -205,6 +213,7 @@ function ServiceResourceList({ service }: { service: string }) {
   if (service === "ecs") return <ECSDashboard />;
   if (service === "ssm") return <SSMDashboard />;
   if (service === "route53") return <Route53Dashboard />;
+  if (service === "apigateway") return <APIGatewayDashboard />;
   return null;
 }
 
@@ -2361,6 +2370,199 @@ function ECSClusterDetail({ clusterName, onBack }: { clusterName: string; onBack
       </Button>
       <Box variant="h2">{clusterName}</Box>
       <Tabs tabs={tabs} />
+    </SpaceBetween>
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  API Gateway
+// ────────────────────────────────────────────────────────
+
+function APIGatewayDashboard() {
+  const { data, isLoading, isError, error } = useAPIGatewayApis();
+  const createApi = useCreateAPIGatewayApi();
+  const deleteApi = useDeleteAPIGatewayApi();
+  const [selectedApi, setSelectedApi] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+
+  const [form, setForm] = useState({ name: "", description: "" });
+
+  const apis = data?.apis || [];
+
+  const columns = [
+    { id: "name", header: "Name", cell: (item: any) => item.name, isRowHeader: true },
+    { id: "id", header: "API ID", cell: (item: any) => item.id },
+    { id: "description", header: "Description", cell: (item: any) => item.description || "—" },
+    { id: "created", header: "Created", cell: (item: any) => item.createdDate ? new Date(item.createdDate).toLocaleDateString() : "—" },
+    {
+      id: "actions",
+      header: "",
+      cell: (item: any) => (
+        <SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setSelectedApi(item.id)}>
+            View
+          </Button>
+          <DeleteButton
+            itemName={item.name}
+            resourceType="REST API"
+            loading={deleteApi.isPending}
+            onDelete={() => deleteApi.mutateAsync(item.id)}
+          />
+        </SpaceBetween>
+      ),
+    },
+  ];
+
+  if (selectedApi) {
+    return <APIGatewayApiDetail apiId={selectedApi} onBack={() => setSelectedApi(null)} />;
+  }
+
+  return (
+    <>
+      <ResourceTable
+        resourceName="REST API"
+        headerTitle="API Gateway REST APIs"
+        headerCounter={data?.total}
+        items={apis}
+        columns={columns}
+        loading={isLoading}
+        emptyMessage="No REST APIs found. Create one to get started."
+        filterEnabled
+        filterPlaceholder="Find APIs by name"
+        filterFunction={(item: any, searchText: string) =>
+          (item.name || "").toLowerCase().includes(searchText.toLowerCase())
+        }
+        onCreate={() => setShowCreate(true)}
+      />
+
+      <Modal
+        visible={showCreate}
+        onDismiss={() => setShowCreate(false)}
+        header="Create REST API"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreate(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                loading={createApi.isPending}
+                disabled={!form.name.trim()}
+                onClick={() => {
+                  createApi.mutate(form, {
+                    onSuccess: () => {
+                      setShowCreate(false);
+                      setForm({ name: "", description: "" });
+                    },
+                  });
+                }}
+              >
+                Create
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          {createApi.isError && (
+            <Alert type="error" dismissible>
+              {(createApi.error as Error)?.message || "Failed to create REST API"}
+            </Alert>
+          )}
+          <SpaceBetween size="m">
+            <FormField label="API name" description="A descriptive name for your REST API.">
+              <Input
+                value={form.name}
+                onChange={({ detail }) => setForm((p) => ({ ...p, name: detail.value }))}
+                placeholder="my-api"
+              />
+            </FormField>
+            <FormField label="Description (optional)">
+              <Input
+                value={form.description}
+                onChange={({ detail }) => setForm((p) => ({ ...p, description: detail.value }))}
+              />
+            </FormField>
+          </SpaceBetween>
+        </Form>
+      </Modal>
+    </>
+  );
+}
+
+function APIGatewayApiDetail({ apiId, onBack }: { apiId: string; onBack: () => void }) {
+  const { data: apiData, isLoading: apiLoading } = useAPIGatewayApi(apiId);
+  const { data: resData, isLoading: resLoading, isError, error } = useAPIGatewayResources(apiId);
+  const { data: deployData, isLoading: deployLoading } = useAPIGatewayDeployments(apiId);
+
+  const resources = resData?.resources || [];
+  const deployments = deployData?.deployments || [];
+
+  const api = apiData?.api;
+
+  return (
+    <SpaceBetween size="l">
+      <Button variant="link" iconName="arrow-left" onClick={onBack}>
+        Back to REST APIs
+      </Button>
+
+      <Header variant="h2" description={api?.description || `API ID: ${apiId}`}>
+        {api?.name || "REST API"}
+      </Header>
+
+      {isError && (
+        <StatusIndicator type="error">
+          {(error as Error)?.message || "Failed to load resources"}
+        </StatusIndicator>
+      )}
+
+      <SpaceBetween size="xl">
+        <Container header={<Header variant="h3">Resources</Header>}>
+          <ResourceTable
+            resourceName="Resource"
+            items={resources}
+            columns={[
+              { id: "path", header: "Path", cell: (item: any) => item.path, isRowHeader: true },
+              { id: "id", header: "Resource ID", cell: (item: any) => item.id },
+              {
+                id: "methods",
+                header: "Methods",
+                cell: (item: any) => {
+                  const methods = Object.keys(item.resourceMethods || {});
+                  return methods.length > 0 ? methods.join(", ") : "—";
+                },
+              },
+            ]}
+            loading={resLoading}
+            emptyMessage="No resources found."
+          />
+        </Container>
+
+        <Container header={<Header variant="h3">Deployments</Header>}>
+          <ResourceTable
+            resourceName="Deployment"
+            items={deployments}
+            columns={[
+              { id: "id", header: "Deployment ID", cell: (item: any) => item.id, isRowHeader: true },
+              { id: "stage", header: "Stage", cell: (item: any) => item.stageName || "—" },
+              {
+                id: "date",
+                header: "Created",
+                cell: (item: any) =>
+                  item.createdDate ? new Date(item.createdDate).toLocaleString() : "—",
+              },
+              {
+                id: "status",
+                header: "Status",
+                cell: (item: any) => item.apiSummary ? "—" : (item.statusDescription || "—"),
+              },
+            ]}
+            loading={deployLoading}
+            emptyMessage="No deployments found."
+          />
+        </Container>
+      </SpaceBetween>
     </SpaceBetween>
   );
 }

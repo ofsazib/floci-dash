@@ -1190,14 +1190,14 @@ if (service === "sqs") return <SQSQueues />;
 
 | # | Task | Status | Date |
 |---|------|--------|------|
-| 13.1 | Consult Floci API Gateway source for supported operations | Pending | |
-| 13.2 | Backend: GET /api/aws/apigateway/rest-apis | Pending | |
-| 13.3 | Backend: POST /api/aws/apigateway/rest-apis | Pending | |
-| 13.4 | Backend: DELETE /api/aws/apigateway/rest-apis/:id | Pending | |
-| 13.5 | Backend: GET /api/aws/apigateway/rest-apis/:id/resources | Pending | |
-| 13.6 | Frontend: useAPIGateway hooks | Pending | |
-| 13.7 | Frontend: API Gateway page | Pending | |
-| 13.8 | Verify: typecheck + build pass | Pending | |
+| 13.1 | Consult Floci API Gateway source for supported operations | Done | 2025-06-17 |
+| 13.2 | Backend: GET /api/aws/apigateway/rest-apis | Done | 2025-06-17 |
+| 13.3 | Backend: POST /api/aws/apigateway/rest-apis | Done | 2025-06-17 |
+| 13.4 | Backend: DELETE /api/aws/apigateway/rest-apis/:id | Done | 2025-06-17 |
+| 13.5 | Backend: GET /api/aws/apigateway/rest-apis/:id/resources | Done | 2025-06-17 |
+| 13.6 | Frontend: useAPIGateway hooks | Done | 2025-06-17 |
+| 13.7 | Frontend: API Gateway page | Done | 2025-06-17 |
+| 13.8 | Verify: typecheck + build pass | Done | 2025-06-17 |
 
 ---
 

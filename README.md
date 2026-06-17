@@ -34,7 +34,7 @@
 
 - **AWS Console look and feel** — Built with [Cloudscape Design System](https://cloudscape.design/), the same component library used by the real AWS Management Console
 - **55+ AWS services** — Full navigation and status for every service Floci supports
-- **Deep resource management** — Browse, create, and delete resources for implemented services (S3, DynamoDB, EC2, RDS, SQS, SNS, EventBridge, CloudWatch Logs, CloudWatch Metrics, Lambda, IAM, Secrets Manager, CloudFormation, KMS, ECS, SSM, Route 53)
+- **Deep resource management** — Browse, create, and delete resources for implemented services (S3, DynamoDB, EC2, RDS, SQS, SNS, EventBridge, CloudWatch Logs, CloudWatch Metrics, Lambda, IAM, Secrets Manager, CloudFormation, KMS, ECS, SSM, Route 53, API Gateway)
 - **EC2 web terminal** — Interactive bash shell inside running EC2 instances directly from the browser (xterm.js + Docker Engine API with PTY)
 - **Dark mode** — Toggle between light and dark themes
 - **Real-time health** — Dashboard shows live Floci service status (running/available counts)
@@ -249,6 +249,7 @@ src/
       useECS.ts            ECS operations
       useSSM.ts            SSM Parameter Store operations
       useRoute53.ts        Route 53 DNS operations
+      useAPIGateway.ts     API Gateway REST API operations
       useService.ts        Generic service hook
       useSystem.ts         Health, active services
     lib/                   Utilities
@@ -290,6 +291,7 @@ src/
         ecs.ts             ECS operations
         ssm.ts             SSM Parameter Store operations
         route53.ts         Route 53 DNS operations
+        apigateway.ts      API Gateway REST API operations
     index.ts               Hono app entry point
     types.ts               Shared backend types
 
@@ -325,6 +327,7 @@ These services have full CRUD operations in both backend and frontend:
 | **ECS** | Clusters (list, create, delete, detail with running task/service counts), task definitions (list, describe, deregister), services (list, delete per cluster), tasks (list by status, run, stop), container instances (list, describe) |
 | **SSM** | Parameter Store (list, create with type/description/overwrite, delete, detail with value reveal, version history), tags (list, add, remove) |
 | **Route 53** | Hosted zones (list, create with domain name/comment, delete, detail with record set count), resource record sets (list, create with type/TTL/value, delete per name+type), health checks (list) |
+| **API Gateway** | REST APIs (list, create with name/description, delete, detail), resources (list with methods per resource), deployments (list with stage/status) |
 
 ### Navigation + status (55 services)
 
