@@ -53,6 +53,11 @@ import {
   DeleteInstanceProfileCommand,
   AddRoleToInstanceProfileCommand,
   RemoveRoleFromInstanceProfileCommand,
+  // Permission boundaries
+  PutUserPermissionsBoundaryCommand,
+  DeleteUserPermissionsBoundaryCommand,
+  PutRolePermissionsBoundaryCommand,
+  DeleteRolePermissionsBoundaryCommand,
 } from "@aws-sdk/client-iam";
 import { getAwsConfig } from "../../clients/aws";
 
@@ -424,6 +429,40 @@ router.delete("/users/:name/inline-policies/:policyName", async (c: Context) => 
   const policyName = c.req.param("policyName");
   await iam().send(new DeleteUserPolicyCommand({ UserName: name, PolicyName: policyName }));
   return c.json({ policyName, deleted: true });
+});
+
+// ─── PERMISSION BOUNDARIES ───────────────────────────────
+
+router.put("/users/:name/permissions-boundary", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<{ permissionsBoundary: string }>();
+  if (!body.permissionsBoundary) return c.json({ error: "permissionsBoundary ARN is required" }, 400);
+  await iam().send(
+    new PutUserPermissionsBoundaryCommand({ UserName: name, PermissionsBoundary: body.permissionsBoundary })
+  );
+  return c.json({ set: true });
+});
+
+router.delete("/users/:name/permissions-boundary", async (c: Context) => {
+  const name = c.req.param("name");
+  await iam().send(new DeleteUserPermissionsBoundaryCommand({ UserName: name }));
+  return c.json({ deleted: true });
+});
+
+router.put("/roles/:name/permissions-boundary", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<{ permissionsBoundary: string }>();
+  if (!body.permissionsBoundary) return c.json({ error: "permissionsBoundary ARN is required" }, 400);
+  await iam().send(
+    new PutRolePermissionsBoundaryCommand({ RoleName: name, PermissionsBoundary: body.permissionsBoundary })
+  );
+  return c.json({ set: true });
+});
+
+router.delete("/roles/:name/permissions-boundary", async (c: Context) => {
+  const name = c.req.param("name");
+  await iam().send(new DeleteRolePermissionsBoundaryCommand({ RoleName: name }));
+  return c.json({ deleted: true });
 });
 
 export default router;

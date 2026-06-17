@@ -89,6 +89,18 @@ export function useSQSDLQSources(queueUrl: string | null) {
   });
 }
 
+export function useSQSMoveDLQMessages() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { dlqUrl: string; sourceUrl: string; maxMessages?: number }) =>
+      api("/aws/sqs/queues/dlq/move-tasks", { method: "POST", body: JSON.stringify(params) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["aws", "sqs", "queues"] });
+      qc.invalidateQueries({ queryKey: ["aws", "sqs", "messages"] });
+    },
+  });
+}
+
 export function useCreateSQSQueue() {
   const qc = useQueryClient();
   return useMutation({

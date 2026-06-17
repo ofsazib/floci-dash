@@ -21,6 +21,7 @@ import ecsRoutes from "./ecs";
 import ssmRoutes from "./ssm";
 import route53Routes from "./route53";
 import apiGatewayRoutes from "./apigateway";
+import stsRoutes from "./sts";
 
 const router = new Hono();
 
@@ -45,9 +46,10 @@ router.route("/ecs", ecsRoutes);
 router.route("/ssm", ssmRoutes);
 router.route("/route53", route53Routes);
 router.route("/apigateway", apiGatewayRoutes);
+router.route("/sts", stsRoutes);
 
 router.get("/", (c: Context) => {
-  return c.json({ message: "AWS routes available. Services registered: s3, dynamodb, rds, ec2, sqs, sns, events, logs, lambda, cloudwatch, iam, secretsmanager, cloudformation, kms, ecs, ssm, route53, apigateway" });
+  return c.json({ message: "AWS routes available. Services registered: s3, dynamodb, rds, ec2, sqs, sns, events, logs, lambda, cloudwatch, iam, secretsmanager, cloudformation, kms, ecs, ssm, route53, apigateway, sts" });
 });
 
 export default router;

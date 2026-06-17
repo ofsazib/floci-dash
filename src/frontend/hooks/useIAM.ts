@@ -167,3 +167,47 @@ export function useInstanceProfiles() {
     queryFn: () => api<{ instanceProfiles: any[]; total: number }>("/aws/iam/instance-profiles"),
   });
 }
+
+// ─── PERMISSION BOUNDARIES ───────────────────────────────
+
+export function useSetUserPermissionsBoundary() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userName, permissionsBoundary }: { userName: string; permissionsBoundary: string }) =>
+      api(`/aws/iam/users/${userName}/permissions-boundary`, {
+        method: "PUT",
+        body: JSON.stringify({ permissionsBoundary }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam"] }),
+  });
+}
+
+export function useDeleteUserPermissionsBoundary() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (userName: string) =>
+      api(`/aws/iam/users/${userName}/permissions-boundary`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam"] }),
+  });
+}
+
+export function useSetRolePermissionsBoundary() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ roleName, permissionsBoundary }: { roleName: string; permissionsBoundary: string }) =>
+      api(`/aws/iam/roles/${roleName}/permissions-boundary`, {
+        method: "PUT",
+        body: JSON.stringify({ permissionsBoundary }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam"] }),
+  });
+}
+
+export function useDeleteRolePermissionsBoundary() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (roleName: string) =>
+      api(`/aws/iam/roles/${roleName}/permissions-boundary`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam"] }),
+  });
+}

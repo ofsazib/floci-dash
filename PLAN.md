@@ -976,7 +976,7 @@ if (service === "sqs") return <SQSQueues />;
 | 3.12 | Backend: POST /api/aws/sqs/queues/:name/messages/visibility (change visibility) | Done | 2025-06-13 |
 | 3.13 | Backend: GET /api/aws/sqs/queues/:name/tags + POST/DELETE tags | Done | 2025-06-13 |
 | 3.14 | Backend: GET /api/aws/sqs/queues/:name/dlq (dead letter sources) | Done | 2025-06-13 |
-| 3.15 | Backend: POST /api/aws/sqs/dlq/move-tasks (start/cancel/list move tasks) | Pending | |
+| 3.15 | Backend: POST /api/aws/sqs/dlq/move-tasks (start/cancel/list move tasks) | Done | 2025-06-17 |
 | 3.16 | Frontend: useSQS hooks (list, create, delete, attributes, messages, tags, DLQ) | Done | 2025-06-13 |
 | 3.17 | Frontend: SQS page — Queue list with search/filter/create | Done | 2025-06-13 |
 | 3.18 | Frontend: Queue detail — Attributes tab (stats, ARN, retention, visibility timeout) | Done | 2025-06-13 |
@@ -1127,8 +1127,8 @@ if (service === "sqs") return <SQSQueues />;
 | 9.7 | Backend: Inline policy CRUD (put/get/delete/list for user, group, role) | Done | 2025-06-14 |
 | 9.8 | Backend: Access keys (create, delete, list, update status per user) | Done | 2025-06-14 |
 | 9.9 | Backend: Instance profiles (create, get, delete, list, add/remove role) | Done | 2025-06-14 |
-| 9.10 | Backend: Permission boundaries (put/delete for user and role) | Pending | |
-| 9.11 | Backend: STS operations (get caller identity, assume role, session token) | Pending | |
+| 9.10 | Backend: Permission boundaries (put/delete for user and role) | Done | 2025-06-17 |
+| 9.11 | Backend: STS operations (get caller identity, assume role, session token) | Done | 2025-06-17 |
 | 9.12 | Frontend: useIAM hooks | Done | 2025-06-14 |
 | 9.13 | Frontend: IAM dedicated page with tabs (Users, Groups, Roles, Policies) | Done | 2025-06-14 |
 | 9.14 | Frontend: Users tab — List, create, detail (groups, attached policies, inline policies, access keys, tags) | Done | 2025-06-14 |

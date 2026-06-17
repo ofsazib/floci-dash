@@ -238,6 +238,55 @@ router.get("/queues/dlq-sources", async (c: Context) => {
   return c.json({ queueUrls: result.queueUrls || [] });
 });
 
+// Move messages from a DLQ to a source queue
+router.post("/queues/dlq/move-tasks", async (c: Context) => {
+  const body = await c.req.json();
+  const { dlqUrl, sourceUrl, maxMessages = 10 } = body;
+  if (!dlqUrl || !sourceUrl)
+    return c.json({ error: "dlqUrl and sourceUrl are required" }, 400);
+
+  const client = getClient();
+  const moved: Array<{ messageId: string; body: string }> = [];
+  const failed: Array<{ messageId: string; error: string }> = [];
+
+  // Receive messages from DLQ
+  const receiveResult = await client.send(
+    new ReceiveMessageCommand({
+      QueueUrl: dlqUrl,
+      MaxNumberOfMessages: Math.min(maxMessages, 10),
+      WaitTimeSeconds: 1,
+      MessageAttributeNames: ["All"],
+    })
+  );
+
+  const messages = receiveResult.Messages || [];
+
+  for (const msg of messages) {
+    try {
+      // Send to source queue
+      await client.send(
+        new SendMessageCommand({
+          QueueUrl: sourceUrl,
+          MessageBody: msg.Body || "",
+          MessageAttributes: msg.MessageAttributes,
+        })
+      );
+      // Delete from DLQ
+      await client.send(
+        new DeleteMessageCommand({
+          QueueUrl: dlqUrl,
+          ReceiptHandle: msg.ReceiptHandle!,
+        })
+      );
+      moved.push({ messageId: msg.MessageId || "", body: msg.Body || "" });
+    } catch (err) {
+      failed.push({ messageId: msg.MessageId || "", error: (err as Error).message });
+    }
+  }
+
+  return c.json({ moved: moved.length, failed: failed.length, movedMessages: moved, failedMessages: failed });
+});
+
 router.post("/queues/permissions", async (c: Context) => {
   const queueUrl = c.req.query("queueUrl");
   if (!queueUrl) return c.json({ error: "queueUrl query parameter required" }, 400);
