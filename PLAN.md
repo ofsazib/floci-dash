@@ -1097,18 +1097,18 @@ if (service === "sqs") return <SQSQueues />;
 
 | # | Task | Status | Date |
 |---|------|--------|------|
-| 8.1 | Consult Floci ECS source for supported operations | Pending | |
-| 8.2 | Backend: Cluster CRUD (list, create, describe, delete, update) | Pending | |
-| 8.3 | Backend: Task definition CRUD (register, describe, list families, list versions, deregister) | Pending | |
-| 8.4 | Backend: Task operations (run, start, stop, describe, list, protection) | Pending | |
-| 8.5 | Backend: Service CRUD (create, update, delete, describe, list) | Pending | |
-| 8.6 | Backend: Container instance operations (list, describe, deregister) | Pending | |
-| 8.7 | Frontend: useECS hooks | Pending | |
-| 8.8 | Frontend: ECS page — Clusters tab (list with task/service counts) | Pending | |
-| 8.9 | Frontend: Cluster detail — Services tab + Tasks tab + Container Instances tab | Pending | |
-| 8.10 | Frontend: Task Definitions tab (family list, version browser, container spec viewer) | Pending | |
+| 8.1 | Consult Floci ECS source for supported operations | Done | 2025-06-17 |
+| 8.2 | Backend: Cluster CRUD (list, create, describe, delete, update) | Done | 2025-06-17 |
+| 8.3 | Backend: Task definition CRUD (register, describe, list families, list versions, deregister) | Done | 2025-06-17 |
+| 8.4 | Backend: Task operations (run, start, stop, describe, list, protection) | Done | 2025-06-17 |
+| 8.5 | Backend: Service CRUD (create, update, delete, describe, list) | Done | 2025-06-17 |
+| 8.6 | Backend: Container instance operations (list, describe, deregister) | Done | 2025-06-17 |
+| 8.7 | Frontend: useECS hooks | Done | 2025-06-17 |
+| 8.8 | Frontend: ECS page — Clusters tab (list with task/service counts) | Done | 2025-06-17 |
+| 8.9 | Frontend: Cluster detail — Services tab + Tasks tab + Container Instances tab | Done | 2025-06-17 |
+| 8.10 | Frontend: Task Definitions tab (family list, version browser, container spec viewer) | Done | 2025-06-17 |
 | 8.11 | Frontend: Service create/edit (desired count slider, task def selector) | Pending | |
-| 8.12 | Verify: typecheck + build pass | Pending | |
+| 8.12 | Verify: typecheck + build pass | Done | 2025-06-17 |
 
 ---
 

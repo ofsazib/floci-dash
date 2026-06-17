@@ -31,6 +31,7 @@ const IMPLEMENTED_SERVICES: Record<string, string> = {
   secretsmanager: "Secrets Manager",
   cloudformation: "CloudFormation",
   kms: "KMS",
+  ecs: "ECS",
 };
 
 const CATEGORY_ORDER = [
@@ -49,7 +50,7 @@ const CATEGORY_ORDER = [
 ] as const;
 
 const SERVICE_CATEGORY_MAP: Record<string, string> = {
-  ec2: "Compute", lambda: "Compute", ecs: "Compute", eks: "Compute", autoscaling: "Compute",
+  ec2: "Compute", lambda: "Compute",   ecs: "Compute", eks: "Compute", autoscaling: "Compute",
   s3: "Storage", ecr: "Storage",
   dynamodb: "Database", rds: "Database", neptune: "Database", elasticache: "Database",
   elasticloadbalancing: "Networking", route53: "Networking", cloudfront: "Networking",

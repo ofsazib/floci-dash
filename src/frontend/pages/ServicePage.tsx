@@ -69,6 +69,17 @@ import { formatBytes } from "../lib/utils";
 import ResourceTable from "../components/ResourceTable";
 import DeleteButton from "../components/DeleteButton";
 import DynamoDBTableDetail from "../components/DynamoDBTableDetail";
+import {
+  useECSClusters,
+  useCreateECSCluster,
+  useDeleteECSCluster,
+  useECSServices,
+  useECSTasks,
+  useECSTaskDefinitions,
+  useDeleteECSService,
+  useStopECSTask,
+  useRunECSTask,
+} from "../hooks/useECS";
 
 const KEY_TYPE_OPTIONS: SelectProps.Option[] = [
   { label: "String (S)", value: "S" },
@@ -109,7 +120,7 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
 ];
 
 /** Services with a fully implemented backend that can show a resource list */
-const IMPLEMENTED_SERVICES = new Set(["dynamodb", "rds", "logs"]);
+const IMPLEMENTED_SERVICES = new Set(["dynamodb", "rds", "logs", "ecs"]);
 
 export default function ServicePage() {
   const { service } = useParams<{ service: string }>();
@@ -171,6 +182,7 @@ function ServiceResourceList({ service }: { service: string }) {
   if (service === "dynamodb") return <DynamoDBTables />;
   if (service === "rds") return <RDSDashboard />;
   if (service === "logs") return <CloudWatchLogsDashboard />;
+  if (service === "ecs") return <ECSDashboard />;
   return null;
 }
 
@@ -1489,6 +1501,284 @@ function RDSParameterGroupParametersView({
           </SpaceBetween>
         </Form>
       </Modal>
+    </SpaceBetween>
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  ECS
+// ────────────────────────────────────────────────────────
+
+function ECSDashboard() {
+  const { data, isLoading, isError, error } = useECSClusters();
+  const createCluster = useCreateECSCluster();
+  const deleteCluster = useDeleteECSCluster();
+  const [selectedCluster, setSelectedCluster] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [clusterName, setClusterName] = useState("");
+
+  const clusters = data?.clusters || [];
+
+  const clusterColumns = [
+    { id: "name", header: "Cluster Name", cell: (item: any) => item.clusterName || "—", isRowHeader: true },
+    { id: "status", header: "Status", cell: (item: any) => <StatusBadge status={item.status || "ACTIVE"} /> },
+    { id: "runningTasks", header: "Running Tasks", cell: (item: any) => item.runningTasksCount ?? 0 },
+    { id: "services", header: "Services", cell: (item: any) => item.activeServicesCount ?? 0 },
+    { id: "instances", header: "Container Instances", cell: (item: any) => item.registeredContainerInstancesCount ?? 0 },
+    {
+      id: "actions",
+      header: "",
+      cell: (item: any) => (
+        <SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setSelectedCluster(item.clusterName)}>
+            View
+          </Button>
+          <DeleteButton
+            itemName={item.clusterName}
+            resourceType="cluster"
+            loading={deleteCluster.isPending}
+            onDelete={() => deleteCluster.mutateAsync(item.clusterArn)}
+          />
+        </SpaceBetween>
+      ),
+    },
+  ];
+
+  if (selectedCluster) {
+    return <ECSClusterDetail clusterName={selectedCluster} onBack={() => setSelectedCluster(null)} />;
+  }
+
+  return (
+    <>
+      <ResourceTable
+        resourceName="Cluster"
+        headerTitle="ECS Clusters"
+        headerCounter={data?.total}
+        items={clusters}
+        columns={clusterColumns}
+        loading={isLoading}
+        emptyMessage="No clusters found. Create one to get started."
+        filterEnabled
+        filterPlaceholder="Find clusters by name"
+        filterFunction={(item: any, searchText: string) =>
+          (item.clusterName || "").toLowerCase().includes(searchText.toLowerCase())
+        }
+        onCreate={() => setShowCreate(true)}
+      />
+
+      <Modal
+        visible={showCreate}
+        onDismiss={() => setShowCreate(false)}
+        header="Create cluster"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreate(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                loading={createCluster.isPending}
+                disabled={!clusterName.trim()}
+                onClick={() => {
+                  createCluster.mutate(
+                    { clusterName: clusterName.trim() },
+                    { onSuccess: () => { setShowCreate(false); setClusterName(""); } }
+                  );
+                }}
+              >
+                Create
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          {createCluster.isError && (
+            <Alert type="error" dismissible>
+              {(createCluster.error as Error)?.message || "Failed to create cluster"}
+            </Alert>
+          )}
+          <FormField label="Cluster name" description="Enter a name for your ECS cluster.">
+            <Input
+              value={clusterName}
+              onChange={({ detail }) => setClusterName(detail.value)}
+              placeholder="my-cluster"
+            />
+          </FormField>
+        </Form>
+      </Modal>
+    </>
+  );
+}
+
+function ECSClusterDetail({ clusterName, onBack }: { clusterName: string; onBack: () => void }) {
+  const servicesQuery = useECSServices(clusterName);
+  const tasksQuery = useECSTasks(clusterName);
+  const taskDefsQuery = useECSTaskDefinitions();
+  const deleteService = useDeleteECSService();
+  const stopTask = useStopECSTask();
+  const runTask = useRunECSTask();
+  const [showRunTask, setShowRunTask] = useState(false);
+  const [taskDefInput, setTaskDefInput] = useState("");
+
+  const tabs: TabsProps.Tab[] = [
+    {
+      label: `Services (${servicesQuery.data?.total || 0})`,
+      id: "services",
+      content: (
+        <ResourceTable
+          resourceName="Service"
+          headerTitle="Services"
+          headerCounter={servicesQuery.data?.total}
+          items={servicesQuery.data?.services || []}
+          columns={[
+            { id: "name", header: "Service Name", cell: (item: any) => item.serviceName, isRowHeader: true },
+            { id: "status", header: "Status", cell: (item: any) => <StatusBadge status={item.status || "ACTIVE"} /> },
+            { id: "desired", header: "Desired", cell: (item: any) => item.desiredCount ?? 0 },
+            { id: "running", header: "Running", cell: (item: any) => item.runningCount ?? 0 },
+            { id: "taskDef", header: "Task Definition", cell: (item: any) => item.taskDefinition?.split("/").pop() || "—" },
+            {
+              id: "actions",
+              header: "",
+              cell: (item: any) => (
+                <DeleteButton
+                  itemName={item.serviceName}
+                  resourceType="service"
+                  loading={deleteService.isPending}
+                  onDelete={() =>
+                    deleteService.mutateAsync({
+                      cluster: clusterName,
+                      service: item.serviceName,
+                      force: true,
+                    })
+                  }
+                />
+              ),
+            },
+          ]}
+          loading={servicesQuery.isLoading}
+          emptyMessage="No services in this cluster."
+          filterEnabled
+          filterPlaceholder="Find services"
+          filterFunction={(item: any, s: string) => (item.serviceName || "").toLowerCase().includes(s.toLowerCase())}
+        />
+      ),
+    },
+    {
+      label: `Tasks (${tasksQuery.data?.total || 0})`,
+      id: "tasks",
+      content: (
+        <>
+          <ResourceTable
+            resourceName="Task"
+            headerTitle="Tasks"
+            headerCounter={tasksQuery.data?.total}
+            items={tasksQuery.data?.tasks || []}
+            columns={[
+              { id: "arn", header: "Task ARN", cell: (item: any) => item.taskArn?.split("/").pop() || "—", isRowHeader: true },
+              { id: "status", header: "Last Status", cell: (item: any) => <StatusBadge status={item.lastStatus || "UNKNOWN"} /> },
+              { id: "desired", header: "Desired", cell: (item: any) => item.desiredStatus || "—" },
+              { id: "taskDef", header: "Task Definition", cell: (item: any) => item.taskDefinitionArn?.split("/").pop() || "—" },
+              { id: "group", header: "Group", cell: (item: any) => item.group || "—" },
+              {
+                id: "actions",
+                header: "",
+                cell: (item: any) =>
+                  item.lastStatus !== "STOPPED" ? (
+                    <Button
+                      variant="link"
+                      onClick={() =>
+                        stopTask.mutateAsync({
+                          cluster: clusterName,
+                          task: item.taskArn,
+                          reason: "Stopped via dashboard",
+                        })
+                      }
+                    >
+                      Stop
+                    </Button>
+                  ) : null,
+              },
+            ]}
+            loading={tasksQuery.isLoading}
+            emptyMessage="No running tasks in this cluster."
+            onCreate={() => setShowRunTask(true)}
+          />
+          <Modal
+            visible={showRunTask}
+            onDismiss={() => setShowRunTask(false)}
+            header="Run task"
+            footer={
+              <Box float="right">
+                <SpaceBetween direction="horizontal" size="xs">
+                  <Button variant="link" onClick={() => setShowRunTask(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="primary"
+                    loading={runTask.isPending}
+                    disabled={!taskDefInput.trim()}
+                    onClick={() => {
+                      runTask.mutate(
+                        { cluster: clusterName, taskDefinition: taskDefInput.trim(), count: 1 },
+                        { onSuccess: () => { setShowRunTask(false); setTaskDefInput(""); } }
+                      );
+                    }}
+                  >
+                    Run
+                  </Button>
+                </SpaceBetween>
+              </Box>
+            }
+          >
+            <Form>
+              {runTask.isError && (
+                <Alert type="error" dismissible>
+                  {(runTask.error as Error)?.message || "Failed to run task"}
+                </Alert>
+              )}
+              <FormField label="Task definition" description="Family:revision or full ARN">
+                <Input
+                  value={taskDefInput}
+                  onChange={({ detail }) => setTaskDefInput(detail.value)}
+                  placeholder="my-task:1"
+                />
+              </FormField>
+            </Form>
+          </Modal>
+        </>
+      ),
+    },
+    {
+      label: `Task Definitions (${taskDefsQuery.data?.total || 0})`,
+      id: "task-defs",
+      content: (
+        <ResourceTable
+          resourceName="Task Definition"
+          headerTitle="Task Definitions"
+          headerCounter={taskDefsQuery.data?.total}
+          items={(taskDefsQuery.data?.taskDefinitionArns || []).map((arn: string) => ({ arn }))}
+          columns={[
+            { id: "arn", header: "Task Definition ARN", cell: (item: any) => item.arn.split("/").pop() || item.arn, isRowHeader: true },
+          ]}
+          loading={taskDefsQuery.isLoading}
+          emptyMessage="No task definitions registered."
+          filterEnabled
+          filterPlaceholder="Find task definitions"
+          filterFunction={(item: any, s: string) => (item.arn || "").toLowerCase().includes(s.toLowerCase())}
+        />
+      ),
+    },
+  ];
+
+  return (
+    <SpaceBetween size="l">
+      <Button variant="link" onClick={onBack}>
+        &larr; Clusters
+      </Button>
+      <Box variant="h2">{clusterName}</Box>
+      <Tabs tabs={tabs} />
     </SpaceBetween>
   );
 }

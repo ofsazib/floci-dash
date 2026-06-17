@@ -259,7 +259,7 @@ describe("ServicePage — RDS", () => {
 describe("ServicePage — Unknown service", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockParams.mockReturnValue({ service: "ecs" });
+    mockParams.mockReturnValue({ service: "lambda" });
   });
 
   it("shows coming soon for unknown service", () => {
