@@ -136,6 +136,33 @@ import {
   useCreateSchedule,
   useDeleteSchedule,
 } from "../hooks/useScheduler";
+import {
+  useECRRepositories,
+  useECRCreateRepository,
+  useECRDeleteRepository,
+  useECRImages,
+  useECRRepositoryPolicy,
+  useECRLifecyclePolicy,
+} from "../hooks/useECR";
+import {
+  useELBLoadBalancers,
+  useELBCreateLoadBalancer,
+  useELBDeleteLoadBalancer,
+  useELBTargetGroups,
+  useELBCreateTargetGroup,
+  useELBDeleteTargetGroup,
+  useELBListeners,
+  useELBCreateListener,
+  useELBDeleteListener,
+} from "../hooks/useELB";
+import {
+  useSESIdentities,
+  useSESVerifyEmail,
+  useSESVerifyDomain,
+  useSESDeleteIdentity,
+  useSESSendEmail,
+  useSESVerifiedEmails,
+} from "../hooks/useSES";
 
 const KEY_TYPE_OPTIONS: SelectProps.Option[] = [
   { label: "String (S)", value: "S" },
@@ -176,7 +203,7 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
 ];
 
 /** Services with a fully implemented backend that can show a resource list */
-const IMPLEMENTED_SERVICES = new Set(["dynamodb", "rds", "logs", "ecs", "ssm", "route53", "apigateway", "appsync", "scheduler"]);
+const IMPLEMENTED_SERVICES = new Set(["dynamodb", "rds", "logs", "ecs", "ssm", "route53", "apigateway", "appsync", "scheduler", "ecr", "elb", "ses"]);
 
 export default function ServicePage() {
   const { service } = useParams<{ service: string }>();
@@ -244,6 +271,9 @@ function ServiceResourceList({ service }: { service: string }) {
   if (service === "apigateway") return <APIGatewayDashboard />;
   if (service === "appsync") return <AppSyncDashboard />;
   if (service === "scheduler") return <SchedulerDashboard />;
+  if (service === "ecr") return <ECRDashboard />;
+  if (service === "elb") return <ELBDashboard />;
+  if (service === "ses") return <SESDashboard />;
   return null;
 }
 
@@ -4695,6 +4725,556 @@ function RDSClusterParameterGroupList() {
               />
             </FormField>
           </SpaceBetween>
+        </Form>
+      </Modal>
+    </>
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  ECR
+// ────────────────────────────────────────────────────────
+
+function ECRDashboard() {
+  const { data, isLoading } = useECRRepositories();
+  const createRepo = useECRCreateRepository();
+  const deleteRepo = useECRDeleteRepository();
+  const [showCreate, setShowCreate] = useState(false);
+  const [repoName, setRepoName] = useState("");
+
+  if (isLoading) return <Spinner />;
+
+  return (
+    <>
+      <ResourceTable
+        resourceName="Repository"
+        headerTitle="Repositories"
+        headerCounter={data?.total}
+        items={(data?.repositories || []).map((r: any) => ({
+          name: r.repositoryName,
+          uri: r.repositoryUri,
+          created: r.createdAt ? new Date(r.createdAt).toLocaleDateString() : "-",
+        }))}
+        loading={isLoading}
+        onCreate={() => setShowCreate(true)}
+        emptyMessage="No repositories"
+        columns={[
+          {
+            id: "name",
+            header: "Name",
+            cell: (item: any) => item.name,
+            isRowHeader: true,
+          },
+          { id: "uri", header: "URI", cell: (item: any) => item.uri },
+          { id: "created", header: "Created", cell: (item: any) => item.created },
+          {
+            id: "actions",
+            header: "",
+            cell: (item: any) => (
+              <DeleteButton
+                itemName={item.name}
+                resourceType="repository"
+                loading={deleteRepo.isPending && deleteRepo.variables === item.name}
+                onDelete={() => deleteRepo.mutateAsync(item.name)}
+              />
+            ),
+          },
+        ]}
+        filterEnabled
+        filterPlaceholder="Find repositories by name"
+        filterFunction={(item: any, searchText: string) =>
+          item.name.toLowerCase().includes(searchText.toLowerCase())
+        }
+      />
+      <Modal
+        visible={showCreate}
+        onDismiss={() => setShowCreate(false)}
+        header="Create repository"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreate(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  createRepo.mutate({ name: repoName });
+                  setShowCreate(false);
+                  setRepoName("");
+                }}
+                disabled={!repoName}
+                loading={createRepo.isPending}
+              >
+                Create
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          <FormField label="Repository name">
+            <Input
+              value={repoName}
+              onChange={({ detail }) => setRepoName(detail.value)}
+              placeholder="my-repo"
+            />
+          </FormField>
+        </Form>
+      </Modal>
+    </>
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  ELB
+// ────────────────────────────────────────────────────────
+
+function ELBDashboard() {
+  const { data: lbs, isLoading: lbsLoading } = useELBLoadBalancers();
+  const { data: tgs, isLoading: tgsLoading } = useELBTargetGroups();
+  const createLB = useELBCreateLoadBalancer();
+  const deleteLB = useELBDeleteLoadBalancer();
+  const createTG = useELBCreateTargetGroup();
+  const deleteTG = useELBDeleteTargetGroup();
+  const [activeTab, setActiveTab] = useState("load-balancers");
+  const [showCreateLB, setShowCreateLB] = useState(false);
+  const [showCreateTG, setShowCreateTG] = useState(false);
+  const [lbName, setLBName] = useState("");
+  const [tgName, setTGName] = useState("");
+  const [tgProtocol, setTGProtocol] = useState<SelectProps.Option>({ label: "HTTP", value: "HTTP" });
+  const [tgPort, setTGPort] = useState("80");
+
+  const PROTOCOL_OPTIONS: SelectProps.Option[] = [
+    { label: "HTTP", value: "HTTP" },
+    { label: "HTTPS", value: "HTTPS" },
+    { label: "TCP", value: "TCP" },
+    { label: "TLS", value: "TLS" },
+    { label: "UDP", value: "UDP" },
+    { label: "TCP_UDP", value: "TCP_UDP" },
+  ];
+
+  if (lbsLoading || tgsLoading) return <Spinner />;
+
+  return (
+    <Tabs
+      activeTabId={activeTab}
+      onChange={({ detail }) => setActiveTab(detail.activeTabId)}
+      tabs={[
+        {
+          id: "load-balancers",
+          label: "Load Balancers",
+          content: (
+            <>
+              <ResourceTable
+                resourceName="Load Balancer"
+                headerTitle="Load Balancers"
+                headerCounter={lbs?.total}
+                items={(lbs?.loadBalancers || []).map((lb: any) => ({
+                  name: lb.loadBalancerName,
+                  arn: lb.loadBalancerArn,
+                  type: lb.type,
+                  scheme: lb.scheme,
+                  state: lb.state?.Code || "unknown",
+                }))}
+                loading={lbsLoading}
+                onCreate={() => setShowCreateLB(true)}
+                emptyMessage="No load balancers"
+                columns={[
+                  {
+                    id: "name",
+                    header: "Name",
+                    cell: (item: any) => item.name,
+                    isRowHeader: true,
+                  },
+                  { id: "type", header: "Type", cell: (item: any) => item.type },
+                  { id: "scheme", header: "Scheme", cell: (item: any) => item.scheme },
+                  { id: "state", header: "State", cell: (item: any) => item.state },
+                  {
+                    id: "actions",
+                    header: "",
+                    cell: (item: any) => (
+                      <DeleteButton
+                        itemName={item.name}
+                        resourceType="load balancer"
+                        loading={deleteLB.isPending && deleteLB.variables === item.arn}
+                        onDelete={() => deleteLB.mutateAsync(item.arn)}
+                      />
+                    ),
+                  },
+                ]}
+                filterEnabled
+                filterPlaceholder="Find load balancers by name"
+                filterFunction={(item: any, searchText: string) =>
+                  item.name.toLowerCase().includes(searchText.toLowerCase())
+                }
+              />
+              <Modal
+                visible={showCreateLB}
+                onDismiss={() => setShowCreateLB(false)}
+                header="Create load balancer"
+                footer={
+                  <Box float="right">
+                    <SpaceBetween direction="horizontal" size="xs">
+                      <Button variant="link" onClick={() => setShowCreateLB(false)}>
+                        Cancel
+                      </Button>
+                      <Button
+                        variant="primary"
+                        onClick={() => {
+                          createLB.mutate({
+                            name: lbName,
+                            type: "application",
+                            scheme: "internet-facing",
+                            subnets: ["subnet-12345678"],
+                          });
+                          setShowCreateLB(false);
+                          setLBName("");
+                        }}
+                        disabled={!lbName}
+                        loading={createLB.isPending}
+                      >
+                        Create
+                      </Button>
+                    </SpaceBetween>
+                  </Box>
+                }
+              >
+                <Form>
+                  <FormField label="Load balancer name">
+                    <Input
+                      value={lbName}
+                      onChange={({ detail }) => setLBName(detail.value)}
+                      placeholder="my-lb"
+                    />
+                  </FormField>
+                </Form>
+              </Modal>
+            </>
+          ),
+        },
+        {
+          id: "target-groups",
+          label: "Target Groups",
+          content: (
+            <>
+              <ResourceTable
+                resourceName="Target Group"
+                headerTitle="Target Groups"
+                headerCounter={tgs?.total}
+                items={(tgs?.targetGroups || []).map((tg: any) => ({
+                  name: tg.targetGroupName,
+                  arn: tg.targetGroupArn,
+                  protocol: tg.protocol || "-",
+                  port: tg.port || "-",
+                  targetType: tg.targetType || "-",
+                }))}
+                loading={tgsLoading}
+                onCreate={() => setShowCreateTG(true)}
+                emptyMessage="No target groups"
+                columns={[
+                  {
+                    id: "name",
+                    header: "Name",
+                    cell: (item: any) => item.name,
+                    isRowHeader: true,
+                  },
+                  { id: "protocol", header: "Protocol", cell: (item: any) => item.protocol },
+                  { id: "port", header: "Port", cell: (item: any) => item.port },
+                  { id: "targetType", header: "Target Type", cell: (item: any) => item.targetType },
+                  {
+                    id: "actions",
+                    header: "",
+                    cell: (item: any) => (
+                      <DeleteButton
+                        itemName={item.name}
+                        resourceType="target group"
+                        loading={deleteTG.isPending && deleteTG.variables === item.arn}
+                        onDelete={() => deleteTG.mutateAsync(item.arn)}
+                      />
+                    ),
+                  },
+                ]}
+                filterEnabled
+                filterPlaceholder="Find target groups by name"
+                filterFunction={(item: any, searchText: string) =>
+                  item.name.toLowerCase().includes(searchText.toLowerCase())
+                }
+              />
+              <Modal
+                visible={showCreateTG}
+                onDismiss={() => setShowCreateTG(false)}
+                header="Create target group"
+                footer={
+                  <Box float="right">
+                    <SpaceBetween direction="horizontal" size="xs">
+                      <Button variant="link" onClick={() => setShowCreateTG(false)}>
+                        Cancel
+                      </Button>
+                      <Button
+                        variant="primary"
+                        onClick={() => {
+                          createTG.mutate({
+                            name: tgName,
+                            protocol: tgProtocol.value as string,
+                            port: parseInt(tgPort),
+                            vpcId: "vpc-default",
+                          });
+                          setShowCreateTG(false);
+                          setTGName("");
+                        }}
+                        disabled={!tgName}
+                        loading={createTG.isPending}
+                      >
+                        Create
+                      </Button>
+                    </SpaceBetween>
+                  </Box>
+                }
+              >
+                <Form>
+                  <FormField label="Target group name">
+                    <Input
+                      value={tgName}
+                      onChange={({ detail }) => setTGName(detail.value)}
+                      placeholder="my-tg"
+                    />
+                  </FormField>
+                  <FormField label="Protocol">
+                    <Select
+                      selectedOption={tgProtocol}
+                      onChange={({ detail }) => setTGProtocol(detail.selectedOption)}
+                      options={PROTOCOL_OPTIONS}
+                    />
+                  </FormField>
+                  <FormField label="Port">
+                    <Input
+                      value={tgPort}
+                      onChange={({ detail }) => setTGPort(detail.value)}
+                      inputMode="numeric"
+                    />
+                  </FormField>
+                </Form>
+              </Modal>
+            </>
+          ),
+        },
+      ]}
+    />
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  SES
+// ────────────────────────────────────────────────────────
+
+function SESDashboard() {
+  const { data, isLoading } = useSESIdentities();
+  const verifyEmail = useSESVerifyEmail();
+  const verifyDomain = useSESVerifyDomain();
+  const deleteIdentity = useSESDeleteIdentity();
+  const sendEmail = useSESSendEmail();
+  const { data: verifiedEmails } = useSESVerifiedEmails();
+  const [showVerifyEmail, setShowVerifyEmail] = useState(false);
+  const [showVerifyDomain, setShowVerifyDomain] = useState(false);
+  const [showSendEmail, setShowSendEmail] = useState(false);
+  const [emailAddress, setEmailAddress] = useState("");
+  const [domain, setDomain] = useState("");
+  const [sendFrom, setSendFrom] = useState("");
+  const [sendTo, setSendTo] = useState("");
+  const [sendSubject, setSendSubject] = useState("");
+  const [sendBody, setSendBody] = useState("");
+
+  if (isLoading) return <Spinner />;
+
+  return (
+    <>
+      <ResourceTable
+        resourceName="Email Identity"
+        headerTitle="Email Identities"
+        headerCounter={data?.total}
+        items={(data?.identities || []).map((id: any) => ({
+          identity: id.identity,
+          status: id.verificationStatus || "Pending",
+          dkim: id.dkimEnabled ? "Enabled" : "Disabled",
+          mailFrom: id.mailFromDomain || "-",
+        }))}
+        loading={isLoading}
+        onCreate={() => setShowVerifyEmail(true)}
+        emptyMessage="No email identities"
+        columns={[
+          {
+            id: "identity",
+            header: "Identity",
+            cell: (item: any) => item.identity,
+            isRowHeader: true,
+          },
+          { id: "status", header: "Status", cell: (item: any) => item.status },
+          { id: "dkim", header: "DKIM", cell: (item: any) => item.dkim },
+          { id: "mailFrom", header: "Mail From", cell: (item: any) => item.mailFrom },
+          {
+            id: "actions",
+            header: "",
+            cell: (item: any) => (
+              <DeleteButton
+                itemName={item.identity}
+                resourceType="identity"
+                loading={deleteIdentity.isPending && deleteIdentity.variables === item.identity}
+                onDelete={() => deleteIdentity.mutateAsync(item.identity)}
+              />
+            ),
+          },
+        ]}
+        filterEnabled
+        filterPlaceholder="Find identities"
+        filterFunction={(item: any, searchText: string) =>
+          item.identity.toLowerCase().includes(searchText.toLowerCase())
+        }
+      />
+      {verifiedEmails && verifiedEmails.emails.length > 0 && (
+        <Container header={<Header variant="h2">Verified Emails</Header>}>
+          <Box>
+            {verifiedEmails.emails.map((email: string) => (
+              <div key={email}>{email}</div>
+            ))}
+          </Box>
+        </Container>
+      )}
+      <Modal
+        visible={showVerifyEmail}
+        onDismiss={() => setShowVerifyEmail(false)}
+        header="Verify email address"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowVerifyEmail(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  verifyEmail.mutate(emailAddress);
+                  setShowVerifyEmail(false);
+                  setEmailAddress("");
+                }}
+                disabled={!emailAddress}
+                loading={verifyEmail.isPending}
+              >
+                Verify
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          <FormField label="Email address">
+            <Input
+              value={emailAddress}
+              onChange={({ detail }) => setEmailAddress(detail.value)}
+              placeholder="user@example.com"
+            />
+          </FormField>
+        </Form>
+      </Modal>
+      <Modal
+        visible={showVerifyDomain}
+        onDismiss={() => setShowVerifyDomain(false)}
+        header="Verify domain"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowVerifyDomain(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  verifyDomain.mutate(domain);
+                  setShowVerifyDomain(false);
+                  setDomain("");
+                }}
+                disabled={!domain}
+                loading={verifyDomain.isPending}
+              >
+                Verify
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          <FormField label="Domain name">
+            <Input
+              value={domain}
+              onChange={({ detail }) => setDomain(detail.value)}
+              placeholder="example.com"
+            />
+          </FormField>
+        </Form>
+      </Modal>
+      <Modal
+        visible={showSendEmail}
+        onDismiss={() => setShowSendEmail(false)}
+        header="Send email"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowSendEmail(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  sendEmail.mutate({
+                    source: sendFrom,
+                    toAddresses: sendTo.split(",").map((s) => s.trim()),
+                    subject: sendSubject,
+                    text: sendBody,
+                  });
+                  setShowSendEmail(false);
+                  setSendFrom("");
+                  setSendTo("");
+                  setSendSubject("");
+                  setSendBody("");
+                }}
+                disabled={!sendFrom || !sendTo || !sendSubject || !sendBody}
+                loading={sendEmail.isPending}
+              >
+                Send
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          <FormField label="From (verified email)">
+            <Input
+              value={sendFrom}
+              onChange={({ detail }) => setSendFrom(detail.value)}
+              placeholder="sender@example.com"
+            />
+          </FormField>
+          <FormField label="To (comma-separated)">
+            <Input
+              value={sendTo}
+              onChange={({ detail }) => setSendTo(detail.value)}
+              placeholder="recipient@example.com"
+            />
+          </FormField>
+          <FormField label="Subject">
+            <Input
+              value={sendSubject}
+              onChange={({ detail }) => setSendSubject(detail.value)}
+              placeholder="Test email"
+            />
+          </FormField>
+          <FormField label="Body (text)">
+            <Textarea
+              value={sendBody}
+              onChange={({ detail }) => setSendBody(detail.value)}
+              placeholder="Hello from SES"
+            />
+          </FormField>
         </Form>
       </Modal>
     </>

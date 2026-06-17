@@ -34,7 +34,7 @@
 
 - **AWS Console look and feel** — Built with [Cloudscape Design System](https://cloudscape.design/), the same component library used by the real AWS Management Console
 - **55+ AWS services** — Full navigation and status for every service Floci supports
-- **Deep resource management** — Browse, create, and delete resources for implemented services (S3, DynamoDB, EC2, RDS, SQS, SNS, EventBridge, CloudWatch Logs, CloudWatch Metrics, Lambda, IAM, Secrets Manager, CloudFormation, KMS, ECS, SSM, Route 53, API Gateway, AppSync, EventBridge Scheduler)
+- **Deep resource management** — Browse, create, and delete resources for implemented services (S3, DynamoDB, EC2, RDS, SQS, SNS, EventBridge, CloudWatch Logs, CloudWatch Metrics, Lambda, IAM, Secrets Manager, CloudFormation, KMS, ECS, SSM, Route 53, API Gateway, AppSync, EventBridge Scheduler, ECR, ELB, SES)
 - **EC2 web terminal** — Interactive bash shell inside running EC2 instances directly from the browser (xterm.js + Docker Engine API with PTY)
 - **Dark mode** — Toggle between light and dark themes
 - **Real-time health** — Dashboard shows live Floci service status (running/available counts)
@@ -335,6 +335,9 @@ These services have full CRUD operations in both backend and frontend:
 | **API Gateway** | REST APIs (list, create with name/description, delete, detail), resources (list with methods per resource), deployments (list with stage/status) |
 | **AppSync** | GraphQL APIs (list, create with auth type, delete, detail), data sources (list, create with type/description, delete), resolvers (list with field/type/kind/runtime), functions (list, create with data source, delete), API keys (list, create, delete with expiry), types (list), schema (get/status/start creation) |
 | **EventBridge Scheduler** | Schedule groups (list, create, delete with schedule count), schedules (list, create with expression/target/role, delete) |
+| **ECR** | Repositories (list, create, delete), images (list with details, batch delete), repository policy (get/set/delete), lifecycle policy (get/set) |
+| **ELB** | Load balancers (list, create, delete, attributes), target groups (list, create, delete), listeners (list, create, delete), target health, register/deregister targets |
+| **SES** | Email identities (list with verification/DKIM/mail-from status, verify email, verify domain, delete), send email (to/cc/bcc with HTML/text), verified emails list |
 
 ### Navigation + status (55 services)
 

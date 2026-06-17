@@ -24,6 +24,9 @@ import apiGatewayRoutes from "./apigateway";
 import stsRoutes from "./sts";
 import appsyncRoutes from "./appsync";
 import schedulerRoutes from "./scheduler";
+import ecrRoutes from "./ecr";
+import elbRoutes from "./elb";
+import sesRoutes from "./ses";
 
 const router = new Hono();
 
@@ -51,9 +54,12 @@ router.route("/apigateway", apiGatewayRoutes);
 router.route("/sts", stsRoutes);
 router.route("/appsync", appsyncRoutes);
 router.route("/scheduler", schedulerRoutes);
+router.route("/ecr", ecrRoutes);
+router.route("/elb", elbRoutes);
+router.route("/ses", sesRoutes);
 
 router.get("/", (c: Context) => {
-  return c.json({ message: "AWS routes available. Services registered: s3, dynamodb, rds, ec2, sqs, sns, events, logs, lambda, cloudwatch, iam, secretsmanager, cloudformation, kms, ecs, ssm, route53, apigateway, sts, appsync, scheduler" });
+  return c.json({ message: "AWS routes available. Services registered: s3, dynamodb, rds, ec2, sqs, sns, events, logs, lambda, cloudwatch, iam, secretsmanager, cloudformation, kms, ecs, ssm, route53, apigateway, sts, appsync, scheduler, ecr, elb, ses" });
 });
 
 export default router;

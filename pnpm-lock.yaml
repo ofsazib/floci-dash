@@ -29,7 +29,13 @@ importers:
       '@aws-sdk/client-ec2':
         specifier: ^3.1068.0
         version: 3.1070.0
+      '@aws-sdk/client-ecr':
+        specifier: ^3.1070.0
+        version: 3.1070.0
       '@aws-sdk/client-ecs':
+        specifier: ^3.1070.0
+        version: 3.1070.0
+      '@aws-sdk/client-elastic-load-balancing-v2':
         specifier: ^3.1070.0
         version: 3.1070.0
       '@aws-sdk/client-eventbridge':
@@ -58,6 +64,9 @@ importers:
         version: 3.1070.0
       '@aws-sdk/client-secrets-manager':
         specifier: ^3.1068.0
+        version: 3.1070.0
+      '@aws-sdk/client-ses':
+        specifier: ^3.1070.0
         version: 3.1070.0
       '@aws-sdk/client-sns':
         specifier: ^3.1068.0
@@ -229,8 +238,16 @@ packages:
     resolution: {integrity: sha512-mWexBXtlLvV+AfvnfsYJxd9ICy637xIiQBYlsNf++2eQ1wuVLe4YIniq+4aazxPV8EQe7a0BZBFc2M/oaYCipw==}
     engines: {node: '>=20.0.0'}
 
+  '@aws-sdk/client-ecr@3.1070.0':
+    resolution: {integrity: sha512-aapnXU7CqzDwCR04Z7bf1KcYq1NSWw0cZ9KtOhoOonz+yCPjMlnCYAauV9MY8kBiHjZ6BQiyUy5TQmp/tIJeig==}
+    engines: {node: '>=20.0.0'}
+
   '@aws-sdk/client-ecs@3.1070.0':
     resolution: {integrity: sha512-Uzs/QXPrSs5bMCBRUVnGRShiaTzwhZBSNAjC6aw2fAXNuOF3pZygDA2UM0aonTg0r6SmBGrS+UqGTz4IDFChDw==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/client-elastic-load-balancing-v2@3.1070.0':
+    resolution: {integrity: sha512-6Be/xn7nwiOHavJX+tDtPfh/gy5ngrR0mg51dS4kZZi+/FScKwXHpDdRmIlCl+g+POGbSjVlDoJaYoURByEDqQ==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-eventbridge@3.1070.0':
@@ -267,6 +284,10 @@ packages:
 
   '@aws-sdk/client-secrets-manager@3.1070.0':
     resolution: {integrity: sha512-5t6TmKsESxrrd6iD1tRXaiQxusjboZa846pLZZUwvt4M2xy3FsHUaQoZ50ZPnSr5DNWJubbrHuB+jKn4LGO1eQ==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/client-ses@3.1070.0':
+    resolution: {integrity: sha512-bPfie6sd2pcs4inpRTBnZzNN8ud5aup9ljI72DjOnI1xUzJKbWjS+i1RVcRjgB5zWdWawOhMYauGlrmKNGCUSg==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-sns@3.1070.0':
@@ -2008,7 +2029,33 @@ snapshots:
       '@smithy/types': 4.15.0
       tslib: 2.8.1
 
+  '@aws-sdk/client-ecr@3.1070.0':
+    dependencies:
+      '@aws-crypto/sha256-browser': 5.2.0
+      '@aws-crypto/sha256-js': 5.2.0
+      '@aws-sdk/core': 3.974.21
+      '@aws-sdk/credential-provider-node': 3.972.56
+      '@aws-sdk/types': 3.973.13
+      '@smithy/core': 3.25.0
+      '@smithy/fetch-http-handler': 5.5.0
+      '@smithy/node-http-handler': 4.8.0
+      '@smithy/types': 4.15.0
+      tslib: 2.8.1
+
   '@aws-sdk/client-ecs@3.1070.0':
+    dependencies:
+      '@aws-crypto/sha256-browser': 5.2.0
+      '@aws-crypto/sha256-js': 5.2.0
+      '@aws-sdk/core': 3.974.21
+      '@aws-sdk/credential-provider-node': 3.972.56
+      '@aws-sdk/types': 3.973.13
+      '@smithy/core': 3.25.0
+      '@smithy/fetch-http-handler': 5.5.0
+      '@smithy/node-http-handler': 4.8.0
+      '@smithy/types': 4.15.0
+      tslib: 2.8.1
+
+  '@aws-sdk/client-elastic-load-balancing-v2@3.1070.0':
     dependencies:
       '@aws-crypto/sha256-browser': 5.2.0
       '@aws-crypto/sha256-js': 5.2.0
@@ -2133,6 +2180,19 @@ snapshots:
       tslib: 2.8.1
 
   '@aws-sdk/client-secrets-manager@3.1070.0':
+    dependencies:
+      '@aws-crypto/sha256-browser': 5.2.0
+      '@aws-crypto/sha256-js': 5.2.0
+      '@aws-sdk/core': 3.974.21
+      '@aws-sdk/credential-provider-node': 3.972.56
+      '@aws-sdk/types': 3.973.13
+      '@smithy/core': 3.25.0
+      '@smithy/fetch-http-handler': 5.5.0
+      '@smithy/node-http-handler': 4.8.0
+      '@smithy/types': 4.15.0
+      tslib: 2.8.1
+
+  '@aws-sdk/client-ses@3.1070.0':
     dependencies:
       '@aws-crypto/sha256-browser': 5.2.0
       '@aws-crypto/sha256-js': 5.2.0
