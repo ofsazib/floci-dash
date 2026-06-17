@@ -61,7 +61,7 @@ describe("GET /api/aws/scheduler/groups", () => {
 
 describe("POST /api/aws/scheduler/groups", () => {
   it("creates a schedule group", async () => {
-    mockSend.mockResolvedValue({ ScheduleGroup: { Name: "my-group", State: "ACTIVE" } });
+    mockSend.mockResolvedValue({ ScheduleGroupArn: "arn:aws:scheduler:us-east-1:123:schedule-group/my-group" });
     const res = await app.request("/api/aws/scheduler/groups", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -69,7 +69,7 @@ describe("POST /api/aws/scheduler/groups", () => {
     });
     expect(res.status).toBe(201);
     const body = await res.json();
-    expect(body.group.Name).toBe("my-group");
+    expect(body.groupArn).toContain("my-group");
   });
 
   it("returns 400 if name is missing", async () => {
@@ -136,7 +136,7 @@ describe("GET /api/aws/scheduler/schedules/:name", () => {
 
 describe("POST /api/aws/scheduler/schedules", () => {
   it("creates a schedule", async () => {
-    mockSend.mockResolvedValue({ Name: "new-schedule", State: "ENABLED" });
+    mockSend.mockResolvedValue({ ScheduleArn: "arn:aws:scheduler:us-east-1:123:schedule/default/new-schedule" });
     const res = await app.request("/api/aws/scheduler/schedules", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -148,7 +148,7 @@ describe("POST /api/aws/scheduler/schedules", () => {
     });
     expect(res.status).toBe(201);
     const body = await res.json();
-    expect(body.schedule.Name).toBe("new-schedule");
+    expect(body.scheduleArn).toContain("new-schedule");
   });
 
   it("returns 400 if name is missing", async () => {

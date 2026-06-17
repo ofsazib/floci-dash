@@ -35,7 +35,7 @@ router.post("/groups", async (c: Context) => {
       Tags: body.tags,
     })
   );
-  return c.json({ group: result.ScheduleGroup }, 201);
+  return c.json({ groupArn: result.ScheduleGroupArn }, 201);
 });
 
 router.delete("/groups/:name", async (c: Context) => {
@@ -86,7 +86,7 @@ router.post("/schedules", async (c: Context) => {
       State: body.state || "ENABLED",
     })
   );
-  return c.json({ schedule: result }, 201);
+  return c.json({ scheduleArn: result.ScheduleArn }, 201);
 });
 
 router.put("/schedules/:name", async (c: Context) => {
@@ -106,7 +106,7 @@ router.put("/schedules/:name", async (c: Context) => {
       State: body.state,
     })
   );
-  return c.json({ schedule: result });
+  return c.json({ scheduleArn: result.ScheduleArn });
 });
 
 router.delete("/schedules/:name", async (c: Context) => {

@@ -45,7 +45,7 @@ describe("useSchedulerGroups", () => {
 
 describe("useCreateSchedulerGroup", () => {
   it("creates a schedule group", async () => {
-    mockedApi.mockResolvedValue({ group: { Name: "my-group" } });
+    mockedApi.mockResolvedValue({ groupArn: "arn:aws:scheduler:us-east-1:123:schedule-group/my-group" });
     const { result } = renderHook(() => useCreateSchedulerGroup(), { wrapper: createWrapper() });
     await result.current.mutateAsync({ name: "my-group" });
     expect(mockedApi).toHaveBeenCalledWith("/aws/scheduler/groups", {
@@ -102,7 +102,7 @@ describe("useSchedule", () => {
 
 describe("useCreateSchedule", () => {
   it("creates a schedule", async () => {
-    mockedApi.mockResolvedValue({ schedule: { Name: "new-schedule" } });
+    mockedApi.mockResolvedValue({ scheduleArn: "arn:aws:scheduler:us-east-1:123:schedule/default/new-schedule" });
     const { result } = renderHook(() => useCreateSchedule(), { wrapper: createWrapper() });
     await result.current.mutateAsync({
       name: "new-schedule",
