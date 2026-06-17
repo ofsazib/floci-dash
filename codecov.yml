@@ -1,0 +1,26 @@
+codecov:
+  require_ci_to_pass: yes
+
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 2%
+        informational: true
+    patch:
+      default:
+        target: 75%
+        informational: false
+
+comment:
+  layout: "condensed_header, diff, components"
+  require_changes: true
+
+ignore:
+  - "src/frontend/main.tsx"
+  - "src/frontend/App.tsx"
+  - "src/**/*.d.ts"
+  - "src/test/**"
+  - "dist/**"
+  - "coverage/**"
