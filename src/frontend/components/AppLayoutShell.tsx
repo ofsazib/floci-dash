@@ -32,6 +32,7 @@ const IMPLEMENTED_SERVICES: Record<string, string> = {
   cloudformation: "CloudFormation",
   kms: "KMS",
   ecs: "ECS",
+  ssm: "Systems Manager",
 };
 
 const CATEGORY_ORDER = [

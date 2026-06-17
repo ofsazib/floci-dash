@@ -34,7 +34,7 @@
 
 - **AWS Console look and feel** — Built with [Cloudscape Design System](https://cloudscape.design/), the same component library used by the real AWS Management Console
 - **55+ AWS services** — Full navigation and status for every service Floci supports
-- **Deep resource management** — Browse, create, and delete resources for implemented services (S3, DynamoDB, EC2, RDS, SQS, SNS, EventBridge, CloudWatch Logs, CloudWatch Metrics, Lambda, IAM, Secrets Manager, CloudFormation, KMS, ECS)
+- **Deep resource management** — Browse, create, and delete resources for implemented services (S3, DynamoDB, EC2, RDS, SQS, SNS, EventBridge, CloudWatch Logs, CloudWatch Metrics, Lambda, IAM, Secrets Manager, CloudFormation, KMS, ECS, SSM)
 - **EC2 web terminal** — Interactive bash shell inside running EC2 instances directly from the browser (xterm.js + Docker Engine API with PTY)
 - **Dark mode** — Toggle between light and dark themes
 - **Real-time health** — Dashboard shows live Floci service status (running/available counts)
@@ -204,6 +204,7 @@ src/
       useCloudFormation.ts CloudFormation operations
       useKMS.ts            KMS operations
       useECS.ts            ECS operations
+      useSSM.ts            SSM Parameter Store operations
       useService.ts        Generic service hook
       useSystem.ts         Health, active services
     lib/                   Utilities
@@ -243,6 +244,7 @@ src/
         cloudformation.ts  CloudFormation operations
         kms.ts             KMS operations
         ecs.ts             ECS operations
+        ssm.ts             SSM Parameter Store operations
     index.ts               Hono app entry point
     types.ts               Shared backend types
 
@@ -276,6 +278,7 @@ These services have full CRUD operations in both backend and frontend:
 | **CloudFormation** | Stacks (list, create with YAML/JSON template, delete, detail with outputs/parameters/tags), resources (per-stack list with status), events (timeline with status), template viewer, template validator, exports |
 | **KMS** | Keys (list, create with usage/spec, detail with state/rotation/aliases/grants/tags), key management (enable/disable, schedule/cancel deletion, rotation toggle, update description), crypto playground (encrypt/decrypt), aliases (list, create, delete), data key generation, random bytes |
 | **ECS** | Clusters (list, create, delete, detail with running task/service counts), task definitions (list, describe, deregister), services (list, delete per cluster), tasks (list by status, run, stop), container instances (list, describe) |
+| **SSM** | Parameter Store (list, create with type/description/overwrite, delete, detail with value reveal, version history), tags (list, add, remove) |
 
 ### Navigation + status (55 services)
 

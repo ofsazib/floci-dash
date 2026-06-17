@@ -16,6 +16,11 @@ import {
   Button,
   Alert,
   Tabs,
+  Textarea,
+  ColumnLayout,
+  Container,
+  Spinner,
+  Checkbox,
   type SelectProps,
   type TabsProps,
 } from "@cloudscape-design/components";
@@ -80,6 +85,13 @@ import {
   useStopECSTask,
   useRunECSTask,
 } from "../hooks/useECS";
+import {
+  useSSMParameters,
+  useSSMParameter,
+  usePutSSMParameter,
+  useDeleteSSMParameter,
+  useSSMParameterHistory,
+} from "../hooks/useSSM";
 
 const KEY_TYPE_OPTIONS: SelectProps.Option[] = [
   { label: "String (S)", value: "S" },
@@ -120,7 +132,7 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
 ];
 
 /** Services with a fully implemented backend that can show a resource list */
-const IMPLEMENTED_SERVICES = new Set(["dynamodb", "rds", "logs", "ecs"]);
+const IMPLEMENTED_SERVICES = new Set(["dynamodb", "rds", "logs", "ecs", "ssm"]);
 
 export default function ServicePage() {
   const { service } = useParams<{ service: string }>();
@@ -183,6 +195,7 @@ function ServiceResourceList({ service }: { service: string }) {
   if (service === "rds") return <RDSDashboard />;
   if (service === "logs") return <CloudWatchLogsDashboard />;
   if (service === "ecs") return <ECSDashboard />;
+  if (service === "ssm") return <SSMDashboard />;
   return null;
 }
 
@@ -1501,6 +1514,263 @@ function RDSParameterGroupParametersView({
           </SpaceBetween>
         </Form>
       </Modal>
+    </SpaceBetween>
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  SSM (Systems Manager — Parameter Store)
+// ────────────────────────────────────────────────────────
+
+const SSM_TYPE_OPTIONS: SelectProps.Option[] = [
+  { label: "String", value: "String" },
+  { label: "StringList", value: "StringList" },
+  { label: "SecureString", value: "SecureString" },
+];
+
+function SSMDashboard() {
+  const { data, isLoading, isError, error } = useSSMParameters();
+  const putParam = usePutSSMParameter();
+  const deleteParam = useDeleteSSMParameter();
+  const [showCreate, setShowCreate] = useState(false);
+  const [selectedParam, setSelectedParam] = useState<string | null>(null);
+
+  const [form, setForm] = useState({
+    name: "",
+    value: "",
+    type: "String",
+    description: "",
+    overwrite: false,
+  });
+
+  const parameters = data?.parameters || [];
+
+  const columns = [
+    { id: "name", header: "Name", cell: (item: any) => item.Name, isRowHeader: true },
+    { id: "type", header: "Type", cell: (item: any) => item.Type || "—" },
+    { id: "version", header: "Version", cell: (item: any) => item.Version ?? "—" },
+    {
+      id: "lastModified",
+      header: "Last Modified",
+      cell: (item: any) =>
+        item.LastModifiedDate
+          ? new Date(item.LastModifiedDate * 1000).toLocaleString()
+          : "—",
+    },
+    { id: "description", header: "Description", cell: (item: any) => item.Description || "—" },
+    {
+      id: "actions",
+      header: "",
+      cell: (item: any) => (
+        <SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setSelectedParam(item.Name)}>
+            View
+          </Button>
+          <DeleteButton
+            itemName={item.Name}
+            resourceType="parameter"
+            loading={deleteParam.isPending}
+            onDelete={() => deleteParam.mutateAsync(item.Name)}
+          />
+        </SpaceBetween>
+      ),
+    },
+  ];
+
+  if (selectedParam) {
+    return (
+      <SSMParameterDetail
+        name={selectedParam}
+        onBack={() => setSelectedParam(null)}
+      />
+    );
+  }
+
+  return (
+    <>
+      <ResourceTable
+        resourceName="Parameter"
+        headerTitle="SSM Parameters"
+        headerCounter={data?.total}
+        items={parameters}
+        columns={columns}
+        loading={isLoading}
+        emptyMessage="No parameters found. Create one to get started."
+        filterEnabled
+        filterPlaceholder="Find parameters by name"
+        filterFunction={(item: any, searchText: string) =>
+          (item.Name || "").toLowerCase().includes(searchText.toLowerCase())
+        }
+        onCreate={() => setShowCreate(true)}
+      />
+
+      <Modal
+        visible={showCreate}
+        onDismiss={() => setShowCreate(false)}
+        header="Create parameter"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreate(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                loading={putParam.isPending}
+                disabled={!form.name.trim() || !form.value.trim()}
+                onClick={() => {
+                  putParam.mutate(form, {
+                    onSuccess: () => {
+                      setShowCreate(false);
+                      setForm({ name: "", value: "", type: "String", description: "", overwrite: false });
+                    },
+                  });
+                }}
+              >
+                Create
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          {putParam.isError && (
+            <Alert type="error" dismissible>
+              {(putParam.error as Error)?.message || "Failed to create parameter"}
+            </Alert>
+          )}
+          <SpaceBetween size="m">
+            <FormField label="Name" description="Use / for hierarchical paths (e.g. /myapp/config)">
+              <Input
+                value={form.name}
+                onChange={({ detail }) => setForm((p) => ({ ...p, name: detail.value }))}
+                placeholder="/myapp/db-url"
+              />
+            </FormField>
+            <FormField label="Type">
+              <Select
+                selectedOption={{ label: form.type, value: form.type }}
+                onChange={({ detail }) => setForm((p) => ({ ...p, type: detail.selectedOption?.value || "String" }))}
+                options={SSM_TYPE_OPTIONS}
+              />
+            </FormField>
+            <FormField label="Value">
+              <Textarea
+                value={form.value}
+                onChange={({ detail }) => setForm((p) => ({ ...p, value: detail.value }))}
+                rows={3}
+              />
+            </FormField>
+            <FormField label="Description (optional)">
+              <Input
+                value={form.description}
+                onChange={({ detail }) => setForm((p) => ({ ...p, description: detail.value }))}
+              />
+            </FormField>
+            <Checkbox
+              checked={form.overwrite}
+              onChange={({ detail }) => setForm((p) => ({ ...p, overwrite: detail.checked }))}
+            >
+              Overwrite existing parameter
+            </Checkbox>
+          </SpaceBetween>
+        </Form>
+      </Modal>
+    </>
+  );
+}
+
+function SSMParameterDetail({ name, onBack }: { name: string; onBack: () => void }) {
+  const { data: paramData, isLoading, isError, error } = useSSMParameter(name);
+  const { data: historyData } = useSSMParameterHistory(name);
+  const param = paramData?.parameter;
+
+  return (
+    <SpaceBetween size="l">
+      <Button variant="link" iconName="arrow-left" onClick={onBack}>
+        Back to Parameters
+      </Button>
+
+      <Header variant="h2" description={param?.ARN}>
+        {name}
+      </Header>
+
+      {isLoading && <Spinner />}
+
+      {isError && (
+        <StatusIndicator type="error">
+          {(error as Error)?.message || "Failed to load parameter"}
+        </StatusIndicator>
+      )}
+
+      {param && (
+        <>
+          <ColumnLayout columns={3}>
+            <div>
+              <Box variant="awsui-key-label">Type</Box>
+              <div>{param.Type || "—"}</div>
+            </div>
+            <div>
+              <Box variant="awsui-key-label">Version</Box>
+              <div>{param.Version ?? "—"}</div>
+            </div>
+            <div>
+              <Box variant="awsui-key-label">Last Modified</Box>
+              <div>
+                {param.LastModifiedDate
+                  ? new Date(param.LastModifiedDate * 1000).toLocaleString()
+                  : "—"}
+              </div>
+            </div>
+          </ColumnLayout>
+
+          <Container header={<Header variant="h3">Value</Header>}>
+            <Box>
+              <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-all", margin: 0 }}>
+                {param.Value || "(empty)"}
+              </pre>
+            </Box>
+          </Container>
+
+          {historyData && historyData.total > 0 && (
+            <Container
+              header={
+                <Header variant="h3" counter={historyData.total}>
+                  Version History
+                </Header>
+              }
+            >
+              <ResourceTable
+                resourceName="Version"
+                items={historyData.history}
+                columns={[
+                  { id: "version", header: "Version", cell: (item: any) => item.Version ?? "—" },
+                  {
+                    id: "value",
+                    header: "Value",
+                    cell: (item: any) => (
+                      <span style={{ fontFamily: "monospace" }}>
+                        {(item.Value || "").length > 60
+                          ? (item.Value || "").slice(0, 60) + "…"
+                          : item.Value || "(empty)"}
+                      </span>
+                    ),
+                  },
+                  {
+                    id: "modified",
+                    header: "Modified",
+                    cell: (item: any) =>
+                      item.LastModifiedDate
+                        ? new Date(item.LastModifiedDate * 1000).toLocaleString()
+                        : "—",
+                  },
+                ]}
+                filterEnabled={false}
+              />
+            </Container>
+          )}
+        </>
+      )}
     </SpaceBetween>
   );
 }

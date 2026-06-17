@@ -1247,13 +1247,14 @@ if (service === "sqs") return <SQSQueues />;
 
 | # | Task | Status | Date |
 |---|------|--------|------|
-| 16.1 | Consult Floci SSM source for supported operations | Pending | |
-| 16.2 | Backend: GET /api/aws/ssm/parameters | Pending | |
-| 16.3 | Backend: POST /api/aws/ssm/parameters (put parameter) | Pending | |
-| 16.4 | Backend: DELETE /api/aws/ssm/parameters/:name | Pending | |
-| 16.5 | Frontend: useSSM hooks | Pending | |
-| 16.6 | Frontend: SSM page (parameter list + create/delete) | Pending | |
-| 16.7 | Verify: typecheck + build pass | Pending | |
+| 16.1 | Consult Floci SSM source for supported operations | Done | 2025-06-17 |
+| 16.2 | Backend: GET /api/aws/ssm/parameters | Done | 2025-06-17 |
+| 16.3 | Backend: POST /api/aws/ssm/parameters (put parameter) | Done | 2025-06-17 |
+| 16.4 | Backend: DELETE /api/aws/ssm/parameters/:name | Done | 2025-06-17 |
+| 16.5 | Backend: GET parameter detail, GET history, tags CRUD | Done | 2025-06-17 |
+| 16.6 | Frontend: useSSM hooks | Done | 2025-06-17 |
+| 16.7 | Frontend: SSM page (parameter list + create/delete + detail with version history) | Done | 2025-06-17 |
+| 16.8 | Verify: typecheck + build pass | Done | 2025-06-17 |
 
 ---
 
