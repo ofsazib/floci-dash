@@ -1107,7 +1107,7 @@ if (service === "sqs") return <SQSQueues />;
 | 8.8 | Frontend: ECS page — Clusters tab (list with task/service counts) | Done | 2025-06-17 |
 | 8.9 | Frontend: Cluster detail — Services tab + Tasks tab + Container Instances tab | Done | 2025-06-17 |
 | 8.10 | Frontend: Task Definitions tab (family list, version browser, container spec viewer) | Done | 2025-06-17 |
-| 8.11 | Frontend: Service create/edit (desired count slider, task def selector) | Pending | |
+| 8.11 | Frontend: Service create/edit (desired count slider, task def selector) | Done | 2025-06-17 |
 | 8.12 | Verify: typecheck + build pass | Done | 2025-06-17 |
 
 ---
@@ -1160,14 +1160,14 @@ if (service === "sqs") return <SQSQueues />;
 
 | # | Task | Status | Date |
 |---|------|--------|------|
-| 11.1 | Consult Floci Secrets Manager source for supported operations | Pending | |
-| 11.2 | Backend: Secret CRUD (list, create, describe, update, delete, restore, rotate) | Pending | |
-| 11.3 | Backend: Secret value (get, put) + version history + stage management | Pending | |
-| 11.4 | Backend: Resource policy + random password + batch get + tags | Pending | |
-| 11.5 | Frontend: useSecretsManager hooks | Pending | |
-| 11.6 | Frontend: Secrets page — List (description, rotation status, create, delete) | Pending | |
-| 11.7 | Frontend: Secret detail — Value tab (masked/reveal toggle), Versions tab (history, stage), Policy tab | Pending | |
-| 11.8 | Verify: typecheck + build pass | Pending | |
+| 11.1 | Consult Floci Secrets Manager source for supported operations | Done | 2025-06-15 |
+| 11.2 | Backend: Secret CRUD (list, create, describe, update, delete, restore, rotate) | Done | 2025-06-15 |
+| 11.3 | Backend: Secret value (get, put) + version history + stage management | Done | 2025-06-15 |
+| 11.4 | Backend: Resource policy + random password + batch get + tags | Done | 2025-06-15 |
+| 11.5 | Frontend: useSecretsManager hooks | Done | 2025-06-15 |
+| 11.6 | Frontend: Secrets page — List (description, rotation status, create, delete) | Done | 2025-06-15 |
+| 11.7 | Frontend: Secret detail — Value tab (masked/reveal toggle), Versions tab (history, stage), Policy tab | Done | 2025-06-15 |
+| 11.8 | Verify: typecheck + build pass | Done | 2025-06-15 |
 
 ---
 
@@ -1234,14 +1234,14 @@ if (service === "sqs") return <SQSQueues />;
 
 | # | Task | Status | Date |
 |---|------|--------|------|
-| 15.1 | Consult Floci CloudFormation source for supported operations | Pending | |
-| 15.2 | Backend: GET /api/aws/cloudformation/stacks | Pending | |
-| 15.3 | Backend: POST /api/aws/cloudformation/stacks (create stack) | Pending | |
-| 15.4 | Backend: DELETE /api/aws/cloudformation/stacks/:name | Pending | |
-| 15.5 | Backend: GET /api/aws/cloudformation/stacks/:name (describe) | Pending | |
-| 15.6 | Frontend: useCloudFormation hooks | Pending | |
-| 15.7 | Frontend: CloudFormation page (stack list + detail) | Pending | |
-| 15.8 | Verify: typecheck + build pass | Pending | |
+| 15.1 | Consult Floci CloudFormation source for supported operations | Done | 2025-06-15 |
+| 15.2 | Backend: GET /api/aws/cloudformation/stacks | Done | 2025-06-15 |
+| 15.3 | Backend: POST /api/aws/cloudformation/stacks (create stack) | Done | 2025-06-15 |
+| 15.4 | Backend: DELETE /api/aws/cloudformation/stacks/:name | Done | 2025-06-15 |
+| 15.5 | Backend: GET /api/aws/cloudformation/stacks/:name (describe) | Done | 2025-06-15 |
+| 15.6 | Frontend: useCloudFormation hooks | Done | 2025-06-15 |
+| 15.7 | Frontend: CloudFormation page (stack list + detail) | Done | 2025-06-15 |
+| 15.8 | Verify: typecheck + build pass | Done | 2025-06-15 |
 
 #### 6C — SSM (Systems Manager)
 

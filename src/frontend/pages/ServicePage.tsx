@@ -81,6 +81,8 @@ import {
   useECSServices,
   useECSTasks,
   useECSTaskDefinitions,
+  useECSTaskDefinitionFamilies,
+  useCreateECSService,
   useDeleteECSService,
   useStopECSTask,
   useRunECSTask,
@@ -108,6 +110,7 @@ import {
   useAPIGatewayResources,
   useAPIGatewayDeployments,
 } from "../hooks/useAPIGateway";
+import { useToast } from "../components/Toast";
 
 const KEY_TYPE_OPTIONS: SelectProps.Option[] = [
   { label: "String (S)", value: "S" },
@@ -2207,53 +2210,164 @@ function ECSClusterDetail({ clusterName, onBack }: { clusterName: string; onBack
   const servicesQuery = useECSServices(clusterName);
   const tasksQuery = useECSTasks(clusterName);
   const taskDefsQuery = useECSTaskDefinitions();
+  const taskDefFamilies = useECSTaskDefinitionFamilies();
+  const createService = useCreateECSService();
   const deleteService = useDeleteECSService();
   const stopTask = useStopECSTask();
   const runTask = useRunECSTask();
   const [showRunTask, setShowRunTask] = useState(false);
+  const [showCreateService, setShowCreateService] = useState(false);
   const [taskDefInput, setTaskDefInput] = useState("");
+  const { showToast } = useToast();
+
+  const [serviceForm, setServiceForm] = useState({
+    serviceName: "",
+    taskDefinition: "",
+    desiredCount: 1,
+    launchType: "FARGATE",
+  });
 
   const tabs: TabsProps.Tab[] = [
     {
       label: `Services (${servicesQuery.data?.total || 0})`,
       id: "services",
       content: (
-        <ResourceTable
-          resourceName="Service"
-          headerTitle="Services"
-          headerCounter={servicesQuery.data?.total}
-          items={servicesQuery.data?.services || []}
-          columns={[
-            { id: "name", header: "Service Name", cell: (item: any) => item.serviceName, isRowHeader: true },
-            { id: "status", header: "Status", cell: (item: any) => <StatusBadge status={item.status || "ACTIVE"} /> },
-            { id: "desired", header: "Desired", cell: (item: any) => item.desiredCount ?? 0 },
-            { id: "running", header: "Running", cell: (item: any) => item.runningCount ?? 0 },
-            { id: "taskDef", header: "Task Definition", cell: (item: any) => item.taskDefinition?.split("/").pop() || "—" },
-            {
-              id: "actions",
-              header: "",
-              cell: (item: any) => (
-                <DeleteButton
-                  itemName={item.serviceName}
-                  resourceType="service"
-                  loading={deleteService.isPending}
-                  onDelete={() =>
-                    deleteService.mutateAsync({
-                      cluster: clusterName,
-                      service: item.serviceName,
-                      force: true,
-                    })
-                  }
-                />
-              ),
-            },
-          ]}
-          loading={servicesQuery.isLoading}
-          emptyMessage="No services in this cluster."
-          filterEnabled
-          filterPlaceholder="Find services"
-          filterFunction={(item: any, s: string) => (item.serviceName || "").toLowerCase().includes(s.toLowerCase())}
-        />
+        <>
+          <ResourceTable
+            resourceName="Service"
+            headerTitle="Services"
+            headerCounter={servicesQuery.data?.total}
+            items={servicesQuery.data?.services || []}
+            columns={[
+              { id: "name", header: "Service Name", cell: (item: any) => item.serviceName, isRowHeader: true },
+              { id: "status", header: "Status", cell: (item: any) => <StatusBadge status={item.status || "ACTIVE"} /> },
+              { id: "desired", header: "Desired", cell: (item: any) => item.desiredCount ?? 0 },
+              { id: "running", header: "Running", cell: (item: any) => item.runningCount ?? 0 },
+              { id: "taskDef", header: "Task Definition", cell: (item: any) => item.taskDefinition?.split("/").pop() || "—" },
+              {
+                id: "actions",
+                header: "",
+                cell: (item: any) => (
+                  <DeleteButton
+                    itemName={item.serviceName}
+                    resourceType="service"
+                    loading={deleteService.isPending}
+                    onDelete={() =>
+                      deleteService.mutateAsync({
+                        cluster: clusterName,
+                        service: item.serviceName,
+                        force: true,
+                      })
+                    }
+                  />
+                ),
+              },
+            ]}
+            loading={servicesQuery.isLoading}
+            emptyMessage="No services in this cluster."
+            filterEnabled
+            filterPlaceholder="Find services"
+            filterFunction={(item: any, s: string) => (item.serviceName || "").toLowerCase().includes(s.toLowerCase())}
+            onCreate={() => setShowCreateService(true)}
+          />
+          <Modal
+            visible={showCreateService}
+            onDismiss={() => { setShowCreateService(false); setServiceForm({ serviceName: "", taskDefinition: "", desiredCount: 1, launchType: "FARGATE" }); }}
+            header="Create Service"
+            footer={
+              <Box float="right">
+                <SpaceBetween direction="horizontal" size="xs">
+                  <Button variant="link" onClick={() => setShowCreateService(false)}>Cancel</Button>
+                  <Button
+                    variant="primary"
+                    loading={createService.isPending}
+                    disabled={!serviceForm.serviceName.trim() || !serviceForm.taskDefinition.trim()}
+                    onClick={() => {
+                      createService.mutate(
+                        {
+                          cluster: clusterName,
+                          serviceName: serviceForm.serviceName.trim(),
+                          taskDefinition: serviceForm.taskDefinition.trim(),
+                          desiredCount: serviceForm.desiredCount,
+                          launchType: serviceForm.launchType,
+                        },
+                        {
+                          onSuccess: () => {
+                            setShowCreateService(false);
+                            setServiceForm({ serviceName: "", taskDefinition: "", desiredCount: 1, launchType: "FARGATE" });
+                            showToast("success", `Service "${serviceForm.serviceName}" created`);
+                          },
+                          onError: (err) => showToast("error", (err as Error)?.message || "Failed to create service"),
+                        }
+                      );
+                    }}
+                  >
+                    Create
+                  </Button>
+                </SpaceBetween>
+              </Box>
+            }
+          >
+            <Form>
+              {createService.isError && (
+                <Alert type="error" dismissible>
+                  {(createService.error as Error)?.message || "Failed to create service"}
+                </Alert>
+              )}
+              <SpaceBetween size="m">
+                <FormField label="Service name" description="A unique name within the cluster.">
+                  <Input
+                    value={serviceForm.serviceName}
+                    onChange={({ detail }) => setServiceForm((p) => ({ ...p, serviceName: detail.value }))}
+                    placeholder="my-service"
+                  />
+                </FormField>
+                <FormField
+                  label="Task definition"
+                  description="Select a task definition family (uses latest revision)."
+                >
+                  <Select
+                    selectedOption={
+                      serviceForm.taskDefinition
+                        ? { label: serviceForm.taskDefinition, value: serviceForm.taskDefinition }
+                        : { label: "Select task definition", value: "" }
+                    }
+                    onChange={({ detail }) =>
+                      setServiceForm((p) => ({
+                        ...p,
+                        taskDefinition: detail.selectedOption?.value || "",
+                      }))
+                    }
+                    options={(taskDefFamilies.data?.families || []).map((f: string) => ({ label: f, value: f }))}
+                    placeholder="Select task definition"
+                    filteringType="auto"
+                  />
+                </FormField>
+                <FormField label="Desired count" description="Number of tasks to run.">
+                  <Input
+                    type="number"
+                    value={String(serviceForm.desiredCount)}
+                    onChange={({ detail }) =>
+                      setServiceForm((p) => ({ ...p, desiredCount: Math.max(0, Number(detail.value) || 0) }))
+                    }
+                  />
+                </FormField>
+                <FormField label="Launch type">
+                  <Select
+                    selectedOption={{ label: serviceForm.launchType, value: serviceForm.launchType }}
+                    onChange={({ detail }) =>
+                      setServiceForm((p) => ({ ...p, launchType: detail.selectedOption?.value || "FARGATE" }))
+                    }
+                    options={[
+                      { label: "FARGATE", value: "FARGATE" },
+                      { label: "EC2", value: "EC2" },
+                    ]}
+                  />
+                </FormField>
+              </SpaceBetween>
+            </Form>
+          </Modal>
+        </>
       ),
     },
     {
