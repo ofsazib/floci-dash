@@ -163,6 +163,11 @@ import {
   useSESSendEmail,
   useSESVerifiedEmails,
 } from "../hooks/useSES";
+import {
+  useSTSCallerIdentity,
+  useSTSAssumeRole,
+  useSTSGetSessionToken,
+} from "../hooks/useSTS";
 
 const KEY_TYPE_OPTIONS: SelectProps.Option[] = [
   { label: "String (S)", value: "S" },
@@ -203,7 +208,7 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
 ];
 
 /** Services with a fully implemented backend that can show a resource list */
-const IMPLEMENTED_SERVICES = new Set(["dynamodb", "rds", "logs", "ecs", "ssm", "route53", "apigateway", "appsync", "scheduler", "ecr", "elb", "ses"]);
+const IMPLEMENTED_SERVICES = new Set(["dynamodb", "rds", "logs", "ecs", "ssm", "route53", "apigateway", "appsync", "scheduler", "ecr", "elb", "ses", "sts"]);
 
 export default function ServicePage() {
   const { service } = useParams<{ service: string }>();
@@ -274,6 +279,7 @@ function ServiceResourceList({ service }: { service: string }) {
   if (service === "ecr") return <ECRDashboard />;
   if (service === "elb") return <ELBDashboard />;
   if (service === "ses") return <SESDashboard />;
+  if (service === "sts") return <STSDashboard />;
   return null;
 }
 
@@ -5278,5 +5284,238 @@ function SESDashboard() {
         </Form>
       </Modal>
     </>
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  STS
+// ────────────────────────────────────────────────────────
+
+function STSDashboard() {
+  const { data: identity, isLoading } = useSTSCallerIdentity();
+  const assumeRole = useSTSAssumeRole();
+  const getSessionToken = useSTSGetSessionToken();
+  const [activeTab, setActiveTab] = useState("identity");
+  const [showAssumeRole, setShowAssumeRole] = useState(false);
+  const [showSessionToken, setShowSessionToken] = useState(false);
+  const [roleArn, setRoleArn] = useState("");
+  const [sessionName, setSessionName] = useState("");
+  const [duration, setDuration] = useState("");
+  const [assumeResult, setAssumeResult] = useState<any>(null);
+  const [sessionResult, setSessionResult] = useState<any>(null);
+  const [sessionDuration, setSessionDuration] = useState("");
+
+  if (isLoading) return <Spinner />;
+
+  return (
+    <Tabs
+      activeTabId={activeTab}
+      onChange={({ detail }) => setActiveTab(detail.activeTabId)}
+      tabs={[
+        {
+          id: "identity",
+          label: "Caller Identity",
+          content: (
+            <SpaceBetween size="l">
+              <Container header={<Header variant="h2">Current Caller Identity</Header>}>
+                <ColumnLayout columns={3} variant="text-grid">
+                  <div>
+                    <Box variant="h4" color="text-body-secondary">Account</Box>
+                    <Box>{identity?.account || "—"}</Box>
+                  </div>
+                  <div>
+                    <Box variant="h4" color="text-body-secondary">User ID</Box>
+                    <Box>{identity?.userId || "—"}</Box>
+                  </div>
+                  <div>
+                    <Box variant="h4" color="text-body-secondary">ARN</Box>
+                    <Box>{identity?.arn || "—"}</Box>
+                  </div>
+                </ColumnLayout>
+              </Container>
+            </SpaceBetween>
+          ),
+        },
+        {
+          id: "assume-role",
+          label: "Assume Role",
+          content: (
+            <SpaceBetween size="l">
+              <Container
+                header={
+                  <Header
+                    variant="h2"
+                    actions={<Button variant="primary" onClick={() => setShowAssumeRole(true)}>Assume role</Button>}
+                  >
+                    Assume Role
+                  </Header>
+                }
+              >
+                {assumeResult ? (
+                  <ColumnLayout columns={2} variant="text-grid">
+                    <div>
+                      <Box variant="h4" color="text-body-secondary">Access Key ID</Box>
+                      <Box>{assumeResult.credentials?.accessKeyId || "—"}</Box>
+                    </div>
+                    <div>
+                      <Box variant="h4" color="text-body-secondary">Secret Access Key</Box>
+                      <Box>{assumeResult.credentials?.secretAccessKey || "—"}</Box>
+                    </div>
+                    <div>
+                      <Box variant="h4" color="text-body-secondary">Session Token</Box>
+                      <Box>{assumeResult.credentials?.sessionToken || "—"}</Box>
+                    </div>
+                    <div>
+                      <Box variant="h4" color="text-body-secondary">Expiration</Box>
+                      <Box>{assumeResult.credentials?.expiration ? new Date(assumeResult.credentials.expiration).toLocaleString() : "—"}</Box>
+                    </div>
+                    {assumeResult.assumedRoleUser && (
+                      <>
+                        <div>
+                          <Box variant="h4" color="text-body-secondary">Assumed Role ID</Box>
+                          <Box>{assumeResult.assumedRoleUser.assumedRoleId || "—"}</Box>
+                        </div>
+                        <div>
+                          <Box variant="h4" color="text-body-secondary">Assumed Role ARN</Box>
+                          <Box>{assumeResult.assumedRoleUser.arn || "—"}</Box>
+                        </div>
+                      </>
+                    )}
+                  </ColumnLayout>
+                ) : (
+                  <Box variant="p" color="text-body-secondary">No role assumed yet. Click "Assume role" to get temporary credentials.</Box>
+                )}
+              </Container>
+              <Modal
+                visible={showAssumeRole}
+                onDismiss={() => setShowAssumeRole(false)}
+                header="Assume role"
+                footer={
+                  <Box float="right">
+                    <SpaceBetween direction="horizontal" size="xs">
+                      <Button variant="link" onClick={() => setShowAssumeRole(false)}>Cancel</Button>
+                      <Button
+                        variant="primary"
+                        disabled={!roleArn}
+                        loading={assumeRole.isPending}
+                        onClick={() => {
+                          assumeRole.mutate(
+                            {
+                              roleArn,
+                              sessionName: sessionName || undefined,
+                              durationSeconds: duration ? parseInt(duration) : undefined,
+                            },
+                            {
+                              onSuccess: (data) => {
+                                setAssumeResult(data);
+                                setShowAssumeRole(false);
+                              },
+                            }
+                          );
+                        }}
+                      >
+                        Assume
+                      </Button>
+                    </SpaceBetween>
+                  </Box>
+                }
+              >
+                <Form>
+                  <SpaceBetween size="m">
+                    <FormField label="Role ARN">
+                      <Input value={roleArn} onChange={({ detail }) => setRoleArn(detail.value)} placeholder="arn:aws:iam::123456789012:role/my-role" />
+                    </FormField>
+                    <FormField label="Session name (optional)">
+                      <Input value={sessionName} onChange={({ detail }) => setSessionName(detail.value)} placeholder="dashboard-session" />
+                    </FormField>
+                    <FormField label="Duration seconds (optional)">
+                      <Input value={duration} onChange={({ detail }) => setDuration(detail.value)} placeholder="3600" inputMode="numeric" />
+                    </FormField>
+                  </SpaceBetween>
+                </Form>
+              </Modal>
+            </SpaceBetween>
+          ),
+        },
+        {
+          id: "session-token",
+          label: "Session Token",
+          content: (
+            <SpaceBetween size="l">
+              <Container
+                header={
+                  <Header
+                    variant="h2"
+                    actions={<Button variant="primary" onClick={() => setShowSessionToken(true)}>Get session token</Button>}
+                  >
+                    Session Token
+                  </Header>
+                }
+              >
+                {sessionResult ? (
+                  <ColumnLayout columns={2} variant="text-grid">
+                    <div>
+                      <Box variant="h4" color="text-body-secondary">Access Key ID</Box>
+                      <Box>{sessionResult.credentials?.accessKeyId || "—"}</Box>
+                    </div>
+                    <div>
+                      <Box variant="h4" color="text-body-secondary">Secret Access Key</Box>
+                      <Box>{sessionResult.credentials?.secretAccessKey || "—"}</Box>
+                    </div>
+                    <div>
+                      <Box variant="h4" color="text-body-secondary">Session Token</Box>
+                      <Box>{sessionResult.credentials?.sessionToken || "—"}</Box>
+                    </div>
+                    <div>
+                      <Box variant="h4" color="text-body-secondary">Expiration</Box>
+                      <Box>{sessionResult.credentials?.expiration ? new Date(sessionResult.credentials.expiration).toLocaleString() : "—"}</Box>
+                    </div>
+                  </ColumnLayout>
+                ) : (
+                  <Box variant="p" color="text-body-secondary">No session token requested. Click "Get session token" to obtain temporary credentials.</Box>
+                )}
+              </Container>
+              <Modal
+                visible={showSessionToken}
+                onDismiss={() => setShowSessionToken(false)}
+                header="Get session token"
+                footer={
+                  <Box float="right">
+                    <SpaceBetween direction="horizontal" size="xs">
+                      <Button variant="link" onClick={() => setShowSessionToken(false)}>Cancel</Button>
+                      <Button
+                        variant="primary"
+                        loading={getSessionToken.isPending}
+                        onClick={() => {
+                          getSessionToken.mutate(
+                            {
+                              durationSeconds: sessionDuration ? parseInt(sessionDuration) : undefined,
+                            },
+                            {
+                              onSuccess: (data) => {
+                                setSessionResult(data);
+                                setShowSessionToken(false);
+                              },
+                            }
+                          );
+                        }}
+                      >
+                        Get token
+                      </Button>
+                    </SpaceBetween>
+                  </Box>
+                }
+              >
+                <Form>
+                  <FormField label="Duration seconds (optional)">
+                    <Input value={sessionDuration} onChange={({ detail }) => setSessionDuration(detail.value)} placeholder="3600" inputMode="numeric" />
+                  </FormField>
+                </Form>
+              </Modal>
+            </SpaceBetween>
+          ),
+        },
+      ]}
+    />
   );
 }

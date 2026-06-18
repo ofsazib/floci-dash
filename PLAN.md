@@ -1281,20 +1281,20 @@ Each remaining service gets a standard list + create + delete pattern.
 | # | Service | Backend | Frontend | Status | Date |
 |---|---------|---------|----------|--------|------|
 | 17.1 | EKS | Pending | Pending | Pending | |
-| 17.2 | ECR | Pending | Pending | Pending | |
+| 17.2 | ECR | Done | Done | Done | 2025-06-18 |
 | 17.3 | Auto Scaling | Pending | Pending | Pending | |
 | 17.4 | RDS | Done | Done | Done | 2025-06-13 |
 | 17.5 | Neptune | Pending | Pending | Pending | |
 | 17.6 | CloudFormation | Done | Done | Done | 2025-06-14 |
-| 17.7 | ELB | Pending | Pending | Pending | |
+| 17.7 | ELB | Done | Done | Done | 2025-06-18 |
 | 17.8 | CloudFront | Pending | Pending | Pending | |
 | 17.9 | API Gateway V2 | Pending | Pending | Pending | |
 | 17.10 | AppSync | Done | Done | Done | 2025-06-17 |
 | 17.11 | Kinesis | Pending | Pending | Pending | |
 | 17.12 | EventBridge Pipes | Pending | Pending | Pending | |
 | 17.13 | EventBridge Scheduler | Done | Done | Done | 2025-06-17 |
-| 17.14 | SES (email) | Pending | Pending | Pending | |
-| 17.15 | STS | Pending | Pending | Pending | |
+| 17.14 | SES (email) | Done | Done | Done | 2025-06-18 |
+| 17.15 | STS | Done | Done | Done | 2025-06-18 |
 | 17.16 | Cognito | Pending | Pending | Pending | |
 | 17.17 | ACM | Pending | Pending | Pending | |
 | 17.18 | Config | Pending | Pending | Pending | |
