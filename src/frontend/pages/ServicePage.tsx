@@ -2898,6 +2898,7 @@ function AppSyncApiDetail({ apiId, onBack }: { apiId: string; onBack: () => void
   const { showToast } = useToast();
   const [showCreateDs, setShowCreateDs] = useState(false);
   const [showCreateFunc, setShowCreateFunc] = useState(false);
+  const [newApiKey, setNewApiKey] = useState<string | null>(null);
   const [dsForm, setDsForm] = useState({ name: "", type: "NONE", description: "" });
   const [funcForm, setFuncForm] = useState({ name: "", dataSourceName: "", code: "" });
 
@@ -3031,7 +3032,10 @@ function AppSyncApiDetail({ apiId, onBack }: { apiId: string; onBack: () => void
             createKey.mutate(
               { apiId },
               {
-                onSuccess: () => showToast("success", "API key created"),
+                onSuccess: (data: any) => {
+                  showToast("success", "API key created");
+                  setNewApiKey(data?.apiKey || "Key not returned");
+                },
                 onError: (err) => showToast("error", (err as Error).message),
               }
             )
@@ -3210,6 +3214,31 @@ function AppSyncApiDetail({ apiId, onBack }: { apiId: string; onBack: () => void
             </FormField>
           </SpaceBetween>
         </Form>
+      </Modal>
+
+      <Modal
+        visible={!!newApiKey}
+        onDismiss={() => setNewApiKey(null)}
+        header="API Key Created"
+        footer={
+          <Box float="right">
+            <Button variant="primary" onClick={() => setNewApiKey(null)}>
+              Done
+            </Button>
+          </Box>
+        }
+      >
+        <SpaceBetween size="m">
+          <Alert type="warning">
+            Copy your API key now. For security reasons, the full key value is only shown once and cannot be retrieved later.
+          </Alert>
+          <FormField label="API Key">
+            <Input
+              value={newApiKey || ""}
+              readOnly
+            />
+          </FormField>
+        </SpaceBetween>
       </Modal>
     </SpaceBetween>
   );
