@@ -1280,7 +1280,7 @@ Each remaining service gets a standard list + create + delete pattern.
 
 | # | Service | Backend | Frontend | Status | Date |
 |---|---------|---------|----------|--------|------|
-| 17.1 | EKS | Pending | Pending | Pending | |
+| 17.1 | EKS | Done | Done | Done | 2025-06-18 |
 | 17.2 | ECR | Done | Done | Done | 2025-06-18 |
 | 17.3 | Auto Scaling | Pending | Pending | Pending | |
 | 17.4 | RDS | Done | Done | Done | 2025-06-13 |

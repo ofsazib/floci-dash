@@ -339,6 +339,7 @@ These services have full CRUD operations in both backend and frontend:
 | **ELB** | Load balancers (list, create, delete, attributes), target groups (list, create, delete), listeners (list, create, delete), target health, register/deregister targets |
 | **SES** | Email identities (list with verification/DKIM/mail-from status, verify email, verify domain, delete), send email (to/cc/bcc with HTML/text), verified emails list |
 | **STS** | Caller identity (account, user ID, ARN), assume role (with session name/duration/policy, returns temporary credentials), get session token (with MFA/duration) |
+| **EKS** | Clusters (list, create, delete, describe with status/version/endpoint), node groups (list, create, delete, describe with scaling config/instance types/subnets) |
 
 ### Navigation + status (55 services)
 

@@ -168,6 +168,14 @@ import {
   useSTSAssumeRole,
   useSTSGetSessionToken,
 } from "../hooks/useSTS";
+import {
+  useEKSClusters,
+  useEKSCreateCluster,
+  useEKSDeleteCluster,
+  useEKSNodegroups,
+  useEKSCreateNodegroup,
+  useEKSDeleteNodegroup,
+} from "../hooks/useEKS";
 
 const KEY_TYPE_OPTIONS: SelectProps.Option[] = [
   { label: "String (S)", value: "S" },
@@ -208,7 +216,7 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
 ];
 
 /** Services with a fully implemented backend that can show a resource list */
-const IMPLEMENTED_SERVICES = new Set(["dynamodb", "rds", "logs", "ecs", "ssm", "route53", "apigateway", "appsync", "scheduler", "ecr", "elb", "ses", "sts"]);
+const IMPLEMENTED_SERVICES = new Set(["dynamodb", "rds", "logs", "ecs", "ssm", "route53", "apigateway", "appsync", "scheduler", "ecr", "elb", "ses", "sts", "eks"]);
 
 export default function ServicePage() {
   const { service } = useParams<{ service: string }>();
@@ -280,6 +288,7 @@ function ServiceResourceList({ service }: { service: string }) {
   if (service === "elb") return <ELBDashboard />;
   if (service === "ses") return <SESDashboard />;
   if (service === "sts") return <STSDashboard />;
+  if (service === "eks") return <EKSDashboard />;
   return null;
 }
 
@@ -5546,5 +5555,335 @@ function STSDashboard() {
         },
       ]}
     />
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  EKS
+// ────────────────────────────────────────────────────────
+
+function EKSDashboard() {
+  const { data: clustersData, isLoading: clustersLoading } = useEKSClusters();
+  const createCluster = useEKSCreateCluster();
+  const deleteCluster = useEKSDeleteCluster();
+  const [showCreateCluster, setShowCreateCluster] = useState(false);
+  const [clusterName, setClusterName] = useState("");
+  const [clusterRoleArn, setClusterRoleArn] = useState("");
+  const [clusterVersion, setClusterVersion] = useState("");
+  const [selectedCluster, setSelectedCluster] = useState<string | null>(null);
+  const { data: nodegroupsData, isLoading: nodegroupsLoading } = useEKSNodegroups(selectedCluster);
+  const createNodegroup = useEKSCreateNodegroup(selectedCluster || "");
+  const deleteNodegroup = useEKSDeleteNodegroup(selectedCluster || "");
+  const [showCreateNodegroup, setShowCreateNodegroup] = useState(false);
+  const [ngName, setNgName] = useState("");
+  const [ngNodeRole, setNgNodeRole] = useState("");
+  const [ngSubnets, setNgSubnets] = useState("");
+
+  if (clustersLoading) return <Spinner />;
+
+  return (
+    <Tabs
+      activeTabId={selectedCluster ? "nodegroups" : "clusters"}
+      onChange={({ detail }) => {
+        if (detail.activeTabId === "clusters") {
+          setSelectedCluster(null);
+        }
+      }}
+      tabs={[
+        {
+          id: "clusters",
+          label: "Clusters",
+          content: (
+            <>
+              {selectedCluster && (
+                <Box margin={{ bottom: "s" }}>
+                  <Button
+                    iconName="arrow-left"
+                    onClick={() => setSelectedCluster(null)}
+                  >
+                    Back to clusters
+                  </Button>
+                </Box>
+              )}
+              {!selectedCluster && (
+                <>
+                  <ResourceTable
+                    resourceName="Cluster"
+                    headerTitle="EKS Clusters"
+                    headerCounter={clustersData?.total}
+                    items={(clustersData?.clusters || []).map((c: any) => ({
+                      name: c.name,
+                      status: c.status,
+                      version: c.version || "-",
+                      endpoint: c.endpoint || "-",
+                      created: c.createdAt ? new Date(c.createdAt).toLocaleDateString() : "-",
+                    }))}
+                    loading={clustersLoading}
+                    onCreate={() => setShowCreateCluster(true)}
+                    emptyMessage="No EKS clusters"
+                    columns={[
+                      {
+                        id: "name",
+                        header: "Name",
+                        cell: (item: any) => (
+                          <Button
+                            variant="link"
+                            onClick={() => setSelectedCluster(item.name)}
+                          >
+                            {item.name}
+                          </Button>
+                        ),
+                        isRowHeader: true,
+                      },
+                      { id: "status", header: "Status", cell: (item: any) => item.status },
+                      { id: "version", header: "Version", cell: (item: any) => item.version },
+                      { id: "created", header: "Created", cell: (item: any) => item.created },
+                      {
+                        id: "actions",
+                        header: "",
+                        cell: (item: any) => (
+                          <DeleteButton
+                            itemName={item.name}
+                            resourceType="cluster"
+                            loading={deleteCluster.isPending && deleteCluster.variables === item.name}
+                            onDelete={() => deleteCluster.mutateAsync(item.name)}
+                          />
+                        ),
+                      },
+                    ]}
+                    filterEnabled
+                    filterPlaceholder="Find clusters by name"
+                    filterFunction={(item: any, searchText: string) =>
+                      item.name.toLowerCase().includes(searchText.toLowerCase())
+                    }
+                  />
+                  <Modal
+                    visible={showCreateCluster}
+                    onDismiss={() => setShowCreateCluster(false)}
+                    header="Create EKS cluster"
+                    footer={
+                      <Box float="right">
+                        <SpaceBetween direction="horizontal" size="xs">
+                          <Button variant="link" onClick={() => setShowCreateCluster(false)}>
+                            Cancel
+                          </Button>
+                          <Button
+                            variant="primary"
+                            onClick={() => {
+                              createCluster.mutate(
+                                {
+                                  name: clusterName,
+                                  roleArn: clusterRoleArn,
+                                  version: clusterVersion || undefined,
+                                },
+                                {
+                                  onSuccess: () => {
+                                    setShowCreateCluster(false);
+                                    setClusterName("");
+                                    setClusterRoleArn("");
+                                    setClusterVersion("");
+                                  },
+                                }
+                              );
+                            }}
+                            disabled={!clusterName || !clusterRoleArn}
+                            loading={createCluster.isPending}
+                          >
+                            Create
+                          </Button>
+                        </SpaceBetween>
+                      </Box>
+                    }
+                  >
+                    <Form>
+                      <FormField label="Cluster name">
+                        <Input
+                          value={clusterName}
+                          onChange={({ detail }) => setClusterName(detail.value)}
+                          placeholder="my-cluster"
+                        />
+                      </FormField>
+                      <FormField label="Role ARN">
+                        <Input
+                          value={clusterRoleArn}
+                          onChange={({ detail }) => setClusterRoleArn(detail.value)}
+                          placeholder="arn:aws:iam::123456789012:role/eks-role"
+                        />
+                      </FormField>
+                      <FormField label="Kubernetes version (optional)">
+                        <Input
+                          value={clusterVersion}
+                          onChange={({ detail }) => setClusterVersion(detail.value)}
+                          placeholder="1.27"
+                        />
+                      </FormField>
+                    </Form>
+                  </Modal>
+                </>
+              )}
+              {selectedCluster && (
+                <NodegroupsPanel
+                  clusterName={selectedCluster}
+                  nodegroupsData={nodegroupsData}
+                  nodegroupsLoading={nodegroupsLoading}
+                  createNodegroup={createNodegroup}
+                  deleteNodegroup={deleteNodegroup}
+                  showCreateNodegroup={showCreateNodegroup}
+                  setShowCreateNodegroup={setShowCreateNodegroup}
+                  ngName={ngName}
+                  setNgName={setNgName}
+                  ngNodeRole={ngNodeRole}
+                  setNgNodeRole={setNgNodeRole}
+                  ngSubnets={ngSubnets}
+                  setNgSubnets={setNgSubnets}
+                />
+              )}
+            </>
+          ),
+        },
+      ]}
+    />
+  );
+}
+
+function NodegroupsPanel({
+  clusterName,
+  nodegroupsData,
+  nodegroupsLoading,
+  createNodegroup,
+  deleteNodegroup,
+  showCreateNodegroup,
+  setShowCreateNodegroup,
+  ngName,
+  setNgName,
+  ngNodeRole,
+  setNgNodeRole,
+  ngSubnets,
+  setNgSubnets,
+}: {
+  clusterName: string;
+  nodegroupsData: any;
+  nodegroupsLoading: boolean;
+  createNodegroup: any;
+  deleteNodegroup: any;
+  showCreateNodegroup: boolean;
+  setShowCreateNodegroup: (v: boolean) => void;
+  ngName: string;
+  setNgName: (v: string) => void;
+  ngNodeRole: string;
+  setNgNodeRole: (v: string) => void;
+  ngSubnets: string;
+  setNgSubnets: (v: string) => void;
+}) {
+  return (
+    <>
+      <ResourceTable
+        resourceName="Node Group"
+        headerTitle={`Node Groups — ${clusterName}`}
+        headerCounter={nodegroupsData?.total}
+        items={(nodegroupsData?.nodegroups || []).map((ng: any) => ({
+          name: ng.nodegroupName,
+          status: ng.status,
+          version: ng.version || "-",
+          instanceTypes: (ng.instanceTypes || []).join(", ") || "-",
+          desired: ng.scalingConfig?.desiredSize ?? "-",
+          created: ng.createdAt ? new Date(ng.createdAt).toLocaleDateString() : "-",
+        }))}
+        loading={nodegroupsLoading}
+        onCreate={() => setShowCreateNodegroup(true)}
+        emptyMessage="No node groups"
+        columns={[
+          {
+            id: "name",
+            header: "Name",
+            cell: (item: any) => item.name,
+            isRowHeader: true,
+          },
+          { id: "status", header: "Status", cell: (item: any) => item.status },
+          { id: "version", header: "Version", cell: (item: any) => item.version },
+          { id: "instanceTypes", header: "Instance Types", cell: (item: any) => item.instanceTypes },
+          { id: "desired", header: "Desired", cell: (item: any) => item.desired },
+          {
+            id: "actions",
+            header: "",
+            cell: (item: any) => (
+              <DeleteButton
+                itemName={item.name}
+                resourceType="node group"
+                loading={deleteNodegroup.isPending && deleteNodegroup.variables === item.name}
+                onDelete={() => deleteNodegroup.mutateAsync(item.name)}
+              />
+            ),
+          },
+        ]}
+        filterEnabled
+        filterPlaceholder="Find node groups by name"
+        filterFunction={(item: any, searchText: string) =>
+          item.name.toLowerCase().includes(searchText.toLowerCase())
+        }
+      />
+      <Modal
+        visible={showCreateNodegroup}
+        onDismiss={() => setShowCreateNodegroup(false)}
+        header="Create node group"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreateNodegroup(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  createNodegroup.mutate(
+                    {
+                      nodegroupName: ngName,
+                      nodeRole: ngNodeRole,
+                      subnets: ngSubnets.split(",").map((s) => s.trim()).filter(Boolean),
+                    },
+                    {
+                      onSuccess: () => {
+                        setShowCreateNodegroup(false);
+                        setNgName("");
+                        setNgNodeRole("");
+                        setNgSubnets("");
+                      },
+                    }
+                  );
+                }}
+                disabled={!ngName || !ngNodeRole || !ngSubnets}
+                loading={createNodegroup.isPending}
+              >
+                Create
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          <FormField label="Node group name">
+            <Input
+              value={ngName}
+              onChange={({ detail }) => setNgName(detail.value)}
+              placeholder="my-nodegroup"
+            />
+          </FormField>
+          <FormField label="Node role ARN">
+            <Input
+              value={ngNodeRole}
+              onChange={({ detail }) => setNgNodeRole(detail.value)}
+              placeholder="arn:aws:iam::123456789012:role/eks-node-role"
+            />
+          </FormField>
+          <FormField label="Subnets (comma-separated)">
+            <Input
+              value={ngSubnets}
+              onChange={({ detail }) => setNgSubnets(detail.value)}
+              placeholder="subnet-12345678, subnet-87654321"
+            />
+          </FormField>
+        </Form>
+      </Modal>
+    </>
   );
 }
