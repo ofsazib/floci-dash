@@ -4,6 +4,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../test/helpers";
 import React from "react";
+import { MemoryRouter } from "react-router-dom";
 
 const mockCloudWatchMetrics = vi.fn();
 const mockPutMetricData = vi.fn();
@@ -29,6 +30,16 @@ vi.mock("../components/Toast", () => ({
 }));
 
 import CloudWatchPage from "./CloudWatchPage";
+
+function pageWrapper() {
+  const Wrapper = createWrapper();
+  return ({ children }: { children: React.ReactNode }) => (
+    <MemoryRouter>
+      <Wrapper>{children}</Wrapper>
+    </MemoryRouter>
+  );
+}
+
 describe("CloudWatchPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -40,20 +51,20 @@ describe("CloudWatchPage", () => {
   // ─── Render State Tests ─────────────────────────────────
 
   it("renders alarms tab by default", () => {
-    render(<CloudWatchPage />, { wrapper: createWrapper() });
-    expect(screen.getByText("CloudWatch")).toBeTruthy();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    expect(screen.getByRole("heading", { name: /CloudWatch/ })).toBeTruthy();
     expect(screen.getAllByText("Alarms").length).toBeGreaterThan(0);
     expect(screen.getAllByText("high-cpu").length).toBeGreaterThan(0);
   });
 
   it("shows empty alarms state", () => {
     mockCloudWatchAlarms.mockReturnValue({ data: { alarms: [] }, isLoading: false });
-    render(<CloudWatchPage />, { wrapper: createWrapper() });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
     expect(screen.getByText("No alarms")).toBeTruthy();
   });
 
   it("renders metrics tab", () => {
-    render(<CloudWatchPage />, { wrapper: createWrapper() });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
     expect(screen.getAllByText("Metrics").length).toBeGreaterThan(0);
   });
 
@@ -61,7 +72,7 @@ describe("CloudWatchPage", () => {
 
   it("opens create alarm modal when 'Create alarm' button is clicked", async () => {
     const user = userEvent.setup();
-    render(<CloudWatchPage />, { wrapper: createWrapper() });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
     await clickButton(user, /Create alarm/i);
     await waitFor(() => {
       expect(screen.getByPlaceholderText("CPUUtilization")).toBeTruthy();
@@ -70,7 +81,7 @@ describe("CloudWatchPage", () => {
 
   it("calls createAlarm when alarm form is submitted", async () => {
     const user = userEvent.setup();
-    render(<CloudWatchPage />, { wrapper: createWrapper() });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
     await clickButton(user, /Create alarm/i);
     await waitFor(() => {
       expect(screen.getByPlaceholderText("AWS/EC2")).toBeTruthy();
@@ -86,7 +97,7 @@ describe("CloudWatchPage", () => {
 
   it("switches to metrics tab and shows metric table", async () => {
     const user = userEvent.setup();
-    render(<CloudWatchPage />, { wrapper: createWrapper() });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
     const tabs = screen.getAllByText("Metrics");
     await user.click(tabs[tabs.length - 1]);
     await waitFor(() => {
@@ -96,20 +107,20 @@ describe("CloudWatchPage", () => {
 
   it("shows loading state for metrics", () => {
     mockCloudWatchMetrics.mockReturnValue({ data: undefined, isLoading: true, refetch: vi.fn() });
-    render(<CloudWatchPage />, { wrapper: createWrapper() });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
     // Just verify it doesn't crash
     expect(true).toBe(true);
   });
 
   it("shows empty metrics state", () => {
     mockCloudWatchMetrics.mockReturnValue({ data: { namespaces: [], metrics: [] }, isLoading: false, refetch: vi.fn() });
-    render(<CloudWatchPage />, { wrapper: createWrapper() });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
   });
 
   it("opens put metric modal and submits", async () => {
     const user = userEvent.setup();
     mockPutMetricData.mockResolvedValueOnce({});
-    render(<CloudWatchPage />, { wrapper: createWrapper() });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
     const tabs = screen.getAllByText("Metrics");
     await user.click(tabs[tabs.length - 1]);
     await waitFor(() => {
@@ -138,7 +149,7 @@ describe("CloudWatchPage", () => {
       },
       isLoading: false,
     });
-    render(<CloudWatchPage />, { wrapper: createWrapper() });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
     const tabs = screen.getAllByText("Metrics");
     await user.click(tabs[tabs.length - 1]);
     await waitFor(() => {
@@ -153,13 +164,13 @@ describe("CloudWatchPage", () => {
 
   it("filters alarms by state", async () => {
     const user = userEvent.setup();
-    render(<CloudWatchPage />, { wrapper: createWrapper() });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
     // The state filter Select is present
     expect(screen.getAllByText("high-cpu").length).toBeGreaterThan(0);
   });
 
   it("shows Set OK button for non-OK alarms", () => {
-    render(<CloudWatchPage />, { wrapper: createWrapper() });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
     expect(screen.getAllByText(/Set OK/i).length).toBeGreaterThan(0);
   });
 
@@ -168,7 +179,7 @@ describe("CloudWatchPage", () => {
       data: { alarms: [{ name: "ok-alarm", state: "OK", namespace: "AWS/EC2", metricName: "CPU", threshold: 80, comparisonOperator: "GreaterThanThreshold", period: 300, statistic: "Average" }] },
       isLoading: false,
     });
-    render(<CloudWatchPage />, { wrapper: createWrapper() });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
     expect(screen.queryByText(/Set OK/i)).toBeNull();
   });
 });

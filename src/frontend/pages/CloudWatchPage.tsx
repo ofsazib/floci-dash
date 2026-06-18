@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
+  BreadcrumbGroup,
   ContentLayout,
   Header,
   Box,
@@ -20,7 +22,9 @@ import {
   Textarea,
 } from "@cloudscape-design/components";
 import DeleteButton from "../components/DeleteButton";
+import StatusBadge from "../components/StatusBadge";
 import { useToast } from "../components/Toast";
+import { useHealth } from "../hooks/useSystem";
 import {
   useCloudWatchMetrics,
   usePutMetricData,
@@ -62,7 +66,7 @@ const ALARM_STATES: Record<string, "red" | "green" | "blue"> = {
 };
 
 function Sparkline({ values }: { values: number[] }) {
-  if (values.length === 0) return <span style={{ color: "#999" }}>-</span>;
+  if (values.length === 0) return <span className="fd-text-muted">-</span>;
   const max = Math.max(...values);
   const min = Math.min(...values);
   const range = max - min || 1;
@@ -72,7 +76,7 @@ function Sparkline({ values }: { values: number[] }) {
   const pts = values.map((v, i) => `${i * step},${h - ((v - min) / range) * h}`).join(" ");
   return (
     <svg width={w} height={h} style={{ verticalAlign: "middle" }}>
-      <polyline points={pts} fill="none" stroke="#0073bb" strokeWidth="1.5" />
+      <polyline points={pts} fill="none" stroke="var(--color-text-status-info, #0073bb)" strokeWidth="1.5" />
     </svg>
   );
 }
@@ -123,7 +127,7 @@ function MetricsTab() {
                 cell: (m: any) =>
                   selectedMetric?.namespace === m.namespace && selectedMetric?.metricName === m.metricName
                     ? <Sparkline values={sparkValues} />
-                    : <span style={{ color: "#999" }}>-</span>,
+                    : <span className="fd-text-muted">-</span>,
               },
             ]}
             items={metrics}
@@ -144,7 +148,7 @@ function MetricsTab() {
             <SpaceBetween size="m">
               <Box>
                 <Sparkline values={sparkValues} />
-                <span style={{ marginLeft: 8, fontSize: 13, color: "#666" }}>{datapoints.length} datapoints</span>
+                <span style={{ marginLeft: 8, fontSize: 13 }} className="fd-text-muted-subtle">{datapoints.length} datapoints</span>
               </Box>
               <Table
                 columnDefinitions={[
@@ -407,7 +411,12 @@ function CreateAlarmModal({ onClose, onSubmit }: {
 }
 
 export default function CloudWatchPage() {
+  const navigate = useNavigate();
+  const { data: health } = useHealth();
   const [activeTab, setActiveTab] = useState("alarms");
+
+  const cwStatus = health?.services?.cloudwatch;
+  const statusText = cwStatus === "running" ? "running" : cwStatus === "available" ? "available" : "connected";
 
   const tabs: TabsProps.Tab[] = [
     { id: "alarms", label: "Alarms", content: <AlarmsTab /> },
@@ -417,9 +426,18 @@ export default function CloudWatchPage() {
   return (
     <ContentLayout
       header={
-        <Header variant="h1" description="CloudWatch metrics and alarms">
-          CloudWatch
-        </Header>
+        <SpaceBetween size="xs">
+          <BreadcrumbGroup
+            items={[
+              { text: "Dashboard", href: "/#/" },
+              { text: "CloudWatch", href: "/#/services/cloudwatch" },
+            ]}
+            onFollow={(e) => { e.preventDefault(); navigate(e.detail.href.replace("/#", "")); }}
+          />
+          <Header variant="h1" description="CloudWatch metrics and alarms">
+            CloudWatch <StatusBadge status={statusText as any} />
+          </Header>
+        </SpaceBetween>
       }
     >
       <Tabs tabs={tabs} activeTabId={activeTab} onChange={({ detail }) => setActiveTab(detail.activeTabId)} />

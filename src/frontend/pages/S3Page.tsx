@@ -578,7 +578,7 @@ function S3ObjectBrowser({ bucket, selectedObject, onSelectObject, onBack, onUpl
                 <span style={{ fontSize: "0.85em" }}>
                   {breadcrumbItems.map((item, i) => (
                     <span key={i}>
-                      {i > 0 && <span style={{ margin: "0 4px", color: "#aab3b0" }}>/</span>}
+                      {i > 0 && <span style={{ margin: "0 4px" }} className="fd-text-muted">/</span>}
                       {item.prefix != null ? (
                         <Button variant="link" onClick={() => navigateToFolder(item.prefix!)}>
                           {item.text}

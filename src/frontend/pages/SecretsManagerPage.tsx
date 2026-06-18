@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
+  BreadcrumbGroup,
   ContentLayout,
   Header,
   Box,
@@ -19,7 +21,9 @@ import {
   type TabsProps,
 } from "@cloudscape-design/components";
 import DeleteButton from "../components/DeleteButton";
+import StatusBadge from "../components/StatusBadge";
 import { useToast } from "../components/Toast";
+import { useHealth } from "../hooks/useSystem";
 import {
   useSecrets,
   useSecret,
@@ -244,7 +248,7 @@ function SecretDetailModal({ secretId, onClose }: { secretId: string; onClose: (
                   </Box>
                   <Box>
                     {showValue ? (
-                      <pre style={{ fontSize: 13, background: "#f5f5f5", padding: 12, borderRadius: 4, overflow: "auto", maxHeight: 300 }}>
+                      <pre className="fd-code-bg" style={{ fontSize: 13, padding: 12, borderRadius: 4, overflow: "auto", maxHeight: 300 }}>
                         {valueQuery.data?.secretString || "(binary)"}
                       </pre>
                     ) : (
@@ -325,12 +329,27 @@ function SecretDetailModal({ secretId, onClose }: { secretId: string; onClose: (
 }
 
 export default function SecretsManagerPage() {
+  const navigate = useNavigate();
+  const { data: health } = useHealth();
+
+  const smStatus = health?.services?.secretsmanager;
+  const statusText = smStatus === "running" ? "running" : smStatus === "available" ? "available" : "connected";
+
   return (
     <ContentLayout
       header={
-        <Header variant="h1" description="Store, manage, and retrieve secrets">
-          Secrets Manager
-        </Header>
+        <SpaceBetween size="xs">
+          <BreadcrumbGroup
+            items={[
+              { text: "Dashboard", href: "/#/" },
+              { text: "Secrets Manager", href: "/#/services/secretsmanager" },
+            ]}
+            onFollow={(e) => { e.preventDefault(); navigate(e.detail.href.replace("/#", "")); }}
+          />
+          <Header variant="h1" description="Store, manage, and retrieve secrets">
+            Secrets Manager <StatusBadge status={statusText as any} />
+          </Header>
+        </SpaceBetween>
       }
     >
       <SecretsPage />

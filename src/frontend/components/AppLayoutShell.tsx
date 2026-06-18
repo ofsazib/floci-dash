@@ -76,14 +76,8 @@ const SERVICE_CATEGORY_MAP: Record<string, string> = {
 function ActiveDot() {
   return (
     <span
-      style={{
-        display: "inline-block",
-        width: "6px",
-        height: "6px",
-        borderRadius: "50%",
-        backgroundColor: "#037f0c",
-        flexShrink: 0,
-      }}
+      className="fd-dot-success"
+      style={{ display: "inline-block", width: "6px", height: "6px" }}
     />
   );
 }
@@ -231,16 +225,7 @@ export default function AppLayoutShell({ children }: Props) {
                 fontSize: "12px",
               }}
             >
-              <span
-                style={{
-                  width: "8px",
-                  height: "8px",
-                  borderRadius: "50%",
-                  flexShrink: 0,
-                  backgroundColor: allHealthy ? "#037f0c" : "#d89914",
-                  boxShadow: allHealthy ? "0 0 6px #037f0c66" : "0 0 6px #d8991466",
-                }}
-              />
+              <span className={allHealthy ? "fd-dot-success" : "fd-dot-warning"} />
               {running} / {total} services running
             </div>
             <SideNavigation

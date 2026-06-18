@@ -47,7 +47,7 @@ export function useConfirmDialog() {
               {state.options.dismissText || "Cancel"}
             </Button>
             <Button
-              variant={state.options.variant === "danger" ? "primary" : "primary"}
+              variant="primary"
               onClick={handleConfirm}
             >
               {state.options.confirmText || "Confirm"}

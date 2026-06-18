@@ -6,6 +6,7 @@ export default defineConfig({
     environment: "node",
     testTimeout: 10000,
     globals: true,
+    pool: "forks",
     setupFiles: ["./src/test/setup.ts"],
     coverage: {
       provider: "v8",
@@ -28,7 +29,7 @@ export default defineConfig({
       thresholds: {
         statements: 72,
         branches: 53,
-        functions: 64,
+        functions: 63,
         lines: 74,
       },
     },

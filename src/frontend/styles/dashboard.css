@@ -93,6 +93,51 @@
   overflow: auto;
 }
 
+.fd-code-bg {
+  background: var(--color-background-container-secondary, #f2f3f3);
+}
+
+.awsui-dark-mode .fd-code-bg {
+  background: var(--color-background-container-secondary, #1a1d21);
+}
+
+/* Subtle muted text (below body-secondary contrast, for labels and metadata) */
+.fd-text-muted-subtle {
+  color: var(--color-text-status-inactive, #687078);
+}
+
+.awsui-dark-mode .fd-text-muted-subtle {
+  color: var(--color-text-status-inactive, #879596);
+}
+
+/* Status dot (used in sidebar health, active service indicators) */
+.fd-dot-success {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background-color: var(--color-text-status-success, #037f0c);
+  box-shadow: 0 0 6px var(--color-text-status-success, #037f0c66);
+}
+
+.fd-dot-warning {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background-color: var(--color-text-status-warning, #d89914);
+  box-shadow: 0 0 6px var(--color-text-status-warning, #d8991466);
+}
+
+.fd-dot-error {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background-color: var(--color-text-status-error, #d13212);
+  box-shadow: 0 0 6px var(--color-text-status-error, #d1321266);
+}
+
 /* Skeleton loading */
 .fd-skeleton {
   background: var(--color-skeleton-row, linear-gradient(90deg, #e9ebed 25%, #f2f3f3 50%, #e9ebed 75%));

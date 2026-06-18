@@ -4,6 +4,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../test/helpers";
 import React from "react";
+import { MemoryRouter } from "react-router-dom";
 
 const mockStacks = vi.fn();
 const mockStack = vi.fn();
@@ -28,12 +29,25 @@ vi.mock("../components/Toast", () => ({
   ToastProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
-vi.mock("react-router-dom", () => ({
-  useNavigate: () => vi.fn(),
-  useSearchParams: () => [new URLSearchParams(), vi.fn()],
-}));
+vi.mock("react-router-dom", async () => {
+  const actual = await import("react-router-dom");
+  return {
+    ...actual,
+    useNavigate: () => vi.fn(),
+    useSearchParams: () => [new URLSearchParams(), vi.fn()],
+  };
+});
 
 import CloudFormationPage from "./CloudFormationPage";
+
+function pageWrapper() {
+  const Wrapper = createWrapper();
+  return ({ children }: { children: React.ReactNode }) => (
+    <MemoryRouter>
+      <Wrapper>{children}</Wrapper>
+    </MemoryRouter>
+  );
+}
 
 describe("CloudFormationPage", () => {
   beforeEach(() => {
@@ -48,38 +62,38 @@ describe("CloudFormationPage", () => {
   });
 
   it("renders stack list", () => {
-    render(<CloudFormationPage />, { wrapper: createWrapper() });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
     expect(screen.getAllByText("Stacks").length).toBeGreaterThan(0);
     expect(screen.getAllByText("my-stack").length).toBeGreaterThan(0);
     expect(screen.getAllByText("CREATE_COMPLETE").length).toBeGreaterThan(0);
   });
 
   it("shows create stack button", () => {
-    render(<CloudFormationPage />, { wrapper: createWrapper() });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
     expect(screen.getByRole("button", { name: /Create stack/i })).toBeTruthy();
   });
 
   it("renders empty stack list when no data", () => {
     mockStacks.mockReturnValue({ data: { stacks: [], total: 0 }, isLoading: false, isError: false, error: null });
-    render(<CloudFormationPage />, { wrapper: createWrapper() });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
     expect(screen.getByText("No stacks")).toBeTruthy();
   });
 
   it("shows loading state", () => {
     mockStacks.mockReturnValue({ data: undefined, isLoading: true, isError: false, error: null });
-    render(<CloudFormationPage />, { wrapper: createWrapper() });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
     expect(screen.getByRole("heading", { name: /Stacks/i, level: 2 })).toBeTruthy();
   });
 
   it("renders without crashing in error state", () => {
     mockStacks.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: new Error("Failed to load stacks") });
-    render(<CloudFormationPage />, { wrapper: createWrapper() });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
     expect(screen.getByRole("heading", { name: /Stacks/i, level: 2 })).toBeTruthy();
   });
 
   it("opens create stack modal when Create stack is clicked", async () => {
     const user = userEvent.setup();
-    render(<CloudFormationPage />, { wrapper: createWrapper() });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
     await clickButton(user, /Create stack/i);
     await waitFor(() => {
       expect(screen.getByPlaceholderText("my-stack")).toBeTruthy();
@@ -89,7 +103,7 @@ describe("CloudFormationPage", () => {
   it("creates a stack via modal", async () => {
     mockCreateStack.mockResolvedValue(undefined);
     const user = userEvent.setup();
-    render(<CloudFormationPage />, { wrapper: createWrapper() });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
     await clickButton(user, /Create stack/i);
     await waitFor(() => {
       expect(screen.getByPlaceholderText("my-stack")).toBeTruthy();
@@ -104,7 +118,7 @@ describe("CloudFormationPage", () => {
   it("validates template in create modal", async () => {
     mockValidateTemplate.mockResolvedValue({ parameters: [] });
     const user = userEvent.setup();
-    render(<CloudFormationPage />, { wrapper: createWrapper() });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
     await clickButton(user, /Create stack/i);
     await waitFor(() => {
       expect(screen.getByPlaceholderText("my-stack")).toBeTruthy();
@@ -121,7 +135,7 @@ describe("CloudFormationPage", () => {
       data: { stack: { stackId: "arn:aws:cloudformation:us-east-1:123:stack/my-stack/abc", status: "CREATE_COMPLETE", creationTime: new Date("2025-01-01"), outputs: [], parameters: [], tags: [] }, resources: [], events: [] },
       isLoading: false, isError: false, error: null,
     });
-    render(<CloudFormationPage />, { wrapper: createWrapper() });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
     await clickButton(user, /View/i);
     await waitFor(() => {
       expect(screen.getAllByText(/Stack: my-stack/i).length).toBeGreaterThan(0);
@@ -138,7 +152,7 @@ describe("CloudFormationPage", () => {
       },
       isLoading: false, isError: false, error: null,
     });
-    render(<CloudFormationPage />, { wrapper: createWrapper() });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
     await clickButton(user, /View/i);
     await waitFor(() => {
       expect(screen.getByText(/Stack ID:/i)).toBeTruthy();
@@ -158,7 +172,7 @@ describe("CloudFormationPage", () => {
       },
       isLoading: false, isError: false, error: null,
     });
-    render(<CloudFormationPage />, { wrapper: createWrapper() });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
     await clickButton(user, /View/i);
     await waitFor(() => {
       expect(screen.getByText("No tags")).toBeTruthy();
@@ -175,7 +189,7 @@ describe("CloudFormationPage", () => {
       },
       isLoading: false, isError: false, error: null,
     });
-    render(<CloudFormationPage />, { wrapper: createWrapper() });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
     await clickButton(user, /View/i);
     await waitFor(() => {
       expect(screen.getByText(/Stack: my-stack/i)).toBeTruthy();
@@ -197,7 +211,7 @@ describe("CloudFormationPage", () => {
       },
       isLoading: false, isError: false, error: null,
     });
-    render(<CloudFormationPage />, { wrapper: createWrapper() });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
     await clickButton(user, /View/i);
     await waitFor(() => {
       expect(screen.getByText(/Stack: my-stack/i)).toBeTruthy();
@@ -219,7 +233,7 @@ describe("CloudFormationPage", () => {
       isLoading: false, isError: false, error: null,
     });
     mockStackTemplate.mockReturnValue({ data: { template: "AWSTemplateFormatVersion: '2010-09-09'" }, isLoading: false, isError: false, error: null });
-    render(<CloudFormationPage />, { wrapper: createWrapper() });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
     await clickButton(user, /View/i);
     await waitFor(() => {
       expect(screen.getByText(/Stack: my-stack/i)).toBeTruthy();
@@ -232,7 +246,7 @@ describe("CloudFormationPage", () => {
 
   it("shows stack not found when detail has no stack", async () => {
     const user = userEvent.setup();
-    render(<CloudFormationPage />, { wrapper: createWrapper() });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
     await clickButton(user, /View/i);
     await waitFor(() => {
       expect(screen.getByText("Stack not found")).toBeTruthy();
@@ -242,7 +256,7 @@ describe("CloudFormationPage", () => {
   it("deletes a stack via delete button", async () => {
     mockDeleteStack.mockResolvedValue(undefined);
     const user = userEvent.setup();
-    render(<CloudFormationPage />, { wrapper: createWrapper() });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
     await user.click(screen.getByRole("button", { name: /Delete my-stack/i }));
     await waitFor(() => {
       expect(screen.getByText(/Are you sure/i)).toBeTruthy();
@@ -259,7 +273,7 @@ describe("CloudFormationPage", () => {
       isLoading: false, isError: false, error: null,
     });
     const user = userEvent.setup();
-    render(<CloudFormationPage />, { wrapper: createWrapper() });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
     await user.click(screen.getByRole("tab", { name: /Exports/i }));
     await waitFor(() => {
       expect(screen.getByText("my-export")).toBeTruthy();
@@ -269,7 +283,7 @@ describe("CloudFormationPage", () => {
 
   it("shows empty exports state", async () => {
     const user = userEvent.setup();
-    render(<CloudFormationPage />, { wrapper: createWrapper() });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
     await user.click(screen.getByRole("tab", { name: /Exports/i }));
     await waitFor(() => {
       expect(screen.getByText("No exports")).toBeTruthy();
@@ -279,7 +293,7 @@ describe("CloudFormationPage", () => {
   it("shows loading state for exports tab", async () => {
     mockExports.mockReturnValue({ data: undefined, isLoading: true, isError: false, error: null });
     const user = userEvent.setup();
-    render(<CloudFormationPage />, { wrapper: createWrapper() });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
     await user.click(screen.getByRole("tab", { name: /Exports/i }));
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: /Exports/i, level: 2 })).toBeTruthy();

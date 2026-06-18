@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
+  BreadcrumbGroup,
   ContentLayout,
   Header,
   Box,
@@ -21,7 +23,9 @@ import {
   Alert,
 } from "@cloudscape-design/components";
 import DeleteButton from "../components/DeleteButton";
+import StatusBadge from "../components/StatusBadge";
 import { useToast } from "../components/Toast";
+import { useHealth } from "../hooks/useSystem";
 import {
   useKMSKeys,
   useKMSKey,
@@ -132,10 +136,12 @@ function CreateKeyModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: 
 
   return (
     <Modal visible={true} onDismiss={onClose} header="Create key" footer={
-      <SpaceBetween direction="horizontal" size="xs">
-        <Button onClick={onClose}>Cancel</Button>
-        <Button variant="primary" onClick={() => onSubmit({ description, keyUsage: keyUsage.value, keySpec: keySpec.value })}>Create</Button>
-      </SpaceBetween>
+      <Box float="right">
+        <SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={onClose}>Cancel</Button>
+          <Button variant="primary" onClick={() => onSubmit({ description, keyUsage: keyUsage.value, keySpec: keySpec.value })}>Create</Button>
+        </SpaceBetween>
+      </Box>
     }>
       <Form>
         <SpaceBetween size="m">
@@ -194,7 +200,7 @@ function KeyDetailModal({ keyId, onClose }: { keyId: string; onClose: () => void
             <div><b>Origin:</b> {k.origin}</div>
             <div><b>Manager:</b> <Badge color={k.keyManager === "AWS" ? "blue" : "green"}>{k.keyManager}</Badge></div>
             <div><b>Created:</b> {k.creationDate ? new Date(k.creationDate).toLocaleString() : "-"}</div>
-            {k.deletionDate && <div><b>Deletion date:</b> <span style={{ color: "red" }}>{new Date(k.deletionDate).toLocaleString()}</span></div>}
+            {k.deletionDate && <div><b>Deletion date:</b> <span style={{ color: "var(--color-text-status-error)" }}>{new Date(k.deletionDate).toLocaleString()}</span></div>}
             <div><b>Multi-Region:</b> {k.multiRegion ? "Yes" : "No"}</div>
             <div><b>Rotation:</b> {rotationEnabled ? <Badge color="green">Enabled</Badge> : <Badge color="grey">Off</Badge>}</div>
           </ColumnLayout>
@@ -267,7 +273,7 @@ function KeyDetailModal({ keyId, onClose }: { keyId: string; onClose: () => void
             {editDesc ? (
               <Input value={newDesc} onChange={({ detail }) => setNewDesc(detail.value)} />
             ) : (
-              <Box>{k.description || <span style={{ color: "#999" }}>No description</span>}</Box>
+              <Box>{k.description || <span className="fd-text-muted">No description</span>}</Box>
             )}
           </Container>
 
@@ -452,15 +458,17 @@ function CreateAliasModal({ onClose }: { onClose: () => void }) {
 
   return (
     <Modal visible={true} onDismiss={onClose} header="Create alias" footer={
-      <SpaceBetween direction="horizontal" size="xs">
-        <Button onClick={onClose}>Cancel</Button>
-        <Button variant="primary" onClick={() => {
-          createAlias.mutate({ aliasName, targetKeyId }, {
-            onSuccess: () => { showToast("success", "Alias created"); onClose(); },
-            onError: (e: any) => showToast("error", e.message),
-          });
-        }}>Create</Button>
-      </SpaceBetween>
+      <Box float="right">
+        <SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={onClose}>Cancel</Button>
+          <Button variant="primary" onClick={() => {
+            createAlias.mutate({ aliasName, targetKeyId }, {
+              onSuccess: () => { showToast("success", "Alias created"); onClose(); },
+              onError: (e: any) => showToast("error", e.message),
+            });
+          }}>Create</Button>
+        </SpaceBetween>
+      </Box>
     }>
       <Form>
         <SpaceBetween size="m">
@@ -477,7 +485,12 @@ function CreateAliasModal({ onClose }: { onClose: () => void }) {
 }
 
 export default function KMSPage() {
+  const navigate = useNavigate();
+  const { data: health } = useHealth();
   const [activeTab, setActiveTab] = useState("keys");
+
+  const kmsStatus = health?.services?.kms;
+  const statusText = kmsStatus === "running" ? "running" : kmsStatus === "available" ? "available" : "connected";
 
   const tabs: TabsProps.Tab[] = [
     { id: "keys", label: "Keys", content: <KeysTab /> },
@@ -487,9 +500,18 @@ export default function KMSPage() {
   return (
     <ContentLayout
       header={
-        <Header variant="h1" description="Create and manage KMS keys, aliases, and grants">
-          KMS
-        </Header>
+        <SpaceBetween size="xs">
+          <BreadcrumbGroup
+            items={[
+              { text: "Dashboard", href: "/#/" },
+              { text: "KMS", href: "/#/services/kms" },
+            ]}
+            onFollow={(e) => { e.preventDefault(); navigate(e.detail.href.replace("/#", "")); }}
+          />
+          <Header variant="h1" description="Create and manage KMS keys, aliases, and grants">
+            KMS <StatusBadge status={statusText as any} />
+          </Header>
+        </SpaceBetween>
       }
     >
       <Tabs tabs={tabs} activeTabId={activeTab} onChange={({ detail }) => setActiveTab(detail.activeTabId)} />

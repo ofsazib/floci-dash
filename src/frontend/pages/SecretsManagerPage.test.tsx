@@ -4,6 +4,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../test/helpers";
 import React from "react";
+import { MemoryRouter } from "react-router-dom";
 
 const mockSecrets = vi.fn();
 const mockSecret = vi.fn();
@@ -30,12 +31,25 @@ vi.mock("../components/Toast", () => ({
   ToastProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
-vi.mock("react-router-dom", () => ({
-  useNavigate: () => vi.fn(),
-  useSearchParams: () => [new URLSearchParams(), vi.fn()],
-}));
+vi.mock("react-router-dom", async () => {
+  const actual = await import("react-router-dom");
+  return {
+    ...actual,
+    useNavigate: () => vi.fn(),
+    useSearchParams: () => [new URLSearchParams(), vi.fn()],
+  };
+});
 
 import SecretsManagerPage from "./SecretsManagerPage";
+
+function pageWrapper() {
+  const Wrapper = createWrapper();
+  return ({ children }: { children: React.ReactNode }) => (
+    <MemoryRouter>
+      <Wrapper>{children}</Wrapper>
+    </MemoryRouter>
+  );
+}
 
 const defaultSecret = {
   name: "my-secret",
@@ -70,7 +84,7 @@ describe("SecretsManagerPage", () => {
   });
 
   it("renders secret list", () => {
-    render(<SecretsManagerPage />, { wrapper: createWrapper() });
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
     expect(screen.getAllByText("Secrets Manager").length).toBeGreaterThan(0);
     expect(screen.getAllByText("my-secret").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Test secret").length).toBeGreaterThan(0);
@@ -79,30 +93,30 @@ describe("SecretsManagerPage", () => {
 
   it("renders empty state when no secrets", () => {
     mockSecrets.mockReturnValue({ data: { secrets: [], total: 0 }, isLoading: false, isError: false, error: null });
-    render(<SecretsManagerPage />, { wrapper: createWrapper() });
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
     expect(screen.getByRole("heading", { name: /Secrets Manager/i, level: 1 })).toBeTruthy();
     expect(screen.getByText("No secrets")).toBeTruthy();
   });
 
   it("shows loading state", () => {
     mockSecrets.mockReturnValue({ data: undefined, isLoading: true, isError: false, error: null });
-    render(<SecretsManagerPage />, { wrapper: createWrapper() });
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
     expect(screen.getByRole("heading", { name: /Secrets Manager/i, level: 1 })).toBeTruthy();
   });
 
   it("renders without crashing in error state", () => {
     mockSecrets.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: new Error("Failed to load secrets") });
-    render(<SecretsManagerPage />, { wrapper: createWrapper() });
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
     expect(screen.getByRole("heading", { name: /Secrets Manager/i, level: 1 })).toBeTruthy();
   });
 
   it("shows create secret button", () => {
-    render(<SecretsManagerPage />, { wrapper: createWrapper() });
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
     expect(screen.getByRole("button", { name: /Create secret/i })).toBeTruthy();
   });
 
   it("renders rotation badge when enabled", () => {
-    render(<SecretsManagerPage />, { wrapper: createWrapper() });
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
     expect(screen.getByText("Enabled")).toBeTruthy();
   });
 
@@ -111,12 +125,12 @@ describe("SecretsManagerPage", () => {
       data: { secrets: [{ ...defaultSecret, rotationEnabled: false }], total: 1 },
       isLoading: false, isError: false, error: null,
     });
-    render(<SecretsManagerPage />, { wrapper: createWrapper() });
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
     expect(screen.getByText("Off")).toBeTruthy();
   });
 
   it("renders tags in the table", () => {
-    render(<SecretsManagerPage />, { wrapper: createWrapper() });
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
     expect(screen.getByText("env")).toBeTruthy();
   });
 
@@ -125,13 +139,13 @@ describe("SecretsManagerPage", () => {
       data: { secrets: [{ ...defaultSecret, description: undefined }], total: 1 },
       isLoading: false, isError: false, error: null,
     });
-    render(<SecretsManagerPage />, { wrapper: createWrapper() });
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
     expect(screen.getAllByText("-").length).toBeGreaterThan(0);
   });
 
   it("opens create modal when Create secret is clicked", async () => {
     const user = userEvent.setup();
-    render(<SecretsManagerPage />, { wrapper: createWrapper() });
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
     await clickButton(user, /Create secret/i);
     await waitFor(() => {
       expect(screen.getAllByPlaceholderText("my-app/db-password").length).toBeGreaterThan(0);
@@ -140,7 +154,7 @@ describe("SecretsManagerPage", () => {
 
   it("create modal generates random password", async () => {
     const user = userEvent.setup();
-    render(<SecretsManagerPage />, { wrapper: createWrapper() });
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
     await clickButton(user, /Create secret/i);
     await waitFor(() => {
       expect(screen.getAllByText("Generate password").length).toBeGreaterThan(0);
@@ -153,7 +167,7 @@ describe("SecretsManagerPage", () => {
 
   it("opens detail modal when View is clicked", async () => {
     const user = userEvent.setup();
-    render(<SecretsManagerPage />, { wrapper: createWrapper() });
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
     await clickButton(user, /View/i);
     await waitFor(() => {
       expect(screen.getAllByText(/Secret: my-secret/i).length).toBeGreaterThan(0);
@@ -162,7 +176,7 @@ describe("SecretsManagerPage", () => {
 
   it("detail modal shows overview tab with secret info", async () => {
     const user = userEvent.setup();
-    render(<SecretsManagerPage />, { wrapper: createWrapper() });
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
     await clickButton(user, /View/i);
     await waitFor(() => {
       expect(screen.getAllByText("arn:aws:secretsmanager:us-east-1::secret:my-secret").length).toBeGreaterThan(0);
@@ -171,7 +185,7 @@ describe("SecretsManagerPage", () => {
 
   it("detail modal shows secret value tab with reveal/hide", async () => {
     const user = userEvent.setup();
-    render(<SecretsManagerPage />, { wrapper: createWrapper() });
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
     await clickButton(user, /View/i);
     await waitFor(() => {
       expect(screen.getAllByText(/Secret: my-secret/i).length).toBeGreaterThan(0);
@@ -190,7 +204,7 @@ describe("SecretsManagerPage", () => {
 
   it("detail modal puts new secret value", async () => {
     const user = userEvent.setup();
-    render(<SecretsManagerPage />, { wrapper: createWrapper() });
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
     await clickButton(user, /View/i);
     await waitFor(() => {
       expect(screen.getAllByText(/Secret: my-secret/i).length).toBeGreaterThan(0);
@@ -210,7 +224,7 @@ describe("SecretsManagerPage", () => {
 
   it("detail modal shows versions tab", async () => {
     const user = userEvent.setup();
-    render(<SecretsManagerPage />, { wrapper: createWrapper() });
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
     await clickButton(user, /View/i);
     await waitFor(() => {
       expect(screen.getAllByText(/Secret: my-secret/i).length).toBeGreaterThan(0);
@@ -223,7 +237,7 @@ describe("SecretsManagerPage", () => {
 
   it("detail modal shows tags tab", async () => {
     const user = userEvent.setup();
-    render(<SecretsManagerPage />, { wrapper: createWrapper() });
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
     await clickButton(user, /View/i);
     await waitFor(() => {
       expect(screen.getAllByText(/Secret: my-secret/i).length).toBeGreaterThan(0);
@@ -239,7 +253,7 @@ describe("SecretsManagerPage", () => {
       data: { secrets: [{ ...defaultSecret, deletedDate: new Date("2025-06-15") }], total: 1 },
       isLoading: false, isError: false, error: null,
     });
-    render(<SecretsManagerPage />, { wrapper: createWrapper() });
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
     expect(screen.getAllByRole("button", { name: /Restore/i }).length).toBeGreaterThan(0);
   });
 
@@ -249,7 +263,7 @@ describe("SecretsManagerPage", () => {
       data: { secrets: [{ ...defaultSecret, deletedDate: new Date("2025-06-15") }], total: 1 },
       isLoading: false, isError: false, error: null,
     });
-    render(<SecretsManagerPage />, { wrapper: createWrapper() });
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
     await clickButton(user, /Restore/i);
     await waitFor(() => {
       expect(mockRestoreSecret).toHaveBeenCalledWith("my-secret");
@@ -258,7 +272,7 @@ describe("SecretsManagerPage", () => {
 
   it("deletes a secret via DeleteButton", async () => {
     const user = userEvent.setup();
-    render(<SecretsManagerPage />, { wrapper: createWrapper() });
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
     const deleteButton = screen.getByRole("button", { name: /Delete my-secret/i });
     await user.click(deleteButton);
     await waitFor(() => {

@@ -4129,8 +4129,8 @@ function CloudWatchLogStreamDetail({
         style={{
           maxHeight: "600px",
           overflowY: "auto",
-          backgroundColor: "var(--color-background-container-content, #0f1b2a)",
-          border: "1px solid var(--color-border-divider-default, #2a3a4a)",
+          backgroundColor: "var(--color-background-container-content, #ffffff)",
+          border: "1px solid var(--color-border-divider-default, #e9ebed)",
           borderRadius: "4px",
           fontFamily: "'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace",
           fontSize: "12px",
@@ -4156,7 +4156,7 @@ function CloudWatchLogStreamDetail({
           >
             <span
               style={{
-                color: "var(--color-text-link-default, #44b9d6)",
+                color: "var(--color-text-link-default, #0073bb)",
                 minWidth: "140px",
                 flexShrink: 0,
                 userSelect: "none",
@@ -4170,7 +4170,7 @@ function CloudWatchLogStreamDetail({
               style={{
                 whiteSpace: "pre-wrap",
                 wordBreak: "break-all",
-                color: "var(--color-text-body-default, #d5dbdb)",
+                color: "var(--color-text-body-default, #16191f)",
               }}
             >
               {event.message}

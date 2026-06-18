@@ -4,6 +4,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../test/helpers";
 import React from "react";
+import { MemoryRouter } from "react-router-dom";
 
 const mockKeys = vi.fn();
 const mockKeyDetail = vi.fn();
@@ -40,12 +41,25 @@ vi.mock("../components/Toast", () => ({
   ToastProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
-vi.mock("react-router-dom", () => ({
-  useNavigate: () => vi.fn(),
-  useSearchParams: () => [new URLSearchParams(), vi.fn()],
-}));
+vi.mock("react-router-dom", async () => {
+  const actual = await import("react-router-dom");
+  return {
+    ...actual,
+    useNavigate: () => vi.fn(),
+    useSearchParams: () => [new URLSearchParams(), vi.fn()],
+  };
+});
 
 import KMSPage from "./KMSPage";
+
+function pageWrapper() {
+  const Wrapper = createWrapper();
+  return ({ children }: { children: React.ReactNode }) => (
+    <MemoryRouter>
+      <Wrapper>{children}</Wrapper>
+    </MemoryRouter>
+  );
+}
 
 describe("KMSPage", () => {
   beforeEach(() => {
@@ -65,37 +79,37 @@ describe("KMSPage", () => {
   });
 
   it("renders key list", () => {
-    render(<KMSPage />, { wrapper: createWrapper() });
+    render(<KMSPage />, { wrapper: pageWrapper() });
     expect(screen.getAllByText("KMS").length).toBeGreaterThan(0);
     expect(screen.getAllByText("1234-abcd").length).toBeGreaterThan(0);
   });
 
   it("renders empty key list when no data", () => {
     mockKeys.mockReturnValue({ data: { keys: [], total: 0 }, isLoading: false, isError: false, error: null });
-    render(<KMSPage />, { wrapper: createWrapper() });
+    render(<KMSPage />, { wrapper: pageWrapper() });
     expect(screen.getByRole("heading", { name: /KMS Keys/i, level: 2 })).toBeTruthy();
   });
 
   it("shows create key button", () => {
-    render(<KMSPage />, { wrapper: createWrapper() });
+    render(<KMSPage />, { wrapper: pageWrapper() });
     expect(screen.getByRole("button", { name: /Create key/i })).toBeTruthy();
   });
 
   it("shows loading state", () => {
     mockKeys.mockReturnValue({ data: undefined, isLoading: true, isError: false, error: null });
-    render(<KMSPage />, { wrapper: createWrapper() });
+    render(<KMSPage />, { wrapper: pageWrapper() });
     expect(screen.getByRole("heading", { name: /KMS Keys/i, level: 2 })).toBeTruthy();
   });
 
   it("renders without crashing in error state", () => {
     mockKeys.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: new Error("Failed to load keys") });
-    render(<KMSPage />, { wrapper: createWrapper() });
+    render(<KMSPage />, { wrapper: pageWrapper() });
     expect(screen.getByRole("heading", { name: /KMS Keys/i, level: 2 })).toBeTruthy();
   });
 
   it("opens key detail modal when View is clicked", async () => {
     const user = userEvent.setup();
-    render(<KMSPage />, { wrapper: createWrapper() });
+    render(<KMSPage />, { wrapper: pageWrapper() });
     await clickButton(user, /View/i);
     await waitFor(() => {
       expect(screen.getAllByText(/KMS Key:/i).length).toBeGreaterThan(0);
@@ -104,7 +118,7 @@ describe("KMSPage", () => {
 
   it("renders aliases tab with alias data", async () => {
     const user = userEvent.setup();
-    render(<KMSPage />, { wrapper: createWrapper() });
+    render(<KMSPage />, { wrapper: pageWrapper() });
     await user.click(screen.getByRole("tab", { name: /Aliases/i }));
     await waitFor(() => {
       expect(screen.getAllByText("alias/my-key").length).toBeGreaterThan(0);
@@ -113,7 +127,7 @@ describe("KMSPage", () => {
 
   it("opens create key modal when Create key is clicked", async () => {
     const user = userEvent.setup();
-    render(<KMSPage />, { wrapper: createWrapper() });
+    render(<KMSPage />, { wrapper: pageWrapper() });
     await clickButton(user, /Create key/i);
     await waitFor(() => {
       expect(screen.getAllByPlaceholderText("My encryption key").length).toBeGreaterThan(0);
@@ -126,7 +140,7 @@ describe("KMSPage", () => {
       data: { key: { keyId: "1234-abcd", keyState: "Disabled", description: "My key" }, tags: {}, aliases: [], grants: [], rotationEnabled: false },
       isLoading: false, isError: false, error: null,
     });
-    render(<KMSPage />, { wrapper: createWrapper() });
+    render(<KMSPage />, { wrapper: pageWrapper() });
     await clickButton(user, /View/i);
     await waitFor(() => {
       expect(screen.getAllByRole("button", { name: /Enable/i }).length).toBeGreaterThan(0);

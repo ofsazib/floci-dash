@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
+  BreadcrumbGroup,
   ContentLayout,
   Header,
   Box,
@@ -21,7 +23,9 @@ import {
   Alert,
 } from "@cloudscape-design/components";
 import DeleteButton from "../components/DeleteButton";
+import StatusBadge from "../components/StatusBadge";
 import { useToast } from "../components/Toast";
+import { useHealth } from "../hooks/useSystem";
 import {
   useIAMUsers,
   useIAMUser,
@@ -70,7 +74,7 @@ function UsersTab() {
         }
         columnDefinitions={[
           { id: "name", header: "User name", cell: (u: any) => u.name },
-          { id: "arn", header: "ARN", cell: (u: any) => <span style={{ fontSize: 12, color: "#888" }}>{u.arn}</span> },
+          { id: "arn", header: "ARN", cell: (u: any) => <span style={{ fontSize: 12 }} className="fd-text-muted">{u.arn}</span> },
           { id: "created", header: "Created", cell: (u: any) => u.createDate ? new Date(u.createDate).toLocaleDateString() : "-" },
           {
             id: "actions",
@@ -123,10 +127,12 @@ function CreateUserModal({ onClose, onSubmit }: { onClose: () => void; onSubmit:
   const [path, setPath] = useState("/");
   return (
     <Modal visible={true} onDismiss={onClose} header="Create user" footer={
-      <SpaceBetween direction="horizontal" size="xs">
-        <Button onClick={onClose}>Cancel</Button>
-        <Button variant="primary" onClick={() => onSubmit({ name, path })}>Create</Button>
-      </SpaceBetween>
+      <Box float="right">
+        <SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={onClose}>Cancel</Button>
+          <Button variant="primary" onClick={() => onSubmit({ name, path })}>Create</Button>
+        </SpaceBetween>
+      </Box>
     }>
       <Form>
         <SpaceBetween size="m">
@@ -327,10 +333,12 @@ function CreateRoleModal({ onClose, onSubmit }: { onClose: () => void; onSubmit:
 
   return (
     <Modal visible={true} onDismiss={onClose} header="Create role" size="large" footer={
-      <SpaceBetween direction="horizontal" size="xs">
-        <Button onClick={onClose}>Cancel</Button>
-        <Button variant="primary" onClick={() => onSubmit({ name, description })}>Create</Button>
-      </SpaceBetween>
+      <Box float="right">
+        <SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={onClose}>Cancel</Button>
+          <Button variant="primary" onClick={() => onSubmit({ name, description })}>Create</Button>
+        </SpaceBetween>
+      </Box>
     }>
       <Form>
         <SpaceBetween size="m">
@@ -510,10 +518,12 @@ function CreatePolicyModal({ onClose, onSubmit }: { onClose: () => void; onSubmi
 
   return (
     <Modal visible={true} onDismiss={onClose} header="Create policy" size="large" footer={
-      <SpaceBetween direction="horizontal" size="xs">
-        <Button onClick={onClose}>Cancel</Button>
-        <Button variant="primary" onClick={() => onSubmit({ name, description, document: defaultDoc })}>Create</Button>
-      </SpaceBetween>
+      <Box float="right">
+        <SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={onClose}>Cancel</Button>
+          <Button variant="primary" onClick={() => onSubmit({ name, description, document: defaultDoc })}>Create</Button>
+        </SpaceBetween>
+      </Box>
     }>
       <Form>
         <SpaceBetween size="m">
@@ -570,7 +580,7 @@ function PolicyDetailModal({ arn, onClose }: { arn: string; onClose: () => void 
                 placeholder="Select version"
               />
               {versionQuery.isLoading ? <Box>Loading document...</Box> : currentDoc ? (
-                <pre style={{ fontSize: 12, overflow: "auto", maxHeight: 300, background: "#f5f5f5", padding: 12, borderRadius: 4 }}>
+                <pre className="fd-code-bg" style={{ fontSize: 12, overflow: "auto", maxHeight: 300, padding: 12, borderRadius: 4 }}>
                   {(() => {
                     try { return JSON.stringify(JSON.parse(currentDoc), null, 2); }
                     catch { return currentDoc; }
@@ -638,18 +648,20 @@ function GroupsTab() {
 
       {showCreate && (
         <Modal visible={true} onDismiss={() => setShowCreate(false)} header="Create group" footer={
-          <SpaceBetween direction="horizontal" size="xs">
-            <Button onClick={() => setShowCreate(false)}>Cancel</Button>
-            <Button variant="primary" onClick={() => {
-              const name = (document.getElementById("group-name-input") as HTMLInputElement)?.value;
-              if (name) {
-                createGroup.mutate({ name }, {
-                  onSuccess: () => { showToast("success", `Group ${name} created`); setShowCreate(false); },
-                  onError: (e: any) => showToast("error", e.message),
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreate(false)}>Cancel</Button>
+              <Button variant="primary" onClick={() => {
+                const name = (document.getElementById("group-name-input") as HTMLInputElement)?.value;
+                if (name) {
+                  createGroup.mutate({ name }, {
+                    onSuccess: () => { showToast("success", `Group ${name} created`); setShowCreate(false); },
+                    onError: (e: any) => showToast("error", e.message),
                 });
               }
             }}>Create</Button>
           </SpaceBetween>
+          </Box>
         }>
           <Form>
             <FormField label="Group name">
@@ -665,7 +677,12 @@ function GroupsTab() {
 // ─── MAIN PAGE ───────────────────────────────────────────
 
 export default function IAMPage() {
+  const navigate = useNavigate();
+  const { data: health } = useHealth();
   const [activeTab, setActiveTab] = useState("roles");
+
+  const iamStatus = health?.services?.iam;
+  const statusText = iamStatus === "running" ? "running" : iamStatus === "available" ? "available" : "connected";
 
   const tabs: TabsProps.Tab[] = [
     { id: "roles", label: "Roles", content: <RolesTab /> },
@@ -677,9 +694,18 @@ export default function IAMPage() {
   return (
     <ContentLayout
       header={
-        <Header variant="h1" description="Users, roles, policies, groups, and instance profiles">
-          IAM
-        </Header>
+        <SpaceBetween size="xs">
+          <BreadcrumbGroup
+            items={[
+              { text: "Dashboard", href: "/#/" },
+              { text: "IAM", href: "/#/services/iam" },
+            ]}
+            onFollow={(e) => { e.preventDefault(); navigate(e.detail.href.replace("/#", "")); }}
+          />
+          <Header variant="h1" description="Users, roles, policies, groups, and instance profiles">
+            IAM <StatusBadge status={statusText as any} />
+          </Header>
+        </SpaceBetween>
       }
     >
       <Tabs tabs={tabs} activeTabId={activeTab} onChange={({ detail }) => setActiveTab(detail.activeTabId)} />

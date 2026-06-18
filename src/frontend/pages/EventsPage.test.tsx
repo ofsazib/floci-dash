@@ -4,6 +4,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../test/helpers";
 import React from "react";
+import { MemoryRouter } from "react-router-dom";
 
 const mockEventBuses = vi.fn();
 const mockEventRules = vi.fn();
@@ -49,6 +50,15 @@ vi.mock("../components/ConfirmDialog", () => ({
 
 import EventsPage from "./EventsPage";
 
+function pageWrapper() {
+  const Wrapper = createWrapper();
+  return ({ children }: { children: React.ReactNode }) => (
+    <MemoryRouter>
+      <Wrapper>{children}</Wrapper>
+    </MemoryRouter>
+  );
+}
+
 describe("EventsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -69,8 +79,8 @@ describe("EventsPage", () => {
   // ─── Rules Tab ──────────────────────────────────────────
 
   it("renders rules tab by default", () => {
-    render(<EventsPage />, { wrapper: createWrapper() });
-    expect(screen.getByText("EventBridge")).toBeTruthy();
+    render(<EventsPage />, { wrapper: pageWrapper() });
+    expect(screen.getByRole("heading", { name: /EventBridge/ })).toBeTruthy();
     expect(screen.getAllByText("Rules").length).toBeGreaterThan(0);
     expect(screen.getByText("my-rule")).toBeTruthy();
   });
@@ -82,7 +92,7 @@ describe("EventsPage", () => {
       isError: false,
       error: null,
     });
-    render(<EventsPage />, { wrapper: createWrapper() });
+    render(<EventsPage />, { wrapper: pageWrapper() });
     expect(screen.getByText("No rules found")).toBeTruthy();
   });
 
@@ -93,7 +103,7 @@ describe("EventsPage", () => {
       isError: false,
       error: null,
     });
-    render(<EventsPage />, { wrapper: createWrapper() });
+    render(<EventsPage />, { wrapper: pageWrapper() });
     expect(screen.getByText("Loading rules...")).toBeTruthy();
   });
 
@@ -104,7 +114,7 @@ describe("EventsPage", () => {
       isError: true,
       error: new Error("Failed to load rules"),
     });
-    render(<EventsPage />, { wrapper: createWrapper() });
+    render(<EventsPage />, { wrapper: pageWrapper() });
     expect(screen.getByText("Failed to load rules")).toBeTruthy();
   });
 
@@ -121,7 +131,7 @@ describe("EventsPage", () => {
       isError: false,
       error: null,
     });
-    render(<EventsPage />, { wrapper: createWrapper() });
+    render(<EventsPage />, { wrapper: pageWrapper() });
     expect(screen.getByText("alpha-rule")).toBeTruthy();
     expect(screen.getByText("beta-rule")).toBeTruthy();
     const searchInput = screen.getByPlaceholderText("Find rules...");
@@ -134,7 +144,7 @@ describe("EventsPage", () => {
 
   it("opens create rule modal from rules tab", async () => {
     const user = userEvent.setup();
-    render(<EventsPage />, { wrapper: createWrapper() });
+    render(<EventsPage />, { wrapper: pageWrapper() });
     await clickButton(user, /Create rule/i);
     await waitFor(() => {
       expect(screen.getByPlaceholderText("my-rule")).toBeTruthy();
@@ -143,7 +153,7 @@ describe("EventsPage", () => {
 
   it("calls putRule when create rule form is submitted", async () => {
     const user = userEvent.setup();
-    render(<EventsPage />, { wrapper: createWrapper() });
+    render(<EventsPage />, { wrapper: pageWrapper() });
     await clickButton(user, /Create rule/i);
     await waitFor(() => {
       expect(screen.getByPlaceholderText("my-rule")).toBeTruthy();
@@ -164,7 +174,7 @@ describe("EventsPage", () => {
       isError: false,
       error: null,
     });
-    render(<EventsPage />, { wrapper: createWrapper() });
+    render(<EventsPage />, { wrapper: pageWrapper() });
     const toggles = screen.getAllByRole("checkbox");
     await user.click(toggles[0]);
     expect(mockToggleDisableMutate).toHaveBeenCalledWith(
@@ -181,7 +191,7 @@ describe("EventsPage", () => {
       data: { targets: [{ Id: "fn-target", Arn: "arn:aws:lambda:us-east-1:000000000000:function:my-fn" }] },
       isLoading: false,
     });
-    render(<EventsPage />, { wrapper: createWrapper() });
+    render(<EventsPage />, { wrapper: pageWrapper() });
     await user.click(screen.getByText("my-rule"));
     await waitFor(() => {
       expect(screen.getByText("Targets for: my-rule")).toBeTruthy();
@@ -192,7 +202,7 @@ describe("EventsPage", () => {
   it("shows loading state for targets", async () => {
     const user = userEvent.setup();
     mockEventTargets.mockReturnValue({ data: undefined, isLoading: true });
-    render(<EventsPage />, { wrapper: createWrapper() });
+    render(<EventsPage />, { wrapper: pageWrapper() });
     await user.click(screen.getByText("my-rule"));
     await waitFor(() => {
       expect(screen.getByText("Targets for: my-rule")).toBeTruthy();
@@ -203,7 +213,7 @@ describe("EventsPage", () => {
   it("adds a target to a rule", async () => {
     const user = userEvent.setup();
     mockEventTargets.mockReturnValue({ data: { targets: [] }, isLoading: false });
-    render(<EventsPage />, { wrapper: createWrapper() });
+    render(<EventsPage />, { wrapper: pageWrapper() });
     await user.click(screen.getByText("my-rule"));
     await waitFor(() => {
       expect(screen.getByText("Targets for: my-rule")).toBeTruthy();
@@ -220,14 +230,14 @@ describe("EventsPage", () => {
   it("shows empty buses state", async () => {
     const user = userEvent.setup();
     mockEventBuses.mockReturnValue({ data: { eventBuses: [] }, isLoading: false });
-    render(<EventsPage />, { wrapper: createWrapper() });
+    render(<EventsPage />, { wrapper: pageWrapper() });
     await user.click(screen.getByText("Event Buses"));
     expect(screen.getByText("No event buses")).toBeTruthy();
   });
 
   it("creates a new event bus", async () => {
     const user = userEvent.setup();
-    render(<EventsPage />, { wrapper: createWrapper() });
+    render(<EventsPage />, { wrapper: pageWrapper() });
     await user.click(screen.getByText("Event Buses"));
     await clickButton(user, /Create bus/i);
     await waitFor(() => {
@@ -250,7 +260,7 @@ describe("EventsPage", () => {
       },
       isLoading: false,
     });
-    render(<EventsPage />, { wrapper: createWrapper() });
+    render(<EventsPage />, { wrapper: pageWrapper() });
     await user.click(screen.getByText("Event Buses"));
     const deleteButtons = screen.getAllByLabelText("Delete bus");
     await user.click(deleteButtons[0]);
@@ -264,7 +274,7 @@ describe("EventsPage", () => {
   it("shows empty archives state", async () => {
     const user = userEvent.setup();
     mockEventArchives.mockReturnValue({ data: { archives: [] }, isLoading: false });
-    render(<EventsPage />, { wrapper: createWrapper() });
+    render(<EventsPage />, { wrapper: pageWrapper() });
     await user.click(screen.getByText("Archives"));
     expect(screen.getByText("No archives")).toBeTruthy();
   });
@@ -284,7 +294,7 @@ describe("EventsPage", () => {
       },
       isLoading: false,
     });
-    render(<EventsPage />, { wrapper: createWrapper() });
+    render(<EventsPage />, { wrapper: pageWrapper() });
     await user.click(screen.getByText("Archives"));
     expect(screen.getByText("my-archive")).toBeTruthy();
     expect(screen.getByText("42")).toBeTruthy();
@@ -292,7 +302,7 @@ describe("EventsPage", () => {
 
   it("creates a new archive", async () => {
     const user = userEvent.setup();
-    render(<EventsPage />, { wrapper: createWrapper() });
+    render(<EventsPage />, { wrapper: pageWrapper() });
     await user.click(screen.getByText("Archives"));
     await clickButton(user, /Create archive/i);
     await waitFor(() => {
@@ -309,7 +319,7 @@ describe("EventsPage", () => {
 
   it("opens send event modal", async () => {
     const user = userEvent.setup();
-    render(<EventsPage />, { wrapper: createWrapper() });
+    render(<EventsPage />, { wrapper: pageWrapper() });
     await user.click(screen.getByText("Send Event"));
     await clickButton(user, /Send event/i);
     await waitFor(() => {
@@ -320,7 +330,7 @@ describe("EventsPage", () => {
 
   it("submits send event form", async () => {
     const user = userEvent.setup();
-    render(<EventsPage />, { wrapper: createWrapper() });
+    render(<EventsPage />, { wrapper: pageWrapper() });
     await user.click(screen.getByText("Send Event"));
     await clickButton(user, /Send event/i);
     await waitFor(() => {

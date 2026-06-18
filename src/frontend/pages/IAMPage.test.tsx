@@ -4,6 +4,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../test/helpers";
 import React from "react";
+import { MemoryRouter } from "react-router-dom";
 
 const mockIAMUsers = vi.fn();
 const mockIAMUser = vi.fn();
@@ -51,6 +52,16 @@ vi.mock("../components/Toast", () => ({
 }));
 
 import IAMPage from "./IAMPage";
+
+function pageWrapper() {
+  const Wrapper = createWrapper();
+  return ({ children }: { children: React.ReactNode }) => (
+    <MemoryRouter>
+      <Wrapper>{children}</Wrapper>
+    </MemoryRouter>
+  );
+}
+
 describe("IAMPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -67,22 +78,22 @@ describe("IAMPage", () => {
   // ─── Render State Tests ─────────────────────────────────
 
   it("renders roles tab by default", () => {
-    render(<IAMPage />, { wrapper: createWrapper() });
-    expect(screen.getByText("IAM")).toBeTruthy();
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    expect(screen.getByRole("heading", { name: /IAM/ })).toBeTruthy();
     expect(screen.getAllByText("Roles").length).toBeGreaterThan(0);
     expect(screen.getAllByText("ec2-role").length).toBeGreaterThan(0);
   });
 
   it("shows empty roles state", () => {
     mockIAMRoles.mockReturnValue({ data: { roles: [] }, isLoading: false, isError: false, error: null });
-    render(<IAMPage />, { wrapper: createWrapper() });
+    render(<IAMPage />, { wrapper: pageWrapper() });
     expect(screen.getByText("No roles")).toBeTruthy();
   });
 
   it("shows empty users state", async () => {
     const user = userEvent.setup();
     mockIAMUsers.mockReturnValue({ data: { users: [] }, isLoading: false, isError: false, error: null });
-    render(<IAMPage />, { wrapper: createWrapper() });
+    render(<IAMPage />, { wrapper: pageWrapper() });
     await user.click(screen.getByRole("tab", { name: /Users/i }));
     await waitFor(() => {
       expect(screen.getByText("No users")).toBeTruthy();
@@ -92,7 +103,7 @@ describe("IAMPage", () => {
   it("shows empty policies state", async () => {
     const user = userEvent.setup();
     mockIAMPolicies.mockReturnValue({ data: { policies: [] }, isLoading: false, isError: false, error: null });
-    render(<IAMPage />, { wrapper: createWrapper() });
+    render(<IAMPage />, { wrapper: pageWrapper() });
     await user.click(screen.getByRole("tab", { name: /Policies/i }));
     await waitFor(() => {
       expect(screen.getByText("No policies")).toBeTruthy();
@@ -102,7 +113,7 @@ describe("IAMPage", () => {
   it("shows empty groups state", async () => {
     const user = userEvent.setup();
     mockIAMGroups.mockReturnValue({ data: { groups: [] }, isLoading: false, isError: false, error: null });
-    render(<IAMPage />, { wrapper: createWrapper() });
+    render(<IAMPage />, { wrapper: pageWrapper() });
     await user.click(screen.getByRole("tab", { name: /Groups/i }));
     await waitFor(() => {
       expect(screen.getByText("No groups")).toBeTruthy();
@@ -110,17 +121,17 @@ describe("IAMPage", () => {
   });
 
   it("renders users tab", () => {
-    render(<IAMPage />, { wrapper: createWrapper() });
+    render(<IAMPage />, { wrapper: pageWrapper() });
     expect(screen.getAllByText("Users").length).toBeGreaterThan(0);
   });
 
   it("renders policies tab", () => {
-    render(<IAMPage />, { wrapper: createWrapper() });
+    render(<IAMPage />, { wrapper: pageWrapper() });
     expect(screen.getAllByText("Policies").length).toBeGreaterThan(0);
   });
 
   it("renders groups tab", () => {
-    render(<IAMPage />, { wrapper: createWrapper() });
+    render(<IAMPage />, { wrapper: pageWrapper() });
     expect(screen.getAllByText("Groups").length).toBeGreaterThan(0);
   });
 
@@ -128,15 +139,15 @@ describe("IAMPage", () => {
 
   it("shows loading state for roles tab", () => {
     mockIAMRoles.mockReturnValue({ data: undefined, isLoading: true, isError: false, error: null });
-    render(<IAMPage />, { wrapper: createWrapper() });
-    expect(screen.getByText("IAM")).toBeTruthy();
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    expect(screen.getByRole("heading", { name: /IAM/ })).toBeTruthy();
     expect(screen.getAllByText("Roles").length).toBeGreaterThan(0);
   });
 
   it("shows loading state for users tab", async () => {
     const user = userEvent.setup();
     mockIAMUsers.mockReturnValue({ data: undefined, isLoading: true, isError: false, error: null });
-    render(<IAMPage />, { wrapper: createWrapper() });
+    render(<IAMPage />, { wrapper: pageWrapper() });
     await user.click(screen.getByRole("tab", { name: /Users/i }));
     expect(screen.getAllByText("Users").length).toBeGreaterThan(0);
   });
@@ -144,7 +155,7 @@ describe("IAMPage", () => {
   it("shows loading state for policies tab", async () => {
     const user = userEvent.setup();
     mockIAMPolicies.mockReturnValue({ data: undefined, isLoading: true, isError: false, error: null });
-    render(<IAMPage />, { wrapper: createWrapper() });
+    render(<IAMPage />, { wrapper: pageWrapper() });
     await user.click(screen.getByRole("tab", { name: /Policies/i }));
     expect(screen.getAllByText("Policies").length).toBeGreaterThan(0);
   });
@@ -152,7 +163,7 @@ describe("IAMPage", () => {
   it("shows loading state for groups tab", async () => {
     const user = userEvent.setup();
     mockIAMGroups.mockReturnValue({ data: undefined, isLoading: true, isError: false, error: null });
-    render(<IAMPage />, { wrapper: createWrapper() });
+    render(<IAMPage />, { wrapper: pageWrapper() });
     await user.click(screen.getByRole("tab", { name: /Groups/i }));
     expect(screen.getAllByText("Groups").length).toBeGreaterThan(0);
   });
@@ -161,14 +172,14 @@ describe("IAMPage", () => {
 
   it("shows error state for roles tab", () => {
     mockIAMRoles.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: new Error("Failed to load roles") });
-    render(<IAMPage />, { wrapper: createWrapper() });
-    expect(screen.getByText("IAM")).toBeTruthy();
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    expect(screen.getByRole("heading", { name: /IAM/ })).toBeTruthy();
   });
 
   it("shows error state for users tab", async () => {
     const user = userEvent.setup();
     mockIAMUsers.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: new Error("Failed to load users") });
-    render(<IAMPage />, { wrapper: createWrapper() });
+    render(<IAMPage />, { wrapper: pageWrapper() });
     await user.click(screen.getByRole("tab", { name: /Users/i }));
     expect(screen.getAllByText("Users").length).toBeGreaterThan(0);
   });
@@ -176,7 +187,7 @@ describe("IAMPage", () => {
   it("shows error state for policies tab", async () => {
     const user = userEvent.setup();
     mockIAMPolicies.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: new Error("Failed to load policies") });
-    render(<IAMPage />, { wrapper: createWrapper() });
+    render(<IAMPage />, { wrapper: pageWrapper() });
     await user.click(screen.getByRole("tab", { name: /Policies/i }));
     expect(screen.getAllByText("Policies").length).toBeGreaterThan(0);
   });
@@ -184,7 +195,7 @@ describe("IAMPage", () => {
   it("shows error state for groups tab", async () => {
     const user = userEvent.setup();
     mockIAMGroups.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: new Error("Failed to load groups") });
-    render(<IAMPage />, { wrapper: createWrapper() });
+    render(<IAMPage />, { wrapper: pageWrapper() });
     await user.click(screen.getByRole("tab", { name: /Groups/i }));
     expect(screen.getAllByText("Groups").length).toBeGreaterThan(0);
   });
@@ -193,7 +204,7 @@ describe("IAMPage", () => {
 
   it("renders users list with data", async () => {
     const user = userEvent.setup();
-    render(<IAMPage />, { wrapper: createWrapper() });
+    render(<IAMPage />, { wrapper: pageWrapper() });
     await user.click(screen.getByRole("tab", { name: /Users/i }));
     await waitFor(() => {
       expect(screen.getAllByText("admin-user").length).toBeGreaterThan(0);
@@ -202,7 +213,7 @@ describe("IAMPage", () => {
 
   it("renders policies list with data", async () => {
     const user = userEvent.setup();
-    render(<IAMPage />, { wrapper: createWrapper() });
+    render(<IAMPage />, { wrapper: pageWrapper() });
     await user.click(screen.getByRole("tab", { name: /Policies/i }));
     await waitFor(() => {
       expect(screen.getAllByText("AdminPolicy").length).toBeGreaterThan(0);
@@ -211,7 +222,7 @@ describe("IAMPage", () => {
 
   it("renders groups list with data", async () => {
     const user = userEvent.setup();
-    render(<IAMPage />, { wrapper: createWrapper() });
+    render(<IAMPage />, { wrapper: pageWrapper() });
     await user.click(screen.getByRole("tab", { name: /Groups/i }));
     await waitFor(() => {
       expect(screen.getAllByText("admins").length).toBeGreaterThan(0);
@@ -222,7 +233,7 @@ describe("IAMPage", () => {
 
   it("opens create role modal and submits", async () => {
     const user = userEvent.setup();
-    render(<IAMPage />, { wrapper: createWrapper() });
+    render(<IAMPage />, { wrapper: pageWrapper() });
     await clickButton(user, /Create role/i);
     await waitFor(() => {
       expect(screen.getByText(/AssumeRolePolicyDocument/i)).toBeTruthy();
@@ -235,7 +246,7 @@ describe("IAMPage", () => {
 
   it("opens create user modal from users tab", async () => {
     const user = userEvent.setup();
-    render(<IAMPage />, { wrapper: createWrapper() });
+    render(<IAMPage />, { wrapper: pageWrapper() });
     await user.click(screen.getByRole("tab", { name: /Users/i }));
     await waitFor(() => {
       expect(screen.getAllByText("Users").length).toBeGreaterThan(0);
@@ -252,7 +263,7 @@ describe("IAMPage", () => {
 
   it("opens create policy modal and submits", async () => {
     const user = userEvent.setup();
-    render(<IAMPage />, { wrapper: createWrapper() });
+    render(<IAMPage />, { wrapper: pageWrapper() });
     await user.click(screen.getByRole("tab", { name: /Policies/i }));
     await clickButton(user, /Create policy/i);
     await waitFor(() => {
@@ -266,7 +277,7 @@ describe("IAMPage", () => {
 
   it("opens create group modal and submits", async () => {
     const user = userEvent.setup();
-    render(<IAMPage />, { wrapper: createWrapper() });
+    render(<IAMPage />, { wrapper: pageWrapper() });
     await user.click(screen.getByRole("tab", { name: /Groups/i }));
     await clickButton(user, /Create group/i);
     await waitFor(() => {
@@ -284,7 +295,7 @@ describe("IAMPage", () => {
   it("deletes a role", async () => {
     const user = userEvent.setup();
     mockDeleteRoleMutate.mockResolvedValue(undefined);
-    render(<IAMPage />, { wrapper: createWrapper() });
+    render(<IAMPage />, { wrapper: pageWrapper() });
     await clickButton(user, /Delete ec2-role/i);
     await waitFor(() => {
       expect(screen.getByText(/Are you sure/i)).toBeTruthy();
@@ -298,7 +309,7 @@ describe("IAMPage", () => {
   it("deletes a user", async () => {
     const user = userEvent.setup();
     mockDeleteUserMutate.mockResolvedValue(undefined);
-    render(<IAMPage />, { wrapper: createWrapper() });
+    render(<IAMPage />, { wrapper: pageWrapper() });
     await user.click(screen.getByRole("tab", { name: /Users/i }));
     await clickButton(user, /Delete admin-user/i);
     await waitFor(() => {
@@ -313,7 +324,7 @@ describe("IAMPage", () => {
   it("deletes a policy", async () => {
     const user = userEvent.setup();
     mockDeletePolicyMutate.mockResolvedValue(undefined);
-    render(<IAMPage />, { wrapper: createWrapper() });
+    render(<IAMPage />, { wrapper: pageWrapper() });
     await user.click(screen.getByRole("tab", { name: /Policies/i }));
     await clickButton(user, /Delete AdminPolicy/i);
     await waitFor(() => {
@@ -328,7 +339,7 @@ describe("IAMPage", () => {
   it("deletes a group", async () => {
     const user = userEvent.setup();
     mockDeleteGroupMutate.mockResolvedValue(undefined);
-    render(<IAMPage />, { wrapper: createWrapper() });
+    render(<IAMPage />, { wrapper: pageWrapper() });
     await user.click(screen.getByRole("tab", { name: /Groups/i }));
     await clickButton(user, /Delete admins/i);
     await waitFor(() => {
@@ -354,7 +365,7 @@ describe("IAMPage", () => {
       },
       isLoading: false,
     });
-    render(<IAMPage />, { wrapper: createWrapper() });
+    render(<IAMPage />, { wrapper: pageWrapper() });
     await user.click(screen.getByRole("tab", { name: /Users/i }));
     await clickButton(user, /View/i, { last: true });
     await waitFor(() => {
@@ -377,7 +388,7 @@ describe("IAMPage", () => {
       },
       isLoading: false,
     });
-    render(<IAMPage />, { wrapper: createWrapper() });
+    render(<IAMPage />, { wrapper: pageWrapper() });
     await user.click(screen.getByRole("tab", { name: /Users/i }));
     await clickButton(user, /View/i, { last: true });
     await waitFor(() => {
@@ -401,7 +412,7 @@ describe("IAMPage", () => {
       },
       isLoading: false,
     });
-    render(<IAMPage />, { wrapper: createWrapper() });
+    render(<IAMPage />, { wrapper: pageWrapper() });
     await clickButton(user, /View/i, { last: true });
     await waitFor(() => {
       expect(screen.getByText(/Role: ec2-role/i)).toBeTruthy();
@@ -423,7 +434,7 @@ describe("IAMPage", () => {
       data: { document: JSON.stringify({ Version: "2012-10-17", Statement: [{ Effect: "Allow", Action: "*", Resource: "*" }] }) },
       isLoading: false,
     });
-    render(<IAMPage />, { wrapper: createWrapper() });
+    render(<IAMPage />, { wrapper: pageWrapper() });
     await user.click(screen.getByRole("tab", { name: /Policies/i }));
     await clickButton(user, /View/i, { last: true });
     await waitFor(() => {
@@ -436,7 +447,7 @@ describe("IAMPage", () => {
 
   it("switches policy scope", async () => {
     const user = userEvent.setup();
-    render(<IAMPage />, { wrapper: createWrapper() });
+    render(<IAMPage />, { wrapper: pageWrapper() });
     await user.click(screen.getByRole("tab", { name: /Policies/i }));
     await waitFor(() => {
       expect(screen.getAllByText("Policies").length).toBeGreaterThan(0);

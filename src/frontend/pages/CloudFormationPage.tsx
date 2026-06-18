@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
+  BreadcrumbGroup,
   ContentLayout,
   Header,
   Box,
@@ -19,7 +21,9 @@ import {
   Alert,
 } from "@cloudscape-design/components";
 import DeleteButton from "../components/DeleteButton";
+import StatusBadge from "../components/StatusBadge";
 import { useToast } from "../components/Toast";
+import { useHealth } from "../hooks/useSystem";
 import {
   useStacks,
   useStack,
@@ -144,15 +148,17 @@ Resources:
 
   return (
     <Modal visible={true} onDismiss={onClose} header="Create stack" size="large" footer={
-      <SpaceBetween direction="horizontal" size="xs">
-        <Button onClick={onClose}>Cancel</Button>
-        <Button
-          variant="primary"
-          onClick={() => onSubmit({ name, templateBody: templateBody || defaultTemplate })}
-        >
-          Create
-        </Button>
-      </SpaceBetween>
+      <Box float="right">
+        <SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={onClose}>Cancel</Button>
+          <Button
+            variant="primary"
+            onClick={() => onSubmit({ name, templateBody: templateBody || defaultTemplate })}
+          >
+            Create
+          </Button>
+        </SpaceBetween>
+      </Box>
     }>
       <Form>
         <SpaceBetween size="m">
@@ -276,7 +282,7 @@ function StackDetailModal({ stackName, onClose }: { stackName: string; onClose: 
       id: "template",
       label: "Template",
       content: templateQuery.isLoading ? <Box>Loading...</Box> : (
-        <pre style={{ fontSize: 12, overflow: "auto", maxHeight: 400, background: "#f5f5f5", padding: 12, borderRadius: 4 }}>
+        <pre className="fd-code-bg" style={{ fontSize: 12, overflow: "auto", maxHeight: 400, padding: 12, borderRadius: 4 }}>
           {templateQuery.data?.template || "No template"}
         </pre>
       ),
@@ -315,7 +321,12 @@ function ExportsTab() {
 }
 
 export default function CloudFormationPage() {
+  const navigate = useNavigate();
+  const { data: health } = useHealth();
   const [activeTab, setActiveTab] = useState("stacks");
+
+  const cfStatus = health?.services?.cloudformation;
+  const statusText = cfStatus === "running" ? "running" : cfStatus === "available" ? "available" : "connected";
 
   const tabs: TabsProps.Tab[] = [
     { id: "stacks", label: "Stacks", content: <StacksTab /> },
@@ -325,9 +336,18 @@ export default function CloudFormationPage() {
   return (
     <ContentLayout
       header={
-        <Header variant="h1" description="Manage CloudFormation stacks, resources, and templates">
-          CloudFormation
-        </Header>
+        <SpaceBetween size="xs">
+          <BreadcrumbGroup
+            items={[
+              { text: "Dashboard", href: "/#/" },
+              { text: "CloudFormation", href: "/#/services/cloudformation" },
+            ]}
+            onFollow={(e) => { e.preventDefault(); navigate(e.detail.href.replace("/#", "")); }}
+          />
+          <Header variant="h1" description="Manage CloudFormation stacks, resources, and templates">
+            CloudFormation <StatusBadge status={statusText as any} />
+          </Header>
+        </SpaceBetween>
       }
     >
       <Tabs tabs={tabs} activeTabId={activeTab} onChange={({ detail }) => setActiveTab(detail.activeTabId)} />

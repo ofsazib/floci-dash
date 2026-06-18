@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
+  BreadcrumbGroup,
   ContentLayout,
   Header,
   Box,
@@ -19,8 +21,10 @@ import {
   Toggle,
 } from "@cloudscape-design/components";
 import StatCard from "../components/StatCard";
+import StatusBadge from "../components/StatusBadge";
 import { useToast } from "../components/Toast";
 import { useConfirmDialog } from "../components/ConfirmDialog";
+import { useHealth } from "../hooks/useSystem";
 import {
   useEventBuses,
   useEventRules,
@@ -43,17 +47,31 @@ import {
 } from "../hooks/useEvents";
 
 export default function EventsPage() {
+  const navigate = useNavigate();
   const { showToast } = useToast();
   const { confirm, dialog } = useConfirmDialog();
+  const { data: health } = useHealth();
   const [activeTab, setActiveTab] = useState("rules");
   const [showSendEvent, setShowSendEvent] = useState(false);
+
+  const eventsStatus = health?.services?.events;
+  const statusText = eventsStatus === "running" ? "running" : eventsStatus === "available" ? "available" : "connected";
 
   return (
     <ContentLayout
       header={
-        <Header variant="h1" description="Amazon EventBridge">
-          EventBridge
-        </Header>
+        <SpaceBetween size="xs">
+          <BreadcrumbGroup
+            items={[
+              { text: "Dashboard", href: "/#/" },
+              { text: "EventBridge", href: "/#/services/events" },
+            ]}
+            onFollow={(e) => { e.preventDefault(); navigate(e.detail.href.replace("/#", "")); }}
+          />
+          <Header variant="h1" description="Amazon EventBridge">
+            EventBridge <StatusBadge status={statusText as any} />
+          </Header>
+        </SpaceBetween>
       }
     >
       <SpaceBetween size="l">
