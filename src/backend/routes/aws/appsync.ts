@@ -228,7 +228,7 @@ router.post("/apis/:apiId/api-keys", async (c: Context) => {
       expires: body.expires,
     })
   );
-  return c.json({ apiKey: result.apiKey }, 201);
+  return c.json({ apiKey: result.apiKey?.apiKey || null, id: result.apiKey?.id, expires: result.apiKey?.expires }, 201);
 });
 
 router.delete("/apis/:apiId/api-keys/:id", async (c: Context) => {

@@ -3043,7 +3043,7 @@ function AppSyncApiDetail({ apiId, onBack }: { apiId: string; onBack: () => void
               {
                 onSuccess: (data: any) => {
                   showToast("success", "API key created");
-                  setNewApiKey(data?.apiKey || "Key not returned");
+                  setNewApiKey(data?.apiKey ?? "Key not returned");
                 },
                 onError: (err) => showToast("error", (err as Error).message),
               }
