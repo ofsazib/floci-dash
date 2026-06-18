@@ -18,6 +18,8 @@ import {
   useS3UploadFiles,
   useS3DeleteObject,
   useS3CreateFolder,
+  useS3BatchDeleteObjects,
+  useS3DeleteFolder,
 } from "./useS3";
 
 function createWrapper() {
@@ -250,6 +252,68 @@ describe("useS3CreateFolder", () => {
         React.createElement(QueryClientProvider, { client: qc }, children),
     });
     await result.current.mutateAsync("a/");
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["aws", "s3", "objects", "my-bucket"] });
+  });
+});
+
+// ─── BATCH DELETE OBJECTS ─────────────────────────────────
+
+describe("useS3BatchDeleteObjects", () => {
+  it("calls api with POST method, bucket in path, and keys in body", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: ["a.txt", "b.txt"], errors: [] });
+    const { result } = renderHook(() => useS3BatchDeleteObjects("my-bucket"), {
+      wrapper: createWrapper(),
+    });
+    await result.current.mutateAsync(["a.txt", "b.txt"]);
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/s3/buckets/my-bucket/objects/batch-delete",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ keys: ["a.txt", "b.txt"] }),
+      })
+    );
+  });
+
+  it("invalidates objects query on success", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: ["a.txt"], errors: [] });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useS3BatchDeleteObjects("my-bucket"), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync(["a.txt"]);
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["aws", "s3", "objects", "my-bucket"] });
+  });
+});
+
+// ─── DELETE FOLDER ────────────────────────────────────────
+
+describe("useS3DeleteFolder", () => {
+  it("calls api with POST method, bucket in path, and prefix in body", async () => {
+    mockApi.mockResolvedValueOnce({ totalDeleted: 3, deleted: [], errors: [] });
+    const { result } = renderHook(() => useS3DeleteFolder("my-bucket"), {
+      wrapper: createWrapper(),
+    });
+    await result.current.mutateAsync("myfolder/");
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/s3/buckets/my-bucket/folders/delete",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ prefix: "myfolder/" }),
+      })
+    );
+  });
+
+  it("invalidates objects query on success", async () => {
+    mockApi.mockResolvedValueOnce({ totalDeleted: 1, deleted: [], errors: [] });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useS3DeleteFolder("my-bucket"), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync("myfolder/");
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["aws", "s3", "objects", "my-bucket"] });
   });
 });

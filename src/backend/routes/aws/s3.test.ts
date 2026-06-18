@@ -25,6 +25,7 @@ vi.mock("@aws-sdk/client-s3", () => ({
   GetObjectCommand: createCmd("GetObjectCommand"),
   PutObjectCommand: createCmd("PutObjectCommand"),
   DeleteObjectCommand: createCmd("DeleteObjectCommand"),
+  DeleteObjectsCommand: createCmd("DeleteObjectsCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -349,6 +350,87 @@ describe("S3 Routes", () => {
       mockSend.mockRejectedValueOnce(new Error("AccessDenied"));
       const res = await put("/buckets/my-bucket/folders", { prefix: "noaccess/" });
       expect(res.status).toBe(500);
+    });
+  });
+
+  describe("Batch Delete", () => {
+    beforeEach(() => { mockSend.mockReset(); });
+
+    it("POST /buckets/:name/objects/batch-delete — deletes multiple objects", async () => {
+      mockSend.mockResolvedValueOnce({
+        Deleted: [{ Key: "file1.txt" }, { Key: "file2.txt" }],
+        Errors: [],
+      });
+      const res = await post("/buckets/my-bucket/objects/batch-delete", { keys: ["file1.txt", "file2.txt"] });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deleted).toEqual(["file1.txt", "file2.txt"]);
+      expect(body.errors).toEqual([]);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteObjectsCommand");
+      expect(mockSend.mock.calls[0][0].Bucket).toBe("my-bucket");
+      expect(mockSend.mock.calls[0][0].Delete.Objects).toEqual([{ Key: "file1.txt" }, { Key: "file2.txt" }]);
+    });
+
+    it("POST /buckets/:name/objects/batch-delete — 400 when keys missing", async () => {
+      const res = await post("/buckets/my-bucket/objects/batch-delete", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /buckets/:name/objects/batch-delete — 400 when keys is empty", async () => {
+      const res = await post("/buckets/my-bucket/objects/batch-delete", { keys: [] });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /buckets/:name/objects/batch-delete — reports partial errors", async () => {
+      mockSend.mockResolvedValueOnce({
+        Deleted: [{ Key: "file1.txt" }],
+        Errors: [{ Key: "file2.txt", Code: "AccessDenied", Message: "Permission denied" }],
+      });
+      const res = await post("/buckets/my-bucket/objects/batch-delete", { keys: ["file1.txt", "file2.txt"] });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deleted).toEqual(["file1.txt"]);
+      expect(body.errors).toHaveLength(1);
+      expect(body.errors[0].key).toBe("file2.txt");
+      expect(body.errors[0].code).toBe("AccessDenied");
+    });
+  });
+
+  describe("Folder Delete", () => {
+    beforeEach(() => { mockSend.mockReset(); });
+
+    it("POST /buckets/:name/folders/delete — recursively deletes folder", async () => {
+      mockSend.mockResolvedValueOnce({
+        Contents: [{ Key: "myfolder/file1.txt" }, { Key: "myfolder/file2.txt" }, { Key: "myfolder/" }],
+        IsTruncated: false,
+      });
+      mockSend.mockResolvedValueOnce({
+        Deleted: [{ Key: "myfolder/file1.txt" }, { Key: "myfolder/file2.txt" }, { Key: "myfolder/" }],
+        Errors: [],
+      });
+      const res = await post("/buckets/my-bucket/folders/delete", { prefix: "myfolder/" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.totalDeleted).toBe(3);
+      expect(body.deleted).toHaveLength(3);
+      expect(body.errors).toEqual([]);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("ListObjectsV2Command");
+      expect(mockSend.mock.calls[1][0].__cmdName).toBe("DeleteObjectsCommand");
+    });
+
+    it("POST /buckets/:name/folders/delete — 400 when prefix missing", async () => {
+      const res = await post("/buckets/my-bucket/folders/delete", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /buckets/:name/folders/delete — empty result when folder has no objects", async () => {
+      mockSend.mockResolvedValueOnce({ Contents: [], IsTruncated: false });
+      const res = await post("/buckets/my-bucket/folders/delete", { prefix: "empty/" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.totalDeleted).toBe(0);
+      expect(body.deleted).toEqual([]);
+      expect(mockSend).toHaveBeenCalledTimes(1);
     });
   });
 });

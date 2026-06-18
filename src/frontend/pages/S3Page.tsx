@@ -32,6 +32,8 @@ import {
   useS3UploadFiles,
   useS3DeleteObject,
   useS3CreateFolder,
+  useS3BatchDeleteObjects,
+  useS3DeleteFolder,
   type S3UploadResult,
 } from "../hooks/useS3";
 import {
@@ -463,11 +465,14 @@ function S3ObjectBrowser({ bucket, selectedObject, onSelectObject, onBack, onUpl
   const { data, isLoading } = useS3Objects(bucket, prefix);
   const deleteObject = useS3DeleteObject(bucket);
   const createFolder = useS3CreateFolder(bucket);
+  const batchDeleteObjects = useS3BatchDeleteObjects(bucket);
+  const deleteFolder = useS3DeleteFolder(bucket);
   const { showToast } = useToast();
   const { confirm, dialog } = useConfirmDialog();
   const [searchTerm, setSearchTerm] = useState("");
   const [createFolderOpen, setCreateFolderOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
+  const [selectedItems, setSelectedItems] = useState<any[]>([]);
 
   const folders = data?.folders || [];
   const allObjects = data?.objects || [];
@@ -514,6 +519,11 @@ function S3ObjectBrowser({ bucket, selectedObject, onSelectObject, onBack, onUpl
     <>
       <Table
         variant="full-page"
+        selectedItems={selectedItems}
+        onSelectionChange={({ detail }) => setSelectedItems(detail.selectedItems)}
+        selectionType="multi"
+        trackBy="key"
+        resizableColumns
         header={
           <Header
             variant="h2"
@@ -521,6 +531,39 @@ function S3ObjectBrowser({ bucket, selectedObject, onSelectObject, onBack, onUpl
             description={bucket}
             actions={
               <SpaceBetween direction="horizontal" size="xs">
+                {selectedItems.length > 0 && (
+                  <Button
+                    variant="primary"
+                    iconName="remove"
+                    loading={batchDeleteObjects.isPending}
+                    onClick={async () => {
+                      const keys = selectedItems.map((i) => i.key);
+                      const ok = await confirm({
+                        title: `Delete ${keys.length} object${keys.length === 1 ? "" : "s"}`,
+                        message: `Permanently delete ${keys.length} object${keys.length === 1 ? "" : "s"} from bucket "${bucket}"?`,
+                        confirmText: "Delete",
+                        variant: "danger",
+                      });
+                      if (ok) {
+                        batchDeleteObjects.mutate(keys, {
+                          onSuccess: (data: any) => {
+                            const deleted = data.deleted?.length || keys.length;
+                            const errors = data.errors?.length || 0;
+                            if (errors > 0) {
+                              showToast("warning", `${deleted} deleted, ${errors} failed`);
+                            } else {
+                              showToast("success", `${deleted} object${deleted === 1 ? "" : "s"} deleted`);
+                            }
+                            setSelectedItems([]);
+                          },
+                          onError: (err) => showToast("error", err.message),
+                        });
+                      }
+                    }}
+                  >
+                    Delete selected ({selectedItems.length})
+                  </Button>
+                )}
                 <Button variant="normal" onClick={onBack}>← Buckets</Button>
                 <Button variant="normal" onClick={() => setCreateFolderOpen(true)}>Create folder</Button>
                 <Button variant="primary" onClick={onUploadClick}>Upload</Button>
@@ -581,16 +624,50 @@ function S3ObjectBrowser({ bucket, selectedObject, onSelectObject, onBack, onUpl
           },
           { id: "size", header: "Size", cell: (item: any) => item._isFolder ? "—" : formatBytes(item.size) },
           { id: "modified", header: "Last modified", cell: (item: any) => item._isFolder ? "—" : (item.lastModified ? new Date(item.lastModified).toLocaleString() : "—") },
-          { id: "actions", header: "", width: 80, cell: (item: any) => item._isFolder ? null : (
-            <Button variant="icon" iconName="remove" ariaLabel={`Delete ${item.key}`} loading={deleteObject.isPending && deleteObject.variables === item.key}
-              onClick={async () => {
-                const ok = await confirm({ title: "Delete object", message: `Delete "${item.key}" from bucket "${bucket}"?`, confirmText: "Delete", variant: "danger" });
-                if (ok) deleteObject.mutate(item.key, {
-                  onSuccess: () => showToast("success", `Object "${item.key}" deleted`),
-                  onError: (err) => showToast("error", err.message),
-                });
-              }} />
-          )},
+          { id: "actions", header: "", width: 80, cell: (item: any) => {
+            if (item._isFolder) {
+              return (
+                <Button
+                  variant="icon"
+                  iconName="remove"
+                  ariaLabel={`Delete folder ${item._folderName}`}
+                  loading={deleteFolder.isPending && deleteFolder.variables === item._folderPrefix}
+                  onClick={async () => {
+                    const ok = await confirm({
+                      title: "Delete folder",
+                      message: `Permanently delete folder "${item._folderName}" and all its contents from bucket "${bucket}"?`,
+                      confirmText: "Delete",
+                      variant: "danger",
+                    });
+                    if (ok) {
+                      deleteFolder.mutate(item._folderPrefix, {
+                        onSuccess: (data: any) => {
+                          const n = data.totalDeleted || 0;
+                          showToast("success", `Folder "${item._folderName}" deleted (${n} object${n === 1 ? "" : "s"})`);
+                        },
+                        onError: (err) => showToast("error", err.message),
+                      });
+                    }
+                  }}
+                />
+              );
+            }
+            return (
+              <Button
+                variant="icon"
+                iconName="remove"
+                ariaLabel={`Delete ${item.key}`}
+                loading={deleteObject.isPending && deleteObject.variables === item.key}
+                onClick={async () => {
+                  const ok = await confirm({ title: "Delete object", message: `Delete "${item.key}" from bucket "${bucket}"?`, confirmText: "Delete", variant: "danger" });
+                  if (ok) deleteObject.mutate(item.key, {
+                    onSuccess: () => showToast("success", `Object "${item.key}" deleted`),
+                    onError: (err) => showToast("error", err.message),
+                  });
+                }}
+              />
+            );
+          }},
         ]}
         items={[
           ...folders.map((f) => ({ _isFolder: true, _folderPrefix: f.prefix, _folderName: f.name, key: f.prefix })),

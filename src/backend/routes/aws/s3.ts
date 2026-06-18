@@ -9,6 +9,7 @@ import {
   GetObjectCommand,
   PutObjectCommand,
   DeleteObjectCommand,
+  DeleteObjectsCommand,
 } from "@aws-sdk/client-s3";
 import { getAwsConfig } from "../../clients/aws";
 
@@ -210,6 +211,77 @@ router.delete("/buckets/:name/objects/*", async (c: Context) => {
   if (!key) return c.json({ error: "Object key is required" }, 400);
   await s3().send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
   return c.json({ bucket, key, deleted: true });
+});
+
+// Batch delete objects (up to 1000 keys per request)
+router.post("/buckets/:name/objects/batch-delete", async (c: Context) => {
+  const bucket = c.req.param("name");
+  const { keys } = await c.req.json<{ keys: string[] }>();
+  if (!keys || !Array.isArray(keys) || keys.length === 0) {
+    return c.json({ error: "keys array is required" }, 400);
+  }
+  const result = await s3().send(
+    new DeleteObjectsCommand({
+      Bucket: bucket,
+      Delete: { Objects: keys.map((k) => ({ Key: k })) },
+    })
+  );
+  return c.json({
+    bucket,
+    deleted: (result.Deleted || []).map((d) => d.Key),
+    errors: (result.Errors || []).map((e) => ({ key: e.Key, code: e.Code, message: e.Message })),
+  });
+});
+
+// Delete folder (recursive: list all objects under prefix, batch-delete in chunks of 1000)
+router.post("/buckets/:name/folders/delete", async (c: Context) => {
+  const bucket = c.req.param("name");
+  const { prefix } = await c.req.json<{ prefix: string }>();
+  if (!prefix) return c.json({ error: "prefix is required" }, 400);
+
+  const client = s3();
+  let allKeys: string[] = [];
+  let continuationToken: string | undefined;
+
+  // List all objects under the prefix (paginated)
+  do {
+    const listResult = await client.send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: prefix,
+        ContinuationToken: continuationToken,
+      })
+    );
+    allKeys.push(...(listResult.Contents || []).map((o) => o.Key!));
+    continuationToken = listResult.IsTruncated ? listResult.NextContinuationToken : undefined;
+  } while (continuationToken);
+
+  if (allKeys.length === 0) {
+    return c.json({ bucket, prefix, deleted: [], totalDeleted: 0 });
+  }
+
+  // Batch delete in chunks of 1000 (S3 limit per DeleteObjects request)
+  let totalDeleted = 0;
+  const allErrors: Array<{ key: string | undefined; code: string | undefined; message: string | undefined }> = [];
+  for (let i = 0; i < allKeys.length; i += 1000) {
+    const chunk = allKeys.slice(i, i + 1000);
+    const result = await client.send(
+      new DeleteObjectsCommand({
+        Bucket: bucket,
+        Delete: { Objects: chunk.map((k) => ({ Key: k })) },
+      })
+    );
+    totalDeleted += result.Deleted?.length || 0;
+    allErrors.push(...(result.Errors || []).map((e) => ({ key: e.Key, code: e.Code, message: e.Message })));
+  }
+
+  return c.json({
+    bucket,
+    prefix,
+    deleted: allKeys,
+    totalDeleted,
+    errors: allErrors,
+  });
 });
 
 export default router;

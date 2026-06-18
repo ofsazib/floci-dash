@@ -25,6 +25,8 @@ vi.mock("../hooks/useS3", () => ({
   useS3UploadFiles: () => ({ mutateAsync: vi.fn(), isPending: false, isError: false, error: null }),
   useS3DeleteObject: () => ({ mutate: vi.fn(), isPending: false, variables: null }),
   useS3CreateFolder: () => ({ mutate: vi.fn(), isPending: false }),
+  useS3BatchDeleteObjects: () => ({ mutate: vi.fn(), isPending: false }),
+  useS3DeleteFolder: () => ({ mutate: vi.fn(), isPending: false, variables: null }),
 }));
 
 vi.mock("../hooks/useS3Config", () => ({

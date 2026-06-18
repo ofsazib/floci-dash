@@ -134,3 +134,27 @@ export function useS3CreateFolder(bucket: string) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "s3", "objects", bucket] }),
   });
 }
+
+export function useS3BatchDeleteObjects(bucket: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (keys: string[]) =>
+      api(`/aws/s3/buckets/${bucket}/objects/batch-delete`, {
+        method: "POST",
+        body: JSON.stringify({ keys }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "s3", "objects", bucket] }),
+  });
+}
+
+export function useS3DeleteFolder(bucket: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (prefix: string) =>
+      api(`/aws/s3/buckets/${bucket}/folders/delete`, {
+        method: "POST",
+        body: JSON.stringify({ prefix }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "s3", "objects", bucket] }),
+  });
+}

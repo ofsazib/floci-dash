@@ -493,7 +493,8 @@ if (service === "sqs") return <SQSQueues />;
 | Resource Type | Floci Operations | Dashboard UI Features | Status |
 |---------------|------------------|----------------------|--------|
 | **Buckets** | ListBuckets, CreateBucket, DeleteBucket | List with search, Create, Delete | Done |
-| **Objects** | ListObjectsV2, GetObject, PutObject (multipart upload), DeleteObject | Object browser, Upload (drag-drop), Detail viewer, Download, Delete | Done |
+| **Objects** | ListObjectsV2, GetObject, PutObject (multipart upload), DeleteObject, DeleteObjects (batch) | Object browser, Upload (drag-drop), Detail viewer, Download, Single delete, **Multi-select batch delete** | Done |
+| **Folders** | ListObjectsV2 (delimiter), PutObject (zero-byte marker) | Folder navigation, breadcrumbs, Create folder, **Recursive folder delete** | Done |
 | **Bucket Versioning** | GetBucketVersioning, PutBucketVersioning | Versioning status viewer, Enable/Suspend toggle | Done |
 | **Bucket Tags** | GetBucketTagging, PutBucketTagging, DeleteBucketTagging | Tag list, Key/value editor, Add/remove tags | Done |
 | **Bucket Policy** | GetBucketPolicy, PutBucketPolicy, DeleteBucketPolicy | JSON policy editor, Save/delete | Done |
@@ -935,6 +936,17 @@ if (service === "sqs") return <SQSQueues />;
 | 1.16 | Frontend: S3 folder browser — create folder button in S3ObjectBrowser (uses current prefix) | Done | 2025-06-17 |
 | 1.17 | Frontend: useS3 hooks — useCreateFolder mutation | Done | 2025-06-17 |
 | 1.18 | Verify: typecheck + build pass | Done | 2025-06-17 |
+| 1.19 | Backend: POST /api/aws/s3/buckets/:name/objects/batch-delete (DeleteObjectsCommand, accepts keys[]) | Done | 2025-06-18 |
+| 1.20 | Backend: POST /api/aws/s3/buckets/:name/folders/delete (recursive delete: list all objects under prefix, batch-delete in chunks of 1000) | Done | 2025-06-18 |
+| 1.21 | Frontend: useS3 hooks — useS3BatchDeleteObjects mutation (invalidates objects query on success) | Done | 2025-06-18 |
+| 1.22 | Frontend: useS3 hooks — useS3DeleteFolder mutation (calls recursive folder-delete endpoint) | Done | 2025-06-18 |
+| 1.23 | Frontend: S3ObjectBrowser — add `selectionType="multi"` to objects Table + `selectedItems` state + `trackBy="key"` | Done | 2025-06-18 |
+| 1.24 | Frontend: S3ObjectBrowser — add "Delete selected (N)" button in header actions, shown only when selectedItems > 0 | Done | 2025-06-18 |
+| 1.25 | Frontend: S3ObjectBrowser — add delete button column for folders (calls useS3DeleteFolder with folder prefix) | Done | 2025-06-18 |
+| 1.26 | Frontend: S3ObjectBrowser — confirm modal for batch delete showing count + selected key names | Done | 2025-06-18 |
+| 1.27 | Backend tests: s3.test.ts — batch-delete (happy path, empty list 400, partial failure) + folder-delete (happy path, empty prefix 400) | Done | 2025-06-18 |
+| 1.28 | Frontend tests: useS3.test.ts — useS3BatchDeleteObjects + useS3DeleteFolder (correct URL, method, body, invalidation) | Done | 2025-06-18 |
+| 1.29 | Verify: typecheck + tests + build pass | Done | 2025-06-18 |
 
 #### 1B — DynamoDB (ServicePage Integration)
 

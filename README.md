@@ -315,7 +315,7 @@ These services have full CRUD operations in both backend and frontend:
 
 | Service | Operations |
 |---------|------------|
-| **S3** | List buckets, create/delete bucket, list objects, upload (multipart), download, delete objects, bucket configuration |
+| **S3** | List buckets, create/delete bucket, list objects, upload (multipart), download, delete objects, **multi-select batch delete**, **recursive folder delete**, bucket configuration |
 | **DynamoDB** | List tables, create/delete table, scan items, query, filter, put item, delete item |
 | **RDS** | List/create/delete/modify/reboot DB instances, list/create/delete DB clusters, list/create/delete parameter groups & cluster parameter groups, view/modify parameters |
 | **EC2** | 13 resource types: Instances (run/start/stop/reboot/terminate, **web terminal** via Docker Engine API with PTY), VPCs (CIDR association, endpoints), Subnets, Security Groups (ingress/egress rules), Key Pairs (import), AMIs, Tags, Internet Gateways (attach/detach), Route Tables (routes, subnet association), NAT Gateways, Elastic IPs (associate/disassociate), Launch Templates (versions), Volumes, Regions/AZs, Instance Types, Network Interfaces |
