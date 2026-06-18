@@ -352,6 +352,9 @@ These services have full CRUD operations in both backend and frontend:
 | **Auto Scaling** | Auto Scaling Groups (list, create, update, delete, set desired capacity), launch configurations (list), scaling policies (list per ASG), scaling activities (list per ASG) |
 | **CloudFront** | Distributions (list, get, create, update, delete with ETag), invalidations (list, create, get per distribution), cache policies (list), origin access controls (list), functions (list), tags (list per resource) |
 | **Kinesis** | Streams (list with summaries, describe, create, delete), shards (list per stream), consumers (list per stream), records (put single, put batch, get via shard iterator), tags (list per stream) |
+| **Neptune** | Clusters (list, describe, create, delete), instances (list, describe, create with cluster attachment, delete) |
+| **EventBridge Pipes** | Pipes (list, describe, create, update, delete, start, stop with state management) |
+| **Cognito** | User pools (list, describe, create, delete), users (list, admin create, delete, enable, disable, set password), groups (list, create, delete), app clients (list, describe, create, delete) |
 
 ### Navigation + status (55 services)
 

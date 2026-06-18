@@ -196,6 +196,35 @@ import {
   useKinesisShards,
   usePutKinesisRecord,
 } from "../hooks/useKinesis";
+import {
+  useNeptuneClusters,
+  useCreateNeptuneCluster,
+  useDeleteNeptuneCluster,
+  useNeptuneInstances,
+  useCreateNeptuneInstance,
+  useDeleteNeptuneInstance,
+} from "../hooks/useNeptune";
+import {
+  usePipes,
+  useCreatePipe,
+  useDeletePipe,
+  useStartPipe,
+  useStopPipe,
+} from "../hooks/usePipes";
+import {
+  useCognitoUserPools,
+  useCreateCognitoUserPool,
+  useDeleteCognitoUserPool,
+  useCognitoUsers,
+  useCreateCognitoUser,
+  useDeleteCognitoUser,
+  useCognitoGroups,
+  useCreateCognitoGroup,
+  useDeleteCognitoGroup,
+  useCognitoUserPoolClients,
+  useCreateCognitoUserPoolClient,
+  useDeleteCognitoUserPoolClient,
+} from "../hooks/useCognito";
 
 const KEY_TYPE_OPTIONS: SelectProps.Option[] = [
   { label: "String (S)", value: "S" },
@@ -236,7 +265,7 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
 ];
 
 /** Services with a fully implemented backend that can show a resource list */
-const IMPLEMENTED_SERVICES = new Set(["dynamodb", "rds", "logs", "ecs", "ssm", "route53", "apigateway", "appsync", "scheduler", "ecr", "elb", "ses", "sts", "eks", "autoscaling", "cloudfront", "kinesis"]);
+const IMPLEMENTED_SERVICES = new Set(["dynamodb", "rds", "logs", "ecs", "ssm", "route53", "apigateway", "appsync", "scheduler", "ecr", "elb", "ses", "sts", "eks", "autoscaling", "cloudfront", "kinesis", "neptune", "pipes", "cognito-idp"]);
 
 export default function ServicePage() {
   const { service } = useParams<{ service: string }>();
@@ -312,6 +341,9 @@ function ServiceResourceList({ service }: { service: string }) {
   if (service === "autoscaling") return <AutoScalingDashboard />;
   if (service === "cloudfront") return <CloudFrontDashboard />;
   if (service === "kinesis") return <KinesisDashboard />;
+  if (service === "neptune") return <NeptuneDashboard />;
+  if (service === "pipes") return <PipesDashboard />;
+  if (service === "cognito-idp") return <CognitoDashboard />;
   return null;
 }
 
@@ -6415,6 +6447,347 @@ function KinesisDashboard() {
           ),
         },
       ]}
+    />
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  Neptune
+// ────────────────────────────────────────────────────────
+
+function NeptuneDashboard() {
+  const { data: clustersData, isLoading: clustersLoading } = useNeptuneClusters();
+  const deleteCluster = useDeleteNeptuneCluster();
+  const { data: instancesData, isLoading: instancesLoading } = useNeptuneInstances();
+  const deleteInstance = useDeleteNeptuneInstance();
+
+  return (
+    <Tabs
+      tabs={[
+        {
+          id: "clusters",
+          label: "Clusters",
+          content: (
+            <ResourceTable
+              resourceName="Cluster"
+              headerTitle="Neptune Clusters"
+              headerCounter={clustersData?.total}
+              items={(clustersData?.clusters || []).map((c: any) => ({
+                id: c.DBClusterIdentifier,
+                status: c.Status,
+                engine: c.Engine,
+                version: c.EngineVersion || "-",
+                endpoint: c.Endpoint || "-",
+                members: c.DBClusterMembers?.length || 0,
+              }))}
+              loading={clustersLoading}
+              emptyMessage="No Neptune clusters"
+              columns={[
+                { id: "id", header: "Cluster ID", cell: (i: any) => i.id, isRowHeader: true },
+                { id: "status", header: "Status", cell: (i: any) => i.status },
+                { id: "engine", header: "Engine", cell: (i: any) => i.engine },
+                { id: "version", header: "Version", cell: (i: any) => i.version },
+                { id: "endpoint", header: "Endpoint", cell: (i: any) => i.endpoint },
+                { id: "members", header: "Members", cell: (i: any) => i.members },
+                {
+                  id: "actions",
+                  header: "",
+                  cell: (i: any) => (
+                    <DeleteButton
+                      itemName={i.id}
+                      resourceType="cluster"
+                      loading={deleteCluster.isPending && deleteCluster.variables === i.id}
+                      onDelete={() => deleteCluster.mutateAsync(i.id)}
+                    />
+                  ),
+                },
+              ]}
+              filterEnabled
+              filterPlaceholder="Find clusters"
+              filterFunction={(i: any, s: string) => i.id.toLowerCase().includes(s.toLowerCase())}
+            />
+          ),
+        },
+        {
+          id: "instances",
+          label: "Instances",
+          content: (
+            <ResourceTable
+              resourceName="Instance"
+              headerTitle="Neptune Instances"
+              headerCounter={instancesData?.total}
+              items={(instancesData?.instances || []).map((i: any) => ({
+                id: i.DBInstanceIdentifier,
+                cluster: i.DBClusterIdentifier || "-",
+                cls: i.DBInstanceClass || "-",
+                status: i.DBInstanceStatus || "-",
+                endpoint: i.Endpoint?.Address || "-",
+              }))}
+              loading={instancesLoading}
+              emptyMessage="No Neptune instances"
+              columns={[
+                { id: "id", header: "Instance ID", cell: (i: any) => i.id, isRowHeader: true },
+                { id: "cluster", header: "Cluster", cell: (i: any) => i.cluster },
+                { id: "cls", header: "Class", cell: (i: any) => i.cls },
+                { id: "status", header: "Status", cell: (i: any) => i.status },
+                { id: "endpoint", header: "Endpoint", cell: (i: any) => i.endpoint },
+                {
+                  id: "actions",
+                  header: "",
+                  cell: (i: any) => (
+                    <DeleteButton
+                      itemName={i.id}
+                      resourceType="instance"
+                      loading={deleteInstance.isPending && deleteInstance.variables === i.id}
+                      onDelete={() => deleteInstance.mutateAsync(i.id)}
+                    />
+                  ),
+                },
+              ]}
+              filterEnabled
+              filterPlaceholder="Find instances"
+              filterFunction={(i: any, s: string) => i.id.toLowerCase().includes(s.toLowerCase())}
+            />
+          ),
+        },
+      ]}
+    />
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  EventBridge Pipes
+// ────────────────────────────────────────────────────────
+
+function PipesDashboard() {
+  const { data, isLoading } = usePipes();
+  const deletePipe = useDeletePipe();
+  const startPipe = useStartPipe();
+  const stopPipe = useStopPipe();
+
+  if (isLoading) return <Spinner />;
+
+  return (
+    <ResourceTable
+      resourceName="Pipe"
+      headerTitle="EventBridge Pipes"
+      headerCounter={data?.total}
+      items={(data?.pipes || []).map((p: any) => ({
+        name: p.Name,
+        source: p.Source,
+        target: p.Target,
+        desired: p.DesiredState,
+        current: p.CurrentState,
+        created: p.CreationTime ? new Date(p.CreationTime * 1000).toLocaleDateString() : "-",
+      }))}
+      loading={isLoading}
+      emptyMessage="No EventBridge pipes"
+      columns={[
+        { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+        { id: "source", header: "Source", cell: (i: any) => i.source },
+        { id: "target", header: "Target", cell: (i: any) => i.target },
+        { id: "desired", header: "Desired", cell: (i: any) => i.desired },
+        { id: "current", header: "Current", cell: (i: any) => i.current },
+        { id: "created", header: "Created", cell: (i: any) => i.created },
+        {
+          id: "actions",
+          header: "",
+          cell: (i: any) => (
+            <SpaceBetween direction="horizontal" size="xs">
+              {i.desired !== "RUNNING" && (
+                <Button
+                  loading={startPipe.isPending && startPipe.variables === i.name}
+                  onClick={() => startPipe.mutateAsync(i.name)}
+                >
+                  Start
+                </Button>
+              )}
+              {i.desired === "RUNNING" && (
+                <Button
+                  loading={stopPipe.isPending && stopPipe.variables === i.name}
+                  onClick={() => stopPipe.mutateAsync(i.name)}
+                >
+                  Stop
+                </Button>
+              )}
+              <DeleteButton
+                itemName={i.name}
+                resourceType="pipe"
+                loading={deletePipe.isPending && deletePipe.variables === i.name}
+                onDelete={() => deletePipe.mutateAsync(i.name)}
+              />
+            </SpaceBetween>
+          ),
+        },
+      ]}
+      filterEnabled
+      filterPlaceholder="Find pipes by name"
+      filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+    />
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  Cognito
+// ────────────────────────────────────────────────────────
+
+function CognitoDashboard() {
+  const { data, isLoading } = useCognitoUserPools();
+  const deletePool = useDeleteCognitoUserPool();
+  const [selectedPool, setSelectedPool] = useState<string | null>(null);
+  const { data: usersData } = useCognitoUsers(selectedPool);
+  const { data: groupsData } = useCognitoGroups(selectedPool);
+  const { data: clientsData } = useCognitoUserPoolClients(selectedPool);
+
+  if (isLoading) return <Spinner />;
+
+  if (selectedPool) {
+    return (
+      <>
+        <Box margin={{ bottom: "s" }}>
+          <Button iconName="arrow-left" onClick={() => setSelectedPool(null)}>
+            Back to user pools
+          </Button>
+        </Box>
+        <Tabs
+          tabs={[
+            {
+              id: "users",
+              label: "Users",
+              content: (
+                <ResourceTable
+                  resourceName="User"
+                  headerTitle={`Users in ${selectedPool}`}
+                  headerCounter={usersData?.total}
+                  items={(usersData?.users || []).map((u: any) => ({
+                    username: u.Username,
+                    status: u.UserStatus,
+                    enabled: u.Enabled,
+                    created: u.UserCreateDate
+                      ? new Date(u.UserCreateDate * 1000).toLocaleDateString()
+                      : "-",
+                  }))}
+                  loading={false}
+                  emptyMessage="No users"
+                  columns={[
+                    { id: "username", header: "Username", cell: (i: any) => i.username, isRowHeader: true },
+                    { id: "status", header: "Status", cell: (i: any) => i.status },
+                    { id: "enabled", header: "Enabled", cell: (i: any) => (i.enabled ? "Yes" : "No") },
+                    { id: "created", header: "Created", cell: (i: any) => i.created },
+                  ]}
+                  filterEnabled
+                  filterPlaceholder="Find users"
+                  filterFunction={(i: any, s: string) => i.username.toLowerCase().includes(s.toLowerCase())}
+                />
+              ),
+            },
+            {
+              id: "groups",
+              label: "Groups",
+              content: (
+                <ResourceTable
+                  resourceName="Group"
+                  headerTitle={`Groups in ${selectedPool}`}
+                  headerCounter={groupsData?.total}
+                  items={(groupsData?.groups || []).map((g: any) => ({
+                    name: g.GroupName,
+                    description: g.Description || "-",
+                    precedence: g.Precedence ?? "-",
+                    role: g.RoleArn || "-",
+                  }))}
+                  loading={false}
+                  emptyMessage="No groups"
+                  columns={[
+                    { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+                    { id: "description", header: "Description", cell: (i: any) => i.description },
+                    { id: "precedence", header: "Precedence", cell: (i: any) => i.precedence },
+                    { id: "role", header: "Role ARN", cell: (i: any) => i.role },
+                  ]}
+                  filterEnabled
+                  filterPlaceholder="Find groups"
+                  filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+                />
+              ),
+            },
+            {
+              id: "clients",
+              label: "App Clients",
+              content: (
+                <ResourceTable
+                  resourceName="Client"
+                  headerTitle={`App Clients in ${selectedPool}`}
+                  headerCounter={clientsData?.total}
+                  items={(clientsData?.clients || []).map((cl: any) => ({
+                    id: cl.ClientId,
+                    name: cl.ClientName,
+                    created: cl.CreationDate
+                      ? new Date(cl.CreationDate * 1000).toLocaleDateString()
+                      : "-",
+                  }))}
+                  loading={false}
+                  emptyMessage="No app clients"
+                  columns={[
+                    { id: "id", header: "Client ID", cell: (i: any) => i.id, isRowHeader: true },
+                    { id: "name", header: "Name", cell: (i: any) => i.name },
+                    { id: "created", header: "Created", cell: (i: any) => i.created },
+                  ]}
+                  filterEnabled
+                  filterPlaceholder="Find clients"
+                  filterFunction={(i: any, s: string) =>
+                    (i.name || "").toLowerCase().includes(s.toLowerCase())
+                  }
+                />
+              ),
+            },
+          ]}
+        />
+      </>
+    );
+  }
+
+  return (
+    <ResourceTable
+      resourceName="User Pool"
+      headerTitle="Cognito User Pools"
+      headerCounter={data?.total}
+      items={(data?.userPools || []).map((p: any) => ({
+        id: p.Id,
+        name: p.Name,
+        status: p.Status,
+        created: p.CreationDate ? new Date(p.CreationDate * 1000).toLocaleDateString() : "-",
+      }))}
+      loading={isLoading}
+      emptyMessage="No Cognito user pools"
+      columns={[
+        {
+          id: "name",
+          header: "Name",
+          cell: (i: any) => (
+            <Button variant="link" onClick={() => setSelectedPool(i.id)}>
+              {i.name}
+            </Button>
+          ),
+          isRowHeader: true,
+        },
+        { id: "id", header: "Pool ID", cell: (i: any) => i.id },
+        { id: "status", header: "Status", cell: (i: any) => i.status },
+        { id: "created", header: "Created", cell: (i: any) => i.created },
+        {
+          id: "actions",
+          header: "",
+          cell: (i: any) => (
+            <DeleteButton
+              itemName={i.name}
+              resourceType="user pool"
+              loading={deletePool.isPending && deletePool.variables === i.id}
+              onDelete={() => deletePool.mutateAsync(i.id)}
+            />
+          ),
+        },
+      ]}
+      filterEnabled
+      filterPlaceholder="Find user pools"
+      filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
     />
   );
 }
