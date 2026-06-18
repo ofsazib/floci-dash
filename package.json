@@ -21,7 +21,9 @@
   "dependencies": {
     "@aws-sdk/client-api-gateway": "^3.1070.0",
     "@aws-sdk/client-appsync": "^3.1070.0",
+    "@aws-sdk/client-auto-scaling": "^3.1071.0",
     "@aws-sdk/client-cloudformation": "^3.1068.0",
+    "@aws-sdk/client-cloudfront": "^3.1071.0",
     "@aws-sdk/client-cloudwatch": "^3.1068.0",
     "@aws-sdk/client-cloudwatch-logs": "^3.1068.0",
     "@aws-sdk/client-dynamodb": "^3.0.0",
@@ -32,6 +34,7 @@
     "@aws-sdk/client-elastic-load-balancing-v2": "^3.1070.0",
     "@aws-sdk/client-eventbridge": "^3.1068.0",
     "@aws-sdk/client-iam": "^3.1068.0",
+    "@aws-sdk/client-kinesis": "^3.1071.0",
     "@aws-sdk/client-kms": "^3.1068.0",
     "@aws-sdk/client-lambda": "^3.1068.0",
     "@aws-sdk/client-rds": "^3.1068.0",

@@ -28,6 +28,9 @@ import ecrRoutes from "./ecr";
 import elbRoutes from "./elb";
 import sesRoutes from "./ses";
 import eksRoutes from "./eks";
+import autoscalingRoutes from "./autoscaling";
+import cloudfrontRoutes from "./cloudfront";
+import kinesisRoutes from "./kinesis";
 
 const router = new Hono();
 
@@ -59,9 +62,12 @@ router.route("/ecr", ecrRoutes);
 router.route("/elb", elbRoutes);
 router.route("/ses", sesRoutes);
 router.route("/eks", eksRoutes);
+router.route("/autoscaling", autoscalingRoutes);
+router.route("/cloudfront", cloudfrontRoutes);
+router.route("/kinesis", kinesisRoutes);
 
 router.get("/", (c: Context) => {
-  return c.json({ message: "AWS routes available. Services registered: s3, dynamodb, rds, ec2, sqs, sns, events, logs, lambda, cloudwatch, iam, secretsmanager, cloudformation, kms, ecs, ssm, route53, apigateway, sts, appsync, scheduler, ecr, elb, ses, eks" });
+  return c.json({ message: "AWS routes available. Services registered: s3, dynamodb, rds, ec2, sqs, sns, events, logs, lambda, cloudwatch, iam, secretsmanager, cloudformation, kms, ecs, ssm, route53, apigateway, sts, appsync, scheduler, ecr, elb, ses, eks, autoscaling, cloudfront, kinesis" });
 });
 
 export default router;

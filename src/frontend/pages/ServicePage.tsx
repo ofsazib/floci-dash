@@ -176,6 +176,26 @@ import {
   useEKSCreateNodegroup,
   useEKSDeleteNodegroup,
 } from "../hooks/useEKS";
+import {
+  useAutoScalingGroups,
+  useCreateAutoScalingGroup,
+  useDeleteAutoScalingGroup,
+  useLaunchConfigurations,
+} from "../hooks/useAutoScaling";
+import {
+  useCloudFrontDistributions,
+  useCloudFrontInvalidations,
+  useCreateCloudFrontInvalidation,
+  useCloudFrontCachePolicies,
+  useCloudFrontFunctions,
+} from "../hooks/useCloudFront";
+import {
+  useKinesisStreams,
+  useCreateKinesisStream,
+  useDeleteKinesisStream,
+  useKinesisShards,
+  usePutKinesisRecord,
+} from "../hooks/useKinesis";
 
 const KEY_TYPE_OPTIONS: SelectProps.Option[] = [
   { label: "String (S)", value: "S" },
@@ -216,7 +236,7 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
 ];
 
 /** Services with a fully implemented backend that can show a resource list */
-const IMPLEMENTED_SERVICES = new Set(["dynamodb", "rds", "logs", "ecs", "ssm", "route53", "apigateway", "appsync", "scheduler", "ecr", "elb", "ses", "sts", "eks"]);
+const IMPLEMENTED_SERVICES = new Set(["dynamodb", "rds", "logs", "ecs", "ssm", "route53", "apigateway", "appsync", "scheduler", "ecr", "elb", "ses", "sts", "eks", "autoscaling", "cloudfront", "kinesis"]);
 
 export default function ServicePage() {
   const { service } = useParams<{ service: string }>();
@@ -289,6 +309,9 @@ function ServiceResourceList({ service }: { service: string }) {
   if (service === "ses") return <SESDashboard />;
   if (service === "sts") return <STSDashboard />;
   if (service === "eks") return <EKSDashboard />;
+  if (service === "autoscaling") return <AutoScalingDashboard />;
+  if (service === "cloudfront") return <CloudFrontDashboard />;
+  if (service === "kinesis") return <KinesisDashboard />;
   return null;
 }
 
@@ -5885,5 +5908,513 @@ function NodegroupsPanel({
         </Form>
       </Modal>
     </>
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  Auto Scaling
+// ────────────────────────────────────────────────────────
+
+function AutoScalingDashboard() {
+  const { data, isLoading } = useAutoScalingGroups();
+  const createGroup = useCreateAutoScalingGroup();
+  const deleteGroup = useDeleteAutoScalingGroup();
+  const { data: lcData } = useLaunchConfigurations();
+  const [showCreate, setShowCreate] = useState(false);
+  const [name, setName] = useState("");
+  const [minSize, setMinSize] = useState("1");
+  const [maxSize, setMaxSize] = useState("5");
+  const [desired, setDesired] = useState("2");
+  const [lcName, setLcName] = useState("");
+
+  if (isLoading) return <Spinner />;
+
+  return (
+    <Tabs
+      tabs={[
+        {
+          id: "groups",
+          label: "Auto Scaling Groups",
+          content: (
+            <ResourceTable
+              resourceName="Auto Scaling Group"
+              headerTitle="Auto Scaling Groups"
+              headerCounter={data?.total}
+              items={(data?.groups || []).map((g: any) => ({
+                name: g.AutoScalingGroupName,
+                min: g.MinSize,
+                max: g.MaxSize,
+                desired: g.DesiredCapacity,
+                instances: g.Instances?.length || 0,
+                health: g.HealthCheckType,
+                created: g.CreatedTime ? new Date(g.CreatedTime).toLocaleDateString() : "-",
+              }))}
+              loading={isLoading}
+              onCreate={() => setShowCreate(true)}
+              emptyMessage="No auto scaling groups"
+              columns={[
+                { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+                { id: "min", header: "Min", cell: (i: any) => i.min },
+                { id: "max", header: "Max", cell: (i: any) => i.max },
+                { id: "desired", header: "Desired", cell: (i: any) => i.desired },
+                { id: "instances", header: "Instances", cell: (i: any) => i.instances },
+                { id: "health", header: "Health Check", cell: (i: any) => i.health },
+                { id: "created", header: "Created", cell: (i: any) => i.created },
+                {
+                  id: "actions",
+                  header: "",
+                  cell: (i: any) => (
+                    <DeleteButton
+                      itemName={i.name}
+                      resourceType="auto scaling group"
+                      loading={deleteGroup.isPending && deleteGroup.variables === i.name}
+                      onDelete={() => deleteGroup.mutateAsync(i.name)}
+                    />
+                  ),
+                },
+              ]}
+              filterEnabled
+              filterPlaceholder="Find groups by name"
+              filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+            />
+          ),
+        },
+        {
+          id: "launch-configs",
+          label: "Launch Configurations",
+          content: (
+            <ResourceTable
+              resourceName="Launch Configuration"
+              headerTitle="Launch Configurations"
+              headerCounter={lcData?.total}
+              items={(lcData?.launchConfigurations || []).map((lc: any) => ({
+                name: lc.LaunchConfigurationName,
+                image: lc.ImageId,
+                type: lc.InstanceType,
+                created: lc.CreatedTime ? new Date(lc.CreatedTime).toLocaleDateString() : "-",
+              }))}
+              loading={false}
+              emptyMessage="No launch configurations"
+              columns={[
+                { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+                { id: "image", header: "AMI", cell: (i: any) => i.image },
+                { id: "type", header: "Instance Type", cell: (i: any) => i.type },
+                { id: "created", header: "Created", cell: (i: any) => i.created },
+              ]}
+              filterEnabled
+              filterPlaceholder="Find launch configs"
+              filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+            />
+          ),
+        },
+      ]}
+    />
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  CloudFront
+// ────────────────────────────────────────────────────────
+
+function CloudFrontDashboard() {
+  const { data, isLoading } = useCloudFrontDistributions();
+  const { data: cachePolicies } = useCloudFrontCachePolicies();
+  const { data: functions } = useCloudFrontFunctions();
+  const [selectedDist, setSelectedDist] = useState<string | null>(null);
+  const { data: invData } = useCloudFrontInvalidations(selectedDist);
+  const createInvalidation = useCreateCloudFrontInvalidation(selectedDist || "");
+  const [showInvalidation, setShowInvalidation] = useState(false);
+  const [invPaths, setInvPaths] = useState("/*");
+
+  if (isLoading) return <Spinner />;
+
+  return (
+    <Tabs
+      activeTabId={selectedDist ? "invalidations" : "distributions"}
+      tabs={[
+        {
+          id: "distributions",
+          label: "Distributions",
+          content: (
+            <ResourceTable
+              resourceName="Distribution"
+              headerTitle="CloudFront Distributions"
+              headerCounter={data?.total}
+              items={(data?.distributions || []).map((d: any) => ({
+                id: d.Id,
+                domain: d.DomainName,
+                status: d.Status,
+                enabled: d.Enabled,
+                priceClass: d.PriceClass || "PriceClass_All",
+                modified: d.LastModifiedTime ? new Date(d.LastModifiedTime).toLocaleDateString() : "-",
+              }))}
+              loading={isLoading}
+              emptyMessage="No CloudFront distributions"
+              columns={[
+                {
+                  id: "id",
+                  header: "ID",
+                  cell: (i: any) => (
+                    <Button variant="link" onClick={() => setSelectedDist(i.id)}>
+                      {i.id}
+                    </Button>
+                  ),
+                  isRowHeader: true,
+                },
+                { id: "domain", header: "Domain", cell: (i: any) => i.domain },
+                { id: "status", header: "Status", cell: (i: any) => i.status },
+                { id: "enabled", header: "Enabled", cell: (i: any) => (i.enabled ? "Yes" : "No") },
+                { id: "modified", header: "Last Modified", cell: (i: any) => i.modified },
+              ]}
+              filterEnabled
+              filterPlaceholder="Find distributions by ID"
+              filterFunction={(i: any, s: string) => i.id.toLowerCase().includes(s.toLowerCase())}
+            />
+          ),
+        },
+        {
+          id: "invalidations",
+          label: "Invalidations",
+          content: (
+            <>
+              {selectedDist && (
+                <Box margin={{ bottom: "s" }}>
+                  <Button iconName="arrow-left" onClick={() => setSelectedDist(null)}>
+                    Back to distributions
+                  </Button>
+                </Box>
+              )}
+              {!selectedDist ? (
+                <Alert type="info">Select a distribution to view its invalidations.</Alert>
+              ) : (
+                <>
+                  <ResourceTable
+                    resourceName="Invalidation"
+                    headerTitle={`Invalidations for ${selectedDist}`}
+                    headerCounter={invData?.total}
+                    items={(invData?.invalidations || []).map((inv: any) => ({
+                      id: inv.Id,
+                      status: inv.Status,
+                      paths: inv.InvalidationBatch?.Paths?.Items?.join(", ") || "-",
+                      created: inv.CreateTime ? new Date(inv.CreateTime).toLocaleDateString() : "-",
+                    }))}
+                    loading={false}
+                    onCreate={() => setShowInvalidation(true)}
+                    emptyMessage="No invalidations"
+                    columns={[
+                      { id: "id", header: "ID", cell: (i: any) => i.id, isRowHeader: true },
+                      { id: "status", header: "Status", cell: (i: any) => i.status },
+                      { id: "paths", header: "Paths", cell: (i: any) => i.paths },
+                      { id: "created", header: "Created", cell: (i: any) => i.created },
+                    ]}
+                  />
+                  <Modal
+                    visible={showInvalidation}
+                    onDismiss={() => setShowInvalidation(false)}
+                    header="Create invalidation"
+                    footer={
+                      <Box>
+                        <Button
+                          variant="primary"
+                          loading={createInvalidation.isPending}
+                          onClick={() => {
+                            const paths = invPaths.split("\n").map((p) => p.trim()).filter(Boolean);
+                            createInvalidation.mutateAsync({ paths }).then(() => {
+                              setShowInvalidation(false);
+                              setInvPaths("/*");
+                            });
+                          }}
+                        >
+                          Create
+                        </Button>
+                        <Button onClick={() => setShowInvalidation(false)}>Cancel</Button>
+                      </Box>
+                    }
+                  >
+                    <FormField label="Paths (one per line)" description="Use /* for all files, /images/* for a directory">
+                      <Textarea value={invPaths} onChange={({ detail }) => setInvPaths(detail.value)} rows={5} />
+                    </FormField>
+                  </Modal>
+                </>
+              )}
+            </>
+          ),
+        },
+        {
+          id: "cache-policies",
+          label: "Cache Policies",
+          content: (
+            <ResourceTable
+              resourceName="Cache Policy"
+              headerTitle="Cache Policies"
+              headerCounter={cachePolicies?.total}
+              items={(cachePolicies?.cachePolicies || []).map((p: any) => ({
+                id: p.CachePolicy?.Id,
+                name: p.CachePolicy?.CachePolicyConfig?.Name,
+                type: p.Type,
+                comment: p.CachePolicy?.CachePolicyConfig?.Comment || "-",
+              }))}
+              loading={false}
+              emptyMessage="No cache policies"
+              columns={[
+                { id: "id", header: "ID", cell: (i: any) => i.id, isRowHeader: true },
+                { id: "name", header: "Name", cell: (i: any) => i.name },
+                { id: "type", header: "Type", cell: (i: any) => i.type },
+                { id: "comment", header: "Comment", cell: (i: any) => i.comment },
+              ]}
+              filterEnabled
+              filterPlaceholder="Find policies"
+              filterFunction={(i: any, s: string) =>
+                (i.name || "").toLowerCase().includes(s.toLowerCase())
+              }
+            />
+          ),
+        },
+        {
+          id: "functions",
+          label: "Functions",
+          content: (
+            <ResourceTable
+              resourceName="Function"
+              headerTitle="CloudFront Functions"
+              headerCounter={functions?.total}
+              items={(functions?.functions || []).map((f: any) => ({
+                name: f.Name,
+                arn: f.FunctionARN,
+                stage: f.FunctionMetadata?.Stage || f.Stage || "-",
+                runtime: f.FunctionConfig?.Runtime || "-",
+                created: f.FunctionMetadata?.CreatedTime
+                  ? new Date(f.FunctionMetadata.CreatedTime).toLocaleDateString()
+                  : "-",
+              }))}
+              loading={false}
+              emptyMessage="No CloudFront functions"
+              columns={[
+                { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+                { id: "stage", header: "Stage", cell: (i: any) => i.stage },
+                { id: "runtime", header: "Runtime", cell: (i: any) => i.runtime },
+                { id: "created", header: "Created", cell: (i: any) => i.created },
+              ]}
+              filterEnabled
+              filterPlaceholder="Find functions"
+              filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+            />
+          ),
+        },
+      ]}
+    />
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  Kinesis
+// ────────────────────────────────────────────────────────
+
+function KinesisDashboard() {
+  const { data, isLoading } = useKinesisStreams();
+  const createStream = useCreateKinesisStream();
+  const deleteStream = useDeleteKinesisStream();
+  const [showCreate, setShowCreate] = useState(false);
+  const [name, setName] = useState("");
+  const [shardCount, setShardCount] = useState("1");
+  const [selectedStream, setSelectedStream] = useState<string | null>(null);
+  const { data: shardsData } = useKinesisShards(selectedStream);
+  const putRecord = usePutKinesisRecord(selectedStream || "");
+  const [showPutRecord, setShowPutRecord] = useState(false);
+  const [recordData, setRecordData] = useState("");
+  const [recordKey, setRecordKey] = useState("");
+
+  if (isLoading) return <Spinner />;
+
+  return (
+    <Tabs
+      activeTabId={selectedStream ? "detail" : "streams"}
+      onChange={({ detail }) => {
+        if (detail.activeTabId === "streams") setSelectedStream(null);
+      }}
+      tabs={[
+        {
+          id: "streams",
+          label: "Streams",
+          content: (
+            <>
+              {selectedStream && (
+                <Box margin={{ bottom: "s" }}>
+                  <Button iconName="arrow-left" onClick={() => setSelectedStream(null)}>
+                    Back to streams
+                  </Button>
+                </Box>
+              )}
+              <ResourceTable
+                resourceName="Stream"
+                headerTitle="Kinesis Streams"
+                headerCounter={data?.total}
+                items={(data?.streams || []).map((s: any) => ({
+                  name: s.StreamName,
+                  status: s.StreamStatus,
+                  shards: s.OpenShardCount || 0,
+                  retention: s.RetentionPeriodHours,
+                  encryption: s.EncryptionType || "NONE",
+                  created: s.StreamCreationTimestamp
+                    ? new Date(s.StreamCreationTimestamp).toLocaleDateString()
+                    : "-",
+                }))}
+                loading={isLoading}
+                onCreate={() => setShowCreate(true)}
+                emptyMessage="No Kinesis streams"
+                columns={[
+                  {
+                    id: "name",
+                    header: "Name",
+                    cell: (i: any) => (
+                      <Button variant="link" onClick={() => setSelectedStream(i.name)}>
+                        {i.name}
+                      </Button>
+                    ),
+                    isRowHeader: true,
+                  },
+                  { id: "status", header: "Status", cell: (i: any) => i.status },
+                  { id: "shards", header: "Open Shards", cell: (i: any) => i.shards },
+                  { id: "retention", header: "Retention (hrs)", cell: (i: any) => i.retention },
+                  { id: "encryption", header: "Encryption", cell: (i: any) => i.encryption },
+                  { id: "created", header: "Created", cell: (i: any) => i.created },
+                  {
+                    id: "actions",
+                    header: "",
+                    cell: (i: any) => (
+                      <DeleteButton
+                        itemName={i.name}
+                        resourceType="stream"
+                        loading={deleteStream.isPending && deleteStream.variables === i.name}
+                        onDelete={() => deleteStream.mutateAsync(i.name)}
+                      />
+                    ),
+                  },
+                ]}
+                filterEnabled
+                filterPlaceholder="Find streams by name"
+                filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+              />
+              <Modal
+                visible={showCreate}
+                onDismiss={() => setShowCreate(false)}
+                header="Create Kinesis stream"
+                footer={
+                  <Box>
+                    <Button
+                      variant="primary"
+                      loading={createStream.isPending}
+                      onClick={() => {
+                        createStream
+                          .mutateAsync({
+                            streamName: name,
+                            shardCount: parseInt(shardCount) || 1,
+                          })
+                          .then(() => {
+                            setShowCreate(false);
+                            setName("");
+                            setShardCount("1");
+                          });
+                      }}
+                    >
+                      Create
+                    </Button>
+                    <Button onClick={() => setShowCreate(false)}>Cancel</Button>
+                  </Box>
+                }
+              >
+                <Form>
+                  <FormField label="Stream name">
+                    <Input value={name} onChange={({ detail }) => setName(detail.value)} placeholder="my-stream" />
+                  </FormField>
+                  <FormField label="Shard count">
+                    <Input
+                      value={shardCount}
+                      onChange={({ detail }) => setShardCount(detail.value)}
+                      placeholder="1"
+                      type="number"
+                    />
+                  </FormField>
+                </Form>
+              </Modal>
+            </>
+          ),
+        },
+        {
+          id: "detail",
+          label: selectedStream ? `Shards: ${selectedStream}` : "Stream Details",
+          content: selectedStream ? (
+            <>
+              <Box margin={{ bottom: "s" }}>
+                <Button onClick={() => setShowPutRecord(true)}>Put record</Button>
+              </Box>
+              <ResourceTable
+                resourceName="Shard"
+                headerTitle={`Shards in ${selectedStream}`}
+                headerCounter={shardsData?.total}
+                items={(shardsData?.shards || []).map((sh: any) => ({
+                  id: sh.ShardId,
+                  parent: sh.ParentShardId || "-",
+                  startHash: sh.HashKeyRange?.StartingHashKey,
+                  endHash: sh.HashKeyRange?.EndingHashKey,
+                  startSeq: sh.SequenceNumberRange?.StartingSequenceNumber?.slice(0, 20) + "...",
+                }))}
+                loading={false}
+                emptyMessage="No shards"
+                columns={[
+                  { id: "id", header: "Shard ID", cell: (i: any) => i.id, isRowHeader: true },
+                  { id: "parent", header: "Parent", cell: (i: any) => i.parent },
+                  { id: "startSeq", header: "Start Sequence", cell: (i: any) => i.startSeq },
+                ]}
+              />
+              <Modal
+                visible={showPutRecord}
+                onDismiss={() => setShowPutRecord(false)}
+                header={`Put record to ${selectedStream}`}
+                footer={
+                  <Box>
+                    <Button
+                      variant="primary"
+                      loading={putRecord.isPending}
+                      onClick={() => {
+                        putRecord
+                          .mutateAsync({ data: recordData, partitionKey: recordKey })
+                          .then(() => {
+                            setShowPutRecord(false);
+                            setRecordData("");
+                            setRecordKey("");
+                          });
+                      }}
+                    >
+                      Put record
+                    </Button>
+                    <Button onClick={() => setShowPutRecord(false)}>Cancel</Button>
+                  </Box>
+                }
+              >
+                <Form>
+                  <FormField label="Data">
+                    <Input
+                      value={recordData}
+                      onChange={({ detail }) => setRecordData(detail.value)}
+                      placeholder="Hello, Kinesis!"
+                    />
+                  </FormField>
+                  <FormField label="Partition key">
+                    <Input
+                      value={recordKey}
+                      onChange={({ detail }) => setRecordKey(detail.value)}
+                      placeholder="partition-key"
+                    />
+                  </FormField>
+                </Form>
+              </Modal>
+            </>
+          ) : (
+            <Alert type="info">Select a stream to view its shards.</Alert>
+          ),
+        },
+      ]}
+    />
   );
 }
