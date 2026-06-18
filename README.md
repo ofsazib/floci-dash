@@ -16,6 +16,9 @@
   <img src="https://img.shields.io/badge/Docker-ready-2496ed?logo=docker&logoColor=white" alt="Docker" />
   <img src="https://github.com/ofsazib/floci-dash/actions/workflows/ci.yml/badge.svg" alt="CI" />
   <a href="https://codecov.io/gh/ofsazib/floci-dash"><img src="https://codecov.io/gh/ofsazib/floci-dash/branch/main/graph/badge.svg" alt="Codecov" /></a>
+  <br/>
+  <a href="https://github.com/ofsazib/floci-dash/pkgs/container/floci-dash"><img src="https://ghcr-badge.egpl.dev/ofsazib/floci-dash/latest_tag?trim=major&amp;label=version" alt="version" /></a>
+  <a href="https://github.com/ofsazib/floci-dash/pkgs/container/floci-dash"><img src="https://ghcr-badge.egpl.dev/ofsazib/floci-dash/size?trim=major" alt="image size" /></a>
 </p>
 
 <p align="center">
