@@ -33,6 +33,12 @@
 
 ---
 
+---
+
+<p align="center">
+  <img src="docs/dashboard-screenshot.png" alt="Floci Dashboard screenshot showing the service grid and dark mode UI" width="800" />
+</p>
+
 ## Features
 
 - **AWS Console look and feel** — Built with [Cloudscape Design System](https://cloudscape.design/), the same component library used by the real AWS Management Console
