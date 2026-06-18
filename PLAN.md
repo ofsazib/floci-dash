@@ -1288,7 +1288,7 @@ Each remaining service gets a standard list + create + delete pattern.
 | 17.6 | CloudFormation | Done | Done | Done | 2025-06-14 |
 | 17.7 | ELB | Done | Done | Done | 2025-06-18 |
 | 17.8 | CloudFront | Done | Done | Done | 2025-06-18 |
-| 17.9 | API Gateway V2 | Pending | Pending | Pending | |
+| 17.9 | API Gateway V2 | Done | Done | Done | 2025-06-18 |
 | 17.10 | AppSync | Done | Done | Done | 2025-06-17 |
 | 17.11 | Kinesis | Done | Done | Done | 2025-06-18 |
 | 17.12 | EventBridge Pipes | Done | Done | Done | 2025-06-18 |
@@ -1296,10 +1296,10 @@ Each remaining service gets a standard list + create + delete pattern.
 | 17.14 | SES (email) | Done | Done | Done | 2025-06-18 |
 | 17.15 | STS | Done | Done | Done | 2025-06-18 |
 | 17.16 | Cognito | Done | Done | Done | 2025-06-18 |
-| 17.17 | ACM | Pending | Pending | Pending | |
+| 17.17 | ACM | Done | Done | Done | 2025-06-18 |
 | 17.18 | Config | Pending | Pending | Pending | |
 | 17.19 | AppConfig | Pending | Pending | Pending | |
-| 17.20 | CloudTrail | Pending | Pending | Pending | |
+| 17.20 | CloudTrail | Done | Done | Done | 2025-06-18 |
 | 17.21 | Cloud Map (service discovery) | Pending | Pending | Pending | |
 | 17.22 | Athena | Pending | Pending | Pending | |
 | 17.23 | Glue | Pending | Pending | Pending | |

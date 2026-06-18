@@ -225,6 +225,28 @@ import {
   useCreateCognitoUserPoolClient,
   useDeleteCognitoUserPoolClient,
 } from "../hooks/useCognito";
+import {
+  useApiGatewayV2Apis,
+  useCreateApiGatewayV2Api,
+  useDeleteApiGatewayV2Api,
+  useApiGatewayV2Routes,
+  useApiGatewayV2Integrations,
+  useApiGatewayV2Stages,
+  useApiGatewayV2Deployments,
+  useCreateApiGatewayV2Deployment,
+} from "../hooks/useApiGatewayV2";
+import {
+  useACMCertificates,
+  useRequestACMCertificate,
+  useDeleteACMCertificate,
+} from "../hooks/useACM";
+import {
+  useCloudTrailTrails,
+  useCreateCloudTrailTrail,
+  useDeleteCloudTrailTrail,
+  useStartCloudTrailLogging,
+  useStopCloudTrailLogging,
+} from "../hooks/useCloudTrail";
 
 const KEY_TYPE_OPTIONS: SelectProps.Option[] = [
   { label: "String (S)", value: "S" },
@@ -265,7 +287,7 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
 ];
 
 /** Services with a fully implemented backend that can show a resource list */
-const IMPLEMENTED_SERVICES = new Set(["dynamodb", "rds", "logs", "ecs", "ssm", "route53", "apigateway", "appsync", "scheduler", "ecr", "elb", "ses", "sts", "eks", "autoscaling", "cloudfront", "kinesis", "neptune", "pipes", "cognito-idp"]);
+const IMPLEMENTED_SERVICES = new Set(["dynamodb", "rds", "logs", "ecs", "ssm", "route53", "apigateway", "appsync", "scheduler", "ecr", "elb", "ses", "sts", "eks", "autoscaling", "cloudfront", "kinesis", "neptune", "pipes", "cognito-idp", "apigatewayv2", "acm", "cloudtrail"]);
 
 export default function ServicePage() {
   const { service } = useParams<{ service: string }>();
@@ -344,6 +366,9 @@ function ServiceResourceList({ service }: { service: string }) {
   if (service === "neptune") return <NeptuneDashboard />;
   if (service === "pipes") return <PipesDashboard />;
   if (service === "cognito-idp") return <CognitoDashboard />;
+  if (service === "apigatewayv2") return <ApiGatewayV2Dashboard />;
+  if (service === "acm") return <ACMDashboard />;
+  if (service === "cloudtrail") return <CloudTrailDashboard />;
   return null;
 }
 
@@ -6787,6 +6812,308 @@ function CognitoDashboard() {
       ]}
       filterEnabled
       filterPlaceholder="Find user pools"
+      filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+    />
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  API Gateway V2
+// ────────────────────────────────────────────────────────
+
+function ApiGatewayV2Dashboard() {
+  const { data, isLoading } = useApiGatewayV2Apis();
+  const deleteApi = useDeleteApiGatewayV2Api();
+  const [selectedApi, setSelectedApi] = useState<string | null>(null);
+  const { data: routesData } = useApiGatewayV2Routes(selectedApi);
+  const { data: integrationsData } = useApiGatewayV2Integrations(selectedApi);
+  const { data: stagesData } = useApiGatewayV2Stages(selectedApi);
+  const { data: deploymentsData } = useApiGatewayV2Deployments(selectedApi);
+  const createDeployment = useCreateApiGatewayV2Deployment(selectedApi || "");
+
+  if (isLoading) return <Spinner />;
+
+  if (selectedApi) {
+    return (
+      <>
+        <Box margin={{ bottom: "s" }}>
+          <Button iconName="arrow-left" onClick={() => setSelectedApi(null)}>
+            Back to APIs
+          </Button>
+        </Box>
+        <Tabs
+          tabs={[
+            {
+              id: "routes",
+              label: "Routes",
+              content: (
+                <ResourceTable
+                  resourceName="Route"
+                  headerTitle={`Routes in ${selectedApi}`}
+                  headerCounter={routesData?.total}
+                  items={(routesData?.routes || []).map((r: any) => ({
+                    id: r.RouteId,
+                    key: r.RouteKey,
+                    auth: r.AuthorizationType || "NONE",
+                    target: r.Target || "-",
+                  }))}
+                  loading={false}
+                  emptyMessage="No routes"
+                  columns={[
+                    { id: "key", header: "Route Key", cell: (i: any) => i.key, isRowHeader: true },
+                    { id: "auth", header: "Auth", cell: (i: any) => i.auth },
+                    { id: "target", header: "Target", cell: (i: any) => i.target },
+                  ]}
+                  filterEnabled
+                  filterPlaceholder="Find routes"
+                  filterFunction={(i: any, s: string) => i.key.toLowerCase().includes(s.toLowerCase())}
+                />
+              ),
+            },
+            {
+              id: "integrations",
+              label: "Integrations",
+              content: (
+                <ResourceTable
+                  resourceName="Integration"
+                  headerTitle={`Integrations in ${selectedApi}`}
+                  headerCounter={integrationsData?.total}
+                  items={(integrationsData?.integrations || []).map((i: any) => ({
+                    id: i.IntegrationId,
+                    type: i.IntegrationType,
+                    uri: i.IntegrationUri || "-",
+                    method: i.IntegrationMethod || "-",
+                  }))}
+                  loading={false}
+                  emptyMessage="No integrations"
+                  columns={[
+                    { id: "type", header: "Type", cell: (i: any) => i.type, isRowHeader: true },
+                    { id: "uri", header: "URI", cell: (i: any) => i.uri },
+                    { id: "method", header: "Method", cell: (i: any) => i.method },
+                  ]}
+                  filterEnabled
+                  filterPlaceholder="Find integrations"
+                  filterFunction={(i: any, s: string) => i.type.toLowerCase().includes(s.toLowerCase())}
+                />
+              ),
+            },
+            {
+              id: "stages",
+              label: "Stages",
+              content: (
+                <ResourceTable
+                  resourceName="Stage"
+                  headerTitle={`Stages in ${selectedApi}`}
+                  headerCounter={stagesData?.total}
+                  items={(stagesData?.stages || []).map((s: any) => ({
+                    name: s.StageName,
+                    autoDeploy: s.AutoDeploy ? "Yes" : "No",
+                    deployment: s.DeploymentId || "-",
+                    created: s.CreatedDate ? new Date(s.CreatedDate * 1000).toLocaleDateString() : "-",
+                  }))}
+                  loading={false}
+                  emptyMessage="No stages"
+                  columns={[
+                    { id: "name", header: "Stage", cell: (i: any) => i.name, isRowHeader: true },
+                    { id: "autoDeploy", header: "Auto Deploy", cell: (i: any) => i.autoDeploy },
+                    { id: "deployment", header: "Deployment", cell: (i: any) => i.deployment },
+                    { id: "created", header: "Created", cell: (i: any) => i.created },
+                  ]}
+                  filterEnabled
+                  filterPlaceholder="Find stages"
+                  filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+                />
+              ),
+            },
+            {
+              id: "deployments",
+              label: "Deployments",
+              content: (
+                <ResourceTable
+                  resourceName="Deployment"
+                  headerTitle={`Deployments in ${selectedApi}`}
+                  headerCounter={deploymentsData?.total}
+                  items={(deploymentsData?.deployments || []).map((d: any) => ({
+                    id: d.DeploymentId,
+                    status: d.DeploymentStatus || "-",
+                    created: d.CreatedDate ? new Date(d.CreatedDate * 1000).toLocaleDateString() : "-",
+                    description: d.Description || "-",
+                  }))}
+                  loading={false}
+                  onCreate={() => createDeployment.mutateAsync({})}
+                  emptyMessage="No deployments"
+                  columns={[
+                    { id: "id", header: "Deployment ID", cell: (i: any) => i.id, isRowHeader: true },
+                    { id: "status", header: "Status", cell: (i: any) => i.status },
+                    { id: "description", header: "Description", cell: (i: any) => i.description },
+                    { id: "created", header: "Created", cell: (i: any) => i.created },
+                  ]}
+                  filterEnabled
+                  filterPlaceholder="Find deployments"
+                  filterFunction={(i: any, s: string) => i.id.toLowerCase().includes(s.toLowerCase())}
+                />
+              ),
+            },
+          ]}
+        />
+      </>
+    );
+  }
+
+  return (
+    <ResourceTable
+      resourceName="API"
+      headerTitle="API Gateway V2 APIs"
+      headerCounter={data?.total}
+      items={(data?.apis || []).map((a: any) => ({
+        id: a.ApiId,
+        name: a.Name,
+        protocol: a.ProtocolType || "HTTP",
+        endpoint: a.ApiEndpoint || "-",
+        created: a.CreatedDate ? new Date(a.CreatedDate * 1000).toLocaleDateString() : "-",
+      }))}
+      loading={isLoading}
+      emptyMessage="No APIs"
+      columns={[
+        {
+          id: "name",
+          header: "Name",
+          cell: (i: any) => (
+            <Button variant="link" onClick={() => setSelectedApi(i.id)}>
+              {i.name}
+            </Button>
+          ),
+          isRowHeader: true,
+        },
+        { id: "protocol", header: "Protocol", cell: (i: any) => i.protocol },
+        { id: "endpoint", header: "Endpoint", cell: (i: any) => i.endpoint },
+        { id: "created", header: "Created", cell: (i: any) => i.created },
+        {
+          id: "actions",
+          header: "",
+          cell: (i: any) => (
+            <DeleteButton
+              itemName={i.name}
+              resourceType="API"
+              loading={deleteApi.isPending && deleteApi.variables === i.id}
+              onDelete={() => deleteApi.mutateAsync(i.id)}
+            />
+          ),
+        },
+      ]}
+      filterEnabled
+      filterPlaceholder="Find APIs by name"
+      filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+    />
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  ACM (Certificate Manager)
+// ────────────────────────────────────────────────────────
+
+function ACMDashboard() {
+  const { data, isLoading } = useACMCertificates();
+  const deleteCert = useDeleteACMCertificate();
+
+  if (isLoading) return <Spinner />;
+
+  return (
+    <ResourceTable
+      resourceName="Certificate"
+      headerTitle="ACM Certificates"
+      headerCounter={data?.total}
+      items={(data?.certificates || []).map((c: any) => ({
+        arn: c.CertificateArn,
+        domain: c.DomainName,
+        status: c.Status,
+        type: c.Type || "-",
+        keyAlgo: c.KeyAlgorithm || "-",
+        inUse: c.InUse ? "Yes" : "No",
+        notAfter: c.NotAfter ? new Date(c.NotAfter * 1000).toLocaleDateString() : "-",
+      }))}
+      loading={isLoading}
+      emptyMessage="No certificates"
+      columns={[
+        { id: "domain", header: "Domain", cell: (i: any) => i.domain, isRowHeader: true },
+        { id: "status", header: "Status", cell: (i: any) => i.status },
+        { id: "type", header: "Type", cell: (i: any) => i.type },
+        { id: "keyAlgo", header: "Key Algorithm", cell: (i: any) => i.keyAlgo },
+        { id: "inUse", header: "In Use", cell: (i: any) => i.inUse },
+        { id: "notAfter", header: "Expires", cell: (i: any) => i.notAfter },
+        {
+          id: "actions",
+          header: "",
+          cell: (i: any) => (
+            <DeleteButton
+              itemName={i.domain}
+              resourceType="certificate"
+              loading={deleteCert.isPending && deleteCert.variables === i.arn}
+              onDelete={() => deleteCert.mutateAsync(i.arn)}
+            />
+          ),
+        },
+      ]}
+      filterEnabled
+      filterPlaceholder="Find certificates by domain"
+      filterFunction={(i: any, s: string) => i.domain.toLowerCase().includes(s.toLowerCase())}
+    />
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  CloudTrail
+// ────────────────────────────────────────────────────────
+
+function CloudTrailDashboard() {
+  const { data, isLoading } = useCloudTrailTrails();
+  const deleteTrail = useDeleteCloudTrailTrail();
+  const startLogging = useStartCloudTrailLogging();
+  const stopLogging = useStopCloudTrailLogging();
+
+  if (isLoading) return <Spinner />;
+
+  return (
+    <ResourceTable
+      resourceName="Trail"
+      headerTitle="CloudTrail Trails"
+      headerCounter={data?.total}
+      items={(data?.trails || []).map((t: any) => ({
+        name: t.Name,
+        arn: t.TrailARN,
+        bucket: t.S3BucketName || "-",
+        multiRegion: t.IsMultiRegionTrail ? "Yes" : "No",
+        globalEvents: t.IncludeGlobalServiceEvents ? "Yes" : "No",
+        orgTrail: t.IsOrganizationTrail ? "Yes" : "No",
+        homeRegion: t.HomeRegion || "-",
+        created: t.CreationDate ? new Date(t.CreationDate * 1000).toLocaleDateString() : "-",
+      }))}
+      loading={isLoading}
+      emptyMessage="No trails"
+      columns={[
+        { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+        { id: "bucket", header: "S3 Bucket", cell: (i: any) => i.bucket },
+        { id: "multiRegion", header: "Multi-Region", cell: (i: any) => i.multiRegion },
+        { id: "globalEvents", header: "Global Events", cell: (i: any) => i.globalEvents },
+        { id: "homeRegion", header: "Home Region", cell: (i: any) => i.homeRegion },
+        { id: "created", header: "Created", cell: (i: any) => i.created },
+        {
+          id: "actions",
+          header: "",
+          cell: (i: any) => (
+            <SpaceBetween direction="horizontal" size="xs">
+              <DeleteButton
+                itemName={i.name}
+                resourceType="trail"
+                loading={deleteTrail.isPending && deleteTrail.variables === i.name}
+                onDelete={() => deleteTrail.mutateAsync(i.name)}
+              />
+            </SpaceBetween>
+          ),
+        },
+      ]}
+      filterEnabled
+      filterPlaceholder="Find trails by name"
       filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
     />
   );

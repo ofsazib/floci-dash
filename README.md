@@ -355,6 +355,9 @@ These services have full CRUD operations in both backend and frontend:
 | **Neptune** | Clusters (list, describe, create, delete), instances (list, describe, create with cluster attachment, delete) |
 | **EventBridge Pipes** | Pipes (list, describe, create, update, delete, start, stop with state management) |
 | **Cognito** | User pools (list, describe, create, delete), users (list, admin create, delete, enable, disable, set password), groups (list, create, delete), app clients (list, describe, create, delete) |
+| **API Gateway V2** | APIs (list, get, create, delete), routes (list, create, delete), integrations (list, create, delete), stages (list, create, delete), deployments (list, create, delete) with drill-down per API |
+| **ACM** | Certificates (list, describe with validation details, request, delete, get PEM), tags (list per certificate) |
+| **CloudTrail** | Trails (list, create, update, delete), start/stop logging, get trail status |
 
 ### Navigation + status (55 services)
 
