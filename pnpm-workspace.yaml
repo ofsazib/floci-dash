@@ -1,1 +1,4 @@
 onlyBuiltDependencies: esbuild
+minimumReleaseAge: 0
+allowBuilds:
+  esbuild: set this to true or false
