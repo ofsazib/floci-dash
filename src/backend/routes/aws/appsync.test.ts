@@ -313,7 +313,7 @@ describe("GET /api/aws/appsync/apis/:apiId/api-keys", () => {
 
 describe("POST /api/aws/appsync/apis/:apiId/api-keys", () => {
   it("creates an API key", async () => {
-    mockSend.mockResolvedValue({ apiKey: { id: "key2", apiKey: "da2-abc123def456", description: "New key" } });
+    mockSend.mockResolvedValue({ apiKey: { id: "key2", description: "New key" } });
     const res = await app.request("/api/aws/appsync/apis/abc123/api-keys", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -321,7 +321,7 @@ describe("POST /api/aws/appsync/apis/:apiId/api-keys", () => {
     });
     expect(res.status).toBe(201);
     const body = await res.json();
-    expect(body.apiKey).toBe("da2-abc123def456");
+    expect(body.apiKey).toBe("key2");
     expect(body.id).toBe("key2");
   });
 });
