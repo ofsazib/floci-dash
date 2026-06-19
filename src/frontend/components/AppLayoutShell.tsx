@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { AppLayout, SideNavigation, TopNavigation, Input, Button, Autosuggest } from "@cloudscape-design/components";
+import { AppLayout, SideNavigation, TopNavigation, Input, Button, Autosuggest, Modal, Box, SpaceBetween, StatusIndicator } from "@cloudscape-design/components";
 import type { SideNavigationProps, AutosuggestProps } from "@cloudscape-design/components";
 import { useHealth, useActiveServices } from "../hooks/useSystem";
 import { useSettings } from "../stores/settings";
@@ -72,6 +72,8 @@ const SERVICE_CATEGORY_MAP: Record<string, string> = {
   backup: "Migration", transfer: "Migration",
 };
 
+const BELL_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M8 1.5c-2.2 0-4 1.8-4 4v2.2L2.7 10.7C2.2 11.5 2.8 12.5 3.7 12.5H12.3c.9 0 1.5-1 .9-1.8L12 7.7V5.5c0-2.2-1.8-4-4-4zM6.5 13.5c0 .8.7 1.5 1.5 1.5s1.5-.7 1.5-1.5" fill="currentColor"/></svg>';
+
 function ActiveDot() {
   return (
     <span
@@ -87,6 +89,7 @@ export default function AppLayoutShell({ children }: Props) {
   const [navAllExpanded, setNavAllExpanded] = useState(false);
   const [navKey, setNavKey] = useState(0);
   const [globalSearch, setGlobalSearch] = useState("");
+  const [showNotifications, setShowNotifications] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const { data: health } = useHealth();
@@ -258,6 +261,13 @@ export default function AppLayoutShell({ children }: Props) {
   const total = health?.stats?.total ?? 0;
   const allHealthy = running === total;
 
+  const nonRunningServices = useMemo(() => {
+    if (!health?.services) return [];
+    return Object.entries(health.services)
+      .filter(([, status]) => status !== "running")
+      .map(([key, status]) => ({ key, status }));
+  }, [health]);
+
   return (
     <>
       <div id="header">
@@ -289,6 +299,13 @@ export default function AppLayoutShell({ children }: Props) {
             />
           }
           utilities={[
+            {
+              type: "button",
+              iconSvg: BELL_SVG,
+              ariaLabel: "Notifications",
+              badge: nonRunningServices.length > 0,
+              onClick: () => setShowNotifications(true),
+            },
             {
               type: "button",
               text: darkMode ? "\u2600 Light" : "\u263D Dark",
@@ -348,6 +365,25 @@ export default function AppLayoutShell({ children }: Props) {
         navigationWidth={260}
         headerSelector="#header"
       />
+      <Modal
+        visible={showNotifications}
+        onDismiss={() => setShowNotifications(false)}
+        header="Notifications"
+      >
+        {nonRunningServices.length === 0 ? (
+          <Box variant="p">All services are running.</Box>
+        ) : (
+          <SpaceBetween size="s">
+            {nonRunningServices.map(({ key, status }) => (
+              <Box key={key} variant="p">
+                <StatusIndicator type={status === "running" ? "success" : "warning"}>
+                  {SERVICE_LABELS[key as keyof typeof SERVICE_LABELS] || key}: {status}
+                </StatusIndicator>
+              </Box>
+            ))}
+          </SpaceBetween>
+        )}
+      </Modal>
     </>
   );
 }

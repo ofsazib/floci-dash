@@ -310,3 +310,80 @@ describe("AppLayoutShell — dark mode toggle", () => {
     expect(document.body.classList.contains("awsui-dark-mode")).toBe(false);
   });
 });
+
+describe("AppLayoutShell — notification bell", () => {
+  it("shows bell badge when services are not all running", () => {
+    (useHealth as any).mockReturnValue({
+      data: {
+        services: { s3: "stopped", dynamodb: "running" },
+        stats: { running: 1, total: 2 },
+      },
+    });
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    const bells = document.querySelectorAll('[aria-label="Notifications"]');
+    expect(bells.length).toBeGreaterThan(0);
+  });
+
+  it("opens notification modal on bell click", async () => {
+    (useHealth as any).mockReturnValue({
+      data: {
+        services: { s3: "stopped", dynamodb: "running" },
+        stats: { running: 1, total: 2 },
+      },
+    });
+    const user = userEvent.setup();
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    const bells = screen.getAllByRole("button", { name: "Notifications" });
+    await user.click(bells[0]);
+    expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  it("shows non-running services in modal", async () => {
+    (useHealth as any).mockReturnValue({
+      data: {
+        services: { s3: "stopped", dynamodb: "running", ec2: "stopped" },
+        stats: { running: 1, total: 3 },
+      },
+    });
+    const user = userEvent.setup();
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    const bells = screen.getAllByRole("button", { name: "Notifications" });
+    await user.click(bells[0]);
+    expect(screen.getByText(/S3.*stopped/i)).toBeTruthy();
+    expect(screen.getByText(/EC2.*stopped/i)).toBeTruthy();
+  });
+
+  it("shows all clear when all services running", async () => {
+    (useHealth as any).mockReturnValue({
+      data: {
+        services: { s3: "running", dynamodb: "running" },
+        stats: { running: 2, total: 2 },
+      },
+    });
+    const user = userEvent.setup();
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    const bells = screen.getAllByRole("button", { name: "Notifications" });
+    await user.click(bells[0]);
+    expect(screen.getByText("All services are running.")).toBeTruthy();
+  });
+});

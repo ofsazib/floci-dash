@@ -1343,7 +1343,7 @@ Each remaining service gets a standard list + create + delete pattern.
 | 18.6 | Side nav: Add search/filter for services | Done | 2026-06-19 |
 | 18.7 | Side nav: Collapse/expand categories (Expand all / Collapse all toggle) | Done | 2026-06-19 |
 | 18.8 | Top nav: Add global search bar (Autosuggest with all services) | Done | 2026-06-19 |
-| 18.9 | Top nav: Add notification bell for errors | Pending | |
+| 18.9 | Top nav: Add notification bell for errors (bell icon with badge, Modal listing non-running services) | Done | 2026-06-19 |
 | 18.10 | Settings: Add localStorage persistence for preferences | Done | 2026-06-19 |
 | 18.11 | Settings: Add Floci endpoint URL configuration | Pending | |
 | 18.12 | Responsive: Test and fix mobile layout | Pending | |
