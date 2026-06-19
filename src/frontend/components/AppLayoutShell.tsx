@@ -1,15 +1,14 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { AppLayout, SideNavigation, TopNavigation, StatusIndicator } from "@cloudscape-design/components";
+import { AppLayout, SideNavigation, TopNavigation, Input, Button } from "@cloudscape-design/components";
 import type { SideNavigationProps } from "@cloudscape-design/components";
 import { useHealth, useActiveServices } from "../hooks/useSystem";
 import { useSettings } from "../stores/settings";
 import { SERVICE_LABELS } from "../types/services";
+
 interface Props {
   children: React.ReactNode;
 }
-
-type NavItem = SideNavigationProps.Link | SideNavigationProps.ExpandableLinkGroup;
 
 const FLOCI_LOGO_SVG = `data:image/svg+xml,${encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#00d4ff"/><stop offset="100%" stop-color="#0073e6"/></linearGradient></defs><rect width="32" height="32" rx="7" fill="url(#g)"/><text x="16" y="23" font-size="20" font-weight="bold" fill="#fff" text-anchor="middle" font-family="Arial,sans-serif">F</text></svg>'
@@ -53,7 +52,7 @@ const CATEGORY_ORDER = [
 ] as const;
 
 const SERVICE_CATEGORY_MAP: Record<string, string> = {
-  ec2: "Compute", lambda: "Compute",   ecs: "Compute", eks: "Compute", autoscaling: "Compute",
+  ec2: "Compute", lambda: "Compute", ecs: "Compute", eks: "Compute", autoscaling: "Compute",
   s3: "Storage", ecr: "Storage",
   dynamodb: "Database", rds: "Database", neptune: "Database", elasticache: "Database",
   elasticloadbalancing: "Networking", route53: "Networking", cloudfront: "Networking",
@@ -84,6 +83,9 @@ function ActiveDot() {
 
 export default function AppLayoutShell({ children }: Props) {
   const [navOpen, setNavOpen] = useState(true);
+  const [navQuery, setNavQuery] = useState("");
+  const [navAllExpanded, setNavAllExpanded] = useState(false);
+  const [navKey, setNavKey] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
   const { data: health } = useHealth();
@@ -96,6 +98,12 @@ export default function AppLayoutShell({ children }: Props) {
   }, [darkMode]);
 
   const currentHref = location.pathname ? `/#${location.pathname}` : "/#/";
+  const query = navQuery.toLowerCase().trim();
+
+  const toggleAll = useCallback(() => {
+    setNavAllExpanded((prev) => !prev);
+    setNavKey((k) => k + 1);
+  }, []);
 
   const navItems = useMemo(() => {
     const items: SideNavigationProps.Item[] = [
@@ -103,24 +111,36 @@ export default function AppLayoutShell({ children }: Props) {
       { type: "divider" as const },
     ];
 
-    // ── Implemented services (full management UI) ──
     const activeSet = new Set(active?.activeServices || []);
     const implementedKeys = Object.keys(IMPLEMENTED_SERVICES);
-
-    // Only show implemented services that Floci reports
     const flociServices = health?.services ? Object.keys(health.services) : [];
     const availableImplemented = implementedKeys.filter((k) => flociServices.includes(k));
 
-    if (availableImplemented.length > 0) {
+    // ── Filter helpers ──
+    const textMatches = (text: string) => !query || text.toLowerCase().includes(query);
+
+    // ── Implemented services (filtered by query) ──
+    const filteredImplemented = availableImplemented.filter((k) =>
+      textMatches(IMPLEMENTED_SERVICES[k]),
+    );
+
+    if (filteredImplemented.length > 0) {
       items.push({
         type: "section" as const,
         text: "Resources",
-        items: availableImplemented.map((key) => ({
+        items: filteredImplemented.map((key) => ({
           type: "link" as const,
           text: IMPLEMENTED_SERVICES[key],
           href: `/#/services/${key}`,
           info: activeSet.has(key) ? <ActiveDot /> : undefined,
         })) as SideNavigationProps.Item[],
+      });
+    } else if (query && availableImplemented.length > 0) {
+      // Show a no-match indicator within the section
+      items.push({
+        type: "section" as const,
+        text: "Resources",
+        items: [{ type: "link" as const, text: "No matches", href: "" }],
       });
     }
 
@@ -133,7 +153,7 @@ export default function AppLayoutShell({ children }: Props) {
 
     const grouped: Record<string, Array<{ key: string; label: string; status: string }>> = {};
     for (const svc of flociServices) {
-      if (IMPLEMENTED_SERVICES[svc]) continue; // Skip already shown
+      if (IMPLEMENTED_SERVICES[svc]) continue;
       const category = SERVICE_CATEGORY_MAP[svc] || "Other";
       if (!grouped[category]) grouped[category] = [];
       grouped[category].push({
@@ -146,27 +166,20 @@ export default function AppLayoutShell({ children }: Props) {
     for (const cat of CATEGORY_ORDER) {
       const svcs = grouped[cat];
       if (!svcs || svcs.length === 0) continue;
+
+      const sorted = svcs.sort((a, b) => a.label.localeCompare(b.label));
+      let filteredSvcs = sorted;
+      if (query) {
+        filteredSvcs = sorted.filter((s) => textMatches(s.label));
+        if (filteredSvcs.length === 0) continue;
+      }
+
       items.push({
         type: "expandable-link-group" as const,
         text: cat,
         href: `/#/category/${cat.toLowerCase()}`,
-        items: svcs
-          .sort((a, b) => a.label.localeCompare(b.label))
-          .map((s) => ({
-            type: "link" as const,
-            text: s.label,
-            href: `/#/services/${s.key}`,
-          })),
-      } as SideNavigationProps.ExpandableLinkGroup);
-    }
-
-    const other = grouped["Other"];
-    if (other && other.length > 0) {
-      items.push({
-        type: "expandable-link-group" as const,
-        text: "Other",
-        href: "/#/category/other",
-        items: other.map((s) => ({
+        defaultExpanded: navAllExpanded || (query ? true : undefined),
+        items: filteredSvcs.map((s) => ({
           type: "link" as const,
           text: s.label,
           href: `/#/services/${s.key}`,
@@ -174,16 +187,51 @@ export default function AppLayoutShell({ children }: Props) {
       } as SideNavigationProps.ExpandableLinkGroup);
     }
 
+    const other = grouped["Other"];
+    if (other && other.length > 0) {
+      let filteredOther = other;
+      if (query) {
+        filteredOther = other.filter((s) => textMatches(s.label));
+        if (filteredOther.length > 0) {
+          items.push({
+            type: "expandable-link-group" as const,
+            text: "Other",
+            href: "/#/category/other",
+            defaultExpanded: navAllExpanded || (query ? true : undefined),
+            items: filteredOther.map((s) => ({
+              type: "link" as const,
+              text: s.label,
+              href: `/#/services/${s.key}`,
+            })),
+          } as SideNavigationProps.ExpandableLinkGroup);
+        }
+      } else {
+        items.push({
+          type: "expandable-link-group" as const,
+          text: "Other",
+          href: "/#/category/other",
+          defaultExpanded: navAllExpanded || undefined,
+          items: other.map((s) => ({
+            type: "link" as const,
+            text: s.label,
+            href: `/#/services/${s.key}`,
+          })),
+        } as SideNavigationProps.ExpandableLinkGroup);
+      }
+    }
+
     items.push({ type: "divider" as const });
     items.push({ type: "link" as const, text: "Settings", href: "/#/settings" });
 
     return items;
-  }, [health, active]);
+  }, [health, active, query, navAllExpanded]);
 
   const handleFollow = (e: CustomEvent<{ href: string }>) => {
     e.preventDefault();
     const path = e.detail.href.replace("/#", "");
-    navigate(path || "/");
+    if (path) {
+      navigate(path || "/");
+    }
   };
 
   const running = health?.stats?.running ?? 0;
@@ -216,7 +264,6 @@ export default function AppLayoutShell({ children }: Props) {
         navigation={
           <div>
             <div
-              className="fd-nav-health"
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -228,7 +275,27 @@ export default function AppLayoutShell({ children }: Props) {
               <span className={allHealthy ? "fd-dot-success" : "fd-dot-warning"} />
               {running} / {total} services running
             </div>
+            <div style={{ padding: "0 12px 8px" }}>
+              <Input
+                placeholder="Find services..."
+                type="search"
+                value={navQuery}
+                onChange={(e) => setNavQuery(e.detail.value)}
+                clearAriaLabel="Clear search"
+              />
+            </div>
+            {!navQuery && (
+              <div style={{ padding: "0 12px 8px", textAlign: "right" }}>
+                <Button
+                  variant="inline-link"
+                  onClick={toggleAll}
+                >
+                  {navAllExpanded ? "Collapse all" : "Expand all"}
+                </Button>
+              </div>
+            )}
             <SideNavigation
+              key={navKey}
               header={{ text: "Floci", href: "/#/" }}
               activeHref={currentHref}
               onFollow={handleFollow as any}

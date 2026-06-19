@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
 
@@ -17,8 +18,11 @@ vi.mock("../hooks/useSystem", () => ({
         dynamodb: "running",
         ec2: "running",
         lambda: "running",
+        sqs: "running",
+        sns: "running",
+        kms: "running",
       },
-      stats: { running: 4, total: 4 },
+      stats: { running: 7, total: 7 },
     },
   })),
   useActiveServices: vi.fn(() => ({
@@ -49,8 +53,16 @@ beforeEach(() => {
   vi.clearAllMocks();
   (useHealth as any).mockReturnValue({
     data: {
-      services: { s3: "running", dynamodb: "running", ec2: "running", lambda: "running" },
-      stats: { running: 4, total: 4 },
+      services: {
+        s3: "running",
+        dynamodb: "running",
+        ec2: "running",
+        lambda: "running",
+        sqs: "running",
+        sns: "running",
+        kms: "running",
+      },
+      stats: { running: 7, total: 7 },
     },
   });
   (useActiveServices as any).mockReturnValue({
@@ -74,8 +86,6 @@ describe("AppLayoutShell — rendering", () => {
       </AppLayoutShell>,
       { wrapper: createWrapper() },
     );
-    // Cloudscape may render the title in more than one responsive slot, so
-    // assert presence rather than uniqueness.
     expect(screen.getAllByText("Floci Dashboard").length).toBeGreaterThan(0);
   });
 
@@ -119,7 +129,7 @@ describe("AppLayoutShell — health status", () => {
       </AppLayoutShell>,
       { wrapper: createWrapper() },
     );
-    expect(screen.getByText(/4 \/ 4 services running/)).toBeTruthy();
+    expect(screen.getByText(/7 \/ 7 services running/)).toBeTruthy();
   });
 
   it("shows 0/0 when no health data", () => {
@@ -183,6 +193,56 @@ describe("AppLayoutShell — navigation items", () => {
       { wrapper: createWrapper() },
     );
     expect(screen.queryByText("Resources")).toBeNull();
+  });
+});
+
+describe("AppLayoutShell — search", () => {
+  it("renders search input", () => {
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    expect(screen.getByPlaceholderText("Find services...")).toBeTruthy();
+  });
+
+  it("filters implemented services when searching", async () => {
+    const user = userEvent.setup();
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    const input = screen.getByPlaceholderText("Find services...");
+    await user.type(input, "S3");
+    expect(screen.getByText("S3")).toBeTruthy();
+    expect(screen.queryByText("DynamoDB")).toBeNull();
+    expect(screen.queryByText("EC2")).toBeNull();
+  });
+
+  it("shows No matches when nothing matches", async () => {
+    const user = userEvent.setup();
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    const input = screen.getByPlaceholderText("Find services...");
+    await user.type(input, "zzzzz");
+    expect(screen.getByText("No matches")).toBeTruthy();
+  });
+
+  it("shows Expand all / Collapse all toggle", () => {
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    expect(screen.getByText("Expand all")).toBeTruthy();
   });
 });
 
