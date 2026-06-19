@@ -59,6 +59,9 @@ import transferRoutes from "./transfer";
 import curRoutes from "./cur";
 import bcmRoutes from "./bcmdataexports";
 import wafv2Routes from "./wafv2";
+import ec2messagesRoutes from "./ec2messages";
+import appconfigdataRoutes from "./appconfigdata";
+import elasticacheRoutes from "./elasticache";
 
 const router = new Hono();
 
@@ -121,9 +124,12 @@ router.route("/transfer", transferRoutes);
 router.route("/cur", curRoutes);
 router.route("/bcmdataexports", bcmRoutes);
 router.route("/wafv2", wafv2Routes);
+router.route("/appconfigdata", appconfigdataRoutes);
+router.route("/elasticache", elasticacheRoutes);
+router.route("/ec2messages", ec2messagesRoutes);
 
   router.get("/", (c: Context) => {
-    return c.json({ message: "AWS routes available. Services registered: s3, dynamodb, rds, ec2, sqs, sns, events, logs, lambda, cloudwatch, iam, secretsmanager, cloudformation, kms, ecs, ssm, route53, apigateway, sts, appsync, scheduler, ecr, elb, ses, eks, autoscaling, cloudfront, kinesis, neptune, pipes, cognito, apigatewayv2, acm, cloudtrail, configservice, appconfig, cloudmap, athena, glue, firehose, stepfunctions, opensearch, msk, bedrockruntime, textract, transcribe, ce, pricing, resourcegroupstagging, codebuild, codedeploy, backup, transfer, cur, bcmdataexports, wafv2" });
+    return c.json({ message: "AWS routes available. Services registered: s3, dynamodb, rds, ec2, sqs, sns, events, logs, lambda, cloudwatch, iam, secretsmanager, cloudformation, kms, ecs, ssm, route53, apigateway, sts, appsync, scheduler, ecr, elb, ses, eks, autoscaling, cloudfront, kinesis, neptune, pipes, cognito, apigatewayv2, acm, cloudtrail, configservice, appconfig, cloudmap, athena, glue, firehose, stepfunctions, opensearch, msk, bedrockruntime, textract, transcribe, ce, pricing, resourcegroupstagging, codebuild, codedeploy, backup, transfer, cur, bcmdataexports, wafv2, elasticache, ec2messages" });
   });
 
 export default router;

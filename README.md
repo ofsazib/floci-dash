@@ -42,8 +42,8 @@
 ## Features
 
 - **AWS Console look and feel** — Built with [Cloudscape Design System](https://cloudscape.design/), the same component library used by the real AWS Management Console
-- **55+ AWS services** — Full navigation and status for every service Floci supports
-- **Deep resource management** — Browse, create, and delete resources for implemented services (S3, DynamoDB, EC2, RDS, SQS, SNS, EventBridge, CloudWatch Logs, CloudWatch Metrics, Lambda, IAM, Secrets Manager, CloudFormation, KMS, ECS, SSM, Route 53, API Gateway, AppSync, EventBridge Scheduler, ECR, ELB, SES, STS, EKS, Auto Scaling, CloudFront, Kinesis, Neptune, EventBridge Pipes, Cognito, API Gateway V2, ACM, CloudTrail, Config, AppConfig, Cloud Map, Athena, Glue, Firehose, Step Functions, OpenSearch, MSK, Bedrock Runtime, Textract, Transcribe, Cost Explorer, Pricing, Resource Groups Tagging, BCM Data Exports, Cost & Usage Report (cur), CodeBuild, CodeDeploy, Backup, Transfer Family, WAF v2)
+- **56+ AWS services** — Full navigation and status for every service Floci supports
+- **Deep resource management** — Browse, create, and delete resources for implemented services (S3, DynamoDB, EC2, RDS, SQS, SNS, EventBridge, CloudWatch Logs, CloudWatch Metrics, Lambda, IAM, Secrets Manager, CloudFormation, KMS, ECS, SSM, Route 53, API Gateway, AppSync, EventBridge Scheduler, ECR, ELB, SES, STS, EKS, Auto Scaling, CloudFront, Kinesis, Neptune, EventBridge Pipes, Cognito, API Gateway V2, ACM, CloudTrail, Config, AppConfig, Cloud Map, Athena, Glue, Firehose, Step Functions, OpenSearch, MSK, Bedrock Runtime, Textract, Transcribe, Cost Explorer, Pricing, Resource Groups Tagging, BCM Data Exports, Cost & Usage Report (cur), CodeBuild, CodeDeploy, Backup, Transfer Family, WAF v2, ElastiCache)
 - **EC2 web terminal** — Interactive bash shell inside running EC2 instances directly from the browser (xterm.js + Docker Engine API with PTY)
 - **Dark mode** — Toggle between light and dark themes
 - **Real-time health** — Dashboard shows live Floci service status (running/available counts)

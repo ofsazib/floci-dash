@@ -26,7 +26,7 @@ An AWS Console-style web dashboard for Floci, the local AWS emulator. The dashbo
 | Shared components | Done | ResourceTable, CreateModal, DeleteButton, ServiceCard, ServiceGrid, StatCard, StatusBadge |
 | Layout | Done | AppLayoutShell with TopNavigation, SideNavigation, dark mode |
 | Settings | Done | Dark mode toggle, refresh interval |
-| 43 services implemented (+ S3/DynamoDB dedicated pages) | ServicePage: browse, create, delete | 45-tracker, 41 done, 4 pending |
+| 59 services implemented (+ S3/DynamoDB dedicated pages) | ServicePage: browse, create, delete | 45-tracker, 45 done, 0 pending |
 
 ### Architecture Constraints
 
@@ -1278,6 +1278,8 @@ if (service === "sqs") return <SQSQueues />;
 
 Each remaining service gets a standard list + create + delete pattern.
 
+**State:** 45-tracker items (17.42 removed as DUP of 17.35, 17.46 added for ElastiCache). **All 45 Done.** 59 services fully implemented across the dashboard.
+
 | # | Service | Backend | Frontend | Status | Date |
 |---|---------|---------|----------|--------|------|
 | 17.1 | EKS | Done | Done | Done | 2025-06-18 |
@@ -1320,11 +1322,12 @@ Each remaining service gets a standard list + create + delete pattern.
 | 17.38 | Backup | Done | Done | Done | 2026-06-19 |
 | 17.39 | Transfer Family | Done | Done | Done | 2026-06-19 |
 | 17.40 | CloudWatch Metrics (monitoring) | Done | Done | Done | 2025-06-14 |
-| 17.41 | AppConfig Data (appconfigdata) | Pending | Pending | Pending | |
-| 17.42 | Resource Groups Tagging (tagging) | Pending | Pending | Pending | |
-| 17.43 | EC2 Messages (ec2messages) | Pending | Pending | Pending | |
-| 17.44 | Verify: all services typecheck + build pass | Pending | | Pending | |
+| 17.41 | AppConfig Data (appconfigdata) — Floci: code lives in `appconfig/` dir, separate service registration, enabled by default | Done | Done | Done | 2026-06-19 |
+| ~~17.42~~ | ~~Resource Groups Tagging (tagging) — DUP of 17.35~~ | | | | |
+| 17.43 | EC2 Messages (ec2messages) — Floci: code lives in `ssm/` dir, internal sub-service, NOT in status check, enabled with SSM | Done | Done | Done | 2026-06-19 |
+| 17.44 | Verify: all services typecheck + build pass | Done | — | Done | 2026-06-19 |
 | 17.45 | WAF v2 (wafv2) | Done | Done | Done | 2026-06-19 |
+| 17.46 | ElastiCache (elasticache) — Floci: full CRUD (Replication Groups, Cache Clusters, Users) — spec exists in PLAN.md but no code | Done | Done | Done | 2026-06-19 |
 
 ---
 
@@ -1341,7 +1344,7 @@ Each remaining service gets a standard list + create + delete pattern.
 | 18.7 | Side nav: Collapse/expand categories | Pending | |
 | 18.8 | Top nav: Add global search bar | Pending | |
 | 18.9 | Top nav: Add notification bell for errors | Pending | |
-| 18.10 | Settings: Add localStorage persistence for preferences | Pending | |
+| 18.10 | Settings: Add localStorage persistence for preferences | Done | 2026-06-19 |
 | 18.11 | Settings: Add Floci endpoint URL configuration | Pending | |
 | 18.12 | Responsive: Test and fix mobile layout | Pending | |
 | 18.13 | Accessibility: Keyboard navigation audit | Pending | |
@@ -1417,11 +1420,17 @@ Each remaining service gets a standard list + create + delete pattern.
 
 ---
 
+## Floci Repo Notes
+
+- **Official dashboard in Floci:** The Floci repo at `../floci` now has an untracked `dashboard/` directory — a separate Node/Express + React dashboard (`../floci/dashboard/`). Not committed to Floci's main branch yet. This is independent from this project.
+- **Floci service layout:** `appconfigdata` lives inside `appconfig/` dir. `ec2messages` lives inside `ssm/` dir. `resourcegroupstagging` is implemented as `resourcegroupstagging/` but registered as `tagging`. All three are enabled by default (except `tagging` which is NOT enabled in `application.yml`).
+- **No new Floci services added** in the last 50 commits. Floci service count is 60 directories, ~58 registered services.
+- **No Floci changes.** Dashboard uses existing endpoints only — never edit `../floci`.
+
 ## Conventions
 
 - **Look up Floci first.** Before implementing any service feature, consult `../floci/src/main/java/io/github/hectorvent/floci/services/{service}/`.
 - **Docker-first.** Every operation runs inside a container.
-- **No Floci changes.** Dashboard uses existing endpoints only — never edit `../floci`.
 - **One service at a time.** S3 -> DynamoDB -> SQS -> SNS -> Lambda -> ...
 - **Backend first, verify, then frontend.** Write routes, run typecheck, then build UI.
 - **Commits:** Conventional commits.
