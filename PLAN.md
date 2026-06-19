@@ -1301,9 +1301,9 @@ Each remaining service gets a standard list + create + delete pattern.
 | 17.19 | AppConfig | Done | Done | Done | 2025-06-18 |
 | 17.20 | CloudTrail | Done | Done | Done | 2025-06-18 |
 | 17.21 | Cloud Map (service discovery) | Done | Done | Done | 2025-06-18 |
-| 17.22 | Athena | Pending | Pending | Pending | |
-| 17.23 | Glue | Pending | Pending | Pending | |
-| 17.24 | Firehose | Pending | Pending | Pending | |
+| 17.22 | Athena | Done | Done | Done | 2025-06-18 |
+| 17.23 | Glue | Done | Done | Done | 2025-06-18 |
+| 17.24 | Firehose | Done | Done | Done | 2025-06-18 |
 | 17.25 | Step Functions (states) | Pending | Pending | Pending | |
 | 17.26 | MSK (kafka) | Pending | Pending | Pending | |
 | 17.27 | OpenSearch (es) | Pending | Pending | Pending | |

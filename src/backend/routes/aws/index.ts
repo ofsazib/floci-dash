@@ -40,6 +40,9 @@ import cloudtrailRoutes from "./cloudtrail";
 import configserviceRoutes from "./configservice";
 import appconfigRoutes from "./appconfig";
 import cloudmapRoutes from "./cloudmap";
+import athenaRoutes from "./athena";
+import glueRoutes from "./glue";
+import firehoseRoutes from "./firehose";
 
 const router = new Hono();
 
@@ -83,6 +86,9 @@ router.route("/cloudtrail", cloudtrailRoutes);
 router.route("/configservice", configserviceRoutes);
 router.route("/appconfig", appconfigRoutes);
 router.route("/cloudmap", cloudmapRoutes);
+router.route("/athena", athenaRoutes);
+router.route("/glue", glueRoutes);
+router.route("/firehose", firehoseRoutes);
 
 router.get("/", (c: Context) => {
   return c.json({ message: "AWS routes available. Services registered: s3, dynamodb, rds, ec2, sqs, sns, events, logs, lambda, cloudwatch, iam, secretsmanager, cloudformation, kms, ecs, ssm, route53, apigateway, sts, appsync, scheduler, ecr, elb, ses, eks, autoscaling, cloudfront, kinesis, neptune, pipes, cognito, apigatewayv2, acm, cloudtrail, configservice, appconfig, cloudmap" });

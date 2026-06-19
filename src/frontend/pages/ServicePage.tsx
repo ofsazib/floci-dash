@@ -269,6 +269,24 @@ import {
   useDeleteCloudMapService,
   useCloudMapInstances,
 } from "../hooks/useCloudMap";
+import {
+  useAthenaWorkGroups,
+  useCreateAthenaWorkGroup,
+  useDeleteAthenaWorkGroup,
+  useAthenaQueryExecutions,
+} from "../hooks/useAthena";
+import {
+  useGlueDatabases,
+  useCreateGlueDatabase,
+  useDeleteGlueDatabase,
+  useGlueTables,
+  useDeleteGlueTable,
+} from "../hooks/useGlue";
+import {
+  useFirehoseStreams,
+  useCreateFirehoseStream,
+  useDeleteFirehoseStream,
+} from "../hooks/useFirehose";
 
 const KEY_TYPE_OPTIONS: SelectProps.Option[] = [
   { label: "String (S)", value: "S" },
@@ -309,7 +327,7 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
 ];
 
 /** Services with a fully implemented backend that can show a resource list */
-const IMPLEMENTED_SERVICES = new Set(["dynamodb", "rds", "logs", "ecs", "ssm", "route53", "apigateway", "appsync", "scheduler", "ecr", "elb", "ses", "sts", "eks", "autoscaling", "cloudfront", "kinesis", "neptune", "pipes", "cognito-idp", "apigatewayv2", "acm", "cloudtrail", "configservice", "appconfig", "cloudmap"]);
+const IMPLEMENTED_SERVICES = new Set(["dynamodb", "rds", "logs", "ecs", "ssm", "route53", "apigateway", "appsync", "scheduler", "ecr", "elb", "ses", "sts", "eks", "autoscaling", "cloudfront", "kinesis", "neptune", "pipes", "cognito-idp", "apigatewayv2", "acm", "cloudtrail", "configservice", "appconfig", "cloudmap", "athena", "glue", "firehose"]);
 
 export default function ServicePage() {
   const { service } = useParams<{ service: string }>();
@@ -394,6 +412,9 @@ function ServiceResourceList({ service }: { service: string }) {
   if (service === "configservice") return <ConfigServiceDashboard />;
   if (service === "appconfig") return <AppConfigDashboard />;
   if (service === "cloudmap") return <CloudMapDashboard />;
+  if (service === "athena") return <AthenaDashboard />;
+  if (service === "glue") return <GlueDashboard />;
+  if (service === "firehose") return <FirehoseDashboard />;
   return null;
 }
 
@@ -7533,6 +7554,243 @@ function CloudMapDashboard() {
       ]}
       filterEnabled
       filterPlaceholder="Find namespaces"
+      filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+    />
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  Athena
+// ────────────────────────────────────────────────────────
+
+function AthenaDashboard() {
+  const { data: wgData, isLoading } = useAthenaWorkGroups();
+  const deleteWg = useDeleteAthenaWorkGroup();
+  const { data: qeData } = useAthenaQueryExecutions();
+
+  if (isLoading) return <Spinner />;
+
+  return (
+    <Tabs
+      tabs={[
+        {
+          id: "work-groups",
+          label: "Work Groups",
+          content: (
+            <ResourceTable
+              resourceName="Work Group"
+              headerTitle="Athena Work Groups"
+              headerCounter={wgData?.total}
+              items={(wgData?.workGroups || []).map((w: any) => ({
+                name: w.Name,
+                state: w.State || "ENABLED",
+                description: w.Description || "-",
+                created: w.CreationTime ? new Date(w.CreationTime).toLocaleDateString() : "-",
+              }))}
+              loading={false}
+              emptyMessage="No work groups"
+              columns={[
+                { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+                { id: "state", header: "State", cell: (i: any) => i.state },
+                { id: "description", header: "Description", cell: (i: any) => i.description },
+                { id: "created", header: "Created", cell: (i: any) => i.created },
+                {
+                  id: "actions",
+                  header: "",
+                  cell: (i: any) =>
+                    i.name !== "primary" ? (
+                      <DeleteButton
+                        itemName={i.name}
+                        resourceType="work group"
+                        loading={deleteWg.isPending && deleteWg.variables === i.name}
+                        onDelete={() => deleteWg.mutateAsync(i.name)}
+                      />
+                    ) : null,
+                },
+              ]}
+              filterEnabled
+              filterPlaceholder="Find work groups"
+              filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+            />
+          ),
+        },
+        {
+          id: "query-executions",
+          label: "Query Executions",
+          content: (
+            <ResourceTable
+              resourceName="Query"
+              headerTitle="Recent Query Executions"
+              headerCounter={qeData?.total}
+              items={(qeData?.queryExecutionIds || []).map((id: string) => ({ id }))}
+              loading={false}
+              emptyMessage="No query executions"
+              columns={[
+                { id: "id", header: "Query Execution ID", cell: (i: any) => i.id, isRowHeader: true },
+              ]}
+            />
+          ),
+        },
+      ]}
+    />
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  Glue
+// ────────────────────────────────────────────────────────
+
+function GlueDashboard() {
+  const { data: dbData, isLoading } = useGlueDatabases();
+  const deleteDb = useDeleteGlueDatabase();
+  const [selectedDb, setSelectedDb] = useState<string | null>(null);
+  const { data: tblData } = useGlueTables(selectedDb);
+  const deleteTbl = useDeleteGlueTable(selectedDb || "");
+
+  if (isLoading) return <Spinner />;
+
+  if (selectedDb) {
+    return (
+      <>
+        <Box margin={{ bottom: "s" }}>
+          <Button iconName="arrow-left" onClick={() => setSelectedDb(null)}>
+            Back to databases
+          </Button>
+        </Box>
+        <ResourceTable
+          resourceName="Table"
+          headerTitle={`Tables in ${selectedDb}`}
+          headerCounter={tblData?.total}
+          items={(tblData?.tables || []).map((t: any) => ({
+            name: t.Name,
+            type: t.TableType || "-",
+            location: t.StorageDescriptor?.Location || "-",
+            columns: t.StorageDescriptor?.Columns?.length || 0,
+            created: t.CreateTime ? new Date(t.CreateTime).toLocaleDateString() : "-",
+          }))}
+          loading={false}
+          emptyMessage="No tables"
+          columns={[
+            { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+            { id: "type", header: "Type", cell: (i: any) => i.type },
+            { id: "location", header: "Location", cell: (i: any) => i.location },
+            { id: "columns", header: "Columns", cell: (i: any) => i.columns },
+            { id: "created", header: "Created", cell: (i: any) => i.created },
+            {
+              id: "actions",
+              header: "",
+              cell: (i: any) => (
+                <DeleteButton
+                  itemName={i.name}
+                  resourceType="table"
+                  loading={deleteTbl.isPending && deleteTbl.variables === i.name}
+                  onDelete={() => deleteTbl.mutateAsync(i.name)}
+                />
+              ),
+            },
+          ]}
+          filterEnabled
+          filterPlaceholder="Find tables"
+          filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+        />
+      </>
+    );
+  }
+
+  return (
+    <ResourceTable
+      resourceName="Database"
+      headerTitle="Glue Databases"
+      headerCounter={dbData?.total}
+      items={(dbData?.databases || []).map((d: any) => ({
+        name: d.Name,
+        description: d.Description || "-",
+        location: d.LocationUri || "-",
+        tables: "-",
+        created: d.CreateTime ? new Date(d.CreateTime).toLocaleDateString() : "-",
+      }))}
+      loading={isLoading}
+      emptyMessage="No Glue databases"
+      columns={[
+        {
+          id: "name",
+          header: "Name",
+          cell: (i: any) => (
+            <Button variant="link" onClick={() => setSelectedDb(i.name)}>
+              {i.name}
+            </Button>
+          ),
+          isRowHeader: true,
+        },
+        { id: "description", header: "Description", cell: (i: any) => i.description },
+        { id: "location", header: "Location", cell: (i: any) => i.location },
+        { id: "created", header: "Created", cell: (i: any) => i.created },
+        {
+          id: "actions",
+          header: "",
+          cell: (i: any) => (
+            <DeleteButton
+              itemName={i.name}
+              resourceType="database"
+              loading={deleteDb.isPending && deleteDb.variables === i.name}
+              onDelete={() => deleteDb.mutateAsync(i.name)}
+            />
+          ),
+        },
+      ]}
+      filterEnabled
+      filterPlaceholder="Find databases"
+      filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+    />
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  Firehose
+// ────────────────────────────────────────────────────────
+
+function FirehoseDashboard() {
+  const { data, isLoading } = useFirehoseStreams();
+  const deleteStream = useDeleteFirehoseStream();
+
+  if (isLoading) return <Spinner />;
+
+  return (
+    <ResourceTable
+      resourceName="Stream"
+      headerTitle="Kinesis Firehose Delivery Streams"
+      headerCounter={data?.total}
+      items={(data?.streams || []).map((s: any) => ({
+        name: s.DeliveryStreamName,
+        arn: s.DeliveryStreamARN,
+        status: s.DeliveryStreamStatus,
+        bucket: s.Destinations?.[0]?.S3DestinationDescription?.BucketARN || "-",
+        prefix: s.Destinations?.[0]?.S3DestinationDescription?.Prefix || "-",
+        created: s.CreateTimestamp ? new Date(s.CreateTimestamp).toLocaleDateString() : "-",
+      }))}
+      loading={isLoading}
+      emptyMessage="No delivery streams"
+      columns={[
+        { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+        { id: "status", header: "Status", cell: (i: any) => i.status },
+        { id: "bucket", header: "S3 Bucket", cell: (i: any) => i.bucket },
+        { id: "prefix", header: "Prefix", cell: (i: any) => i.prefix },
+        { id: "created", header: "Created", cell: (i: any) => i.created },
+        {
+          id: "actions",
+          header: "",
+          cell: (i: any) => (
+            <DeleteButton
+              itemName={i.name}
+              resourceType="delivery stream"
+              loading={deleteStream.isPending && deleteStream.variables === i.name}
+              onDelete={() => deleteStream.mutateAsync(i.name)}
+            />
+          ),
+        },
+      ]}
+      filterEnabled
+      filterPlaceholder="Find streams by name"
       filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
     />
   );
