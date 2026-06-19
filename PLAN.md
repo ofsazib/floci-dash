@@ -1304,9 +1304,9 @@ Each remaining service gets a standard list + create + delete pattern.
 | 17.22 | Athena | Done | Done | Done | 2025-06-18 |
 | 17.23 | Glue | Done | Done | Done | 2025-06-18 |
 | 17.24 | Firehose | Done | Done | Done | 2025-06-18 |
-| 17.25 | Step Functions (states) | Pending | Pending | Pending | |
-| 17.26 | MSK (kafka) | Pending | Pending | Pending | |
-| 17.27 | OpenSearch (es) | Pending | Pending | Pending | |
+| 17.25 | Step Functions (states) | Done | Done | Done | 2025-06-18 |
+| 17.26 | MSK (kafka) | Done | Done | Done | 2025-06-18 |
+| 17.27 | OpenSearch (es) | Done | Done | Done | 2025-06-18 |
 | 17.28 | Bedrock Runtime | Pending | Pending | Pending | |
 | 17.29 | Textract | Pending | Pending | Pending | |
 | 17.30 | Transcribe | Pending | Pending | Pending | |

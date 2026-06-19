@@ -364,6 +364,9 @@ These services have full CRUD operations in both backend and frontend:
 | **Athena** | Work groups (list, create, delete), query executions (list, get, stop), data catalogs (list, get), databases (list), table metadata (list per database) |
 | **Glue** | Databases (list, get, create, delete), tables (list, get, create, delete per database) with drill-down navigation |
 | **Firehose** | Delivery streams (list with describe, get, create, delete), put record/batch, tags (list per stream) |
+| **Step Functions** | State machines (list, describe, create, delete), executions (list, describe, start, stop, history), activities (list) with drill-down per state machine |
+| **OpenSearch** | Domains (list, describe, create, delete), versions (list) |
+| **MSK** | Clusters (list, describe, create, delete V2 API), bootstrap brokers (get per cluster) |
 
 ### Navigation + status (55 services)
 

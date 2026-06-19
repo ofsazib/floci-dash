@@ -287,6 +287,20 @@ import {
   useCreateFirehoseStream,
   useDeleteFirehoseStream,
 } from "../hooks/useFirehose";
+import {
+  useStateMachines,
+  useDeleteStateMachine,
+  useStateMachineExecutions,
+  useActivities,
+} from "../hooks/useStepFunctions";
+import {
+  useOpenSearchDomains,
+  useDeleteOpenSearchDomain,
+} from "../hooks/useOpenSearch";
+import {
+  useMskClusters,
+  useDeleteMskCluster,
+} from "../hooks/useMsk";
 
 const KEY_TYPE_OPTIONS: SelectProps.Option[] = [
   { label: "String (S)", value: "S" },
@@ -327,7 +341,7 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
 ];
 
 /** Services with a fully implemented backend that can show a resource list */
-const IMPLEMENTED_SERVICES = new Set(["dynamodb", "rds", "logs", "ecs", "ssm", "route53", "apigateway", "appsync", "scheduler", "ecr", "elb", "ses", "sts", "eks", "autoscaling", "cloudfront", "kinesis", "neptune", "pipes", "cognito-idp", "apigatewayv2", "acm", "cloudtrail", "configservice", "appconfig", "cloudmap", "athena", "glue", "firehose"]);
+const IMPLEMENTED_SERVICES = new Set(["dynamodb", "rds", "logs", "ecs", "ssm", "route53", "apigateway", "appsync", "scheduler", "ecr", "elb", "ses", "sts", "eks", "autoscaling", "cloudfront", "kinesis", "neptune", "pipes", "cognito-idp", "apigatewayv2", "acm", "cloudtrail", "configservice", "appconfig", "cloudmap", "athena", "glue", "firehose", "states", "es", "kafka"]);
 
 export default function ServicePage() {
   const { service } = useParams<{ service: string }>();
@@ -415,6 +429,9 @@ function ServiceResourceList({ service }: { service: string }) {
   if (service === "athena") return <AthenaDashboard />;
   if (service === "glue") return <GlueDashboard />;
   if (service === "firehose") return <FirehoseDashboard />;
+  if (service === "states") return <StepFunctionsDashboard />;
+  if (service === "es") return <OpenSearchDashboard />;
+  if (service === "kafka") return <MskDashboard />;
   return null;
 }
 
@@ -7791,6 +7808,230 @@ function FirehoseDashboard() {
       ]}
       filterEnabled
       filterPlaceholder="Find streams by name"
+      filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+    />
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  Step Functions
+// ────────────────────────────────────────────────────────
+
+function StepFunctionsDashboard() {
+  const { data: smData, isLoading } = useStateMachines();
+  const deleteSm = useDeleteStateMachine();
+  const [selectedSm, setSelectedSm] = useState<string | null>(null);
+  const { data: execData } = useStateMachineExecutions(selectedSm);
+  const { data: actData } = useActivities();
+
+  if (isLoading) return <Spinner />;
+
+  if (selectedSm) {
+    return (
+      <>
+        <Box margin={{ bottom: "s" }}>
+          <Button iconName="arrow-left" onClick={() => setSelectedSm(null)}>
+            Back to state machines
+          </Button>
+        </Box>
+        <ResourceTable
+          resourceName="Execution"
+          headerTitle="Executions"
+          headerCounter={execData?.total}
+          items={(execData?.executions || []).map((e: any) => ({
+            name: e.name,
+            status: e.status,
+            started: e.startDate ? new Date(e.startDate).toLocaleString() : "-",
+            stopped: e.stopDate ? new Date(e.stopDate).toLocaleString() : "-",
+          }))}
+          loading={false}
+          emptyMessage="No executions"
+          columns={[
+            { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+            { id: "status", header: "Status", cell: (i: any) => i.status },
+            { id: "started", header: "Started", cell: (i: any) => i.started },
+            { id: "stopped", header: "Stopped", cell: (i: any) => i.stopped },
+          ]}
+          filterEnabled
+          filterPlaceholder="Find executions"
+          filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+        />
+      </>
+    );
+  }
+
+  return (
+    <Tabs
+      tabs={[
+        {
+          id: "state-machines",
+          label: "State Machines",
+          content: (
+            <ResourceTable
+              resourceName="State Machine"
+              headerTitle="Step Functions State Machines"
+              headerCounter={smData?.total}
+              items={(smData?.stateMachines || []).map((sm: any) => ({
+                arn: sm.stateMachineArn,
+                name: sm.name,
+                type: sm.type || "STANDARD",
+                created: sm.creationDate ? new Date(sm.creationDate).toLocaleDateString() : "-",
+              }))}
+              loading={false}
+              emptyMessage="No state machines"
+              columns={[
+                {
+                  id: "name",
+                  header: "Name",
+                  cell: (i: any) => (
+                    <Button variant="link" onClick={() => setSelectedSm(i.arn)}>
+                      {i.name}
+                    </Button>
+                  ),
+                  isRowHeader: true,
+                },
+                { id: "type", header: "Type", cell: (i: any) => i.type },
+                { id: "created", header: "Created", cell: (i: any) => i.created },
+                {
+                  id: "actions",
+                  header: "",
+                  cell: (i: any) => (
+                    <DeleteButton
+                      itemName={i.name}
+                      resourceType="state machine"
+                      loading={deleteSm.isPending && deleteSm.variables === i.arn}
+                      onDelete={() => deleteSm.mutateAsync(i.arn)}
+                    />
+                  ),
+                },
+              ]}
+              filterEnabled
+              filterPlaceholder="Find state machines"
+              filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+            />
+          ),
+        },
+        {
+          id: "activities",
+          label: "Activities",
+          content: (
+            <ResourceTable
+              resourceName="Activity"
+              headerTitle="Activities"
+              headerCounter={actData?.total}
+              items={(actData?.activities || []).map((a: any) => ({
+                arn: a.activityArn,
+                name: a.name,
+                created: a.creationDate ? new Date(a.creationDate).toLocaleDateString() : "-",
+              }))}
+              loading={false}
+              emptyMessage="No activities"
+              columns={[
+                { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+                { id: "arn", header: "ARN", cell: (i: any) => i.arn },
+                { id: "created", header: "Created", cell: (i: any) => i.created },
+              ]}
+              filterEnabled
+              filterPlaceholder="Find activities"
+              filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+            />
+          ),
+        },
+      ]}
+    />
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  OpenSearch
+// ────────────────────────────────────────────────────────
+
+function OpenSearchDashboard() {
+  const { data, isLoading } = useOpenSearchDomains();
+  const deleteDomain = useDeleteOpenSearchDomain();
+
+  if (isLoading) return <Spinner />;
+
+  return (
+    <ResourceTable
+      resourceName="Domain"
+      headerTitle="OpenSearch Domains"
+      headerCounter={data?.total}
+      items={(data?.domains || []).map((d: any) => ({
+        name: d.DomainName,
+        engine: d.EngineType || "OpenSearch",
+      }))}
+      loading={isLoading}
+      emptyMessage="No OpenSearch domains"
+      columns={[
+        { id: "name", header: "Domain Name", cell: (i: any) => i.name, isRowHeader: true },
+        { id: "engine", header: "Engine Type", cell: (i: any) => i.engine },
+        {
+          id: "actions",
+          header: "",
+          cell: (i: any) => (
+            <DeleteButton
+              itemName={i.name}
+              resourceType="domain"
+              loading={deleteDomain.isPending && deleteDomain.variables === i.name}
+              onDelete={() => deleteDomain.mutateAsync(i.name)}
+            />
+          ),
+        },
+      ]}
+      filterEnabled
+      filterPlaceholder="Find domains"
+      filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+    />
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  MSK (Managed Streaming for Kafka)
+// ────────────────────────────────────────────────────────
+
+function MskDashboard() {
+  const { data, isLoading } = useMskClusters();
+  const deleteCluster = useDeleteMskCluster();
+
+  if (isLoading) return <Spinner />;
+
+  return (
+    <ResourceTable
+      resourceName="Cluster"
+      headerTitle="MSK Clusters"
+      headerCounter={data?.total}
+      items={(data?.clusters || []).map((c: any) => ({
+        arn: c.ClusterArn,
+        name: c.ClusterName,
+        state: c.State || "-",
+        brokers: c.NumberOfBrokerNodes || "-",
+        version: c.CurrentBrokerSoftwareInfo?.KafkaVersion || "-",
+        created: c.CreationTime ? new Date(c.CreationTime).toLocaleDateString() : "-",
+      }))}
+      loading={isLoading}
+      emptyMessage="No MSK clusters"
+      columns={[
+        { id: "name", header: "Cluster Name", cell: (i: any) => i.name, isRowHeader: true },
+        { id: "state", header: "State", cell: (i: any) => i.state },
+        { id: "brokers", header: "Brokers", cell: (i: any) => i.brokers },
+        { id: "version", header: "Kafka Version", cell: (i: any) => i.version },
+        { id: "created", header: "Created", cell: (i: any) => i.created },
+        {
+          id: "actions",
+          header: "",
+          cell: (i: any) => (
+            <DeleteButton
+              itemName={i.name}
+              resourceType="cluster"
+              loading={deleteCluster.isPending && deleteCluster.variables === i.arn}
+              onDelete={() => deleteCluster.mutateAsync(i.arn)}
+            />
+          ),
+        },
+      ]}
+      filterEnabled
+      filterPlaceholder="Find clusters by name"
       filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
     />
   );
