@@ -80,8 +80,49 @@ vi.mock("../components/DynamoDBTableDetail", () => ({
   ),
 }));
 
-vi.mock("../hooks/useSystem", () => ({
-  useHealth: () => ({ data: { services: { logs: "available" } } }),
+vi.mock("../hooks/useCodeDeploy", () => ({
+  useCodeDeployApplications: vi.fn(() => ({ data: { applications: [], total: 0 }, isLoading: false, isError: false, error: null })),
+  useCreateCodeDeployApplication: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
+  useDeleteCodeDeployApplication: () => ({ mutateAsync: vi.fn(), isPending: false, variables: null }),
+  useCodeDeployDeploymentGroups: vi.fn(() => ({ data: { deploymentGroups: [], total: 0 }, isLoading: false, isError: false, error: null })),
+  useCreateCodeDeployDeploymentGroup: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
+  useCodeDeployDeploymentConfigs: vi.fn(() => ({ data: { deploymentConfigs: [], total: 0 }, isLoading: false, isError: false, error: null })),
+  useCreateCodeDeployDeploymentConfig: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
+  useCodeDeployDeployments: vi.fn(() => ({ data: { deployments: [], total: 0 }, isLoading: false, isError: false, error: null })),
+  useCreateCodeDeployDeployment: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
+}));
+
+vi.mock("../hooks/useCUR", () => ({
+  useReportDefinitions: vi.fn(() => ({ data: { reportDefinitions: [], total: 0 }, isLoading: false, isError: false, error: null })),
+  useCreateReportDefinition: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
+  useModifyReportDefinition: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
+  useDeleteReportDefinition: () => ({ mutateAsync: vi.fn(), isPending: false, variables: null }),
+}));
+
+vi.mock("../hooks/useBCMDataExports", () => ({
+  useBCMExports: () => ({ data: { exports: [], total: 0 }, isLoading: false, isError: false, error: null }),
+  useCreateBCMExport: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
+  useDeleteBCMExport: () => ({ mutateAsync: vi.fn(), isPending: false, variables: null }),
+  useBCMExportExecutions: () => ({ data: { executions: [], total: 0 }, isLoading: false, isError: false, error: null }),
+  useBCMTables: () => ({ data: { tables: [], total: 0 }, isLoading: false, isError: false, error: null }),
+}));
+
+vi.mock("../hooks/useWafV2", () => ({
+  useWebACLs: () => ({ data: { webAcls: [], total: 0 }, isLoading: false, isError: false, error: null }),
+  useCreateWebACL: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
+  useDeleteWebACL: () => ({ mutateAsync: vi.fn(), isPending: false, variables: null }),
+  useIPSets: () => ({ data: { ipSets: [], total: 0 }, isLoading: false, isError: false, error: null }),
+  useCreateIPSet: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
+  useDeleteIPSet: () => ({ mutateAsync: vi.fn(), isPending: false, variables: null }),
+  useRegexPatternSets: () => ({ data: { regexPatternSets: [], total: 0 }, isLoading: false, isError: false, error: null }),
+  useCreateRegexPatternSet: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
+  useDeleteRegexPatternSet: () => ({ mutateAsync: vi.fn(), isPending: false, variables: null }),
+  useRuleGroups: () => ({ data: { ruleGroups: [], total: 0 }, isLoading: false, isError: false, error: null }),
+  useCreateRuleGroup: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
+  useDeleteRuleGroup: () => ({ mutateAsync: vi.fn(), isPending: false, variables: null }),
+}));
+
+vi.mock("../hooks/useSystem", () => ({ useHealth: () => ({ data: { services: { logs: "available" } } }),
 }));
 
 vi.mock("../lib/client", () => ({
@@ -99,6 +140,9 @@ vi.mock("react-router-dom", () => ({
 }));
 
 import ServicePage from "./ServicePage";
+import * as codeDeployModule from "../hooks/useCodeDeploy";
+import * as curModule from "../hooks/useCUR";
+import * as bcmModule from "../hooks/useBCMDataExports";
 
 // ─── Shared default mock data ────────────────────────────
 const DEFAULT_LOG_GROUPS = [
@@ -884,5 +928,106 @@ describe("ServicePage — RDS DB Cluster Detail", () => {
     await waitFor(() => {
       expect(screen.getByText("Loading cluster details...")).toBeTruthy();
     });
+  });
+});
+
+// ─── CodeDeploy ─────────────────────────────────────────
+
+describe("ServicePage — CodeDeploy", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockParams.mockReturnValue({ service: "codedeploy" });
+  });
+
+  it("renders CodeDeploy applications page with empty state", () => {
+    render(<ServicePage />, { wrapper: createWrapper() });
+    expect(screen.getAllByText("CodeDeploy Applications").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("No applications found").length).toBeGreaterThanOrEqual(0);
+  });
+
+  it("renders CodeDeploy applications with data", () => {
+    vi.mocked(codeDeployModule.useCodeDeployApplications).mockReturnValue({
+      data: { applications: [{ applicationName: "my-app", description: "test", createTime: "2025-01-01" }], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as any);
+    render(<ServicePage />, { wrapper: createWrapper() });
+    expect(screen.getAllByText("my-app").length).toBeGreaterThan(0);
+  });
+
+  it("shows error state for CodeDeploy", () => {
+    vi.mocked(codeDeployModule.useCodeDeployApplications).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new Error("boom"),
+    } as any);
+    render(<ServicePage />, { wrapper: createWrapper() });
+    expect(screen.getAllByText("CodeDeploy Applications").length).toBeGreaterThan(0);
+  });
+});
+
+// ─── CUR ────────────────────────────────────────────────
+
+describe("ServicePage — CUR", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockParams.mockReturnValue({ service: "cur" });
+  });
+
+  it("renders CUR report definitions with empty state", () => {
+    render(<ServicePage />, { wrapper: createWrapper() });
+    expect(screen.getAllByText("Cost & Usage Report Definitions").length).toBeGreaterThan(0);
+  });
+
+  it("renders CUR report definitions with data", () => {
+    vi.mocked(curModule.useReportDefinitions).mockReturnValue({
+      data: { reportDefinitions: [{ ReportName: "my-report", TimeUnit: "DAILY", Format: "textORcsv", Compression: "GZIP", S3Bucket: "bucket" }], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as any);
+    render(<ServicePage />, { wrapper: createWrapper() });
+    expect(screen.getAllByText("my-report").length).toBeGreaterThan(0);
+  });
+
+  it("renders CUR report definitions with data", () => {
+    vi.mocked(curModule.useReportDefinitions).mockReturnValue({
+      data: { reportDefinitions: [{ ReportName: "my-report", TimeUnit: "DAILY", Format: "textORcsv", Compression: "GZIP", S3Bucket: "bucket" }], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as any);
+    render(<ServicePage />, { wrapper: createWrapper() });
+    expect(screen.getAllByText("my-report").length).toBeGreaterThan(0);
+  });
+});
+
+// ─── BCM Data Exports ───────────────────────────────────
+
+describe("ServicePage — BCM", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockParams.mockReturnValue({ service: "bcmdataexports" });
+  });
+
+  it("renders BCM exports with empty state", () => {
+    render(<ServicePage />, { wrapper: createWrapper() });
+    expect(screen.getAllByText("BCM Data Exports").length).toBeGreaterThan(0);
+  });
+});
+
+// ─── WAF v2 ─────────────────────────────────────────────
+
+describe("ServicePage — WAFv2", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockParams.mockReturnValue({ service: "wafv2" });
+  });
+
+  it("renders WAF v2 web ACLs page with empty state", () => {
+    render(<ServicePage />, { wrapper: createWrapper() });
+    expect(screen.getAllByText("WAF v2 Web ACLs").length).toBeGreaterThan(0);
   });
 });

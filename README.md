@@ -43,7 +43,7 @@
 
 - **AWS Console look and feel** — Built with [Cloudscape Design System](https://cloudscape.design/), the same component library used by the real AWS Management Console
 - **55+ AWS services** — Full navigation and status for every service Floci supports
-- **Deep resource management** — Browse, create, and delete resources for implemented services (S3, DynamoDB, EC2, RDS, SQS, SNS, EventBridge, CloudWatch Logs, CloudWatch Metrics, Lambda, IAM, Secrets Manager, CloudFormation, KMS, ECS, SSM, Route 53, API Gateway, AppSync, EventBridge Scheduler, ECR, ELB, SES, STS, EKS, Auto Scaling, CloudFront, Kinesis)
+- **Deep resource management** — Browse, create, and delete resources for implemented services (S3, DynamoDB, EC2, RDS, SQS, SNS, EventBridge, CloudWatch Logs, CloudWatch Metrics, Lambda, IAM, Secrets Manager, CloudFormation, KMS, ECS, SSM, Route 53, API Gateway, AppSync, EventBridge Scheduler, ECR, ELB, SES, STS, EKS, Auto Scaling, CloudFront, Kinesis, Neptune, EventBridge Pipes, Cognito, API Gateway V2, ACM, CloudTrail, Config, AppConfig, Cloud Map, Athena, Glue, Firehose, Step Functions, OpenSearch, MSK, Bedrock Runtime, Textract, Transcribe, Cost Explorer, Pricing, Resource Groups Tagging, BCM Data Exports, Cost & Usage Report (cur), CodeBuild, CodeDeploy, Backup, Transfer Family, WAF v2)
 - **EC2 web terminal** — Interactive bash shell inside running EC2 instances directly from the browser (xterm.js + Docker Engine API with PTY)
 - **Dark mode** — Toggle between light and dark themes
 - **Real-time health** — Dashboard shows live Floci service status (running/available counts)
@@ -187,12 +187,14 @@ docker run -p 3000:3000 -p 4566:4566 \
 
 ### Testing
 
-The project includes 389 unit tests (237 backend + 66 frontend + 86 integration) organized as:
+The project includes **2,127 unit tests** across 131 test files, organized as:
 
 | Tests | Count | Location |
 |-------|-------|----------|
-| Backend route unit tests | 313 | `src/backend/routes/aws/*.test.ts` |
-| Frontend page tests | 76 | `src/frontend/pages/*.test.tsx` |
+| Backend route unit tests | 43 files | `src/backend/routes/aws/*.test.ts` |
+| Frontend page/component tests | 14 files | `src/frontend/pages/*.test.tsx`, `src/frontend/components/*.test.tsx` |
+| Frontend hook tests | 30 files | `src/frontend/hooks/*.test.ts` |
+| Other tests | 44 files | shared libs, stores, types, etc. |
 | Integration tests | 86 | `src/backend/integration.test.ts` (requires Floci) |
 
 ```bash
@@ -367,6 +369,19 @@ These services have full CRUD operations in both backend and frontend:
 | **Step Functions** | State machines (list, describe, create, delete), executions (list, describe, start, stop, history), activities (list) with drill-down per state machine |
 | **OpenSearch** | Domains (list, describe, create, delete), versions (list) |
 | **MSK** | Clusters (list, describe, create, delete V2 API), bootstrap brokers (get per cluster) |
+| **Bedrock Runtime** | Converse (messages → response), invoke model (prompt → response) with configurable model IDs |
+| **Textract** | Sync detect document text, sync analyze document (with feature types), async start/get document text detection, async start/get document analysis |
+| **Transcribe** | Transcription jobs (list, get, start, delete), vocabularies (list) |
+| **Cost Explorer** | Get cost & usage, dimension values, tags, reservation coverage/utilization, savings plans coverage/utilization, cost categories — all as interactive POST queries |
+| **Pricing** | List services, get attribute values per service, list products with filters, list price lists, get price list file URL |
+| **Resource Groups Tagging** | List tagged resources (with tag/value filters), tag/untag resources by ARN, list tag keys and values |
+| **Cost & Usage Report (cur)** | Report definitions (list, create, modify, delete), tags (list, add, remove) |
+| **BCM Data Exports** | Exports (list, create, get, update, delete), executions (list per export), tables (list), tags (list, add, remove) |
+| **CodeBuild** | Projects (list, create, delete, get), builds (start, list per project, list all, get, stop), source credentials (list, import, delete), curated environment images (list) |
+| **CodeDeploy** | Applications (list, create, get, update, delete), deployment groups (list, create, get, delete per application), deployment configs (list, create, get, delete), deployments (create, list per application, get), tags (list, add, remove per resource) |
+| **Backup** | Backup plans (list, create, get, delete), backup vaults (list, create, describe, delete), backup selections (list, create per plan, get, delete), backup jobs (list, start, describe, stop), tags (list) |
+| **Transfer Family** | Servers (list, create, describe, delete, start, stop), users (list per server, create, describe, delete), tags (list) |
+| **WAF v2** | Web ACLs, IP Sets, Regex Pattern Sets, Rule Groups (list, create, delete) |
 
 ### Navigation + status (55 services)
 
@@ -380,7 +395,7 @@ All services reported by Floci appear in the sidebar with status indicators. Uns
 **Database:** DynamoDB, ElastiCache, Neptune, RDS
 **Networking:** API Gateway, API Gateway V2, AppSync, CloudFront, ELB, Route 53
 **Messaging:** EventBridge (Events), EventBridge Pipes, EventBridge Scheduler, Kinesis, Kinesis Firehose, SES, SNS, SQS
-**Security:** ACM, Cognito, IAM, KMS, Secrets Manager
+**Security:** ACM, Cognito, IAM, KMS, Secrets Manager, WAF v2
 **Management:** AppConfig, AppConfig Data, CloudFormation, CloudTrail, CloudWatch Logs, CloudWatch Metrics, Config, Service Discovery (Cloud Map), SSM (Systems Manager)
 **Analytics:** Athena, Glue, MSK (Kafka), OpenSearch, Step Functions
 **ML/AI:** Bedrock Runtime, Textract, Transcribe

@@ -112,6 +112,12 @@ import {
 } from "../hooks/useAPIGateway";
 import { useToast } from "../components/Toast";
 import {
+  useReportDefinitions,
+  useCreateReportDefinition,
+  useModifyReportDefinition,
+  useDeleteReportDefinition,
+} from "../hooks/useCUR";
+import {
   useAppSyncApis,
   useAppSyncApi,
   useCreateAppSyncApi,
@@ -301,6 +307,112 @@ import {
   useMskClusters,
   useDeleteMskCluster,
 } from "../hooks/useMsk";
+import {
+  useTranscriptionJobs,
+  useDeleteTranscriptionJob,
+} from "../hooks/useTranscribe";
+import {
+  useCostAndUsage,
+  useDimensionValues,
+  useCETags,
+  useReservationCoverage,
+  useReservationUtilization,
+  useSavingsPlansCoverage,
+  useSavingsPlansUtilization,
+  useCostCategories,
+} from "../hooks/useCE";
+import {
+  usePricingServices,
+  usePricingAttributeValues,
+  usePricingProducts,
+  usePricingPriceLists,
+  usePricingPriceListFileUrl,
+} from "../hooks/usePricing";
+import {
+  useRGTResources,
+  useRGTTagKeys,
+  useRGTTagValues,
+  useRGTTagResources,
+  useRGTUntagResources,
+} from "../hooks/useRGT";
+import {
+  useCodeBuildProjects,
+  useCreateCodeBuildProject,
+  useCodeBuildProject,
+  useDeleteCodeBuildProject,
+  useStartCodeBuildBuild,
+  useCodeBuildProjectBuilds,
+  useCodeBuildBuilds,
+  useCodeBuildBuild,
+  useStopCodeBuildBuild,
+  useCodeBuildSourceCredentials,
+  useImportCodeBuildSourceCredentials,
+  useDeleteCodeBuildSourceCredentials,
+  useCodeBuildCuratedImages,
+} from "../hooks/useCodeBuild";
+import {
+  useCodeDeployApplications,
+  useCreateCodeDeployApplication,
+  useDeleteCodeDeployApplication,
+  useCodeDeployDeploymentGroups,
+  useCreateCodeDeployDeploymentGroup,
+  useCodeDeployDeploymentConfigs,
+  useCreateCodeDeployDeploymentConfig,
+  useCodeDeployDeployments,
+  useCreateCodeDeployDeployment,
+} from "../hooks/useCodeDeploy";
+import {
+  useBackupPlans,
+  useCreateBackupPlan,
+  useBackupPlan,
+  useDeleteBackupPlan,
+  useBackupVaults,
+  useCreateBackupVault,
+  useBackupVault,
+  useDeleteBackupVault,
+  useBackupSelections,
+  useCreateBackupSelection,
+  useDeleteBackupSelection,
+  useBackupJobs,
+  useStartBackupJob,
+  useBackupJob,
+  useStopBackupJob,
+  useBackupTags,
+} from "../hooks/useBackup";
+import {
+  useTransferServers,
+  useCreateTransferServer,
+  useTransferServer,
+  useDeleteTransferServer,
+  useStartTransferServer,
+  useStopTransferServer,
+  useTransferUsers,
+  useCreateTransferUser,
+  useTransferUser,
+  useDeleteTransferUser,
+  useTransferTags,
+} from "../hooks/useTransfer";
+import {
+  useBCMExports,
+  useCreateBCMExport,
+  useDeleteBCMExport,
+  useBCMExportExecutions,
+  useBCMTables,
+} from "../hooks/useBCMDataExports";
+import {
+  useWebACLs,
+  useCreateWebACL,
+  useDeleteWebACL,
+  useIPSets,
+  useCreateIPSet,
+  useDeleteIPSet,
+  useRegexPatternSets,
+  useCreateRegexPatternSet,
+  useDeleteRegexPatternSet,
+  useRuleGroups,
+  useCreateRuleGroup,
+  useDeleteRuleGroup,
+} from "../hooks/useWafV2";
 
 const KEY_TYPE_OPTIONS: SelectProps.Option[] = [
   { label: "String (S)", value: "S" },
@@ -341,7 +453,7 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
 ];
 
 /** Services with a fully implemented backend that can show a resource list */
-const IMPLEMENTED_SERVICES = new Set(["dynamodb", "rds", "logs", "ecs", "ssm", "route53", "apigateway", "appsync", "scheduler", "ecr", "elb", "ses", "sts", "eks", "autoscaling", "cloudfront", "kinesis", "neptune", "pipes", "cognito-idp", "apigatewayv2", "acm", "cloudtrail", "configservice", "appconfig", "cloudmap", "athena", "glue", "firehose", "states", "es", "kafka"]);
+const IMPLEMENTED_SERVICES = new Set(["dynamodb", "rds", "logs", "ecs", "ssm", "route53", "apigateway", "appsync", "scheduler", "ecr", "elb", "ses", "sts", "eks", "autoscaling", "cloudfront", "kinesis", "neptune", "pipes", "cognito-idp", "apigatewayv2", "acm", "cloudtrail", "configservice", "appconfig", "cloudmap", "athena", "glue", "firehose", "states", "es", "kafka", "bedrock-runtime", "textract", "transcribe", "ce", "pricing", "resourcegroupstagging", "codebuild", "codedeploy", "backup", "transfer", "cur", "bcmdataexports", "wafv2"]);
 
 export default function ServicePage() {
   const { service } = useParams<{ service: string }>();
@@ -432,6 +544,19 @@ function ServiceResourceList({ service }: { service: string }) {
   if (service === "states") return <StepFunctionsDashboard />;
   if (service === "es") return <OpenSearchDashboard />;
   if (service === "kafka") return <MskDashboard />;
+  if (service === "bedrock-runtime") return <BedrockRuntimeDashboard />;
+  if (service === "textract") return <TextractDashboard />;
+  if (service === "transcribe") return <TranscribeDashboard />;
+  if (service === "codebuild") return <CodeBuildDashboard />;
+  if (service === "codedeploy") return <CodeDeployDashboard />;
+  if (service === "backup") return <BackupDashboard />;
+  if (service === "transfer") return <TransferDashboard />;
+  if (service === "ce") return <CEDashboard />;
+  if (service === "pricing") return <PricingDashboard />;
+  if (service === "resourcegroupstagging") return <RGTDashboard />;
+  if (service === "cur") return <CURDashboard />;
+  if (service === "bcmdataexports") return <BCMDashboard />;
+  if (service === "wafv2") return <WafV2Dashboard />;
   return null;
 }
 
@@ -8034,5 +8159,1792 @@ function MskDashboard() {
       filterPlaceholder="Find clusters by name"
       filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
     />
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  Bedrock Runtime
+// ────────────────────────────────────────────────────────
+
+function BedrockRuntimeDashboard() {
+  return (
+    <Alert type="info">
+      Bedrock Runtime is a data-plane service. Use the Converse API or InvokeModel API to interact with
+      foundation models. The dashboard does not have a resource listing — models are invoked directly.
+    </Alert>
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  Textract
+// ────────────────────────────────────────────────────────
+
+function TextractDashboard() {
+  return (
+    <Alert type="info">
+      Textract is a document analysis service. Use the DetectDocumentText or AnalyzeDocument APIs to
+      extract text and data from documents. The dashboard provides API endpoints for sync and async operations.
+    </Alert>
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  Transcribe
+// ────────────────────────────────────────────────────────
+
+function TranscribeDashboard() {
+  const { data, isLoading } = useTranscriptionJobs();
+  const deleteJob = useDeleteTranscriptionJob();
+
+  if (isLoading) return <Spinner />;
+
+  return (
+    <ResourceTable
+      resourceName="Job"
+      headerTitle="Transcription Jobs"
+      headerCounter={data?.total}
+      items={(data?.jobs || []).map((j: any) => ({
+        name: j.TranscriptionJobName,
+        status: j.TranscriptionJobStatus,
+        language: j.LanguageCode || "-",
+        created: j.CreationTime ? new Date(j.CreationTime).toLocaleDateString() : "-",
+        completed: j.CompletionTime ? new Date(j.CompletionTime).toLocaleDateString() : "-",
+      }))}
+      loading={isLoading}
+      emptyMessage="No transcription jobs"
+      columns={[
+        { id: "name", header: "Job Name", cell: (i: any) => i.name, isRowHeader: true },
+        { id: "status", header: "Status", cell: (i: any) => i.status },
+        { id: "language", header: "Language", cell: (i: any) => i.language },
+        { id: "created", header: "Created", cell: (i: any) => i.created },
+        { id: "completed", header: "Completed", cell: (i: any) => i.completed },
+        {
+          id: "actions",
+          header: "",
+          cell: (i: any) => (
+            <DeleteButton
+              itemName={i.name}
+              resourceType="job"
+              loading={deleteJob.isPending && deleteJob.variables === i.name}
+              onDelete={() => deleteJob.mutateAsync(i.name)}
+            />
+          ),
+        },
+      ]}
+      filterEnabled
+      filterPlaceholder="Find jobs by name"
+      filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+    />
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  Cost Explorer
+// ────────────────────────────────────────────────────────
+
+function CEDashboard() {
+  const costAndUsage = useCostAndUsage();
+  const dimensionValues = useDimensionValues();
+  const ceTags = useCETags();
+  const reservationCoverage = useReservationCoverage();
+  const reservationUtilization = useReservationUtilization();
+  const savingsPlansCoverage = useSavingsPlansCoverage();
+  const savingsPlansUtilization = useSavingsPlansUtilization();
+  const costCategories = useCostCategories();
+
+  return (
+    <SpaceBetween size="l">
+      <Alert type="info">
+        Cost Explorer provides read-only cost and usage data. Use the query buttons below to retrieve data.
+      </Alert>
+      <Header variant="h2">Cost & Usage</Header>
+      <Button
+        loading={costAndUsage.isPending}
+        onClick={() =>
+          costAndUsage.mutate({
+            timePeriod: { start: "2026-01-01", end: "2026-06-30" },
+            granularity: "MONTHLY",
+            metrics: ["BlendedCost"],
+          })
+        }
+      >
+        Get Cost & Usage
+      </Button>
+      {(costAndUsage.data as any) && (
+        <Box>
+          Results by time: {((costAndUsage.data as any).resultsByTime || []).length}
+        </Box>
+      )}
+
+      <Header variant="h2">Dimension Values</Header>
+      <Button
+        loading={dimensionValues.isPending}
+        onClick={() =>
+          dimensionValues.mutate({
+            timePeriod: { start: "2026-01-01", end: "2026-06-30" },
+            dimension: "SERVICE",
+          })
+        }
+      >
+        Get Dimensions (SERVICE)
+      </Button>
+
+      <Header variant="h2">Tags</Header>
+      <Button
+        loading={ceTags.isPending}
+        onClick={() =>
+          ceTags.mutate({
+            timePeriod: { start: "2026-01-01", end: "2026-06-30" },
+          })
+        }
+      >
+        Get Tags
+      </Button>
+
+      <Header variant="h2">Reservation & Savings Plans</Header>
+      <SpaceBetween direction="horizontal" size="xs">
+        <Button loading={reservationCoverage.isPending} onClick={() => reservationCoverage.mutate({ timePeriod: { start: "2026-01-01", end: "2026-06-30" }, granularity: "MONTHLY" })}>
+          Reservation Coverage
+        </Button>
+        <Button loading={reservationUtilization.isPending} onClick={() => reservationUtilization.mutate({ timePeriod: { start: "2026-01-01", end: "2026-06-30" }, granularity: "MONTHLY" })}>
+          Reservation Utilization
+        </Button>
+        <Button loading={savingsPlansCoverage.isPending} onClick={() => savingsPlansCoverage.mutate({ timePeriod: { start: "2026-01-01", end: "2026-06-30" }, granularity: "MONTHLY" })}>
+          Savings Plans Coverage
+        </Button>
+        <Button loading={savingsPlansUtilization.isPending} onClick={() => savingsPlansUtilization.mutate({ timePeriod: { start: "2026-01-01", end: "2026-06-30" }, granularity: "MONTHLY" })}>
+          Savings Plans Utilization
+        </Button>
+      </SpaceBetween>
+
+      <Header variant="h2">Cost Categories</Header>
+      <Button loading={costCategories.isPending} onClick={() => costCategories.mutate({})}>
+        Get Cost Categories
+      </Button>
+      {(costCategories.data as any) && (
+        <Box>
+          Categories: {((costCategories.data as any).costCategories || []).length}
+        </Box>
+      )}
+    </SpaceBetween>
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  Pricing
+// ────────────────────────────────────────────────────────
+
+function PricingDashboard() {
+  const { data: servicesData, isLoading: servicesLoading } = usePricingServices({ serviceCode: "AmazonEC2" });
+  const [selectedServiceCode, setSelectedServiceCode] = useState<string | null>(null);
+  const { data: attrData } = usePricingAttributeValues(selectedServiceCode);
+  const { data: productsData, isLoading: productsLoading } = usePricingProducts(
+    selectedServiceCode ? { serviceCode: selectedServiceCode } : null
+  );
+  const { data: priceListsData } = usePricingPriceLists(selectedServiceCode ? selectedServiceCode : null);
+  const getUrl = usePricingPriceListFileUrl();
+
+  return (
+    <SpaceBetween size="l">
+      <Header variant="h2">Services</Header>
+      {servicesLoading ? <Spinner /> : (
+        <Box>
+          Found {(servicesData?.services || []).length} services
+          {servicesData?.services?.slice(0, 5).map((s: any) => (
+            <Button key={s.ServiceCode} variant="link" onFollow={() => setSelectedServiceCode(s.ServiceCode)}>
+              {s.ServiceCode}
+            </Button>
+          ))}
+        </Box>
+      )}
+
+      {selectedServiceCode && (
+        <>
+          <Header variant="h3">Attributes for {selectedServiceCode}</Header>
+          <Box>{(attrData?.attributeValues || []).length} attribute values</Box>
+
+          <Header variant="h3">Products</Header>
+          {productsLoading ? <Spinner /> : <Box>{(productsData?.priceList || []).length} products</Box>}
+
+          <Header variant="h3">Price Lists</Header>
+          <Box>{(priceListsData?.priceLists || []).length} price lists</Box>
+
+          <Header variant="h3">Get Price List File URL</Header>
+          <Button loading={getUrl.isPending} onClick={() => getUrl.mutate({ priceListArn: "arn:aws:pricing::123456789012:price-list/AmazonEC2/us-east-1/v1", fileFormat: "json" })}>
+            Get URL
+          </Button>
+          {getUrl.data && <Box>URL: {(getUrl.data as any).url}</Box>}
+        </>
+      )}
+    </SpaceBetween>
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  Resource Groups Tagging
+// ────────────────────────────────────────────────────────
+
+function RGTDashboard() {
+  const { data: resourcesData, isLoading: resourcesLoading } = useRGTResources();
+  const { data: tagKeysData } = useRGTTagKeys();
+  const [selectedTagKey, setSelectedTagKey] = useState<string | null>(null);
+  const { data: tagValuesData } = useRGTTagValues(selectedTagKey);
+  const tagResources = useRGTTagResources();
+  const untagResources = useRGTUntagResources();
+
+  return (
+    <SpaceBetween size="l">
+      <Header variant="h2">Tagged Resources</Header>
+      {resourcesLoading ? <Spinner /> : (
+        <ResourceTable
+          resourceName="Tagged Resource"
+          headerTitle="Tagged Resources"
+          headerCounter={resourcesData?.total}
+          items={(resourcesData?.resourceTagMappingList || []).map((r: any) => ({
+            arn: r.ResourceARN,
+            tags: Object.entries(r.Tags || {}).map(([k, v]: [string, any]) => `${k}=${v}`).join(", "),
+          }))}
+          loading={resourcesLoading}
+          emptyMessage="No tagged resources found"
+          columns={[
+            { id: "arn", header: "Resource ARN", cell: (i: any) => i.arn, isRowHeader: true },
+            { id: "tags", header: "Tags", cell: (i: any) => i.tags },
+          ]}
+          filterEnabled
+          filterPlaceholder="Find by ARN"
+          filterFunction={(i: any, s: string) => i.arn.toLowerCase().includes(s.toLowerCase())}
+        />
+      )}
+
+      <Header variant="h2">Tag Keys</Header>
+      <Box>
+        {(tagKeysData?.tagKeys || []).slice(0, 20).map((k: string) => (
+          <Button key={k} variant="link" onFollow={() => setSelectedTagKey(k)}>
+            {k}
+          </Button>
+        ))}
+      </Box>
+
+      {selectedTagKey && (
+        <>
+          <Header variant="h3">Values for "{selectedTagKey}"</Header>
+          <Box>{(tagValuesData?.tagValues || []).join(", ") || "No values"}</Box>
+        </>
+      )}
+    </SpaceBetween>
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  CodeBuild
+// ────────────────────────────────────────────────────────
+
+function CodeBuildDashboard() {
+  const { data: projectsData, isLoading: projectsLoading } = useCodeBuildProjects();
+  const { data: buildsData } = useCodeBuildBuilds();
+  const { data: credentialsData } = useCodeBuildSourceCredentials();
+  const { data: imagesData } = useCodeBuildCuratedImages();
+  const createProject = useCreateCodeBuildProject();
+  const deleteProject = useDeleteCodeBuildProject();
+  const startBuild = useStartCodeBuildBuild();
+  const [showCreate, setShowCreate] = useState(false);
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+
+  if (projectsLoading) return <Spinner />;
+
+  const projects = (projectsData?.projects || []).map((p: any) => ({
+    name: p.name,
+    description: p.description || "-",
+    created: p.created
+      ? new Date(p.created).toLocaleDateString()
+      : p.createdAt
+      ? new Date(p.createdAt * 1000).toLocaleDateString()
+      : "-",
+    language: p.language || "-",
+  }));
+
+  return (
+    <SpaceBetween size="l">
+      <ResourceTable
+        resourceName="Project"
+        headerTitle="CodeBuild Projects"
+        headerCounter={(projectsData?.projects || []).length}
+        items={projects}
+        columns={[
+          { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+          { id: "description", header: "Description", cell: (i: any) => i.description },
+          { id: "language", header: "Language", cell: (i: any) => i.language },
+          { id: "created", header: "Created", cell: (i: any) => i.created },
+          {
+            id: "actions",
+            header: "",
+            cell: (i: any) => (
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button
+                  loading={startBuild.isPending && startBuild.variables === i.name}
+                  onClick={() => startBuild.mutate(i.name)}
+                >
+                  Start build
+                </Button>
+                <DeleteButton
+                  itemName={i.name}
+                  resourceType="project"
+                  loading={deleteProject.isPending && deleteProject.variables === i.name}
+                  onDelete={() => deleteProject.mutateAsync(i.name)}
+                />
+              </SpaceBetween>
+            ),
+          },
+        ]}
+        loading={projectsLoading}
+        emptyMessage="No CodeBuild projects"
+        filterEnabled
+        filterPlaceholder="Find projects by name"
+        filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+        onCreate={() => setShowCreate(true)}
+      />
+
+      <Container header={<Header variant="h3" counter={(buildsData?.builds || []).length}>Recent Builds</Header>}>
+        <ResourceTable
+          resourceName="Build"
+          items={(buildsData?.builds || []).slice(0, 20).map((b: any) => ({
+            id: b.id,
+            project: b.projectName || "-",
+            status: b.buildStatus || b.status || "-",
+            started: b.startTime ? new Date(b.startTime).toLocaleString() : "-",
+          }))}
+          columns={[
+            { id: "id", header: "Build ID", cell: (i: any) => (i.id || "").split("/").pop() || i.id, isRowHeader: true },
+            { id: "project", header: "Project", cell: (i: any) => i.project },
+            { id: "status", header: "Status", cell: (i: any) => i.status },
+            { id: "started", header: "Started", cell: (i: any) => i.started },
+          ]}
+          emptyMessage="No builds yet"
+        />
+      </Container>
+
+      <Container header={<Header variant="h3" counter={credentialsData?.sourceCredentialsInfo?.length}>Source Credentials</Header>}>
+        <ResourceTable
+          resourceName="Credential"
+          items={(credentialsData?.sourceCredentialsInfo || []).map((c: any) => ({
+            arn: c.arn,
+            serverType: c.serverType || "-",
+            authType: c.authType || "-",
+          }))}
+          columns={[
+            { id: "arn", header: "ARN", cell: (i: any) => i.arn, isRowHeader: true },
+            { id: "serverType", header: "Server Type", cell: (i: any) => i.serverType },
+            { id: "authType", header: "Auth Type", cell: (i: any) => i.authType },
+          ]}
+          emptyMessage="No source credentials"
+        />
+      </Container>
+
+      <Container header={<Header variant="h3" counter={imagesData?.images?.length}>Curated Images</Header>}>
+        <ResourceTable
+          resourceName="Image"
+          items={(imagesData?.images || []).map((img: any) => ({
+            name: img.identifier || img.name || img.repoName || "-",
+            description: img.description || "-",
+          }))}
+          columns={[
+            { id: "name", header: "Identifier", cell: (i: any) => i.name, isRowHeader: true },
+            { id: "description", header: "Description", cell: (i: any) => i.description },
+          ]}
+          emptyMessage="No curated images"
+        />
+      </Container>
+
+      <Modal
+        visible={showCreate}
+        onDismiss={() => setShowCreate(false)}
+        header="Create CodeBuild project"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreate(false)}>Cancel</Button>
+              <Button
+                variant="primary"
+                loading={createProject.isPending}
+                disabled={!name.trim()}
+                onClick={() => {
+                  createProject.mutate(
+                    { name: name.trim(), description: description.trim() || undefined },
+                    { onSuccess: () => { setShowCreate(false); setName(""); setDescription(""); } }
+                  );
+                }}
+              >
+                Create
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          {createProject.isError && (
+            <Alert type="error" dismissible>
+              {(createProject.error as Error)?.message || "Failed to create project"}
+            </Alert>
+          )}
+          <SpaceBetween size="m">
+            <FormField label="Project name">
+              <Input value={name} onChange={({ detail }) => setName(detail.value)} placeholder="my-project" />
+            </FormField>
+            <FormField label="Description (optional)">
+              <Input value={description} onChange={({ detail }) => setDescription(detail.value)} />
+            </FormField>
+          </SpaceBetween>
+        </Form>
+      </Modal>
+    </SpaceBetween>
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  Backup
+// ────────────────────────────────────────────────────────
+
+function BackupDashboard() {
+  const { data: plansData, isLoading: plansLoading } = useBackupPlans();
+  const { data: vaultsData, isLoading: vaultsLoading } = useBackupVaults();
+  const { data: jobsData, isLoading: jobsLoading } = useBackupJobs();
+  const createPlan = useCreateBackupPlan();
+  const deletePlan = useDeleteBackupPlan();
+  const createVault = useCreateBackupVault();
+  const deleteVault = useDeleteBackupVault();
+  const stopJob = useStopBackupJob();
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
+  const { data: selectionsData } = useBackupSelections(selectedPlanId);
+  const [showCreatePlan, setShowCreatePlan] = useState(false);
+  const [showCreateVault, setShowCreateVault] = useState(false);
+  const [planName, setPlanName] = useState("");
+  const [vaultName, setVaultName] = useState("");
+
+  const plans = (plansData?.plans || []).map((p: any) => ({
+    id: p.BackupPlanId,
+    name: p.BackupPlanName || p.BackupPlan?.BackupPlanName || "-",
+    created: p.CreationDate ? new Date(p.CreationDate).toLocaleDateString() : "-",
+    version: p.VersionId || "-",
+  }));
+
+  const vaults = (vaultsData?.backupVaults || []).map((v: any) => ({
+    name: v.BackupVaultName,
+    arn: v.BackupVaultArn || "-",
+    created: v.CreationDate ? new Date(v.CreationDate).toLocaleDateString() : "-",
+    encrypted: v.EncryptionKeyArn ? "Yes" : "No",
+  }));
+
+  const jobs = (jobsData?.backupJobs || []).map((j: any) => ({
+    id: j.BackupJobId,
+    vault: j.BackupVaultName || "-",
+    resource: j.ResourceArn ? j.ResourceArn.split("/").pop() || j.ResourceArn : "-",
+    state: j.State || "-",
+    created: j.CreationDate ? new Date(j.CreationDate).toLocaleDateString() : "-",
+    completed: j.CompletionDate ? new Date(j.CompletionDate).toLocaleDateString() : "-",
+  }));
+
+  if (plansLoading || vaultsLoading || jobsLoading) return <Spinner />;
+
+  return (
+    <SpaceBetween size="l">
+      <Container header={<Header variant="h3" counter={plansData?.total} actions={<Button onClick={() => setShowCreatePlan(true)}>Create plan</Button>}>Backup Plans</Header>}>
+        <ResourceTable
+          resourceName="Plan"
+          items={plans}
+          columns={[
+            {
+              id: "name",
+              header: "Plan Name",
+              cell: (i: any) => (
+                <Button variant="link" onClick={() => setSelectedPlanId(i.id === selectedPlanId ? null : i.id)}>
+                  {i.name}
+                </Button>
+              ),
+              isRowHeader: true,
+            },
+            { id: "version", header: "Version", cell: (i: any) => i.version },
+            { id: "created", header: "Created", cell: (i: any) => i.created },
+            {
+              id: "actions",
+              header: "",
+              cell: (i: any) => (
+                <DeleteButton
+                  itemName={i.name}
+                  resourceType="plan"
+                  loading={deletePlan.isPending && deletePlan.variables === i.id}
+                  onDelete={() => deletePlan.mutateAsync(i.id)}
+                />
+              ),
+            },
+          ]}
+          emptyMessage="No backup plans"
+          filterEnabled
+          filterPlaceholder="Find plans"
+          filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+        />
+      </Container>
+
+      {selectedPlanId && (
+        <Container header={<Header variant="h3">Selections for selected plan</Header>}>
+          <ResourceTable
+            resourceName="Selection"
+            items={(selectionsData?.backupSelections || []).map((s: any) => ({
+              id: s.SelectionId,
+              name: s.SelectionName || "-",
+              resources: s.Resources ? s.Resources.join(", ") : "-",
+              iamRole: s.IamRoleArn || "-",
+            }))}
+            columns={[
+              { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+              { id: "resources", header: "Resources", cell: (i: any) => i.resources },
+              { id: "iamRole", header: "IAM Role", cell: (i: any) => i.iamRole },
+            ]}
+            emptyMessage="No selections for this plan"
+          />
+        </Container>
+      )}
+
+      <Container header={<Header variant="h3" counter={vaultsData?.total} actions={<Button onClick={() => setShowCreateVault(true)}>Create vault</Button>}>Backup Vaults</Header>}>
+        <ResourceTable
+          resourceName="Vault"
+          items={vaults}
+          columns={[
+            { id: "name", header: "Vault Name", cell: (i: any) => i.name, isRowHeader: true },
+            { id: "arn", header: "ARN", cell: (i: any) => i.arn },
+            { id: "encrypted", header: "Encrypted", cell: (i: any) => i.encrypted },
+            { id: "created", header: "Created", cell: (i: any) => i.created },
+            {
+              id: "actions",
+              header: "",
+              cell: (i: any) => (
+                <DeleteButton
+                  itemName={i.name}
+                  resourceType="vault"
+                  loading={deleteVault.isPending && deleteVault.variables === i.name}
+                  onDelete={() => deleteVault.mutateAsync(i.name)}
+                />
+              ),
+            },
+          ]}
+          emptyMessage="No backup vaults"
+          filterEnabled
+          filterPlaceholder="Find vaults"
+          filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+        />
+      </Container>
+
+      <Container header={<Header variant="h3" counter={jobsData?.total}>Backup Jobs</Header>}>
+        <ResourceTable
+          resourceName="Job"
+          items={jobs}
+          columns={[
+            { id: "id", header: "Job ID", cell: (i: any) => (i.id || "").slice(0, 20) + "...", isRowHeader: true },
+            { id: "resource", header: "Resource", cell: (i: any) => i.resource },
+            { id: "vault", header: "Vault", cell: (i: any) => i.vault },
+            { id: "state", header: "State", cell: (i: any) => i.state },
+            { id: "created", header: "Created", cell: (i: any) => i.created },
+            { id: "completed", header: "Completed", cell: (i: any) => i.completed },
+            {
+              id: "actions",
+              header: "",
+              cell: (i: any) =>
+                i.state !== "COMPLETED" && i.state !== "FAILED" ? (
+                  <Button
+                    loading={stopJob.isPending && stopJob.variables === i.id}
+                    onClick={() => stopJob.mutate(i.id)}
+                  >
+                    Stop
+                  </Button>
+                ) : null,
+            },
+          ]}
+          emptyMessage="No backup jobs"
+          filterEnabled
+          filterPlaceholder="Find jobs"
+          filterFunction={(i: any, s: string) => i.resource.toLowerCase().includes(s.toLowerCase())}
+        />
+      </Container>
+
+      <Modal
+        visible={showCreatePlan}
+        onDismiss={() => setShowCreatePlan(false)}
+        header="Create backup plan"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreatePlan(false)}>Cancel</Button>
+              <Button
+                variant="primary"
+                loading={createPlan.isPending}
+                disabled={!planName.trim()}
+                onClick={() => {
+                  createPlan.mutate(
+                    { BackupPlan: { BackupPlanName: planName.trim() } },
+                    { onSuccess: () => { setShowCreatePlan(false); setPlanName(""); } }
+                  );
+                }}
+              >
+                Create
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          {createPlan.isError && (
+            <Alert type="error" dismissible>
+              {(createPlan.error as Error)?.message || "Failed to create plan"}
+            </Alert>
+          )}
+          <FormField label="Plan name">
+            <Input value={planName} onChange={({ detail }) => setPlanName(detail.value)} placeholder="my-backup-plan" />
+          </FormField>
+        </Form>
+      </Modal>
+
+      <Modal
+        visible={showCreateVault}
+        onDismiss={() => setShowCreateVault(false)}
+        header="Create backup vault"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreateVault(false)}>Cancel</Button>
+              <Button
+                variant="primary"
+                loading={createVault.isPending}
+                disabled={!vaultName.trim()}
+                onClick={() => {
+                  createVault.mutate(
+                    { backupVaultName: vaultName.trim() },
+                    { onSuccess: () => { setShowCreateVault(false); setVaultName(""); } }
+                  );
+                }}
+              >
+                Create
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          {createVault.isError && (
+            <Alert type="error" dismissible>
+              {(createVault.error as Error)?.message || "Failed to create vault"}
+            </Alert>
+          )}
+          <FormField label="Vault name">
+            <Input value={vaultName} onChange={({ detail }) => setVaultName(detail.value)} placeholder="my-backup-vault" />
+          </FormField>
+        </Form>
+      </Modal>
+    </SpaceBetween>
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  Transfer
+// ────────────────────────────────────────────────────────
+
+// ────────────────────────────────────────────────────────
+//  CodeDeploy
+// ────────────────────────────────────────────────────────
+
+function CodeDeployDashboard() {
+  const applicationsQuery = useCodeDeployApplications();
+  const createApplication = useCreateCodeDeployApplication();
+  const deleteApplication = useDeleteCodeDeployApplication();
+  const deploymentConfigsQuery = useCodeDeployDeploymentConfigs();
+  const createDeploymentConfig = useCreateCodeDeployDeploymentConfig();
+  const createDeploymentGroup = useCreateCodeDeployDeploymentGroup();
+  const createDeployment = useCreateCodeDeployDeployment();
+  const [selectedApp, setSelectedApp] = useState<string | null>(null);
+  const [showCreateApp, setShowCreateApp] = useState(false);
+  const [appName, setAppName] = useState("");
+  const [showCreateConfig, setShowCreateConfig] = useState(false);
+  const [configName, setConfigName] = useState("");
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [groupName, setGroupName] = useState("");
+  const [groupRoleArn, setGroupRoleArn] = useState("");
+  const [showCreateDeployment, setShowCreateDeployment] = useState(false);
+  const [deployGroupName, setDeployGroupName] = useState("");
+  const deploymentGroupsQuery = useCodeDeployDeploymentGroups(selectedApp);
+  const deploymentsQuery = useCodeDeployDeployments(selectedApp);
+
+  const apps = (applicationsQuery.data?.applications || []).map((a: any) => ({
+    name: a.applicationName,
+    description: a.description || "—",
+    created: a.createTime ? new Date(a.createTime).toLocaleDateString() : "—",
+  }));
+
+  const groups = (deploymentGroupsQuery.data?.deploymentGroups || []).map((g: any) => ({
+    name: g.deploymentGroupName,
+    roleArn: g.serviceRoleArn || "—",
+    config: g.deploymentConfigName || "—",
+  }));
+
+  const deploys = (deploymentsQuery.data?.deployments || []).map((d: any) => ({
+    id: d.deploymentId,
+    groupName: d.deploymentGroupName || "—",
+    status: d.status || "—",
+    created: d.createTime ? new Date(d.createTime).toLocaleDateString() : "—",
+  }));
+
+  const configs = (deploymentConfigsQuery.data?.deploymentConfigs || []).map((c: any) => ({
+    name: typeof c === "string" ? c : c.deploymentConfigName || "—",
+  }));
+
+  if (applicationsQuery.isLoading) return <Spinner />;
+
+  return (
+    <SpaceBetween size="l">
+      <Tabs
+        tabs={[
+          {
+            id: "applications",
+            label: `Applications (${applicationsQuery.data?.total || 0})`,
+            content: (
+              <>
+                <ResourceTable
+                  resourceName="Application"
+                  headerTitle="CodeDeploy Applications"
+                  headerCounter={applicationsQuery.data?.total}
+                  items={apps}
+                  columns={[
+                    {
+                      id: "name",
+                      header: "Name",
+                      cell: (i: any) => (
+                        <Button variant="link" onClick={() => setSelectedApp(i.name === selectedApp ? null : i.name)}>
+                          {i.name}
+                        </Button>
+                      ),
+                      isRowHeader: true,
+                    },
+                    { id: "description", header: "Description", cell: (i: any) => i.description },
+                    { id: "created", header: "Created", cell: (i: any) => i.created },
+                    {
+                      id: "actions",
+                      header: "",
+                      cell: (i: any) => (
+                        <DeleteButton
+                          itemName={i.name}
+                          resourceType="application"
+                          loading={deleteApplication.isPending && deleteApplication.variables === i.name}
+                          onDelete={() => deleteApplication.mutateAsync(i.name)}
+                        />
+                      ),
+                    },
+                  ]}
+                  loading={applicationsQuery.isLoading}
+                  emptyMessage="No applications found"
+                  filterEnabled
+                  filterPlaceholder="Find applications by name"
+                  filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+                  onCreate={() => setShowCreateApp(true)}
+                />
+
+                {selectedApp && (
+                  <Container
+                    header={
+                      <Header
+                        variant="h3"
+                        counter={deploymentGroupsQuery.data?.total}
+                        actions={
+                          <SpaceBetween direction="horizontal" size="xs">
+                            <Button onClick={() => setShowCreateGroup(true)}>Create group</Button>
+                            <Button onClick={() => setShowCreateDeployment(true)}>Create deployment</Button>
+                          </SpaceBetween>
+                        }
+                      >
+                        Deployment Groups — {selectedApp}
+                      </Header>
+                    }
+                  >
+                    <ResourceTable
+                      resourceName="Deployment Group"
+                      items={groups}
+                      columns={[
+                        { id: "name", header: "Group Name", cell: (i: any) => i.name, isRowHeader: true },
+                        { id: "role", header: "Service Role", cell: (i: any) => i.roleArn },
+                        { id: "config", header: "Deployment Config", cell: (i: any) => i.config },
+                      ]}
+                      loading={deploymentGroupsQuery.isLoading}
+                      emptyMessage="No deployment groups"
+                      filterEnabled
+                      filterPlaceholder="Find groups"
+                      filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+                    />
+                  </Container>
+                )}
+
+                {selectedApp && (
+                  <Container
+                    header={
+                      <Header variant="h3" counter={deploymentsQuery.data?.total}>
+                        Deployments — {selectedApp}
+                      </Header>
+                    }
+                  >
+                    <ResourceTable
+                      resourceName="Deployment"
+                      items={deploys}
+                      columns={[
+                        { id: "id", header: "Deployment ID", cell: (i: any) => i.id, isRowHeader: true },
+                        { id: "group", header: "Group", cell: (i: any) => i.groupName },
+                        { id: "status", header: "Status", cell: (i: any) => i.status },
+                        { id: "created", header: "Created", cell: (i: any) => i.created },
+                      ]}
+                      loading={deploymentsQuery.isLoading}
+                      emptyMessage="No deployments"
+                      filterEnabled
+                      filterPlaceholder="Find deployments by ID"
+                      filterFunction={(i: any, s: string) => (i.id || "").toLowerCase().includes(s.toLowerCase())}
+                    />
+                  </Container>
+                )}
+
+                <Modal
+                  visible={showCreateApp}
+                  onDismiss={() => setShowCreateApp(false)}
+                  header="Create application"
+                  footer={
+                    <Box float="right">
+                      <SpaceBetween direction="horizontal" size="xs">
+                        <Button variant="link" onClick={() => setShowCreateApp(false)}>Cancel</Button>
+                        <Button
+                          variant="primary"
+                          loading={createApplication.isPending}
+                          disabled={!appName.trim()}
+                          onClick={() => {
+                            createApplication.mutate(
+                              { applicationName: appName.trim() },
+                              { onSuccess: () => { setShowCreateApp(false); setAppName(""); } }
+                            );
+                          }}
+                        >
+                          Create
+                        </Button>
+                      </SpaceBetween>
+                    </Box>
+                  }
+                >
+                  <Form>
+                    {createApplication.isError && (
+                      <Alert type="error" dismissible>
+                        {(createApplication.error as Error)?.message || "Failed to create application"}
+                      </Alert>
+                    )}
+                    <FormField label="Application name" description="A name for your CodeDeploy application.">
+                      <Input value={appName} onChange={({ detail }) => setAppName(detail.value)} placeholder="my-app" />
+                    </FormField>
+                  </Form>
+                </Modal>
+
+                {selectedApp && (
+                  <Modal
+                    visible={showCreateGroup}
+                    onDismiss={() => setShowCreateGroup(false)}
+                    header="Create deployment group"
+                    footer={
+                      <Box float="right">
+                        <SpaceBetween direction="horizontal" size="xs">
+                          <Button variant="link" onClick={() => setShowCreateGroup(false)}>Cancel</Button>
+                          <Button
+                            variant="primary"
+                            loading={createDeploymentGroup.isPending}
+                            disabled={!groupName.trim() || !groupRoleArn.trim()}
+                            onClick={() => {
+                              createDeploymentGroup.mutate(
+                                {
+                                  appName: selectedApp,
+                                  deploymentGroupName: groupName.trim(),
+                                  serviceRoleArn: groupRoleArn.trim(),
+                                },
+                                { onSuccess: () => { setShowCreateGroup(false); setGroupName(""); setGroupRoleArn(""); } }
+                              );
+                            }}
+                          >
+                            Create
+                          </Button>
+                        </SpaceBetween>
+                      </Box>
+                    }
+                  >
+                    <Form>
+                      {createDeploymentGroup.isError && (
+                        <Alert type="error" dismissible>
+                          {(createDeploymentGroup.error as Error)?.message || "Failed to create group"}
+                        </Alert>
+                      )}
+                      <SpaceBetween size="m">
+                        <FormField label="Deployment group name">
+                          <Input value={groupName} onChange={({ detail }) => setGroupName(detail.value)} placeholder="my-group" />
+                        </FormField>
+                        <FormField label="Service role ARN">
+                          <Input value={groupRoleArn} onChange={({ detail }) => setGroupRoleArn(detail.value)} placeholder="arn:aws:iam::123:role/MyRole" />
+                        </FormField>
+                      </SpaceBetween>
+                    </Form>
+                  </Modal>
+                )}
+
+                {selectedApp && (
+                  <Modal
+                    visible={showCreateDeployment}
+                    onDismiss={() => setShowCreateDeployment(false)}
+                    header="Create deployment"
+                    footer={
+                      <Box float="right">
+                        <SpaceBetween direction="horizontal" size="xs">
+                          <Button variant="link" onClick={() => setShowCreateDeployment(false)}>Cancel</Button>
+                          <Button
+                            variant="primary"
+                            loading={createDeployment.isPending}
+                            disabled={!deployGroupName.trim()}
+                            onClick={() => {
+                              createDeployment.mutate(
+                                {
+                                  appName: selectedApp,
+                                  deploymentGroupName: deployGroupName.trim(),
+                                },
+                                { onSuccess: () => { setShowCreateDeployment(false); setDeployGroupName(""); } }
+                              );
+                            }}
+                          >
+                            Create
+                          </Button>
+                        </SpaceBetween>
+                      </Box>
+                    }
+                  >
+                    <Form>
+                      {createDeployment.isError && (
+                        <Alert type="error" dismissible>
+                          {(createDeployment.error as Error)?.message || "Failed to create deployment"}
+                        </Alert>
+                      )}
+                      <FormField label="Deployment group name">
+                        <Input value={deployGroupName} onChange={({ detail }) => setDeployGroupName(detail.value)} placeholder="my-group" />
+                      </FormField>
+                    </Form>
+                  </Modal>
+                )}
+              </>
+            ),
+          },
+          {
+            id: "deployment-configs",
+            label: `Deployment Configs (${deploymentConfigsQuery.data?.total || 0})`,
+            content: (
+              <>
+                <ResourceTable
+                  resourceName="Deployment Config"
+                  headerTitle="Deployment Configs"
+                  headerCounter={deploymentConfigsQuery.data?.total}
+                  items={configs}
+                  columns={[
+                    { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+                  ]}
+                  loading={deploymentConfigsQuery.isLoading}
+                  emptyMessage="No deployment configs"
+                  filterEnabled
+                  filterPlaceholder="Find configs by name"
+                  filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+                  onCreate={() => setShowCreateConfig(true)}
+                />
+                <Modal
+                  visible={showCreateConfig}
+                  onDismiss={() => setShowCreateConfig(false)}
+                  header="Create deployment config"
+                  footer={
+                    <Box float="right">
+                      <SpaceBetween direction="horizontal" size="xs">
+                        <Button variant="link" onClick={() => setShowCreateConfig(false)}>Cancel</Button>
+                        <Button
+                          variant="primary"
+                          loading={createDeploymentConfig.isPending}
+                          disabled={!configName.trim()}
+                          onClick={() => {
+                            createDeploymentConfig.mutate(
+                              { deploymentConfigName: configName.trim() },
+                              { onSuccess: () => { setShowCreateConfig(false); setConfigName(""); } }
+                            );
+                          }}
+                        >
+                          Create
+                        </Button>
+                      </SpaceBetween>
+                    </Box>
+                  }
+                >
+                  <Form>
+                    {createDeploymentConfig.isError && (
+                      <Alert type="error" dismissible>
+                        {(createDeploymentConfig.error as Error)?.message || "Failed to create config"}
+                      </Alert>
+                    )}
+                    <FormField label="Deployment config name">
+                      <Input value={configName} onChange={({ detail }) => setConfigName(detail.value)} placeholder="MyConfig" />
+                    </FormField>
+                  </Form>
+                </Modal>
+              </>
+            ),
+          },
+        ]}
+      />
+    </SpaceBetween>
+  );
+}
+
+function TransferDashboard() {
+  const { data: serversData, isLoading: serversLoading } = useTransferServers();
+  const createServer = useCreateTransferServer();
+  const deleteServer = useDeleteTransferServer();
+  const startServer = useStartTransferServer();
+  const stopServer = useStopTransferServer();
+  const [selectedServerId, setSelectedServerId] = useState<string | null>(null);
+  const { data: usersData } = useTransferUsers(selectedServerId);
+  const createUser = useCreateTransferUser();
+  const deleteUser = useDeleteTransferUser();
+  const [showCreateServer, setShowCreateServer] = useState(false);
+  const [showCreateUser, setShowCreateUser] = useState(false);
+  const [serverDomain, setServerDomain] = useState<SelectProps.Option>({ label: "S3", value: "S3" });
+  const [userName, setUserName] = useState("");
+  const [userRole, setUserRole] = useState("");
+
+  const servers = (serversData?.servers || []).map((s: any) => ({
+    serverId: s.ServerId,
+    arn: s.Arn || "-",
+    domain: s.Domain || "-",
+    state: s.State || s._state || "-",
+    protocol: s.Protocols ? s.Protocols.join(", ") : s.EndpointType || "-",
+    identityProvider: s.IdentityProviderType || "SERVICE_MANAGED",
+    created: s.CreatedDate ? new Date(s.CreatedDate).toLocaleDateString() : "-",
+  }));
+
+  const users = (usersData?.users || []).map((u: any) => ({
+    userName: u.UserName,
+    role: u.Role || "-",
+    homeDirectory: u.HomeDirectory || "-",
+    sshKeys: u.SshPublicKeyCount ?? u.SshPublicKeys?.length ?? "-",
+  }));
+
+  if (serversLoading) return <Spinner />;
+
+  return (
+    <SpaceBetween size="l">
+      <ResourceTable
+        resourceName="Server"
+        headerTitle="Transfer Servers"
+        headerCounter={serversData?.total}
+        items={servers}
+        columns={[
+          {
+            id: "serverId",
+            header: "Server ID",
+            cell: (i: any) => (
+              <Button variant="link" onClick={() => setSelectedServerId(i.serverId === selectedServerId ? null : i.serverId)}>
+                {i.serverId}
+              </Button>
+            ),
+            isRowHeader: true,
+          },
+          { id: "domain", header: "Domain", cell: (i: any) => i.domain },
+          { id: "state", header: "State", cell: (i: any) => i.state },
+          { id: "protocol", header: "Protocol", cell: (i: any) => i.protocol },
+          { id: "identityProvider", header: "Identity Provider", cell: (i: any) => i.identityProvider },
+          { id: "created", header: "Created", cell: (i: any) => i.created },
+          {
+            id: "actions",
+            header: "",
+            cell: (i: any) => (
+              <SpaceBetween direction="horizontal" size="xs">
+                {i.state !== "ONLINE" && (
+                  <Button
+                    loading={startServer.isPending && startServer.variables === i.serverId}
+                    onClick={() => startServer.mutate(i.serverId)}
+                  >
+                    Start
+                  </Button>
+                )}
+                {i.state === "ONLINE" && (
+                  <Button
+                    loading={stopServer.isPending && stopServer.variables === i.serverId}
+                    onClick={() => stopServer.mutate(i.serverId)}
+                  >
+                    Stop
+                  </Button>
+                )}
+                <DeleteButton
+                  itemName={i.serverId}
+                  resourceType="server"
+                  loading={deleteServer.isPending && deleteServer.variables === i.serverId}
+                  onDelete={() => deleteServer.mutateAsync(i.serverId)}
+                />
+              </SpaceBetween>
+            ),
+          },
+        ]}
+        loading={serversLoading}
+        emptyMessage="No transfer servers"
+        filterEnabled
+        filterPlaceholder="Find servers by ID"
+        filterFunction={(i: any, s: string) => i.serverId.toLowerCase().includes(s.toLowerCase())}
+        onCreate={() => setShowCreateServer(true)}
+      />
+
+      {selectedServerId && (
+        <Container header={<Header variant="h3" counter={usersData?.total} actions={<Button onClick={() => setShowCreateUser(true)}>Create user</Button>}>Users for {selectedServerId}</Header>}>
+          <ResourceTable
+            resourceName="User"
+            items={users}
+            columns={[
+              { id: "userName", header: "Username", cell: (i: any) => i.userName, isRowHeader: true },
+              { id: "role", header: "Role", cell: (i: any) => i.role },
+              { id: "homeDirectory", header: "Home Directory", cell: (i: any) => i.homeDirectory },
+              { id: "sshKeys", header: "SSH Keys", cell: (i: any) => i.sshKeys },
+              {
+                id: "actions",
+                header: "",
+                cell: (i: any) => (
+                  <DeleteButton
+                    itemName={i.userName}
+                    resourceType="user"
+                    loading={deleteUser.isPending && (deleteUser.variables as any)?.userName === i.userName}
+                    onDelete={() => deleteUser.mutateAsync({ serverId: selectedServerId, userName: i.userName })}
+                  />
+                ),
+              },
+            ]}
+            emptyMessage="No users for this server"
+          />
+        </Container>
+      )}
+
+      <Modal
+        visible={showCreateServer}
+        onDismiss={() => setShowCreateServer(false)}
+        header="Create transfer server"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreateServer(false)}>Cancel</Button>
+              <Button
+                variant="primary"
+                loading={createServer.isPending}
+                onClick={() => {
+                  createServer.mutate(
+                    { domain: (serverDomain.value as string) || "S3" },
+                    { onSuccess: () => setShowCreateServer(false) }
+                  );
+                }}
+              >
+                Create
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          {createServer.isError && (
+            <Alert type="error" dismissible>
+              {(createServer.error as Error)?.message || "Failed to create server"}
+            </Alert>
+          )}
+          <FormField label="Domain">
+            <Select
+              selectedOption={serverDomain}
+              onChange={({ detail }) => setServerDomain(detail.selectedOption)}
+              options={[
+                { label: "S3", value: "S3" },
+                { label: "EFS", value: "EFS" },
+              ]}
+            />
+          </FormField>
+        </Form>
+      </Modal>
+
+      <Modal
+        visible={showCreateUser}
+        onDismiss={() => setShowCreateUser(false)}
+        header="Create transfer user"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreateUser(false)}>Cancel</Button>
+              <Button
+                variant="primary"
+                loading={createUser.isPending}
+                disabled={!userName.trim() || !userRole.trim()}
+                onClick={() => {
+                  if (!selectedServerId) return;
+                  createUser.mutate(
+                    { serverId: selectedServerId, userName: userName.trim(), role: userRole.trim() },
+                    { onSuccess: () => { setShowCreateUser(false); setUserName(""); setUserRole(""); } }
+                  );
+                }}
+              >
+                Create
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          {createUser.isError && (
+            <Alert type="error" dismissible>
+              {(createUser.error as Error)?.message || "Failed to create user"}
+            </Alert>
+          )}
+          <SpaceBetween size="m">
+            <FormField label="Username">
+              <Input value={userName} onChange={({ detail }) => setUserName(detail.value)} placeholder="my-user" />
+            </FormField>
+            <FormField label="IAM Role ARN">
+              <Input value={userRole} onChange={({ detail }) => setUserRole(detail.value)} placeholder="arn:aws:iam::..." />
+            </FormField>
+          </SpaceBetween>
+        </Form>
+      </Modal>
+    </SpaceBetween>
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  CUR (Cost & Usage Report)
+// ────────────────────────────────────────────────────────
+
+function CURDashboard() {
+  const { data, isLoading, isError, error } = useReportDefinitions();
+  const createReport = useCreateReportDefinition();
+  const deleteReport = useDeleteReportDefinition();
+  const [showCreate, setShowCreate] = useState(false);
+  const [name, setName] = useState("");
+  const [timeUnit, setTimeUnit] = useState<SelectProps.Option>({ label: "Daily", value: "DAILY" });
+  const [format, setFormat] = useState<SelectProps.Option>({ label: "textORcsv", value: "textORcsv" });
+  const [s3Bucket, setS3Bucket] = useState("");
+
+  const TIME_UNIT_OPTIONS: SelectProps.Option[] = [
+    { label: "Hourly", value: "HOURLY" },
+    { label: "Daily", value: "DAILY" },
+    { label: "Monthly", value: "MONTHLY" },
+  ];
+
+  const FORMAT_OPTIONS: SelectProps.Option[] = [
+    { label: "textORcsv", value: "textORcsv" },
+    { label: "Parquet", value: "Parquet" },
+  ];
+
+  const items = (data?.reportDefinitions || []).map((r: any) => ({
+    name: r.ReportName,
+    timeUnit: r.TimeUnit,
+    format: r.Format,
+    compression: r.Compression,
+    s3Bucket: r.S3Bucket,
+    s3Prefix: r.S3Prefix,
+    s3Region: r.S3Region,
+  }));
+
+  function resetForm() {
+    setName("");
+    setTimeUnit(TIME_UNIT_OPTIONS[1]);
+    setFormat(FORMAT_OPTIONS[0]);
+    setS3Bucket("");
+  }
+
+  function handleCreate() {
+    if (!name || !timeUnit.value || !s3Bucket) return;
+    createReport.mutate(
+      {
+        reportName: name,
+        timeUnit: timeUnit.value,
+        format: format.value,
+        s3Bucket,
+      },
+      {
+        onSuccess: () => {
+          setShowCreate(false);
+          resetForm();
+        },
+      }
+    );
+  }
+
+  return (
+    <>
+      {isError && (
+        <StatusIndicator type="error">
+          {(error as Error)?.message || "Failed to load report definitions"}
+        </StatusIndicator>
+      )}
+
+      <ResourceTable
+        resourceName="Report Definition"
+        headerTitle="Cost & Usage Report Definitions"
+        headerCounter={data?.total}
+        items={items}
+        columns={[
+          {
+            id: "name",
+            header: "Report name",
+            cell: (item: any) => item.name,
+            isRowHeader: true,
+          },
+          {
+            id: "timeUnit",
+            header: "Time unit",
+            cell: (item: any) => item.timeUnit,
+          },
+          {
+            id: "format",
+            header: "Format",
+            cell: (item: any) => item.format,
+          },
+          {
+            id: "s3Bucket",
+            header: "S3 bucket",
+            cell: (item: any) => item.s3Bucket,
+          },
+          {
+            id: "actions",
+            header: "",
+            cell: (item: any) => (
+              <DeleteButton
+                itemName={item.name}
+                resourceType="report definition"
+                loading={
+                  deleteReport.isPending && deleteReport.variables === item.name
+                }
+                onDelete={() => deleteReport.mutateAsync(item.name)}
+              />
+            ),
+          },
+        ]}
+        loading={isLoading}
+        emptyMessage="No report definitions found"
+        filterEnabled
+        filterPlaceholder="Find reports by name"
+        filterFunction={(item: any, searchText: string) =>
+          item.name.toLowerCase().includes(searchText.toLowerCase())
+        }
+        onCreate={() => setShowCreate(true)}
+      />
+
+      <Modal
+        visible={showCreate}
+        onDismiss={() => {
+          setShowCreate(false);
+          resetForm();
+        }}
+        header="Create Cost & Usage Report"
+        size="medium"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button
+                variant="link"
+                onClick={() => {
+                  setShowCreate(false);
+                  resetForm();
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                loading={createReport.isPending}
+                disabled={!name || !timeUnit.value || !s3Bucket}
+                onClick={handleCreate}
+              >
+                Create report
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          {createReport.isError && (
+            <Alert type="error" dismissible>
+              {(createReport.error as Error)?.message ||
+                "Failed to create report"}
+            </Alert>
+          )}
+          <SpaceBetween size="m">
+            <FormField
+              label="Report name"
+              description="A unique name for the report definition."
+            >
+              <Input
+                value={name}
+                onChange={({ detail }) => setName(detail.value)}
+                placeholder="my-cur-report"
+              />
+            </FormField>
+            <FormField label="Time unit">
+              <Select
+                selectedOption={timeUnit}
+                onChange={({ detail }) => setTimeUnit(detail.selectedOption)}
+                options={TIME_UNIT_OPTIONS}
+              />
+            </FormField>
+            <FormField label="Format">
+              <Select
+                selectedOption={format}
+                onChange={({ detail }) => setFormat(detail.selectedOption)}
+                options={FORMAT_OPTIONS}
+              />
+            </FormField>
+            <FormField
+              label="S3 bucket"
+              description="The S3 bucket where the report will be delivered."
+            >
+              <Input
+                value={s3Bucket}
+                onChange={({ detail }) => setS3Bucket(detail.value)}
+                placeholder="my-report-bucket"
+              />
+            </FormField>
+          </SpaceBetween>
+        </Form>
+      </Modal>
+    </>
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  BCM Data Exports
+// ────────────────────────────────────────────────────────
+
+function BCMDashboard() {
+  const { data, isLoading, isError, error } = useBCMExports();
+  const { data: tablesData } = useBCMTables();
+  const createExport = useCreateBCMExport();
+  const deleteExport = useDeleteBCMExport();
+  const [selectedExport, setSelectedExport] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [exportName, setExportName] = useState("");
+
+  const items = (data?.exports || []).map((e: any) => ({
+    exportArn: e.ExportArn,
+    name: e.Name,
+  }));
+
+  function handleCreate() {
+    if (!exportName.trim()) return;
+    createExport.mutate(
+      { Name: exportName.trim(), Export: {} },
+      {
+        onSuccess: () => {
+          setShowCreate(false);
+          setExportName("");
+        },
+      }
+    );
+  }
+
+  return (
+    <SpaceBetween size="l">
+      {isError && (
+        <StatusIndicator type="error">
+          {(error as Error)?.message || "Failed to load exports"}
+        </StatusIndicator>
+      )}
+
+      <ResourceTable
+        resourceName="Export"
+        headerTitle="BCM Data Exports"
+        headerCounter={data?.total}
+        items={items}
+        columns={[
+          {
+            id: "exportArn",
+            header: "Export ARN",
+            cell: (item: any) => (
+              <Button
+                variant="link"
+                onClick={() =>
+                  setSelectedExport(
+                    selectedExport === item.exportArn ? null : item.exportArn
+                  )
+                }
+              >
+                {item.name || item.exportArn}
+              </Button>
+            ),
+            isRowHeader: true,
+          },
+          {
+            id: "actions",
+            header: "",
+            cell: (item: any) => (
+              <DeleteButton
+                itemName={item.exportArn}
+                resourceType="export"
+                loading={
+                  deleteExport.isPending && deleteExport.variables === item.exportArn
+                }
+                onDelete={() => deleteExport.mutateAsync(item.exportArn)}
+              />
+            ),
+          },
+        ]}
+        loading={isLoading}
+        emptyMessage="No exports found"
+        filterEnabled
+        filterPlaceholder="Find exports by name"
+        filterFunction={(item: any, searchText: string) =>
+          (item.name || "").toLowerCase().includes(searchText.toLowerCase())
+        }
+        onCreate={() => setShowCreate(true)}
+      />
+
+      {selectedExport && <BCMExportExecutions exportArn={selectedExport} />}
+
+      <Container header={<Header variant="h3" counter={tablesData?.total}>BCM Tables</Header>}>
+        <ResourceTable
+          resourceName="Table"
+          items={tablesData?.tables || []}
+          columns={[
+            { id: "tableName", header: "Table Name", cell: (item: any) => item.TableName, isRowHeader: true },
+            { id: "description", header: "Description", cell: (item: any) => item.Description || "\u2014" },
+          ]}
+          loading={false}
+          emptyMessage="No tables available"
+        />
+      </Container>
+
+      <Modal
+        visible={showCreate}
+        onDismiss={() => setShowCreate(false)}
+        header="Create BCM Data Export"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreate(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                loading={createExport.isPending}
+                disabled={!exportName.trim()}
+                onClick={handleCreate}
+              >
+                Create
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          {createExport.isError && (
+            <Alert type="error" dismissible>
+              {(createExport.error as Error)?.message || "Failed to create export"}
+          </Alert>
+          )}
+          <FormField
+            label="Export name"
+            description="A unique name for your BCM data export."
+          >
+            <Input
+              value={exportName}
+              onChange={({ detail }) => setExportName(detail.value)}
+              placeholder="my-bcm-export"
+            />
+          </FormField>
+        </Form>
+      </Modal>
+    </SpaceBetween>
+  );
+}
+
+function BCMExportExecutions({ exportArn }: { exportArn: string }) {
+  const { data, isLoading } = useBCMExportExecutions(exportArn);
+
+  return (
+    <Container
+      header={
+        <Header variant="h3" counter={data?.total}>
+          Executions for {exportArn}
+        </Header>
+      }
+    >
+      <ResourceTable
+        resourceName="Execution"
+        items={data?.executions || []}
+        columns={[
+          {
+            id: "executionId",
+            header: "Execution ID",
+            cell: (item: any) => item.ExecutionId || "\u2014",
+            isRowHeader: true,
+          },
+          {
+            id: "status",
+            header: "Status",
+            cell: (item: any) => item.Status || "\u2014",
+          },
+          {
+            id: "created",
+            header: "Created",
+            cell: (item: any) =>
+              item.CreatedAt ? new Date(item.CreatedAt).toLocaleString() : "\u2014",
+          },
+        ]}
+         loading={isLoading}
+         emptyMessage="No executions found"
+       />
+     </Container>
+   );
+}
+
+// ────────────────────────────────────────────────────────
+//  WAF v2
+// ────────────────────────────────────────────────────────
+
+function WafV2Dashboard() {
+  const webAclsQuery = useWebACLs();
+  const createWebAcl = useCreateWebACL();
+  const deleteWebAcl = useDeleteWebACL();
+  const ipSetsQuery = useIPSets();
+  const regexSetsQuery = useRegexPatternSets();
+  const ruleGroupsQuery = useRuleGroups();
+  const [showCreate, setShowCreate] = useState(false);
+  const [aclName, setAclName] = useState("");
+
+  const webAcls = (webAclsQuery.data?.webAcls || []).map((a: any) => ({
+    name: a.Name,
+    id: a.Id,
+    description: a.Description || "\u2014",
+    arn: a.ARN || "\u2014",
+  }));
+
+  const ipSets = (ipSetsQuery.data?.ipSets || []).map((s: any) => ({
+    name: s.Name,
+    id: s.Id,
+    description: s.Description || "\u2014",
+  }));
+
+  const regexSets = (regexSetsQuery.data?.regexPatternSets || []).map((s: any) => ({
+    name: s.Name,
+    id: s.Id,
+    description: s.Description || "\u2014",
+  }));
+
+  const ruleGroups = (ruleGroupsQuery.data?.ruleGroups || []).map((g: any) => ({
+    name: g.Name,
+    id: g.Id,
+    description: g.Description || "\u2014",
+  }));
+
+  function handleCreate() {
+    if (!aclName.trim()) return;
+    createWebAcl.mutate(
+      { Name: aclName.trim(), Scope: "REGIONAL", DefaultAction: { Allow: {} } },
+      {
+        onSuccess: () => {
+          setShowCreate(false);
+          setAclName("");
+        },
+      }
+    );
+  }
+
+  return (
+    <SpaceBetween size="l">
+      <ResourceTable
+        resourceName="Web ACL"
+        headerTitle="WAF v2 Web ACLs"
+        headerCounter={webAclsQuery.data?.total}
+        items={webAcls}
+        columns={[
+          {
+            id: "name",
+            header: "Name",
+            cell: (item: any) => item.name,
+            isRowHeader: true,
+          },
+          { id: "description", header: "Description", cell: (item: any) => item.description },
+          {
+            id: "actions",
+            header: "",
+            cell: (item: any) => (
+              <DeleteButton
+                itemName={item.name}
+                resourceType="web ACL"
+                loading={deleteWebAcl.isPending && deleteWebAcl.variables?.Name === item.name}
+                onDelete={() => deleteWebAcl.mutateAsync({ Id: item.id, Name: item.name, Scope: "REGIONAL", LockToken: "placeholder" })}
+              />
+            ),
+          },
+        ]}
+        loading={webAclsQuery.isLoading}
+        emptyMessage="No web ACLs found"
+        filterEnabled
+        filterPlaceholder="Find web ACLs by name"
+        filterFunction={(item: any, searchText: string) =>
+          (item.name || "").toLowerCase().includes(searchText.toLowerCase())
+        }
+        onCreate={() => setShowCreate(true)}
+      />
+
+      <Container header={<Header variant="h3" counter={ipSetsQuery.data?.total}>IP Sets</Header>}>
+        <ResourceTable
+          resourceName="IP Set"
+          items={ipSets}
+          columns={[
+            { id: "name", header: "Name", cell: (item: any) => item.name, isRowHeader: true },
+            { id: "description", header: "Description", cell: (item: any) => item.description },
+          ]}
+          loading={ipSetsQuery.isLoading}
+          emptyMessage="No IP sets found"
+        />
+      </Container>
+
+      <Container header={<Header variant="h3" counter={regexSetsQuery.data?.total}>Regex Pattern Sets</Header>}>
+        <ResourceTable
+          resourceName="Regex Pattern Set"
+          items={regexSets}
+          columns={[
+            { id: "name", header: "Name", cell: (item: any) => item.name, isRowHeader: true },
+            { id: "description", header: "Description", cell: (item: any) => item.description },
+          ]}
+          loading={regexSetsQuery.isLoading}
+          emptyMessage="No regex pattern sets found"
+        />
+      </Container>
+
+      <Container header={<Header variant="h3" counter={ruleGroupsQuery.data?.total}>Rule Groups</Header>}>
+        <ResourceTable
+          resourceName="Rule Group"
+          items={ruleGroups}
+          columns={[
+            { id: "name", header: "Name", cell: (item: any) => item.name, isRowHeader: true },
+            { id: "description", header: "Description", cell: (item: any) => item.description },
+          ]}
+          loading={ruleGroupsQuery.isLoading}
+          emptyMessage="No rule groups found"
+        />
+      </Container>
+
+      <Modal
+        visible={showCreate}
+        onDismiss={() => setShowCreate(false)}
+        header="Create Web ACL"
+        size="medium"
+        footer={
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button variant="link" onClick={() => setShowCreate(false)}>Cancel</Button>
+            <Button variant="primary" onClick={handleCreate} disabled={!aclName.trim()}>Create</Button>
+          </SpaceBetween>
+        }
+      >
+        <FormField label="Web ACL name">
+          <Input value={aclName} onChange={({ detail }) => setAclName(detail.value)} placeholder="my-web-acl" />
+        </FormField>
+      </Modal>
+    </SpaceBetween>
   );
 }

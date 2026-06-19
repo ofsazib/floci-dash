@@ -46,6 +46,19 @@ import firehoseRoutes from "./firehose";
 import stepfunctionsRoutes from "./stepfunctions";
 import opensearchRoutes from "./opensearch";
 import mskRoutes from "./msk";
+import bedrockruntimeRoutes from "./bedrockruntime";
+import textractRoutes from "./textract";
+import transcribeRoutes from "./transcribe";
+import ceRoutes from "./ce";
+import pricingRoutes from "./pricing";
+import rgtRoutes from "./resourcegroupstagging";
+import codebuildRoutes from "./codebuild";
+import codedeployRoutes from "./codedeploy";
+import backupRoutes from "./backup";
+import transferRoutes from "./transfer";
+import curRoutes from "./cur";
+import bcmRoutes from "./bcmdataexports";
+import wafv2Routes from "./wafv2";
 
 const router = new Hono();
 
@@ -95,9 +108,22 @@ router.route("/firehose", firehoseRoutes);
 router.route("/stepfunctions", stepfunctionsRoutes);
 router.route("/opensearch", opensearchRoutes);
 router.route("/msk", mskRoutes);
+router.route("/bedrockruntime", bedrockruntimeRoutes);
+router.route("/textract", textractRoutes);
+router.route("/transcribe", transcribeRoutes);
+router.route("/ce", ceRoutes);
+router.route("/pricing", pricingRoutes);
+router.route("/resourcegroupstagging", rgtRoutes);
+router.route("/codebuild", codebuildRoutes);
+router.route("/codedeploy", codedeployRoutes);
+router.route("/backup", backupRoutes);
+router.route("/transfer", transferRoutes);
+router.route("/cur", curRoutes);
+router.route("/bcmdataexports", bcmRoutes);
+router.route("/wafv2", wafv2Routes);
 
-router.get("/", (c: Context) => {
-  return c.json({ message: "AWS routes available. Services registered: s3, dynamodb, rds, ec2, sqs, sns, events, logs, lambda, cloudwatch, iam, secretsmanager, cloudformation, kms, ecs, ssm, route53, apigateway, sts, appsync, scheduler, ecr, elb, ses, eks, autoscaling, cloudfront, kinesis, neptune, pipes, cognito, apigatewayv2, acm, cloudtrail, configservice, appconfig, cloudmap" });
-});
+  router.get("/", (c: Context) => {
+    return c.json({ message: "AWS routes available. Services registered: s3, dynamodb, rds, ec2, sqs, sns, events, logs, lambda, cloudwatch, iam, secretsmanager, cloudformation, kms, ecs, ssm, route53, apigateway, sts, appsync, scheduler, ecr, elb, ses, eks, autoscaling, cloudfront, kinesis, neptune, pipes, cognito, apigatewayv2, acm, cloudtrail, configservice, appconfig, cloudmap, athena, glue, firehose, stepfunctions, opensearch, msk, bedrockruntime, textract, transcribe, ce, pricing, resourcegroupstagging, codebuild, codedeploy, backup, transfer, cur, bcmdataexports, wafv2" });
+  });
 
 export default router;

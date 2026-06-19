@@ -4,7 +4,7 @@ export const SERVICE_CATEGORIES: Record<string, string[]> = {
   "Database":       ["dynamodb", "rds", "neptune", "elasticache"],
   "Networking":     ["elasticloadbalancing", "route53", "cloudfront", "apigateway", "apigatewayv2", "appsync"],
   "Messaging":      ["sqs", "sns", "events", "kinesis", "pipes", "scheduler", "email"],
-  "Security":       ["iam", "sts", "cognito-idp", "kms", "secretsmanager", "acm"],
+  "Security":       ["iam", "sts", "cognito-idp", "kms", "secretsmanager", "acm", "wafv2"],
   "Management":     ["cloudformation", "monitoring", "logs", "ssm", "config", "appconfig", "appconfigdata", "cloudtrail", "servicediscovery"],
   "Analytics":      ["athena", "glue", "firehose", "states", "kafka", "es"],
   "ML/AI":          ["bedrock-runtime", "textract", "transcribe"],
@@ -71,6 +71,7 @@ export const SERVICE_LABELS: Record<string, string> = {
   "config": "Config",
   "autoscaling": "Auto Scaling",
   "appsync": "AppSync",
+  "wafv2": "WAF v2",
   "ec2messages": "EC2 Messages",
 };
 

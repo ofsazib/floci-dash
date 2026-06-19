@@ -26,7 +26,7 @@ An AWS Console-style web dashboard for Floci, the local AWS emulator. The dashbo
 | Shared components | Done | ResourceTable, CreateModal, DeleteButton, ServiceCard, ServiceGrid, StatCard, StatusBadge |
 | Layout | Done | AppLayoutShell with TopNavigation, SideNavigation, dark mode |
 | Settings | Done | Dark mode toggle, refresh interval |
-| 56 other services | Not started | Show "Coming soon" placeholder |
+| 43 services implemented (+ S3/DynamoDB dedicated pages) | ServicePage: browse, create, delete | 45-tracker, 41 done, 4 pending |
 
 ### Architecture Constraints
 
@@ -1307,23 +1307,24 @@ Each remaining service gets a standard list + create + delete pattern.
 | 17.25 | Step Functions (states) | Done | Done | Done | 2025-06-18 |
 | 17.26 | MSK (kafka) | Done | Done | Done | 2025-06-18 |
 | 17.27 | OpenSearch (es) | Done | Done | Done | 2025-06-18 |
-| 17.28 | Bedrock Runtime | Pending | Pending | Pending | |
-| 17.29 | Textract | Pending | Pending | Pending | |
-| 17.30 | Transcribe | Pending | Pending | Pending | |
-| 17.31 | Cost Explorer (ce) | Pending | Pending | Pending | |
-| 17.32 | Cost & Usage Report (cur) | Pending | Pending | Pending | |
-| 17.33 | BCM Data Exports | Pending | Pending | Pending | |
-| 17.34 | Pricing | Pending | Pending | Pending | |
-| 17.35 | Resource Groups Tagging | Pending | Pending | Pending | |
-| 17.36 | CodeDeploy | Pending | Pending | Pending | |
-| 17.37 | CodeBuild | Pending | Pending | Pending | |
-| 17.38 | Backup | Pending | Pending | Pending | |
-| 17.39 | Transfer Family | Pending | Pending | Pending | |
+| 17.28 | Bedrock Runtime | Done | Done | Done | 2026-06-19 |
+| 17.29 | Textract | Done | Done | Done | 2026-06-19 |
+| 17.30 | Transcribe | Done | Done | Done | 2026-06-19 |
+| 17.31 | Cost Explorer (ce) | Done | Done | Done | 2026-06-19 |
+| 17.32 | Cost & Usage Report (cur) | Done | Done | Done | 2026-06-19 |
+| 17.33 | BCM Data Exports | Done | Done | Done | 2026-06-19 |
+| 17.34 | Pricing | Done | Done | Done | 2026-06-19 |
+| 17.35 | Resource Groups Tagging | Done | Done | Done | 2026-06-19 |
+| 17.36 | CodeDeploy | Done | Done | Done | 2026-06-19 |
+| 17.37 | CodeBuild | Done | Done | Done | 2026-06-19 |
+| 17.38 | Backup | Done | Done | Done | 2026-06-19 |
+| 17.39 | Transfer Family | Done | Done | Done | 2026-06-19 |
 | 17.40 | CloudWatch Metrics (monitoring) | Done | Done | Done | 2025-06-14 |
 | 17.41 | AppConfig Data (appconfigdata) | Pending | Pending | Pending | |
 | 17.42 | Resource Groups Tagging (tagging) | Pending | Pending | Pending | |
 | 17.43 | EC2 Messages (ec2messages) | Pending | Pending | Pending | |
 | 17.44 | Verify: all services typecheck + build pass | Pending | | Pending | |
+| 17.45 | WAF v2 (wafv2) | Done | Done | Done | 2026-06-19 |
 
 ---
 
