@@ -37,6 +37,9 @@ import cognitoRoutes from "./cognito";
 import apigatewayv2Routes from "./apigatewayv2";
 import acmRoutes from "./acm";
 import cloudtrailRoutes from "./cloudtrail";
+import configserviceRoutes from "./configservice";
+import appconfigRoutes from "./appconfig";
+import cloudmapRoutes from "./cloudmap";
 
 const router = new Hono();
 
@@ -77,9 +80,12 @@ router.route("/cognito", cognitoRoutes);
 router.route("/apigatewayv2", apigatewayv2Routes);
 router.route("/acm", acmRoutes);
 router.route("/cloudtrail", cloudtrailRoutes);
+router.route("/configservice", configserviceRoutes);
+router.route("/appconfig", appconfigRoutes);
+router.route("/cloudmap", cloudmapRoutes);
 
 router.get("/", (c: Context) => {
-  return c.json({ message: "AWS routes available. Services registered: s3, dynamodb, rds, ec2, sqs, sns, events, logs, lambda, cloudwatch, iam, secretsmanager, cloudformation, kms, ecs, ssm, route53, apigateway, sts, appsync, scheduler, ecr, elb, ses, eks, autoscaling, cloudfront, kinesis, neptune, pipes, cognito, apigatewayv2, acm, cloudtrail" });
+  return c.json({ message: "AWS routes available. Services registered: s3, dynamodb, rds, ec2, sqs, sns, events, logs, lambda, cloudwatch, iam, secretsmanager, cloudformation, kms, ecs, ssm, route53, apigateway, sts, appsync, scheduler, ecr, elb, ses, eks, autoscaling, cloudfront, kinesis, neptune, pipes, cognito, apigatewayv2, acm, cloudtrail, configservice, appconfig, cloudmap" });
 });
 
 export default router;

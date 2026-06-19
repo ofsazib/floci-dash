@@ -247,6 +247,28 @@ import {
   useStartCloudTrailLogging,
   useStopCloudTrailLogging,
 } from "../hooks/useCloudTrail";
+import {
+  useConfigRules,
+  usePutConfigRule,
+  useDeleteConfigRule,
+  useConfigRecorders,
+  useConformancePacks,
+  useDeleteConformancePack,
+} from "../hooks/useConfigService";
+import {
+  useAppConfigApplications,
+  useDeleteAppConfigApplication,
+  useAppConfigEnvironments,
+  useAppConfigProfiles,
+} from "../hooks/useAppConfig";
+import {
+  useCloudMapNamespaces,
+  useCreateCloudMapNamespace,
+  useDeleteCloudMapNamespace,
+  useCloudMapServices,
+  useDeleteCloudMapService,
+  useCloudMapInstances,
+} from "../hooks/useCloudMap";
 
 const KEY_TYPE_OPTIONS: SelectProps.Option[] = [
   { label: "String (S)", value: "S" },
@@ -287,7 +309,7 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
 ];
 
 /** Services with a fully implemented backend that can show a resource list */
-const IMPLEMENTED_SERVICES = new Set(["dynamodb", "rds", "logs", "ecs", "ssm", "route53", "apigateway", "appsync", "scheduler", "ecr", "elb", "ses", "sts", "eks", "autoscaling", "cloudfront", "kinesis", "neptune", "pipes", "cognito-idp", "apigatewayv2", "acm", "cloudtrail"]);
+const IMPLEMENTED_SERVICES = new Set(["dynamodb", "rds", "logs", "ecs", "ssm", "route53", "apigateway", "appsync", "scheduler", "ecr", "elb", "ses", "sts", "eks", "autoscaling", "cloudfront", "kinesis", "neptune", "pipes", "cognito-idp", "apigatewayv2", "acm", "cloudtrail", "configservice", "appconfig", "cloudmap"]);
 
 export default function ServicePage() {
   const { service } = useParams<{ service: string }>();
@@ -369,6 +391,9 @@ function ServiceResourceList({ service }: { service: string }) {
   if (service === "apigatewayv2") return <ApiGatewayV2Dashboard />;
   if (service === "acm") return <ACMDashboard />;
   if (service === "cloudtrail") return <CloudTrailDashboard />;
+  if (service === "configservice") return <ConfigServiceDashboard />;
+  if (service === "appconfig") return <AppConfigDashboard />;
+  if (service === "cloudmap") return <CloudMapDashboard />;
   return null;
 }
 
@@ -7114,6 +7139,400 @@ function CloudTrailDashboard() {
       ]}
       filterEnabled
       filterPlaceholder="Find trails by name"
+      filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+    />
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  AWS Config
+// ────────────────────────────────────────────────────────
+
+function ConfigServiceDashboard() {
+  const { data: rulesData, isLoading } = useConfigRules();
+  const deleteRule = useDeleteConfigRule();
+  const { data: recordersData } = useConfigRecorders();
+  const { data: packsData } = useConformancePacks();
+  const deletePack = useDeleteConformancePack();
+
+  if (isLoading) return <Spinner />;
+
+  return (
+    <Tabs
+      tabs={[
+        {
+          id: "rules",
+          label: "Config Rules",
+          content: (
+            <ResourceTable
+              resourceName="Config Rule"
+              headerTitle="Config Rules"
+              headerCounter={rulesData?.total}
+              items={(rulesData?.rules || []).map((r: any) => ({
+                name: r.ConfigRuleName,
+                state: r.ConfigRuleState || "ACTIVE",
+                owner: r.Source?.Owner || "-",
+                source: r.Source?.SourceIdentifier || "-",
+              }))}
+              loading={false}
+              emptyMessage="No config rules"
+              columns={[
+                { id: "name", header: "Rule Name", cell: (i: any) => i.name, isRowHeader: true },
+                { id: "state", header: "State", cell: (i: any) => i.state },
+                { id: "owner", header: "Owner", cell: (i: any) => i.owner },
+                { id: "source", header: "Source", cell: (i: any) => i.source },
+                {
+                  id: "actions",
+                  header: "",
+                  cell: (i: any) => (
+                    <DeleteButton
+                      itemName={i.name}
+                      resourceType="config rule"
+                      loading={deleteRule.isPending && deleteRule.variables === i.name}
+                      onDelete={() => deleteRule.mutateAsync(i.name)}
+                    />
+                  ),
+                },
+              ]}
+              filterEnabled
+              filterPlaceholder="Find rules"
+              filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+            />
+          ),
+        },
+        {
+          id: "recorders",
+          label: "Recorders",
+          content: (
+            <ResourceTable
+              resourceName="Recorder"
+              headerTitle="Configuration Recorders"
+              headerCounter={recordersData?.total}
+              items={(recordersData?.recorders || []).map((r: any) => ({
+                name: r.name,
+                role: r.roleARN,
+                allSupported: r.recordingGroup?.allSupported ? "Yes" : "No",
+              }))}
+              loading={false}
+              emptyMessage="No configuration recorders"
+              columns={[
+                { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+                { id: "role", header: "Role ARN", cell: (i: any) => i.role },
+                { id: "allSupported", header: "All Supported", cell: (i: any) => i.allSupported },
+              ]}
+            />
+          ),
+        },
+        {
+          id: "conformance-packs",
+          label: "Conformance Packs",
+          content: (
+            <ResourceTable
+              resourceName="Conformance Pack"
+              headerTitle="Conformance Packs"
+              headerCounter={packsData?.total}
+              items={(packsData?.conformancePacks || []).map((p: any) => ({
+                name: p.ConformancePackName,
+                id: p.ConformancePackId || "-",
+                arn: p.ConformancePackArn || "-",
+              }))}
+              loading={false}
+              emptyMessage="No conformance packs"
+              columns={[
+                { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+                { id: "id", header: "Pack ID", cell: (i: any) => i.id },
+                {
+                  id: "actions",
+                  header: "",
+                  cell: (i: any) => (
+                    <DeleteButton
+                      itemName={i.name}
+                      resourceType="conformance pack"
+                      loading={deletePack.isPending && deletePack.variables === i.name}
+                      onDelete={() => deletePack.mutateAsync(i.name)}
+                    />
+                  ),
+                },
+              ]}
+              filterEnabled
+              filterPlaceholder="Find packs"
+              filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+            />
+          ),
+        },
+      ]}
+    />
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  AppConfig
+// ────────────────────────────────────────────────────────
+
+function AppConfigDashboard() {
+  const { data, isLoading } = useAppConfigApplications();
+  const deleteApp = useDeleteAppConfigApplication();
+  const [selectedApp, setSelectedApp] = useState<string | null>(null);
+  const { data: envData } = useAppConfigEnvironments(selectedApp);
+  const { data: profileData } = useAppConfigProfiles(selectedApp);
+
+  if (isLoading) return <Spinner />;
+
+  if (selectedApp) {
+    return (
+      <>
+        <Box margin={{ bottom: "s" }}>
+          <Button iconName="arrow-left" onClick={() => setSelectedApp(null)}>
+            Back to applications
+          </Button>
+        </Box>
+        <Tabs
+          tabs={[
+            {
+              id: "environments",
+              label: "Environments",
+              content: (
+                <ResourceTable
+                  resourceName="Environment"
+                  headerTitle={`Environments`}
+                  headerCounter={envData?.total}
+                  items={(envData?.environments || []).map((e: any) => ({
+                    id: e.Id,
+                    name: e.Name,
+                    state: e.State || "-",
+                    description: e.Description || "-",
+                  }))}
+                  loading={false}
+                  emptyMessage="No environments"
+                  columns={[
+                    { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+                    { id: "state", header: "State", cell: (i: any) => i.state },
+                    { id: "description", header: "Description", cell: (i: any) => i.description },
+                  ]}
+                  filterEnabled
+                  filterPlaceholder="Find environments"
+                  filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+                />
+              ),
+            },
+            {
+              id: "profiles",
+              label: "Configuration Profiles",
+              content: (
+                <ResourceTable
+                  resourceName="Profile"
+                  headerTitle="Configuration Profiles"
+                  headerCounter={profileData?.total}
+                  items={(profileData?.profiles || []).map((p: any) => ({
+                    id: p.Id,
+                    name: p.Name,
+                    type: p.Type || "-",
+                    location: p.LocationUri || "-",
+                  }))}
+                  loading={false}
+                  emptyMessage="No configuration profiles"
+                  columns={[
+                    { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+                    { id: "type", header: "Type", cell: (i: any) => i.type },
+                    { id: "location", header: "Location", cell: (i: any) => i.location },
+                  ]}
+                  filterEnabled
+                  filterPlaceholder="Find profiles"
+                  filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+                />
+              ),
+            },
+          ]}
+        />
+      </>
+    );
+  }
+
+  return (
+    <ResourceTable
+      resourceName="Application"
+      headerTitle="AppConfig Applications"
+      headerCounter={data?.total}
+      items={(data?.applications || []).map((a: any) => ({
+        id: a.Id,
+        name: a.Name,
+        description: a.Description || "-",
+      }))}
+      loading={isLoading}
+      emptyMessage="No AppConfig applications"
+      columns={[
+        {
+          id: "name",
+          header: "Name",
+          cell: (i: any) => (
+            <Button variant="link" onClick={() => setSelectedApp(i.id)}>
+              {i.name}
+            </Button>
+          ),
+          isRowHeader: true,
+        },
+        { id: "id", header: "Application ID", cell: (i: any) => i.id },
+        { id: "description", header: "Description", cell: (i: any) => i.description },
+        {
+          id: "actions",
+          header: "",
+          cell: (i: any) => (
+            <DeleteButton
+              itemName={i.name}
+              resourceType="application"
+              loading={deleteApp.isPending && deleteApp.variables === i.id}
+              onDelete={() => deleteApp.mutateAsync(i.id)}
+            />
+          ),
+        },
+      ]}
+      filterEnabled
+      filterPlaceholder="Find applications"
+      filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+    />
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  Cloud Map
+// ────────────────────────────────────────────────────────
+
+function CloudMapDashboard() {
+  const { data: nsData, isLoading } = useCloudMapNamespaces();
+  const deleteNs = useDeleteCloudMapNamespace();
+  const [selectedNs, setSelectedNs] = useState<string | null>(null);
+  const { data: svcData } = useCloudMapServices(selectedNs);
+  const deleteSvc = useDeleteCloudMapService();
+  const [selectedSvc, setSelectedSvc] = useState<string | null>(null);
+  const { data: instData } = useCloudMapInstances(selectedSvc);
+
+  if (isLoading) return <Spinner />;
+
+  if (selectedNs && selectedSvc) {
+    return (
+      <>
+        <Box margin={{ bottom: "s" }}>
+          <Button
+            iconName="arrow-left"
+            onClick={() => setSelectedSvc(null)}
+          >
+            Back to services
+          </Button>
+        </Box>
+        <ResourceTable
+          resourceName="Instance"
+          headerTitle={`Instances in ${selectedSvc}`}
+          headerCounter={instData?.total}
+          items={(instData?.instances || []).map((i: any) => ({
+            id: i.Id,
+            attributes: Object.entries(i.Attributes || {}).map(([k, v]) => `${k}=${v}`).join(", "),
+          }))}
+          loading={false}
+          emptyMessage="No instances"
+          columns={[
+            { id: "id", header: "Instance ID", cell: (i: any) => i.id, isRowHeader: true },
+            { id: "attributes", header: "Attributes", cell: (i: any) => i.attributes },
+          ]}
+        />
+      </>
+    );
+  }
+
+  if (selectedNs) {
+    return (
+      <>
+        <Box margin={{ bottom: "s" }}>
+          <Button iconName="arrow-left" onClick={() => setSelectedNs(null)}>
+            Back to namespaces
+          </Button>
+        </Box>
+        <ResourceTable
+          resourceName="Service"
+          headerTitle={`Services in namespace`}
+          headerCounter={svcData?.total}
+          items={(svcData?.services || []).map((s: any) => ({
+            id: s.Id,
+            name: s.Name,
+            type: s.Type || "-",
+            description: s.Description || "-",
+          }))}
+          loading={false}
+          emptyMessage="No services"
+          columns={[
+            {
+              id: "name",
+              header: "Name",
+              cell: (i: any) => (
+                <Button variant="link" onClick={() => setSelectedSvc(i.id)}>
+                  {i.name}
+                </Button>
+              ),
+              isRowHeader: true,
+            },
+            { id: "type", header: "Type", cell: (i: any) => i.type },
+            { id: "description", header: "Description", cell: (i: any) => i.description },
+            {
+              id: "actions",
+              header: "",
+              cell: (i: any) => (
+                <DeleteButton
+                  itemName={i.name}
+                  resourceType="service"
+                  loading={deleteSvc.isPending && deleteSvc.variables === i.id}
+                  onDelete={() => deleteSvc.mutateAsync(i.id)}
+                />
+              ),
+            },
+          ]}
+          filterEnabled
+          filterPlaceholder="Find services"
+          filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+        />
+      </>
+    );
+  }
+
+  return (
+    <ResourceTable
+      resourceName="Namespace"
+      headerTitle="Cloud Map Namespaces"
+      headerCounter={nsData?.total}
+      items={(nsData?.namespaces || []).map((n: any) => ({
+        id: n.Id,
+        name: n.Name,
+        type: n.Type || "-",
+        description: n.Description || "-",
+      }))}
+      loading={isLoading}
+      emptyMessage="No namespaces"
+      columns={[
+        {
+          id: "name",
+          header: "Name",
+          cell: (i: any) => (
+            <Button variant="link" onClick={() => setSelectedNs(i.id)}>
+              {i.name}
+            </Button>
+          ),
+          isRowHeader: true,
+        },
+        { id: "type", header: "Type", cell: (i: any) => i.type },
+        { id: "description", header: "Description", cell: (i: any) => i.description },
+        {
+          id: "actions",
+          header: "",
+          cell: (i: any) => (
+            <DeleteButton
+              itemName={i.name}
+              resourceType="namespace"
+              loading={deleteNs.isPending && deleteNs.variables === i.id}
+              onDelete={() => deleteNs.mutateAsync(i.id)}
+            />
+          ),
+        },
+      ]}
+      filterEnabled
+      filterPlaceholder="Find namespaces"
       filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
     />
   );

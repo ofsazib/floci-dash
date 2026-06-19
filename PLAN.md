@@ -1297,10 +1297,10 @@ Each remaining service gets a standard list + create + delete pattern.
 | 17.15 | STS | Done | Done | Done | 2025-06-18 |
 | 17.16 | Cognito | Done | Done | Done | 2025-06-18 |
 | 17.17 | ACM | Done | Done | Done | 2025-06-18 |
-| 17.18 | Config | Pending | Pending | Pending | |
-| 17.19 | AppConfig | Pending | Pending | Pending | |
+| 17.18 | Config | Done | Done | Done | 2025-06-18 |
+| 17.19 | AppConfig | Done | Done | Done | 2025-06-18 |
 | 17.20 | CloudTrail | Done | Done | Done | 2025-06-18 |
-| 17.21 | Cloud Map (service discovery) | Pending | Pending | Pending | |
+| 17.21 | Cloud Map (service discovery) | Done | Done | Done | 2025-06-18 |
 | 17.22 | Athena | Pending | Pending | Pending | |
 | 17.23 | Glue | Pending | Pending | Pending | |
 | 17.24 | Firehose | Pending | Pending | Pending | |
