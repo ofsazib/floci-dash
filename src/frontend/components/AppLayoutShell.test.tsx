@@ -184,6 +184,16 @@ describe("AppLayoutShell — navigation items", () => {
     expect(screen.getByText("Resources")).toBeTruthy();
   });
 
+  it("renders global search input with placeholder", () => {
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    expect(screen.getAllByPlaceholderText("Search services...").length).toBeGreaterThan(0);
+  });
+
   it("does not render Resources section when no health data", () => {
     (useHealth as any).mockReturnValue({ data: undefined });
     render(

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { AppLayout, SideNavigation, TopNavigation, Input, Button } from "@cloudscape-design/components";
-import type { SideNavigationProps } from "@cloudscape-design/components";
+import { AppLayout, SideNavigation, TopNavigation, Input, Button, Autosuggest } from "@cloudscape-design/components";
+import type { SideNavigationProps, AutosuggestProps } from "@cloudscape-design/components";
 import { useHealth, useActiveServices } from "../hooks/useSystem";
 import { useSettings } from "../stores/settings";
 import { SERVICE_LABELS } from "../types/services";
@@ -86,6 +86,7 @@ export default function AppLayoutShell({ children }: Props) {
   const [navQuery, setNavQuery] = useState("");
   const [navAllExpanded, setNavAllExpanded] = useState(false);
   const [navKey, setNavKey] = useState(0);
+  const [globalSearch, setGlobalSearch] = useState("");
   const navigate = useNavigate();
   const location = useLocation();
   const { data: health } = useHealth();
@@ -104,6 +105,25 @@ export default function AppLayoutShell({ children }: Props) {
     setNavAllExpanded((prev) => !prev);
     setNavKey((k) => k + 1);
   }, []);
+
+  const searchOptions: AutosuggestProps.Options = useMemo(() => {
+    const flociServices = health?.services ? Object.keys(health.services) : [];
+    const all: AutosuggestProps.Option[] = [];
+    const added = new Set<string>();
+
+    for (const key of flociServices) {
+      const label = IMPLEMENTED_SERVICES[key] || SERVICE_LABELS[key] || key;
+      if (!added.has(label)) {
+        added.add(label);
+        all.push({ value: label, label, description: key });
+      }
+    }
+
+    const sorted = all.sort((a, b) => a.label!.localeCompare(b.label!));
+    return [
+      { label: "Services", options: sorted },
+    ];
+  }, [health]);
 
   const navItems = useMemo(() => {
     const items: SideNavigationProps.Item[] = [
@@ -247,6 +267,27 @@ export default function AppLayoutShell({ children }: Props) {
             title: "Floci Dashboard",
             logo: { src: FLOCI_LOGO_SVG, alt: "Floci" },
           }}
+          search={
+            <Autosuggest
+              placeholder="Search services..."
+              value={globalSearch}
+              onChange={(e) => setGlobalSearch(e.detail.value)}
+              onSelect={(e) => {
+                const label = e.detail.value;
+                const flociServices = health?.services ? Object.keys(health.services) : [];
+                const found = flociServices.find(
+                  (k) => (IMPLEMENTED_SERVICES[k] || SERVICE_LABELS[k] || k) === label,
+                );
+                if (found) {
+                  setGlobalSearch("");
+                  navigate(`/services/${found}`);
+                }
+              }}
+              options={searchOptions}
+              enteredTextLabel={(v) => `Search for "${v}"`}
+              empty="No matching services"
+            />
+          }
           utilities={[
             {
               type: "button",
