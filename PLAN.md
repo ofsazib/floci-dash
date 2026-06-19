@@ -26,7 +26,7 @@ An AWS Console-style web dashboard for Floci, the local AWS emulator. The dashbo
 | Shared components | Done | ResourceTable, CreateModal, DeleteButton, ServiceCard, ServiceGrid, StatCard, StatusBadge |
 | Layout | Done | AppLayoutShell with TopNavigation, SideNavigation, dark mode |
 | Settings | Done | Dark mode toggle, refresh interval |
-| 59 services implemented (+ S3/DynamoDB dedicated pages) | ServicePage: browse, create, delete | 45-tracker, 45 done, 0 pending |
+| 59 services implemented (+ S3/DynamoDB dedicated pages) | ServicePage: browse, create, delete | 45-tracker, 48 done, 0 pending |
 
 ### Architecture Constraints
 
@@ -1335,9 +1335,9 @@ Each remaining service gets a standard list + create + delete pattern.
 
 | # | Task | Status | Date |
 |---|------|--------|------|
-| 18.1 | Dashboard Home: Add recent activity feed | Pending | |
-| 18.2 | Dashboard Home: Add quick actions panel | Pending | |
-| 18.3 | Dashboard Home: Add resource count summary per service | Pending | |
+| 18.1 | Dashboard Home: Add recent activity feed (localStorage-backed) | Done | 2026-06-19 |
+| 18.2 | Dashboard Home: Add quick actions panel (enhanced with 9 services) | Done | 2026-06-19 |
+| 18.3 | Dashboard Home: Add resource count summary per service (backend route + frontend cards) | Done | 2026-06-19 |
 | 18.4 | All pages: Add loading skeletons (not just spinners) | Pending | |
 | 18.5 | All pages: Improve empty states with illustrations | Pending | |
 | 18.6 | Side nav: Add search/filter for services | Pending | |
