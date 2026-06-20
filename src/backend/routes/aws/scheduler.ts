@@ -73,7 +73,7 @@ router.post("/schedules", async (c: Context) => {
   const body = await c.req.json();
   if (!body.name) return c.json({ error: "name is required" }, 400);
   if (!body.scheduleExpression) return c.json({ error: "scheduleExpression is required" }, 400);
-  if (!body.target || !body.target.arn) return c.json({ error: "target.arn is required" }, 400);
+  if (!body.target || !body.target.Arn) return c.json({ error: "target.Arn is required" }, 400);
   const client = getClient();
   const result = await client.send(
     new CreateScheduleCommand({
