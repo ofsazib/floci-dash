@@ -199,7 +199,7 @@ docker run -p 3000:3000 -p 4566:4566 \
 
 ### Testing
 
-The project includes **2,127 unit tests** across 131 test files, organized as:
+The project includes **~1,634 tests** (1,247 unit + 387 integration) across 131+ test files, organized as:
 
 | Tests | Count | Location |
 |-------|-------|----------|
@@ -207,7 +207,7 @@ The project includes **2,127 unit tests** across 131 test files, organized as:
 | Frontend page/component tests | 14 files | `src/frontend/pages/*.test.tsx`, `src/frontend/components/*.test.tsx` |
 | Frontend hook tests | 30 files | `src/frontend/hooks/*.test.ts` |
 | Other tests | 44 files | shared libs, stores, types, etc. |
-| Integration tests | 86 | `src/backend/integration.test.ts` (requires Floci) |
+| Integration tests | 387 | `src/backend/integration.test.ts` (requires Floci) |
 
 ```bash
 make test           # Fast unit tests (no Floci needed)

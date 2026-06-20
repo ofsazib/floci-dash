@@ -199,6 +199,7 @@ router.post("/user-pools/:id/clients", async (c: Context) => {
     generateSecret?: boolean;
     callbackURLs?: string[];
     logoutURLs?: string[];
+    allowedOAuthFlowsUserPoolClient?: boolean;
   }>();
   if (!body.clientName) return c.json({ error: "clientName is required" }, 400);
 
@@ -210,6 +211,7 @@ router.post("/user-pools/:id/clients", async (c: Context) => {
       GenerateSecret: body.generateSecret,
       CallbackURLs: body.callbackURLs,
       LogoutURLs: body.logoutURLs,
+      AllowedOAuthFlowsUserPoolClient: body.allowedOAuthFlowsUserPoolClient,
     })
   );
   return c.json({ client: result.UserPoolClient }, 201);
