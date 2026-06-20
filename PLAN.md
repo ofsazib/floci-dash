@@ -1348,7 +1348,7 @@ Each remaining service gets a standard list + create + delete pattern.
 | 18.11 | Settings: Add Floci endpoint URL configuration (mutable config store, GET/PUT routes, Settings UI) | Done | 2026-06-20 |
 | 18.12 | Responsive: Test and fix mobile layout | Done | 2026-06-20 |
 | 18.13 | Accessibility: Keyboard navigation audit | Done | 2026-06-20 |
-| 18.14 | Accessibility: ARIA labels audit | Pending | |
+| 18.14 | Accessibility: ARIA labels audit (labeled search inputs, toggle, skip link, content area) | Done | 2026-06-20 |
 
 ---
 
