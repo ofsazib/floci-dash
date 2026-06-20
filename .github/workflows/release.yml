@@ -201,7 +201,7 @@ jobs:
         with:
           images: ghcr.io/ofsazib/floci-dash
           flavor: |
-            latest=auto
+            latest=true
             suffix=-combined,onlatest=true
           tags: |
             type=semver,pattern={{version}}
