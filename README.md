@@ -19,7 +19,7 @@
   <br/>
   <a href="https://github.com/ofsazib/floci-dash/pkgs/container/floci-dash"><img src="https://ghcr-badge.egpl.dev/ofsazib/floci-dash/latest_tag?trim=major&amp;label=version" alt="version" /></a>
   <a href="https://github.com/ofsazib/floci-dash/pkgs/container/floci-dash"><img src="https://ghcr-badge.egpl.dev/ofsazib/floci-dash/size?trim=major" alt="image size" /></a>
-  <a href="https://github.com/ofsazib/floci-dash/pkgs/container/floci-dash"><img src="https://img.shields.io/badge/pulls-ghcr.io-blue" alt="pulls" /></a>
+  <a href="https://github.com/ofsazib/floci-dash/pkgs/container/floci-dash"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fghcr-badge.elias.eu.org%2Fapi%2Fofsazib%2Ffloci-dash&query=downloadCount&label=pulls&color=blue&logo=docker" alt="pulls" /></a>
 </p>
 
 <p align="center">
