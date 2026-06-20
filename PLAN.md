@@ -1361,11 +1361,11 @@ Each remaining service gets a standard list + create + delete pattern.
 | 19.3 | Performance: Lazy-load service pages with React.lazy | Done | 2026-06-20 |
 | 19.4 | Performance: Add TanStack Query devtools (dev only) | Done | 2026-06-20 |
 | 19.5 | Security: Add CSP headers in production | Done | 2026-06-20 |
-| 19.6 | Security: Sanitize all user inputs on backend | Pending | |
-| 19.7 | Docker: Optimize production image size | Pending | |
-| 19.8 | Docker: Add health check endpoint to dashboard container | Pending | |
+| 19.6 | Security: Sanitize all user inputs on backend | Done | 2026-06-20 |
+| 19.7 | Docker: Optimize production image size | Done | 2026-06-20 |
+| 19.8 | Docker: Add health check endpoint to dashboard container | Done | 2026-06-20 |
 | 19.9 | CI: Add GitHub Actions for typecheck + build | Done | 2025-06-15 |
-| 19.10 | Final: Full docker:prod test with all services | Pending | |
+| 19.10 | Final: Full docker:prod test with all services | Done | 2026-06-20 |
 
 ---
 
@@ -1417,6 +1417,18 @@ Each remaining service gets a standard list + create + delete pattern.
 | 22.a | Write component tests for high-impact files: DynamoDBTableDetail (22 tests), S3BucketConfig (24 tests), AppLayoutShell (14 tests) | Done | 2026-06-16 |
 | 22.b | Write tests for backend entry files (index.ts, types.ts) | Done | 2026-06-20 |
 | 22.c | Re-check Codecov number, iterate if below target | Done | 2026-06-20 |
+
+### Phase 13: Remaining Floci Services (4 services)
+
+Implement the 4 Floci services not yet covered by the dashboard. Each follows the standard pattern: backend route file → frontend hooks → ServicePage dashboard component → tests.
+
+| # | Task | Status | Date |
+|---|------|--------|------|
+| 23.1 | **AWS Batch** — Compute environments, job queues, job definitions, jobs. Install `@aws-sdk/client-batch`, create routes/batch.ts with list+create+delete for all 4 resource types, create hooks/useBatch.ts, add BatchDashboard to ServicePage, write tests | Pending | |
+| 23.2 | **DocumentDB** — Clusters (create/describe/delete/modify) and instances (create/describe/delete/modify). Routes via `@aws-sdk/client-docdb`, hooks/useDocDB.ts, DocDBDashboard component, tests | Pending | |
+| 23.3 | **Amazon EMR** — Clusters (run/describe/terminate), steps (add/describe/cancel), instance groups/fleets, security configs. Install `@aws-sdk/client-emr`, routes/emr.ts, hooks/useEMR.ts, EMRDashboard component, tests | Pending | |
+| 23.4 | **RDS Data API** — ExecuteStatement, ExecuteSql, BeginTransaction, CommitTransaction, RollbackTransaction. Install `@aws-sdk/rds-data`, routes/rdsdata.ts, hooks/useRDSData.ts, RDSDataDashboard component, tests | Pending | |
+| 23.5 | Verify: typecheck + all tests pass + coverage thresholds met. Update README with newly implemented services and remove from "Coming soon" | Pending | |
 
 ---
 
