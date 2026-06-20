@@ -264,7 +264,7 @@ describe("AppLayoutShell — dark mode toggle", () => {
       </AppLayoutShell>,
       { wrapper: createWrapper() },
     );
-    expect(screen.getAllByText(/Dark/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText("Switch to dark mode").length).toBeGreaterThan(0);
   });
 
   it("renders Light toggle when darkMode is enabled", () => {
@@ -280,7 +280,7 @@ describe("AppLayoutShell — dark mode toggle", () => {
       </AppLayoutShell>,
       { wrapper: createWrapper() },
     );
-    expect(screen.getAllByText(/Light/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText("Switch to light mode").length).toBeGreaterThan(0);
   });
 
   it("applies dark mode class to document body", () => {
