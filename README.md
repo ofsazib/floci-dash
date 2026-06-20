@@ -47,6 +47,7 @@
 - **EC2 web terminal** — Interactive bash shell inside running EC2 instances directly from the browser (xterm.js + Docker Engine API with PTY)
 - **Dark mode** — Toggle between light and dark themes
 - **Configurable Floci endpoint** — Change the Floci URL at runtime from Settings (no restart needed)
+- **Loading skeletons** — Animated skeleton placeholders during data fetches (table rows, stat cards, detail views)
 - **Notification bell** — Visual badge in the top nav when services are unhealthy, with a modal listing non-running services
 - **Global search** — Search bar in the top nav to quickly find and navigate to any service
 - **Dashboard home** — Live stat cards (total/active/running services), resource count summaries per service, enhanced quick actions (9 services), recent activity feed (localStorage-backed), and the full service grid

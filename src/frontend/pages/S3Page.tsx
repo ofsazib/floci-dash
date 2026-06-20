@@ -23,6 +23,7 @@ import {
 } from "@cloudscape-design/components";
 import { useHealth } from "../hooks/useSystem";
 import StatusBadge from "../components/StatusBadge";
+import { DetailSkeleton } from "../components/LoadingSkeleton";
 import {
   useS3Buckets,
   useS3Objects,
@@ -776,7 +777,7 @@ function S3ObjectViewer({ bucket, objectKey, onBack }: { bucket: string; objectK
     }
   }, [rawUrl, isText, data]);
 
-  if (isLoading) return <Spinner size="large" />;
+  if (isLoading) return <DetailSkeleton />;
   if (isError) return (
     <Box padding={{ top: "l" }}>
       <Button variant="link" onClick={onBack}>← Back</Button>

@@ -1,10 +1,11 @@
 import { useNavigate } from "react-router-dom";
-import { Box, Button, ColumnLayout, Container, Header, SpaceBetween, Spinner, StatusIndicator, Link } from "@cloudscape-design/components";
+import { Box, Button, ColumnLayout, Container, Header, SpaceBetween, StatusIndicator, Link } from "@cloudscape-design/components";
 import { useHealth, useActiveServices } from "../hooks/useSystem";
 import { useResourceCounts } from "../hooks/useResourceCounts";
 import { useActivityFeed } from "../hooks/useActivityFeed";
 import ServiceGrid from "../components/ServiceGrid";
 import StatCard from "../components/StatCard";
+import { DashboardSkeleton } from "../components/LoadingSkeleton";
 
 function formatTime(ts: number) {
   const d = new Date(ts);
@@ -38,11 +39,8 @@ export default function DashboardHome() {
   return (
     <div style={{ padding: "0 24px", maxWidth: 1280, margin: "0 auto" }}>
       {isLoading ? (
-        <Box textAlign="center" padding={{ top: "xxxl", bottom: "xxxl" }}>
-          <Spinner size="large" />
-          <Box variant="p" padding={{ top: "m" }} color="text-body-secondary">
-            Connecting to Floci...
-          </Box>
+        <Box padding={{ top: "l" }}>
+          <DashboardSkeleton />
         </Box>
       ) : isError ? (
         <Box textAlign="center" padding={{ top: "xxxl", bottom: "xxxl" }}>

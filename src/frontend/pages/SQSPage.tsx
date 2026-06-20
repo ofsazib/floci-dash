@@ -25,6 +25,7 @@ import {
 } from "@cloudscape-design/components";
 import { useHealth } from "../hooks/useSystem";
 import StatusBadge from "../components/StatusBadge";
+import { TableSkeleton } from "../components/LoadingSkeleton";
 import StatCard from "../components/StatCard";
 import { useToast } from "../components/Toast";
 import { useConfirmDialog } from "../components/ConfirmDialog";
@@ -497,11 +498,7 @@ function AttributesTab({
   const [messageRetention, setMessageRetention] = useState(attrs.MessageRetentionPeriod || "345600");
 
   if (isLoading) {
-    return (
-      <Box textAlign="center" padding="l">
-        <Spinner size="large" />
-      </Box>
-    );
+    return <TableSkeleton />;
   }
 
   const hasRedrive = !!attrs.RedrivePolicy;

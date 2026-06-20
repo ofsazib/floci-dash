@@ -27,6 +27,7 @@ import {
 import { useHealth } from "../hooks/useSystem";
 import { getServiceLabel } from "../types/services";
 import StatusBadge from "../components/StatusBadge";
+import { TableSkeleton } from "../components/LoadingSkeleton";
 import {
   useDynamoDBTables,
   useDynamoDBCreateTable,
@@ -5066,7 +5067,7 @@ function ECRDashboard() {
   const [showCreate, setShowCreate] = useState(false);
   const [repoName, setRepoName] = useState("");
 
-  if (isLoading) return <Spinner />;
+  if (isLoading) return <TableSkeleton />;
 
   return (
     <>
@@ -5178,7 +5179,7 @@ function ELBDashboard() {
     { label: "TCP_UDP", value: "TCP_UDP" },
   ];
 
-  if (lbsLoading || tgsLoading) return <Spinner />;
+  if (lbsLoading || tgsLoading) return <TableSkeleton />;
 
   return (
     <Tabs
@@ -5409,7 +5410,7 @@ function SESDashboard() {
   const [sendSubject, setSendSubject] = useState("");
   const [sendBody, setSendBody] = useState("");
 
-  if (isLoading) return <Spinner />;
+  if (isLoading) return <TableSkeleton />;
 
   return (
     <>
@@ -5623,7 +5624,7 @@ function STSDashboard() {
   const [sessionResult, setSessionResult] = useState<any>(null);
   const [sessionDuration, setSessionDuration] = useState("");
 
-  if (isLoading) return <Spinner />;
+  if (isLoading) return <TableSkeleton />;
 
   return (
     <Tabs
@@ -5859,7 +5860,7 @@ function EKSDashboard() {
   const [ngNodeRole, setNgNodeRole] = useState("");
   const [ngSubnets, setNgSubnets] = useState("");
 
-  if (clustersLoading) return <Spinner />;
+  if (clustersLoading) return <TableSkeleton />;
 
   return (
     <Tabs
@@ -6184,7 +6185,7 @@ function AutoScalingDashboard() {
   const [desired, setDesired] = useState("2");
   const [lcName, setLcName] = useState("");
 
-  if (isLoading) return <Spinner />;
+  if (isLoading) return <TableSkeleton />;
 
   return (
     <Tabs
@@ -6283,7 +6284,7 @@ function CloudFrontDashboard() {
   const [showInvalidation, setShowInvalidation] = useState(false);
   const [invPaths, setInvPaths] = useState("/*");
 
-  if (isLoading) return <Spinner />;
+  if (isLoading) return <TableSkeleton />;
 
   return (
     <Tabs
@@ -6481,7 +6482,7 @@ function KinesisDashboard() {
   const [recordData, setRecordData] = useState("");
   const [recordKey, setRecordKey] = useState("");
 
-  if (isLoading) return <Spinner />;
+  if (isLoading) return <TableSkeleton />;
 
   return (
     <Tabs
@@ -6790,7 +6791,7 @@ function PipesDashboard() {
   const startPipe = useStartPipe();
   const stopPipe = useStopPipe();
 
-  if (isLoading) return <Spinner />;
+  if (isLoading) return <TableSkeleton />;
 
   return (
     <ResourceTable
@@ -6864,7 +6865,7 @@ function CognitoDashboard() {
   const { data: groupsData } = useCognitoGroups(selectedPool);
   const { data: clientsData } = useCognitoUserPoolClients(selectedPool);
 
-  if (isLoading) return <Spinner />;
+  if (isLoading) return <TableSkeleton />;
 
   if (selectedPool) {
     return (
@@ -7031,7 +7032,7 @@ function ApiGatewayV2Dashboard() {
   const { data: deploymentsData } = useApiGatewayV2Deployments(selectedApi);
   const createDeployment = useCreateApiGatewayV2Deployment(selectedApi || "");
 
-  if (isLoading) return <Spinner />;
+  if (isLoading) return <TableSkeleton />;
 
   if (selectedApi) {
     return (
@@ -7216,7 +7217,7 @@ function ACMDashboard() {
   const { data, isLoading } = useACMCertificates();
   const deleteCert = useDeleteACMCertificate();
 
-  if (isLoading) return <Spinner />;
+  if (isLoading) return <TableSkeleton />;
 
   return (
     <ResourceTable
@@ -7271,7 +7272,7 @@ function CloudTrailDashboard() {
   const startLogging = useStartCloudTrailLogging();
   const stopLogging = useStopCloudTrailLogging();
 
-  if (isLoading) return <Spinner />;
+  if (isLoading) return <TableSkeleton />;
 
   return (
     <ResourceTable
@@ -7330,7 +7331,7 @@ function ConfigServiceDashboard() {
   const { data: packsData } = useConformancePacks();
   const deletePack = useDeleteConformancePack();
 
-  if (isLoading) return <Spinner />;
+  if (isLoading) return <TableSkeleton />;
 
   return (
     <Tabs
@@ -7451,7 +7452,7 @@ function AppConfigDashboard() {
   const { data: envData } = useAppConfigEnvironments(selectedApp);
   const { data: profileData } = useAppConfigProfiles(selectedApp);
 
-  if (isLoading) return <Spinner />;
+  if (isLoading) return <TableSkeleton />;
 
   if (selectedApp) {
     return (
@@ -7581,7 +7582,7 @@ function CloudMapDashboard() {
   const [selectedSvc, setSelectedSvc] = useState<string | null>(null);
   const { data: instData } = useCloudMapInstances(selectedSvc);
 
-  if (isLoading) return <Spinner />;
+  if (isLoading) return <TableSkeleton />;
 
   if (selectedNs && selectedSvc) {
     return (
@@ -7722,7 +7723,7 @@ function AthenaDashboard() {
   const deleteWg = useDeleteAthenaWorkGroup();
   const { data: qeData } = useAthenaQueryExecutions();
 
-  if (isLoading) return <Spinner />;
+  if (isLoading) return <TableSkeleton />;
 
   return (
     <Tabs
@@ -7801,7 +7802,7 @@ function GlueDashboard() {
   const { data: tblData } = useGlueTables(selectedDb);
   const deleteTbl = useDeleteGlueTable(selectedDb || "");
 
-  if (isLoading) return <Spinner />;
+  if (isLoading) return <TableSkeleton />;
 
   if (selectedDb) {
     return (
@@ -7907,7 +7908,7 @@ function FirehoseDashboard() {
   const { data, isLoading } = useFirehoseStreams();
   const deleteStream = useDeleteFirehoseStream();
 
-  if (isLoading) return <Spinner />;
+  if (isLoading) return <TableSkeleton />;
 
   return (
     <ResourceTable
@@ -7961,7 +7962,7 @@ function StepFunctionsDashboard() {
   const { data: execData } = useStateMachineExecutions(selectedSm);
   const { data: actData } = useActivities();
 
-  if (isLoading) return <Spinner />;
+  if (isLoading) return <TableSkeleton />;
 
   if (selectedSm) {
     return (
@@ -8087,7 +8088,7 @@ function OpenSearchDashboard() {
   const { data, isLoading } = useOpenSearchDomains();
   const deleteDomain = useDeleteOpenSearchDomain();
 
-  if (isLoading) return <Spinner />;
+  if (isLoading) return <TableSkeleton />;
 
   return (
     <ResourceTable
@@ -8131,7 +8132,7 @@ function MskDashboard() {
   const { data, isLoading } = useMskClusters();
   const deleteCluster = useDeleteMskCluster();
 
-  if (isLoading) return <Spinner />;
+  if (isLoading) return <TableSkeleton />;
 
   return (
     <ResourceTable
@@ -8208,7 +8209,7 @@ function TranscribeDashboard() {
   const { data, isLoading } = useTranscriptionJobs();
   const deleteJob = useDeleteTranscriptionJob();
 
-  if (isLoading) return <Spinner />;
+  if (isLoading) return <TableSkeleton />;
 
   return (
     <ResourceTable
@@ -8463,7 +8464,7 @@ function CodeBuildDashboard() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
 
-  if (projectsLoading) return <Spinner />;
+  if (projectsLoading) return <TableSkeleton />;
 
   const projects = (projectsData?.projects || []).map((p: any) => ({
     name: p.name,
@@ -8656,7 +8657,7 @@ function BackupDashboard() {
     completed: j.CompletionDate ? new Date(j.CompletionDate).toLocaleDateString() : "-",
   }));
 
-  if (plansLoading || vaultsLoading || jobsLoading) return <Spinner />;
+  if (plansLoading || vaultsLoading || jobsLoading) return <TableSkeleton />;
 
   return (
     <SpaceBetween size="l">
@@ -8907,7 +8908,7 @@ function CodeDeployDashboard() {
     name: typeof c === "string" ? c : c.deploymentConfigName || "—",
   }));
 
-  if (applicationsQuery.isLoading) return <Spinner />;
+  if (applicationsQuery.isLoading) return <TableSkeleton />;
 
   return (
     <SpaceBetween size="l">
@@ -9244,7 +9245,7 @@ function TransferDashboard() {
     sshKeys: u.SshPublicKeyCount ?? u.SshPublicKeys?.length ?? "-",
   }));
 
-  if (serversLoading) return <Spinner />;
+  if (serversLoading) return <TableSkeleton />;
 
   return (
     <SpaceBetween size="l">
