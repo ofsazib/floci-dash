@@ -28,6 +28,7 @@ import { useHealth } from "../hooks/useSystem";
 import { getServiceLabel } from "../types/services";
 import StatusBadge from "../components/StatusBadge";
 import { TableSkeleton } from "../components/LoadingSkeleton";
+import EmptyState from "../components/EmptyState";
 import {
   useDynamoDBTables,
   useDynamoDBCreateTable,
@@ -509,15 +510,11 @@ export default function ServicePage() {
       {IMPLEMENTED_SERVICES.has(service) ? (
         <ServiceResourceList service={service} />
       ) : (
-        <Box textAlign="center" padding={{ top: "xxxl", bottom: "xxxl" }}>
-          <Box variant="h2" padding={{ bottom: "s" }}>
-            Coming soon
-          </Box>
-          <Box variant="p" color="text-body-secondary" padding={{ bottom: "l" }}>
-            This service page is under development. S3 is fully implemented —
-            visit the S3 page for bucket and object management.
-          </Box>
-        </Box>
+        <EmptyState
+          title="Coming soon"
+          icon="🚧"
+          description="This service page is under development. Check back soon — explore fully implemented services like S3, DynamoDB, or EC2 in the meantime."
+        />
       )}
     </ContentLayout>
   );

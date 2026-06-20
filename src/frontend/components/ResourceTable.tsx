@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Table, Box, Button, SpaceBetween, TextFilter, Header } from "@cloudscape-design/components";
+import EmptyState from "./EmptyState";
 
 interface Column {
   id: string;
@@ -106,16 +107,15 @@ export default function ResourceTable({
       loadingText="Loading resources..."
       empty={
         filterEnabled && searchTerm ? (
-          <Box textAlign="center" padding={{ top: "xxl", bottom: "xxl" }}>
-            <Box variant="h3" padding={{ bottom: "s" }}>No matches</Box>
-            <Box variant="p" color="text-body-secondary">
-              No {resourceName.toLowerCase()}s match "{searchTerm}". Try a different search term.
-            </Box>
-          </Box>
+          <EmptyState
+            title="No matches"
+            description={`No ${resourceName.toLowerCase()}s match "${searchTerm}". Try a different search term.`}
+          />
         ) : (
-          <Box textAlign="center" color="inherit">
-            <b>{emptyMessage || `No ${resourceName.toLowerCase()}s found`}</b>
-          </Box>
+          <EmptyState
+            title={emptyMessage || `No ${resourceName.toLowerCase()}s found`}
+            description={onCreate ? `Click "Create ${resourceName}" to get started.` : undefined}
+          />
         )
       }
     />

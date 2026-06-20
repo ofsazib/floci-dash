@@ -1339,7 +1339,7 @@ Each remaining service gets a standard list + create + delete pattern.
 | 18.2 | Dashboard Home: Add quick actions panel (enhanced with 9 services) | Done | 2026-06-19 |
 | 18.3 | Dashboard Home: Add resource count summary per service (backend route + frontend cards) | Done | 2026-06-19 |
 | 18.4 | All pages: Add loading skeletons (TableSkeleton, CardsSkeleton, DetailSkeleton, DashboardSkeleton components) | Done | 2026-06-20 |
-| 18.5 | All pages: Improve empty states with illustrations | Pending | |
+| 18.5 | All pages: Improve empty states with illustrations (EmptyState component with icon, title, description, action) | Done | 2026-06-20 |
 | 18.6 | Side nav: Add search/filter for services | Done | 2026-06-19 |
 | 18.7 | Side nav: Collapse/expand categories (Expand all / Collapse all toggle) | Done | 2026-06-19 |
 | 18.8 | Top nav: Add global search bar (Autosuggest with all services) | Done | 2026-06-19 |

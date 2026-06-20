@@ -6,6 +6,7 @@ import { useActivityFeed } from "../hooks/useActivityFeed";
 import ServiceGrid from "../components/ServiceGrid";
 import StatCard from "../components/StatCard";
 import { DashboardSkeleton } from "../components/LoadingSkeleton";
+import EmptyState from "../components/EmptyState";
 
 function formatTime(ts: number) {
   const d = new Date(ts);
@@ -43,14 +44,11 @@ export default function DashboardHome() {
           <DashboardSkeleton />
         </Box>
       ) : isError ? (
-        <Box textAlign="center" padding={{ top: "xxxl", bottom: "xxxl" }}>
-          <StatusIndicator type="error">
-            {(error as Error)?.message || "Failed to connect to Floci"}
-          </StatusIndicator>
-          <Box variant="p" padding={{ top: "s" }} color="text-body-secondary">
-            Make sure Floci is running and accessible.
-          </Box>
-        </Box>
+        <EmptyState
+          title={(error as Error)?.message || "Failed to connect to Floci"}
+          icon="⚠️"
+          description="Make sure Floci is running and accessible."
+        />
       ) : health ? (
         <SpaceBetween size="xl">
           <Header
