@@ -75,10 +75,19 @@ jobs:
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
 
-  docker:
+  # ── Build each platform natively (no QEMU emulation) ──
+  build:
     needs: test
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
@@ -86,9 +95,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
-
-      - name: Set up QEMU (multi-arch)
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -100,49 +106,106 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Generate version tag
-        id: version
-        run: echo "tag=0.0.${{ github.run_number }}" >> $GITHUB_OUTPUT
+      - name: Extract platform slug
+        id: slug
+        run: echo "slug=$(echo '${{ matrix.platform }}' | tr '/' '-')" >> $GITHUB_OUTPUT
 
-      - name: Extract metadata — dashboard-only image
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/ofsazib/floci-dash
-          tags: |
-            type=raw,value=${{ steps.version.outputs.tag }}
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-
-      - name: Build and push — dashboard-only
+      # ── Dashboard-only image ──
+      - name: Build dashboard-only (by digest)
+        id: build-dash
         uses: docker/build-push-action@v6
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,name=ghcr.io/ofsazib/floci-dash,push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=dash-${{ steps.slug.outputs.slug }}
+          cache-to: type=gha,scope=dash-${{ steps.slug.outputs.slug }},mode=max
           provenance: false
 
-      - name: Extract metadata — combined image
-        id: meta-combined
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/ofsazib/floci-dash
-          tags: |
-            type=raw,value=${{ steps.version.outputs.tag }}-combined
-            type=raw,value=latest-combined,enable=${{ github.ref == 'refs/heads/main' }}
-
-      - name: Build and push — combined (Floci + Dashboard)
+      # ── Combined image (Floci + Dashboard) ──
+      - name: Build combined (by digest)
+        id: build-combined
         uses: docker/build-push-action@v6
         with:
           context: .
           file: docker/Dockerfile.combined
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta-combined.outputs.tags }}
-          labels: ${{ steps.meta-combined.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,name=ghcr.io/ofsazib/floci-dash,push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=combined-${{ steps.slug.outputs.slug }}
+          cache-to: type=gha,scope=combined-${{ steps.slug.outputs.slug }},mode=max
           provenance: false
+
+      - name: Export digests
+        run: |
+          mkdir -p /tmp/digests
+          echo "${{ steps.build-dash.outputs.digest }}" > /tmp/digests/dash-${{ steps.slug.outputs.slug }}.txt
+          echo "${{ steps.build-combined.outputs.digest }}" > /tmp/digests/combined-${{ steps.slug.outputs.slug }}.txt
+
+      - name: Upload digest artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ steps.slug.outputs.slug }}
+          path: /tmp/digests/*.txt
+          retention-days: 1
+
+  # ── Merge per-platform digests into multi-arch manifests ──
+  merge:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Download all digest artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: digests-*
+          merge-multiple: true
+          path: /tmp/digests
+
+      - name: Read digests
+        id: digests
+        run: |
+          echo "dash-amd64=$(cat /tmp/digests/dash-linux-amd64.txt)" >> $GITHUB_OUTPUT
+          echo "dash-arm64=$(cat /tmp/digests/dash-linux-arm64.txt)" >> $GITHUB_OUTPUT
+          echo "combined-amd64=$(cat /tmp/digests/combined-linux-amd64.txt)" >> $GITHUB_OUTPUT
+          echo "combined-arm64=$(cat /tmp/digests/combined-linux-arm64.txt)" >> $GITHUB_OUTPUT
+
+      - name: Generate version tag
+        id: version
+        run: echo "tag=0.0.${{ github.run_number }}" >> $GITHUB_OUTPUT
+
+      # ── Dashboard-only manifest ──
+      - name: Create multi-arch manifest — dashboard-only
+        run: |
+          for tag in "${{ steps.version.outputs.tag }}" "latest"; do
+            docker buildx imagetools create \
+              -t "ghcr.io/ofsazib/floci-dash:$tag" \
+              "ghcr.io/ofsazib/floci-dash@${{ steps.digests.outputs.dash-amd64 }}" \
+              "ghcr.io/ofsazib/floci-dash@${{ steps.digests.outputs.dash-arm64 }}"
+          done
+
+      # ── Combined manifest ──
+      - name: Create multi-arch manifest — combined
+        run: |
+          for tag in "${{ steps.version.outputs.tag }}-combined" "latest-combined"; do
+            docker buildx imagetools create \
+              -t "ghcr.io/ofsazib/floci-dash:$tag" \
+              "ghcr.io/ofsazib/floci-dash@${{ steps.digests.outputs.combined-amd64 }}" \
+              "ghcr.io/ofsazib/floci-dash@${{ steps.digests.outputs.combined-arm64 }}"
+          done

@@ -492,6 +492,9 @@ describe("Lambda Integration", () => {
 
   afterAll(async () => {
     await api("DELETE", `/api/aws/lambda/functions/${funcName}`).catch(() => {});
+    if (queueUrl) {
+      await api("DELETE", `/api/aws/sqs/queues?queueUrl=${encodeURIComponent(queueUrl)}`).catch(() => {});
+    }
     await api("DELETE", `/api/aws/iam/roles/${roleName}`).catch(() => {});
   });
 
@@ -675,6 +678,9 @@ describe("IAM Integration", () => {
 
   afterAll(async () => {
     await api("DELETE", `/api/aws/iam/users/${userName}`).catch(() => {});
+    if (queueUrl) {
+      await api("DELETE", `/api/aws/sqs/queues?queueUrl=${encodeURIComponent(queueUrl)}`).catch(() => {});
+    }
     await api("DELETE", `/api/aws/iam/roles/${roleName}`).catch(() => {});
     if (policyArn) {
       await api("DELETE", `/api/aws/iam/policies?arn=${encodeURIComponent(policyArn)}`).catch(() => {});
@@ -2162,6 +2168,9 @@ describe("Step Functions Integration", () => {
     if (smArn) {
       await api("DELETE", `/api/aws/stepfunctions/state-machines/${encodeURIComponent(smArn)}`).catch(() => {});
     }
+    if (queueUrl) {
+      await api("DELETE", `/api/aws/sqs/queues?queueUrl=${encodeURIComponent(queueUrl)}`).catch(() => {});
+    }
     await api("DELETE", `/api/aws/iam/roles/${roleName}`).catch(() => {});
   });
 
@@ -2579,6 +2588,9 @@ describe("EKS Integration", () => {
 
   afterAll(async () => {
     await api("DELETE", `/api/aws/eks/clusters/${clusterName}`).catch(() => {});
+    if (queueUrl) {
+      await api("DELETE", `/api/aws/sqs/queues?queueUrl=${encodeURIComponent(queueUrl)}`).catch(() => {});
+    }
     await api("DELETE", `/api/aws/iam/roles/${roleName}`).catch(() => {});
   });
 
@@ -2892,6 +2904,522 @@ describe("Auto Scaling Integration", () => {
       "DELETE",
       `/api/aws/autoscaling/groups/${asgName}?force=true`
     );
+    expect(status).toBe(200);
+    expect(data.deleted).toBe(true);
+  });
+});
+
+// ═════════════════════════════════════════════════════════
+//  CloudFront Integration Tests
+// ═════════════════════════════════════════════════════════
+
+describe("CloudFront Integration", () => {
+  it("lists distributions (empty)", async () => {
+    const { status, data } = await api("GET", "/api/aws/cloudfront/distributions");
+    expect(status).toBe(200);
+    expect(data.distributions).toBeDefined();
+  });
+
+  it("lists cache policies", async () => {
+    const { status, data } = await api("GET", "/api/aws/cloudfront/cache-policies");
+    expect(status).toBe(200);
+    expect(data.cachePolicies).toBeDefined();
+  });
+
+  it("lists origin access controls (empty)", async () => {
+    const { status, data } = await api("GET", "/api/aws/cloudfront/origin-access-controls");
+    expect(status).toBe(200);
+    expect(data.originAccessControls).toBeDefined();
+  });
+
+  it("lists CloudFront functions (empty)", async () => {
+    const { status, data } = await api("GET", "/api/aws/cloudfront/functions");
+    expect(status).toBe(200);
+    expect(data.functions).toBeDefined();
+  });
+});
+
+// ═════════════════════════════════════════════════════════
+//  API Gateway V2 Integration Tests
+// ═════════════════════════════════════════════════════════
+
+describe("API Gateway V2 Integration", () => {
+  const apiName = rand("test-api-v2");
+  let apiId = "";
+  let routeId = "";
+  let stageName = "";
+  let deploymentId = "";
+  let integrationId = "";
+
+  afterAll(async () => {
+    if (apiId) {
+      await api("DELETE", `/api/aws/apigatewayv2/apis/${apiId}`).catch(() => {});
+    }
+  });
+
+  it("creates an HTTP API", async () => {
+    const { status, data } = await api("POST", "/api/aws/apigatewayv2/apis", {
+      name: apiName,
+      protocolType: "HTTP",
+      description: "Integration test HTTP API",
+    });
+    expect(status).toBe(201);
+    expect(data.api).toBeTruthy();
+    expect(data.api.Name).toBe(apiName);
+    apiId = data.api.ApiId;
+  });
+
+  it("lists APIs and includes the new one", async () => {
+    const { status, data } = await api("GET", "/api/aws/apigatewayv2/apis");
+    expect(status).toBe(200);
+    expect(data.total).toBeGreaterThanOrEqual(1);
+    const names = data.apis.map((a: any) => a.Name);
+    expect(names).toContain(apiName);
+  });
+
+  it("describes the API", async () => {
+    const { status, data } = await api("GET", `/api/aws/apigatewayv2/apis/${apiId}`);
+    expect(status).toBe(200);
+    expect(data.api.Name).toBe(apiName);
+  });
+
+  it("creates a route", async () => {
+    const { status, data } = await api("POST", `/api/aws/apigatewayv2/apis/${apiId}/routes`, {
+      routeKey: "GET /items",
+      target: undefined,
+    });
+    expect(status).toBe(201);
+    expect(data.route).toBeTruthy();
+    expect(data.route.RouteKey).toBe("GET /items");
+    routeId = data.route.RouteId;
+  });
+
+  it("lists routes", async () => {
+    const { status, data } = await api("GET", `/api/aws/apigatewayv2/apis/${apiId}/routes`);
+    expect(status).toBe(200);
+    expect(data.total).toBeGreaterThanOrEqual(1);
+    const routeKeys = data.routes.map((r: any) => r.RouteKey);
+    expect(routeKeys).toContain("GET /items");
+  });
+
+  it("creates an integration", async () => {
+    const { status, data } = await api(
+      "POST",
+      `/api/aws/apigatewayv2/apis/${apiId}/integrations`,
+      {
+        integrationType: "HTTP_PROXY",
+        integrationUri: "https://example.com",
+        integrationMethod: "ANY",
+        payloadFormatVersion: "1.0",
+      }
+    );
+    expect(status).toBe(201);
+    expect(data.integration).toBeTruthy();
+    integrationId = data.integration.IntegrationId;
+  });
+
+  it("lists integrations", async () => {
+    const { status, data } = await api(
+      "GET",
+      `/api/aws/apigatewayv2/apis/${apiId}/integrations`
+    );
+    expect(status).toBe(200);
+    expect(data.total).toBeGreaterThanOrEqual(1);
+  });
+
+  it("creates a deployment", async () => {
+    const { status, data } = await api(
+      "POST",
+      `/api/aws/apigatewayv2/apis/${apiId}/deployments`,
+      { description: "Integration test deployment" }
+    );
+    expect(status).toBe(201);
+    expect(data.deployment).toBeTruthy();
+    deploymentId = data.deployment.DeploymentId;
+  });
+
+  it("lists deployments", async () => {
+    const { status, data } = await api(
+      "GET",
+      `/api/aws/apigatewayv2/apis/${apiId}/deployments`
+    );
+    expect(status).toBe(200);
+    expect(data.total).toBeGreaterThanOrEqual(1);
+  });
+
+  it("creates a stage", async () => {
+    stageName = rand("stage");
+    const { status, data } = await api(
+      "POST",
+      `/api/aws/apigatewayv2/apis/${apiId}/stages`,
+      { stageName, autoDeploy: true, deploymentId }
+    );
+    expect(status).toBe(201);
+    expect(data.stage).toBeTruthy();
+    expect(data.stage.StageName).toBe(stageName);
+  });
+
+  it("lists stages", async () => {
+    const { status, data } = await api(
+      "GET",
+      `/api/aws/apigatewayv2/apis/${apiId}/stages`
+    );
+    expect(status).toBe(200);
+    const names = data.stages.map((s: any) => s.StageName);
+    expect(names).toContain(stageName);
+  });
+
+  it("deletes the stage", async () => {
+    const { status, data } = await api(
+      "DELETE",
+      `/api/aws/apigatewayv2/apis/${apiId}/stages/${stageName}`
+    );
+    expect(status).toBe(200);
+    expect(data.deleted).toBe(true);
+  });
+
+  it("deletes the deployment", async () => {
+    const { status, data } = await api(
+      "DELETE",
+      `/api/aws/apigatewayv2/apis/${apiId}/deployments/${deploymentId}`
+    );
+    expect(status).toBe(200);
+    expect(data.deleted).toBe(true);
+    deploymentId = "";
+  });
+
+  it("deletes the integration", async () => {
+    const { status, data } = await api(
+      "DELETE",
+      `/api/aws/apigatewayv2/apis/${apiId}/integrations/${integrationId}`
+    );
+    expect(status).toBe(200);
+    expect(data.deleted).toBe(true);
+    integrationId = "";
+  });
+
+  it("deletes the route", async () => {
+    const { status, data } = await api(
+      "DELETE",
+      `/api/aws/apigatewayv2/apis/${apiId}/routes/${routeId}`
+    );
+    expect(status).toBe(200);
+    expect(data.deleted).toBe(true);
+    routeId = "";
+  });
+
+  it("deletes the API", async () => {
+    const { status, data } = await api("DELETE", `/api/aws/apigatewayv2/apis/${apiId}`);
+    expect(status).toBe(200);
+    expect(data.deleted).toBe(true);
+    apiId = "";
+  });
+});
+
+// ═════════════════════════════════════════════════════════
+//  AppSync Integration Tests
+// ═════════════════════════════════════════════════════════
+
+describe("AppSync Integration", () => {
+  const apiName = rand("test-appsync");
+  let apiId = "";
+  let apiKeyId = "";
+
+  afterAll(async () => {
+    if (apiId) {
+      await api("DELETE", `/api/aws/appsync/apis/${apiId}`).catch(() => {});
+    }
+  });
+
+  it("creates a GraphQL API", async () => {
+    const { status, data } = await api("POST", "/api/aws/appsync/apis", {
+      name: apiName,
+      authenticationType: "API_KEY",
+    });
+    expect(status).toBe(201);
+    expect(data.api).toBeTruthy();
+    expect(data.api.name).toBe(apiName);
+    apiId = data.api.apiId;
+  });
+
+  it("lists GraphQL APIs and includes the new one", async () => {
+    const { status, data } = await api("GET", "/api/aws/appsync/apis");
+    expect(status).toBe(200);
+    expect(data.total).toBeGreaterThanOrEqual(1);
+    const names = data.apis.map((a: any) => a.name);
+    expect(names).toContain(apiName);
+  });
+
+  it("describes the GraphQL API", async () => {
+    const { status, data } = await api("GET", `/api/aws/appsync/apis/${apiId}`);
+    expect(status).toBe(200);
+    expect(data.api.name).toBe(apiName);
+  });
+
+  it("creates an API key", async () => {
+    const { status, data } = await api(
+      "POST",
+      `/api/aws/appsync/apis/${apiId}/api-keys`,
+      { description: "Integration test key" }
+    );
+    expect(status).toBe(201);
+    expect(data.id).toBeTruthy();
+    apiKeyId = data.id;
+  });
+
+  it("lists API keys", async () => {
+    const { status, data } = await api(
+      "GET",
+      `/api/aws/appsync/apis/${apiId}/api-keys`
+    );
+    expect(status).toBe(200);
+    expect(data.total).toBeGreaterThanOrEqual(1);
+  });
+
+  it("creates a data source", async () => {
+    const { status, data } = await api(
+      "POST",
+      `/api/aws/appsync/apis/${apiId}/data-sources`,
+      { name: "none-ds", type: "NONE", description: "Integration test data source" }
+    );
+    expect(status).toBe(201);
+    expect(data.dataSource).toBeTruthy();
+    expect(data.dataSource.name).toBe("none-ds");
+  });
+
+  it("lists data sources", async () => {
+    const { status, data } = await api(
+      "GET",
+      `/api/aws/appsync/apis/${apiId}/data-sources`
+    );
+    expect(status).toBe(200);
+    expect(data.total).toBeGreaterThanOrEqual(1);
+    const names = data.dataSources.map((ds: any) => ds.name);
+    expect(names).toContain("none-ds");
+  });
+
+  it("lists resolvers (empty)", async () => {
+    const { status, data } = await api(
+      "GET",
+      `/api/aws/appsync/apis/${apiId}/resolvers`
+    );
+    expect(status).toBe(200);
+    expect(data.resolvers).toBeDefined();
+  });
+
+  it("lists functions (empty)", async () => {
+    const { status, data } = await api(
+      "GET",
+      `/api/aws/appsync/apis/${apiId}/functions`
+    );
+    expect(status).toBe(200);
+    expect(data.functions).toBeDefined();
+  });
+
+  it("lists types (empty — no schema uploaded)", async () => {
+    const { status, data } = await api(
+      "GET",
+      `/api/aws/appsync/apis/${apiId}/types`
+    );
+    expect(status).toBe(200);
+    expect(data.types).toBeDefined();
+  });
+
+  it("deletes the API key", async () => {
+    const { status, data } = await api(
+      "DELETE",
+      `/api/aws/appsync/apis/${apiId}/api-keys/${apiKeyId}`
+    );
+    expect(status).toBe(200);
+    expect(data.deleted).toBe(true);
+    apiKeyId = "";
+  });
+
+  it("deletes the data source", async () => {
+    const { status, data } = await api(
+      "DELETE",
+      `/api/aws/appsync/apis/${apiId}/data-sources/none-ds`
+    );
+    expect(status).toBe(200);
+    expect(data.deleted).toBe(true);
+  });
+
+  it("deletes the GraphQL API", async () => {
+    const { status, data } = await api("DELETE", `/api/aws/appsync/apis/${apiId}`);
+    expect(status).toBe(200);
+    expect(data.deleted).toBe(true);
+    apiId = "";
+  });
+});
+
+// ═════════════════════════════════════════════════════════
+//  EventBridge Pipes Integration Tests
+// ═════════════════════════════════════════════════════════
+
+describe("EventBridge Pipes Integration", () => {
+  const pipeName = rand("test-pipe");
+  const queueName = rand("pipe-source");
+  const roleName = rand("pipe-role");
+  let queueUrl = "";
+  let queueArn = "";
+  let roleArn = "";
+
+  beforeAll(async () => {
+    // Create an SQS queue as source/target for the pipe
+    const queueRes = await api("POST", "/api/aws/sqs/queues", { queueName });
+    queueUrl = queueRes.data.queueUrl;
+
+    // Get the queue ARN
+    const attrRes = await api(
+      "GET",
+      `/api/aws/sqs/queues/attributes?queueUrl=${encodeURIComponent(queueUrl)}`
+    );
+    queueArn = attrRes.data.attributes.QueueArn;
+
+    // Create an IAM role for the pipe
+    const roleRes = await api("POST", "/api/aws/iam/roles", {
+      name: roleName,
+      description: "Pipe execution role for integration tests",
+      assumeRolePolicyDocument: JSON.stringify({
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            Principal: { Service: "pipes.amazonaws.com" },
+            Action: "sts:AssumeRole",
+          },
+        ],
+      }),
+    });
+    roleArn = `arn:aws:iam::000000000000:role/${roleName}`;
+  });
+
+  afterAll(async () => {
+    await api("DELETE", `/api/aws/pipes/pipes/${pipeName}`).catch(() => {});
+    if (queueUrl) {
+      await api("DELETE", `/api/aws/sqs/queues?queueUrl=${encodeURIComponent(queueUrl)}`).catch(() => {});
+    }
+    await api("DELETE", `/api/aws/iam/roles/${roleName}`).catch(() => {});
+  });
+
+  it("creates a pipe", async () => {
+    const { status, data } = await api("POST", "/api/aws/pipes/pipes", {
+      name: pipeName,
+      source: queueArn,
+      target: queueArn,
+      roleArn,
+      description: "Integration test pipe",
+    });
+    expect(status).toBe(201);
+    expect(data.pipe).toBeTruthy();
+  });
+
+  it("lists pipes and includes the new one", async () => {
+    const { status, data } = await api("GET", "/api/aws/pipes/pipes");
+    expect(status).toBe(200);
+    expect(data.total).toBeGreaterThanOrEqual(1);
+    const names = data.pipes.map((p: any) => p.Name);
+    expect(names).toContain(pipeName);
+  });
+
+  it("describes the pipe", async () => {
+    const { status, data } = await api("GET", `/api/aws/pipes/pipes/${pipeName}`);
+    expect(status).toBe(200);
+    expect(data.pipe.Name).toBe(pipeName);
+  });
+
+  it("stops the pipe", async () => {
+    const { status, data } = await api("POST", `/api/aws/pipes/pipes/${pipeName}/stop`);
+    expect(status).toBe(200);
+    expect(data.pipe).toBeTruthy();
+  });
+
+  it("starts the pipe", async () => {
+    const { status, data } = await api("POST", `/api/aws/pipes/pipes/${pipeName}/start`);
+    expect(status).toBe(200);
+    expect(data.pipe).toBeTruthy();
+  });
+
+  it("deletes the pipe", async () => {
+    const { status, data } = await api("DELETE", `/api/aws/pipes/pipes/${pipeName}`);
+    expect(status).toBe(200);
+    expect(data.deleted).toBe(true);
+  });
+});
+
+// ═════════════════════════════════════════════════════════
+//  EventBridge Scheduler Integration Tests
+// ═════════════════════════════════════════════════════════
+
+describe("EventBridge Scheduler Integration", () => {
+  const groupName = rand("test-schedule-group");
+  const scheduleName = rand("test-schedule");
+
+  afterAll(async () => {
+    await api("DELETE", `/api/aws/scheduler/schedules/${scheduleName}?group=default`).catch(() => {});
+    await api("DELETE", `/api/aws/scheduler/groups/${groupName}`).catch(() => {});
+  });
+
+  it("creates a schedule group", async () => {
+    const { status, data } = await api("POST", "/api/aws/scheduler/groups", {
+      name: groupName,
+    });
+    expect(status).toBe(201);
+    expect(data.groupArn).toBeTruthy();
+  });
+
+  it("lists schedule groups and includes the new one", async () => {
+    const { status, data } = await api("GET", "/api/aws/scheduler/groups");
+    expect(status).toBe(200);
+    expect(data.total).toBeGreaterThanOrEqual(1);
+    const names = data.groups.map((g: any) => g.Name || g.name);
+    expect(names).toContain(groupName);
+  });
+
+  it("creates a schedule in default group", async () => {
+    const { status, data } = await api("POST", "/api/aws/scheduler/schedules", {
+      name: scheduleName,
+      groupName: "default",
+      scheduleExpression: "rate(5 minutes)",
+      description: "Integration test schedule",
+      flexibleTimeWindow: { Mode: "OFF" },
+      target: {
+        Arn: "arn:aws:lambda:us-east-1:000000000000:function:test",
+        RoleArn: "arn:aws:iam::000000000000:role/scheduler-role",
+      },
+      state: "ENABLED",
+    });
+    expect(status).toBe(201);
+    expect(data.scheduleArn).toBeTruthy();
+  });
+
+  it("lists schedules and includes the new one", async () => {
+    const { status, data } = await api("GET", "/api/aws/scheduler/schedules");
+    expect(status).toBe(200);
+    const names = data.schedules.map((s: any) => s.Name);
+    expect(names).toContain(scheduleName);
+  });
+
+  it("describes the schedule", async () => {
+    const { status, data } = await api(
+      "GET",
+      `/api/aws/scheduler/schedules/${scheduleName}?group=default`
+    );
+    expect(status).toBe(200);
+    expect(data.schedule.Name).toBe(scheduleName);
+  });
+
+  it("deletes the schedule", async () => {
+    const { status, data } = await api(
+      "DELETE",
+      `/api/aws/scheduler/schedules/${scheduleName}?group=default`
+    );
+    expect(status).toBe(200);
+    expect(data.deleted).toBe(true);
+  });
+
+  it("deletes the schedule group", async () => {
+    const { status, data } = await api("DELETE", `/api/aws/scheduler/groups/${groupName}`);
     expect(status).toBe(200);
     expect(data.deleted).toBe(true);
   });
