@@ -1345,7 +1345,7 @@ Each remaining service gets a standard list + create + delete pattern.
 | 18.8 | Top nav: Add global search bar (Autosuggest with all services) | Done | 2026-06-19 |
 | 18.9 | Top nav: Add notification bell for errors (bell icon with badge, Modal listing non-running services) | Done | 2026-06-19 |
 | 18.10 | Settings: Add localStorage persistence for preferences | Done | 2026-06-19 |
-| 18.11 | Settings: Add Floci endpoint URL configuration | Pending | |
+| 18.11 | Settings: Add Floci endpoint URL configuration (mutable config store, GET/PUT routes, Settings UI) | Done | 2026-06-20 |
 | 18.12 | Responsive: Test and fix mobile layout | Pending | |
 | 18.13 | Accessibility: Keyboard navigation audit | Pending | |
 | 18.14 | Accessibility: ARIA labels audit | Pending | |

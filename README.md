@@ -46,6 +46,9 @@
 - **Deep resource management** — Browse, create, and delete resources for implemented services (S3, DynamoDB, EC2, RDS, SQS, SNS, EventBridge, CloudWatch Logs, CloudWatch Metrics, Lambda, IAM, Secrets Manager, CloudFormation, KMS, ECS, SSM, Route 53, API Gateway, AppSync, EventBridge Scheduler, ECR, ELB, SES, STS, EKS, Auto Scaling, CloudFront, Kinesis, Neptune, EventBridge Pipes, Cognito, API Gateway V2, ACM, CloudTrail, Config, AppConfig, Cloud Map, Athena, Glue, Firehose, Step Functions, OpenSearch, MSK, Bedrock Runtime, Textract, Transcribe, Cost Explorer, Pricing, Resource Groups Tagging, BCM Data Exports, Cost & Usage Report (cur), CodeBuild, CodeDeploy, Backup, Transfer Family, WAF v2, ElastiCache)
 - **EC2 web terminal** — Interactive bash shell inside running EC2 instances directly from the browser (xterm.js + Docker Engine API with PTY)
 - **Dark mode** — Toggle between light and dark themes
+- **Configurable Floci endpoint** — Change the Floci URL at runtime from Settings (no restart needed)
+- **Notification bell** — Visual badge in the top nav when services are unhealthy, with a modal listing non-running services
+- **Global search** — Search bar in the top nav to quickly find and navigate to any service
 - **Dashboard home** — Live stat cards (total/active/running services), resource count summaries per service, enhanced quick actions (9 services), recent activity feed (localStorage-backed), and the full service grid
 - **Zero host dependencies** — Everything runs in Docker, no Node.js or AWS CLI needed locally
 - **Single container** — One Docker image for the entire dashboard (React SPA + Node.js API)
@@ -463,7 +466,7 @@ You'll need Floci running separately (e.g., `docker run -p 4566:4566 ghcr.io/hec
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `FLOCI_URL` | `http://localhost:4566` | Floci endpoint URL (auto-set in Docker) |
+| `FLOCI_URL` | `http://localhost:4566` | Floci endpoint URL (auto-set in Docker; can also be changed at runtime via Settings) |
 | `AWS_REGION` | `us-east-1` | Default AWS region |
 | `PORT` | `3000` | Dashboard backend port (inside container) |
 | `NODE_ENV` | `production` | Node environment |

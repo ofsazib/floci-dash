@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import router from "./system";
+import { setFlociEndpoint, getDefaultFlociEndpoint } from "../clients/config";
 
 const mockFlociFetch = vi.hoisted(() => vi.fn());
 vi.mock("../clients/floci", () => ({ flociFetch: mockFlociFetch }));
@@ -114,6 +115,72 @@ describe("System Routes", () => {
       const res = await router.request("/resource-counts", { method: "GET" });
       const body = await res.json();
       Object.values(body).forEach((count) => expect(count).toBe(0));
+    });
+  });
+
+  describe("GET /floci-endpoint", () => {
+    it("returns current endpoint and default", async () => {
+      setFlociEndpoint("http://example.test:4566");
+      const res = await router.request("/floci-endpoint", { method: "GET" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.endpoint).toBe("http://example.test:4566");
+      expect(body.default).toBe(getDefaultFlociEndpoint());
+    });
+  });
+
+  describe("PUT /floci-endpoint", () => {
+    it("updates the endpoint successfully", async () => {
+      const res = await router.request("/floci-endpoint", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ endpoint: "http://my-floci:4566" }),
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.endpoint).toBe("http://my-floci:4566");
+    });
+
+    it("strips trailing slashes from endpoint", async () => {
+      const res = await router.request("/floci-endpoint", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ endpoint: "http://my-floci:4566///" }),
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.endpoint).toBe("http://my-floci:4566");
+    });
+
+    it("returns 400 when endpoint is missing", async () => {
+      const res = await router.request("/floci-endpoint", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("required");
+    });
+
+    it("returns 400 for invalid URL", async () => {
+      const res = await router.request("/floci-endpoint", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ endpoint: "not-a-url" }),
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("valid URL");
+    });
+
+    it("returns 400 when body is not valid JSON", async () => {
+      const res = await router.request("/floci-endpoint", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: "not-json",
+      });
+      expect(res.status).toBe(400);
     });
   });
 });

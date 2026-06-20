@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { flociFetch } from "../clients/floci";
 import { getAwsConfig } from "../clients/aws";
+import { getFlociEndpoint, setFlociEndpoint, getDefaultFlociEndpoint } from "../clients/config";
 import { S3Client, ListBucketsCommand } from "@aws-sdk/client-s3";
 import { DynamoDBClient, ListTablesCommand } from "@aws-sdk/client-dynamodb";
 import { EC2Client, DescribeInstancesCommand } from "@aws-sdk/client-ec2";
@@ -64,6 +65,24 @@ router.get("/resource-counts", async (c: Context) => {
   }
 
   return c.json(counts);
+});
+
+router.get("/floci-endpoint", (c: Context) => {
+  return c.json({ endpoint: getFlociEndpoint(), default: getDefaultFlociEndpoint() });
+});
+
+router.put("/floci-endpoint", async (c: Context) => {
+  const body = await c.req.json().catch(() => ({})) as { endpoint?: string };
+  if (!body.endpoint || typeof body.endpoint !== "string") {
+    return c.json({ error: "endpoint is required" }, 400);
+  }
+  try {
+    new URL(body.endpoint);
+  } catch {
+    return c.json({ error: "endpoint must be a valid URL" }, 400);
+  }
+  setFlociEndpoint(body.endpoint);
+  return c.json({ endpoint: getFlociEndpoint() });
 });
 
 export default router;

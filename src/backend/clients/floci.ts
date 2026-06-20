@@ -1,7 +1,7 @@
-const FLOCI_URL = process.env.FLOCI_URL || "http://localhost:4566";
+import { getFlociEndpoint } from "./config";
 
 export async function flociFetch(path: string, init?: RequestInit) {
-  const res = await fetch(`${FLOCI_URL}${path}`, {
+  const res = await fetch(`${getFlociEndpoint()}${path}`, {
     ...init,
     headers: { "Content-Type": "application/json", ...init?.headers },
   });

@@ -2,7 +2,13 @@ import { create } from "zustand";
 
 const STORAGE_KEY = "fd-settings";
 
-function loadSettings(): { darkMode: boolean; refreshInterval: number } {
+interface PersistedSettings {
+  darkMode: boolean;
+  refreshInterval: number;
+  flociEndpoint?: string;
+}
+
+function loadSettings(): PersistedSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) return JSON.parse(raw);
@@ -10,17 +16,16 @@ function loadSettings(): { darkMode: boolean; refreshInterval: number } {
   return { darkMode: true, refreshInterval: 5000 };
 }
 
-function saveSettings(settings: { darkMode: boolean; refreshInterval: number }) {
+function saveSettings(settings: PersistedSettings) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
   } catch {}
 }
 
-interface SettingsState {
-  darkMode: boolean;
-  refreshInterval: number;
+interface SettingsState extends PersistedSettings {
   toggleDarkMode: () => void;
   setRefreshInterval: (ms: number) => void;
+  setFlociEndpoint: (url: string) => void;
 }
 
 export const useSettings = create<SettingsState>((set) => {
@@ -28,16 +33,22 @@ export const useSettings = create<SettingsState>((set) => {
   return {
     darkMode: initial.darkMode,
     refreshInterval: initial.refreshInterval,
+    flociEndpoint: initial.flociEndpoint,
     toggleDarkMode: () =>
       set((s) => {
         const nextMode = !s.darkMode;
-        saveSettings({ darkMode: nextMode, refreshInterval: s.refreshInterval });
+        saveSettings({ darkMode: nextMode, refreshInterval: s.refreshInterval, flociEndpoint: s.flociEndpoint });
         return { darkMode: nextMode };
       }),
     setRefreshInterval: (ms) =>
       set((s) => {
-        saveSettings({ darkMode: s.darkMode, refreshInterval: ms });
+        saveSettings({ darkMode: s.darkMode, refreshInterval: ms, flociEndpoint: s.flociEndpoint });
         return { refreshInterval: ms };
+      }),
+    setFlociEndpoint: (url) =>
+      set((s) => {
+        saveSettings({ darkMode: s.darkMode, refreshInterval: s.refreshInterval, flociEndpoint: url });
+        return { flociEndpoint: url };
       }),
   };
 });

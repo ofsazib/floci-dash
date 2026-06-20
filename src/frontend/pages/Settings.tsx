@@ -1,13 +1,32 @@
-import { ContentLayout, Header, Container, Toggle, Select, SpaceBetween, Box } from "@cloudscape-design/components";
+import { useState } from "react";
+import { ContentLayout, Header, Container, Toggle, Select, SpaceBetween, Box, Input, Button, FormField, Alert } from "@cloudscape-design/components";
 import { useSettings } from "../stores/settings";
+import { api } from "../lib/client";
 
 export default function Settings() {
-  const { darkMode, refreshInterval, toggleDarkMode, setRefreshInterval } = useSettings();
+  const { darkMode, refreshInterval, toggleDarkMode, setRefreshInterval, flociEndpoint, setFlociEndpoint } = useSettings();
+  const [endpointInput, setEndpointInput] = useState(flociEndpoint || "http://localhost:4566");
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   const refreshLabel = refreshInterval === 5000 ? "5 seconds"
     : refreshInterval === 10000 ? "10 seconds"
     : refreshInterval === 30000 ? "30 seconds"
     : "Off";
+
+  async function handleSaveEndpoint() {
+    setSaving(true);
+    setStatus(null);
+    try {
+      await api("/system/floci-endpoint", { method: "PUT", body: JSON.stringify({ endpoint: endpointInput }) });
+      setFlociEndpoint(endpointInput);
+      setStatus({ type: "success", message: "Endpoint updated. The dashboard will now use the new Floci URL." });
+    } catch (err) {
+      setStatus({ type: "error", message: `Failed to update endpoint: ${(err as Error).message}` });
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <ContentLayout header={<Header variant="h1">Settings</Header>}>
@@ -34,6 +53,31 @@ export default function Settings() {
               setRefreshInterval(Number(detail.selectedOption.value))
             }
           />
+        </Container>
+
+        <Container header={<Header variant="h2">Floci Connection</Header>}>
+          <SpaceBetween size="m">
+            {status && (
+              <Alert type={status.type} dismissible onDismiss={() => setStatus(null)}>
+                {status.message}
+              </Alert>
+            )}
+            <FormField
+              label="Floci endpoint URL"
+              description="The URL where your Floci instance is running. Changing this will redirect all AWS SDK calls and HTTP proxy requests."
+            >
+              <Input
+                value={endpointInput}
+                onChange={({ detail }) => setEndpointInput(detail.value)}
+                placeholder="http://localhost:4566"
+              />
+            </FormField>
+            <Box float="right">
+              <Button variant="primary" loading={saving} onClick={handleSaveEndpoint}>
+                Save endpoint
+              </Button>
+            </Box>
+          </SpaceBetween>
         </Container>
 
         <Container header={<Header variant="h2">About</Header>}>
