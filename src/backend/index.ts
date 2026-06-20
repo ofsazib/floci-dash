@@ -12,7 +12,42 @@ import type { Server as HttpServer } from "node:http";
 
 const app = new Hono();
 
+const isProd = process.env.NODE_ENV === "production";
+
 app.use("*", cors({ origin: ["http://localhost:5173", "http://localhost:3000", "http://localhost:9876", "http://localhost:9877"] }));
+
+// Content Security Policy (production only)
+if (isProd) {
+  app.use("*", async (c: any, next: any) => {
+    await next();
+    c.res.headers.set(
+      "Content-Security-Policy",
+      [
+        "default-src 'self'",
+        // Vite production builds use hashed script filenames — no inline scripts.
+        "script-src 'self'",
+        // Cloudscape Design System uses inline styles extensively.
+        "style-src 'self' 'unsafe-inline'",
+        // Floci logo uses an inline SVG data URI; S3 object preview images.
+        "img-src 'self' data:",
+        // API calls + WebSocket (EC2 terminal) — same origin.
+        "connect-src 'self'",
+        // Cloudscape font assets.
+        "font-src 'self'",
+        // S3 PDF preview is displayed in an iframe.
+        "frame-src 'self'",
+        // Worker scripts (e.g. for background tasks).
+        "worker-src 'self' blob:",
+        // Block object/plugin-based attacks.
+        "object-src 'none'",
+        // Restrict form actions to same origin.
+        "form-action 'self'",
+        // Block inline event handlers and javascript: URLs.
+        "base-uri 'self'",
+      ].join("; ")
+    );
+  });
+}
 
 app.onError((err: Error, c: any) => {
   console.error("Unhandled error:", err);
@@ -26,7 +61,6 @@ app.route("/api/aws", awsRoutes);
 
 app.get("/api/healthz", (c: any) => c.json({ status: "ok" }));
 
-const isProd = process.env.NODE_ENV === "production";
 if (isProd) {
   app.use("/*", serveStatic({ root: "./dist/frontend" }));
   app.get("/*", async (c: any) => {

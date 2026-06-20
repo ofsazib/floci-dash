@@ -863,7 +863,7 @@ function S3ObjectViewer({ bucket, objectKey, onBack }: { bucket: string; objectK
                     placeholder="Value"
                   />
                 </div>
-                <Button variant="icon" iconName="remove" onClick={() => setTagPairs((prev) => prev.filter((_, idx) => idx !== i))} />
+                <Button variant="icon" iconName="remove" ariaLabel={`Remove tag ${tag.key || i + 1}`} onClick={() => setTagPairs((prev) => prev.filter((_, idx) => idx !== i))} />
               </div>
             ))}
             <div style={{ display: "flex", gap: 8 }}>
