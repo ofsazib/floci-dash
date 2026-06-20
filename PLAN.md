@@ -1359,7 +1359,7 @@ Each remaining service gets a standard list + create + delete pattern.
 | 19.1 | Error boundary: Add React error boundary component | Done | 2026-06-20 |
 | 19.2 | Error handling: Global API error interceptor with toast notifications | Done | 2026-06-20 |
 | 19.3 | Performance: Lazy-load service pages with React.lazy | Done | 2026-06-20 |
-| 19.4 | Performance: Add TanStack Query devtools (dev only) | Pending | |
+| 19.4 | Performance: Add TanStack Query devtools (dev only) | Done | 2026-06-20 |
 | 19.5 | Security: Add CSP headers in production | Done | 2026-06-20 |
 | 19.6 | Security: Sanitize all user inputs on backend | Pending | |
 | 19.7 | Docker: Optimize production image size | Pending | |
