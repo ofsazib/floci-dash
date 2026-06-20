@@ -492,9 +492,6 @@ describe("Lambda Integration", () => {
 
   afterAll(async () => {
     await api("DELETE", `/api/aws/lambda/functions/${funcName}`).catch(() => {});
-    if (queueUrl) {
-      await api("DELETE", `/api/aws/sqs/queues?queueUrl=${encodeURIComponent(queueUrl)}`).catch(() => {});
-    }
     await api("DELETE", `/api/aws/iam/roles/${roleName}`).catch(() => {});
   });
 
@@ -678,9 +675,6 @@ describe("IAM Integration", () => {
 
   afterAll(async () => {
     await api("DELETE", `/api/aws/iam/users/${userName}`).catch(() => {});
-    if (queueUrl) {
-      await api("DELETE", `/api/aws/sqs/queues?queueUrl=${encodeURIComponent(queueUrl)}`).catch(() => {});
-    }
     await api("DELETE", `/api/aws/iam/roles/${roleName}`).catch(() => {});
     if (policyArn) {
       await api("DELETE", `/api/aws/iam/policies?arn=${encodeURIComponent(policyArn)}`).catch(() => {});
@@ -2168,9 +2162,6 @@ describe("Step Functions Integration", () => {
     if (smArn) {
       await api("DELETE", `/api/aws/stepfunctions/state-machines/${encodeURIComponent(smArn)}`).catch(() => {});
     }
-    if (queueUrl) {
-      await api("DELETE", `/api/aws/sqs/queues?queueUrl=${encodeURIComponent(queueUrl)}`).catch(() => {});
-    }
     await api("DELETE", `/api/aws/iam/roles/${roleName}`).catch(() => {});
   });
 
@@ -2588,9 +2579,6 @@ describe("EKS Integration", () => {
 
   afterAll(async () => {
     await api("DELETE", `/api/aws/eks/clusters/${clusterName}`).catch(() => {});
-    if (queueUrl) {
-      await api("DELETE", `/api/aws/sqs/queues?queueUrl=${encodeURIComponent(queueUrl)}`).catch(() => {});
-    }
     await api("DELETE", `/api/aws/iam/roles/${roleName}`).catch(() => {});
   });
 
