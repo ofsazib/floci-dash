@@ -14,8 +14,12 @@ import {
   useECRCreateRepository,
   useECRDeleteRepository,
   useECRImages,
+  useECRDeleteImages,
   useECRRepositoryPolicy,
+  useECRSetRepositoryPolicy,
+  useECRDeleteRepositoryPolicy,
   useECRLifecyclePolicy,
+  useECRPutLifecyclePolicy,
 } from "./useECR";
 
 function createWrapper() {
@@ -92,6 +96,65 @@ describe("useECRImages", () => {
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith("/aws/ecr/repositories/my-repo/images");
+  });
+});
+
+// ─── DELETE IMAGES ─────────────────────────────────────────
+
+describe("useECRDeleteImages", () => {
+  it("calls api with DELETE method and imageIds in body", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useECRDeleteImages("my-repo"), { wrapper: createWrapper() });
+    await result.current.mutateAsync([{ imageDigest: "sha256:abc" }]);
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/ecr/repositories/my-repo/images",
+      expect.objectContaining({
+        method: "DELETE",
+        body: JSON.stringify({ imageIds: [{ imageDigest: "sha256:abc" }] }),
+      })
+    );
+  });
+});
+
+// ─── SET REPOSITORY POLICY ─────────────────────────────────
+
+describe("useECRSetRepositoryPolicy", () => {
+  it("calls api with PUT method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useECRSetRepositoryPolicy("my-repo"), { wrapper: createWrapper() });
+    await result.current.mutateAsync('{"Version":"2012-10-17"}');
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/ecr/repositories/my-repo/policy",
+      expect.objectContaining({ method: "PUT" })
+    );
+  });
+});
+
+// ─── DELETE REPOSITORY POLICY ──────────────────────────────
+
+describe("useECRDeleteRepositoryPolicy", () => {
+  it("calls api with DELETE method", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useECRDeleteRepositoryPolicy("my-repo"), { wrapper: createWrapper() });
+    await result.current.mutateAsync();
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/ecr/repositories/my-repo/policy",
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
+});
+
+// ─── PUT LIFECYCLE POLICY ──────────────────────────────────
+
+describe("useECRPutLifecyclePolicy", () => {
+  it("calls api with PUT method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useECRPutLifecyclePolicy("my-repo"), { wrapper: createWrapper() });
+    await result.current.mutateAsync('{"rules":[]}');
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/ecr/repositories/my-repo/lifecycle",
+      expect.objectContaining({ method: "PUT" })
+    );
   });
 });
 

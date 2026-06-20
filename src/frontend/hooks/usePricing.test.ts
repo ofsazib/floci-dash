@@ -38,6 +38,15 @@ describe("usePricingServices", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith("/aws/pricing/services?maxResults=10&serviceCode=AmazonEC2");
   });
+
+  it("calls api with formatVersion param", async () => {
+    mockApi.mockResolvedValueOnce({ services: [] });
+    const { result } = renderHook(() => usePricingServices({ formatVersion: "aws_v1" }), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/pricing/services?formatVersion=aws_v1");
+  });
 });
 
 describe("usePricingAttributeValues", () => {

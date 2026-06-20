@@ -29,6 +29,10 @@ import {
   useCreateAccessKey,
   useDeleteAccessKey,
   useInstanceProfiles,
+  useSetUserPermissionsBoundary,
+  useDeleteUserPermissionsBoundary,
+  useSetRolePermissionsBoundary,
+  useDeleteRolePermissionsBoundary,
 } from "./useIAM";
 
 function createWrapper() {
@@ -305,5 +309,55 @@ describe("useInstanceProfiles", () => {
     const { result } = renderHook(() => useInstanceProfiles(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith("/aws/iam/instance-profiles");
+  });
+});
+
+// ─── PERMISSION BOUNDARIES ────────────────────────────────
+
+describe("useSetUserPermissionsBoundary", () => {
+  it("calls api with PUT method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useSetUserPermissionsBoundary(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ userName: "alice", permissionsBoundary: "arn:aws:iam::123:policy/boundary" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/iam/users/alice/permissions-boundary",
+      expect.objectContaining({ method: "PUT" })
+    );
+  });
+});
+
+describe("useDeleteUserPermissionsBoundary", () => {
+  it("calls api with DELETE method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useDeleteUserPermissionsBoundary(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("alice");
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/iam/users/alice/permissions-boundary",
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
+});
+
+describe("useSetRolePermissionsBoundary", () => {
+  it("calls api with PUT method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useSetRolePermissionsBoundary(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ roleName: "my-role", permissionsBoundary: "arn:aws:iam::123:policy/boundary" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/iam/roles/my-role/permissions-boundary",
+      expect.objectContaining({ method: "PUT" })
+    );
+  });
+});
+
+describe("useDeleteRolePermissionsBoundary", () => {
+  it("calls api with DELETE method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useDeleteRolePermissionsBoundary(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("my-role");
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/iam/roles/my-role/permissions-boundary",
+      expect.objectContaining({ method: "DELETE" })
+    );
   });
 });

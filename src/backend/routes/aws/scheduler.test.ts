@@ -143,7 +143,7 @@ describe("POST /api/aws/scheduler/schedules", () => {
       body: JSON.stringify({
         name: "new-schedule",
         scheduleExpression: "rate(5 minutes)",
-        target: { arn: "arn:aws:lambda:us-east-1:123:function:fn" },
+        target: { Arn: "arn:aws:lambda:us-east-1:123:function:fn" },
       }),
     });
     expect(res.status).toBe(201);
@@ -169,7 +169,7 @@ describe("POST /api/aws/scheduler/schedules", () => {
     expect(res.status).toBe(400);
   });
 
-  it("returns 400 if target.arn is missing", async () => {
+  it("returns 400 if target.Arn is missing", async () => {
     const res = await app.request("/api/aws/scheduler/schedules", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
