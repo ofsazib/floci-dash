@@ -426,6 +426,42 @@ import {
   useElastiCacheCreateUser,
   useElastiCacheDeleteUser,
 } from "../hooks/useElastiCache";
+import {
+  useBatchComputeEnvironments,
+  useCreateBatchComputeEnvironment,
+  useDeleteBatchComputeEnvironment,
+  useBatchJobQueues,
+  useCreateBatchJobQueue,
+  useDeleteBatchJobQueue,
+  useBatchJobDefinitions,
+  useRegisterBatchJobDefinition,
+  useDeregisterBatchJobDefinition,
+  useBatchJobs,
+  useSubmitBatchJob,
+  useTerminateBatchJob,
+} from "../hooks/useBatch";
+import {
+  useDocDBClusters,
+  useCreateDocDBCluster,
+  useDeleteDocDBCluster,
+  useDocDBInstances,
+  useCreateDocDBInstance,
+  useDeleteDocDBInstance,
+} from "../hooks/useDocDB";
+import {
+  useEMRClusters,
+  useRunEMRJobFlow,
+  useTerminateEMRJobFlows,
+  useEMRSecurityConfigurations,
+  useCreateEMRSecurityConfiguration,
+  useDeleteEMRSecurityConfiguration,
+} from "../hooks/useEMR";
+import {
+  useExecuteRDSDataStatement,
+  useBeginRDSDataTransaction,
+  useCommitRDSDataTransaction,
+  useRollbackRDSDataTransaction,
+} from "../hooks/useRDSData";
 
 const KEY_TYPE_OPTIONS: SelectProps.Option[] = [
   { label: "String (S)", value: "S" },
@@ -567,6 +603,10 @@ function ServiceResourceList({ service }: { service: string }) {
   if (service === "bcmdataexports") return <BCMDashboard />;
   if (service === "wafv2") return <WafV2Dashboard />;
   if (service === "elasticache") return <ElastiCacheDashboard />;
+  if (service === "batch") return <BatchDashboard />;
+  if (service === "docdb") return <DocDBDashboard />;
+  if (service === "emr") return <EMRDashboard />;
+  if (service === "rdsdata") return <RDSDataDashboard />;
   return null;
 }
 
@@ -10529,5 +10569,496 @@ function ElastiCacheUserSection() {
         </Form>
       </Modal>
     </>
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  AWS Batch
+// ────────────────────────────────────────────────────────
+
+function BatchDashboard() {
+  const { data: ceData, isLoading: ceLoading } = useBatchComputeEnvironments();
+  const { data: jqData, isLoading: jqLoading } = useBatchJobQueues();
+  const { data: jdData, isLoading: jdLoading } = useBatchJobDefinitions();
+  const { data: jobsData } = useBatchJobs();
+  const createCE = useCreateBatchComputeEnvironment();
+  const deleteCE = useDeleteBatchComputeEnvironment();
+  const createJQ = useCreateBatchJobQueue();
+  const deleteJQ = useDeleteBatchJobQueue();
+  const registerJD = useRegisterBatchJobDefinition();
+  const deregisterJD = useDeregisterBatchJobDefinition();
+  const submitJob = useSubmitBatchJob();
+  const [showCreateCE, setShowCreateCE] = useState(false);
+  const [ceName, setCeName] = useState("");
+  const [ceType, setCeType] = useState("MANAGED");
+  const [showCreateJQ, setShowCreateJQ] = useState(false);
+  const [jqName, setJqName] = useState("");
+  const [jqPriority, setJqPriority] = useState("");
+  const [showCreateJD, setShowCreateJD] = useState(false);
+  const [jdName, setJdName] = useState("");
+  const [showSubmitJob, setShowSubmitJob] = useState(false);
+  const [jobName, setJobName] = useState("");
+  const [jobQueue, setJobQueue] = useState("");
+  const [jobDefinition, setJobDefinition] = useState("");
+
+  if (ceLoading || jqLoading || jdLoading) return <TableSkeleton />;
+
+  return (
+    <SpaceBetween size="l">
+      <ResourceTable
+        resourceName="Compute Environment"
+        headerTitle="Compute Environments"
+        headerCounter={(ceData?.computeEnvironments || []).length}
+        items={(ceData?.computeEnvironments || []).map((ce: any) => ({
+          name: ce.computeEnvironmentName,
+          type: ce.type || "-",
+          state: ce.state || "-",
+          status: ce.status || "-",
+        }))}
+        columns={[
+          { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+          { id: "type", header: "Type", cell: (i: any) => i.type },
+          { id: "state", header: "State", cell: (i: any) => i.state },
+          { id: "status", header: "Status", cell: (i: any) => i.status },
+          { id: "actions", header: "", cell: (i: any) => (
+            <DeleteButton itemName={i.name} resourceType="compute environment" loading={deleteCE.isPending && deleteCE.variables === i.name} onDelete={() => deleteCE.mutateAsync(i.name)} />
+          )},
+        ]}
+        filterEnabled
+        filterPlaceholder="Find by name"
+        filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+        onCreate={() => setShowCreateCE(true)}
+      />
+
+      <ResourceTable
+        resourceName="Job Queue"
+        headerTitle="Job Queues"
+        headerCounter={(jqData?.jobQueues || []).length}
+        items={(jqData?.jobQueues || []).map((jq: any) => ({
+          name: jq.jobQueueName,
+          priority: jq.priority,
+          state: jq.state || "-",
+          status: jq.status || "-",
+        }))}
+        columns={[
+          { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+          { id: "priority", header: "Priority", cell: (i: any) => i.priority },
+          { id: "state", header: "State", cell: (i: any) => i.state },
+          { id: "status", header: "Status", cell: (i: any) => i.status },
+          { id: "actions", header: "", cell: (i: any) => (
+            <DeleteButton itemName={i.name} resourceType="job queue" loading={deleteJQ.isPending && deleteJQ.variables === i.name} onDelete={() => deleteJQ.mutateAsync(i.name)} />
+          )},
+        ]}
+        filterEnabled
+        filterPlaceholder="Find by name"
+        filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+        onCreate={() => setShowCreateJQ(true)}
+      />
+
+      <ResourceTable
+        resourceName="Job Definition"
+        headerTitle="Job Definitions"
+        headerCounter={(jdData?.jobDefinitions || []).length}
+        items={(jdData?.jobDefinitions || []).map((jd: any) => ({
+          name: jd.jobDefinitionName,
+          revision: jd.revision,
+          type: jd.type || "-",
+          status: jd.status || "-",
+        }))}
+        columns={[
+          { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+          { id: "revision", header: "Revision", cell: (i: any) => i.revision },
+          { id: "type", header: "Type", cell: (i: any) => i.type },
+          { id: "status", header: "Status", cell: (i: any) => i.status },
+          { id: "actions", header: "", cell: (i: any) => (
+            <DeleteButton itemName={i.name} resourceType="job definition" loading={deregisterJD.isPending && deregisterJD.variables === i.name} onDelete={() => deregisterJD.mutateAsync(i.name)} />
+          )},
+        ]}
+        filterEnabled
+        filterPlaceholder="Find by name"
+        filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+        onCreate={() => setShowCreateJD(true)}
+      />
+
+      <ResourceTable
+        resourceName="Job"
+        headerTitle="Jobs"
+        headerCounter={(jobsData?.jobs || []).length}
+        items={(jobsData?.jobs || []).map((j: any) => ({
+          id: j.jobId,
+          name: j.jobName,
+          status: j.status || "-",
+          created: j.createdAt ? new Date(j.createdAt).toLocaleString() : "-",
+        }))}
+        columns={[
+          { id: "id", header: "Job ID", cell: (i: any) => i.id, isRowHeader: true },
+          { id: "name", header: "Name", cell: (i: any) => i.name },
+          { id: "status", header: "Status", cell: (i: any) => i.status },
+          { id: "created", header: "Created", cell: (i: any) => i.created },
+        ]}
+        filterEnabled
+        filterPlaceholder="Find by name"
+        filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+        onCreate={() => setShowSubmitJob(true)}
+      />
+
+      <Modal visible={showCreateCE} onDismiss={() => setShowCreateCE(false)} header="Create Compute Environment"
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setShowCreateCE(false)}>Cancel</Button>
+          <Button variant="primary" loading={createCE.isPending} disabled={!ceName.trim()} onClick={() => {
+            createCE.mutate({ computeEnvironmentName: ceName.trim(), type: ceType }, { onSuccess: () => { setShowCreateCE(false); setCeName(""); } });
+          }}>Create</Button>
+        </SpaceBetween></Box>}
+      >
+        <Form>
+          {createCE.isError && <Alert type="error" dismissible>{(createCE.error as Error)?.message || "Failed"}</Alert>}
+          <SpaceBetween size="m">
+            <FormField label="Name"><Input value={ceName} onChange={({ detail }) => setCeName(detail.value)} /></FormField>
+            <FormField label="Type">
+              <Select selectedOption={{ label: ceType, value: ceType }} onChange={({ detail }) => setCeType(detail.selectedOption.value || "MANAGED")} options={[{ label: "MANAGED", value: "MANAGED" }, { label: "UNMANAGED", value: "UNMANAGED" }]} />
+            </FormField>
+          </SpaceBetween>
+        </Form>
+      </Modal>
+
+      <Modal visible={showCreateJQ} onDismiss={() => setShowCreateJQ(false)} header="Create Job Queue"
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setShowCreateJQ(false)}>Cancel</Button>
+          <Button variant="primary" loading={createJQ.isPending} disabled={!jqName.trim() || !jqPriority.trim()} onClick={() => {
+            createJQ.mutate({ jobQueueName: jqName.trim(), priority: parseInt(jqPriority) }, { onSuccess: () => { setShowCreateJQ(false); setJqName(""); setJqPriority(""); } });
+          }}>Create</Button>
+        </SpaceBetween></Box>}
+      >
+        <Form>
+          {createJQ.isError && <Alert type="error" dismissible>{(createJQ.error as Error)?.message || "Failed"}</Alert>}
+          <SpaceBetween size="m">
+            <FormField label="Queue name"><Input value={jqName} onChange={({ detail }) => setJqName(detail.value)} /></FormField>
+            <FormField label="Priority"><Input type="number" value={jqPriority} onChange={({ detail }) => setJqPriority(detail.value)} /></FormField>
+          </SpaceBetween>
+        </Form>
+      </Modal>
+
+      <Modal visible={showCreateJD} onDismiss={() => setShowCreateJD(false)} header="Register Job Definition"
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setShowCreateJD(false)}>Cancel</Button>
+          <Button variant="primary" loading={registerJD.isPending} disabled={!jdName.trim()} onClick={() => {
+            registerJD.mutate({ jobDefinitionName: jdName.trim(), type: "container", containerProperties: { image: "busybox:latest", command: ["echo", "hello"] } }, { onSuccess: () => { setShowCreateJD(false); setJdName(""); } });
+          }}>Create</Button>
+        </SpaceBetween></Box>}
+      >
+        <Form>
+          {registerJD.isError && <Alert type="error" dismissible>{(registerJD.error as Error)?.message || "Failed"}</Alert>}
+          <FormField label="Definition name"><Input value={jdName} onChange={({ detail }) => setJdName(detail.value)} /></FormField>
+        </Form>
+      </Modal>
+
+      <Modal visible={showSubmitJob} onDismiss={() => setShowSubmitJob(false)} header="Submit Job"
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setShowSubmitJob(false)}>Cancel</Button>
+          <Button variant="primary" loading={submitJob.isPending} disabled={!jobName.trim() || !jobQueue.trim() || !jobDefinition.trim()} onClick={() => {
+            submitJob.mutate({ jobName: jobName.trim(), jobQueue: jobQueue.trim(), jobDefinition: jobDefinition.trim() }, { onSuccess: () => { setShowSubmitJob(false); setJobName(""); setJobQueue(""); setJobDefinition(""); } });
+          }}>Submit</Button>
+        </SpaceBetween></Box>}
+      >
+        <Form>
+          {submitJob.isError && <Alert type="error" dismissible>{(submitJob.error as Error)?.message || "Failed"}</Alert>}
+          <SpaceBetween size="m">
+            <FormField label="Job name"><Input value={jobName} onChange={({ detail }) => setJobName(detail.value)} /></FormField>
+            <FormField label="Job queue ARN"><Input value={jobQueue} onChange={({ detail }) => setJobQueue(detail.value)} /></FormField>
+            <FormField label="Job definition ARN"><Input value={jobDefinition} onChange={({ detail }) => setJobDefinition(detail.value)} /></FormField>
+          </SpaceBetween>
+        </Form>
+      </Modal>
+    </SpaceBetween>
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  DocumentDB
+// ────────────────────────────────────────────────────────
+
+function DocDBDashboard() {
+  const { data: clustersData, isLoading: clustersLoading } = useDocDBClusters();
+  const { data: instancesData } = useDocDBInstances();
+  const createCluster = useCreateDocDBCluster();
+  const deleteCluster = useDeleteDocDBCluster();
+  const createInstance = useCreateDocDBInstance();
+  const deleteInstance = useDeleteDocDBInstance();
+  const [showCreateCluster, setShowCreateCluster] = useState(false);
+  const [cId, setCId] = useState("");
+  const [cMasterUsername, setCMasterUsername] = useState("");
+  const [cMasterPassword, setCMasterPassword] = useState("");
+  const [showCreateInstance, setShowCreateInstance] = useState(false);
+  const [iId, setIId] = useState("");
+  const [iCluster, setICluster] = useState("");
+  const [iClass, setIClass] = useState("");
+
+  if (clustersLoading) return <TableSkeleton />;
+
+  return (
+    <SpaceBetween size="l">
+      <ResourceTable
+        resourceName="Cluster"
+        headerTitle="DB Clusters"
+        headerCounter={(clustersData?.clusters || []).length}
+        items={(clustersData?.clusters || []).map((c: any) => ({
+          id: c.DBClusterIdentifier,
+          engine: c.Engine || "-",
+          version: c.EngineVersion || "-",
+          status: c.Status || "-",
+          endpoint: c.Endpoint || "-",
+        }))}
+        columns={[
+          { id: "id", header: "Identifier", cell: (i: any) => i.id, isRowHeader: true },
+          { id: "engine", header: "Engine", cell: (i: any) => i.engine },
+          { id: "version", header: "Version", cell: (i: any) => i.version },
+          { id: "status", header: "Status", cell: (i: any) => i.status },
+          { id: "endpoint", header: "Endpoint", cell: (i: any) => i.endpoint },
+          { id: "actions", header: "", cell: (i: any) => (
+            <DeleteButton itemName={i.id} resourceType="cluster" loading={deleteCluster.isPending && deleteCluster.variables === i.id} onDelete={() => deleteCluster.mutateAsync(i.id)} />
+          )},
+        ]}
+        filterEnabled
+        filterPlaceholder="Find by identifier"
+        filterFunction={(i: any, s: string) => i.id.toLowerCase().includes(s.toLowerCase())}
+        onCreate={() => setShowCreateCluster(true)}
+      />
+
+      <ResourceTable
+        resourceName="Instance"
+        headerTitle="DB Instances"
+        headerCounter={(instancesData?.instances || []).length}
+        items={(instancesData?.instances || []).map((inst: any) => ({
+          id: inst.DBInstanceIdentifier,
+          cluster: inst.DBClusterIdentifier || "-",
+          instanceClass: inst.DBInstanceClass || "-",
+          status: inst.DBInstanceStatus || "-",
+        }))}
+        columns={[
+          { id: "id", header: "Identifier", cell: (i: any) => i.id, isRowHeader: true },
+          { id: "cluster", header: "Cluster", cell: (i: any) => i.cluster },
+          { id: "instanceClass", header: "Class", cell: (i: any) => i.instanceClass },
+          { id: "status", header: "Status", cell: (i: any) => i.status },
+          { id: "actions", header: "", cell: (i: any) => (
+            <DeleteButton itemName={i.id} resourceType="instance" loading={deleteInstance.isPending && deleteInstance.variables === i.id} onDelete={() => deleteInstance.mutateAsync(i.id)} />
+          )},
+        ]}
+        filterEnabled
+        filterPlaceholder="Find by identifier"
+        filterFunction={(i: any, s: string) => i.id.toLowerCase().includes(s.toLowerCase())}
+        onCreate={() => setShowCreateInstance(true)}
+      />
+
+      <Modal visible={showCreateCluster} onDismiss={() => setShowCreateCluster(false)} header="Create DB Cluster"
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setShowCreateCluster(false)}>Cancel</Button>
+          <Button variant="primary" loading={createCluster.isPending} disabled={!cId.trim()} onClick={() => {
+            createCluster.mutate({ DBClusterIdentifier: cId.trim(), MasterUsername: cMasterUsername.trim() || undefined, MasterUserPassword: cMasterPassword.trim() || undefined }, { onSuccess: () => { setShowCreateCluster(false); setCId(""); setCMasterUsername(""); setCMasterPassword(""); } });
+          }}>Create</Button>
+        </SpaceBetween></Box>}
+      >
+        <Form>
+          {createCluster.isError && <Alert type="error" dismissible>{(createCluster.error as Error)?.message || "Failed"}</Alert>}
+          <SpaceBetween size="m">
+            <FormField label="Cluster identifier"><Input value={cId} onChange={({ detail }) => setCId(detail.value)} /></FormField>
+            <FormField label="Master username"><Input value={cMasterUsername} onChange={({ detail }) => setCMasterUsername(detail.value)} /></FormField>
+            <FormField label="Master password"><Input type="password" value={cMasterPassword} onChange={({ detail }) => setCMasterPassword(detail.value)} /></FormField>
+          </SpaceBetween>
+        </Form>
+      </Modal>
+
+      <Modal visible={showCreateInstance} onDismiss={() => setShowCreateInstance(false)} header="Create DB Instance"
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setShowCreateInstance(false)}>Cancel</Button>
+          <Button variant="primary" loading={createInstance.isPending} disabled={!iId.trim() || !iCluster.trim()} onClick={() => {
+            createInstance.mutate({ DBInstanceIdentifier: iId.trim(), DBClusterIdentifier: iCluster.trim(), DBInstanceClass: iClass.trim() || undefined }, { onSuccess: () => { setShowCreateInstance(false); setIId(""); setICluster(""); setIClass(""); } });
+          }}>Create</Button>
+        </SpaceBetween></Box>}
+      >
+        <Form>
+          {createInstance.isError && <Alert type="error" dismissible>{(createInstance.error as Error)?.message || "Failed"}</Alert>}
+          <SpaceBetween size="m">
+            <FormField label="Instance identifier"><Input value={iId} onChange={({ detail }) => setIId(detail.value)} /></FormField>
+            <FormField label="Cluster identifier"><Input value={iCluster} onChange={({ detail }) => setICluster(detail.value)} /></FormField>
+            <FormField label="Instance class"><Input value={iClass} onChange={({ detail }) => setIClass(detail.value)} placeholder="db.r5.large" /></FormField>
+          </SpaceBetween>
+        </Form>
+      </Modal>
+    </SpaceBetween>
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  Amazon EMR
+// ────────────────────────────────────────────────────────
+
+function EMRDashboard() {
+  const { data: clustersData, isLoading: clustersLoading } = useEMRClusters();
+  const { data: secConfigsData } = useEMRSecurityConfigurations();
+  const runJobFlow = useRunEMRJobFlow();
+  const terminate = useTerminateEMRJobFlows();
+  const createSecConfig = useCreateEMRSecurityConfiguration();
+  const deleteSecConfig = useDeleteEMRSecurityConfiguration();
+  const [showCreateCluster, setShowCreateCluster] = useState(false);
+  const [clusterName, setClusterName] = useState("");
+  const [releaseLabel, setReleaseLabel] = useState("");
+  const [showCreateSecConfig, setShowCreateSecConfig] = useState(false);
+  const [secName, setSecName] = useState("");
+  const [secConfigJson, setSecConfigJson] = useState("");
+
+  if (clustersLoading) return <TableSkeleton />;
+
+  return (
+    <SpaceBetween size="l">
+      <ResourceTable
+        resourceName="Cluster"
+        headerTitle="Clusters"
+        headerCounter={(clustersData?.clusters || []).length}
+        items={(clustersData?.clusters || []).map((c: any) => ({
+          id: c.Id,
+          name: c.Name,
+          status: c.Status?.State || "-",
+          created: c.Status?.Timeline?.CreationDateTime ? new Date(c.Status.Timeline.CreationDateTime * 1000).toLocaleDateString() : "-",
+        }))}
+        columns={[
+          { id: "id", header: "ID", cell: (i: any) => i.id, isRowHeader: true },
+          { id: "name", header: "Name", cell: (i: any) => i.name },
+          { id: "status", header: "Status", cell: (i: any) => i.status },
+          { id: "created", header: "Created", cell: (i: any) => i.created },
+          { id: "actions", header: "", cell: (i: any) => (
+            <DeleteButton itemName={i.name} resourceType="cluster" loading={terminate.isPending && terminate.variables === i.id} onDelete={() => terminate.mutateAsync(i.id)} />
+          )},
+        ]}
+        filterEnabled
+        filterPlaceholder="Find by name"
+        filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+        onCreate={() => setShowCreateCluster(true)}
+      />
+
+      <ResourceTable
+        resourceName="Security Configuration"
+        headerTitle="Security Configurations"
+        headerCounter={(secConfigsData?.securityConfigurations || []).length}
+        items={(secConfigsData?.securityConfigurations || []).map((s: any) => ({
+          name: s.Name,
+          created: s.CreationDateTime ? new Date(s.CreationDateTime * 1000).toLocaleDateString() : "-",
+        }))}
+        columns={[
+          { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+          { id: "created", header: "Created", cell: (i: any) => i.created },
+          { id: "actions", header: "", cell: (i: any) => (
+            <DeleteButton itemName={i.name} resourceType="security configuration" loading={deleteSecConfig.isPending && deleteSecConfig.variables === i.name} onDelete={() => deleteSecConfig.mutateAsync(i.name)} />
+          )},
+        ]}
+        filterEnabled
+        filterPlaceholder="Find by name"
+        filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+        onCreate={() => setShowCreateSecConfig(true)}
+      />
+
+      <Modal visible={showCreateCluster} onDismiss={() => setShowCreateCluster(false)} header="Run Job Flow"
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setShowCreateCluster(false)}>Cancel</Button>
+          <Button variant="primary" loading={runJobFlow.isPending} disabled={!clusterName.trim()} onClick={() => {
+            runJobFlow.mutate({ Name: clusterName.trim(), ReleaseLabel: releaseLabel.trim() || undefined, Instances: { KeepJobFlowAliveWhenNoSteps: true } }, { onSuccess: () => { setShowCreateCluster(false); setClusterName(""); setReleaseLabel(""); } });
+          }}>Create</Button>
+        </SpaceBetween></Box>}
+      >
+        <Form>
+          {runJobFlow.isError && <Alert type="error" dismissible>{(runJobFlow.error as Error)?.message || "Failed"}</Alert>}
+          <SpaceBetween size="m">
+            <FormField label="Cluster name"><Input value={clusterName} onChange={({ detail }) => setClusterName(detail.value)} /></FormField>
+            <FormField label="Release label"><Input value={releaseLabel} onChange={({ detail }) => setReleaseLabel(detail.value)} placeholder="emr-7.1.0" /></FormField>
+          </SpaceBetween>
+        </Form>
+      </Modal>
+
+      <Modal visible={showCreateSecConfig} onDismiss={() => setShowCreateSecConfig(false)} header="Create Security Configuration"
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setShowCreateSecConfig(false)}>Cancel</Button>
+          <Button variant="primary" loading={createSecConfig.isPending} disabled={!secName.trim() || !secConfigJson.trim()} onClick={() => {
+            try { JSON.parse(secConfigJson); } catch { return; }
+            createSecConfig.mutate({ Name: secName.trim(), SecurityConfiguration: secConfigJson.trim() }, { onSuccess: () => { setShowCreateSecConfig(false); setSecName(""); setSecConfigJson(""); } });
+          }}>Create</Button>
+        </SpaceBetween></Box>}
+      >
+        <Form>
+          {createSecConfig.isError && <Alert type="error" dismissible>{(createSecConfig.error as Error)?.message || "Failed"}</Alert>}
+          <SpaceBetween size="m">
+            <FormField label="Name"><Input value={secName} onChange={({ detail }) => setSecName(detail.value)} /></FormField>
+            <FormField label="Security Configuration (JSON)">
+              <Textarea value={secConfigJson} onChange={({ detail }) => setSecConfigJson(detail.value)} placeholder='{"EncryptionConfiguration":{"EnableAtRest":true}}' />
+            </FormField>
+          </SpaceBetween>
+        </Form>
+      </Modal>
+    </SpaceBetween>
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  RDS Data API
+// ────────────────────────────────────────────────────────
+
+function RDSDataDashboard() {
+  const execute = useExecuteRDSDataStatement();
+  const beginTx = useBeginRDSDataTransaction();
+  const commitTx = useCommitRDSDataTransaction();
+  const rollbackTx = useRollbackRDSDataTransaction();
+  const [sql, setSql] = useState("");
+  const [resourceArn, setResourceArn] = useState("");
+  const [secretArn, setSecretArn] = useState("");
+  const [transactionId, setTransactionId] = useState("");
+  const [result, setResult] = useState<any>(null);
+  const [database, setDatabase] = useState("");
+
+  return (
+    <SpaceBetween size="l">
+      <Container header={<Header variant="h3">SQL Editor</Header>}>
+        <Form>
+          <SpaceBetween size="m">
+            <FormField label="Resource ARN">
+              <Input value={resourceArn} onChange={({ detail }) => setResourceArn(detail.value)} placeholder="arn:aws:rds:us-east-1:000000000000:cluster:my-cluster" />
+            </FormField>
+            <FormField label="Secret ARN">
+              <Input value={secretArn} onChange={({ detail }) => setSecretArn(detail.value)} placeholder="arn:aws:secretsmanager:us-east-1:000000000000:secret:my-secret" />
+            </FormField>
+            <FormField label="Database">
+              <Input value={database} onChange={({ detail }) => setDatabase(detail.value)} placeholder="mydb" />
+            </FormField>
+            <FormField label="SQL Statement">
+              <Textarea value={sql} onChange={({ detail }) => setSql(detail.value)} placeholder="SELECT * FROM information_schema.tables" />
+            </FormField>
+            {transactionId && (
+              <FormField label="Transaction ID">
+                <Input value={transactionId} onChange={({ detail }) => setTransactionId(detail.value)} />
+              </FormField>
+            )}
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button loading={execute.isPending} disabled={!sql.trim() || !resourceArn.trim() || !secretArn.trim()} onClick={() => {
+                execute.mutate({ sql: sql.trim(), resourceArn: resourceArn.trim(), secretArn: secretArn.trim(), database: database.trim() || undefined, transactionId: transactionId.trim() || undefined, includeResultMetadata: true }, { onSuccess: (data) => setResult(data) });
+              }}>Execute</Button>
+              <Button loading={beginTx.isPending} disabled={!resourceArn.trim() || !secretArn.trim()} onClick={() => {
+                beginTx.mutate({ resourceArn: resourceArn.trim(), secretArn: secretArn.trim(), database: database.trim() || undefined }, { onSuccess: (data: any) => setTransactionId(data.transactionId || "") });
+              }}>Begin Transaction</Button>
+              <Button loading={commitTx.isPending} disabled={!transactionId.trim()} onClick={() => {
+                commitTx.mutate({ transactionId: transactionId.trim(), resourceArn: resourceArn.trim(), secretArn: secretArn.trim() }, { onSuccess: () => { setTransactionId(""); setResult({ status: "Committed" }); } });
+              }}>Commit</Button>
+              <Button loading={rollbackTx.isPending} disabled={!transactionId.trim()} onClick={() => {
+                rollbackTx.mutate({ transactionId: transactionId.trim(), resourceArn: resourceArn.trim(), secretArn: secretArn.trim() }, { onSuccess: () => { setTransactionId(""); setResult({ status: "Rolled back" }); } });
+              }}>Rollback</Button>
+            </SpaceBetween>
+            {execute.isError && <Alert type="error" dismissible>{(execute.error as Error)?.message}</Alert>}
+            {beginTx.isError && <Alert type="error" dismissible>{(beginTx.error as Error)?.message}</Alert>}
+          </SpaceBetween>
+        </Form>
+      </Container>
+
+      {result && (
+        <Container header={<Header variant="h3">Result</Header>}>
+          <Textarea readOnly value={JSON.stringify(result, null, 2)} />
+        </Container>
+      )}
+    </SpaceBetween>
   );
 }

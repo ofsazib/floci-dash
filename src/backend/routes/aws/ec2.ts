@@ -74,6 +74,7 @@ import {
   DescribeNetworkInterfacesCommand,
 } from "@aws-sdk/client-ec2";
 import { getAwsConfig } from "../../clients/aws";
+import { sanitizeName, sanitizeText } from "../../clients/sanitize";
 
 const router = new Hono();
 
@@ -125,14 +126,14 @@ router.post("/instances", async (c: Context) => {
   const body = await c.req.json<any>();
   const result = await ec2().send(
     new RunInstancesCommand({
-      ImageId: body.imageId || "ami-0abcdef1234567891",
+      ImageId: sanitizeName(body.imageId || "ami-0abcdef1234567891", 256),
       InstanceType: body.instanceType || "t3.micro",
-      KeyName: body.keyName,
+      KeyName: sanitizeName(body.keyName || "", 255),
       SecurityGroupIds: body.securityGroupIds,
-      SubnetId: body.subnetId,
+      SubnetId: sanitizeName(body.subnetId || "", 255),
       MinCount: body.minCount || 1,
       MaxCount: body.maxCount || 1,
-      UserData: body.userData,
+      UserData: body.userData ? Buffer.from(body.userData).toString("base64") : undefined,
     })
   );
   const instances = (result.Instances || []).map((i) => ({
@@ -397,15 +398,16 @@ router.get("/security-groups", async (c: Context) => {
 
 router.post("/security-groups", async (c: Context) => {
   const body = await c.req.json<any>();
-  if (!body.groupName) return c.json({ error: "GroupName is required" }, 400);
+  const groupName = sanitizeName(body.groupName || "", 255);
+  if (!groupName) return c.json({ error: "GroupName is required" }, 400);
   const result = await ec2().send(
     new CreateSecurityGroupCommand({
-      GroupName: body.groupName,
-      Description: body.description || `Security group ${body.groupName}`,
-      VpcId: body.vpcId,
+      GroupName: groupName,
+      Description: sanitizeText(body.description || "", 255),
+      VpcId: sanitizeName(body.vpcId || "", 255),
     })
   );
-  return c.json({ id: result.GroupId, name: body.groupName, created: true });
+  return c.json({ id: result.GroupId, name: groupName, created: true });
 });
 
 router.delete("/security-groups/:id", async (c: Context) => {
@@ -470,21 +472,23 @@ router.get("/key-pairs", async (c: Context) => {
 
 router.post("/key-pairs", async (c: Context) => {
   const body = await c.req.json<any>();
-  if (!body.keyName) return c.json({ error: "KeyName is required" }, 400);
+  const keyName = sanitizeName(body.keyName || "", 255);
+  if (!keyName) return c.json({ error: "KeyName is required" }, 400);
   const result = await ec2().send(
-    new CreateKeyPairCommand({ KeyName: body.keyName, KeyType: body.keyType || "rsa" })
+    new CreateKeyPairCommand({ KeyName: keyName, KeyType: body.keyType || "rsa" })
   );
   return c.json({ name: result.KeyName, fingerprint: result.KeyFingerprint, keyMaterial: result.KeyMaterial, created: true });
 });
 
 router.post("/key-pairs/import", async (c: Context) => {
   const body = await c.req.json<any>();
-  if (!body.keyName || !body.publicKeyMaterial) {
+  const importKeyName = sanitizeName(body.keyName || "", 255);
+  if (!importKeyName || !body.publicKeyMaterial) {
     return c.json({ error: "KeyName and PublicKeyMaterial are required" }, 400);
   }
   const result = await ec2().send(
     new ImportKeyPairCommand({
-      KeyName: body.keyName,
+      KeyName: importKeyName,
       PublicKeyMaterial: Buffer.from(body.publicKeyMaterial),
     })
   );
@@ -803,19 +807,20 @@ router.get("/launch-templates", async (c: Context) => {
 
 router.post("/launch-templates", async (c: Context) => {
   const body = await c.req.json<any>();
-  if (!body.launchTemplateName) return c.json({ error: "LaunchTemplateName is required" }, 400);
+  const ltName = sanitizeName(body.launchTemplateName || "", 128);
+  if (!ltName) return c.json({ error: "LaunchTemplateName is required" }, 400);
   const result = await ec2().send(
     new CreateLaunchTemplateCommand({
-      LaunchTemplateName: body.launchTemplateName,
+      LaunchTemplateName: ltName,
       LaunchTemplateData: {
-        ImageId: body.imageId || "ami-0abcdef1234567891",
+        ImageId: sanitizeName(body.imageId || "ami-0abcdef1234567891", 256),
         InstanceType: body.instanceType || "t3.micro",
-        KeyName: body.keyName,
+        KeyName: sanitizeName(body.keyName || "", 255),
         SecurityGroupIds: body.securityGroupIds,
       },
     })
   );
-  return c.json({ id: result.LaunchTemplate?.LaunchTemplateId, name: body.launchTemplateName, created: true });
+  return c.json({ id: result.LaunchTemplate?.LaunchTemplateId, name: ltName, created: true });
 });
 
 router.delete("/launch-templates/:id", async (c: Context) => {

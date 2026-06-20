@@ -26,6 +26,7 @@ import {
   UntagResourceCommand,
   ListTagsForResourceCommand,
 } from "@aws-sdk/client-eventbridge";
+import { sanitizeName, sanitizeText } from "../../clients/sanitize";
 
 const router = new Hono();
 const getClient = () => create(EventBridgeClient);
@@ -38,12 +39,13 @@ router.get("/buses", async (c: Context) => {
 
 router.post("/buses", async (c: Context) => {
   const body = await c.req.json();
-  if (!body.name) return c.json({ error: "name is required" }, 400);
+  const busName = sanitizeName(body.name || "", 256);
+  if (!busName) return c.json({ error: "name is required" }, 400);
   const client = getClient();
   const result = await client.send(
     new CreateEventBusCommand({
-      Name: body.name,
-      Description: body.description,
+      Name: busName,
+      Description: sanitizeText(body.description || "", 1024),
       Tags: body.tags,
     })
   );
@@ -72,13 +74,13 @@ router.post("/rules", async (c: Context) => {
   const client = getClient();
   const result = await client.send(
     new PutRuleCommand({
-      Name: body.name,
-      EventBusName: body.eventBusName,
+      Name: sanitizeName(body.name || "", 256),
+      EventBusName: sanitizeName(body.eventBusName || "", 256),
       EventPattern: body.eventPattern,
       ScheduleExpression: body.scheduleExpression,
       State: body.state,
-      Description: body.description,
-      RoleArn: body.roleArn,
+      Description: sanitizeText(body.description || "", 1024),
+      RoleArn: sanitizeName(body.roleArn || "", 2048),
     })
   );
   return c.json({ ruleArn: result.RuleArn }, 201);
@@ -171,9 +173,9 @@ router.post("/archives", async (c: Context) => {
   const client = getClient();
   const result = await client.send(
     new CreateArchiveCommand({
-      ArchiveName: body.archiveName,
-      EventSourceArn: body.eventSourceArn,
-      Description: body.description,
+      ArchiveName: sanitizeName(body.archiveName || "", 256),
+      EventSourceArn: sanitizeName(body.eventSourceArn || "", 2048),
+      Description: sanitizeText(body.description || "", 1024),
       EventPattern: body.eventPattern,
       RetentionDays: body.retentionDays,
     })

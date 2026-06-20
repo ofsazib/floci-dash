@@ -29,6 +29,7 @@ import {
   ListFunctionUrlConfigsCommand,
 } from "@aws-sdk/client-lambda";
 import { getAwsConfig } from "../../clients/aws";
+import { sanitizeName, sanitizeText } from "../../clients/sanitize";
 
 const router = new Hono();
 
@@ -72,21 +73,23 @@ router.get("/functions", async (c: Context) => {
 
 router.post("/functions", async (c: Context) => {
   const body = await c.req.json<any>();
+  const funcName = sanitizeName(body.name || "", 140);
+  if (!funcName) return c.json({ error: "name is required" }, 400);
   const result = await lambda().send(
     new CreateFunctionCommand({
-      FunctionName: body.name,
+      FunctionName: funcName,
       Runtime: body.runtime,
       Role: body.role || "arn:aws:iam::000000000000:role/lambda-role",
-      Handler: body.handler,
+      Handler: sanitizeName(body.handler || "", 128),
       Code: body.zipFile
         ? { ZipFile: new Uint8Array(Buffer.from(body.zipFile, "base64")) }
-        : { S3Bucket: body.s3Bucket, S3Key: body.s3Key },
+        : { S3Bucket: sanitizeName(body.s3Bucket || "", 255), S3Key: sanitizeName(body.s3Key || "", 1024) },
       Timeout: body.timeout || 3,
       MemorySize: body.memorySize || 128,
       Environment: body.environment
         ? { Variables: body.environment }
         : undefined,
-      Description: body.description,
+      Description: sanitizeText(body.description || "", 256),
       Layers: body.layers,
       Architectures: body.architectures,
       PackageType: body.packageType,
@@ -116,11 +119,11 @@ router.put("/functions/:name/configuration", async (c: Context) => {
     new UpdateFunctionConfigurationCommand({
       FunctionName: name,
       Runtime: body.runtime,
-      Handler: body.handler,
+      Handler: sanitizeName(body.handler || "", 128),
       Timeout: body.timeout,
       MemorySize: body.memorySize,
       Environment: body.environment ? { Variables: body.environment } : undefined,
-      Description: body.description,
+      Description: sanitizeText(body.description || "", 256),
     })
   );
   return c.json({ function: mapFunction(result), updated: true });
@@ -135,8 +138,8 @@ router.put("/functions/:name/code", async (c: Context) => {
       ZipFile: body.zipFile
         ? new Uint8Array(Buffer.from(body.zipFile, "base64"))
         : undefined,
-      S3Bucket: body.s3Bucket,
-      S3Key: body.s3Key,
+      S3Bucket: sanitizeName(body.s3Bucket || "", 255),
+      S3Key: sanitizeName(body.s3Key || "", 1024),
     })
   );
   return c.json({ function: mapFunction(result), updated: true });

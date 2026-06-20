@@ -35,6 +35,9 @@ importers:
       '@aws-sdk/client-backup':
         specifier: ^3.1072.0
         version: 3.1072.0
+      '@aws-sdk/client-batch':
+        specifier: ^3.1073.0
+        version: 3.1073.0
       '@aws-sdk/client-bcm-data-exports':
         specifier: ^3.1072.0
         version: 3.1072.0
@@ -74,6 +77,9 @@ importers:
       '@aws-sdk/client-cost-explorer':
         specifier: ^3.1072.0
         version: 3.1072.0
+      '@aws-sdk/client-docdb':
+        specifier: ^3.1073.0
+        version: 3.1073.0
       '@aws-sdk/client-dynamodb':
         specifier: ^3.0.0
         version: 3.1070.0
@@ -95,6 +101,9 @@ importers:
       '@aws-sdk/client-elasticache':
         specifier: ^3.1072.0
         version: 3.1072.0
+      '@aws-sdk/client-emr':
+        specifier: ^3.1073.0
+        version: 3.1073.0
       '@aws-sdk/client-eventbridge':
         specifier: ^3.1068.0
         version: 3.1070.0
@@ -134,6 +143,9 @@ importers:
       '@aws-sdk/client-rds':
         specifier: ^3.1068.0
         version: 3.1070.0
+      '@aws-sdk/client-rds-data':
+        specifier: ^3.1073.0
+        version: 3.1073.0
       '@aws-sdk/client-resource-groups-tagging-api':
         specifier: ^3.1072.0
         version: 3.1072.0
@@ -221,12 +233,6 @@ importers:
       ws:
         specifier: ^8.21.0
         version: 8.21.0
-      xterm:
-        specifier: ^5.3.0
-        version: 5.3.0
-      xterm-addon-fit:
-        specifier: ^0.8.0
-        version: 0.8.0(xterm@5.3.0)
       zustand:
         specifier: ^5.0.0
         version: 5.0.14(@types/react@19.2.17)(react@19.2.7)
@@ -351,6 +357,10 @@ packages:
     resolution: {integrity: sha512-AjJbBnYcmamX0N/WyWPRWGDHfmq6CkH/QRNdXBB9R13jjnNkGrrZGoPG/4JYTPramI7EawW3QpqWXXOVf8Vofw==}
     engines: {node: '>=20.0.0'}
 
+  '@aws-sdk/client-batch@3.1073.0':
+    resolution: {integrity: sha512-6+etTmRshANFAsHtyYtpjPPO4CqqX2v1VRK0kss4JVVFTm/lgAA0l5exkIYjPuy8lL3I70WvEtv2JgLJow0GCg==}
+    engines: {node: '>=20.0.0'}
+
   '@aws-sdk/client-bcm-data-exports@3.1072.0':
     resolution: {integrity: sha512-0qicEfeAj3vg0W/9hLPptPtQMsKGzRUyfrrB+Xjf2EMa4qpSJTyYZCbywMecHpRyoPzsohBe5lDpb1PlWHDjGA==}
     engines: {node: '>=20.0.0'}
@@ -403,6 +413,10 @@ packages:
     resolution: {integrity: sha512-YWScTHhULpIrdbPU676XnNU7vxVgddfgsY/aBc//8rlKq4nlNs5y9eVtu400yEShzozEzQIMtSJkpoBeFUdv7g==}
     engines: {node: '>=20.0.0'}
 
+  '@aws-sdk/client-docdb@3.1073.0':
+    resolution: {integrity: sha512-sdJBAJyNRkNFophs/7zBEk9xCK1B7yHmBwwnHssRx4b3pEDbddsXNu/7BmXS3bzV4AYdwrYrvKhns/dlj00i6w==}
+    engines: {node: '>=20.0.0'}
+
   '@aws-sdk/client-dynamodb@3.1070.0':
     resolution: {integrity: sha512-H5rA840DhCV0cFb5t5pWcixLXzpG/d8knhkSAh5hrkzJkoPnz2k2MAmSiPy8mzOZysQcTyNq28grRUpZ3aQbWg==}
     engines: {node: '>=20.0.0'}
@@ -429,6 +443,10 @@ packages:
 
   '@aws-sdk/client-elasticache@3.1072.0':
     resolution: {integrity: sha512-Us0DiRGG6gPR95Hm04t/RzPSLNiRfNx2u5yqhG3SciFfTI8vgFFTwmCmp/lKRlq83YkmdmDzrgSugtNdNZSdOQ==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/client-emr@3.1073.0':
+    resolution: {integrity: sha512-ySHGg08booZL5G50CfpgLpIjJcGI8QeJ6SXi1O7uIZkv4riIi04BI6QOtIQRJqSt28MHLIDnR8rLqPssZh/VTA==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-eventbridge@3.1070.0':
@@ -477,6 +495,10 @@ packages:
 
   '@aws-sdk/client-pricing@3.1072.0':
     resolution: {integrity: sha512-o1HKTp1dBJo5v3fkATgbLnZT+b2S8akLhMsD5OBA2T+XAeLtINbIBSiUcLpqvlZuojicwNJYaV57LtuF+DUn1g==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/client-rds-data@3.1073.0':
+    resolution: {integrity: sha512-Tmrb9Dh6hEDd2XxRR3jePE6LWXdten2EqMY27TMhEoEDdvmbR9WEO45nbBDkoHZB4ryKJ42P1n+Yvk+xKOJ0pA==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-rds@3.1070.0':
@@ -2155,16 +2177,6 @@ packages:
     resolution: {integrity: sha512-k8KO9hrMyNk6tUWqUfkTEZbezRRpONVOzUTnc97VnCvyj6Tf9lyUR9EDAIeiVLv56jsMcoXEwjW8Kv5yPY52lw==}
     engines: {node: '>=16.0.0'}
 
-  xterm-addon-fit@0.8.0:
-    resolution: {integrity: sha512-yj3Np7XlvxxhYF/EJ7p3KHaMt6OdwQ+HDu573Vx1lRXsVxOcnVJs51RgjZOouIZOczTsskaS+CpXspK81/DLqw==}
-    deprecated: This package is now deprecated. Move to @xterm/addon-fit instead.
-    peerDependencies:
-      xterm: ^5.0.0
-
-  xterm@5.3.0:
-    resolution: {integrity: sha512-8QqjlekLUFTrU6x7xck1MsPzPA571K5zNqWm0M0oroYEWVOptZ0+ubQSkQ3uxIEhcIHRujJy6emDWX4A7qyFzg==}
-    deprecated: This package is now deprecated. Move to @xterm/xterm instead.
-
   y18n@5.0.8:
     resolution: {integrity: sha512-0pfFzegeDWJHJIAmTLRP2DwHjdF5s7jo9tuztdQxAhINCdvS+3nGINqPd00AphqJR/0LhANUS6/+7SCb98YOfA==}
     engines: {node: '>=10'}
@@ -2378,6 +2390,19 @@ snapshots:
       '@smithy/types': 4.15.0
       tslib: 2.8.1
 
+  '@aws-sdk/client-batch@3.1073.0':
+    dependencies:
+      '@aws-crypto/sha256-browser': 5.2.0
+      '@aws-crypto/sha256-js': 5.2.0
+      '@aws-sdk/core': 3.974.22
+      '@aws-sdk/credential-provider-node': 3.972.57
+      '@aws-sdk/types': 3.973.13
+      '@smithy/core': 3.25.0
+      '@smithy/fetch-http-handler': 5.5.0
+      '@smithy/node-http-handler': 4.8.0
+      '@smithy/types': 4.15.0
+      tslib: 2.8.1
+
   '@aws-sdk/client-bcm-data-exports@3.1072.0':
     dependencies:
       '@aws-crypto/sha256-browser': 5.2.0
@@ -2552,6 +2577,20 @@ snapshots:
       '@smithy/types': 4.15.0
       tslib: 2.8.1
 
+  '@aws-sdk/client-docdb@3.1073.0':
+    dependencies:
+      '@aws-crypto/sha256-browser': 5.2.0
+      '@aws-crypto/sha256-js': 5.2.0
+      '@aws-sdk/core': 3.974.22
+      '@aws-sdk/credential-provider-node': 3.972.57
+      '@aws-sdk/middleware-sdk-rds': 3.972.36
+      '@aws-sdk/types': 3.973.13
+      '@smithy/core': 3.25.0
+      '@smithy/fetch-http-handler': 5.5.0
+      '@smithy/node-http-handler': 4.8.0
+      '@smithy/types': 4.15.0
+      tslib: 2.8.1
+
   '@aws-sdk/client-dynamodb@3.1070.0':
     dependencies:
       '@aws-crypto/sha256-browser': 5.2.0
@@ -2634,6 +2673,19 @@ snapshots:
       tslib: 2.8.1
 
   '@aws-sdk/client-elasticache@3.1072.0':
+    dependencies:
+      '@aws-crypto/sha256-browser': 5.2.0
+      '@aws-crypto/sha256-js': 5.2.0
+      '@aws-sdk/core': 3.974.22
+      '@aws-sdk/credential-provider-node': 3.972.57
+      '@aws-sdk/types': 3.973.13
+      '@smithy/core': 3.25.0
+      '@smithy/fetch-http-handler': 5.5.0
+      '@smithy/node-http-handler': 4.8.0
+      '@smithy/types': 4.15.0
+      tslib: 2.8.1
+
+  '@aws-sdk/client-emr@3.1073.0':
     dependencies:
       '@aws-crypto/sha256-browser': 5.2.0
       '@aws-crypto/sha256-js': 5.2.0
@@ -2792,6 +2844,19 @@ snapshots:
       tslib: 2.8.1
 
   '@aws-sdk/client-pricing@3.1072.0':
+    dependencies:
+      '@aws-crypto/sha256-browser': 5.2.0
+      '@aws-crypto/sha256-js': 5.2.0
+      '@aws-sdk/core': 3.974.22
+      '@aws-sdk/credential-provider-node': 3.972.57
+      '@aws-sdk/types': 3.973.13
+      '@smithy/core': 3.25.0
+      '@smithy/fetch-http-handler': 5.5.0
+      '@smithy/node-http-handler': 4.8.0
+      '@smithy/types': 4.15.0
+      tslib: 2.8.1
+
+  '@aws-sdk/client-rds-data@3.1073.0':
     dependencies:
       '@aws-crypto/sha256-browser': 5.2.0
       '@aws-crypto/sha256-js': 5.2.0
@@ -4686,12 +4751,6 @@ snapshots:
   ws@8.21.0: {}
 
   xml-naming@0.1.0: {}
-
-  xterm-addon-fit@0.8.0(xterm@5.3.0):
-    dependencies:
-      xterm: 5.3.0
-
-  xterm@5.3.0: {}
 
   y18n@5.0.8: {}
 

@@ -5,5 +5,27 @@ dist/
 .env.local
 *.log
 .DS_Store
+
+# Documentation — not needed at runtime
 PLAN.md
 AGENTS.md
+README.md
+
+# Test artifacts
+coverage/
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+test/
+__tests__/
+
+# IDE and local config
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS metadata
+Thumbs.db

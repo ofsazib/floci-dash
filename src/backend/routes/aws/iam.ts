@@ -60,6 +60,7 @@ import {
   DeleteRolePermissionsBoundaryCommand,
 } from "@aws-sdk/client-iam";
 import { getAwsConfig } from "../../clients/aws";
+import { sanitizeName, validateJson } from "../../clients/sanitize";
 
 const router = new Hono();
 
@@ -174,8 +175,10 @@ router.get("/users/:name", async (c: Context) => {
 
 router.post("/users", async (c: Context) => {
   const body = await c.req.json<any>();
-  await iam().send(new CreateUserCommand({ UserName: body.name, Path: body.path }));
-  return c.json({ name: body.name, created: true });
+  const username = sanitizeName(body.name || "", 128);
+  if (!username) return c.json({ error: "name is required" }, 400);
+  await iam().send(new CreateUserCommand({ UserName: username, Path: sanitizeName(body.path || "", 512) }));
+  return c.json({ name: username, created: true });
 });
 
 router.delete("/users/:name", async (c: Context) => {
@@ -225,19 +228,29 @@ router.get("/roles/:name", async (c: Context) => {
 
 router.post("/roles", async (c: Context) => {
   const body = await c.req.json<any>();
+  const roleName = sanitizeName(body.name || "", 128);
+  if (!roleName) return c.json({ error: "name is required" }, 400);
+  const trustDoc = body.assumeRolePolicyDocument || JSON.stringify({
+    Version: "2012-10-17",
+    Statement: [{ Effect: "Allow", Principal: { Service: "ec2.amazonaws.com" }, Action: "sts:AssumeRole" }],
+  });
+  // Validate trust policy JSON if provided
+  if (body.assumeRolePolicyDocument) {
+    const validation = validateJson(body.assumeRolePolicyDocument, "object");
+    if (!validation.valid) {
+      return c.json({ error: `Invalid trust policy: ${validation.error}` }, 400);
+    }
+  }
   await iam().send(
     new CreateRoleCommand({
-      RoleName: body.name,
-      AssumeRolePolicyDocument: body.assumeRolePolicyDocument || JSON.stringify({
-        Version: "2012-10-17",
-        Statement: [{ Effect: "Allow", Principal: { Service: "ec2.amazonaws.com" }, Action: "sts:AssumeRole" }],
-      }),
-      Description: body.description,
+      RoleName: roleName,
+      AssumeRolePolicyDocument: trustDoc,
+      Description: sanitizeName(body.description || "", 1000),
       MaxSessionDuration: body.maxSessionDuration,
-      Path: body.path,
+      Path: sanitizeName(body.path || "", 512),
     })
   );
-  return c.json({ name: body.name, created: true });
+  return c.json({ name: roleName, created: true });
 });
 
 router.delete("/roles/:name", async (c: Context) => {
@@ -254,10 +267,13 @@ router.get("/groups", async (c: Context) => {
   return c.json({ groups, total: groups.length });
 });
 
-router.post("/groups", async (c: Context) => {
-  const body = await c.req.json<any>();
-  await iam().send(new CreateGroupCommand({ GroupName: body.name, Path: body.path }));
-  return c.json({ name: body.name, created: true });
+router.post("/groups", async (c: Context) => {  const body = await c.req.json<any>();
+  const groupName = sanitizeName(body.name || "", 128);
+  if (!groupName) return c.json({ error: "name is required" }, 400);
+  await iam().send(
+    new CreateGroupCommand({ GroupName: groupName, Path: sanitizeName(body.path || "", 512) })
+  );
+  return c.json({ name: groupName, created: true });
 });
 
 router.delete("/groups/:name", async (c: Context) => {
@@ -313,15 +329,24 @@ router.get("/policies/version", async (c: Context) => {
 
 router.post("/policies", async (c: Context) => {
   const body = await c.req.json<any>();
+  const policyName = sanitizeName(body.name || "", 128);
+  if (!policyName) return c.json({ error: "name is required" }, 400);
+  const policyDoc = body.document || JSON.stringify({
+    Version: "2012-10-17",
+    Statement: [{ Effect: "Allow", Action: "*", Resource: "*" }],
+  });
+  if (body.document) {
+    const validation = validateJson(body.document, "object");
+    if (!validation.valid) {
+      return c.json({ error: `Invalid policy document: ${validation.error}` }, 400);
+    }
+  }
   const result = await iam().send(
     new CreatePolicyCommand({
-      PolicyName: body.name,
-      PolicyDocument: body.document || JSON.stringify({
-        Version: "2012-10-17",
-        Statement: [{ Effect: "Allow", Action: "*", Resource: "*" }],
-      }),
-      Description: body.description,
-      Path: body.path,
+      PolicyName: policyName,
+      PolicyDocument: policyDoc,
+      Description: sanitizeName(body.description || "", 1000),
+      Path: sanitizeName(body.path || "", 512),
     })
   );
   return c.json({ name: result.Policy?.PolicyName, arn: result.Policy?.Arn, created: true });
@@ -421,10 +446,18 @@ router.get("/users/:name/inline-policies/:policyName", async (c: Context) => {
 router.put("/users/:name/inline-policies", async (c: Context) => {
   const name = c.req.param("name");
   const body = await c.req.json<any>();
+  const inlinePolicyName = sanitizeName(body.policyName || "", 128);
+  if (!inlinePolicyName) return c.json({ error: "policyName is required" }, 400);
+  if (body.document) {
+    const validation = validateJson(body.document, "object");
+    if (!validation.valid) {
+      return c.json({ error: `Invalid policy document: ${validation.error}` }, 400);
+    }
+  }
   await iam().send(
-    new PutUserPolicyCommand({ UserName: name, PolicyName: body.policyName, PolicyDocument: body.document })
+    new PutUserPolicyCommand({ UserName: name, PolicyName: inlinePolicyName, PolicyDocument: body.document })
   );
-  return c.json({ policyName: body.policyName, put: true });
+  return c.json({ policyName: inlinePolicyName, put: true });
 });
 
 router.delete("/users/:name/inline-policies/:policyName", async (c: Context) => {

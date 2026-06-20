@@ -26,6 +26,7 @@ import {
 } from "@aws-sdk/client-sqs";
 import type { QueueAttributeName } from "@aws-sdk/client-sqs";
 import { flociFetch } from "../../clients/floci";
+import { sanitizeName, sanitizeText } from "../../clients/sanitize";
 
 const router = new Hono();
 const getClient = () => create(SQSClient);
@@ -58,10 +59,11 @@ router.get("/queues", async (c: Context) => {
 
 router.post("/queues", async (c: Context) => {
   const body = await c.req.json();
-  if (!body.queueName) return c.json({ error: "queueName is required" }, 400);
+  const queueName = sanitizeName(body.queueName || "", 80);
+  if (!queueName) return c.json({ error: "queueName is required" }, 400);
   const client = getClient();
   const cmd = new CreateQueueCommand({
-    QueueName: body.queueName,
+    QueueName: queueName,
     Attributes: body.attributes,
     tags: body.tags,
   });
@@ -161,11 +163,11 @@ router.post("/queues/messages", async (c: Context) => {
   const result = await client.send(
     new SendMessageCommand({
       QueueUrl: queueUrl,
-      MessageBody: body.messageBody,
+      MessageBody: sanitizeText(body.messageBody || "", 262144),
       DelaySeconds: body.delaySeconds,
       MessageAttributes: body.messageAttributes,
-      MessageGroupId: body.messageGroupId,
-      MessageDeduplicationId: body.messageDeduplicationId,
+      MessageGroupId: sanitizeName(body.messageGroupId || "", 128),
+      MessageDeduplicationId: sanitizeName(body.messageDeduplicationId || "", 128),
     })
   );
   return c.json({

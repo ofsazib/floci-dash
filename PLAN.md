@@ -2,7 +2,7 @@
 
 ## Overview
 
-An AWS Console-style web dashboard for Floci, the local AWS emulator. The dashboard provides a polished, production-grade management UI that mirrors the real AWS Console experience — allowing users to manage all 58+ AWS services that Floci emulates, including resource CRUD operations, detailed views, filtering, search, and real-time status monitoring.
+An AWS Console-style web dashboard for Floci, the local AWS emulator. The dashboard provides a polished, production-grade management UI that mirrors the real AWS Console experience — allowing users to manage all 60 AWS services that Floci emulates, including resource CRUD operations, detailed views, filtering, search, and real-time status monitoring.
 
 **Everything runs inside Docker containers.** No host machine dependencies beyond Docker itself.
 
@@ -26,7 +26,7 @@ An AWS Console-style web dashboard for Floci, the local AWS emulator. The dashbo
 | Shared components | Done | ResourceTable, CreateModal, DeleteButton, ServiceCard, ServiceGrid, StatCard, StatusBadge |
 | Layout | Done | AppLayoutShell with TopNavigation, SideNavigation, dark mode |
 | Settings | Done | Dark mode toggle, refresh interval |
-| 59 services implemented (+ S3/DynamoDB dedicated pages) | ServicePage: browse, create, delete | 45-tracker, 45 done, 0 pending |
+| 60+ services implemented (+ S3/DynamoDB dedicated pages) | ServicePage: browse, create, delete | All Floci services covered |
 
 ### Architecture Constraints
 
@@ -1418,17 +1418,40 @@ Each remaining service gets a standard list + create + delete pattern.
 | 22.b | Write tests for backend entry files (index.ts, types.ts) | Done | 2026-06-20 |
 | 22.c | Re-check Codecov number, iterate if below target | Done | 2026-06-20 |
 
+---
+
+### Phase 13: E2E Integration Test Expansion
+
+| # | Task | Status | Date |
+|---|------|--------|------|
+| 23.1 | Add KMS integration tests (keys, aliases, encrypt/decrypt, tags, schedule/cancel deletion) | Done | 2026-06-20 |
+| 23.2 | Add SSM integration tests (parameters, versions, SecureString, tags) | Done | 2026-06-20 |
+| 23.3 | Add Route53 integration tests (hosted zones, record sets, CRUD) | Done | 2026-06-20 |
+| 23.4 | Add ECR integration tests (repositories, list, create, delete) | Done | 2026-06-20 |
+| 23.5 | Add SES integration tests (email identities, verify, list, get, delete) | Done | 2026-06-20 |
+| 23.6 | Add Kinesis integration tests (streams, shards, put records, batch records) | Done | 2026-06-20 |
+| 23.7 | Add Cognito integration tests (user pools, users, groups, app clients) | Done | 2026-06-20 |
+| 23.8 | Add ACM integration tests (certificates, request, list, describe, delete) | Done | 2026-06-20 |
+| 23.9 | Add API Gateway integration tests (REST APIs, resources, CRUD) | Done | 2026-06-20 |
+| 23.10 | Add Step Functions integration tests (state machines, executions, IAM role setup) | Done | 2026-06-20 |
+| 23.11 | Add ECS integration tests (clusters, task definitions, full lifecycle) | Done | 2026-06-20 |
+| 23.12 | Add Athena integration tests (work groups, data catalogs, databases) | Done | 2026-06-20 |
+| 23.13 | Add ELB integration tests (load balancers, target groups, listeners, tags, 2-AZ subnets) | Done | 2026-06-20 |
+| 23.14 | Add EKS integration tests (cluster CRUD with IAM role) | Done | 2026-06-20 |
+| 23.15 | Add RDS integration tests (DB instances, parameter groups, clusters) | Done | 2026-06-20 |
+| 23.16 | Add Auto Scaling integration tests (ASG CRUD, launch templates, scaling policies) | Done | 2026-06-20 |
+
 ### Phase 13: Remaining Floci Services (4 services)
 
 Implement the 4 Floci services not yet covered by the dashboard. Each follows the standard pattern: backend route file → frontend hooks → ServicePage dashboard component → tests.
 
 | # | Task | Status | Date |
 |---|------|--------|------|
-| 23.1 | **AWS Batch** — Compute environments, job queues, job definitions, jobs. Install `@aws-sdk/client-batch`, create routes/batch.ts with list+create+delete for all 4 resource types, create hooks/useBatch.ts, add BatchDashboard to ServicePage, write tests | Pending | |
-| 23.2 | **DocumentDB** — Clusters (create/describe/delete/modify) and instances (create/describe/delete/modify). Routes via `@aws-sdk/client-docdb`, hooks/useDocDB.ts, DocDBDashboard component, tests | Pending | |
-| 23.3 | **Amazon EMR** — Clusters (run/describe/terminate), steps (add/describe/cancel), instance groups/fleets, security configs. Install `@aws-sdk/client-emr`, routes/emr.ts, hooks/useEMR.ts, EMRDashboard component, tests | Pending | |
-| 23.4 | **RDS Data API** — ExecuteStatement, ExecuteSql, BeginTransaction, CommitTransaction, RollbackTransaction. Install `@aws-sdk/rds-data`, routes/rdsdata.ts, hooks/useRDSData.ts, RDSDataDashboard component, tests | Pending | |
-| 23.5 | Verify: typecheck + all tests pass + coverage thresholds met. Update README with newly implemented services and remove from "Coming soon" | Pending | |
+| 23.1 | **AWS Batch** — Compute environments, job queues, job definitions, jobs. Install `@aws-sdk/client-batch`, create routes/batch.ts with list+create+delete for all 4 resource types, create hooks/useBatch.ts, add BatchDashboard to ServicePage, write tests | Done | 2026-06-20 |
+| 23.2 | **DocumentDB** — Clusters (create/describe/delete/modify) and instances (create/describe/delete/modify). Routes via `@aws-sdk/client-docdb`, hooks/useDocDB.ts, DocDBDashboard component, tests | Done | 2026-06-20 |
+| 23.3 | **Amazon EMR** — Clusters (run/describe/terminate), steps (add/describe/cancel), instance groups/fleets, security configs. Install `@aws-sdk/client-emr`, routes/emr.ts, hooks/useEMR.ts, EMRDashboard component, tests | Done | 2026-06-20 |
+| 23.4 | **RDS Data API** — ExecuteStatement, ExecuteSql, BeginTransaction, CommitTransaction, RollbackTransaction. Install `@aws-sdk/rds-data`, routes/rdsdata.ts, hooks/useRDSData.ts, RDSDataDashboard component, tests | Done | 2026-06-20 |
+| 23.5 | Verify: typecheck + all tests pass + coverage thresholds met. Update README with newly implemented services and remove from "Coming soon" | Done | 2026-06-20 |
 
 ---
 

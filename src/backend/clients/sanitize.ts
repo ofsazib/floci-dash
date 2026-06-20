@@ -122,21 +122,4 @@ export function sanitizeFileName(name: string): string {
     .slice(0, 255);
 }
 
-/**
- * Sanitize a user-submitted object. Recursively strips control characters
- * from all string values. Handles nested objects and arrays.
- */
-export function sanitizeObject<T>(obj: T, maxDepth = 10): T {
-  if (maxDepth <= 0) return obj;
-  if (typeof obj === "string") return sanitizeText(obj) as unknown as T;
-  if (Array.isArray(obj)) return obj.map((item) => sanitizeObject(item, maxDepth - 1)) as unknown as T;
-  if (obj !== null && typeof obj === "object") {
-    const result: Record<string, any> = {};
-    for (const [key, value] of Object.entries(obj)) {
-      const cleanKey = sanitizeName(key, 256);
-      result[cleanKey] = sanitizeObject(value, maxDepth - 1);
-    }
-    return result as unknown as T;
-  }
-  return obj;
-}
+

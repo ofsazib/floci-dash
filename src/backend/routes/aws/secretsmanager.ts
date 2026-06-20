@@ -17,6 +17,7 @@ import {
   GetRandomPasswordCommand,
 } from "@aws-sdk/client-secrets-manager";
 import { getAwsConfig } from "../../clients/aws";
+import { sanitizeName, sanitizeText } from "../../clients/sanitize";
 
 const router = new Hono();
 
@@ -95,14 +96,16 @@ router.get("/secrets/:id/value", async (c: Context) => {
 
 router.post("/secrets", async (c: Context) => {
   const body = await c.req.json<any>();
+  const secretName = sanitizeName(body.name || "", 512);
+  if (!secretName) return c.json({ error: "name is required" }, 400);
   const result = await sm().send(
     new CreateSecretCommand({
-      Name: body.name,
-      SecretString: body.secretString,
+      Name: secretName,
+      SecretString: sanitizeText(body.secretString || "", 65536),
       SecretBinary: body.secretBinary,
-      Description: body.description,
-      KmsKeyId: body.kmsKeyId,
-      Tags: (body.tags || []).map((t: any) => ({ Key: t.key, Value: t.value })),
+      Description: sanitizeText(body.description || "", 1024),
+      KmsKeyId: sanitizeName(body.kmsKeyId || "", 2048),
+      Tags: (body.tags || []).map((t: any) => ({ Key: sanitizeName(t.key || "", 128), Value: sanitizeText(t.value || "", 256) })),
     })
   );
   return c.json({ arn: result.ARN, name: result.Name, versionId: result.VersionId, created: true });
@@ -116,9 +119,9 @@ router.put("/secrets/:id", async (c: Context) => {
   const result = await sm().send(
     new UpdateSecretCommand({
       SecretId: id,
-      Description: body.description,
-      SecretString: body.secretString,
-      KmsKeyId: body.kmsKeyId,
+      Description: sanitizeText(body.description || "", 1024),
+      SecretString: sanitizeText(body.secretString || "", 65536),
+      KmsKeyId: sanitizeName(body.kmsKeyId || "", 2048),
     })
   );
   return c.json({ arn: result.ARN, name: result.Name, versionId: result.VersionId, updated: true });
@@ -132,7 +135,7 @@ router.post("/secrets/:id/value", async (c: Context) => {
   const result = await sm().send(
     new PutSecretValueCommand({
       SecretId: id,
-      SecretString: body.secretString,
+      SecretString: sanitizeText(body.secretString || "", 65536),
       SecretBinary: body.secretBinary,
     })
   );

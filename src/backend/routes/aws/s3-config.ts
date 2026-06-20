@@ -31,6 +31,7 @@ import {
   ServerSideEncryptionByDefault,
 } from "@aws-sdk/client-s3";
 import { getAwsConfig } from "../../clients/aws";
+import { sanitizeBucketName, sanitizeName, validateJson } from "../../clients/sanitize";
 
 const router = new Hono();
 
@@ -51,9 +52,9 @@ router.get("/buckets/:name/versioning", async (c: Context) => {
 });
 
 router.put("/buckets/:name/versioning", async (c: Context) => {
-  const name = c.req.param("name");
-  const { status } = await c.req.json<{ status: string }>();
-  if (!status || !["Enabled", "Suspended"].includes(status)) {
+  const name = c.req.param("name");  const { status } = await c.req.json<{ status: string }>();
+  if (!status || !["Enabled", "Suspended"].includes(status))
+ {
     return c.json({ error: "Status must be 'Enabled' or 'Suspended'" }, 400);
   }
   await s3().send(new PutBucketVersioningCommand({ Bucket: name, VersioningConfiguration: { Status: status as any } }));
@@ -111,6 +112,11 @@ router.put("/buckets/:name/policy", async (c: Context) => {
   const { policy } = await c.req.json<{ policy: string | Record<string, any> }>();
   if (!policy) return c.json({ error: "Policy is required" }, 400);
   const policyString = typeof policy === "string" ? policy : JSON.stringify(policy);
+  // Validate policy is parseable JSON
+  const validation = validateJson(policyString, "object");
+  if (!validation.valid) {
+    return c.json({ error: `Invalid policy: ${validation.error}` }, 400);
+  }
   await s3().send(new PutBucketPolicyCommand({ Bucket: name, Policy: policyString }));
   return c.json({ bucket: name, hasPolicy: true, updated: true });
 });

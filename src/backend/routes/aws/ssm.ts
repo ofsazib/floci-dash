@@ -12,6 +12,7 @@ import {
   ListTagsForResourceCommand,
   RemoveTagsFromResourceCommand,
 } from "@aws-sdk/client-ssm";
+import { sanitizeName, sanitizeText } from "../../clients/sanitize";
 
 const router = new Hono();
 const getClient = () => new SSMClient(getAwsConfig());
@@ -39,14 +40,16 @@ router.get("/parameters/:name", async (c: Context) => {
 
 router.post("/parameters", async (c: Context) => {
   const body = await c.req.json();
-  if (!body.name || !body.value) return c.json({ error: "name and value are required" }, 400);
+  const paramName = sanitizeName(body.name || "", 2048);
+  const paramValue = sanitizeText(body.value || "", 4096);
+  if (!paramName || !paramValue) return c.json({ error: "name and value are required" }, 400);
   const client = getClient();
   const result = await client.send(
     new PutParameterCommand({
-      Name: body.name,
-      Value: body.value,
+      Name: paramName,
+      Value: paramValue,
       Type: body.type || "String",
-      Description: body.description,
+      Description: sanitizeText(body.description || "", 1024),
       Overwrite: body.overwrite ?? false,
       Tags: body.tags,
     })

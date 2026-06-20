@@ -1,16 +1,17 @@
 export const SERVICE_CATEGORIES: Record<string, string[]> = {
   "Compute":        ["ec2", "lambda", "ecs", "eks", "autoscaling", "codebuild"],
   "Storage":        ["s3", "ecr"],
-  "Database":       ["dynamodb", "rds", "neptune", "elasticache"],
+  "Database":       ["dynamodb", "rds", "neptune", "elasticache", "docdb"],
   "Networking":     ["elasticloadbalancing", "route53", "cloudfront", "apigateway", "apigatewayv2", "appsync"],
   "Messaging":      ["sqs", "sns", "events", "kinesis", "pipes", "scheduler", "email"],
   "Security":       ["iam", "sts", "cognito-idp", "kms", "secretsmanager", "acm", "wafv2"],
   "Management":     ["cloudformation", "monitoring", "logs", "ssm", "config", "appconfig", "appconfigdata", "cloudtrail", "servicediscovery"],
-  "Analytics":      ["athena", "glue", "firehose", "states", "kafka", "es"],
+  "Analytics":      ["athena", "glue", "firehose", "states", "kafka", "es", "emr"],
   "ML/AI":          ["bedrock-runtime", "textract", "transcribe"],
   "Billing":        ["ce", "cur", "bcm-data-exports", "pricing", "tagging"],
   "Developer Tools":["codedeploy", "codebuild"],
   "Migration":      ["backup", "transfer"],
+  "Batch/EMR":      ["batch", "emr"],
 };
 
 export const SERVICE_LABELS: Record<string, string> = {
@@ -73,6 +74,10 @@ export const SERVICE_LABELS: Record<string, string> = {
   "appsync": "AppSync",
   "wafv2": "WAF v2",
   "ec2messages": "EC2 Messages",
+  "batch": "AWS Batch",
+  "docdb": "DocumentDB",
+  "emr": "Amazon EMR",
+  "rdsdata": "RDS Data API",
 };
 
 export function getServiceLabel(externalKey: string): string {

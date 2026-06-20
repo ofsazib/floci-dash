@@ -32,6 +32,7 @@ import {
   SetEndpointAttributesCommand,
 } from "@aws-sdk/client-sns";
 import { flociFetch } from "../../clients/floci";
+import { sanitizeName, sanitizeText } from "../../clients/sanitize";
 
 const router = new Hono();
 const getClient = () => create(SNSClient);
@@ -44,11 +45,12 @@ router.get("/topics", async (c: Context) => {
 
 router.post("/topics", async (c: Context) => {
   const body = await c.req.json();
-  if (!body.name) return c.json({ error: "name is required" }, 400);
+  const topicName = sanitizeName(body.name || "", 256);
+  if (!topicName) return c.json({ error: "name is required" }, 400);
   const client = getClient();
   const result = await client.send(
     new CreateTopicCommand({
-      Name: body.name,
+      Name: topicName,
       Attributes: body.attributes,
       Tags: body.tags?.map((t: { Key: string; Value: string }) => ({ Key: t.Key, Value: t.Value })),
     })
@@ -131,7 +133,7 @@ router.post("/subscriptions", async (c: Context) => {
     new SubscribeCommand({
       TopicArn: body.topicArn,
       Protocol: body.protocol,
-      Endpoint: body.endpoint,
+      Endpoint: sanitizeText(body.endpoint || "", 2048),
       Attributes: body.attributes,
     })
   );
@@ -176,12 +178,12 @@ router.post("/topics/publish", async (c: Context) => {
   const result = await client.send(
     new PublishCommand({
       TopicArn: body.topicArn,
-      Message: body.message,
-      Subject: body.subject,
+      Message: sanitizeText(body.message || "", 262144),
+      Subject: sanitizeName(body.subject || "", 100),
       MessageAttributes: body.messageAttributes,
       MessageStructure: body.messageStructure,
-      MessageGroupId: body.messageGroupId,
-      MessageDeduplicationId: body.messageDeduplicationId,
+      MessageGroupId: sanitizeName(body.messageGroupId || "", 128),
+      MessageDeduplicationId: sanitizeName(body.messageDeduplicationId || "", 128),
     })
   );
   return c.json({ messageId: result.MessageId }, 201);

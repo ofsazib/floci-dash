@@ -20,6 +20,7 @@ import {
   ListChangeSetsCommand,
 } from "@aws-sdk/client-cloudformation";
 import { getAwsConfig } from "../../clients/aws";
+import { sanitizeName, sanitizeText, validateJson } from "../../clients/sanitize";
 
 const router = new Hono();
 
@@ -114,32 +115,46 @@ router.get("/stacks/:name", async (c: Context) => {
 
 router.post("/stacks", async (c: Context) => {
   const body = await c.req.json<any>();
+  const stackName = sanitizeName(body.name || "", 128);
+  if (!stackName) return c.json({ error: "name is required" }, 400);
+  if (body.templateBody) {
+    const validation = validateJson(body.templateBody);
+    if (!validation.valid) {
+      return c.json({ error: `Invalid template: ${validation.error}` }, 400);
+    }
+  }
   await cfn().send(
     new CreateStackCommand({
-      StackName: body.name,
+      StackName: stackName,
       TemplateBody: body.templateBody,
-      TemplateURL: body.templateUrl,
+      TemplateURL: sanitizeName(body.templateUrl || "", 2048),
       Parameters: (body.parameters || []).map((p: any) => ({
-        ParameterKey: p.key,
-        ParameterValue: p.value,
+        ParameterKey: sanitizeName(p.key || "", 256),
+        ParameterValue: sanitizeText(p.value || "", 4096),
       })),
       Capabilities: body.capabilities || ["CAPABILITY_IAM", "CAPABILITY_NAMED_IAM"],
     } as any)
   );
-  return c.json({ name: body.name, created: true });
+  return c.json({ name: stackName, created: true });
 });
 
 router.put("/stacks/:name", async (c: Context) => {
   const name = c.req.param("name");
   const body = await c.req.json<any>();
+  if (body.templateBody) {
+    const validation = validateJson(body.templateBody);
+    if (!validation.valid) {
+      return c.json({ error: `Invalid template: ${validation.error}` }, 400);
+    }
+  }
   await cfn().send(
     new UpdateStackCommand({
       StackName: name,
       TemplateBody: body.templateBody,
-      TemplateURL: body.templateUrl,
+      TemplateURL: sanitizeName(body.templateUrl || "", 2048),
       Parameters: (body.parameters || []).map((p: any) => ({
-        ParameterKey: p.key,
-        ParameterValue: p.value,
+        ParameterKey: sanitizeName(p.key || "", 256),
+        ParameterValue: sanitizeText(p.value || "", 4096),
       })),
       Capabilities: body.capabilities || ["CAPABILITY_IAM", "CAPABILITY_NAMED_IAM"],
     })
@@ -169,7 +184,7 @@ router.get("/stacks/:name/template", async (c: Context) => {
 router.post("/validate-template", async (c: Context) => {
   const body = await c.req.json<any>();
   const result = await cfn().send(
-    new ValidateTemplateCommand({ TemplateBody: body.templateBody, TemplateURL: body.templateUrl })
+    new ValidateTemplateCommand({ TemplateBody: body.templateBody, TemplateURL: sanitizeName(body.templateUrl || "", 2048) })
   );
   return c.json({
     valid: true,
@@ -201,19 +216,25 @@ router.get("/stacks/:name/change-sets", async (c: Context) => {
 
 router.post("/change-sets", async (c: Context) => {
   const body = await c.req.json<any>();
+  if (body.templateBody) {
+    const validation = validateJson(body.templateBody);
+    if (!validation.valid) {
+      return c.json({ error: `Invalid template: ${validation.error}` }, 400);
+    }
+  }
   await cfn().send(
     new CreateChangeSetCommand({
-      StackName: body.stackName,
-      ChangeSetName: body.changeSetName,
+      StackName: sanitizeName(body.stackName || "", 128),
+      ChangeSetName: sanitizeName(body.changeSetName || "", 128),
       ChangeSetType: body.changeSetType || "CREATE",
       TemplateBody: body.templateBody,
-      TemplateURL: body.templateUrl,
+      TemplateURL: sanitizeName(body.templateUrl || "", 2048),
       Parameters: (body.parameters || []).map((p: any) => ({
-        ParameterKey: p.key,
-        ParameterValue: p.value,
+        ParameterKey: sanitizeName(p.key || "", 256),
+        ParameterValue: sanitizeText(p.value || "", 4096),
       })),
       Capabilities: body.capabilities || ["CAPABILITY_IAM"],
-      Description: body.description,
+      Description: sanitizeText(body.description || "", 1024),
     })
   );
   return c.json({ stackName: body.stackName, changeSetName: body.changeSetName, created: true });

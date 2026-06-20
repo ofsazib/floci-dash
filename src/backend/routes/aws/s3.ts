@@ -12,6 +12,7 @@ import {
   DeleteObjectsCommand,
 } from "@aws-sdk/client-s3";
 import { getAwsConfig } from "../../clients/aws";
+import { sanitizeName, sanitizeS3Key, sanitizeBucketName, sanitizeFileName, validateJson } from "../../clients/sanitize";
 
 const router = new Hono();
 
@@ -36,22 +37,25 @@ router.get("/buckets", async (c: Context) => {
 // Create bucket
 router.post("/buckets", async (c: Context) => {
   const { name } = await c.req.json<{ name: string }>();
-  if (!name) return c.json({ error: "Bucket name is required" }, 400);
-  await s3().send(new CreateBucketCommand({ Bucket: name }));
-  return c.json({ name, created: true });
+  const cleanName = sanitizeBucketName(name || "");
+  if (!cleanName) return c.json({ error: "Bucket name is required" }, 400);
+  await s3().send(new CreateBucketCommand({ Bucket: cleanName }));
+  return c.json({ name: cleanName, created: true });
 });
 
 // Delete bucket
 router.delete("/buckets/:name", async (c: Context) => {
   const name = c.req.param("name");
-  await s3().send(new DeleteBucketCommand({ Bucket: name }));
-  return c.json({ name, deleted: true });
+  const cleanName = sanitizeBucketName(name || "");
+  if (!cleanName) return c.json({ error: "Invalid bucket name" }, 400);
+  await s3().send(new DeleteBucketCommand({ Bucket: cleanName }));
+  return c.json({ name: cleanName, deleted: true });
 });
 
 // List objects in a bucket (with folder support via delimiter)
 router.get("/buckets/:name/objects", async (c: Context) => {
   const name = c.req.param("name");
-  const prefix = c.req.query("prefix") || "";
+  const prefix = sanitizeS3Key(c.req.query("prefix") || "");
   const delimiter = c.req.query("delimiter") || "/";
   const result = await s3().send(
     new ListObjectsV2Command({
@@ -78,9 +82,9 @@ router.get("/buckets/:name/objects", async (c: Context) => {
 // Stream raw object content with correct Content-Type — used for "Open in browser"
 // Must be defined BEFORE the catch-all /* route.
 router.get("/buckets/:name/objects/*/raw", async (c: Context) => {
-  const bucket = c.req.param("name");
+  const bucket = sanitizeBucketName(c.req.param("name") || "");
   const path = new URL(c.req.url).pathname;
-  const key = decodeURIComponent(path.split("/objects/")[1]?.replace(/\/raw$/, "") || "");
+  const key = sanitizeS3Key(decodeURIComponent(path.split("/objects/")[1]?.replace(/\/raw$/, "") || ""));
   if (!key) return c.json({ error: "Object key is required" }, 400);
   const result = await s3().send(new GetObjectCommand({ Bucket: bucket, Key: key }));
   const contentType = result.ContentType || "application/octet-stream";
@@ -96,9 +100,9 @@ router.get("/buckets/:name/objects/*/raw", async (c: Context) => {
 
 // Get object metadata + content (supports keys with slashes)
 router.get("/buckets/:name/objects/*", async (c: Context) => {
-  const bucket = c.req.param("name");
+  const bucket = sanitizeBucketName(c.req.param("name") || "");
   const path = new URL(c.req.url).pathname;
-  const key = decodeURIComponent(path.split("/objects/")[1] || "");
+  const key = sanitizeS3Key(decodeURIComponent(path.split("/objects/")[1] || ""));
   if (!key) return c.json({ error: "Object key is required" }, 400);
   const result = await s3().send(new GetObjectCommand({ Bucket: bucket, Key: key }));
   const contentType = result.ContentType || "application/octet-stream";
@@ -142,7 +146,7 @@ router.get("/buckets/:name/objects/*", async (c: Context) => {
 // Field name is "files" (one or many). Optional ?prefix=... is prepended to each filename.
 router.post("/buckets/:name/objects/upload", async (c: Context) => {
   const bucket = c.req.param("name");
-  const prefix = c.req.query("prefix") || "";
+  const prefix = sanitizeS3Key(c.req.query("prefix") || "");
   const body = await c.req.parseBody();
   const raw = body["files"];
   const fileList: File[] = Array.isArray(raw)
@@ -156,7 +160,7 @@ router.post("/buckets/:name/objects/upload", async (c: Context) => {
   const client = s3();
   const results = await Promise.all(
     fileList.map(async (file) => {
-      const key = `${prefix}${file.name}`;
+      const key = `${prefix}${sanitizeFileName(file.name)}`;
       try {
         if (file.size > MAX_FILE_SIZE) {
           return {
@@ -198,16 +202,17 @@ router.post("/buckets/:name/objects/upload", async (c: Context) => {
 router.put("/buckets/:name/folders", async (c: Context) => {
   const bucket = c.req.param("name");
   const { prefix } = await c.req.json<{ prefix: string }>();
-  if (!prefix) return c.json({ error: "prefix is required" }, 400);
-  await s3().send(new PutObjectCommand({ Bucket: bucket, Key: prefix, Body: "" }));
-  return c.json({ bucket, prefix, created: true });
+  const cleanPrefix = sanitizeS3Key(prefix || "");
+  if (!cleanPrefix) return c.json({ error: "prefix is required" }, 400);
+  await s3().send(new PutObjectCommand({ Bucket: bucket, Key: cleanPrefix, Body: "" }));
+  return c.json({ bucket, prefix: cleanPrefix, created: true });
 });
 
 // Delete object (supports keys with slashes)
 router.delete("/buckets/:name/objects/*", async (c: Context) => {
   const bucket = c.req.param("name");
   const path = new URL(c.req.url).pathname;
-  const key = decodeURIComponent(path.split("/objects/")[1] || "");
+  const key = sanitizeS3Key(decodeURIComponent(path.split("/objects/")[1] || ""));
   if (!key) return c.json({ error: "Object key is required" }, 400);
   await s3().send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
   return c.json({ bucket, key, deleted: true });
@@ -220,10 +225,14 @@ router.post("/buckets/:name/objects/batch-delete", async (c: Context) => {
   if (!keys || !Array.isArray(keys) || keys.length === 0) {
     return c.json({ error: "keys array is required" }, 400);
   }
+  const sanitizedKeys = keys.map((k) => sanitizeS3Key(k)).filter(Boolean);
+  if (sanitizedKeys.length === 0) {
+    return c.json({ error: "No valid keys provided after sanitization" }, 400);
+  }
   const result = await s3().send(
     new DeleteObjectsCommand({
       Bucket: bucket,
-      Delete: { Objects: keys.map((k) => ({ Key: k })) },
+      Delete: { Objects: sanitizedKeys.map((k) => ({ Key: k })) },
     })
   );
   return c.json({
@@ -237,7 +246,8 @@ router.post("/buckets/:name/objects/batch-delete", async (c: Context) => {
 router.post("/buckets/:name/folders/delete", async (c: Context) => {
   const bucket = c.req.param("name");
   const { prefix } = await c.req.json<{ prefix: string }>();
-  if (!prefix) return c.json({ error: "prefix is required" }, 400);
+  const cleanPrefix = sanitizeS3Key(prefix || "");
+  if (!cleanPrefix) return c.json({ error: "prefix is required" }, 400);
 
   const client = s3();
   let allKeys: string[] = [];

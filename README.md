@@ -401,29 +401,31 @@ These services have full CRUD operations in both backend and frontend:
 | **CodeDeploy** | Applications (list, create, get, update, delete), deployment groups (list, create, get, delete per application), deployment configs (list, create, get, delete), deployments (create, list per application, get), tags (list, add, remove per resource) |
 | **Backup** | Backup plans (list, create, get, delete), backup vaults (list, create, describe, delete), backup selections (list, create per plan, get, delete), backup jobs (list, start, describe, stop), tags (list) |
 | **Transfer Family** | Servers (list, create, describe, delete, start, stop), users (list per server, create, describe, delete), tags (list) |
+| **AWS Batch** | Compute environments (list, create, describe, delete), job queues (list, create, describe, delete), job definitions (list, register, describe, deregister), jobs (list, describe, submit, terminate) |
+| **DocumentDB** | DB clusters (list, describe, create, delete, modify), DB instances (list, describe, create, delete, modify) |
+| **Amazon EMR** | Clusters (list, create via RunJobFlow, describe, terminate, modify, termination protection), steps (list, add, describe, cancel per cluster), instance groups (list, add), instance fleets (list, add), instances (list), security configurations (list, create, describe, delete), tags (add, remove per cluster) |
+| **RDS Data API** | Execute SQL statements, begin/commit/rollback transactions |
 | **WAF v2** | Web ACLs, IP Sets, Regex Pattern Sets, Rule Groups (list, create, delete) |
 
-### Navigation + status (57 services)
+### Navigation + status (60 services)
 
-All services reported by Floci appear in the sidebar with status indicators. Unsupported services show a "Coming soon" placeholder.
+All services reported by Floci appear in the sidebar with status indicators.
 
 <details>
 <summary>Full list of navigable services</summary>
 
-**Compute:** EC2, ECS, EKS, Auto Scaling, Lambda
+**Compute:** EC2, ECS, EKS, Auto Scaling, Lambda, AWS Batch
 **Storage:** S3, ECR
-**Database:** DynamoDB, ElastiCache, Neptune, RDS
+**Database:** DynamoDB, DocumentDB, ElastiCache, Neptune, RDS, RDS Data API
 **Networking:** API Gateway, API Gateway V2, AppSync, CloudFront, ELB, Route 53
 **Messaging:** EventBridge (Events), EventBridge Pipes, EventBridge Scheduler, Kinesis, Kinesis Firehose, SES, SNS, SQS
 **Security:** ACM, Cognito, IAM, KMS, Secrets Manager, WAF v2
 **Management:** AppConfig, AppConfig Data, CloudFormation, CloudTrail, CloudWatch Logs, CloudWatch Metrics, Config, Service Discovery (Cloud Map), SSM (Systems Manager)
-**Analytics:** Athena, Glue, MSK (Kafka), OpenSearch, Step Functions
+**Analytics:** Athena, Glue, MSK (Kafka), OpenSearch, Step Functions, Amazon EMR
 **ML/AI:** Bedrock Runtime, Textract, Transcribe
 **Billing:** BCM Data Exports, Cost Explorer, Cost & Usage Report, Pricing, Resource Groups Tagging
 **Developer Tools:** CodeBuild, CodeDeploy
 **Migration:** Backup, Transfer Family
-
-**Coming soon:** AWS Batch, DocumentDB, Amazon EMR, RDS Data API
 
 </details>
 

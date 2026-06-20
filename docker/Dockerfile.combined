@@ -54,6 +54,9 @@ RUN chmod +x /usr/local/bin/combined-start.sh
 
 EXPOSE 3000 4566
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD curl -sf http://localhost:3000/api/healthz || exit 1
+
 WORKDIR /app
 
 # Reuse Floci's entrypoint which handles docker socket permissions,
