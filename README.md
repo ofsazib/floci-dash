@@ -43,16 +43,20 @@
 ## Features
 
 - **AWS Console look and feel** — Built with [Cloudscape Design System](https://cloudscape.design/), the same component library used by the real AWS Management Console
-- **56 Floci services** — Full navigation, status, and resource management with 59 backend routes covering all major AWS services
-- **Deep resource management** — Browse, create, and delete resources for implemented services (S3, DynamoDB, EC2, RDS, SQS, SNS, EventBridge, CloudWatch Logs, CloudWatch Metrics, Lambda, IAM, Secrets Manager, CloudFormation, KMS, ECS, SSM, Route 53, API Gateway, AppSync, EventBridge Scheduler, ECR, ELB, SES, STS, EKS, Auto Scaling, CloudFront, Kinesis, Neptune, EventBridge Pipes, Cognito, API Gateway V2, ACM, CloudTrail, Config, AppConfig, Cloud Map, Athena, Glue, Firehose, Step Functions, OpenSearch, MSK, Bedrock Runtime, Textract, Transcribe, Cost Explorer, Pricing, Resource Groups Tagging, BCM Data Exports, Cost & Usage Report (cur), CodeBuild, CodeDeploy, Backup, Transfer Family, WAF v2, ElastiCache)
+- **60 Floci services** — Full navigation, status, and resource management with 60+ backend routes covering all major AWS services
+- **Deep resource management** — Browse, create, and delete resources for implemented services (S3, DynamoDB, EC2, RDS, SQS, SNS, EventBridge, CloudWatch Logs, CloudWatch Metrics, Lambda, IAM, Secrets Manager, CloudFormation, KMS, ECS, SSM, Route 53, API Gateway)
 - **EC2 web terminal** — Interactive bash shell inside running EC2 instances directly from the browser (xterm.js + Docker Engine API with PTY)
-- **Dark mode** — Toggle between light and dark themes
+- **Dark mode** — Toggle between light and dark themes (persisted to localStorage)
 - **Configurable Floci endpoint** — Change the Floci URL at runtime from Settings (no restart needed)
-- **Loading skeletons** — Animated skeleton placeholders during data fetchs (table rows, stat cards, detail views)
+- **AWS-aligned sidebar** — Service categories reorganized to match AWS Console navigation (Application Integration, Containers, Management & Governance, etc.)
+- **Favorites** — Star any service for quick access; favorites persist in localStorage and appear at the top of the sidebar
+- **Recently Visited** — Last 10 visited services shown in the sidebar for quick re-access
+- **Combined search** — Sidebar search shows all matching services in one flat list (both implemented and available)
+- **Loading skeletons** — Animated skeleton placeholders during data fetches (table rows, stat cards, detail views)
 - **Improved empty states** — Consistent empty state component with icon, description, and action hint across all tables and pages
 - **Notification bell** — Visual badge in the top nav when services are unhealthy, with a modal listing non-running services
 - **Global search** — Search bar in the top nav to quickly find and navigate to any service
-- **Dashboard home** — Live stat cards (total/active/running services), resource count summaries per service, enhanced quick actions (9 services), recent activity feed (localStorage-backed), and the full service grid
+- **Dashboard home** — Live stat cards (total/active/running services), resource count summaries per service, quick actions with responsive grid, recent activity feed (localStorage-backed), breadcrumbs, and the full service grid
 - **Zero host dependencies** — Everything runs in Docker, no Node.js or AWS CLI needed locally
 - **Single container** — One Docker image for the entire dashboard (React SPA + Node.js API)
 - **Error boundaries** — React error boundary wrapping the entire app, catches rendering errors gracefully with a recovery message

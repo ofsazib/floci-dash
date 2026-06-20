@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { Box, Button, ColumnLayout, Container, Header, SpaceBetween, StatusIndicator, Link } from "@cloudscape-design/components";
+import { Box, BreadcrumbGroup, Button, ColumnLayout, Container, Header, SpaceBetween, StatusIndicator, Link } from "@cloudscape-design/components";
 import { useHealth, useActiveServices } from "../hooks/useSystem";
 import { useResourceCounts } from "../hooks/useResourceCounts";
 import { useActivityFeed } from "../hooks/useActivityFeed";
@@ -51,6 +51,11 @@ export default function DashboardHome() {
         />
       ) : health ? (
         <SpaceBetween size="xl">
+          <BreadcrumbGroup
+            items={[
+              { text: "Dashboard", href: "/#/" },
+            ]}
+          />
           <Header
             variant="h1"
             description="Local AWS emulator — manage services, buckets, tables, and more"
@@ -80,7 +85,7 @@ export default function DashboardHome() {
               label="Running"
               value={health.stats.running}
               variant="warning"
-              subtext={`${health.stats.available} inactive`}
+              subtext={health.stats.available === 0 ? "All running" : `${health.stats.available} inactive`}
             />
             <StatCard
               label="Edition"
@@ -112,7 +117,7 @@ export default function DashboardHome() {
           )}
 
           <Container header={<Header variant="h3">Quick actions</Header>}>
-            <SpaceBetween direction="horizontal" size="s">
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
               <Button variant="primary" onClick={() => trackNav("/services/s3", "s3")}>Open S3</Button>
               <Button variant="normal" onClick={() => trackNav("/services/dynamodb", "dynamodb")}>Open DynamoDB</Button>
               <Button variant="normal" onClick={() => trackNav("/services/ec2", "ec2")}>Open EC2</Button>
@@ -122,7 +127,7 @@ export default function DashboardHome() {
               <Button variant="normal" onClick={() => trackNav("/services/sns", "sns")}>Open SNS</Button>
               <Button variant="normal" onClick={() => trackNav("/services/kms", "kms")}>Open KMS</Button>
               <Button variant="normal" onClick={() => trackNav("/services/iam", "iam")}>Open IAM</Button>
-            </SpaceBetween>
+            </div>
           </Container>
 
           {entries.length > 0 && (

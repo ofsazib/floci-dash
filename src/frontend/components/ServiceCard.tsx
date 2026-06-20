@@ -1,16 +1,21 @@
 import { useNavigate } from "react-router-dom";
 import { Box } from "@cloudscape-design/components";
 import { getServiceLabel } from "../types/services";
+import { useFavorites } from "../stores/favorites";
 
 interface Props {
   serviceKey: string;
   status: "running" | "available";
 }
 
+const STAR_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M8 1l2.2 4.5L15 6.3l-3.5 3.4.8 4.9L8 12.4 3.7 14.6l.8-4.9L1 6.3l4.8-.8z"/></svg>';
+
 export default function ServiceCard({ serviceKey, status }: Props) {
   const navigate = useNavigate();
   const label = getServiceLabel(serviceKey);
   const isRunning = status === "running";
+  const { isFavorite, toggleFavorite } = useFavorites();
+  const fav = isFavorite(serviceKey);
 
   const handleClick = () => {
     navigate(`/services/${serviceKey}`);
@@ -20,6 +25,19 @@ export default function ServiceCard({ serviceKey, status }: Props) {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       navigate(`/services/${serviceKey}`);
+    }
+  };
+
+  const handleStarClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    toggleFavorite(serviceKey);
+  };
+
+  const handleStarKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleFavorite(serviceKey);
     }
   };
 
@@ -53,7 +71,28 @@ export default function ServiceCard({ serviceKey, status }: Props) {
           flexShrink: 0,
         }}
       />
-      <Box variant="p" fontWeight="bold">{label}</Box>
+      <div style={{ flex: 1 }}>
+        <Box variant="p" fontWeight="bold">{label}</Box>
+      </div>
+      <button
+        onClick={handleStarClick}
+        onKeyDown={handleStarKeyDown}
+        aria-label={fav ? `Remove ${label} from favorites` : `Add ${label} to favorites`}
+        style={{
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          padding: 4,
+          color: fav ? "var(--color-text-status-warning)" : "var(--color-text-body-secondary)",
+          opacity: fav ? 1 : 0.4,
+          transition: "opacity 0.15s",
+          flexShrink: 0,
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.opacity = "1"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.opacity = fav ? "1" : "0.4"; }}
+      >
+        <span dangerouslySetInnerHTML={{ __html: STAR_SVG }} style={{ width: 14, height: 14, display: "block" }} />
+      </button>
     </div>
   );
 }

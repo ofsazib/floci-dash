@@ -4,7 +4,9 @@ import { AppLayout, SideNavigation, TopNavigation, Input, Button, Autosuggest, M
 import type { SideNavigationProps, AutosuggestProps } from "@cloudscape-design/components";
 import { useHealth, useActiveServices } from "../hooks/useSystem";
 import { useSettings } from "../stores/settings";
-import { SERVICE_LABELS } from "../types/services";
+import { useFavorites } from "../stores/favorites";
+import { useRecentlyVisited } from "../hooks/useRecentlyVisited";
+import { SERVICE_LABELS, CATEGORY_ORDER, SERVICE_CATEGORY_MAP } from "../types/services";
 
 interface Props {
   children: React.ReactNode;
@@ -34,42 +36,6 @@ const IMPLEMENTED_SERVICES: Record<string, string> = {
   ssm: "Systems Manager",
   route53: "Route 53",
   apigateway: "API Gateway",
-};
-
-const CATEGORY_ORDER = [
-  "Compute",
-  "Storage",
-  "Database",
-  "Networking",
-  "Messaging",
-  "Security",
-  "Management",
-  "Analytics",
-  "ML/AI",
-  "Billing",
-  "Developer Tools",
-  "Migration",
-] as const;
-
-const SERVICE_CATEGORY_MAP: Record<string, string> = {
-  ec2: "Compute", lambda: "Compute", ecs: "Compute", eks: "Compute", autoscaling: "Compute",
-  s3: "Storage", ecr: "Storage",
-  dynamodb: "Database", rds: "Database", neptune: "Database", elasticache: "Database",
-  elasticloadbalancing: "Networking", route53: "Networking", cloudfront: "Networking",
-  apigateway: "Networking", apigatewayv2: "Networking", appsync: "Networking",
-  sqs: "Messaging", sns: "Messaging", events: "Messaging", kinesis: "Messaging",
-  pipes: "Messaging", scheduler: "Messaging", email: "Messaging",
-  iam: "Security", sts: "Security", "cognito-idp": "Security", kms: "Security",
-  secretsmanager: "Security", acm: "Security",
-  cloudformation: "Management", monitoring: "Management", logs: "Management", ssm: "Management",
-  config: "Management", appconfig: "Management", appconfigdata: "Management",
-  cloudtrail: "Management", servicediscovery: "Management",
-  athena: "Analytics", glue: "Analytics", firehose: "Analytics", states: "Analytics",
-  kafka: "Analytics", es: "Analytics",
-  "bedrock-runtime": "ML/AI", textract: "ML/AI", transcribe: "ML/AI",
-  ce: "Billing", cur: "Billing", "bcm-data-exports": "Billing", pricing: "Billing", tagging: "Billing",
-  codedeploy: "Developer Tools", codebuild: "Developer Tools",
-  backup: "Migration", transfer: "Migration",
 };
 
 const BELL_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M8 1.5c-2.2 0-4 1.8-4 4v2.2L2.7 10.7C2.2 11.5 2.8 12.5 3.7 12.5H12.3c.9 0 1.5-1 .9-1.8L12 7.7V5.5c0-2.2-1.8-4-4-4zM6.5 13.5c0 .8.7 1.5 1.5 1.5s1.5-.7 1.5-1.5" fill="currentColor"/></svg>';
@@ -140,6 +106,8 @@ export default function AppLayoutShell({ children }: Props) {
   }, [health]);
 
   const navItems = useMemo(() => {
+    const { favorites } = useFavorites.getState();
+    const { recentlyVisited } = useRecentlyVisited.getState();
     const items: SideNavigationProps.Item[] = [
       { type: "link" as const, text: "Dashboard", href: "/#/" },
       { type: "divider" as const },
@@ -148,12 +116,103 @@ export default function AppLayoutShell({ children }: Props) {
     const activeSet = new Set(active?.activeServices || []);
     const implementedKeys = Object.keys(IMPLEMENTED_SERVICES);
     const flociServices = health?.services ? Object.keys(health.services) : [];
+
+    // ── Favorites ──
+    const validFavorites = favorites.filter((k) => flociServices.includes(k));
+    if (validFavorites.length > 0) {
+      const textMatchesFav = (text: string) => !query || text.toLowerCase().includes(query);
+      const filteredFavs = validFavorites.filter((k) =>
+        textMatchesFav(SERVICE_LABELS[k] || k),
+      );
+      if (filteredFavs.length > 0) {
+        items.push({
+          type: "section" as const,
+          text: "★ Favorites",
+          items: filteredFavs.map((key) => ({
+            type: "link" as const,
+            text: SERVICE_LABELS[key] || key,
+            href: `/#/services/${key}`,
+            info: activeSet.has(key) ? <ActiveDot /> : undefined,
+          })) as SideNavigationProps.Item[],
+        });
+      }
+    }
+
+    // ── Recently Visited ──
+    const validRecent = recentlyVisited.filter((k) => flociServices.includes(k));
+    if (validRecent.length > 0) {
+      const textMatchesRecent = (text: string) => !query || text.toLowerCase().includes(query);
+      const filteredRecent = validRecent.filter((k) =>
+        textMatchesRecent(SERVICE_LABELS[k] || k),
+      );
+      if (filteredRecent.length > 0) {
+        items.push({
+          type: "section" as const,
+          text: "Recently Visited",
+          items: filteredRecent.map((key) => ({
+            type: "link" as const,
+            text: SERVICE_LABELS[key] || key,
+            href: `/#/services/${key}`,
+            info: activeSet.has(key) ? <ActiveDot /> : undefined,
+          })) as SideNavigationProps.Item[],
+        });
+      }
+    }
+
     const availableImplemented = implementedKeys.filter((k) => flociServices.includes(k));
 
     // ── Filter helpers ──
     const textMatches = (text: string) => !query || text.toLowerCase().includes(query);
 
-    // ── Implemented services (filtered by query) ──
+    // ── When searching, show all matches in one flat list ──
+    if (query) {
+      const allMatching: Array<{ key: string; label: string }> = [];
+
+      // Add implemented services that match
+      for (const k of availableImplemented) {
+        if (textMatches(IMPLEMENTED_SERVICES[k])) {
+          allMatching.push({ key: k, label: IMPLEMENTED_SERVICES[k] });
+        }
+      }
+
+      // Add non-implemented services that match
+      if (health?.services) {
+        for (const svc of flociServices) {
+          if (IMPLEMENTED_SERVICES[svc]) continue;
+          const label = SERVICE_LABELS[svc] || svc;
+          if (textMatches(label)) {
+            allMatching.push({ key: svc, label });
+          }
+        }
+      }
+
+      if (allMatching.length > 0) {
+        items.push({
+          type: "section" as const,
+          text: "Search Results",
+          items: allMatching
+            .sort((a, b) => a.label.localeCompare(b.label))
+            .map((s) => ({
+              type: "link" as const,
+              text: s.label,
+              href: `/#/services/${s.key}`,
+              info: activeSet.has(s.key) ? <ActiveDot /> : undefined,
+            })) as SideNavigationProps.Item[],
+        });
+      } else {
+        items.push({
+          type: "section" as const,
+          text: "Search Results",
+          items: [{ type: "link" as const, text: "No matches", href: "" }],
+        });
+      }
+
+      items.push({ type: "divider" as const });
+      items.push({ type: "link" as const, text: "Settings", href: "/#/settings" });
+      return items;
+    }
+
+    // ── Implemented services (no query — show as Resources) ──
     const filteredImplemented = availableImplemented.filter((k) =>
       textMatches(IMPLEMENTED_SERVICES[k]),
     );
@@ -169,16 +228,9 @@ export default function AppLayoutShell({ children }: Props) {
           info: activeSet.has(key) ? <ActiveDot /> : undefined,
         })) as SideNavigationProps.Item[],
       });
-    } else if (query && availableImplemented.length > 0) {
-      // Show a no-match indicator within the section
-      items.push({
-        type: "section" as const,
-        text: "Resources",
-        items: [{ type: "link" as const, text: "No matches", href: "" }],
-      });
     }
 
-    // ── All services by category ──
+    // ── All services by category (no query) ──
     if (!health?.services) {
       return items;
     }
@@ -202,18 +254,12 @@ export default function AppLayoutShell({ children }: Props) {
       if (!svcs || svcs.length === 0) continue;
 
       const sorted = svcs.sort((a, b) => a.label.localeCompare(b.label));
-      let filteredSvcs = sorted;
-      if (query) {
-        filteredSvcs = sorted.filter((s) => textMatches(s.label));
-        if (filteredSvcs.length === 0) continue;
-      }
-
       items.push({
         type: "expandable-link-group" as const,
         text: cat,
         href: `/#/category/${cat.toLowerCase()}`,
-        defaultExpanded: navAllExpanded || (query ? true : undefined),
-        items: filteredSvcs.map((s) => ({
+        defaultExpanded: navAllExpanded || undefined,
+        items: sorted.map((s) => ({
           type: "link" as const,
           text: s.label,
           href: `/#/services/${s.key}`,
@@ -223,35 +269,17 @@ export default function AppLayoutShell({ children }: Props) {
 
     const other = grouped["Other"];
     if (other && other.length > 0) {
-      let filteredOther = other;
-      if (query) {
-        filteredOther = other.filter((s) => textMatches(s.label));
-        if (filteredOther.length > 0) {
-          items.push({
-            type: "expandable-link-group" as const,
-            text: "Other",
-            href: "/#/category/other",
-            defaultExpanded: navAllExpanded || (query ? true : undefined),
-            items: filteredOther.map((s) => ({
-              type: "link" as const,
-              text: s.label,
-              href: `/#/services/${s.key}`,
-            })),
-          } as SideNavigationProps.ExpandableLinkGroup);
-        }
-      } else {
-        items.push({
-          type: "expandable-link-group" as const,
-          text: "Other",
-          href: "/#/category/other",
-          defaultExpanded: navAllExpanded || undefined,
-          items: other.map((s) => ({
-            type: "link" as const,
-            text: s.label,
-            href: `/#/services/${s.key}`,
-          })),
-        } as SideNavigationProps.ExpandableLinkGroup);
-      }
+      items.push({
+        type: "expandable-link-group" as const,
+        text: "Other",
+        href: "/#/category/other",
+        defaultExpanded: navAllExpanded || undefined,
+        items: other.map((s) => ({
+          type: "link" as const,
+          text: s.label,
+          href: `/#/services/${s.key}`,
+        })),
+      } as SideNavigationProps.ExpandableLinkGroup);
     }
 
     items.push({ type: "divider" as const });
@@ -264,6 +292,11 @@ export default function AppLayoutShell({ children }: Props) {
     e.preventDefault();
     const path = e.detail.href.replace("/#", "");
     if (path) {
+      // Track recently visited services
+      const serviceMatch = path.match(/^\/services\/([^/]+)/);
+      if (serviceMatch) {
+        useRecentlyVisited.getState().addVisited(serviceMatch[1]);
+      }
       navigate(path || "/");
     }
   };
@@ -324,6 +357,7 @@ export default function AppLayoutShell({ children }: Props) {
                   );
                   if (found) {
                     setGlobalSearch("");
+                    useRecentlyVisited.getState().addVisited(found);
                     navigate(`/services/${found}`);
                   }
                 }}
