@@ -502,7 +502,7 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
 ];
 
 /** Services with a fully implemented backend that can show a resource list */
-const IMPLEMENTED_SERVICES = new Set(["dynamodb", "rds", "logs", "ecs", "ssm", "route53", "apigateway", "appsync", "scheduler", "ecr", "elb", "ses", "sts", "eks", "autoscaling", "cloudfront", "kinesis", "neptune", "pipes", "cognito-idp", "apigatewayv2", "acm", "cloudtrail", "configservice", "appconfig", "cloudmap", "athena", "glue", "firehose", "states", "es", "kafka", "bedrock-runtime", "textract", "transcribe", "ce", "pricing", "resourcegroupstagging", "codebuild", "codedeploy", "backup", "transfer", "cur", "bcmdataexports", "wafv2", "elasticache"]);
+const IMPLEMENTED_SERVICES = new Set(["batch", "docdb", "emr", "rdsdata", "dynamodb", "rds", "logs", "ecs", "ssm", "route53", "apigateway", "appsync", "scheduler", "ecr", "elb", "ses", "sts", "eks", "autoscaling", "cloudfront", "kinesis", "neptune", "pipes", "cognito-idp", "apigatewayv2", "acm", "cloudtrail", "configservice", "appconfig", "cloudmap", "athena", "glue", "firehose", "states", "es", "kafka", "bedrock-runtime", "textract", "transcribe", "ce", "pricing", "resourcegroupstagging", "codebuild", "codedeploy", "backup", "transfer", "cur", "bcmdataexports", "wafv2", "elasticache"]);
 
 export default function ServicePage() {
   const { service } = useParams<{ service: string }>();

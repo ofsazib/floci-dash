@@ -36,6 +36,7 @@ const IMPLEMENTED_SERVICES: Record<string, string> = {
   ssm: "Systems Manager",
   route53: "Route 53",
   apigateway: "API Gateway",
+  batch: "AWS Batch",
 };
 
 const BellIcon = () => (
