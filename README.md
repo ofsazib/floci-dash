@@ -43,7 +43,7 @@
 ## Features
 
 - **AWS Console look and feel** — Built with [Cloudscape Design System](https://cloudscape.design/), the same component library used by the real AWS Management Console
-- **59+ AWS services** — Full navigation and status for every service Floci supports
+- **56 Floci services** — Full navigation, status, and resource management with 59 backend routes covering all major AWS services
 - **Deep resource management** — Browse, create, and delete resources for implemented services (S3, DynamoDB, EC2, RDS, SQS, SNS, EventBridge, CloudWatch Logs, CloudWatch Metrics, Lambda, IAM, Secrets Manager, CloudFormation, KMS, ECS, SSM, Route 53, API Gateway, AppSync, EventBridge Scheduler, ECR, ELB, SES, STS, EKS, Auto Scaling, CloudFront, Kinesis, Neptune, EventBridge Pipes, Cognito, API Gateway V2, ACM, CloudTrail, Config, AppConfig, Cloud Map, Athena, Glue, Firehose, Step Functions, OpenSearch, MSK, Bedrock Runtime, Textract, Transcribe, Cost Explorer, Pricing, Resource Groups Tagging, BCM Data Exports, Cost & Usage Report (cur), CodeBuild, CodeDeploy, Backup, Transfer Family, WAF v2, ElastiCache)
 - **EC2 web terminal** — Interactive bash shell inside running EC2 instances directly from the browser (xterm.js + Docker Engine API with PTY)
 - **Dark mode** — Toggle between light and dark themes
@@ -55,6 +55,12 @@
 - **Dashboard home** — Live stat cards (total/active/running services), resource count summaries per service, enhanced quick actions (9 services), recent activity feed (localStorage-backed), and the full service grid
 - **Zero host dependencies** — Everything runs in Docker, no Node.js or AWS CLI needed locally
 - **Single container** — One Docker image for the entire dashboard (React SPA + Node.js API)
+- **Error boundaries** — React error boundary wrapping the entire app, catches rendering errors gracefully with a recovery message
+- **Toast notifications** — Global API error interceptor that surfaces network and server errors via non-intrusive toast notifications
+- **Content Security Policy** — Strict CSP headers applied in production (self-only scripts, inline styles allowed for Cloudscape, no inline event handlers)
+- **Input sanitization** — All user inputs sanitized on the backend (control character stripping, path traversal prevention, JSON validation, length limits)
+- **Docker health checks** — Container health monitoring via `/api/healthz` endpoint, used by Docker Compose for dependency ordering
+- **Optimized Docker image** — Multi-stage build with pnpm cache mounts and `pnpm prune --prod` for minimal production image size
 
 ## Quick Start
 
@@ -229,8 +235,13 @@ src/
       DeleteButton.tsx     Generic delete with confirmation
       StatCard.tsx         Dashboard stat cards
       StatusBadge.tsx      Service status badges
+      EmptyState.tsx       Empty state with icon, title, description, action
+      LoadingSkeleton.tsx  Animated skeleton placeholders
+      ErrorBoundary.tsx    React error boundary (catches render errors)
+      Toast.tsx            Toast notification component
       DynamoDBTableDetail.tsx  DynamoDB item browser
-      S3BucketConfig.tsx   S3 bucket configuration
+      DynamoDBAdvanced.tsx DynamoDB advanced features (GSIs, TTL, tags, PartiQL)
+      S3BucketConfig.tsx   S3 bucket configuration (11 tabs)
       EC2Terminal.tsx       EC2 web terminal (xterm.js + WebSocket)
     pages/                 Route pages
       DashboardHome.tsx    Home with stats + service grid
@@ -271,6 +282,8 @@ src/
       useScheduler.ts      EventBridge Scheduler operations
       useService.ts        Generic service hook
       useSystem.ts         Health, active services
+      useActivityFeed.ts   Dashboard activity feed (localStorage)
+      useResourceCounts.ts Resource count summaries
     lib/                   Utilities
       client.ts            Fetch wrapper
       utils.ts             Helpers
@@ -284,6 +297,7 @@ src/
     clients/
       floci.ts             HTTP proxy to Floci
       aws.ts               AWS SDK client factory
+      sanitize.ts          Input sanitization utilities
     routes/
       system.ts            /api/system/health, /init
       inspection.ts        /api/inspect/sqs, /ses, /sns
@@ -389,7 +403,7 @@ These services have full CRUD operations in both backend and frontend:
 | **Transfer Family** | Servers (list, create, describe, delete, start, stop), users (list per server, create, describe, delete), tags (list) |
 | **WAF v2** | Web ACLs, IP Sets, Regex Pattern Sets, Rule Groups (list, create, delete) |
 
-### Navigation + status (55 services)
+### Navigation + status (57 services)
 
 All services reported by Floci appear in the sidebar with status indicators. Unsupported services show a "Coming soon" placeholder.
 
@@ -408,6 +422,8 @@ All services reported by Floci appear in the sidebar with status indicators. Uns
 **Billing:** BCM Data Exports, Cost Explorer, Cost & Usage Report, Pricing, Resource Groups Tagging
 **Developer Tools:** CodeBuild, CodeDeploy
 **Migration:** Backup, Transfer Family
+
+**Coming soon:** AWS Batch, DocumentDB, Amazon EMR, RDS Data API
 
 </details>
 
