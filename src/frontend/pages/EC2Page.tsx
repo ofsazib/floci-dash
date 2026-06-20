@@ -20,6 +20,7 @@ import {
   type TabsProps,
 } from "@cloudscape-design/components";
 import EC2Terminal from "../components/EC2Terminal";
+import EC2NetworkTopology from "../components/EC2NetworkTopology";
 import {
   useEC2Instances,
   useEC2RunInstance,
@@ -150,6 +151,11 @@ export default function EC2Page() {
       id: "network-interfaces",
       label: "Network Interfaces",
       content: <EC2NetworkInterfaceList />,
+    },
+    {
+      id: "topology",
+      label: "Network Topology",
+      content: <EC2NetworkTopology />,
     },
   ];
 

@@ -55,13 +55,7 @@ export default function ServiceGrid({ services }: Props) {
             <Box variant="h3" padding={{ bottom: "m" }} color="text-body-secondary">
               {category}
             </Box>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
-                gap: "12px",
-              }}
-            >
+            <div className="fd-grid-responsive">
               {keys.map((key) => (
                 <ServiceCard key={key} serviceKey={key} status={services[key]} />
               ))}

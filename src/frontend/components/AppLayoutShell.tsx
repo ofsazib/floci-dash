@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { AppLayout, SideNavigation, TopNavigation, Input, Button, Autosuggest, Modal, Box, SpaceBetween, StatusIndicator } from "@cloudscape-design/components";
 import type { SideNavigationProps, AutosuggestProps } from "@cloudscape-design/components";
@@ -85,6 +85,8 @@ function ActiveDot() {
 
 export default function AppLayoutShell({ children }: Props) {
   const [navOpen, setNavOpen] = useState(true);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 600);
+  const mainRef = useRef<HTMLDivElement>(null);
   const [navQuery, setNavQuery] = useState("");
   const [navAllExpanded, setNavAllExpanded] = useState(false);
   const [navKey, setNavKey] = useState(0);
@@ -100,6 +102,15 @@ export default function AppLayoutShell({ children }: Props) {
     document.body.classList.toggle("awsui-dark-mode", darkMode);
     document.documentElement.classList.toggle("awsui-dark-mode", darkMode);
   }, [darkMode]);
+
+  // Track viewport size for responsive adjustments
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 600);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   const currentHref = location.pathname ? `/#${location.pathname}` : "/#/";
   const query = navQuery.toLowerCase().trim();
@@ -268,35 +279,59 @@ export default function AppLayoutShell({ children }: Props) {
       .map(([key, status]) => ({ key, status }));
   }, [health]);
 
+  const handleSkipToContent = () => {
+    // Focus the main content area — prefer semantic selectors first
+    const contentEl = document.querySelector<HTMLElement>("main, [role='main'], #main-content");
+    if (contentEl) {
+      contentEl.setAttribute("tabindex", "-1");
+      contentEl.focus();
+      contentEl.scrollIntoView({ behavior: "smooth" });
+    }
+  };
+
   return (
     <>
+      {/* Skip to main content link — visually hidden until focused via CSS :focus-visible */}
+      <a
+        href="#main-content"
+        className="fd-skip-link"
+        onClick={(e) => {
+          e.preventDefault();
+          handleSkipToContent();
+        }}
+      >
+        Skip to main content
+      </a>
       <div id="header">
         <TopNavigation
           identity={{
             href: "/#/",
-            title: "Floci Dashboard",
+            title: isMobile ? "Floci" : "Floci Dashboard",
             logo: { src: FLOCI_LOGO_SVG, alt: "Floci" },
           }}
           search={
-            <Autosuggest
-              placeholder="Search services..."
-              value={globalSearch}
-              onChange={(e) => setGlobalSearch(e.detail.value)}
-              onSelect={(e) => {
-                const label = e.detail.value;
-                const flociServices = health?.services ? Object.keys(health.services) : [];
-                const found = flociServices.find(
-                  (k) => (IMPLEMENTED_SERVICES[k] || SERVICE_LABELS[k] || k) === label,
-                );
-                if (found) {
-                  setGlobalSearch("");
-                  navigate(`/services/${found}`);
-                }
-              }}
-              options={searchOptions}
-              enteredTextLabel={(v) => `Search for "${v}"`}
-              empty="No matching services"
-            />
+            <div className={isMobile ? "fd-hide-mobile" : ""} style={{ minWidth: isMobile ? 0 : 200, maxWidth: 300 }}>
+              <Autosuggest
+                placeholder="Search services..."
+                ariaLabel="Search services"
+                value={globalSearch}
+                onChange={(e) => setGlobalSearch(e.detail.value)}
+                onSelect={(e) => {
+                  const label = e.detail.value;
+                  const flociServices = health?.services ? Object.keys(health.services) : [];
+                  const found = flociServices.find(
+                    (k) => (IMPLEMENTED_SERVICES[k] || SERVICE_LABELS[k] || k) === label,
+                  );
+                  if (found) {
+                    setGlobalSearch("");
+                    navigate(`/services/${found}`);
+                  }
+                }}
+                options={searchOptions}
+                enteredTextLabel={(v) => `Search for "${v}"`}
+                empty="No matching services"
+              />
+            </div>
           }
           utilities={[
             {
@@ -308,7 +343,8 @@ export default function AppLayoutShell({ children }: Props) {
             },
             {
               type: "button",
-              text: darkMode ? "\u2600 Light" : "\u263D Dark",
+              text: darkMode ? "\u2600" : "\u263D",
+              ariaLabel: darkMode ? "Switch to light mode" : "Switch to dark mode",
               onClick: toggleDarkMode,
             },
           ]}
@@ -316,7 +352,11 @@ export default function AppLayoutShell({ children }: Props) {
         />
       </div>
       <AppLayout
-        content={children}
+        content={
+          <div ref={mainRef} id="main-content" data-testid="app-layout-content">
+            {children}
+          </div>
+        }
         navigationOpen={navOpen}
         onNavigationChange={(e) => setNavOpen(e.detail.open)}
         navigation={
@@ -340,6 +380,7 @@ export default function AppLayoutShell({ children }: Props) {
                 value={navQuery}
                 onChange={(e) => setNavQuery(e.detail.value)}
                 clearAriaLabel="Clear search"
+                ariaLabel="Filter services by name"
               />
             </div>
             {!navQuery && (

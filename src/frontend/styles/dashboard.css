@@ -155,3 +155,119 @@
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+
+/* ─── Accessibility: keyboard navigation ─── */
+
+/* Skip-to-content link — hidden until focused via Tab */
+.fd-skip-link {
+  position: absolute;
+  top: -100%;
+  left: 8px;
+  z-index: 10000;
+  padding: 8px 16px;
+  background: var(--color-background-home-header, #0972d3);
+  color: #fff;
+  border-radius: 0 0 4px 4px;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: top 0.1s ease;
+  outline: 2px solid var(--color-text-link-focus, #fff);
+  outline-offset: 2px;
+}
+
+/* Reveal the skip link when it receives focus */
+.fd-skip-link:focus,
+.fd-skip-link:focus-visible {
+  top: 4px;
+  position: fixed;
+}
+
+/* Enhanced focus-visible ring for custom interactive elements */
+.fd-skip-link:focus-visible,
+.fd-accent-card:focus-visible,
+.fd-tag-chip:focus-visible {
+  outline: 2px solid var(--color-text-link-focus, #0972d3);
+  outline-offset: 2px;
+}
+
+/* ─── Responsive utilities ─── */
+
+/* Hide on mobile screens (< 600px) */
+@media (max-width: 599px) {
+  .fd-hide-mobile {
+    display: none !important;
+  }
+}
+
+/* Show only on mobile screens (< 600px) */
+.fd-show-mobile {
+  display: none !important;
+}
+@media (max-width: 599px) {
+  .fd-show-mobile {
+    display: block !important;
+  }
+}
+
+/* Hide on tablet screens (600px - 1024px) */
+@media (min-width: 600px) and (max-width: 1024px) {
+  .fd-hide-tablet {
+    display: none !important;
+  }
+}
+
+/* Responsive table wrapper — adds horizontal scroll on small screens */
+.fd-table-responsive {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 0 -12px;
+  padding: 0 12px;
+}
+
+/* Utility: responsive padding that shrinks on mobile */
+.fd-p-responsive {
+  padding: 0 24px;
+}
+@media (max-width: 599px) {
+  .fd-p-responsive {
+    padding: 0 8px;
+  }
+}
+
+/* Utility: max-width container for centered layouts */
+.fd-container-responsive {
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+/* Stack buttons vertically on very small screens */
+.fd-button-stack-mobile {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+@media (max-width: 599px) {
+  .fd-button-stack-mobile {
+    flex-direction: column;
+  }
+  .fd-button-stack-mobile > * {
+    width: 100%;
+  }
+}
+
+/* Responsive grid — adjusts columns on mobile */
+.fd-grid-responsive {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+@media (max-width: 599px) {
+  .fd-grid-responsive {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 8px;
+  }
+}
+
+

@@ -1,48 +1,89 @@
+import { lazy, Suspense, useEffect, useRef } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HashRouter, Routes, Route } from "react-router-dom";
 import AppLayoutShell from "./components/AppLayoutShell";
-import { ToastProvider } from "./components/Toast";
+import ErrorBoundary from "./components/ErrorBoundary";
+import { ToastProvider, useToast } from "./components/Toast";
+import { setGlobalErrorReporter, clearGlobalErrorReporter } from "./lib/globalErrorHandler";
+import { DashboardSkeleton } from "./components/LoadingSkeleton";
 import DashboardHome from "./pages/DashboardHome";
-import ServicePage from "./pages/ServicePage";
-import S3Page from "./pages/S3Page";
-import EC2Page from "./pages/EC2Page";
-import SQSPage from "./pages/SQSPage";
-import SNSPage from "./pages/SNSPage";
-import EventsPage from "./pages/EventsPage";
-import LambdaPage from "./pages/LambdaPage";
-import CloudWatchPage from "./pages/CloudWatchPage";
-import IAMPage from "./pages/IAMPage";
-import SecretsManagerPage from "./pages/SecretsManagerPage";
-import CloudFormationPage from "./pages/CloudFormationPage";
-import KMSPage from "./pages/KMSPage";
-import Settings from "./pages/Settings";
 
+// Lazy-loaded dedicated service pages — code-split at the route level
+// so the initial bundle only contains the DashboardHome page.
+// Vite will generate separate chunks for each lazy import.
+const ServicePage = lazy(() => import("./pages/ServicePage"));
+const S3Page = lazy(() => import("./pages/S3Page"));
+const EC2Page = lazy(() => import("./pages/EC2Page"));
+const SQSPage = lazy(() => import("./pages/SQSPage"));
+const SNSPage = lazy(() => import("./pages/SNSPage"));
+const EventsPage = lazy(() => import("./pages/EventsPage"));
+const LambdaPage = lazy(() => import("./pages/LambdaPage"));
+const CloudWatchPage = lazy(() => import("./pages/CloudWatchPage"));
+const IAMPage = lazy(() => import("./pages/IAMPage"));
+const SecretsManagerPage = lazy(() => import("./pages/SecretsManagerPage"));
+const CloudFormationPage = lazy(() => import("./pages/CloudFormationPage"));
+const KMSPage = lazy(() => import("./pages/KMSPage"));
+const Settings = lazy(() => import("./pages/Settings"));
+
+// Errors are reported globally via the enhanced api() client, so TanStack Query
+// defaultOptions don't need an onError handler here. Toast integration happens
+// in ToastProviderWithErrorReporter below.
 const queryClient = new QueryClient();
+
+/**
+ * Inner component that bridges the Toast context into the global error reporter
+ * so that errors from `api()` calls and TanStack Query are automatically shown
+ * as toasts.
+ */
+function ToastProviderWithErrorReporter({ children }: { children: React.ReactNode }) {
+  const { showToast } = useToast();
+  const registered = useRef(false);
+
+  useEffect(() => {
+    setGlobalErrorReporter((message: string, context?: string) => {
+      const label = context ? `[${context}] ` : "";
+      showToast("error", `${label}${message}`);
+    });
+    registered.current = true;
+    return () => {
+      clearGlobalErrorReporter();
+      registered.current = false;
+    };
+  }, [showToast]);
+
+  return <>{children}</>;
+}
 
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
-        <HashRouter>
-          <AppLayoutShell>
-            <Routes>
-              <Route path="/" element={<DashboardHome />} />
-              <Route path="/services/s3" element={<S3Page />} />
-              <Route path="/services/ec2" element={<EC2Page />} />
-              <Route path="/services/sqs" element={<SQSPage />} />
-              <Route path="/services/sns" element={<SNSPage />} />
-              <Route path="/services/events" element={<EventsPage />} />
-              <Route path="/services/lambda" element={<LambdaPage />} />
-              <Route path="/services/cloudwatch" element={<CloudWatchPage />} />
-              <Route path="/services/iam" element={<IAMPage />} />
-              <Route path="/services/secretsmanager" element={<SecretsManagerPage />} />
-              <Route path="/services/cloudformation" element={<CloudFormationPage />} />
-              <Route path="/services/kms" element={<KMSPage />} />
-              <Route path="/services/:service" element={<ServicePage />} />
-              <Route path="/settings" element={<Settings />} />
-            </Routes>
-          </AppLayoutShell>
-        </HashRouter>
+        <ToastProviderWithErrorReporter>
+          <HashRouter>
+            <AppLayoutShell>
+              <ErrorBoundary>
+                <Suspense fallback={<DashboardSkeleton />}>
+                  <Routes>
+                    <Route path="/" element={<DashboardHome />} />
+                    <Route path="/services/s3" element={<S3Page />} />
+                    <Route path="/services/ec2" element={<EC2Page />} />
+                    <Route path="/services/sqs" element={<SQSPage />} />
+                    <Route path="/services/sns" element={<SNSPage />} />
+                    <Route path="/services/events" element={<EventsPage />} />
+                    <Route path="/services/lambda" element={<LambdaPage />} />
+                    <Route path="/services/cloudwatch" element={<CloudWatchPage />} />
+                    <Route path="/services/iam" element={<IAMPage />} />
+                    <Route path="/services/secretsmanager" element={<SecretsManagerPage />} />
+                    <Route path="/services/cloudformation" element={<CloudFormationPage />} />
+                    <Route path="/services/kms" element={<KMSPage />} />
+                    <Route path="/services/:service" element={<ServicePage />} />
+                    <Route path="/settings" element={<Settings />} />
+                  </Routes>
+                </Suspense>
+              </ErrorBoundary>
+            </AppLayoutShell>
+          </HashRouter>
+        </ToastProviderWithErrorReporter>
       </ToastProvider>
     </QueryClientProvider>
   );

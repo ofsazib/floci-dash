@@ -38,7 +38,7 @@ export default function DashboardHome() {
   };
 
   return (
-    <div style={{ padding: "0 24px", maxWidth: 1280, margin: "0 auto" }}>
+    <div className="fd-p-responsive fd-container-responsive">
       {isLoading ? (
         <Box padding={{ top: "l" }}>
           <DashboardSkeleton />

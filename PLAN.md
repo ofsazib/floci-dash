@@ -1101,7 +1101,7 @@ if (service === "sqs") return <SQSQueues />;
 | 7.21 | Frontend: VPC tab — List, create, detail, delete, CIDR association, VPC endpoints | Done | 2025-06-13 |
 | 7.22 | Frontend: Security Groups tab — List, create, detail (inbound/outbound rules display) | Done | 2025-06-13 |
 | 7.23 | Frontend: Key Pairs, Elastic IPs, Volumes, Launch Templates, Subnets, NAT Gateways, Route Tables, Internet Gateways tabs — each with list + create + delete | Done | 2025-06-13 |
-| 7.24 | Frontend: Network topology view (VPC -> Subnets -> Instances visual) | Pending | |
+| 7.24 | Frontend: Network topology view (VPC -> Subnets -> Instances visual) | Done | 2026-06-20 |
 | 7.25 | Verify: typecheck + build pass | Done | 2025-06-13 |
 | 7.26 | Backend: EC2 web terminal — WebSocket server + Docker Engine API with Tty=true for interactive bash | Done | 2025-06-14 |
 | 7.27 | Frontend: EC2Terminal component — xterm.js terminal with WebSocket, resize, reconnect | Done | 2025-06-14 |
@@ -1346,8 +1346,8 @@ Each remaining service gets a standard list + create + delete pattern.
 | 18.9 | Top nav: Add notification bell for errors (bell icon with badge, Modal listing non-running services) | Done | 2026-06-19 |
 | 18.10 | Settings: Add localStorage persistence for preferences | Done | 2026-06-19 |
 | 18.11 | Settings: Add Floci endpoint URL configuration (mutable config store, GET/PUT routes, Settings UI) | Done | 2026-06-20 |
-| 18.12 | Responsive: Test and fix mobile layout | Pending | |
-| 18.13 | Accessibility: Keyboard navigation audit | Pending | |
+| 18.12 | Responsive: Test and fix mobile layout | Done | 2026-06-20 |
+| 18.13 | Accessibility: Keyboard navigation audit | Done | 2026-06-20 |
 | 18.14 | Accessibility: ARIA labels audit | Pending | |
 
 ---
@@ -1356,9 +1356,9 @@ Each remaining service gets a standard list + create + delete pattern.
 
 | # | Task | Status | Date |
 |---|------|--------|------|
-| 19.1 | Error boundary: Add React error boundary component | Pending | |
-| 19.2 | Error handling: Global API error interceptor with toast notifications | Pending | |
-| 19.3 | Performance: Lazy-load service pages with React.lazy | Pending | |
+| 19.1 | Error boundary: Add React error boundary component | Done | 2026-06-20 |
+| 19.2 | Error handling: Global API error interceptor with toast notifications | Done | 2026-06-20 |
+| 19.3 | Performance: Lazy-load service pages with React.lazy | Done | 2026-06-20 |
 | 19.4 | Performance: Add TanStack Query devtools (dev only) | Pending | |
 | 19.5 | Security: Add CSP headers in production | Pending | |
 | 19.6 | Security: Sanitize all user inputs on backend | Pending | |
@@ -1415,8 +1415,8 @@ Each remaining service gets a standard list + create + delete pattern.
 | 22.8 | Raise coverage thresholds: 55/45/38/57 → 68/48/60/70 to lock in gains | Done | 2026-06-16 |
 | 22.9 | Verify: 1247 unit tests pass, typecheck clean, coverage thresholds met | Done | 2026-06-16 |
 | 22.a | Write component tests for high-impact files: DynamoDBTableDetail (22 tests), S3BucketConfig (24 tests), AppLayoutShell (14 tests) | Done | 2026-06-16 |
-| 22.b | Write tests for backend entry files (index.ts, types.ts) | Pending | |
-| 22.c | Re-check Codecov number, iterate if below target | Pending | |
+| 22.b | Write tests for backend entry files (index.ts, types.ts) | Done | 2026-06-20 |
+| 22.c | Re-check Codecov number, iterate if below target | Done | 2026-06-20 |
 
 ---
 

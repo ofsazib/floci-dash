@@ -69,6 +69,7 @@ export default function ResourceTable({
   }));
 
   return (
+    <div className="fd-table-responsive">
     <Table
       header={
         headerTitle ? (
@@ -119,5 +120,6 @@ export default function ResourceTable({
         )
       }
     />
+    </div>
   );
 }

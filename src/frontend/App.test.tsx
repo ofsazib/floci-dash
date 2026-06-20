@@ -10,6 +10,10 @@ vi.mock("./components/AppLayoutShell", () => ({
 }));
 vi.mock("./components/Toast", () => ({
   ToastProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  useToast: () => ({
+    showToast: () => {},
+    toasts: [],
+  }),
 }));
 
 // Factories are hoisted above imports, so each must be fully self-contained.
