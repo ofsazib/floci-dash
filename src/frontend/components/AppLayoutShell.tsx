@@ -38,7 +38,11 @@ const IMPLEMENTED_SERVICES: Record<string, string> = {
   apigateway: "API Gateway",
 };
 
-const BELL_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M8 1.5c-2.2 0-4 1.8-4 4v2.2L2.7 10.7C2.2 11.5 2.8 12.5 3.7 12.5H12.3c.9 0 1.5-1 .9-1.8L12 7.7V5.5c0-2.2-1.8-4-4-4zM6.5 13.5c0 .8.7 1.5 1.5 1.5s1.5-.7 1.5-1.5" fill="currentColor"/></svg>';
+const BellIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
+    <path d="M8 1.5c-2.2 0-4 1.8-4 4v2.2L2.7 10.7C2.2 11.5 2.8 12.5 3.7 12.5H12.3c.9 0 1.5-1 .9-1.8L12 7.7V5.5c0-2.2-1.8-4-4-4zM6.5 13.5c0 .8.7 1.5 1.5 1.5s1.5-.7 1.5-1.5" fill="currentColor"/>
+  </svg>
+);
 
 function ActiveDot() {
   return (
@@ -370,7 +374,7 @@ export default function AppLayoutShell({ children }: Props) {
           utilities={[
             {
               type: "button",
-              iconSvg: BELL_SVG,
+              iconSvg: <BellIcon />,
               ariaLabel: "Notifications",
               badge: nonRunningServices.length > 0,
               onClick: () => setShowNotifications(true),
