@@ -157,3 +157,4 @@ All commands use `make`. Run `make help` for the full list.
 - Every task in PLAN.md must be tracked and updated
 - **Always use `make` commands** for Docker and build operations
 - **Always update README.md** after making changes
+- **Never push to GitHub unless explicitly instructed** — the agent may commit changes locally (e.g., `git add` + `git commit`) but MUST NOT run `git push` unless the user says "push" or "commit and push"
