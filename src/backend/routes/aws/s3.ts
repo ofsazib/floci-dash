@@ -219,6 +219,8 @@ router.delete("/buckets/:name/objects/*", async (c: Context) => {
 });
 
 // Batch delete objects (up to 1000 keys per request)
+// Keys ending with "/" are treated as folder prefixes — all objects under
+// the prefix are listed and deleted recursively.
 router.post("/buckets/:name/objects/batch-delete", async (c: Context) => {
   const bucket = c.req.param("name");
   const { keys } = await c.req.json<{ keys: string[] }>();
@@ -229,16 +231,66 @@ router.post("/buckets/:name/objects/batch-delete", async (c: Context) => {
   if (sanitizedKeys.length === 0) {
     return c.json({ error: "No valid keys provided after sanitization" }, 400);
   }
-  const result = await s3().send(
-    new DeleteObjectsCommand({
-      Bucket: bucket,
-      Delete: { Objects: sanitizedKeys.map((k) => ({ Key: k })) },
-    })
-  );
+
+  const client = s3();
+
+  // Separate regular keys from folder prefixes (ending with "/")
+  const regularKeys: string[] = [];
+  const folderPrefixes: string[] = [];
+  for (const k of sanitizedKeys) {
+    if (k.endsWith("/")) {
+      folderPrefixes.push(k);
+    } else {
+      regularKeys.push(k);
+    }
+  }
+
+  // Expand each folder prefix: list all objects under it
+  const folderKeys: string[] = [];
+  for (const prefix of folderPrefixes) {
+    let continuationToken: string | undefined;
+    do {
+      const listResult = await client.send(
+        new ListObjectsV2Command({
+          Bucket: bucket,
+          Prefix: prefix,
+          ContinuationToken: continuationToken,
+        })
+      );
+      folderKeys.push(...(listResult.Contents || []).map((o) => o.Key!));
+      continuationToken = listResult.IsTruncated ? listResult.NextContinuationToken : undefined;
+    } while (continuationToken);
+  }
+
+  // Combine regular keys + expanded folder keys (dedup)
+  const allKeys = [...new Set([...regularKeys, ...folderKeys])];
+
+  if (allKeys.length === 0) {
+    return c.json({ bucket, deleted: [], errors: [] });
+  }
+
+  // Batch delete in chunks of 1000 (S3 limit per DeleteObjects request)
+  let totalDeleted = 0;
+  const deletedKeys: string[] = [];
+  const allErrors: Array<{ key: string | undefined; code: string | undefined; message: string | undefined }> = [];
+  for (let i = 0; i < allKeys.length; i += 1000) {
+    const chunk = allKeys.slice(i, i + 1000);
+    const result = await client.send(
+      new DeleteObjectsCommand({
+        Bucket: bucket,
+        Delete: { Objects: chunk.map((k) => ({ Key: k })) },
+      })
+    );
+    totalDeleted += result.Deleted?.length || 0;
+    deletedKeys.push(...(result.Deleted || []).map((d) => d.Key!));
+    allErrors.push(...(result.Errors || []).map((e) => ({ key: e.Key, code: e.Code, message: e.Message })));
+  }
+
   return c.json({
     bucket,
-    deleted: (result.Deleted || []).map((d) => d.Key),
-    errors: (result.Errors || []).map((e) => ({ key: e.Key, code: e.Code, message: e.Message })),
+    deleted: deletedKeys,
+    totalDeleted,
+    errors: allErrors,
   });
 });
 
