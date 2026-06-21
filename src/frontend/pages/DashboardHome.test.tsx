@@ -70,7 +70,8 @@ describe("DashboardHome", () => {
     expect(screen.getByText("Connected — v1.5.22")).toBeTruthy();
     expect(screen.getByText("50")).toBeTruthy();
     expect(screen.getByText("30")).toBeTruthy();
-    expect(screen.getByText("Community")).toBeTruthy();
+    expect(screen.getByText("Resources")).toBeTruthy();
+    expect(screen.getByText("11")).toBeTruthy();
   });
 
   it("shows resource counts section with non-zero services", () => {

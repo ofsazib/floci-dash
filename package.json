@@ -3,6 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "description": "AWS Console-style web UI for Floci, the local AWS emulator",
+  "license": "MIT",
+  "author": "Omar Faruk Sazib",
+  "homepage": "https://github.com/ofsazib/floci-dash#readme",
+  "repository": { "type": "git", "url": "https://github.com/ofsazib/floci-dash.git" },
+  "bugs": { "url": "https://github.com/ofsazib/floci-dash/issues" },
   "packageManager": "pnpm@11.8.0",
   "scripts": {
     "dev": "concurrently \"pnpm run dev:backend\" \"pnpm run dev:frontend\"",

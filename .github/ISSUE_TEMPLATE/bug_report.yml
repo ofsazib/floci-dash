@@ -1,0 +1,28 @@
+name: Bug report
+description: Report a problem with Floci Dashboard
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, what you got.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open ...
+        2. Click ...
+        3. See error
+  - type: input
+    id: floci-version
+    attributes:
+      label: Floci version
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: Browser, OS, how you're running the dashboard (Docker / dev).

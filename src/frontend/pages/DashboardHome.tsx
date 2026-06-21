@@ -88,11 +88,10 @@ export default function DashboardHome() {
               subtext={health.stats.available === 0 ? "All running" : `${health.stats.available} inactive`}
             />
             <StatCard
-              label="Edition"
-              value={health.edition}
-              variant="default"
-              subtext={`v${health.version}`}
-              isText
+              label="Resources"
+              value={resourceCounts ? Object.values(resourceCounts).reduce((a, b) => a + b, 0) : "—"}
+              variant="info"
+              subtext="Total resources across all services"
             />
           </ColumnLayout>
 
