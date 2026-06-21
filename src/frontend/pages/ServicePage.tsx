@@ -461,6 +461,8 @@ import {
   useCommitRDSDataTransaction,
   useRollbackRDSDataTransaction,
 } from "../hooks/useRDSData";
+import { useEc2Messages, useAcknowledgeMessage } from "../hooks/useEc2Messages";
+import { useStartConfigurationSession, useGetLatestConfiguration } from "../hooks/useAppConfigData";
 
 const KEY_TYPE_OPTIONS: SelectProps.Option[] = [
   { label: "String (S)", value: "S" },
@@ -501,7 +503,7 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
 ];
 
 /** Services with a fully implemented backend that can show a resource list */
-const IMPLEMENTED_SERVICES = new Set(["batch", "docdb", "emr", "rdsdata", "dynamodb", "rds", "logs", "ecs", "ssm", "route53", "apigateway", "appsync", "scheduler", "ecr", "elb", "ses", "sts", "eks", "autoscaling", "cloudfront", "kinesis", "neptune", "pipes", "cognito-idp", "apigatewayv2", "acm", "cloudtrail", "configservice", "appconfig", "cloudmap", "athena", "glue", "firehose", "states", "es", "kafka", "bedrock-runtime", "textract", "transcribe", "ce", "pricing", "resourcegroupstagging", "codebuild", "codedeploy", "backup", "transfer", "cur", "bcmdataexports", "wafv2", "elasticache"]);
+const IMPLEMENTED_SERVICES = new Set(["batch", "docdb", "emr", "rdsdata", "ec2messages", "appconfigdata", "dynamodb", "rds", "logs", "ecs", "ssm", "route53", "apigateway", "appsync", "scheduler", "ecr", "elb", "ses", "sts", "eks", "autoscaling", "cloudfront", "kinesis", "neptune", "pipes", "cognito-idp", "apigatewayv2", "acm", "cloudtrail", "configservice", "appconfig", "cloudmap", "athena", "glue", "firehose", "states", "es", "kafka", "bedrock-runtime", "textract", "transcribe", "ce", "pricing", "resourcegroupstagging", "codebuild", "codedeploy", "backup", "transfer", "cur", "bcmdataexports", "wafv2", "elasticache"]);
 
 export default function ServicePage() {
   const { service } = useParams<{ service: string }>();
@@ -606,6 +608,8 @@ function ServiceResourceList({ service }: { service: string }) {
   if (service === "docdb") return <DocDBDashboard />;
   if (service === "emr") return <EMRDashboard />;
   if (service === "rdsdata") return <RDSDataDashboard />;
+  if (service === "ec2messages") return <Ec2MessagesDashboard />;
+  if (service === "appconfigdata") return <AppConfigDataDashboard />;
   return null;
 }
 
@@ -11033,6 +11037,162 @@ function RDSDataDashboard() {
       {result && (
         <Container header={<Header variant="h3">Result</Header>}>
           <Textarea readOnly value={JSON.stringify(result, null, 2)} />
+        </Container>
+      )}
+    </SpaceBetween>
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  EC2 Messages
+// ────────────────────────────────────────────────────────
+
+function Ec2MessagesDashboard() {
+  const [destination, setDestination] = useState("");
+  const [activated, setActivated] = useState(false);
+  const { data, isLoading, refetch } = useEc2Messages(activated ? destination.trim() : null);
+  const acknowledge = useAcknowledgeMessage();
+  const { showToast } = useToast();
+
+  const messages = (data as any)?.Messages || [];
+
+  return (
+    <SpaceBetween size="l">
+      <Container header={<Header variant="h2">SSM Message Lookup</Header>}>
+        <SpaceBetween direction="horizontal" size="s">
+          <FormField label="Destination (Instance ID)">
+            <Input
+              placeholder="i-xxxxxxxx"
+              value={destination}
+              onChange={({ detail }) => setDestination(detail.value)}
+            />
+          </FormField>
+          <Button
+            variant="primary"
+            disabled={!destination.trim()}
+            onClick={() => { setActivated(true); setTimeout(() => refetch(), 100); }}
+          >
+            Get Messages
+          </Button>
+        </SpaceBetween>
+      </Container>
+
+      <ResourceTable
+        resourceName="Message"
+        headerTitle="Messages"
+        headerCounter={messages.length}
+        items={messages.map((m: any) => ({
+          id: m.MessageId || "-",
+          destination: m.Destination || "-",
+          status: m.Acknowledged ? "Acknowledged" : "Pending",
+          created: m.CreatedTime ? new Date(m.CreatedTime).toLocaleString() : "-",
+        }))}
+        columns={[
+          { id: "id", header: "Message ID", cell: (i: any) => i.id, isRowHeader: true },
+          { id: "destination", header: "Destination", cell: (i: any) => i.destination },
+          { id: "status", header: "Status", cell: (i: any) => i.status },
+          { id: "created", header: "Created", cell: (i: any) => i.created },
+          { id: "actions", header: "", cell: (i: any) => (
+            <Button
+              variant="inline-link"
+              loading={acknowledge.isPending}
+              onClick={async () => {
+                try {
+                  await acknowledge.mutateAsync(i.id);
+                  showToast("success", `Message ${i.id} acknowledged`);
+                  refetch();
+                } catch (e: any) { showToast("error", e.message); }
+              }}
+            >
+              Acknowledge
+            </Button>
+          )},
+        ]}
+        loading={isLoading}
+        emptyMessage="No messages found"
+      />
+    </SpaceBetween>
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  AppConfig Data
+// ────────────────────────────────────────────────────────
+
+function AppConfigDataDashboard() {
+  const [appId, setAppId] = useState("");
+  const [envId, setEnvId] = useState("");
+  const [profileId, setProfileId] = useState("");
+  const [token, setToken] = useState("");
+  const [result, setResult] = useState<any>(null);
+  const startSession = useStartConfigurationSession();
+  const getLatest = useGetLatestConfiguration();
+  const { showToast } = useToast();
+
+  return (
+    <SpaceBetween size="l">
+      <Container header={<Header variant="h2">Start Configuration Session</Header>}>
+        <SpaceBetween size="s">
+          <FormField label="Application Identifier">
+            <Input value={appId} onChange={({ detail }) => setAppId(detail.value)} placeholder="my-app" />
+          </FormField>
+          <FormField label="Environment Identifier">
+            <Input value={envId} onChange={({ detail }) => setEnvId(detail.value)} placeholder="prod" />
+          </FormField>
+          <FormField label="Configuration Profile Identifier">
+            <Input value={profileId} onChange={({ detail }) => setProfileId(detail.value)} placeholder="profile-1" />
+          </FormField>
+          <Button
+            variant="primary"
+            loading={startSession.isPending}
+            disabled={!appId.trim() || !envId.trim() || !profileId.trim()}
+            onClick={async () => {
+              try {
+                const res = await startSession.mutateAsync({
+                  ApplicationIdentifier: appId.trim(),
+                  EnvironmentIdentifier: envId.trim(),
+                  ConfigurationProfileIdentifier: profileId.trim(),
+                });
+                setToken(res.initialConfigurationToken);
+                showToast("success", "Session started");
+              } catch (e: any) { showToast("error", e.message); }
+            }}
+          >
+            Start Session
+          </Button>
+        </SpaceBetween>
+      </Container>
+
+      {token && (
+        <Container header={<Header variant="h2">Configuration</Header>}>
+          <SpaceBetween size="s">
+            <Box>
+              <b>Token:</b> {token.slice(0, 40)}…
+            </Box>
+            <Button
+              variant="primary"
+              loading={getLatest.isPending}
+              onClick={async () => {
+                try {
+                  const res = await getLatest.mutateAsync({ configurationToken: token });
+                  setResult(res);
+                  if (res.nextPollConfigurationToken) setToken(res.nextPollConfigurationToken);
+                } catch (e: any) { showToast("error", e.message); }
+              }}
+            >
+              Get Latest Configuration
+            </Button>
+          </SpaceBetween>
+        </Container>
+      )}
+
+      {result && (
+        <Container header={<Header variant="h3">Result</Header>}>
+          <SpaceBetween size="s">
+            <Box><b>Version:</b> {result.versionLabel || "-"}</Box>
+            <Box><b>Content Type:</b> {result.contentType || "-"}</Box>
+            <Textarea readOnly value={result.content || "(empty)"} rows={10} />
+          </SpaceBetween>
         </Container>
       )}
     </SpaceBetween>

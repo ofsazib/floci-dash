@@ -89,6 +89,7 @@ export default function App() {
                     <Route path="/services/events" element={<EventsPage />} />
                     <Route path="/services/lambda" element={<LambdaPage />} />
                     <Route path="/services/cloudwatch" element={<CloudWatchPage />} />
+                    <Route path="/services/monitoring" element={<CloudWatchPage />} />
                     <Route path="/services/iam" element={<IAMPage />} />
                     <Route path="/services/secretsmanager" element={<SecretsManagerPage />} />
                     <Route path="/services/cloudformation" element={<CloudFormationPage />} />
