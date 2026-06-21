@@ -345,7 +345,7 @@ export default function AppLayoutShell({ children }: Props) {
         <TopNavigation
           identity={{
             href: "/#/",
-            title: isMobile ? "Floci" : "Floci Dashboard",
+            title: isMobile ? "Floci" : "Floci Dash",
             logo: { src: FLOCI_LOGO_SVG, alt: "Floci" },
           }}
           search={

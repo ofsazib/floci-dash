@@ -12,7 +12,7 @@ COMPOSE := docker compose
 
 help: ## Show this help
 	@echo ""
-	@echo "  Floci Dashboard"
+	@echo "  Floci Dash"
 	@echo "  ──────────────"
 	@echo ""
 	@echo "  Native (requires Node.js 22+):"

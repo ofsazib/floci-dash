@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="public/favicon.svg" width="80" height="80" alt="Floci Dashboard logo" />
+  <img src="public/favicon.svg" width="80" height="80" alt="Floci Dash logo" />
 </p>
 
-<h1 align="center">Floci Dashboard</h1>
+<h1 align="center">Floci Dash</h1>
 
 <p align="center">
   <strong>AWS Console-style web UI for <a href="https://github.com/hectorvent/floci">Floci</a> — the local AWS emulator.</strong>
@@ -37,7 +37,7 @@
 ---
 
 <p align="center">
-  <img src="docs/dashboard-screenshot.png" alt="Floci Dashboard screenshot showing the service grid and dark mode UI" width="800" />
+  <img src="docs/dashboard-screenshot.png" alt="Floci Dash screenshot showing the service grid and dark mode UI" width="800" />
 </p>
 
 ## Features
@@ -71,8 +71,8 @@
 > **Prerequisites:** [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/) (or Docker Desktop)
 
 ```bash
-git clone https://github.com/hectorvent/floci-dashboard.git
-cd floci-dashboard
+git clone https://github.com/ofsazib/floci-dash.git
+cd floci-dash
 make up-bg
 ```
 
@@ -178,7 +178,7 @@ docker run -p 3000:3000 -p 4566:4566 \
 ```
 ┌─────────────────────────────────────────────────┐
 │                   Browser                        │
-│         Floci Dashboard (React SPA)              │
+│         Floci Dash (React SPA)              │
 │      Cloudscape Design + TanStack Query          │
 └──────────────────┬──────────────────────────────┘
                    │ /api/*

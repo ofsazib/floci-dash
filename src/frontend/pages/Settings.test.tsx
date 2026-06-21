@@ -42,7 +42,7 @@ describe("Settings", () => {
     expect(screen.getByText("Data Refresh")).toBeTruthy();
     expect(screen.getByText("10 seconds")).toBeTruthy();
     expect(screen.getByText("About")).toBeTruthy();
-    expect(screen.getByText("Floci Dashboard v0.1.0")).toBeTruthy();
+    expect(screen.getByText("Floci Dash v0.1.0")).toBeTruthy();
   });
 
   it("shows dark mode toggle is checked when enabled", () => {

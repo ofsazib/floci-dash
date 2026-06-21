@@ -65,7 +65,7 @@ export default function DashboardHome() {
               </StatusIndicator>
             }
           >
-            Floci Dashboard
+            Floci Dash
           </Header>
 
           <ColumnLayout columns={4} variant="text-grid">

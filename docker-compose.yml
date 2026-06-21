@@ -1,4 +1,4 @@
-# ─── Floci Dashboard — Docker Compose ───
+# ─── Floci Dash — Docker Compose ───
 #
 # Usage:
 #   make up          → start everything (foreground)
@@ -38,7 +38,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: floci-dashboard
+    container_name: floci-dash
     ports:
       - "${DASHBOARD_PORT:-9877}:3000"
     environment:

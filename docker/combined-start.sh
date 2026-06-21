@@ -29,6 +29,6 @@ while [ $i -lt 60 ]; do
 done
 
 # ── 3. Start Dashboard ────────────────────────────────
-echo "[combined] Starting Floci Dashboard..."
+echo "[combined] Starting Floci Dash..."
 cd /app/dashboard
 exec node dist/backend/index.js

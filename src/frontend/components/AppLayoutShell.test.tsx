@@ -79,14 +79,14 @@ beforeEach(() => {
 });
 
 describe("AppLayoutShell — rendering", () => {
-  it("renders header with Floci Dashboard title", () => {
+  it("renders header with Floci Dash title", () => {
     render(
       <AppLayoutShell>
         <div>Content</div>
       </AppLayoutShell>,
       { wrapper: createWrapper() },
     );
-    expect(screen.getAllByText("Floci Dashboard").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Floci Dash").length).toBeGreaterThan(0);
   });
 
   it("renders children content", () => {

@@ -1,4 +1,4 @@
-# ─── Floci Dashboard — CI ───
+# ─── Floci Dash — CI ───
 #
 # Runs on every push/PR to main.
 #   - TypeScript typecheck

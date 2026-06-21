@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for your interest in improving Floci Dashboard.
+Thanks for your interest in improving Floci Dash.
 
 ## Setup
 

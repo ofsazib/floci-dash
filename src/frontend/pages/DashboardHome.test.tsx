@@ -66,7 +66,7 @@ describe("DashboardHome", () => {
 
   it("renders dashboard with health data", () => {
     render(<DashboardHome />, { wrapper: createWrapper() });
-    expect(screen.getByText("Floci Dashboard")).toBeTruthy();
+    expect(screen.getByText("Floci Dash")).toBeTruthy();
     expect(screen.getByText("Connected — v1.5.22")).toBeTruthy();
     expect(screen.getByText("50")).toBeTruthy();
     expect(screen.getByText("30")).toBeTruthy();

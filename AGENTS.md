@@ -1,4 +1,4 @@
-# Agent Instructions — Floci Dashboard
+# Agent Instructions — Floci Dash
 
 ## MANDATORY: Use the Makefile
 
@@ -88,7 +88,7 @@ The tracker uses these status values: `Done`, `In Progress`, `Pending`, `Blocked
 
 ## Project
 
-Floci Dashboard is a Dockerized, full-stack web app providing an AWS Console-style UI for the Floci local AWS emulator. This project is open source — write code and docs accordingly.
+Floci Dash is a Dockerized, full-stack web app providing an AWS Console-style UI for the Floci local AWS emulator. This project is open source — write code and docs accordingly.
 
 - **Frontend:** React 19 + Cloudscape Design System + TanStack Query + React Router (HashRouter)
 - **Backend:** Node.js 22 + Hono + @aws-sdk/client-* (all AWS SDK calls go through the backend, never the browser)

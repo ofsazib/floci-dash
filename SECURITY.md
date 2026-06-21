@@ -8,4 +8,4 @@ Report privately via [GitHub Security Advisories](https://github.com/ofsazib/flo
 
 ## Scope
 
-Floci Dashboard is a local development tool that proxies to a [Floci](https://github.com/hectorvent/floci) emulator. It is **not intended to be exposed to the public internet** — it grants full control over the connected Floci instance and has no authentication layer. Run it on localhost or a trusted network only.
+Floci Dash is a local development tool that proxies to a [Floci](https://github.com/hectorvent/floci) emulator. It is **not intended to be exposed to the public internet** — it grants full control over the connected Floci instance and has no authentication layer. Run it on localhost or a trusted network only.

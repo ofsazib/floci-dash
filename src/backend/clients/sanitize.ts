@@ -1,7 +1,7 @@
 /**
  * Input sanitization utilities for backend routes.
  *
- * Because the Floci Dashboard only talks to a local emulator via the AWS SDK,
+ * Because the Floci Dash only talks to a local emulator via the AWS SDK,
  * the attack surface is limited. Sanitization here focuses on:
  *
  *   1. Path traversal in S3 object keys

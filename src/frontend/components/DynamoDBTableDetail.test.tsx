@@ -397,7 +397,7 @@ describe("DynamoDBTableDetail — preset management", () => {
     await user.click(screen.getByRole("button", { name: /Save as preset/i }));
     await user.type(screen.getByPlaceholderText("e.g. Active items"), "my-preset");
     await clickButton(user, /^Save$/i, { last: true });
-    const stored = JSON.parse(localStorage.getItem("floci-dashboard-dynamodb-presets") || "{}");
+    const stored = JSON.parse(localStorage.getItem("floci-dash-dynamodb-presets") || "{}");
     expect(stored.users).toBeDefined();
     expect(stored.users[0].name).toBe("my-preset");
   });
@@ -419,7 +419,7 @@ describe("DynamoDBTableDetail — preset management", () => {
     const presets = {
       users: [{ name: "saved-preset", conditions: [{ attr: "x", op: "=", value: "1", enabled: true }], logic: "AND" }],
     };
-    localStorage.setItem("floci-dashboard-dynamodb-presets", JSON.stringify(presets));
+    localStorage.setItem("floci-dash-dynamodb-presets", JSON.stringify(presets));
     render(<DynamoDBTableDetail tableName="users" onBack={vi.fn()} />, {
       wrapper: createWrapper(),
     });

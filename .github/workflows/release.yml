@@ -1,4 +1,4 @@
-# ─── Floci Dashboard — Release ───
+# ─── Floci Dash — Release ───
 #
 # Triggered by git tag pushes (v* semver).
 # Builds and publishes Docker images to GHCR with semver tags.

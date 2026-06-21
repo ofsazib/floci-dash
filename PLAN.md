@@ -1,4 +1,4 @@
-# Floci Dashboard — Implementation Plan
+# Floci Dash — Implementation Plan
 
 ## Overview
 
@@ -74,7 +74,7 @@ An AWS Console-style web dashboard for Floci, the local AWS emulator. The dashbo
 ## Project Structure
 
 ```
-floci-dashboard/
+floci-dash/
 ├── src/
 │   ├── frontend/                  <- React SPA
 │   │   ├── main.tsx               <- Entry point
@@ -207,7 +207,7 @@ export const SERVICE_CATEGORIES: Record<string, string[]> = {
 +------------------------------------------------------------------+
 | [Floci Logo]  Floci          [Dark Mode] [Settings]               |
 +----------+-------------------------------------------------------+
-|          |  Floci Dashboard                          Connected v1  |
+|          |  Floci Dash                          Connected v1  |
 | Nav      |                                                        |
 | ------   |  [Available] [Active] [Running] [Edition]              |
 | Dashboard|                                                        |

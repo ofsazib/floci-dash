@@ -75,7 +75,7 @@ const port = Number(process.env.PORT) || 3000;
 const httpServer = createAdaptorServer({ fetch: app.fetch }) as HttpServer;
 
 httpServer.listen(port, () => {
-  console.log(`Floci Dashboard running on http://localhost:${port}`);
+  console.log(`Floci Dash running on http://localhost:${port}`);
 });
 
 // Attach WebSocket server for EC2 terminal access

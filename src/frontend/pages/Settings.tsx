@@ -81,7 +81,7 @@ export default function Settings() {
         </Container>
 
         <Container header={<Header variant="h2">About</Header>}>
-          <Box variant="p">Floci Dashboard v0.1.0</Box>
+          <Box variant="p">Floci Dash v0.1.0</Box>
           <Box variant="p">AWS Console-style management interface for the Floci local AWS emulator.</Box>
         </Container>
       </SpaceBetween>

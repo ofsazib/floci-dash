@@ -121,7 +121,7 @@ export default function DynamoDBTableDetail({
     }>;
     logic: "AND" | "OR";
   }
-  const PRESETS_KEY = "floci-dashboard-dynamodb-presets";
+  const PRESETS_KEY = "floci-dash-dynamodb-presets";
 
   const [showSavePreset, setShowSavePreset] = useState(false);
   const [showManagePresets, setShowManagePresets] = useState(false);

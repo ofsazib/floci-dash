@@ -1,7 +1,7 @@
 # AWS Services: ECR, ELB, SES Implementation Plan
 
 ## Goal
-Implement three new AWS services in the Floci Dashboard: ECR (container registry), ELB (load balancers), and SES (email). Each follows the existing service-based vertical slice pattern.
+Implement three new AWS services in the Floci Dash: ECR (container registry), ELB (load balancers), and SES (email). Each follows the existing service-based vertical slice pattern.
 
 ## Architecture Pattern (established)
 Each service follows:

@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a problem with Floci Dashboard
+description: Report a problem with Floci Dash
 labels: [bug]
 body:
   - type: textarea
