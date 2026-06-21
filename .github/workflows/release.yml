@@ -185,9 +185,10 @@ jobs:
             type=semver,pattern={{major}}
 
       - name: Create multi-arch manifest — dashboard-only
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
         run: |
-          SOURCES=""
-          for tag in ${{ steps.meta.outputs.tags }}; do
+          for tag in $TAGS; do
             docker buildx imagetools create \
               -t "$tag" \
               "ghcr.io/ofsazib/floci-dash@${{ steps.digests.outputs.dash-amd64 }}" \
@@ -209,8 +210,10 @@ jobs:
             type=semver,pattern={{major}}
 
       - name: Create multi-arch manifest — combined
+        env:
+          TAGS: ${{ steps.meta-combined.outputs.tags }}
         run: |
-          for tag in ${{ steps.meta-combined.outputs.tags }}; do
+          for tag in $TAGS; do
             docker buildx imagetools create \
               -t "$tag" \
               "ghcr.io/ofsazib/floci-dash@${{ steps.digests.outputs.combined-amd64 }}" \
