@@ -1278,7 +1278,7 @@ if (service === "sqs") return <SQSQueues />;
 
 Each remaining service gets a standard list + create + delete pattern.
 
-**State:** 45-tracker items (17.42 removed as DUP of 17.35, 17.46 added for ElastiCache). **All 45 Done.** 59 services fully implemented across the dashboard.
+**State:** 46-tracker items (17.42 removed as DUP of 17.35, 17.46 added for ElastiCache, 17.47 added for MemoryDB). **All 46 Done.** 62 services fully implemented across the dashboard.
 
 | # | Service | Backend | Frontend | Status | Date |
 |---|---------|---------|----------|--------|------|
@@ -1328,6 +1328,7 @@ Each remaining service gets a standard list + create + delete pattern.
 | 17.44 | Verify: all services typecheck + build pass | Done | — | Done | 2026-06-19 |
 | 17.45 | WAF v2 (wafv2) | Done | Done | Done | 2026-06-19 |
 | 17.46 | ElastiCache (elasticache) — Floci: full CRUD (Replication Groups, Cache Clusters, Users) — spec exists in PLAN.md but no code | Done | Done | Done | 2026-06-19 |
+| 17.47 | MemoryDB (memorydb) — Floci: clusters CRUD + tags, SDK: @aws-sdk/client-memorydb@3.1073.0 | Done | Done | Done | 2026-06-21 |
 
 ---
 
@@ -1459,7 +1460,7 @@ Implement the 4 Floci services not yet covered by the dashboard. Each follows th
 
 - **Official dashboard in Floci:** The Floci repo at `../floci` now has an untracked `dashboard/` directory — a separate Node/Express + React dashboard (`../floci/dashboard/`). Not committed to Floci's main branch yet. This is independent from this project.
 - **Floci service layout:** `appconfigdata` lives inside `appconfig/` dir. `ec2messages` lives inside `ssm/` dir. `resourcegroupstagging` is implemented as `resourcegroupstagging/` but registered as `tagging`. All three are enabled by default (except `tagging` which is NOT enabled in `application.yml`).
-- **No new Floci services added** in the last 50 commits. Floci service count is 60 directories, ~58 registered services.
+- **62 Floci services now fully supported** in the dashboard, including MemoryDB and ElastiCache.
 - **No Floci changes.** Dashboard uses existing endpoints only — never edit `../floci`.
 
 ## Conventions

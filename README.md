@@ -43,7 +43,7 @@
 ## Features
 
 - **AWS Console look and feel** — Built with [Cloudscape Design System](https://cloudscape.design/), the same component library used by the real AWS Management Console
-- **60 Floci services** — Full navigation, status, and resource management with 60+ backend routes covering all major AWS services
+- **62 Floci services** — Full navigation, status, and resource management with 65+ backend routes covering all major AWS services
 - **Deep resource management** — Browse, create, and delete resources for implemented services (S3, DynamoDB, EC2, RDS, SQS, SNS, EventBridge, CloudWatch Logs, CloudWatch Metrics, Lambda, IAM, Secrets Manager, CloudFormation, KMS, ECS, SSM, Route 53, API Gateway)
 - **EC2 web terminal** — Interactive bash shell inside running EC2 instances directly from the browser (xterm.js + Docker Engine API with PTY)
 - **Dark mode** — Toggle between light and dark themes (persisted to localStorage)
@@ -203,15 +203,15 @@ docker run -p 3000:3000 -p 4566:4566 \
 
 ### Testing
 
-The project includes **~1,634 tests** (1,247 unit + 387 integration) across 131+ test files, organized as:
+The project includes **~3,167 tests** (2,873 unit + 294 integration) across 177 test files, organized as:
 
 | Tests | Count | Location |
 |-------|-------|----------|
-| Backend route unit tests | 43 files | `src/backend/routes/aws/*.test.ts` |
-| Frontend page/component tests | 14 files | `src/frontend/pages/*.test.tsx`, `src/frontend/components/*.test.tsx` |
-| Frontend hook tests | 30 files | `src/frontend/hooks/*.test.ts` |
-| Other tests | 44 files | shared libs, stores, types, etc. |
-| Integration tests | 387 | `src/backend/integration.test.ts` (requires Floci) |
+| Backend route unit tests | 46 files | `src/backend/routes/aws/*.test.ts` |
+| Frontend page/component tests | 44 files | `src/frontend/pages/*.test.tsx`, `src/frontend/components/*.test.tsx` |
+| Frontend hook tests | 34 files | `src/frontend/hooks/*.test.ts` |
+| Other tests | 53 files | shared libs, stores, types, etc. |
+| Integration tests | 294 | `src/backend/integration.test.ts` (requires Floci) |
 
 ```bash
 make test           # Fast unit tests (no Floci needed)
@@ -410,8 +410,10 @@ These services have full CRUD operations in both backend and frontend:
 | **Amazon EMR** | Clusters (list, create via RunJobFlow, describe, terminate, modify, termination protection), steps (list, add, describe, cancel per cluster), instance groups (list, add), instance fleets (list, add), instances (list), security configurations (list, create, describe, delete), tags (add, remove per cluster) |
 | **RDS Data API** | Execute SQL statements, begin/commit/rollback transactions |
 | **WAF v2** | Web ACLs, IP Sets, Regex Pattern Sets, Rule Groups (list, create, delete) |
+| **ElastiCache** | Replication groups (list, create, describe, delete), cache clusters (list, create, describe, delete), users (list, create, describe, delete) |
+| **MemoryDB** | Clusters (list, create, describe, delete), tags (list per resource) |
 
-### Navigation + status (60 services)
+### Navigation + status (62 services)
 
 All services reported by Floci appear in the sidebar with status indicators.
 
@@ -420,7 +422,7 @@ All services reported by Floci appear in the sidebar with status indicators.
 
 **Compute:** EC2, ECS, EKS, Auto Scaling, Lambda, AWS Batch
 **Storage:** S3, ECR
-**Database:** DynamoDB, DocumentDB, ElastiCache, Neptune, RDS, RDS Data API
+**Database:** DynamoDB, DocumentDB, ElastiCache, MemoryDB, Neptune, RDS, RDS Data API
 **Networking:** API Gateway, API Gateway V2, AppSync, CloudFront, ELB, Route 53
 **Messaging:** EventBridge (Events), EventBridge Pipes, EventBridge Scheduler, Kinesis, Kinesis Firehose, SES, SNS, SQS
 **Security:** ACM, Cognito, IAM, KMS, Secrets Manager, WAF v2
