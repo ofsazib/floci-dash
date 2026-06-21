@@ -160,7 +160,7 @@ router.post("/jobs", async (c: Context) => {
 
 router.get("/jobs", async (c: Context) => {
   const client = getClient();
-  const result = await client.send(new ListJobsCommand({ jobQueue: "", jobStatus: "RUNNING" }));
+  const result = await client.send(new ListJobsCommand({}));
   return c.json({ jobs: result.jobSummaryList || [], total: result.jobSummaryList?.length || 0 });
 });
 
