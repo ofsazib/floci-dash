@@ -36,7 +36,7 @@ describe("useSESIdentities", () => {
     mockApi.mockResolvedValueOnce({ identities: [], total: 0 });
     const { result } = renderHook(() => useSESIdentities(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(mockApi).toHaveBeenCalledWith("/aws/ses/identities");
+    expect(mockApi).toHaveBeenCalledWith("/aws/email/identities");
   });
 
   it("forwards error", async () => {
@@ -54,7 +54,7 @@ describe("useSESVerifyEmail", () => {
     const { result } = renderHook(() => useSESVerifyEmail(), { wrapper: createWrapper() });
     await result.current.mutateAsync("a@b.com");
     expect(mockApi).toHaveBeenCalledWith(
-      "/aws/ses/identities/verify-email",
+      "/aws/email/identities/verify-email",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ emailAddress: "a@b.com" }),
@@ -83,7 +83,7 @@ describe("useSESVerifyDomain", () => {
     const { result } = renderHook(() => useSESVerifyDomain(), { wrapper: createWrapper() });
     await result.current.mutateAsync("example.com");
     expect(mockApi).toHaveBeenCalledWith(
-      "/aws/ses/identities/verify-domain",
+      "/aws/email/identities/verify-domain",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ domain: "example.com" }),
@@ -112,7 +112,7 @@ describe("useSESDeleteIdentity", () => {
     const { result } = renderHook(() => useSESDeleteIdentity(), { wrapper: createWrapper() });
     await result.current.mutateAsync("a@b.com");
     expect(mockApi).toHaveBeenCalledWith(
-      "/aws/ses/identities/a%40b.com",
+      "/aws/email/identities/a%40b.com",
       expect.objectContaining({ method: "DELETE" })
     );
   });
@@ -142,7 +142,7 @@ describe("useSESSendEmail", () => {
       subject: "Hello",
     });
     expect(mockApi).toHaveBeenCalledWith(
-      "/aws/ses/send-email",
+      "/aws/email/send-email",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
@@ -162,7 +162,7 @@ describe("useSESVerifiedEmails", () => {
     mockApi.mockResolvedValueOnce({ emails: ["a@b.com"], total: 1 });
     const { result } = renderHook(() => useSESVerifiedEmails(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(mockApi).toHaveBeenCalledWith("/aws/ses/verified-emails");
+    expect(mockApi).toHaveBeenCalledWith("/aws/email/verified-emails");
   });
 
   it("forwards error", async () => {

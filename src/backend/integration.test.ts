@@ -1837,11 +1837,11 @@ describe("SES Integration", () => {
   const email = `${rand("test")}@integration.floci.local`;
 
   afterAll(async () => {
-    await api("DELETE", `/api/aws/ses/identities/${encodeURIComponent(email)}`).catch(() => {});
+    await api("DELETE", `/api/aws/email/identities/${encodeURIComponent(email)}`).catch(() => {});
   });
 
   it("verifies an email identity", async () => {
-    const { status, data } = await api("POST", "/api/aws/ses/identities/verify-email", {
+    const { status, data } = await api("POST", "/api/aws/email/identities/verify-email", {
       emailAddress: email,
     });
     expect(status).toBe(200);
@@ -1849,21 +1849,21 @@ describe("SES Integration", () => {
   });
 
   it("lists identities and includes the new one", async () => {
-    const { status, data } = await api("GET", "/api/aws/ses/identities");
+    const { status, data } = await api("GET", "/api/aws/email/identities");
     expect(status).toBe(200);
     const identities = data.identities.map((i: any) => i.identity);
     expect(identities).toContain(email);
   });
 
   it("gets identity details", async () => {
-    const { status, data } = await api("GET", `/api/aws/ses/identities/${encodeURIComponent(email)}`);
+    const { status, data } = await api("GET", `/api/aws/email/identities/${encodeURIComponent(email)}`);
     expect(status).toBe(200);
     expect(data.identity).toBe(email);
     expect(data.verificationStatus).toBeDefined();
   });
 
   it("deletes the identity", async () => {
-    const { status, data } = await api("DELETE", `/api/aws/ses/identities/${encodeURIComponent(email)}`);
+    const { status, data } = await api("DELETE", `/api/aws/email/identities/${encodeURIComponent(email)}`);
     expect(status).toBe(200);
     expect(data.deleted).toBe(true);
   });
@@ -2383,13 +2383,13 @@ describe("ELB Integration", () => {
 
   afterAll(async () => {
     if (listenerArn) {
-      await api("DELETE", `/api/aws/elb/listeners/${encodeURIComponent(listenerArn)}`).catch(() => {});
+      await api("DELETE", `/api/aws/elasticloadbalancing/listeners/${encodeURIComponent(listenerArn)}`).catch(() => {});
     }
     if (tgArn) {
-      await api("DELETE", `/api/aws/elb/target-groups/${encodeURIComponent(tgArn)}`).catch(() => {});
+      await api("DELETE", `/api/aws/elasticloadbalancing/target-groups/${encodeURIComponent(tgArn)}`).catch(() => {});
     }
     if (lbArn) {
-      await api("DELETE", `/api/aws/elb/load-balancers/${encodeURIComponent(lbArn)}`).catch(() => {});
+      await api("DELETE", `/api/aws/elasticloadbalancing/load-balancers/${encodeURIComponent(lbArn)}`).catch(() => {});
     }
     for (const sid of subnetIds) {
       await api("DELETE", `/api/aws/ec2/subnets/${sid}`).catch(() => {});
@@ -2400,7 +2400,7 @@ describe("ELB Integration", () => {
   });
 
   it("creates a load balancer", async () => {
-    const { status, data } = await api("POST", "/api/aws/elb/load-balancers", {
+    const { status, data } = await api("POST", "/api/aws/elasticloadbalancing/load-balancers", {
       name: lbName,
       subnets: subnetIds,
       scheme: "internal",
@@ -2413,7 +2413,7 @@ describe("ELB Integration", () => {
   });
 
   it("lists load balancers and includes the new one", async () => {
-    const { status, data } = await api("GET", "/api/aws/elb/load-balancers");
+    const { status, data } = await api("GET", "/api/aws/elasticloadbalancing/load-balancers");
     expect(status).toBe(200);
     expect(data.total).toBeGreaterThanOrEqual(1);
     const arns = data.loadBalancers.map((lb: any) => lb.loadBalancerArn);
@@ -2423,7 +2423,7 @@ describe("ELB Integration", () => {
   it("gets load balancer attributes", async () => {
     const { status, data } = await api(
       "GET",
-      `/api/aws/elb/load-balancers/${encodeURIComponent(lbArn)}/attributes`
+      `/api/aws/elasticloadbalancing/load-balancers/${encodeURIComponent(lbArn)}/attributes`
     );
     expect(status).toBe(200);
     expect(data.attributes).toBeDefined();
@@ -2432,7 +2432,7 @@ describe("ELB Integration", () => {
   it("modifies load balancer attributes", async () => {
     const { status, data } = await api(
       "PUT",
-      `/api/aws/elb/load-balancers/${encodeURIComponent(lbArn)}/attributes`,
+      `/api/aws/elasticloadbalancing/load-balancers/${encodeURIComponent(lbArn)}/attributes`,
       { attributes: { "routing.http.desync_mitigation_mode": "monitor" } }
     );
     expect(status).toBe(200);
@@ -2440,7 +2440,7 @@ describe("ELB Integration", () => {
   });
 
   it("creates a target group", async () => {
-    const { status, data } = await api("POST", "/api/aws/elb/target-groups", {
+    const { status, data } = await api("POST", "/api/aws/elasticloadbalancing/target-groups", {
       name: tgName,
       protocol: "HTTP",
       port: 80,
@@ -2453,7 +2453,7 @@ describe("ELB Integration", () => {
   });
 
   it("lists target groups and includes the new one", async () => {
-    const { status, data } = await api("GET", "/api/aws/elb/target-groups");
+    const { status, data } = await api("GET", "/api/aws/elasticloadbalancing/target-groups");
     expect(status).toBe(200);
     expect(data.total).toBeGreaterThanOrEqual(1);
     const arns = data.targetGroups.map((tg: any) => tg.targetGroupArn);
@@ -2463,7 +2463,7 @@ describe("ELB Integration", () => {
   it("gets target group health (empty)", async () => {
     const { status, data } = await api(
       "GET",
-      `/api/aws/elb/target-groups/${encodeURIComponent(tgArn)}/health`
+      `/api/aws/elasticloadbalancing/target-groups/${encodeURIComponent(tgArn)}/health`
     );
     expect(status).toBe(200);
     expect(data.targets).toBeDefined();
@@ -2472,7 +2472,7 @@ describe("ELB Integration", () => {
   it("creates a listener for the load balancer", async () => {
     const { status, data } = await api(
       "POST",
-      `/api/aws/elb/load-balancers/${encodeURIComponent(lbArn)}/listeners`,
+      `/api/aws/elasticloadbalancing/load-balancers/${encodeURIComponent(lbArn)}/listeners`,
       {
         protocol: "HTTP",
         port: 80,
@@ -2487,7 +2487,7 @@ describe("ELB Integration", () => {
   it("lists listeners for the load balancer", async () => {
     const { status, data } = await api(
       "GET",
-      `/api/aws/elb/load-balancers/${encodeURIComponent(lbArn)}/listeners`
+      `/api/aws/elasticloadbalancing/load-balancers/${encodeURIComponent(lbArn)}/listeners`
     );
     expect(status).toBe(200);
     expect(data.total).toBeGreaterThanOrEqual(1);
@@ -2498,21 +2498,21 @@ describe("ELB Integration", () => {
   it("gets listener attributes", async () => {
     const { status, data } = await api(
       "GET",
-      `/api/aws/elb/listeners/${encodeURIComponent(listenerArn)}/attributes`
+      `/api/aws/elasticloadbalancing/listeners/${encodeURIComponent(listenerArn)}/attributes`
     );
     expect(status).toBe(200);
     expect(data.attributes).toBeDefined();
   });
 
   it("manages ELB tags", async () => {
-    const addRes = await api("POST", "/api/aws/elb/tags", {
+    const addRes = await api("POST", "/api/aws/elasticloadbalancing/tags", {
       resourceArns: [lbArn],
       tags: { env: "test", service: "elb-integration" },
     });
     expect(addRes.status).toBe(200);
     expect(addRes.data.updated).toBe(true);
 
-    const delRes = await api("DELETE", "/api/aws/elb/tags", {
+    const delRes = await api("DELETE", "/api/aws/elasticloadbalancing/tags", {
       resourceArns: [lbArn],
       tagKeys: ["service"],
     });
@@ -2523,7 +2523,7 @@ describe("ELB Integration", () => {
   it("deletes the listener", async () => {
     const { status, data } = await api(
       "DELETE",
-      `/api/aws/elb/listeners/${encodeURIComponent(listenerArn)}`
+      `/api/aws/elasticloadbalancing/listeners/${encodeURIComponent(listenerArn)}`
     );
     expect(status).toBe(200);
     expect(data.deleted).toBe(true);
@@ -2533,7 +2533,7 @@ describe("ELB Integration", () => {
   it("deletes the target group", async () => {
     const { status, data } = await api(
       "DELETE",
-      `/api/aws/elb/target-groups/${encodeURIComponent(tgArn)}`
+      `/api/aws/elasticloadbalancing/target-groups/${encodeURIComponent(tgArn)}`
     );
     expect(status).toBe(200);
     expect(data.deleted).toBe(true);
@@ -2543,7 +2543,7 @@ describe("ELB Integration", () => {
   it("deletes the load balancer", async () => {
     const { status, data } = await api(
       "DELETE",
-      `/api/aws/elb/load-balancers/${encodeURIComponent(lbArn)}`
+      `/api/aws/elasticloadbalancing/load-balancers/${encodeURIComponent(lbArn)}`
     );
     expect(status).toBe(200);
     expect(data.deleted).toBe(true);

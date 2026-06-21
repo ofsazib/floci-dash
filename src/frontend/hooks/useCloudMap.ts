@@ -29,7 +29,7 @@ export interface CloudMapInstance {
 export function useCloudMapNamespaces() {
   return useQuery<{ namespaces: CloudMapNamespace[]; total: number }>({
     queryKey: ["aws", "cloudmap", "namespaces"],
-    queryFn: () => api("/aws/cloudmap/namespaces"),
+    queryFn: () => api("/aws/servicediscovery/namespaces"),
     refetchInterval: 10000,
   });
 }
@@ -38,7 +38,7 @@ export function useCreateCloudMapNamespace() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (params: { name: string; description?: string }) =>
-      api("/aws/cloudmap/namespaces", { method: "POST", body: JSON.stringify(params) }),
+      api("/aws/servicediscovery/namespaces", { method: "POST", body: JSON.stringify(params) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cloudmap", "namespaces"] }),
   });
 }
@@ -47,7 +47,7 @@ export function useDeleteCloudMapNamespace() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) =>
-      api(`/aws/cloudmap/namespaces/${encodeURIComponent(id)}`, { method: "DELETE" }),
+      api(`/aws/servicediscovery/namespaces/${encodeURIComponent(id)}`, { method: "DELETE" }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cloudmap", "namespaces"] }),
   });
 }
@@ -58,7 +58,7 @@ export function useCloudMapServices(namespaceId: string | null) {
   const qs = namespaceId ? `?namespaceId=${encodeURIComponent(namespaceId)}` : "";
   return useQuery<{ services: CloudMapService[]; total: number }>({
     queryKey: ["aws", "cloudmap", "services", namespaceId],
-    queryFn: () => api(`/aws/cloudmap/services${qs}`),
+    queryFn: () => api(`/aws/servicediscovery/services${qs}`),
     enabled: namespaceId !== undefined,
     refetchInterval: 10000,
   });
@@ -68,7 +68,7 @@ export function useDeleteCloudMapService() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) =>
-      api(`/aws/cloudmap/services/${encodeURIComponent(id)}`, { method: "DELETE" }),
+      api(`/aws/servicediscovery/services/${encodeURIComponent(id)}`, { method: "DELETE" }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cloudmap", "services"] }),
   });
 }
@@ -78,7 +78,7 @@ export function useDeleteCloudMapService() {
 export function useCloudMapInstances(serviceId: string | null) {
   return useQuery<{ instances: CloudMapInstance[]; total: number }>({
     queryKey: ["aws", "cloudmap", "instances", serviceId],
-    queryFn: () => api(`/aws/cloudmap/services/${encodeURIComponent(serviceId!)}/instances`),
+    queryFn: () => api(`/aws/servicediscovery/services/${encodeURIComponent(serviceId!)}/instances`),
     enabled: !!serviceId,
   });
 }

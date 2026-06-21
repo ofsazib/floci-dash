@@ -14,7 +14,7 @@ export interface SESIdentity {
 export function useSESIdentities() {
   return useQuery<{ identities: SESIdentity[]; total: number }>({
     queryKey: ["aws", "ses", "identities"],
-    queryFn: () => api("/aws/ses/identities"),
+    queryFn: () => api("/aws/email/identities"),
     refetchInterval: 10000,
   });
 }
@@ -23,7 +23,7 @@ export function useSESVerifyEmail() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (emailAddress: string) =>
-      api("/aws/ses/identities/verify-email", {
+      api("/aws/email/identities/verify-email", {
         method: "POST",
         body: JSON.stringify({ emailAddress }),
       }),
@@ -35,7 +35,7 @@ export function useSESVerifyDomain() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (domain: string) =>
-      api("/aws/ses/identities/verify-domain", {
+      api("/aws/email/identities/verify-domain", {
         method: "POST",
         body: JSON.stringify({ domain }),
       }),
@@ -47,7 +47,7 @@ export function useSESDeleteIdentity() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (value: string) =>
-      api(`/aws/ses/identities/${encodeURIComponent(value)}`, { method: "DELETE" }),
+      api(`/aws/email/identities/${encodeURIComponent(value)}`, { method: "DELETE" }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ses", "identities"] }),
   });
 }
@@ -63,7 +63,7 @@ export function useSESSendEmail() {
       html?: string;
       text?: string;
     }) =>
-      api("/aws/ses/send-email", {
+      api("/aws/email/send-email", {
         method: "POST",
         body: JSON.stringify(data),
       }),
@@ -73,6 +73,6 @@ export function useSESSendEmail() {
 export function useSESVerifiedEmails() {
   return useQuery<{ emails: string[]; total: number }>({
     queryKey: ["aws", "ses", "verified-emails"],
-    queryFn: () => api("/aws/ses/verified-emails"),
+    queryFn: () => api("/aws/email/verified-emails"),
   });
 }

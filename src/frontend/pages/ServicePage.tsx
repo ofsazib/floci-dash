@@ -503,7 +503,7 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
 ];
 
 /** Services with a fully implemented backend that can show a resource list */
-const IMPLEMENTED_SERVICES = new Set(["batch", "docdb", "emr", "rdsdata", "ec2messages", "appconfigdata", "dynamodb", "rds", "logs", "ecs", "ssm", "route53", "apigateway", "appsync", "scheduler", "ecr", "elb", "ses", "sts", "eks", "autoscaling", "cloudfront", "kinesis", "neptune", "pipes", "cognito-idp", "apigatewayv2", "acm", "cloudtrail", "configservice", "appconfig", "cloudmap", "athena", "glue", "firehose", "states", "es", "kafka", "bedrock-runtime", "textract", "transcribe", "ce", "pricing", "resourcegroupstagging", "codebuild", "codedeploy", "backup", "transfer", "cur", "bcmdataexports", "wafv2", "elasticache"]);
+const IMPLEMENTED_SERVICES = new Set(["batch", "docdb", "emr", "rdsdata", "ec2messages", "appconfigdata", "dynamodb", "rds", "logs", "ecs", "ssm", "route53", "apigateway", "appsync", "scheduler", "ecr", "email", "elasticloadbalancing", "servicediscovery", "config", "tagging", "sts", "eks", "autoscaling", "cloudfront", "kinesis", "neptune", "pipes", "cognito-idp", "apigatewayv2", "acm", "cloudtrail", "appconfig", "athena", "glue", "firehose", "states", "es", "kafka", "bedrock-runtime", "textract", "transcribe", "ce", "pricing", "codebuild", "codedeploy", "backup", "transfer", "cur", "bcmdataexports", "wafv2", "elasticache"]);
 
 export default function ServicePage() {
   const { service } = useParams<{ service: string }>();
@@ -568,8 +568,8 @@ function ServiceResourceList({ service }: { service: string }) {
   if (service === "appsync") return <AppSyncDashboard />;
   if (service === "scheduler") return <SchedulerDashboard />;
   if (service === "ecr") return <ECRDashboard />;
-  if (service === "elb") return <ELBDashboard />;
-  if (service === "ses") return <SESDashboard />;
+  if (service === "elasticloadbalancing") return <ELBDashboard />;
+  if (service === "email") return <SESDashboard />;
   if (service === "sts") return <STSDashboard />;
   if (service === "eks") return <EKSDashboard />;
   if (service === "autoscaling") return <AutoScalingDashboard />;
@@ -581,9 +581,9 @@ function ServiceResourceList({ service }: { service: string }) {
   if (service === "apigatewayv2") return <ApiGatewayV2Dashboard />;
   if (service === "acm") return <ACMDashboard />;
   if (service === "cloudtrail") return <CloudTrailDashboard />;
-  if (service === "configservice") return <ConfigServiceDashboard />;
+  if (service === "config") return <ConfigServiceDashboard />;
   if (service === "appconfig") return <AppConfigDashboard />;
-  if (service === "cloudmap") return <CloudMapDashboard />;
+  if (service === "servicediscovery") return <CloudMapDashboard />;
   if (service === "athena") return <AthenaDashboard />;
   if (service === "glue") return <GlueDashboard />;
   if (service === "firehose") return <FirehoseDashboard />;
@@ -599,7 +599,7 @@ function ServiceResourceList({ service }: { service: string }) {
   if (service === "transfer") return <TransferDashboard />;
   if (service === "ce") return <CEDashboard />;
   if (service === "pricing") return <PricingDashboard />;
-  if (service === "resourcegroupstagging") return <RGTDashboard />;
+  if (service === "tagging") return <RGTDashboard />;
   if (service === "cur") return <CURDashboard />;
   if (service === "bcmdataexports") return <BCMDashboard />;
   if (service === "wafv2") return <WafV2Dashboard />;

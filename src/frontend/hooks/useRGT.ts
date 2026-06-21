@@ -14,21 +14,21 @@ export function useRGTResources(params?: { tagFilters?: any; resourceTypeFilters
   const q = qs.toString();
   return useQuery({
     queryKey: [...RGT_KEY, "resources", q],
-    queryFn: () => api<any>(`/aws/resourcegroupstagging/resources${q ? `?${q}` : ""}`),
+    queryFn: () => api<any>(`/aws/tagging/resources${q ? `?${q}` : ""}`),
   });
 }
 
 export function useRGTTagKeys() {
   return useQuery({
     queryKey: [...RGT_KEY, "tag-keys"],
-    queryFn: () => api<any>("/aws/resourcegroupstagging/tag-keys"),
+    queryFn: () => api<any>("/aws/tagging/tag-keys"),
   });
 }
 
 export function useRGTTagValues(key: string | null) {
   return useQuery({
     queryKey: [...RGT_KEY, "tag-values", key],
-    queryFn: () => api<any>(`/aws/resourcegroupstagging/tag-values?key=${key}`),
+    queryFn: () => api<any>(`/aws/tagging/tag-values?key=${key}`),
     enabled: !!key,
   });
 }
@@ -39,7 +39,7 @@ export function useRGTTagResources() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: any) =>
-      api("/aws/resourcegroupstagging/tag", { method: "POST", body: JSON.stringify(body) }),
+      api("/aws/tagging/tag", { method: "POST", body: JSON.stringify(body) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: RGT_KEY }),
   });
 }
@@ -48,7 +48,7 @@ export function useRGTUntagResources() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: any) =>
-      api("/aws/resourcegroupstagging/untag", { method: "POST", body: JSON.stringify(body) }),
+      api("/aws/tagging/untag", { method: "POST", body: JSON.stringify(body) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: RGT_KEY }),
   });
 }

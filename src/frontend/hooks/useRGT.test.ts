@@ -27,7 +27,7 @@ describe("useRGTResources", () => {
     mockApi.mockResolvedValueOnce({ resourceTagMappingList: [] });
     const { result } = renderHook(() => useRGTResources(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(mockApi).toHaveBeenCalledWith("/aws/resourcegroupstagging/resources");
+    expect(mockApi).toHaveBeenCalledWith("/aws/tagging/resources");
   });
 
   it("calls api with tagFilters param", async () => {
@@ -36,7 +36,7 @@ describe("useRGTResources", () => {
     const { result } = renderHook(() => useRGTResources({ tagFilters: filters }), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith(
-      `/aws/resourcegroupstagging/resources?tagFilters=${encodeURIComponent(JSON.stringify(filters))}`
+      `/aws/tagging/resources?tagFilters=${encodeURIComponent(JSON.stringify(filters))}`
     );
   });
 
@@ -47,7 +47,7 @@ describe("useRGTResources", () => {
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith(
-      "/aws/resourcegroupstagging/resources?resourceTypeFilters=AWS%3A%3AS3%3A%3ABucket&resourceTypeFilters=AWS%3A%3AEC2%3A%3AInstance"
+      "/aws/tagging/resources?resourceTypeFilters=AWS%3A%3AS3%3A%3ABucket&resourceTypeFilters=AWS%3A%3AEC2%3A%3AInstance"
     );
   });
 });
@@ -57,7 +57,7 @@ describe("useRGTTagKeys", () => {
     mockApi.mockResolvedValueOnce({ tagKeys: [] });
     const { result } = renderHook(() => useRGTTagKeys(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(mockApi).toHaveBeenCalledWith("/aws/resourcegroupstagging/tag-keys");
+    expect(mockApi).toHaveBeenCalledWith("/aws/tagging/tag-keys");
   });
 });
 
@@ -71,7 +71,7 @@ describe("useRGTTagValues", () => {
     mockApi.mockResolvedValueOnce({ tagValues: [] });
     const { result } = renderHook(() => useRGTTagValues("Environment"), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(mockApi).toHaveBeenCalledWith("/aws/resourcegroupstagging/tag-values?key=Environment");
+    expect(mockApi).toHaveBeenCalledWith("/aws/tagging/tag-values?key=Environment");
   });
 });
 
@@ -81,7 +81,7 @@ describe("useRGTTagResources", () => {
     const { result } = renderHook(() => useRGTTagResources(), { wrapper: createWrapper() });
     const body = { resourceARNList: [RESOURCE_ARN], tags: { Env: "prod" } };
     await result.current.mutateAsync(body);
-    expect(mockApi).toHaveBeenCalledWith("/aws/resourcegroupstagging/tag", {
+    expect(mockApi).toHaveBeenCalledWith("/aws/tagging/tag", {
       method: "POST",
       body: JSON.stringify(body),
     });
@@ -94,7 +94,7 @@ describe("useRGTUntagResources", () => {
     const { result } = renderHook(() => useRGTUntagResources(), { wrapper: createWrapper() });
     const body = { resourceARNList: [RESOURCE_ARN], tagKeys: ["Env"] };
     await result.current.mutateAsync(body);
-    expect(mockApi).toHaveBeenCalledWith("/aws/resourcegroupstagging/untag", {
+    expect(mockApi).toHaveBeenCalledWith("/aws/tagging/untag", {
       method: "POST",
       body: JSON.stringify(body),
     });

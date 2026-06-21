@@ -48,7 +48,7 @@ describe("useELBLoadBalancers", () => {
     mockApi.mockResolvedValueOnce({ loadBalancers: [], total: 0 });
     const { result } = renderHook(() => useELBLoadBalancers(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(mockApi).toHaveBeenCalledWith("/aws/elb/load-balancers");
+    expect(mockApi).toHaveBeenCalledWith("/aws/elasticloadbalancing/load-balancers");
   });
 });
 
@@ -60,7 +60,7 @@ describe("useELBCreateLoadBalancer", () => {
     const { result } = renderHook(() => useELBCreateLoadBalancer(), { wrapper: createWrapper() });
     await result.current.mutateAsync({ name: "new-lb", subnets: ["subnet-123"] });
     expect(mockApi).toHaveBeenCalledWith(
-      "/aws/elb/load-balancers",
+      "/aws/elasticloadbalancing/load-balancers",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ name: "new-lb", subnets: ["subnet-123"] }),
@@ -77,7 +77,7 @@ describe("useELBDeleteLoadBalancer", () => {
     const { result } = renderHook(() => useELBDeleteLoadBalancer(), { wrapper: createWrapper() });
     await result.current.mutateAsync(LB_ARN);
     expect(mockApi).toHaveBeenCalledWith(
-      `/aws/elb/load-balancers/${ENC_LB}`,
+      `/aws/elasticloadbalancing/load-balancers/${ENC_LB}`,
       expect.objectContaining({ method: "DELETE" })
     );
   });
@@ -98,7 +98,7 @@ describe("useELBLoadBalancerAttributes", () => {
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith(
-      `/aws/elb/load-balancers/${ENC_LB}/attributes`
+      `/aws/elasticloadbalancing/load-balancers/${ENC_LB}/attributes`
     );
   });
 });
@@ -110,7 +110,7 @@ describe("useELBTargetGroups", () => {
     mockApi.mockResolvedValueOnce({ targetGroups: [], total: 0 });
     const { result } = renderHook(() => useELBTargetGroups(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(mockApi).toHaveBeenCalledWith("/aws/elb/target-groups");
+    expect(mockApi).toHaveBeenCalledWith("/aws/elasticloadbalancing/target-groups");
   });
 });
 
@@ -129,7 +129,7 @@ describe("useELBListeners", () => {
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith(
-      `/aws/elb/load-balancers/${ENC_LB}/listeners`
+      `/aws/elasticloadbalancing/load-balancers/${ENC_LB}/listeners`
     );
   });
 });
@@ -142,7 +142,7 @@ describe("useELBCreateTargetGroup", () => {
     const { result } = renderHook(() => useELBCreateTargetGroup(), { wrapper: createWrapper() });
     await result.current.mutateAsync({ name: "tg1", protocol: "HTTP", port: 80, vpcId: "vpc-123" });
     expect(mockApi).toHaveBeenCalledWith(
-      "/aws/elb/target-groups",
+      "/aws/elasticloadbalancing/target-groups",
       expect.objectContaining({ method: "POST" })
     );
   });
@@ -156,7 +156,7 @@ describe("useELBDeleteTargetGroup", () => {
     const { result } = renderHook(() => useELBDeleteTargetGroup(), { wrapper: createWrapper() });
     await result.current.mutateAsync(TG_ARN);
     expect(mockApi).toHaveBeenCalledWith(
-      `/aws/elb/target-groups/${ENC_TG}`,
+      `/aws/elasticloadbalancing/target-groups/${ENC_TG}`,
       expect.objectContaining({ method: "DELETE" })
     );
   });
@@ -170,7 +170,7 @@ describe("useELBCreateListener", () => {
     const { result } = renderHook(() => useELBCreateListener(LB_ARN), { wrapper: createWrapper() });
     await result.current.mutateAsync({ protocol: "HTTP", port: 80, defaultActions: [{ Type: "forward" }] });
     expect(mockApi).toHaveBeenCalledWith(
-      `/aws/elb/load-balancers/${ENC_LB}/listeners`,
+      `/aws/elasticloadbalancing/load-balancers/${ENC_LB}/listeners`,
       expect.objectContaining({ method: "POST" })
     );
   });
@@ -184,7 +184,7 @@ describe("useELBDeleteListener", () => {
     const { result } = renderHook(() => useELBDeleteListener(), { wrapper: createWrapper() });
     await result.current.mutateAsync(LB_ARN);
     expect(mockApi).toHaveBeenCalledWith(
-      `/aws/elb/listeners/${ENC_LB}`,
+      `/aws/elasticloadbalancing/listeners/${ENC_LB}`,
       expect.objectContaining({ method: "DELETE" })
     );
   });
@@ -198,7 +198,7 @@ describe("useELBRegisterTargets", () => {
     const { result } = renderHook(() => useELBRegisterTargets(TG_ARN), { wrapper: createWrapper() });
     await result.current.mutateAsync([{ id: "i-123" }]);
     expect(mockApi).toHaveBeenCalledWith(
-      `/aws/elb/target-groups/${ENC_TG}/register`,
+      `/aws/elasticloadbalancing/target-groups/${ENC_TG}/register`,
       expect.objectContaining({ method: "POST" })
     );
   });
@@ -212,7 +212,7 @@ describe("useELBDeregisterTargets", () => {
     const { result } = renderHook(() => useELBDeregisterTargets(TG_ARN), { wrapper: createWrapper() });
     await result.current.mutateAsync([{ id: "i-123" }]);
     expect(mockApi).toHaveBeenCalledWith(
-      `/aws/elb/target-groups/${ENC_TG}/deregister`,
+      `/aws/elasticloadbalancing/target-groups/${ENC_TG}/deregister`,
       expect.objectContaining({ method: "POST" })
     );
   });
@@ -233,7 +233,7 @@ describe("useELBTargetHealth", () => {
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith(
-      `/aws/elb/target-groups/${ENC_TG}/health`
+      `/aws/elasticloadbalancing/target-groups/${ENC_TG}/health`
     );
   });
 });

@@ -41,7 +41,7 @@ export interface ELBListener {
 export function useELBLoadBalancers() {
   return useQuery<{ loadBalancers: ELBLoadBalancer[]; total: number }>({
     queryKey: ["aws", "elb", "load-balancers"],
-    queryFn: () => api("/aws/elb/load-balancers"),
+    queryFn: () => api("/aws/elasticloadbalancing/load-balancers"),
     refetchInterval: 10000,
   });
 }
@@ -50,7 +50,7 @@ export function useELBCreateLoadBalancer() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: { name: string; subnets: string[]; securityGroups?: string[]; scheme?: string; type?: string }) =>
-      api("/aws/elb/load-balancers", { method: "POST", body: JSON.stringify(data) }),
+      api("/aws/elasticloadbalancing/load-balancers", { method: "POST", body: JSON.stringify(data) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "elb", "load-balancers"] }),
   });
 }
@@ -59,7 +59,7 @@ export function useELBDeleteLoadBalancer() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (arn: string) =>
-      api(`/aws/elb/load-balancers/${encodeURIComponent(arn)}`, { method: "DELETE" }),
+      api(`/aws/elasticloadbalancing/load-balancers/${encodeURIComponent(arn)}`, { method: "DELETE" }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "elb", "load-balancers"] }),
   });
 }
@@ -67,7 +67,7 @@ export function useELBDeleteLoadBalancer() {
 export function useELBLoadBalancerAttributes(arn: string | null) {
   return useQuery<{ loadBalancerArn: string; attributes: Record<string, string> }>({
     queryKey: ["aws", "elb", "attributes", arn],
-    queryFn: () => api(`/aws/elb/load-balancers/${encodeURIComponent(arn!)}/attributes`),
+    queryFn: () => api(`/aws/elasticloadbalancing/load-balancers/${encodeURIComponent(arn!)}/attributes`),
     enabled: !!arn,
   });
 }
@@ -75,7 +75,7 @@ export function useELBLoadBalancerAttributes(arn: string | null) {
 export function useELBTargetGroups() {
   return useQuery<{ targetGroups: ELBTargetGroup[]; total: number }>({
     queryKey: ["aws", "elb", "target-groups"],
-    queryFn: () => api("/aws/elb/target-groups"),
+    queryFn: () => api("/aws/elasticloadbalancing/target-groups"),
     refetchInterval: 10000,
   });
 }
@@ -84,7 +84,7 @@ export function useELBCreateTargetGroup() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: { name: string; protocol: string; port: number; vpcId: string; targetType?: string }) =>
-      api("/aws/elb/target-groups", { method: "POST", body: JSON.stringify(data) }),
+      api("/aws/elasticloadbalancing/target-groups", { method: "POST", body: JSON.stringify(data) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "elb", "target-groups"] }),
   });
 }
@@ -93,7 +93,7 @@ export function useELBDeleteTargetGroup() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (arn: string) =>
-      api(`/aws/elb/target-groups/${encodeURIComponent(arn)}`, { method: "DELETE" }),
+      api(`/aws/elasticloadbalancing/target-groups/${encodeURIComponent(arn)}`, { method: "DELETE" }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "elb", "target-groups"] }),
   });
 }
@@ -101,7 +101,7 @@ export function useELBDeleteTargetGroup() {
 export function useELBTargetHealth(tgArn: string | null) {
   return useQuery<{ targets: Array<{ target: string; port: number; healthState: string; reason: string; description: string }>; total: number }>({
     queryKey: ["aws", "elb", "target-health", tgArn],
-    queryFn: () => api(`/aws/elb/target-groups/${encodeURIComponent(tgArn!)}/health`),
+    queryFn: () => api(`/aws/elasticloadbalancing/target-groups/${encodeURIComponent(tgArn!)}/health`),
     enabled: !!tgArn,
     refetchInterval: 5000,
   });
@@ -110,7 +110,7 @@ export function useELBTargetHealth(tgArn: string | null) {
 export function useELBListeners(lbArn: string | null) {
   return useQuery<{ listeners: ELBListener[]; total: number }>({
     queryKey: ["aws", "elb", "listeners", lbArn],
-    queryFn: () => api(`/aws/elb/load-balancers/${encodeURIComponent(lbArn!)}/listeners`),
+    queryFn: () => api(`/aws/elasticloadbalancing/load-balancers/${encodeURIComponent(lbArn!)}/listeners`),
     enabled: !!lbArn,
   });
 }
@@ -119,7 +119,7 @@ export function useELBCreateListener(lbArn: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: { protocol: string; port: number; defaultActions: any[]; certificates?: any[] }) =>
-      api(`/aws/elb/load-balancers/${encodeURIComponent(lbArn)}/listeners`, {
+      api(`/aws/elasticloadbalancing/load-balancers/${encodeURIComponent(lbArn)}/listeners`, {
         method: "POST",
         body: JSON.stringify(data),
       }),
@@ -131,7 +131,7 @@ export function useELBDeleteListener() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (arn: string) =>
-      api(`/aws/elb/listeners/${encodeURIComponent(arn)}`, { method: "DELETE" }),
+      api(`/aws/elasticloadbalancing/listeners/${encodeURIComponent(arn)}`, { method: "DELETE" }),
   });
 }
 
@@ -139,7 +139,7 @@ export function useELBRegisterTargets(tgArn: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (targets: Array<{ id: string; port?: number }>) =>
-      api(`/aws/elb/target-groups/${encodeURIComponent(tgArn)}/register`, {
+      api(`/aws/elasticloadbalancing/target-groups/${encodeURIComponent(tgArn)}/register`, {
         method: "POST",
         body: JSON.stringify({ targets }),
       }),
@@ -151,7 +151,7 @@ export function useELBDeregisterTargets(tgArn: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (targets: Array<{ id: string; port?: number }>) =>
-      api(`/aws/elb/target-groups/${encodeURIComponent(tgArn)}/deregister`, {
+      api(`/aws/elasticloadbalancing/target-groups/${encodeURIComponent(tgArn)}/deregister`, {
         method: "POST",
         body: JSON.stringify({ targets }),
       }),

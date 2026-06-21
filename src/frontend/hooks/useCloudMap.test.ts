@@ -26,14 +26,14 @@ describe("useCloudMap hooks", () => {
     mockApi.mockResolvedValueOnce({ namespaces: [], total: 0 });
     const { result } = renderHook(() => useCloudMapNamespaces(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(mockApi).toHaveBeenCalledWith("/aws/cloudmap/namespaces");
+    expect(mockApi).toHaveBeenCalledWith("/aws/servicediscovery/namespaces");
   });
 
   it("useCreateCloudMapNamespace calls POST", async () => {
     mockApi.mockResolvedValueOnce({ operationId: "op-1" });
     const { result } = renderHook(() => useCreateCloudMapNamespace(), { wrapper: createWrapper() });
     await result.current.mutateAsync({ name: "my-ns" });
-    expect(mockApi).toHaveBeenCalledWith("/aws/cloudmap/namespaces", {
+    expect(mockApi).toHaveBeenCalledWith("/aws/servicediscovery/namespaces", {
       method: "POST",
       body: JSON.stringify({ name: "my-ns" }),
     });
@@ -43,35 +43,35 @@ describe("useCloudMap hooks", () => {
     mockApi.mockResolvedValueOnce({ operationId: "op-1" });
     const { result } = renderHook(() => useDeleteCloudMapNamespace(), { wrapper: createWrapper() });
     await result.current.mutateAsync("ns-1");
-    expect(mockApi).toHaveBeenCalledWith("/aws/cloudmap/namespaces/ns-1", { method: "DELETE" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/servicediscovery/namespaces/ns-1", { method: "DELETE" });
   });
 
   it("useCloudMapServices calls correct URL with no filter", async () => {
     mockApi.mockResolvedValueOnce({ services: [], total: 0 });
     const { result } = renderHook(() => useCloudMapServices(null), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(mockApi).toHaveBeenCalledWith("/aws/cloudmap/services");
+    expect(mockApi).toHaveBeenCalledWith("/aws/servicediscovery/services");
   });
 
   it("useCloudMapServices with namespaceId filter", async () => {
     mockApi.mockResolvedValueOnce({ services: [], total: 0 });
     const { result } = renderHook(() => useCloudMapServices("ns-1"), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(mockApi).toHaveBeenCalledWith("/aws/cloudmap/services?namespaceId=ns-1");
+    expect(mockApi).toHaveBeenCalledWith("/aws/servicediscovery/services?namespaceId=ns-1");
   });
 
   it("useDeleteCloudMapService calls DELETE", async () => {
     mockApi.mockResolvedValueOnce({ deleted: true });
     const { result } = renderHook(() => useDeleteCloudMapService(), { wrapper: createWrapper() });
     await result.current.mutateAsync("svc-1");
-    expect(mockApi).toHaveBeenCalledWith("/aws/cloudmap/services/svc-1", { method: "DELETE" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/servicediscovery/services/svc-1", { method: "DELETE" });
   });
 
   it("useCloudMapInstances calls correct URL", async () => {
     mockApi.mockResolvedValueOnce({ instances: [], total: 0 });
     const { result } = renderHook(() => useCloudMapInstances("svc-1"), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(mockApi).toHaveBeenCalledWith("/aws/cloudmap/services/svc-1/instances");
+    expect(mockApi).toHaveBeenCalledWith("/aws/servicediscovery/services/svc-1/instances");
   });
 
   it("useCloudMapInstances disabled when null", () => {

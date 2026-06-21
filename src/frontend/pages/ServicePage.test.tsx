@@ -1356,7 +1356,7 @@ describe("ServicePage — CloudTrail", () => {
 describe("ServicePage — RGT", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockParams.mockReturnValue({ service: "resourcegroupstagging" });
+    mockParams.mockReturnValue({ service: "tagging" });
     mockRGTResources.mockReturnValue({
       data: {
         resourceTagMappingList: [
