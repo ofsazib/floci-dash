@@ -1031,3 +1031,360 @@ describe("ServicePage — WAFv2", () => {
     expect(screen.getAllByText("WAF v2 Web ACLs").length).toBeGreaterThan(0);
   });
 });
+
+// ─── Mock declarations for additional dashboards ─────────
+const mockOpenSearchDomains = vi.fn();
+const mockMskClusters = vi.fn();
+const mockFirehoseStreams = vi.fn();
+const mockACMCertificates = vi.fn();
+const mockTranscriptionJobs = vi.fn();
+const mockCloudTrailTrails = vi.fn();
+const mockRGTResources = vi.fn();
+const mockRGTTagKeys = vi.fn();
+const mockRGTTagValues = vi.fn();
+
+vi.mock("../hooks/useOpenSearch", () => ({
+  useOpenSearchDomains: (...args: any[]) => mockOpenSearchDomains(...args),
+  useDeleteOpenSearchDomain: () => ({ mutateAsync: vi.fn(), isPending: false, variables: null }),
+}));
+
+vi.mock("../hooks/useMsk", () => ({
+  useMskClusters: (...args: any[]) => mockMskClusters(...args),
+  useDeleteMskCluster: () => ({ mutateAsync: vi.fn(), isPending: false, variables: null }),
+}));
+
+vi.mock("../hooks/useFirehose", () => ({
+  useFirehoseStreams: (...args: any[]) => mockFirehoseStreams(...args),
+  useDeleteFirehoseStream: () => ({ mutateAsync: vi.fn(), isPending: false, variables: null }),
+}));
+
+vi.mock("../hooks/useACM", () => ({
+  useACMCertificates: (...args: any[]) => mockACMCertificates(...args),
+  useDeleteACMCertificate: () => ({ mutateAsync: vi.fn(), isPending: false, variables: null }),
+}));
+
+vi.mock("../hooks/useTranscribe", () => ({
+  useTranscriptionJobs: (...args: any[]) => mockTranscriptionJobs(...args),
+  useDeleteTranscriptionJob: () => ({ mutateAsync: vi.fn(), isPending: false, variables: null }),
+}));
+
+vi.mock("../hooks/useCloudTrail", () => ({
+  useCloudTrailTrails: (...args: any[]) => mockCloudTrailTrails(...args),
+  useDeleteCloudTrailTrail: () => ({ mutateAsync: vi.fn(), isPending: false, variables: null }),
+  useStartCloudTrailLogging: () => ({ mutate: vi.fn(), isPending: false }),
+  useStopCloudTrailLogging: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
+vi.mock("../hooks/useRGT", () => ({
+  useRGTResources: (...args: any[]) => mockRGTResources(...args),
+  useRGTTagKeys: (...args: any[]) => mockRGTTagKeys(...args),
+  useRGTTagValues: (...args: any[]) => mockRGTTagValues(...args),
+  useRGTTagResources: () => ({ mutate: vi.fn(), isPending: false }),
+  useRGTUntagResources: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
+// ─── Bedrock Runtime (static Alert) ──────────────────────
+
+describe("ServicePage — Bedrock Runtime", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockParams.mockReturnValue({ service: "bedrock-runtime" });
+  });
+
+  it("renders informational alert", () => {
+    render(<ServicePage />, { wrapper: createWrapper() });
+    expect(screen.getAllByText(/Bedrock Runtime is a data-plane service/i).length).toBeGreaterThan(0);
+  });
+});
+
+// ─── Textract (static Alert) ─────────────────────────────
+
+describe("ServicePage — Textract", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockParams.mockReturnValue({ service: "textract" });
+  });
+
+  it("renders informational alert", () => {
+    render(<ServicePage />, { wrapper: createWrapper() });
+    expect(screen.getAllByText(/Textract is a document analysis service/i).length).toBeGreaterThan(0);
+  });
+});
+
+// ─── OpenSearch ─────────────────────────────────────────
+
+describe("ServicePage — OpenSearch", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockParams.mockReturnValue({ service: "es" });
+    mockOpenSearchDomains.mockReturnValue({
+      data: { domains: [{ DomainName: "my-domain", EngineType: "OpenSearch" }], total: 1 },
+      isLoading: false,
+    });
+  });
+
+  it("renders OpenSearch domains with data", () => {
+    render(<ServicePage />, { wrapper: createWrapper() });
+    expect(screen.getAllByText("OpenSearch Domains").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("my-domain").length).toBeGreaterThan(0);
+  });
+
+  it("shows empty state when no domains", () => {
+    mockOpenSearchDomains.mockReturnValue({ data: { domains: [], total: 0 }, isLoading: false });
+    render(<ServicePage />, { wrapper: createWrapper() });
+    expect(screen.getByText("No OpenSearch domains")).toBeTruthy();
+  });
+
+  it("shows loading state", () => {
+    mockOpenSearchDomains.mockReturnValue({ data: undefined, isLoading: true });
+    render(<ServicePage />, { wrapper: createWrapper() });
+    expect(screen.queryByText("my-domain")).toBeNull();
+  });
+});
+
+// ─── MSK ────────────────────────────────────────────────
+
+describe("ServicePage — MSK", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockParams.mockReturnValue({ service: "kafka" });
+    mockMskClusters.mockReturnValue({
+      data: {
+        clusters: [
+          {
+            ClusterArn: "arn:aws:kafka:us-east-1:1:cluster/my-cluster/abc",
+            ClusterName: "my-cluster",
+            State: "ACTIVE",
+            NumberOfBrokerNodes: 3,
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+  });
+
+  it("renders MSK clusters with data", () => {
+    render(<ServicePage />, { wrapper: createWrapper() });
+    expect(screen.getAllByText("MSK Clusters").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("my-cluster").length).toBeGreaterThan(0);
+  });
+
+  it("shows empty state when no clusters", () => {
+    mockMskClusters.mockReturnValue({ data: { clusters: [], total: 0 }, isLoading: false });
+    render(<ServicePage />, { wrapper: createWrapper() });
+    expect(screen.getByText("No MSK clusters")).toBeTruthy();
+  });
+
+  it("shows loading state", () => {
+    mockMskClusters.mockReturnValue({ data: undefined, isLoading: true });
+    render(<ServicePage />, { wrapper: createWrapper() });
+    expect(screen.queryByText("my-cluster")).toBeNull();
+  });
+});
+
+// ─── Firehose ───────────────────────────────────────────
+
+describe("ServicePage — Firehose", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockParams.mockReturnValue({ service: "firehose" });
+    mockFirehoseStreams.mockReturnValue({
+      data: {
+        streams: [
+          {
+            DeliveryStreamName: "my-stream",
+            DeliveryStreamARN: "arn:aws:firehose:us-east-1:1:deliverystream/my-stream",
+            DeliveryStreamStatus: "ACTIVE",
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+  });
+
+  it("renders Firehose streams with data", () => {
+    render(<ServicePage />, { wrapper: createWrapper() });
+    expect(screen.getAllByText("Kinesis Firehose Delivery Streams").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("my-stream").length).toBeGreaterThan(0);
+  });
+
+  it("shows empty state when no streams", () => {
+    mockFirehoseStreams.mockReturnValue({ data: { streams: [], total: 0 }, isLoading: false });
+    render(<ServicePage />, { wrapper: createWrapper() });
+    expect(screen.getByText("No delivery streams")).toBeTruthy();
+  });
+
+  it("shows loading state", () => {
+    mockFirehoseStreams.mockReturnValue({ data: undefined, isLoading: true });
+    render(<ServicePage />, { wrapper: createWrapper() });
+    expect(screen.queryByText("my-stream")).toBeNull();
+  });
+});
+
+// ─── ACM ────────────────────────────────────────────────
+
+describe("ServicePage — ACM", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockParams.mockReturnValue({ service: "acm" });
+    mockACMCertificates.mockReturnValue({
+      data: {
+        certificates: [
+          {
+            CertificateArn: "arn:aws:acm:us-east-1:1:certificate/abc",
+            DomainName: "example.com",
+            Status: "ISSUED",
+            Type: "AMAZON_ISSUED",
+            KeyAlgorithm: "RSA_2048",
+            InUse: true,
+            NotAfter: 1800000000,
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+  });
+
+  it("renders ACM certificates with data", () => {
+    render(<ServicePage />, { wrapper: createWrapper() });
+    expect(screen.getAllByText("ACM Certificates").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("example.com").length).toBeGreaterThan(0);
+  });
+
+  it("shows empty state when no certificates", () => {
+    mockACMCertificates.mockReturnValue({ data: { certificates: [], total: 0 }, isLoading: false });
+    render(<ServicePage />, { wrapper: createWrapper() });
+    expect(screen.getByText("No certificates")).toBeTruthy();
+  });
+
+  it("shows loading state", () => {
+    mockACMCertificates.mockReturnValue({ data: undefined, isLoading: true });
+    render(<ServicePage />, { wrapper: createWrapper() });
+    expect(screen.queryByText("example.com")).toBeNull();
+  });
+});
+
+// ─── Transcribe ─────────────────────────────────────────
+
+describe("ServicePage — Transcribe", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockParams.mockReturnValue({ service: "transcribe" });
+    mockTranscriptionJobs.mockReturnValue({
+      data: {
+        jobs: [
+          {
+            TranscriptionJobName: "my-job",
+            TranscriptionJobStatus: "COMPLETED",
+            LanguageCode: "en-US",
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+  });
+
+  it("renders transcription jobs with data", () => {
+    render(<ServicePage />, { wrapper: createWrapper() });
+    expect(screen.getAllByText("Transcription Jobs").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("my-job").length).toBeGreaterThan(0);
+  });
+
+  it("shows empty state when no jobs", () => {
+    mockTranscriptionJobs.mockReturnValue({ data: { jobs: [], total: 0 }, isLoading: false });
+    render(<ServicePage />, { wrapper: createWrapper() });
+    expect(screen.getByText("No transcription jobs")).toBeTruthy();
+  });
+
+  it("shows loading state", () => {
+    mockTranscriptionJobs.mockReturnValue({ data: undefined, isLoading: true });
+    render(<ServicePage />, { wrapper: createWrapper() });
+    expect(screen.queryByText("my-job")).toBeNull();
+  });
+});
+
+// ─── CloudTrail ─────────────────────────────────────────
+
+describe("ServicePage — CloudTrail", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockParams.mockReturnValue({ service: "cloudtrail" });
+    mockCloudTrailTrails.mockReturnValue({
+      data: {
+        trails: [
+          {
+            Name: "my-trail",
+            TrailARN: "arn:aws:cloudtrail:us-east-1:1:trail/my-trail",
+            S3BucketName: "my-bucket",
+            IsMultiRegionTrail: true,
+            IncludeGlobalServiceEvents: true,
+            IsOrganizationTrail: false,
+            HomeRegion: "us-east-1",
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+  });
+
+  it("renders CloudTrail trails with data", () => {
+    render(<ServicePage />, { wrapper: createWrapper() });
+    expect(screen.getAllByText("CloudTrail Trails").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("my-trail").length).toBeGreaterThan(0);
+  });
+
+  it("shows empty state when no trails", () => {
+    mockCloudTrailTrails.mockReturnValue({ data: { trails: [], total: 0 }, isLoading: false });
+    render(<ServicePage />, { wrapper: createWrapper() });
+    expect(screen.getByText("No trails")).toBeTruthy();
+  });
+
+  it("shows loading state", () => {
+    mockCloudTrailTrails.mockReturnValue({ data: undefined, isLoading: true });
+    render(<ServicePage />, { wrapper: createWrapper() });
+    expect(screen.queryByText("my-trail")).toBeNull();
+  });
+});
+
+// ─── Resource Groups & Tagging ──────────────────────────
+
+describe("ServicePage — RGT", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockParams.mockReturnValue({ service: "resourcegroupstagging" });
+    mockRGTResources.mockReturnValue({
+      data: {
+        resourceTagMappingList: [
+          { ResourceARN: "arn:aws:s3:::my-bucket", Tags: { env: "prod" } },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    mockRGTTagKeys.mockReturnValue({ data: { tagKeys: ["env", "team"] }, isLoading: false });
+    mockRGTTagValues.mockReturnValue({ data: { tagValues: ["prod", "dev"] }, isLoading: false });
+  });
+
+  it("renders tagged resources with data", () => {
+    render(<ServicePage />, { wrapper: createWrapper() });
+    expect(screen.getAllByText("Tagged Resources").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("arn:aws:s3:::my-bucket").length).toBeGreaterThan(0);
+  });
+
+  it("shows empty state when no resources", () => {
+    mockRGTResources.mockReturnValue({ data: { resourceTagMappingList: [], total: 0 }, isLoading: false });
+    render(<ServicePage />, { wrapper: createWrapper() });
+    expect(screen.getByText("No tagged resources found")).toBeTruthy();
+  });
+
+  it("shows loading state with spinner", () => {
+    mockRGTResources.mockReturnValue({ data: undefined, isLoading: true });
+    render(<ServicePage />, { wrapper: createWrapper() });
+    expect(screen.queryByText("arn:aws:s3:::my-bucket")).toBeNull();
+  });
+});

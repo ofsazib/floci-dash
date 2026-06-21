@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { render, screen, waitFor, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../test/helpers";
 import React from "react";
@@ -31,7 +31,7 @@ vi.mock("../hooks/useS3", () => ({
 
 vi.mock("../hooks/useS3Config", () => ({
   useS3ObjectTags: (...args: any[]) => mockObjectTags(...args),
-  useS3UpdateObjectTags: () => ({ mutate: vi.fn(), isPending: false }),
+  useS3UpdateObjectTags: () => ({ mutate: mockUpdateObjectTags, isPending: false }),
 }));
 
 vi.mock("../hooks/useSystem", () => ({
@@ -67,6 +67,10 @@ describe("S3Page", () => {
     });
     mockObjectDetail.mockReturnValue({ data: undefined, isLoading: false });
     mockObjectTags.mockReturnValue({ data: { tags: [], total: 0 } });
+  });
+
+  afterEach(() => {
+    cleanup();
   });
 
   // ─── Render State Tests ─────────────────────────────────
@@ -217,5 +221,195 @@ describe("S3Page", () => {
 
     render(<S3Page />, { wrapper: createWrapper() });
     expect(screen.getByText(/Preview not available/i)).toBeTruthy();
+  });
+
+  // ─── S3ObjectViewer Actions (Tier 1) ────────────────────
+
+  it("clicking Download triggers anchor click", async () => {
+    const user = userEvent.setup();
+    mockSearchParams.mockReturnValue([new URLSearchParams("?bucket=my-bucket&object=file.bin"), vi.fn()]);
+    mockObjectDetail.mockReturnValue({
+      data: { size: 1024, contentType: "application/octet-stream", lastModified: "2024-01-01T00:00:00Z", etag: "abc123" },
+      isLoading: false, isError: false, error: null,
+    });
+    mockObjectTags.mockReturnValue({ data: { tags: [], total: 0 } });
+
+    render(<S3Page />, { wrapper: createWrapper() });
+
+    const clickSpy = vi.fn();
+    const origCreate = document.createElement.bind(document);
+    const createSpy = vi.spyOn(document, "createElement").mockImplementation((tag: string) => {
+      if (tag === "a") {
+        return { click: clickSpy, href: "", download: "" } as any;
+      }
+      return origCreate(tag);
+    });
+
+    try {
+      await clickButton(user, /download/i);
+      expect(clickSpy).toHaveBeenCalled();
+    } finally {
+      createSpy.mockRestore();
+    }
+  });
+
+  it("clicking Copy S3 URI calls navigator.clipboard.writeText", async () => {
+    const user = userEvent.setup();
+    mockSearchParams.mockReturnValue([new URLSearchParams("?bucket=my-bucket&object=file.bin"), vi.fn()]);
+    mockObjectDetail.mockReturnValue({
+      data: { size: 1024, contentType: "application/octet-stream", lastModified: "2024-01-01T00:00:00Z", etag: "abc123" },
+      isLoading: false, isError: false, error: null,
+    });
+    mockObjectTags.mockReturnValue({ data: { tags: [], total: 0 } });
+
+    const writeTextSpy = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: writeTextSpy },
+      configurable: true,
+      writable: true,
+    });
+
+    render(<S3Page />, { wrapper: createWrapper() });
+    const copyBtn = screen.getByRole("button", { name: /copy s3 uri/i });
+    await user.click(copyBtn);
+    expect(writeTextSpy).toHaveBeenCalledWith("s3://my-bucket/file.bin");
+  });
+
+  it("shows 'No tags set' message when object has no tags", () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("?bucket=my-bucket&object=file.bin"), vi.fn()]);
+    mockObjectDetail.mockReturnValue({
+      data: { size: 1024, contentType: "application/octet-stream", lastModified: "2024-01-01T00:00:00Z", etag: "abc123" },
+      isLoading: false, isError: false, error: null,
+    });
+    mockObjectTags.mockReturnValue({ data: { tags: [], total: 0 } });
+
+    render(<S3Page />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No tags set on this object/i)).toBeTruthy();
+  });
+
+  it("clicking Edit tags enters edit mode", async () => {
+    const user = userEvent.setup();
+    mockSearchParams.mockReturnValue([new URLSearchParams("?bucket=my-bucket&object=file.bin"), vi.fn()]);
+    mockObjectDetail.mockReturnValue({
+      data: { size: 1024, contentType: "application/octet-stream", lastModified: "2024-01-01T00:00:00Z", etag: "abc123" },
+      isLoading: false, isError: false, error: null,
+    });
+    mockObjectTags.mockReturnValue({ data: { tags: [{ Key: "env", Value: "prod" }], total: 1 } });
+
+    render(<S3Page />, { wrapper: createWrapper() });
+    await clickButton(user, /edit tags/i);
+    expect(screen.getByText("Save tags")).toBeTruthy();
+    expect(screen.getByText("Add tag")).toBeTruthy();
+    expect(screen.getAllByText("Cancel").length).toBeGreaterThan(0);
+  });
+
+  it("clicking Save tags calls updateObjectTags.mutate", async () => {
+    const user = userEvent.setup();
+    mockSearchParams.mockReturnValue([new URLSearchParams("?bucket=my-bucket&object=file.bin"), vi.fn()]);
+    mockObjectDetail.mockReturnValue({
+      data: { size: 1024, contentType: "application/octet-stream", lastModified: "2024-01-01T00:00:00Z", etag: "abc123" },
+      isLoading: false, isError: false, error: null,
+    });
+    mockObjectTags.mockReturnValue({ data: { tags: [{ Key: "env", Value: "prod" }], total: 1 } });
+
+    render(<S3Page />, { wrapper: createWrapper() });
+    await clickButton(user, /edit tags/i);
+    await clickButton(user, /save tags/i);
+    expect(mockUpdateObjectTags).toHaveBeenCalledWith(
+      [{ Key: "env", Value: "prod" }],
+      expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) }),
+    );
+  });
+
+  // ─── Preview Variants (Tier 2) ──────────────────────────
+
+  it("renders image preview for image/png contentType", () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("?bucket=my-bucket&object=image.png"), vi.fn()]);
+    mockObjectDetail.mockReturnValue({
+      data: { size: 2048, contentType: "image/png", lastModified: "2024-01-01T00:00:00Z", etag: "abc123" },
+      isLoading: false, isError: false, error: null,
+    });
+    mockObjectTags.mockReturnValue({ data: { tags: [], total: 0 } });
+
+    const { container } = render(<S3Page />, { wrapper: createWrapper() });
+    expect(container.querySelector("img")).toBeTruthy();
+  });
+
+  it("renders video preview for video/mp4 contentType", () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("?bucket=my-bucket&object=video.mp4"), vi.fn()]);
+    mockObjectDetail.mockReturnValue({
+      data: { size: 5000, contentType: "video/mp4", lastModified: "2024-01-01T00:00:00Z", etag: "abc123" },
+      isLoading: false, isError: false, error: null,
+    });
+    mockObjectTags.mockReturnValue({ data: { tags: [], total: 0 } });
+
+    const { container } = render(<S3Page />, { wrapper: createWrapper() });
+    expect(container.querySelector("video")).toBeTruthy();
+  });
+
+  it("renders audio preview for audio/mp3 contentType", () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("?bucket=my-bucket&object=audio.mp3"), vi.fn()]);
+    mockObjectDetail.mockReturnValue({
+      data: { size: 3000, contentType: "audio/mp3", lastModified: "2024-01-01T00:00:00Z", etag: "abc123" },
+      isLoading: false, isError: false, error: null,
+    });
+    mockObjectTags.mockReturnValue({ data: { tags: [], total: 0 } });
+
+    const { container } = render(<S3Page />, { wrapper: createWrapper() });
+    expect(container.querySelector("audio")).toBeTruthy();
+  });
+
+  it("renders PDF preview for application/pdf contentType", () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("?bucket=my-bucket&object=doc.pdf"), vi.fn()]);
+    mockObjectDetail.mockReturnValue({
+      data: { size: 8000, contentType: "application/pdf", lastModified: "2024-01-01T00:00:00Z", etag: "abc123" },
+      isLoading: false, isError: false, error: null,
+    });
+    mockObjectTags.mockReturnValue({ data: { tags: [], total: 0 } });
+
+    const { container } = render(<S3Page />, { wrapper: createWrapper() });
+    expect(container.querySelector("iframe")).toBeTruthy();
+  });
+
+  // ─── S3ObjectBrowser Interactions (Tier 3) ──────────────
+
+  it("opens Create Folder modal when Create folder is clicked", async () => {
+    const user = userEvent.setup();
+    mockSearchParams.mockReturnValue([new URLSearchParams("?bucket=my-bucket"), vi.fn()]);
+    mockObjects.mockReturnValue({ data: { objects: [], folders: [], total: 0 }, isLoading: false });
+
+    render(<S3Page />, { wrapper: createWrapper() });
+    await clickButton(user, /create folder/i);
+    await waitFor(() => {
+      expect(screen.getAllByPlaceholderText("e.g. logs/2024").length).toBeGreaterThan(0);
+    });
+  });
+
+  it("filters objects by search term typed in TextFilter", async () => {
+    const user = userEvent.setup();
+    mockSearchParams.mockReturnValue([new URLSearchParams("?bucket=my-bucket"), vi.fn()]);
+    mockObjects.mockReturnValue({
+      data: {
+        objects: [
+          { key: "alpha.txt", size: 100, lastModified: "2024-01-01T00:00:00Z" },
+          { key: "beta.log", size: 200, lastModified: "2024-01-01T00:00:00Z" },
+        ],
+        folders: [],
+        total: 2,
+      },
+      isLoading: false,
+    });
+
+    render(<S3Page />, { wrapper: createWrapper() });
+    expect(screen.getByText("alpha.txt")).toBeTruthy();
+    expect(screen.getByText("beta.log")).toBeTruthy();
+
+    const filterInput = screen.getByPlaceholderText("Filter by name");
+    await user.type(filterInput, "alpha");
+
+    await waitFor(() => {
+      expect(screen.getByText("alpha.txt")).toBeTruthy();
+      expect(screen.queryByText("beta.log")).toBeNull();
+    });
   });
 });
