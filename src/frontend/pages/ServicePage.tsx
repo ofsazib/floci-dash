@@ -436,7 +436,6 @@ import {
   useBatchJobDefinitions,
   useRegisterBatchJobDefinition,
   useDeregisterBatchJobDefinition,
-  useBatchJobs,
   useSubmitBatchJob,
   useTerminateBatchJob,
 } from "../hooks/useBatch";
@@ -10580,7 +10579,6 @@ function BatchDashboard() {
   const { data: ceData, isLoading: ceLoading } = useBatchComputeEnvironments();
   const { data: jqData, isLoading: jqLoading } = useBatchJobQueues();
   const { data: jdData, isLoading: jdLoading } = useBatchJobDefinitions();
-  const { data: jobsData } = useBatchJobs();
   const createCE = useCreateBatchComputeEnvironment();
   const deleteCE = useDeleteBatchComputeEnvironment();
   const createJQ = useCreateBatchJobQueue();
@@ -10678,28 +10676,6 @@ function BatchDashboard() {
         filterPlaceholder="Find by name"
         filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
         onCreate={() => setShowCreateJD(true)}
-      />
-
-      <ResourceTable
-        resourceName="Job"
-        headerTitle="Jobs"
-        headerCounter={(jobsData?.jobs || []).length}
-        items={(jobsData?.jobs || []).map((j: any) => ({
-          id: j.jobId,
-          name: j.jobName,
-          status: j.status || "-",
-          created: j.createdAt ? new Date(j.createdAt).toLocaleString() : "-",
-        }))}
-        columns={[
-          { id: "id", header: "Job ID", cell: (i: any) => i.id, isRowHeader: true },
-          { id: "name", header: "Name", cell: (i: any) => i.name },
-          { id: "status", header: "Status", cell: (i: any) => i.status },
-          { id: "created", header: "Created", cell: (i: any) => i.created },
-        ]}
-        filterEnabled
-        filterPlaceholder="Find by name"
-        filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
-        onCreate={() => setShowSubmitJob(true)}
       />
 
       <Modal visible={showCreateCE} onDismiss={() => setShowCreateCE(false)} header="Create Compute Environment"
