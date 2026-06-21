@@ -37,6 +37,7 @@ const IMPLEMENTED_SERVICES: Record<string, string> = {
   route53: "Route 53",
   apigateway: "API Gateway",
   batch: "AWS Batch",
+  memorydb: "MemoryDB",
 };
 
 const BellIcon = () => (

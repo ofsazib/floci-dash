@@ -463,6 +463,7 @@ import {
 } from "../hooks/useRDSData";
 import { useEc2Messages, useAcknowledgeMessage } from "../hooks/useEc2Messages";
 import { useStartConfigurationSession, useGetLatestConfiguration } from "../hooks/useAppConfigData";
+import { useMemoryDBClusters, useCreateMemoryDBCluster, useDeleteMemoryDBCluster } from "../hooks/useMemoryDB";
 
 const KEY_TYPE_OPTIONS: SelectProps.Option[] = [
   { label: "String (S)", value: "S" },
@@ -503,7 +504,7 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
 ];
 
 /** Services with a fully implemented backend that can show a resource list */
-const IMPLEMENTED_SERVICES = new Set(["batch", "docdb", "emr", "rdsdata", "ec2messages", "appconfigdata", "dynamodb", "rds", "logs", "ecs", "ssm", "route53", "apigateway", "appsync", "scheduler", "ecr", "email", "elasticloadbalancing", "servicediscovery", "config", "tagging", "sts", "eks", "autoscaling", "cloudfront", "kinesis", "neptune", "pipes", "cognito-idp", "apigatewayv2", "acm", "cloudtrail", "appconfig", "athena", "glue", "firehose", "states", "es", "kafka", "bedrock-runtime", "textract", "transcribe", "ce", "pricing", "codebuild", "codedeploy", "backup", "transfer", "cur", "bcmdataexports", "wafv2", "elasticache"]);
+const IMPLEMENTED_SERVICES = new Set(["batch", "docdb", "emr", "rdsdata", "memorydb", "ec2messages", "appconfigdata", "dynamodb", "rds", "logs", "ecs", "ssm", "route53", "apigateway", "appsync", "scheduler", "ecr", "email", "elasticloadbalancing", "servicediscovery", "config", "tagging", "sts", "eks", "autoscaling", "cloudfront", "kinesis", "neptune", "pipes", "cognito-idp", "apigatewayv2", "acm", "cloudtrail", "appconfig", "athena", "glue", "firehose", "states", "es", "kafka", "bedrock-runtime", "textract", "transcribe", "ce", "pricing", "codebuild", "codedeploy", "backup", "transfer", "cur", "bcmdataexports", "wafv2", "elasticache"]);
 
 export default function ServicePage() {
   const { service } = useParams<{ service: string }>();
@@ -610,6 +611,7 @@ function ServiceResourceList({ service }: { service: string }) {
   if (service === "rdsdata") return <RDSDataDashboard />;
   if (service === "ec2messages") return <Ec2MessagesDashboard />;
   if (service === "appconfigdata") return <AppConfigDataDashboard />;
+  if (service === "memorydb") return <MemoryDBDashboard />;
   return null;
 }
 
@@ -11195,6 +11197,122 @@ function AppConfigDataDashboard() {
           </SpaceBetween>
         </Container>
       )}
+    </SpaceBetween>
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  MemoryDB
+// ────────────────────────────────────────────────────────
+
+function MemoryDBDashboard() {
+  const { showToast } = useToast();
+  const { data, isLoading } = useMemoryDBClusters();
+  const createCluster = useCreateMemoryDBCluster();
+  const deleteCluster = useDeleteMemoryDBCluster();
+  const [showCreate, setShowCreate] = useState(false);
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [nodeType, setNodeType] = useState("db.t4g.small");
+  const [engine, setEngine] = useState("redis");
+
+  const clusters = (data as any)?.clusters || [];
+
+  return (
+    <SpaceBetween size="l">
+      <ResourceTable
+        resourceName="Cluster"
+        headerTitle="Clusters"
+        headerCounter={clusters.length}
+        items={clusters.map((c: any) => ({
+          name: c.Name,
+          status: c.Status || "-",
+          nodeType: c.NodeType || "-",
+          engine: c.Engine || "-",
+          shards: c.NumberOfShards ?? "-",
+          endpoint: c.ClusterEndpoint ? `${c.ClusterEndpoint.Address}:${c.ClusterEndpoint.Port}` : "-",
+        }))}
+        columns={[
+          { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+          { id: "status", header: "Status", cell: (i: any) => i.status },
+          { id: "nodeType", header: "Node Type", cell: (i: any) => i.nodeType },
+          { id: "engine", header: "Engine", cell: (i: any) => i.engine },
+          { id: "shards", header: "Shards", cell: (i: any) => i.shards },
+          { id: "endpoint", header: "Endpoint", cell: (i: any) => i.endpoint },
+          { id: "actions", header: "", cell: (i: any) => (
+            <DeleteButton
+              itemName={i.name}
+              resourceType="cluster"
+              loading={deleteCluster.isPending && deleteCluster.variables === i.name}
+              onDelete={async () => {
+                try {
+                  await deleteCluster.mutateAsync(i.name);
+                  showToast("success", `Cluster ${i.name} deleted`);
+                } catch (e: any) { showToast("error", e.message); }
+              }}
+            />
+          )},
+        ]}
+        loading={isLoading}
+        filterEnabled
+        filterPlaceholder="Find by name"
+        filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+        onCreate={() => setShowCreate(true)}
+      />
+
+      <Modal
+        visible={showCreate}
+        onDismiss={() => setShowCreate(false)}
+        header="Create Cluster"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreate(false)}>Cancel</Button>
+              <Button
+                variant="primary"
+                loading={createCluster.isPending}
+                disabled={!name.trim()}
+                onClick={() => {
+                  createCluster.mutate(
+                    {
+                      clusterName: name.trim(),
+                      description: description.trim(),
+                      nodeType: nodeType.trim(),
+                      engine: engine.trim(),
+                    },
+                    {
+                      onSuccess: () => {
+                        setShowCreate(false);
+                        setName("");
+                        setDescription("");
+                        showToast("success", `Cluster ${name} created`);
+                      },
+                      onError: (e: any) => showToast("error", e.message),
+                    }
+                  );
+                }}
+              >
+                Create
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <SpaceBetween size="s">
+          <FormField label="Cluster name">
+            <Input value={name} onChange={({ detail }) => setName(detail.value)} placeholder="my-cluster" />
+          </FormField>
+          <FormField label="Description">
+            <Input value={description} onChange={({ detail }) => setDescription(detail.value)} placeholder="Optional description" />
+          </FormField>
+          <FormField label="Node type">
+            <Input value={nodeType} onChange={({ detail }) => setNodeType(detail.value)} placeholder="db.t4g.small" />
+          </FormField>
+          <FormField label="Engine">
+            <Input value={engine} onChange={({ detail }) => setEngine(detail.value)} placeholder="redis" />
+          </FormField>
+        </SpaceBetween>
+      </Modal>
     </SpaceBetween>
   );
 }
