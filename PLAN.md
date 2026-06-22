@@ -1278,7 +1278,7 @@ if (service === "sqs") return <SQSQueues />;
 
 Each remaining service gets a standard list + create + delete pattern.
 
-**State:** 46-tracker items (17.42 removed as DUP of 17.35, 17.46 added for ElastiCache, 17.47 added for MemoryDB). **All 46 Done.** 62 services fully implemented across the dashboard.
+**State:** 46-tracker items (17.42 removed as DUP of 17.35, 17.46 added for ElastiCache, 17.47 added for MemoryDB). **All 46 Done.** 61 services. 1 more (codepipeline) in Phase 14. s3vectors implemented 2026-06-22.
 
 | # | Service | Backend | Frontend | Status | Date |
 |---|---------|---------|----------|--------|------|
@@ -1456,11 +1456,23 @@ Implement the 4 Floci services not yet covered by the dashboard. Each follows th
 
 ---
 
+### Phase 14: Remaining Floci Services (2 services discovered in Floci audit)
+
+Two Floci services found in `../floci/src/main/java/io/github/hectorvent/floci/services/` that have no dashboard implementation. Each follows the standard pattern: backend route file → frontend hooks → ServicePage dashboard component → tests.
+
+| # | Task | Status | Date |
+|---|------|--------|------|
+| 24.1 | **CodePipeline (codepipeline)** — Full CI/CD pipeline service with ~40 operations across pipelines, executions, stages, approvals, webhooks, custom action types, and jobs. Integrates with CodeBuild, CodeDeploy, Lambda, and S3. Install `@aws-sdk/client-codepipeline`, create routes/codepipeline.ts, hooks/useCodePipeline.ts, CodePipelineDashboard component, tests. See `../floci/src/main/java/io/github/hectorvent/floci/services/codepipeline/` for the Floci source. | Pending | — |
+| 24.2 | **S3 Vector Search (s3vectors)** — Vector search engine with Vector Buckets (Create/Get/List/Delete), Indexes (Create/Get/List/Delete with dimension, data type, distance metric), and Vector Data (Put/Get/Delete/Query). Uses direct HTTP (Floci exposes raw POST endpoints), routes/s3vectors.ts, hooks/useS3Vectors.ts, S3VectorsDashboard component. | Done | 2026-06-22 |
+| 24.3 | Verify: typecheck + all tests pass + coverage thresholds met. Update README with newly implemented services. | Pending | — |
+
+---
+
 ## Floci Repo Notes
 
 - **Official dashboard in Floci:** The Floci repo at `../floci` now has an untracked `dashboard/` directory — a separate Node/Express + React dashboard (`../floci/dashboard/`). Not committed to Floci's main branch yet. This is independent from this project.
 - **Floci service layout:** `appconfigdata` lives inside `appconfig/` dir. `ec2messages` lives inside `ssm/` dir. `resourcegroupstagging` is implemented as `resourcegroupstagging/` but registered as `tagging`. All three are enabled by default (except `tagging` which is NOT enabled in `application.yml`).
-- **62 Floci services now fully supported** in the dashboard, including MemoryDB and ElastiCache.
+- **60 Floci services fully supported** in the dashboard. **2 remaining:** `codepipeline` and `s3vectors` — Floci has them, dashboard doesn't yet (see Phase 14).
 - **No Floci changes.** Dashboard uses existing endpoints only — never edit `../floci`.
 
 ## Conventions

@@ -51,6 +51,7 @@ import { RDSDataDashboard } from "./services/RDSDataDashboard";
 import { Ec2MessagesDashboard } from "./services/Ec2MessagesDashboard";
 import { AppConfigDataDashboard } from "./services/AppConfigDataDashboard";
 import { MemoryDBDashboard } from "./services/MemoryDBDashboard";
+import { S3VectorsDashboard } from "./services/S3VectorsDashboard";
 
 import type { ComponentType } from "react";
 

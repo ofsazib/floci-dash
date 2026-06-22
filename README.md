@@ -412,6 +412,7 @@ These services have full CRUD operations in both backend and frontend:
 | **WAF v2** | Web ACLs, IP Sets, Regex Pattern Sets, Rule Groups (list, create, delete) |
 | **ElastiCache** | Replication groups (list, create, describe, delete), cache clusters (list, create, describe, delete), users (list, create, describe, delete) |
 | **MemoryDB** | Clusters (list, create, describe, delete), tags (list per resource) |
+| **S3 Vector Search** | Vector buckets (list, create, get, delete), indexes (list, create, get, delete with dimension/data type/distance metric), vectors (put with metadata, get by keys, delete, query with top-K/filter) |
 
 ### Navigation + status (62 services)
 
@@ -421,7 +422,7 @@ All services reported by Floci appear in the sidebar with status indicators.
 <summary>Full list of navigable services</summary>
 
 **Compute:** EC2, ECS, EKS, Auto Scaling, Lambda, AWS Batch
-**Storage:** S3, ECR
+**Storage:** S3, S3 Vector Search, ECR
 **Database:** DynamoDB, DocumentDB, ElastiCache, MemoryDB, Neptune, RDS, RDS Data API
 **Networking:** API Gateway, API Gateway V2, AppSync, CloudFront, ELB, Route 53
 **Messaging:** EventBridge (Events), EventBridge Pipes, EventBridge Scheduler, Kinesis, Kinesis Firehose, SES, SNS, SQS

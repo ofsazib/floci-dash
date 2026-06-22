@@ -33,7 +33,7 @@ export const CATEGORY_ORDER = [
 export const SERVICE_CATEGORY_MAP: Record<string, string> = {
   ec2: "Compute", lambda: "Compute", autoscaling: "Compute",
   ecs: "Containers", ecr: "Containers", eks: "Containers",
-  s3: "Storage",
+  s3: "Storage", s3vectors: "Storage",
   dynamodb: "Database", rds: "Database", neptune: "Database", elasticache: "Database", docdb: "Database", memorydb: "Database",
   elasticloadbalancing: "Networking & Content Delivery", route53: "Networking & Content Delivery", cloudfront: "Networking & Content Delivery",
   apigateway: "Networking & Content Delivery", apigatewayv2: "Networking & Content Delivery", appsync: "Application Integration",
@@ -55,6 +55,7 @@ export const SERVICE_CATEGORY_MAP: Record<string, string> = {
 
 export const SERVICE_LABELS: Record<string, string> = {
   "s3": "S3",
+  "s3vectors": "S3 Vector Search",
   "sqs": "SQS",
   "sns": "SNS",
   "lambda": "Lambda",
