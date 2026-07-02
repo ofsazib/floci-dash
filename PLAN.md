@@ -2,7 +2,7 @@
 
 ## Overview
 
-An AWS Console-style web dashboard for Floci, the local AWS emulator. The dashboard provides a polished, production-grade management UI that mirrors the real AWS Console experience — allowing users to manage all 60 AWS services that Floci emulates, including resource CRUD operations, detailed views, filtering, search, and real-time status monitoring.
+An AWS Console-style web dashboard for Floci, the local AWS emulator. The dashboard provides a polished, production-grade management UI that mirrors the real AWS Console experience — allowing users to manage all 66 AWS services that Floci emulates, including resource CRUD operations, detailed views, filtering, search, and real-time status monitoring.
 
 **Everything runs inside Docker containers.** No host machine dependencies beyond Docker itself.
 
@@ -26,7 +26,7 @@ An AWS Console-style web dashboard for Floci, the local AWS emulator. The dashbo
 | Shared components | Done | ResourceTable, CreateModal, DeleteButton, ServiceCard, ServiceGrid, StatCard, StatusBadge |
 | Layout | Done | AppLayoutShell with TopNavigation, SideNavigation, dark mode |
 | Settings | Done | Dark mode toggle, refresh interval |
-| 60+ services implemented (+ S3/DynamoDB dedicated pages) | ServicePage: browse, create, delete | All Floci services covered |
+| 63 services implemented (3 remaining: codepipeline, elasticbeanstalk, iot) | ServicePage: browse, create, delete | 63 of 66 Floci services covered |
 
 ### Architecture Constraints
 
@@ -817,6 +817,54 @@ if (service === "sqs") return <SQSQueues />;
 
 ---
 
+### CodePipeline (20+ operations) ⬅ NEW — NOT YET IMPLEMENTED
+
+Floci externalKey: `codepipeline` | Protocol: JSON | SDK: `@aws-sdk/client-codepipeline` (already installed)
+
+| Resource Type | Floci Operations | Dashboard UI Features |
+|---------------|------------------|----------------------|
+| **Pipelines** | CreatePipeline, GetPipeline, UpdatePipeline, DeletePipeline, ListPipelines, GetPipelineState | List, Create (stages, actions, artifact store), Detail (state visualization), Edit, Delete |
+| **Executions** | StartPipelineExecution, StopPipelineExecution, GetPipelineExecution, ListPipelineExecutions, RetryStageExecution | Execution list with status timeline, Start execution, Stop/abandon, Retry stage, Detail view |
+| **Stage Transitions** | DisableStageTransition, EnableStageTransition | Per-stage enable/disable toggle, Transition reason |
+| **Approvals** | PutApprovalResult | Approval result submission (Approved/Rejected with summary) |
+| **Action Executions** | ListActionExecutions | Per-action execution history with status and timing |
+| **Action Types** | ListActionTypes, CreateCustomActionType | Built-in action type browser (by owner/region), Custom action type creation |
+| **Webhooks** | ListWebhooks, PutWebhook, DeleteWebhook | Webhook list, Create (with filters/authentication), Delete |
+| **Tags** | TagResource, UntagResource, ListTagsForResource | Tag editor on pipelines |
+
+---
+
+### Elastic Beanstalk (14 operations) ⬅ NEW — NOT YET IMPLEMENTED
+
+Floci externalKey: `elasticbeanstalk` | Protocol: QUERY (AWS Query API) | SDK: `@aws-sdk/client-elastic-beanstalk` (needs install)
+
+| Resource Type | Floci Operations | Dashboard UI Features |
+|---------------|------------------|----------------------|
+| **Applications** | CreateApplication, DescribeApplications, UpdateApplication, DeleteApplication | Application list, Create, Detail, Edit, Delete |
+| **Application Versions** | CreateApplicationVersion, DescribeApplicationVersions, DeleteApplicationVersion | Version list per app, Create (source bundle), Detail, Delete |
+| **Environments** | CreateEnvironment, DescribeEnvironments, UpdateEnvironment, TerminateEnvironment | Environment list with health, Create (solution stack, version), Detail, Edit, Terminate |
+| **Configuration Settings** | DescribeConfigurationSettings | Config settings browser |
+| **DNS Availability** | CheckDNSAvailability | CNAME availability checker |
+| **Solution Stacks** | ListAvailableSolutionStacks | Solution stack list |
+
+---
+
+### IoT Core (20+ operations) ⬅ NEW — NOT YET IMPLEMENTED
+
+Floci externalKey: `iot` | Protocol: REST_JSON | SDK: `@aws-sdk/client-iot` + `@aws-sdk/client-iot-data-plane` (needs install)
+
+| Resource Type | Floci Operations | Dashboard UI Features |
+|---------------|------------------|----------------------|
+| **Things** | CreateThing, DescribeThing, ListThings, UpdateThing, DeleteThing, DescribeEndpoint | Thing list, Create (type, attributes), Detail, Edit attributes, Delete |
+| **Certificates** | CreateKeysAndCertificate, CreateCertificateFromCsr, DescribeCertificate, ListCertificates, UpdateCertificate, DeleteCertificate | Certificate list with status, Create (download keys), Activate/deactivate/revoke, Delete |
+| **Policies** | CreatePolicy, GetPolicy, ListPolicies, DeletePolicy, CreatePolicyVersion, ListPolicyVersions, SetDefaultPolicyVersion | Policy list, Create (JSON document), Detail, Version browser, Attach/detach to certificate |
+| **Shadows** | GetThingShadow, UpdateThingShadow, DeleteThingShadow | Shadow state viewer (JSON), Update shadow, Delete |
+| **Topic Rules** | CreateTopicRule, GetTopicRule, ListTopicRules, UpdateTopicRule, DeleteTopicRule | Rule list, Create (SQL query + actions), Detail, Enable/disable, Delete |
+| **Jobs** | CreateJob, DescribeJob, ListJobs, DeleteJob | Job list with status, Create (targets + document), Detail, Cancel, Delete |
+| **Tags** | TagResource, UntagResource, ListTagsForResource | Tag editor |
+
+---
+
 ### Remaining Services (list-only / minimal CRUD)
 
 | Service | Key Resources | Dashboard UI Features |
@@ -1278,7 +1326,7 @@ if (service === "sqs") return <SQSQueues />;
 
 Each remaining service gets a standard list + create + delete pattern.
 
-**State:** 46-tracker items (17.42 removed as DUP of 17.35, 17.46 added for ElastiCache, 17.47 added for MemoryDB). **All 46 Done.** 61 services. 1 more (codepipeline) in Phase 14. s3vectors implemented 2026-06-22.
+**State:** 46-tracker items (17.42 removed as DUP of 17.35, 17.46 added for ElastiCache, 17.47 added for MemoryDB). **All 46 Done.** 63 services. 3 remaining (codepipeline, elasticbeanstalk, iot) in Phase 14.
 
 | # | Service | Backend | Frontend | Status | Date |
 |---|---------|---------|----------|--------|------|
@@ -1456,15 +1504,17 @@ Implement the 4 Floci services not yet covered by the dashboard. Each follows th
 
 ---
 
-### Phase 14: Remaining Floci Services (2 services discovered in Floci audit)
+### Phase 14: Remaining Floci Services (4 services — July 2026 Floci audit)
 
-Two Floci services found in `../floci/src/main/java/io/github/hectorvent/floci/services/` that have no dashboard implementation. Each follows the standard pattern: backend route file → frontend hooks → ServicePage dashboard component → tests.
+Discovered during a full audit of Floci's 66 service directories (July 2026). Each follows the standard pattern: backend route file → frontend hooks → ServicePage dashboard component → tests.
 
 | # | Task | Status | Date |
 |---|------|--------|------|
-| 24.1 | **CodePipeline (codepipeline)** — Full CI/CD pipeline service with ~40 operations across pipelines, executions, stages, approvals, webhooks, custom action types, and jobs. Integrates with CodeBuild, CodeDeploy, Lambda, and S3. Install `@aws-sdk/client-codepipeline`, create routes/codepipeline.ts, hooks/useCodePipeline.ts, CodePipelineDashboard component, tests. See `../floci/src/main/java/io/github/hectorvent/floci/services/codepipeline/` for the Floci source. | Pending | — |
-| 24.2 | **S3 Vector Search (s3vectors)** — Vector search engine with Vector Buckets (Create/Get/List/Delete), Indexes (Create/Get/List/Delete with dimension, data type, distance metric), and Vector Data (Put/Get/Delete/Query). Uses direct HTTP (Floci exposes raw POST endpoints), routes/s3vectors.ts, hooks/useS3Vectors.ts, S3VectorsDashboard component. | Done | 2026-06-22 |
-| 24.3 | Verify: typecheck + all tests pass + coverage thresholds met. Update README with newly implemented services. | Pending | — |
+| 24.1 | **CodePipeline (codepipeline)** — 20+ operations: pipelines, executions, stage transitions, approvals, action executions, action types, webhooks, tags. Full implementation: backend route, useCodePipeline hooks, CodePipelineDashboard with tabs (Pipelines/Webhooks/Action Types), Create/Delete/Start/Stop/Retry, backend tests (31) + frontend tests (21). | Done | 2026-07-02 |
+| 24.2 | **S3 Vector Search (s3vectors)** — Vector buckets, indexes, vector data. Direct HTTP (raw POST endpoints). | Done | 2026-06-22 |
+| 24.3 | **Elastic Beanstalk (elasticbeanstalk)** — 14 ops: applications (Create/Describe/Update/Delete), versions (Create/Describe/Delete), environments (Create/Describe/Update/Terminate), config settings, DNS availability, solution stacks. Protocol: QUERY. No dashboard code exists. Install `@aws-sdk/client-elastic-beanstalk`, create `routes/elasticbeanstalk.ts`, `hooks/useElasticBeanstalk.ts`, `BeanstalkDashboard`, `SERVICE_LABELS`/`SERVICE_CATEGORIES` entries, tests. See `../floci/src/main/java/io/github/hectorvent/floci/services/elasticbeanstalk/`. | Pending | — |
+| 24.4 | **IoT Core (iot)** — 20+ ops: things (CRUD with attributes/types), certificates (create keys+bundle, activate/deactivate/revoke), policies (CRUD + versions + attachments), shadows (get/update/delete), topic rules (SQL queries + actions), jobs (CRUD + cancel), tags. Protocol: REST_JSON. No dashboard code exists. Install `@aws-sdk/client-iot` + `@aws-sdk/client-iot-data-plane`, create `routes/iot.ts`, `hooks/useIoT.ts`, `IoTDashboard`, `SERVICE_LABELS`/`SERVICE_CATEGORIES` entries, tests. See `../floci/src/main/java/io/github/hectorvent/floci/services/iot/`. | Pending | — |
+| 24.5 | Verify: typecheck + all tests pass + coverage thresholds met. Update README ("62 services" → "66 services", add new service specs to tables). | Pending | — |
 
 ---
 
@@ -1472,7 +1522,7 @@ Two Floci services found in `../floci/src/main/java/io/github/hectorvent/floci/s
 
 - **Official dashboard in Floci:** The Floci repo at `../floci` now has an untracked `dashboard/` directory — a separate Node/Express + React dashboard (`../floci/dashboard/`). Not committed to Floci's main branch yet. This is independent from this project.
 - **Floci service layout:** `appconfigdata` lives inside `appconfig/` dir. `ec2messages` lives inside `ssm/` dir. `resourcegroupstagging` is implemented as `resourcegroupstagging/` but registered as `tagging`. All three are enabled by default (except `tagging` which is NOT enabled in `application.yml`).
-- **60 Floci services fully supported** in the dashboard. **2 remaining:** `codepipeline` and `s3vectors` — Floci has them, dashboard doesn't yet (see Phase 14).
+- **66 Floci services total** (including `floci` internal). **63 implemented in the dashboard.** **3 remaining:** `codepipeline`, `elasticbeanstalk`, `iot` (see Phase 14). The `floci` service is Floci's own internal management service and does not need a dashboard UI.
 - **No Floci changes.** Dashboard uses existing endpoints only — never edit `../floci`.
 
 ## Conventions
