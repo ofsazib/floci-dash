@@ -26,7 +26,7 @@ An AWS Console-style web dashboard for Floci, the local AWS emulator. The dashbo
 | Shared components | Done | ResourceTable, CreateModal, DeleteButton, ServiceCard, ServiceGrid, StatCard, StatusBadge |
 | Layout | Done | AppLayoutShell with TopNavigation, SideNavigation, dark mode |
 | Settings | Done | Dark mode toggle, refresh interval |
-| 65 services implemented (1 remaining: iot) | ServicePage: browse, create, delete | 65 of 66 Floci services covered |
+| 66 services implemented — all Floci services covered! | ServicePage: browse, create, delete | 66 of 66 Floci services covered |
 
 ### Architecture Constraints
 
@@ -849,7 +849,7 @@ Floci externalKey: `elasticbeanstalk` | Protocol: QUERY (AWS Query API) | SDK: `
 
 ---
 
-### IoT Core (20+ operations) ⬅ NEW — NOT YET IMPLEMENTED
+### IoT Core (20+ operations) ✅ Done
 
 Floci externalKey: `iot` | Protocol: REST_JSON | SDK: `@aws-sdk/client-iot` + `@aws-sdk/client-iot-data-plane` (needs install)
 
@@ -1326,7 +1326,7 @@ Floci externalKey: `iot` | Protocol: REST_JSON | SDK: `@aws-sdk/client-iot` + `@
 
 Each remaining service gets a standard list + create + delete pattern.
 
-**State:** 46-tracker items (17.42 removed as DUP of 17.35, 17.46 added for ElastiCache, 17.47 added for MemoryDB). **All 46 Done.** 65 services. 1 remaining (iot) in Phase 14.
+**State:** 46-tracker items (17.42 removed as DUP of 17.35, 17.46 added for ElastiCache, 17.47 added for MemoryDB). **All 46 Done.** 66 services. All 66 Floci services implemented!
 
 | # | Service | Backend | Frontend | Status | Date |
 |---|---------|---------|----------|--------|------|

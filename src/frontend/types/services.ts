@@ -12,6 +12,7 @@ export const SERVICE_CATEGORIES: Record<string, string[]> = {
   "Cost Management": ["ce", "cur", "bcm-data-exports", "pricing", "tagging"],
   "Developer Tools":["codedeploy", "codebuild", "codepipeline", "elasticbeanstalk"],
   "Migration & Transfer": ["backup", "transfer"],
+  "Internet of Things": ["iot"],
 };
 
 export const CATEGORY_ORDER = [
@@ -28,6 +29,7 @@ export const CATEGORY_ORDER = [
   "Machine Learning",
   "Cost Management",
   "Migration & Transfer",
+  "Internet of Things",
 ] as const;
 
 export const SERVICE_CATEGORY_MAP: Record<string, string> = {
@@ -50,6 +52,7 @@ export const SERVICE_CATEGORY_MAP: Record<string, string> = {
   ce: "Cost Management", cur: "Cost Management", "bcm-data-exports": "Cost Management", pricing: "Cost Management", tagging: "Cost Management",
   codedeploy: "Developer Tools", codebuild: "Developer Tools", codepipeline: "Developer Tools", elasticbeanstalk: "Developer Tools",
   backup: "Migration & Transfer", transfer: "Migration & Transfer",
+  iot: "Internet of Things",
   batch: "Analytics",
 };
 
@@ -121,6 +124,7 @@ export const SERVICE_LABELS: Record<string, string> = {
   "rdsdata": "RDS Data API",
   "codepipeline": "CodePipeline",
   "elasticbeanstalk": "Elastic Beanstalk",
+  "iot": "IoT Core",
 };
 
 export function getServiceLabel(externalKey: string): string {
