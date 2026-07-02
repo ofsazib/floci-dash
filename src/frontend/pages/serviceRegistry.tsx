@@ -53,6 +53,7 @@ import { AppConfigDataDashboard } from "./services/AppConfigDataDashboard";
 import { MemoryDBDashboard } from "./services/MemoryDBDashboard";
 import { S3VectorsDashboard } from "./services/S3VectorsDashboard";
 import { CodePipelineDashboard } from "./services/CodePipelineDashboard";
+import { ElasticBeanstalkDashboard } from "./services/ElasticBeanstalkDashboard";
 
 import type { ComponentType } from "react";
 
@@ -111,4 +112,5 @@ export const SERVICE_DASHBOARDS: Record<string, ComponentType> = {
   "appconfigdata": AppConfigDataDashboard,
   "memorydb": MemoryDBDashboard,
   "codepipeline": CodePipelineDashboard,
+  "elasticbeanstalk": ElasticBeanstalkDashboard,
 };

@@ -43,7 +43,7 @@
 ## Features
 
 - **AWS Console look and feel** — Built with [Cloudscape Design System](https://cloudscape.design/), the same component library used by the real AWS Management Console
-- **63 Floci services** — Full navigation, status, and resource management with 65+ backend routes covering all major AWS services
+- **65 Floci services** — Full navigation, status, and resource management with 65+ backend routes covering all major AWS services
 - **Deep resource management** — Browse, create, and delete resources for implemented services (S3, DynamoDB, EC2, RDS, SQS, SNS, EventBridge, CloudWatch Logs, CloudWatch Metrics, Lambda, IAM, Secrets Manager, CloudFormation, KMS, ECS, SSM, Route 53, API Gateway)
 - **EC2 web terminal** — Interactive bash shell inside running EC2 instances directly from the browser (xterm.js + Docker Engine API with PTY)
 - **Dark mode** — Toggle between light and dark themes (persisted to localStorage)
@@ -404,6 +404,7 @@ These services have full CRUD operations in both backend and frontend:
 | **CodeBuild** | Projects (list, create, delete, get), builds (start, list per project, list all, get, stop), source credentials (list, import, delete), curated environment images (list) |
 | **CodeDeploy** | Applications (list, create, get, update, delete), deployment groups (list, create, get, delete per application), deployment configs (list, create, get, delete), deployments (create, list per application, get), tags (list, add, remove per resource) |
 | **CodePipeline** | Pipelines (list, create with stages/actions, get, get state, update, delete), executions (list, get, start, stop, retry stage), stage transitions (enable/disable), approvals (submit result), action executions (list), action types (list, create custom), webhooks (list, create, delete), tags (list, add, remove) |
+| **Elastic Beanstalk** | Applications (list, create, update, delete), application versions (list, create, delete), environments (list, create, delete with health/status), configuration settings (get), solution stacks (list), DNS availability (check) |
 | **Backup** | Backup plans (list, create, get, delete), backup vaults (list, create, describe, delete), backup selections (list, create per plan, get, delete), backup jobs (list, start, describe, stop), tags (list) |
 | **Transfer Family** | Servers (list, create, describe, delete, start, stop), users (list per server, create, describe, delete), tags (list) |
 | **AWS Batch** | Compute environments (list, create, describe, delete), job queues (list, create, describe, delete), job definitions (list, register, describe, deregister), jobs (list, describe, submit, terminate) |
@@ -415,7 +416,7 @@ These services have full CRUD operations in both backend and frontend:
 | **MemoryDB** | Clusters (list, create, describe, delete), tags (list per resource) |
 | **S3 Vector Search** | Vector buckets (list, create, get, delete), indexes (list, create, get, delete with dimension/data type/distance metric), vectors (put with metadata, get by keys, delete, query with top-K/filter) |
 
-### Navigation + status (63 services)
+### Navigation + status (65 services)
 
 All services reported by Floci appear in the sidebar with status indicators.
 
@@ -432,7 +433,7 @@ All services reported by Floci appear in the sidebar with status indicators.
 **Analytics:** Athena, Glue, MSK (Kafka), OpenSearch, Step Functions, Amazon EMR
 **ML/AI:** Bedrock Runtime, Textract, Transcribe
 **Billing:** BCM Data Exports, Cost Explorer, Cost & Usage Report, Pricing, Resource Groups Tagging
-**Developer Tools:** CodeBuild, CodeDeploy, CodePipeline
+**Developer Tools:** CodeBuild, CodeDeploy, CodePipeline, Elastic Beanstalk
 **Migration:** Backup, Transfer Family
 
 </details>

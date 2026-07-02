@@ -10,7 +10,7 @@ export const SERVICE_CATEGORIES: Record<string, string[]> = {
   "Analytics":      ["athena", "glue", "firehose", "kafka", "es", "emr"],
   "Machine Learning": ["bedrock-runtime", "textract", "transcribe"],
   "Cost Management": ["ce", "cur", "bcm-data-exports", "pricing", "tagging"],
-  "Developer Tools":["codedeploy", "codebuild", "codepipeline"],
+  "Developer Tools":["codedeploy", "codebuild", "codepipeline", "elasticbeanstalk"],
   "Migration & Transfer": ["backup", "transfer"],
 };
 
@@ -48,7 +48,7 @@ export const SERVICE_CATEGORY_MAP: Record<string, string> = {
   athena: "Analytics", glue: "Analytics", firehose: "Analytics", kafka: "Analytics", es: "Analytics", emr: "Analytics",
   "bedrock-runtime": "Machine Learning", textract: "Machine Learning", transcribe: "Machine Learning",
   ce: "Cost Management", cur: "Cost Management", "bcm-data-exports": "Cost Management", pricing: "Cost Management", tagging: "Cost Management",
-  codedeploy: "Developer Tools", codebuild: "Developer Tools", codepipeline: "Developer Tools",
+  codedeploy: "Developer Tools", codebuild: "Developer Tools", codepipeline: "Developer Tools", elasticbeanstalk: "Developer Tools",
   backup: "Migration & Transfer", transfer: "Migration & Transfer",
   batch: "Analytics",
 };
@@ -120,6 +120,7 @@ export const SERVICE_LABELS: Record<string, string> = {
   "emr": "Amazon EMR",
   "rdsdata": "RDS Data API",
   "codepipeline": "CodePipeline",
+  "elasticbeanstalk": "Elastic Beanstalk",
 };
 
 export function getServiceLabel(externalKey: string): string {

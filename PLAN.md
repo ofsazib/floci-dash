@@ -26,7 +26,7 @@ An AWS Console-style web dashboard for Floci, the local AWS emulator. The dashbo
 | Shared components | Done | ResourceTable, CreateModal, DeleteButton, ServiceCard, ServiceGrid, StatCard, StatusBadge |
 | Layout | Done | AppLayoutShell with TopNavigation, SideNavigation, dark mode |
 | Settings | Done | Dark mode toggle, refresh interval |
-| 63 services implemented (3 remaining: codepipeline, elasticbeanstalk, iot) | ServicePage: browse, create, delete | 63 of 66 Floci services covered |
+| 65 services implemented (1 remaining: iot) | ServicePage: browse, create, delete | 65 of 66 Floci services covered |
 
 ### Architecture Constraints
 
@@ -817,7 +817,7 @@ if (service === "sqs") return <SQSQueues />;
 
 ---
 
-### CodePipeline (20+ operations) ⬅ NEW — NOT YET IMPLEMENTED
+### CodePipeline (20+ operations) ✅ Done
 
 Floci externalKey: `codepipeline` | Protocol: JSON | SDK: `@aws-sdk/client-codepipeline` (already installed)
 
@@ -834,7 +834,7 @@ Floci externalKey: `codepipeline` | Protocol: JSON | SDK: `@aws-sdk/client-codep
 
 ---
 
-### Elastic Beanstalk (14 operations) ⬅ NEW — NOT YET IMPLEMENTED
+### Elastic Beanstalk (14 operations) ✅ Done
 
 Floci externalKey: `elasticbeanstalk` | Protocol: QUERY (AWS Query API) | SDK: `@aws-sdk/client-elastic-beanstalk` (needs install)
 
@@ -1326,7 +1326,7 @@ Floci externalKey: `iot` | Protocol: REST_JSON | SDK: `@aws-sdk/client-iot` + `@
 
 Each remaining service gets a standard list + create + delete pattern.
 
-**State:** 46-tracker items (17.42 removed as DUP of 17.35, 17.46 added for ElastiCache, 17.47 added for MemoryDB). **All 46 Done.** 63 services. 3 remaining (codepipeline, elasticbeanstalk, iot) in Phase 14.
+**State:** 46-tracker items (17.42 removed as DUP of 17.35, 17.46 added for ElastiCache, 17.47 added for MemoryDB). **All 46 Done.** 65 services. 1 remaining (iot) in Phase 14.
 
 | # | Service | Backend | Frontend | Status | Date |
 |---|---------|---------|----------|--------|------|
