@@ -11,21 +11,25 @@ vi.mock("../lib/client", () => ({
 
 import {
   useThings,
+  useThing,
   useCreateThing,
   useDeleteThing,
   useThingTypes,
   useCreateThingType,
   useDeleteThingType,
   useCertificates,
+  useCertificate,
   useCreateKeysAndCertificate,
   useUpdateCertificateStatus,
   useDeleteCertificate,
   usePolicies,
+  usePolicy,
   useCreatePolicy,
   useDeletePolicy,
   usePolicyVersions,
   useCreatePolicyVersion,
   useTopicRules,
+  useTopicRule,
   useCreateTopicRule,
   useDeleteTopicRule,
   useEnableTopicRule,
@@ -33,6 +37,8 @@ import {
   useShadow,
   useUpdateShadow,
   useEndpoint,
+  useIoTTags,
+  useTagIoTResource,
   useThingJobs,
 } from "./useIoT";
 
@@ -66,6 +72,20 @@ describe("useThings", () => {
     const { result } = renderHook(() => useThings(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith("/aws/iot/things");
+  });
+});
+
+describe("useThing", () => {
+  it("does NOT call api when thingName is null", () => {
+    renderHook(() => useThing(null), { wrapper: createWrapper() });
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api with thingName in path", async () => {
+    mockApi.mockResolvedValueOnce({ thingName: "my-device", thingTypeName: "Sensor" });
+    const { result } = renderHook(() => useThing("my-device"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/iot/things/my-device");
   });
 });
 
@@ -103,6 +123,18 @@ describe("useDeleteThing", () => {
       expect.objectContaining({ method: "DELETE" }),
     );
   });
+
+  it("invalidates things query on success", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useDeleteThing(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync("my-device");
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["aws", "iot", "things"] });
+  });
 });
 
 // ─── Thing Types ─────────────────────────────────────
@@ -126,6 +158,18 @@ describe("useCreateThingType", () => {
       expect.objectContaining({ method: "POST" }),
     );
   });
+
+  it("invalidates thing-types query on success", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useCreateThingType(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync({ thingTypeName: "Sensor" });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["aws", "iot", "thing-types"] });
+  });
 });
 
 describe("useDeleteThingType", () => {
@@ -138,6 +182,18 @@ describe("useDeleteThingType", () => {
       expect.objectContaining({ method: "DELETE" }),
     );
   });
+
+  it("invalidates thing-types query on success", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useDeleteThingType(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync("Sensor");
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["aws", "iot", "thing-types"] });
+  });
 });
 
 // ─── Certificates ────────────────────────────────────
@@ -148,6 +204,20 @@ describe("useCertificates", () => {
     const { result } = renderHook(() => useCertificates(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith("/aws/iot/certificates");
+  });
+});
+
+describe("useCertificate", () => {
+  it("does NOT call api when certificateId is null", () => {
+    renderHook(() => useCertificate(null), { wrapper: createWrapper() });
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api with certificateId in path", async () => {
+    mockApi.mockResolvedValueOnce({ certificateId: "cert-123", status: "ACTIVE" });
+    const { result } = renderHook(() => useCertificate("cert-123"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/iot/certificates/cert-123");
   });
 });
 
@@ -185,6 +255,18 @@ describe("useUpdateCertificateStatus", () => {
       expect.objectContaining({ method: "PUT" }),
     );
   });
+
+  it("invalidates certificates query on success", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useUpdateCertificateStatus(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync({ certificateId: "cert-123", newStatus: "ACTIVE" });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["aws", "iot", "certificates"] });
+  });
 });
 
 describe("useDeleteCertificate", () => {
@@ -197,6 +279,18 @@ describe("useDeleteCertificate", () => {
       expect.objectContaining({ method: "DELETE" }),
     );
   });
+
+  it("invalidates certificates query on success", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useDeleteCertificate(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync("cert-123");
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["aws", "iot", "certificates"] });
+  });
 });
 
 // ─── Policies ────────────────────────────────────────
@@ -207,6 +301,20 @@ describe("usePolicies", () => {
     const { result } = renderHook(() => usePolicies(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith("/aws/iot/policies");
+  });
+});
+
+describe("usePolicy", () => {
+  it("does NOT call api when policyName is null", () => {
+    renderHook(() => usePolicy(null), { wrapper: createWrapper() });
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api with policyName in path", async () => {
+    mockApi.mockResolvedValueOnce({ policyName: "MyPolicy", policyDocument: "{}" });
+    const { result } = renderHook(() => usePolicy("MyPolicy"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/iot/policies/MyPolicy");
   });
 });
 
@@ -244,6 +352,18 @@ describe("useDeletePolicy", () => {
       expect.objectContaining({ method: "DELETE" }),
     );
   });
+
+  it("invalidates policies query on success", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useDeletePolicy(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync("MyPolicy");
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["aws", "iot", "policies"] });
+  });
 });
 
 // ─── Policy Versions ─────────────────────────────────
@@ -262,6 +382,32 @@ describe("usePolicyVersions", () => {
   });
 });
 
+describe("useCreatePolicyVersion", () => {
+  it("calls api with POST method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useCreatePolicyVersion(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ policyName: "MyPolicy", policyDocument: "{}" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/iot/policies/MyPolicy/versions",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("invalidates policy versions query dynamically on success", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useCreatePolicyVersion(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync({ policyName: "MyPolicy", policyDocument: "{}" });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["aws", "iot", "policies", "MyPolicy", "versions"],
+    });
+  });
+});
+
 // ─── Topic Rules ─────────────────────────────────────
 
 describe("useTopicRules", () => {
@@ -270,6 +416,20 @@ describe("useTopicRules", () => {
     const { result } = renderHook(() => useTopicRules(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith("/aws/iot/topic-rules");
+  });
+});
+
+describe("useTopicRule", () => {
+  it("does NOT call api when ruleName is null", () => {
+    renderHook(() => useTopicRule(null), { wrapper: createWrapper() });
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api with ruleName in path", async () => {
+    mockApi.mockResolvedValueOnce({ ruleName: "my_rule", sql: "SELECT * FROM 'device/#'" });
+    const { result } = renderHook(() => useTopicRule("my_rule"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/iot/topic-rules/my_rule");
   });
 });
 
@@ -283,6 +443,18 @@ describe("useCreateTopicRule", () => {
       expect.objectContaining({ method: "POST" }),
     );
   });
+
+  it("invalidates topic-rules query on success", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useCreateTopicRule(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync({ ruleName: "my_rule", topicRulePayload: { sql: "SELECT * FROM 'device/#'", actions: [] } });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["aws", "iot", "topic-rules"] });
+  });
 });
 
 describe("useDeleteTopicRule", () => {
@@ -294,6 +466,18 @@ describe("useDeleteTopicRule", () => {
       "/aws/iot/topic-rules/my_rule",
       expect.objectContaining({ method: "DELETE" }),
     );
+  });
+
+  it("invalidates topic-rules query on success", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useDeleteTopicRule(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync("my_rule");
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["aws", "iot", "topic-rules"] });
   });
 });
 
@@ -307,6 +491,18 @@ describe("useEnableTopicRule", () => {
       expect.objectContaining({ method: "POST" }),
     );
   });
+
+  it("invalidates topic-rules query on success", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useEnableTopicRule(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync("my_rule");
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["aws", "iot", "topic-rules"] });
+  });
 });
 
 describe("useDisableTopicRule", () => {
@@ -318,6 +514,18 @@ describe("useDisableTopicRule", () => {
       "/aws/iot/topic-rules/my_rule/disable",
       expect.objectContaining({ method: "POST" }),
     );
+  });
+
+  it("invalidates topic-rules query on success", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useDisableTopicRule(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync("my_rule");
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["aws", "iot", "topic-rules"] });
   });
 });
 
@@ -347,6 +555,20 @@ describe("useUpdateShadow", () => {
       expect.objectContaining({ method: "POST" }),
     );
   });
+
+  it("invalidates shadow query dynamically on success", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useUpdateShadow(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync({ thingName: "my-device", state: { desired: { color: "green" } } });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["aws", "iot", "things", "my-device", "shadow"],
+    });
+  });
 });
 
 // ─── Jobs ────────────────────────────────────────────
@@ -362,5 +584,47 @@ describe("useThingJobs", () => {
     const { result } = renderHook(() => useThingJobs("my-device"), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith("/aws/iot/things/my-device/jobs");
+  });
+});
+
+// ─── Tags ────────────────────────────────────────────
+
+describe("useIoTTags", () => {
+  it("does NOT call api when resourceArn is null", () => {
+    renderHook(() => useIoTTags(null), { wrapper: createWrapper() });
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api with resourceArn query param", async () => {
+    mockApi.mockResolvedValueOnce({ tags: [{ key: "env", value: "prod" }] });
+    const { result } = renderHook(() => useIoTTags("arn:aws:iot:us-east-1::thing/my-device"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/iot/tags?resourceArn=arn%3Aaws%3Aiot%3Aus-east-1%3A%3Athing%2Fmy-device"
+    );
+  });
+});
+
+describe("useTagIoTResource", () => {
+  it("calls api with POST method and body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useTagIoTResource(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ resourceArn: "arn:aws:iot:us-east-1::thing/my-device", tags: [{ key: "env", value: "prod" }] });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/iot/tags",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ resourceArn: "arn:aws:iot:us-east-1::thing/my-device", tags: [{ key: "env", value: "prod" }] }) }),
+    );
+  });
+
+  it("invalidates tags query on success", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useTagIoTResource(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync({ resourceArn: "arn:aws:iot:us-east-1::thing/my-device", tags: [{ key: "env", value: "prod" }] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["aws", "iot", "tags", "arn:aws:iot:us-east-1::thing/my-device"] });
   });
 });
