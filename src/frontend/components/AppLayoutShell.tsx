@@ -367,7 +367,7 @@ export default function AppLayoutShell({ children }: Props) {
             logo: { src: FLOCI_LOGO_SVG, alt: "Floci" },
           }}
           search={
-            <div ref={searchRef} className={isMobile ? "fd-hide-mobile" : ""} style={{ minWidth: isMobile ? 0 : 200, maxWidth: 300 }}>
+            <div ref={searchRef} className={isMobile ? "fd-hide-mobile" : ""} style={{ position: "relative", minWidth: isMobile ? 0 : 200, maxWidth: 300 }}>
               <Autosuggest
                 placeholder="Search services..."
                 ariaLabel="Search services"
@@ -389,6 +389,26 @@ export default function AppLayoutShell({ children }: Props) {
                 enteredTextLabel={(v) => `Search for "${v}"`}
                 empty="No matching services"
               />
+              <kbd
+                style={{
+                  position: "absolute",
+                  right: "28px",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  pointerEvents: "none",
+                  fontSize: "11px",
+                  fontFamily: "inherit",
+                  padding: "1px 5px",
+                  borderRadius: "4px",
+                  border: "1px solid var(--color-border-input, #5b5b5b)",
+                  backgroundColor: "var(--color-background-input-default, #1a1a1a)",
+                  color: "var(--color-text-input-placeholder, #888)",
+                  lineHeight: "1.4",
+                  opacity: 0.7,
+                }}
+              >
+                ⌘K
+              </kbd>
             </div>
           }
           utilities={[
