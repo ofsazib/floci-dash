@@ -104,6 +104,8 @@ floci-dash/
 │   │   │   ├── StatCard.tsx       <- Stat display card
 │   │   │   ├── StatusBadge.tsx    <- Running/available/error badge
 │   │   │   ├── S3BucketConfig.tsx <- S3 bucket config tabs (11 tabs)
+│   │   │   ├── PropertyTable.tsx  <- Reusable key-value detail table (horizontal/grid/compact, href support)
+│   │   │   ├── ServiceDashboardLayout.tsx <- Unified tab navigation wrapper with loading/error/empty states
 │   │   │   └── DynamoDBAdvanced.tsx <- DynamoDB advanced features (GSIs, TTL, Tags, PartiQL)
 │   │   ├── stores/
 │   │   │   └── settings.ts        <- Zustand: darkMode, refreshInterval
@@ -283,6 +285,8 @@ export const SERVICE_CATEGORIES: Record<string, string[]> = {
 | `CreateModal` | Form modal for creating resources | All service pages |
 | `DeleteButton` | Delete with confirmation modal | All service pages |
 | `StatusBadge` | Running/available/error indicator | All service pages |
+| `PropertyTable` | Reusable key-value detail table with 3 variants + href support | EC2Page, RDSDashboard |
+| `ServiceDashboardLayout` | Unified tab navigation wrapper with loading/error/empty state handling | RDSDashboard, ECSDashboard, Route53Dashboard, SSMDashboard |
 
 ### Interaction Patterns
 
@@ -1398,6 +1402,10 @@ Each remaining service gets a standard list + create + delete pattern.
 | 18.12 | Responsive: Test and fix mobile layout | Done | 2026-06-20 |
 | 18.13 | Accessibility: Keyboard navigation audit | Done | 2026-06-20 |
 | 18.14 | Accessibility: ARIA labels audit (labeled search inputs, toggle, skip link, content area) | Done | 2026-06-20 |
+| 18.15 | Create PropertyTable reusable component — key-value detail table (3 variants: horizontal, grid, compact) with href support and tests | Done | 2026-07-04 |
+| 18.16 | Create ServiceDashboardLayout wrapper — unified tab navigation with loading/error/empty state handling, refactor RDS/ECS/Route53/SSM dashboards to use it | Done | 2026-07-04 |
+| 18.17 | Replace inline `<table>` tags in EC2 instance/VPC detail and RDS instance/cluster detail with PropertyTable (eliminates ~80 lines of duplicated inline styles) | Done | 2026-07-04 |
+| 18.18 | Add card hover transitions (`.fd-accent-card:hover` translateY + box-shadow) and Cmd+K keyboard shortcut to focus global search input | Done | 2026-07-04 |
 
 ---
 

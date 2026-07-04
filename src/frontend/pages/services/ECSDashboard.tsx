@@ -30,6 +30,7 @@ import { useHealth } from "../../hooks/useSystem";
 import { getServiceLabel } from "../../types/services";
 import StatusBadge from "../../components/StatusBadge";
 import { TableSkeleton } from "../../components/LoadingSkeleton";
+import ServiceDashboardLayout from "../../components/ServiceDashboardLayout";
 import EmptyState from "../../components/EmptyState";
 import {
   useDynamoDBTables,
@@ -882,11 +883,15 @@ function ECSClusterDetail({ clusterName, onBack }: { clusterName: string; onBack
 
   return (
     <SpaceBetween size="l">
-      <Button variant="link" onClick={onBack}>
-        &larr; Clusters
-      </Button>
       <Box variant="h2">{clusterName}</Box>
-      <Tabs tabs={tabs} />
+      <ServiceDashboardLayout
+        tabs={tabs}
+        backButton={
+          <Button variant="link" iconName="arrow-left" onClick={onBack}>
+            Clusters
+          </Button>
+        }
+      />
     </SpaceBetween>
   );
 }

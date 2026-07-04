@@ -31,10 +31,20 @@
   padding: 20px;
   border-radius: 10px;
   border: 1px solid var(--color-border-divider-default, #e9ebed);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.fd-accent-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 .awsui-dark-mode .fd-accent-card {
   border-color: var(--color-border-divider-default, #3c4246);
+}
+
+.awsui-dark-mode .fd-accent-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 /* Divider lines */
@@ -137,6 +147,8 @@
   background-color: var(--color-text-status-error, #d13212);
   box-shadow: 0 0 6px var(--color-text-status-error, #d1321266);
 }
+
+
 
 /* Skeleton loading */
 .fd-skeleton {

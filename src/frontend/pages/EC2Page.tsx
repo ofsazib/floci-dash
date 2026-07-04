@@ -71,6 +71,7 @@ import {
 import ResourceTable from "../components/ResourceTable";
 import DeleteButton from "../components/DeleteButton";
 import StatusBadge from "../components/StatusBadge";
+import PropertyTable from "../components/PropertyTable";
 
 export default function EC2Page() {
   const navigate = useNavigate();
@@ -389,37 +390,28 @@ function EC2InstanceDetail({ id, onBack }: { id: string; onBack: () => void }) {
         <EC2Terminal instanceId={id} onClose={() => setShowTerminal(false)} />
       </Modal>
 
-      <Box variant="div">
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <tbody>
-            {[
-              { label: "State", value: data.state },
-              { label: "Instance type", value: data.instanceType },
-              { label: "Private IP", value: data.privateIp || "N/A" },
-              { label: "Public IP", value: data.publicIp || "N/A" },
-              { label: "VPC ID", value: data.vpcId || "N/A" },
-              { label: "Subnet ID", value: data.subnetId || "N/A" },
-              { label: "Key name", value: data.keyName || "N/A" },
-              { label: "AMI ID", value: data.imageId || "N/A" },
-              { label: "Availability Zone", value: data.availabilityZone || "N/A" },
-              { label: "Architecture", value: data.architecture || "N/A" },
-              { label: "Platform", value: data.platform || "Linux/Unix" },
-              { label: "Launch time", value: data.launchTime ? new Date(data.launchTime).toLocaleString() : "N/A" },
-              { label: "IAM Profile", value: data.iamInstanceProfile || "N/A" },
-              { label: "EBS Optimized", value: data.ebsOptimized ? "Yes" : "No" },
-              { label: "Monitoring", value: data.monitoring || "disabled" },
-              { label: "Source/Dest Check", value: data.sourceDestCheck !== undefined ? (data.sourceDestCheck ? "Enabled" : "Disabled") : "N/A" },
-              { label: "Root device", value: data.rootDeviceName || "N/A" },
-              { label: "Root device type", value: data.rootDeviceType || "N/A" },
-            ].map((row) => (
-              <tr key={row.label} style={{ borderBottom: "1px solid var(--color-border-divider-default, #eaeded)" }}>
-                <td style={{ padding: "8px 12px", fontWeight: 600, width: "220px", verticalAlign: "top" }}>{row.label}</td>
-                <td style={{ padding: "8px 12px" }}>{row.value}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Box>
+      <PropertyTable
+        items={[
+          { label: "State", value: data.state },
+          { label: "Instance type", value: data.instanceType },
+          { label: "Private IP", value: data.privateIp || "N/A" },
+          { label: "Public IP", value: data.publicIp || "N/A" },
+          { label: "VPC ID", value: data.vpcId || "N/A" },
+          { label: "Subnet ID", value: data.subnetId || "N/A" },
+          { label: "Key name", value: data.keyName || "N/A" },
+          { label: "AMI ID", value: data.imageId || "N/A" },
+          { label: "Availability Zone", value: data.availabilityZone || "N/A" },
+          { label: "Architecture", value: data.architecture || "N/A" },
+          { label: "Platform", value: data.platform || "Linux/Unix" },
+          { label: "Launch time", value: data.launchTime ? new Date(data.launchTime).toLocaleString() : "N/A" },
+          { label: "IAM Profile", value: data.iamInstanceProfile || "N/A" },
+          { label: "EBS Optimized", value: data.ebsOptimized ? "Yes" : "No" },
+          { label: "Monitoring", value: data.monitoring || "disabled" },
+          { label: "Source/Dest Check", value: data.sourceDestCheck !== undefined ? (data.sourceDestCheck ? "Enabled" : "Disabled") : "N/A" },
+          { label: "Root device", value: data.rootDeviceName || "N/A" },
+          { label: "Root device type", value: data.rootDeviceType || "N/A" },
+        ]}
+      />
 
       {/* Connection Info Panel */}
       <Container header={<Header variant="h3">Connection Info</Header>}>
@@ -522,24 +514,15 @@ function EC2VpcDetail({ id, onBack }: { id: string; onBack: () => void }) {
       >
         {data.id}
       </Header>
-      <Box variant="div">
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <tbody>
-            {[
-              { label: "VPC ID", value: data.id },
-              { label: "State", value: data.state },
-              { label: "IPv4 CIDR", value: data.cidrBlock },
-              { label: "Default VPC", value: data.isDefault ? "Yes" : "No" },
-              { label: "Instance tenancy", value: data.instanceTenancy },
-            ].map((row) => (
-              <tr key={row.label} style={{ borderBottom: "1px solid var(--color-border-divider-default, #eaeded)" }}>
-                <td style={{ padding: "8px 12px", fontWeight: 600, width: "220px", verticalAlign: "top" }}>{row.label}</td>
-                <td style={{ padding: "8px 12px" }}>{row.value}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Box>
+      <PropertyTable
+        items={[
+          { label: "VPC ID", value: data.id },
+          { label: "State", value: data.state },
+          { label: "IPv4 CIDR", value: data.cidrBlock },
+          { label: "Default VPC", value: data.isDefault ? "Yes" : "No" },
+          { label: "Instance tenancy", value: data.instanceTenancy },
+        ]}
+      />
     </SpaceBetween>
   );
 }

@@ -30,6 +30,7 @@ import { useHealth } from "../../hooks/useSystem";
 import { getServiceLabel } from "../../types/services";
 import StatusBadge from "../../components/StatusBadge";
 import { TableSkeleton } from "../../components/LoadingSkeleton";
+import ServiceDashboardLayout from "../../components/ServiceDashboardLayout";
 import EmptyState from "../../components/EmptyState";
 import {
   useDynamoDBTables,
@@ -564,96 +565,107 @@ export function SSMDashboard() {
   }
 
   return (
-    <>
-      <ResourceTable
-        resourceName="Parameter"
-        headerTitle="SSM Parameters"
-        headerCounter={data?.total}
-        items={parameters}
-        columns={columns}
-        loading={isLoading}
-        emptyMessage="No parameters found. Create one to get started."
-        filterEnabled
-        filterPlaceholder="Find parameters by name"
-        filterFunction={(item: any, searchText: string) =>
-          (item.Name || "").toLowerCase().includes(searchText.toLowerCase())
-        }
-        onCreate={() => setShowCreate(true)}
-      />
+    <ServiceDashboardLayout
+      tabs={[
+        {
+          id: "parameters",
+          label: "Parameters",
+          content: (
+            <>
+              <ResourceTable
+                resourceName="Parameter"
+                headerTitle="SSM Parameters"
+                headerCounter={data?.total}
+                items={parameters}
+                columns={columns}
+                loading={isLoading}
+                emptyMessage="No parameters found. Create one to get started."
+                filterEnabled
+                filterPlaceholder="Find parameters by name"
+                filterFunction={(item: any, searchText: string) =>
+                  (item.Name || "").toLowerCase().includes(searchText.toLowerCase())
+                }
+                onCreate={() => setShowCreate(true)}
+              />
 
-      <Modal
-        visible={showCreate}
-        onDismiss={() => setShowCreate(false)}
-        header="Create parameter"
-        footer={
-          <Box float="right">
-            <SpaceBetween direction="horizontal" size="xs">
-              <Button variant="link" onClick={() => setShowCreate(false)}>
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                loading={putParam.isPending}
-                disabled={!form.name.trim() || !form.value.trim()}
-                onClick={() => {
-                  putParam.mutate(form, {
-                    onSuccess: () => {
-                      setShowCreate(false);
-                      setForm({ name: "", value: "", type: "String", description: "", overwrite: false });
-                    },
-                  });
-                }}
+              <Modal
+                visible={showCreate}
+                onDismiss={() => setShowCreate(false)}
+                header="Create parameter"
+                footer={
+                  <Box float="right">
+                    <SpaceBetween direction="horizontal" size="xs">
+                      <Button variant="link" onClick={() => setShowCreate(false)}>
+                        Cancel
+                      </Button>
+                      <Button
+                        variant="primary"
+                        loading={putParam.isPending}
+                        disabled={!form.name.trim() || !form.value.trim()}
+                        onClick={() => {
+                          putParam.mutate(form, {
+                            onSuccess: () => {
+                              setShowCreate(false);
+                              setForm({ name: "", value: "", type: "String", description: "", overwrite: false });
+                            },
+                          });
+                        }}
+                      >
+                        Create
+                      </Button>
+                    </SpaceBetween>
+                  </Box>
+                }
               >
-                Create
-              </Button>
-            </SpaceBetween>
-          </Box>
-        }
-      >
-        <Form>
-          {putParam.isError && (
-            <Alert type="error" dismissible>
-              {(putParam.error as Error)?.message || "Failed to create parameter"}
-            </Alert>
-          )}
-          <SpaceBetween size="m">
-            <FormField label="Name" description="Use / for hierarchical paths (e.g. /myapp/config)">
-              <Input
-                value={form.name}
-                onChange={({ detail }) => setForm((p) => ({ ...p, name: detail.value }))}
-                placeholder="/myapp/db-url"
-              />
-            </FormField>
-            <FormField label="Type">
-              <Select
-                selectedOption={{ label: form.type, value: form.type }}
-                onChange={({ detail }) => setForm((p) => ({ ...p, type: detail.selectedOption?.value || "String" }))}
-                options={SSM_TYPE_OPTIONS}
-              />
-            </FormField>
-            <FormField label="Value">
-              <Textarea
-                value={form.value}
-                onChange={({ detail }) => setForm((p) => ({ ...p, value: detail.value }))}
-                rows={3}
-              />
-            </FormField>
-            <FormField label="Description (optional)">
-              <Input
-                value={form.description}
-                onChange={({ detail }) => setForm((p) => ({ ...p, description: detail.value }))}
-              />
-            </FormField>
-            <Checkbox
-              checked={form.overwrite}
-              onChange={({ detail }) => setForm((p) => ({ ...p, overwrite: detail.checked }))}
-            >
-              Overwrite existing parameter
-            </Checkbox>
-          </SpaceBetween>
-        </Form>
-      </Modal>
-    </>
+                <Form>
+                  {putParam.isError && (
+                    <Alert type="error" dismissible>
+                      {(putParam.error as Error)?.message || "Failed to create parameter"}
+                    </Alert>
+                  )}
+                  <SpaceBetween size="m">
+                    <FormField label="Name" description="Use / for hierarchical paths (e.g. /myapp/config)">
+                      <Input
+                        value={form.name}
+                        onChange={({ detail }) => setForm((p) => ({ ...p, name: detail.value }))}
+                        placeholder="/myapp/db-url"
+                      />
+                    </FormField>
+                    <FormField label="Type">
+                      <Select
+                        selectedOption={{ label: form.type, value: form.type }}
+                        onChange={({ detail }) => setForm((p) => ({ ...p, type: detail.selectedOption?.value || "String" }))}
+                        options={SSM_TYPE_OPTIONS}
+                      />
+                    </FormField>
+                    <FormField label="Value">
+                      <Textarea
+                        value={form.value}
+                        onChange={({ detail }) => setForm((p) => ({ ...p, value: detail.value }))}
+                        rows={3}
+                      />
+                    </FormField>
+                    <FormField label="Description (optional)">
+                      <Input
+                        value={form.description}
+                        onChange={({ detail }) => setForm((p) => ({ ...p, description: detail.value }))}
+                      />
+                    </FormField>
+                    <Checkbox
+                      checked={form.overwrite}
+                      onChange={({ detail }) => setForm((p) => ({ ...p, overwrite: detail.checked }))}
+                    >
+                      Overwrite existing parameter
+                    </Checkbox>
+                  </SpaceBetween>
+                </Form>
+              </Modal>
+            </>
+          ),
+        },
+      ]}
+
+    />
   );
 }
 

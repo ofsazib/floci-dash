@@ -29,6 +29,8 @@ import {
 import { useHealth } from "../../hooks/useSystem";
 import { getServiceLabel } from "../../types/services";
 import StatusBadge from "../../components/StatusBadge";
+import PropertyTable from "../../components/PropertyTable";
+import ServiceDashboardLayout from "../../components/ServiceDashboardLayout";
 import { TableSkeleton } from "../../components/LoadingSkeleton";
 import EmptyState from "../../components/EmptyState";
 import {
@@ -506,7 +508,6 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
 ];
 
 export function RDSDashboard() {
-  const [selectedTab, setSelectedTab] = useState("db-instances");
   const [selectedInstance, setSelectedInstance] = useState<string | null>(null);
   const [selectedCluster, setSelectedCluster] = useState<string | null>(null);
 
@@ -552,10 +553,9 @@ export function RDSDashboard() {
   ];
 
   return (
-    <Tabs
-      activeTabId={selectedTab}
-      onChange={({ detail }) => setSelectedTab(detail.activeTabId)}
+    <ServiceDashboardLayout
       tabs={tabs}
+      defaultActiveTab="db-instances"
     />
   );
 }
@@ -911,41 +911,27 @@ function RDSDBInstanceDetail({
         {data.id}
       </Header>
 
-      <Box variant="div">
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <tbody>
-            {[
-              { label: "Status", value: data.status },
-              { label: "Engine", value: `${data.engine} ${data.engineVersion || ""}` },
-              { label: "Instance class", value: data.dbInstanceClass },
-              { label: "Allocated storage", value: `${data.allocatedStorage} GB` },
-              { label: "Master username", value: data.masterUsername },
-              { label: "Endpoint", value: data.endpoint ? `${data.endpoint.address}:${data.endpoint.port}` : "N/A" },
-              { label: "Database name", value: data.dbName || "N/A" },
-              { label: "Cluster", value: data.dbClusterIdentifier || "Standalone" },
-              { label: "Parameter group", value: data.parameterGroupName || "default" },
-              { label: "Publicly accessible", value: data.publiclyAccessible ? "Yes" : "No" },
-              { label: "Multi-AZ", value: data.multiAZ ? "Yes" : "No" },
-              { label: "Storage type", value: data.storageType },
-              { label: "Backup retention", value: `${data.backupRetentionPeriod} days` },
-              { label: "Auto minor version upgrade", value: data.autoMinorVersionUpgrade ? "Enabled" : "Disabled" },
-              { label: "IAM auth", value: data.iamDatabaseAuthenticationEnabled ? "Enabled" : "Disabled" },
-              { label: "Copy tags to snapshots", value: data.copyTagsToSnapshot ? "Yes" : "No" },
-              { label: "ARN", value: data.arn || "N/A" },
-            ].map((row) => (
-              <tr
-                key={row.label}
-                style={{ borderBottom: "1px solid var(--color-border-divider-default, #eaeded)" }}
-              >
-                <td style={{ padding: "8px 12px", fontWeight: 600, width: "220px", verticalAlign: "top" }}>
-                  {row.label}
-                </td>
-                <td style={{ padding: "8px 12px" }}>{row.value}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Box>
+      <PropertyTable
+        items={[
+          { label: "Status", value: data.status },
+          { label: "Engine", value: `${data.engine} ${data.engineVersion || ""}` },
+          { label: "Instance class", value: data.dbInstanceClass },
+          { label: "Allocated storage", value: `${data.allocatedStorage} GB` },
+          { label: "Master username", value: data.masterUsername },
+          { label: "Endpoint", value: data.endpoint ? `${data.endpoint.address}:${data.endpoint.port}` : "N/A" },
+          { label: "Database name", value: data.dbName || "N/A" },
+          { label: "Cluster", value: data.dbClusterIdentifier || "Standalone" },
+          { label: "Parameter group", value: data.parameterGroupName || "default" },
+          { label: "Publicly accessible", value: data.publiclyAccessible ? "Yes" : "No" },
+          { label: "Multi-AZ", value: data.multiAZ ? "Yes" : "No" },
+          { label: "Storage type", value: data.storageType },
+          { label: "Backup retention", value: `${data.backupRetentionPeriod} days` },
+          { label: "Auto minor version upgrade", value: data.autoMinorVersionUpgrade ? "Enabled" : "Disabled" },
+          { label: "IAM auth", value: data.iamDatabaseAuthenticationEnabled ? "Enabled" : "Disabled" },
+          { label: "Copy tags to snapshots", value: data.copyTagsToSnapshot ? "Yes" : "No" },
+          { label: "ARN", value: data.arn || "N/A" },
+        ]}
+      />
     </SpaceBetween>
   );
 }
@@ -1238,38 +1224,24 @@ function RDSDBClusterDetail({
         {data.id}
       </Header>
 
-      <Box variant="div">
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <tbody>
-            {[
-              { label: "Status", value: data.status },
-              { label: "Engine", value: `${data.engine} ${data.engineVersion || ""}` },
-              { label: "Master username", value: data.masterUsername },
-              { label: "Database name", value: data.databaseName || "N/A" },
-              { label: "Endpoint", value: data.endpoint || "N/A" },
-              { label: "Reader endpoint", value: data.readerEndpoint || "N/A" },
-              { label: "Port", value: data.port?.toString() || "N/A" },
-              { label: "Parameter group", value: data.parameterGroupName || "default" },
-              { label: "Cluster members", value: data.clusterMembers.length > 0 ? data.clusterMembers.join(", ") : "None" },
-              { label: "IAM auth", value: data.iamDatabaseAuthenticationEnabled ? "Enabled" : "Disabled" },
-              { label: "Allocated storage", value: data.allocatedStorage ? `${data.allocatedStorage} GB` : "N/A" },
-              { label: "Backup retention", value: data.backupRetentionPeriod ? `${data.backupRetentionPeriod} days` : "N/A" },
-              { label: "Copy tags to snapshots", value: data.copyTagsToSnapshot ? "Yes" : "No" },
-              { label: "ARN", value: data.arn || "N/A" },
-            ].map((row) => (
-              <tr
-                key={row.label}
-                style={{ borderBottom: "1px solid var(--color-border-divider-default, #eaeded)" }}
-              >
-                <td style={{ padding: "8px 12px", fontWeight: 600, width: "220px", verticalAlign: "top" }}>
-                  {row.label}
-                </td>
-                <td style={{ padding: "8px 12px" }}>{row.value}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Box>
+      <PropertyTable
+        items={[
+          { label: "Status", value: data.status },
+          { label: "Engine", value: `${data.engine} ${data.engineVersion || ""}` },
+          { label: "Master username", value: data.masterUsername },
+          { label: "Database name", value: data.databaseName || "N/A" },
+          { label: "Endpoint", value: data.endpoint || "N/A" },
+          { label: "Reader endpoint", value: data.readerEndpoint || "N/A" },
+          { label: "Port", value: data.port?.toString() || "N/A" },
+          { label: "Parameter group", value: data.parameterGroupName || "default" },
+          { label: "Cluster members", value: data.clusterMembers.length > 0 ? data.clusterMembers.join(", ") : "None" },
+          { label: "IAM auth", value: data.iamDatabaseAuthenticationEnabled ? "Enabled" : "Disabled" },
+          { label: "Allocated storage", value: data.allocatedStorage ? `${data.allocatedStorage} GB` : "N/A" },
+          { label: "Backup retention", value: data.backupRetentionPeriod ? `${data.backupRetentionPeriod} days` : "N/A" },
+          { label: "Copy tags to snapshots", value: data.copyTagsToSnapshot ? "Yes" : "No" },
+          { label: "ARN", value: data.arn || "N/A" },
+        ]}
+      />
     </SpaceBetween>
   );
 }

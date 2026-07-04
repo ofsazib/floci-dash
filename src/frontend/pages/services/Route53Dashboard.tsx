@@ -30,6 +30,7 @@ import { useHealth } from "../../hooks/useSystem";
 import { getServiceLabel } from "../../types/services";
 import StatusBadge from "../../components/StatusBadge";
 import { TableSkeleton } from "../../components/LoadingSkeleton";
+import ServiceDashboardLayout from "../../components/ServiceDashboardLayout";
 import EmptyState from "../../components/EmptyState";
 import {
   useDynamoDBTables,
@@ -550,76 +551,87 @@ export function Route53Dashboard() {
   }
 
   return (
-    <>
-      <ResourceTable
-        resourceName="Hosted Zone"
-        headerTitle="Route 53 Hosted Zones"
-        headerCounter={data?.total}
-        items={zones}
-        columns={columns}
-        loading={isLoading}
-        emptyMessage="No hosted zones found. Create one to get started."
-        filterEnabled
-        filterPlaceholder="Find zones by name"
-        filterFunction={(item: any, searchText: string) =>
-          (item.Name || "").toLowerCase().includes(searchText.toLowerCase())
-        }
-        onCreate={() => setShowCreate(true)}
-      />
+    <ServiceDashboardLayout
+      tabs={[
+        {
+          id: "hosted-zones",
+          label: "Hosted Zones",
+          content: (
+            <>
+              <ResourceTable
+                resourceName="Hosted Zone"
+                headerTitle="Route 53 Hosted Zones"
+                headerCounter={data?.total}
+                items={zones}
+                columns={columns}
+                loading={isLoading}
+                emptyMessage="No hosted zones found. Create one to get started."
+                filterEnabled
+                filterPlaceholder="Find zones by name"
+                filterFunction={(item: any, searchText: string) =>
+                  (item.Name || "").toLowerCase().includes(searchText.toLowerCase())
+                }
+                onCreate={() => setShowCreate(true)}
+              />
 
-      <Modal
-        visible={showCreate}
-        onDismiss={() => setShowCreate(false)}
-        header="Create hosted zone"
-        footer={
-          <Box float="right">
-            <SpaceBetween direction="horizontal" size="xs">
-              <Button variant="link" onClick={() => setShowCreate(false)}>
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                loading={createZone.isPending}
-                disabled={!form.name.trim()}
-                onClick={() => {
-                  createZone.mutate(form, {
-                    onSuccess: () => {
-                      setShowCreate(false);
-                      setForm({ name: "", comment: "" });
-                    },
-                  });
-                }}
+              <Modal
+                visible={showCreate}
+                onDismiss={() => setShowCreate(false)}
+                header="Create hosted zone"
+                footer={
+                  <Box float="right">
+                    <SpaceBetween direction="horizontal" size="xs">
+                      <Button variant="link" onClick={() => setShowCreate(false)}>
+                        Cancel
+                      </Button>
+                      <Button
+                        variant="primary"
+                        loading={createZone.isPending}
+                        disabled={!form.name.trim()}
+                        onClick={() => {
+                          createZone.mutate(form, {
+                            onSuccess: () => {
+                              setShowCreate(false);
+                              setForm({ name: "", comment: "" });
+                            },
+                          });
+                        }}
+                      >
+                        Create
+                      </Button>
+                    </SpaceBetween>
+                  </Box>
+                }
               >
-                Create
-              </Button>
-            </SpaceBetween>
-          </Box>
-        }
-      >
-        <Form>
-          {createZone.isError && (
-            <Alert type="error" dismissible>
-              {(createZone.error as Error)?.message || "Failed to create hosted zone"}
-            </Alert>
-          )}
-          <SpaceBetween size="m">
-            <FormField label="Domain name" description="The name of the domain (e.g. example.com.)">
-              <Input
-                value={form.name}
-                onChange={({ detail }) => setForm((p) => ({ ...p, name: detail.value }))}
-                placeholder="example.com."
-              />
-            </FormField>
-            <FormField label="Comment (optional)">
-              <Input
-                value={form.comment}
-                onChange={({ detail }) => setForm((p) => ({ ...p, comment: detail.value }))}
-              />
-            </FormField>
-          </SpaceBetween>
-        </Form>
-      </Modal>
-    </>
+                <Form>
+                  {createZone.isError && (
+                    <Alert type="error" dismissible>
+                      {(createZone.error as Error)?.message || "Failed to create hosted zone"}
+                    </Alert>
+                  )}
+                  <SpaceBetween size="m">
+                    <FormField label="Domain name" description="The name of the domain (e.g. example.com.)">
+                      <Input
+                        value={form.name}
+                        onChange={({ detail }) => setForm((p) => ({ ...p, name: detail.value }))}
+                        placeholder="example.com."
+                      />
+                    </FormField>
+                    <FormField label="Comment (optional)">
+                      <Input
+                        value={form.comment}
+                        onChange={({ detail }) => setForm((p) => ({ ...p, comment: detail.value }))}
+                      />
+                    </FormField>
+                  </SpaceBetween>
+                </Form>
+              </Modal>
+            </>
+          ),
+        },
+      ]}
+
+    />
   );
 }
 

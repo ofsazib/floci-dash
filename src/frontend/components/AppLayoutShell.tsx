@@ -59,6 +59,7 @@ export default function AppLayoutShell({ children }: Props) {
   const [navOpen, setNavOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 600);
   const mainRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLDivElement>(null);
   const [navQuery, setNavQuery] = useState("");
   const [navAllExpanded, setNavAllExpanded] = useState(false);
   const [navKey, setNavKey] = useState(0);
@@ -82,6 +83,23 @@ export default function AppLayoutShell({ children }: Props) {
     };
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  // Cmd+K / Ctrl+K — focus the global service search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        // Focus the input inside the Autosuggest
+        const input = searchRef.current?.querySelector("input");
+        if (input) {
+          input.focus();
+          input.select();
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
   const currentHref = location.pathname ? `/#${location.pathname}` : "/#/";
@@ -349,7 +367,7 @@ export default function AppLayoutShell({ children }: Props) {
             logo: { src: FLOCI_LOGO_SVG, alt: "Floci" },
           }}
           search={
-            <div className={isMobile ? "fd-hide-mobile" : ""} style={{ minWidth: isMobile ? 0 : 200, maxWidth: 300 }}>
+            <div ref={searchRef} className={isMobile ? "fd-hide-mobile" : ""} style={{ minWidth: isMobile ? 0 : 200, maxWidth: 300 }}>
               <Autosuggest
                 placeholder="Search services..."
                 ariaLabel="Search services"
