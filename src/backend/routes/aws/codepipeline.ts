@@ -150,6 +150,8 @@ router.post("/pipelines/:name/executions/:executionId/retry", async (c: Context)
   const body = await c.req.json();
   if (!pipelineName || !pipelineExecutionId)
     return c.json({ error: "name and executionId are required" }, 400);
+  if (!body.stageName)
+    return c.json({ error: "stageName is required in request body" }, 400);
   const client = getClient();
   const result = await client.send(new RetryStageExecutionCommand({
     pipelineName,
