@@ -214,7 +214,7 @@ describe("AppLayoutShell — search", () => {
       </AppLayoutShell>,
       { wrapper: createWrapper() },
     );
-    expect(screen.getByPlaceholderText("Find services...")).toBeTruthy();
+    expect(screen.getByPlaceholderText(/^Find services/)).toBeTruthy();
   });
 
   it("filters implemented services when searching", async () => {
@@ -225,7 +225,7 @@ describe("AppLayoutShell — search", () => {
       </AppLayoutShell>,
       { wrapper: createWrapper() },
     );
-    const input = screen.getByPlaceholderText("Find services...");
+    const input = screen.getByPlaceholderText(/^Find services/);
     await user.type(input, "S3");
     expect(screen.getByText("S3")).toBeTruthy();
     expect(screen.queryByText("DynamoDB")).toBeNull();
@@ -240,7 +240,7 @@ describe("AppLayoutShell — search", () => {
       </AppLayoutShell>,
       { wrapper: createWrapper() },
     );
-    const input = screen.getByPlaceholderText("Find services...");
+    const input = screen.getByPlaceholderText(/^Find services/);
     await user.type(input, "zzzzz");
     expect(screen.getByText("No matches")).toBeTruthy();
   });

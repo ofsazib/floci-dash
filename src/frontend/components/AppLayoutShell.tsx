@@ -454,15 +454,35 @@ export default function AppLayoutShell({ children }: Props) {
               <span className={allHealthy ? "fd-dot-success" : "fd-dot-warning"} />
               {running} / {total} services running
             </div>
-            <div style={{ padding: "0 12px 8px" }}>
+            <div style={{ padding: "0 12px 8px", position: "relative" }}>
               <Input
-                placeholder="Find services..."
+                placeholder={`Find services... (${shortcutLabel})`}
                 type="search"
                 value={navQuery}
                 onChange={(e) => setNavQuery(e.detail.value)}
                 clearAriaLabel="Clear search"
                 ariaLabel="Filter services by name"
               />
+              <kbd
+                style={{
+                  position: "absolute",
+                  right: "28px",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  pointerEvents: "none",
+                  fontSize: "11px",
+                  fontFamily: "inherit",
+                  padding: "1px 5px",
+                  borderRadius: "4px",
+                  border: "1px solid var(--color-border-input, #5b5b5b)",
+                  backgroundColor: "var(--color-background-input-default, #1a1a1a)",
+                  color: "var(--color-text-input-placeholder, #888)",
+                  lineHeight: "1.4",
+                  opacity: 0.7,
+                }}
+              >
+                {shortcutBadge}
+              </kbd>
             </div>
             {!navQuery && (
               <div style={{ padding: "0 12px 8px", textAlign: "right" }}>
