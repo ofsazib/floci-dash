@@ -153,6 +153,7 @@ router.post("/pipelines/:name/executions/:executionId/retry", async (c: Context)
   const client = getClient();
   const result = await client.send(new RetryStageExecutionCommand({
     pipelineName,
+    stageName: body.stageName,
     pipelineExecutionId,
     retryMode: body.retryMode || "FAILED_ACTIONS",
   }));
@@ -171,6 +172,7 @@ router.post("/pipelines/:name/transitions/:stageName/disable", async (c: Context
   await client.send(new DisableStageTransitionCommand({
     pipelineName,
     stageName,
+    transitionType: body.transitionType || "Inbound",
     reason: body.reason || "Disabled from dashboard",
   }));
   return c.json({ disabled: true });
@@ -182,7 +184,11 @@ router.post("/pipelines/:name/transitions/:stageName/enable", async (c: Context)
   if (!pipelineName || !stageName)
     return c.json({ error: "name and stageName are required" }, 400);
   const client = getClient();
-  await client.send(new EnableStageTransitionCommand({ pipelineName, stageName }));
+  await client.send(new EnableStageTransitionCommand({
+    pipelineName,
+    stageName,
+    transitionType: "Inbound",
+  }));
   return c.json({ enabled: true });
 });
 
@@ -228,7 +234,7 @@ router.get("/pipelines/:name/actions", async (c: Context) => {
 router.get("/action-types", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new ListActionTypesCommand({
-    actionOwnerFilter: c.req.query("owner"),
+    actionOwnerFilter: (c.req.query("owner") || undefined) as "AWS" | "ThirdParty" | "Custom" | undefined,
     regionFilter: c.req.query("region"),
   }));
   return c.json({ actionTypes: result.actionTypes || [], total: result.actionTypes?.length || 0 });
@@ -244,7 +250,7 @@ router.post("/action-types", async (c: Context) => {
     version: body.actionType.version || "1",
     inputArtifactDetails: body.actionType.inputArtifactDetails || { minimumCount: 0, maximumCount: 5 },
     outputArtifactDetails: body.actionType.outputArtifactDetails || { minimumCount: 0, maximumCount: 5 },
-    actionConfigurationProperties: body.actionType.actionConfigurationProperties,
+    configurationProperties: body.actionType.configurationProperties,
     settings: body.actionType.settings,
   }));
   return c.json({ actionType: result.actionType }, 201);
@@ -255,13 +261,13 @@ router.post("/action-types", async (c: Context) => {
 router.get("/webhooks", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new ListWebhooksCommand({
-    maxResults: Number(c.req.query("maxResults")) || 100,
-    nextToken: c.req.query("nextToken"),
+    MaxResults: Number(c.req.query("maxResults")) || 100,
+    NextToken: c.req.query("nextToken"),
   }));
   return c.json({
     webhooks: result.webhooks || [],
     total: result.webhooks?.length || 0,
-    nextToken: result.nextToken,
+    NextToken: result.NextToken,
   });
 });
 
