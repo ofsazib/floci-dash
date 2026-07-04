@@ -191,7 +191,7 @@ describe("AppLayoutShell — navigation items", () => {
       </AppLayoutShell>,
       { wrapper: createWrapper() },
     );
-    expect(screen.getAllByPlaceholderText("Search services...").length).toBeGreaterThan(0);
+    expect(screen.getAllByPlaceholderText(/^Search services/).length).toBeGreaterThan(0);
   });
 
   it("does not render Resources section when no health data", () => {

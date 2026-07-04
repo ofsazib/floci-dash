@@ -69,6 +69,9 @@ export default function AppLayoutShell({ children }: Props) {
   const location = useLocation();
   const { data: health } = useHealth();
   const { data: active } = useActiveServices();
+  const isMac = navigator.platform.startsWith("Mac");
+  const shortcutLabel = isMac ? "Cmd+K" : "Ctrl+K";
+  const shortcutBadge = isMac ? "⌘K" : "Ctrl+K";
   const { darkMode, toggleDarkMode } = useSettings();
 
   useEffect(() => {
@@ -369,7 +372,7 @@ export default function AppLayoutShell({ children }: Props) {
           search={
             <div ref={searchRef} className={isMobile ? "fd-hide-mobile" : ""} style={{ position: "relative", minWidth: isMobile ? 0 : 200, maxWidth: 300 }}>
               <Autosuggest
-                placeholder="Search services..."
+                placeholder={`Search services... (${shortcutLabel})`}
                 ariaLabel="Search services"
                 value={globalSearch}
                 onChange={(e) => setGlobalSearch(e.detail.value)}
@@ -407,7 +410,7 @@ export default function AppLayoutShell({ children }: Props) {
                   opacity: 0.7,
                 }}
               >
-                ⌘K
+                {shortcutBadge}
               </kbd>
             </div>
           }
