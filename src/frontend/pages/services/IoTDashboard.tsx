@@ -92,6 +92,27 @@ export function IoTDashboard() {
   const [showShadowModal, setShowShadowModal] = useState(false);
   const [shadowState, setShadowState] = useState("");
 
+  // Certificate creation result modal
+  const [certCreationResult, setCertCreationResult] = useState<any>(null);
+
+  function copyToClipboard(text: string) {
+    navigator.clipboard.writeText(text).catch(() => {
+      // fallback for environments where clipboard API is unavailable
+    });
+  }
+
+  function downloadText(text: string, filename: string) {
+    const blob = new Blob([text], { type: "application/octet-stream" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
   const things = (thingsQuery.data?.things || []).map((t: any) => ({
     thingName: t.thingName || "—",
     thingTypeName: t.thingTypeName || "—",
@@ -330,8 +351,126 @@ export function IoTDashboard() {
           filterEnabled
           filterPlaceholder="Find certificates"
           filterFunction={(i: any, s: string) => i.certificateId.toLowerCase().includes(s.toLowerCase())}
-          onCreate={() => createCert.mutate(undefined, { onSuccess: () => {} })}
+          onCreate={() => createCert.mutate(undefined, {
+            onSuccess: (data) => setCertCreationResult(data),
+          })}
         />
+
+        {/* Certificate Creation Success Modal */}
+        <Modal
+          visible={!!certCreationResult}
+          onDismiss={() => {
+            setCertCreationResult(null);
+            createCert.reset();
+          }}
+          header="Certificate created"
+          size="large"
+          footer={
+            <Box float="right">
+              <Button
+                variant="primary"
+                onClick={() => {
+                  setCertCreationResult(null);
+                  createCert.reset();
+                }}
+              >Done</Button>
+            </Box>
+          }
+        >
+          {certCreationResult && (
+            <SpaceBetween size="l">
+              <Alert type="success">
+                Certificate <strong>{certCreationResult.certificateId}</strong> created successfully.
+                Save the private key now — it cannot be retrieved later.
+              </Alert>
+
+              <FormField label="Certificate ID">
+                <Box fontSize="body-m"><code>{certCreationResult.certificateId}</code></Box>
+              </FormField>
+
+              {certCreationResult.certificateArn && (
+                <FormField label="ARN">
+                  <Box fontSize="body-m"><code>{certCreationResult.certificateArn}</code></Box>
+                </FormField>
+              )}
+
+              {certCreationResult.certificatePem && (
+                <FormField
+                  label="Certificate PEM"
+                  description="X.509 certificate in PEM format"
+                >
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <Button
+                      iconName="copy"
+                      variant="inline-icon"
+                      onClick={() => copyToClipboard(certCreationResult.certificatePem)}
+                    >Copy</Button>
+                    <Button
+                      iconName="download"
+                      variant="inline-icon"
+                      onClick={() => downloadText(certCreationResult.certificatePem, `${certCreationResult.certificateId || "certificate"}.pem`)}
+                    >Download</Button>
+                  </SpaceBetween>
+                  <Textarea
+                    value={certCreationResult.certificatePem}
+                    readOnly
+                    rows={6}
+                  />
+                </FormField>
+              )}
+
+              {certCreationResult.keyPair?.PublicKey && (
+                <FormField
+                  label="Public Key"
+                  description="RSA public key"
+                >
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <Button
+                      iconName="copy"
+                      variant="inline-icon"
+                      onClick={() => copyToClipboard(certCreationResult.keyPair.PublicKey)}
+                    >Copy</Button>
+                    <Button
+                      iconName="download"
+                      variant="inline-icon"
+                      onClick={() => downloadText(certCreationResult.keyPair.PublicKey, `${certCreationResult.certificateId || "certificate"}-public.pem`)}
+                    >Download</Button>
+                  </SpaceBetween>
+                  <Textarea
+                    value={certCreationResult.keyPair.PublicKey}
+                    readOnly
+                    rows={4}
+                  />
+                </FormField>
+              )}
+
+              {certCreationResult.keyPair?.PrivateKey && (
+                <FormField
+                  label="Private Key"
+                  description={<Box color="text-status-error">⚠ Save this private key now. It cannot be retrieved after closing this dialog.</Box>}
+                >
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <Button
+                      iconName="copy"
+                      variant="inline-icon"
+                      onClick={() => copyToClipboard(certCreationResult.keyPair.PrivateKey)}
+                    >Copy</Button>
+                    <Button
+                      iconName="download"
+                      variant="primary"
+                      onClick={() => downloadText(certCreationResult.keyPair.PrivateKey, `${certCreationResult.certificateId || "certificate"}-private.pem`)}
+                    >Download private key</Button>
+                  </SpaceBetween>
+                  <Textarea
+                    value={certCreationResult.keyPair.PrivateKey}
+                    readOnly
+                    rows={6}
+                  />
+                </FormField>
+              )}
+            </SpaceBetween>
+          )}
+        </Modal>
       </SpaceBetween>
     ),
   };
