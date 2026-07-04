@@ -43,7 +43,7 @@
 ## Features
 
 - **AWS Console look and feel** — Built with [Cloudscape Design System](https://cloudscape.design/), the same component library used by the real AWS Management Console
-- **66 Floci services** — Full navigation, status, and resource management with 65+ backend routes covering all major AWS services — every service Floci emulates now has a dashboard UI
+- **65 Floci services** — Full navigation, status, and resource management with backend routes covering every service Floci emulates, plus dashboard-only extras (STS, EC2 Messages, AppConfig Data)
 - **Deep resource management** — Browse, create, and delete resources for implemented services (S3, DynamoDB, EC2, RDS, SQS, SNS, EventBridge, CloudWatch Logs, CloudWatch Metrics, Lambda, IAM, Secrets Manager, CloudFormation, KMS, ECS, SSM, Route 53, API Gateway)
 - **EC2 web terminal** — Interactive bash shell inside running EC2 instances directly from the browser (xterm.js + Docker Engine API with PTY)
 - **Dark mode** — Toggle between light and dark themes (persisted to localStorage)
@@ -203,15 +203,15 @@ docker run -p 3000:3000 -p 4566:4566 \
 
 ### Testing
 
-The project includes **~3,167 tests** (2,873 unit + 294 integration) across 177 test files, organized as:
+The project includes **3,183 tests** across 187 test files, organized as:
 
-| Tests | Count | Location |
+| Tests | Files | Location |
 |-------|-------|----------|
-| Backend route unit tests | 46 files | `src/backend/routes/aws/*.test.ts` |
-| Frontend page/component tests | 44 files | `src/frontend/pages/*.test.tsx`, `src/frontend/components/*.test.tsx` |
-| Frontend hook tests | 34 files | `src/frontend/hooks/*.test.ts` |
-| Other tests | 53 files | shared libs, stores, types, etc. |
-| Integration tests | 294 | `src/backend/integration.test.ts` (requires Floci) |
+| Backend route unit tests | 50 | `src/backend/routes/aws/*.test.ts` |
+| Frontend page/component tests | 48 | `src/frontend/pages/*.test.tsx`, `src/frontend/components/*.test.tsx` |
+| Frontend hook tests | 36 | `src/frontend/hooks/*.test.ts` |
+| Other tests | 53 | shared libs, stores, types, etc. |
+| Integration tests (requires Floci) | 1 | `src/backend/integration.test.ts` |
 
 ```bash
 make test           # Fast unit tests (no Floci needed)
@@ -417,7 +417,7 @@ These services have full CRUD operations in both backend and frontend:
 | **MemoryDB** | Clusters (list, create, describe, delete), tags (list per resource) |
 | **S3 Vector Search** | Vector buckets (list, create, get, delete), indexes (list, create, get, delete with dimension/data type/distance metric), vectors (put with metadata, get by keys, delete, query with top-K/filter) |
 
-### Navigation + status (66 services)
+### Navigation + status (65 services)
 
 All services reported by Floci appear in the sidebar with status indicators.
 
@@ -439,6 +439,47 @@ All services reported by Floci appear in the sidebar with status indicators.
 **Migration:** Backup, Transfer Family
 
 </details>
+
+### Gap analysis
+
+The dashboard covers **all 65 Floci services at the service level** — every Floci emulated service has a backend route, frontend hooks, and a dedicated UI component. The following operational gaps exist at the feature level:
+
+| Service | Missing Operations | Impact |
+| **ECR** | Garbage collection management UI | Low — repository lifecycle policy covers cleanup |
+| **SNS** | Push notification inspection dedicated endpoint | Low — subscription status and delivery monitoring available |
+| **SES** | SMTP relay configuration UI | Low — email sending and identity verification are covered |
+
+#### Dashboard-only extras
+
+The dashboard includes several features that go beyond what Floci directly exposes:
+
+| Feature | Description |
+|---------|-------------|
+| **STS** | Identity and session operations (caller identity, assume role, get session token) |
+| **EC2 Web Terminal** | Interactive bash shell inside running EC2 instances via xterm.js + Docker Engine API |
+| **EC2 Messages** | Message relay for EC2 instance communication |
+| **AppConfig Data** | Data plane operations (get configuration, get latest version) |
+| **S3 Config** | Bucket configuration UI (CORS, encryption, lifecycle, versioning, static website, logging, notifications, policies, tags, object lock, ACLs — 11 tabs) |
+| **DynamoDB Advanced** | GSIs, TTL management, PartiQL queries, tags |
+| **CloudWatch Logs + Metrics** | Separate dedicated pages for logs (live viewer) and metrics (statistics, alarms) with richer UIs |
+| **Service dashboards** | Dedicated per-service dashboards (57 services) with drill-down navigation, resource tables, stat cards, and action buttons |
+
+#### Service naming alignment
+
+Floci uses different internal names for some services than the AWS SDK or Cloudscape UI labels. The dashboard normalizes these:
+
+| Floci Internal | Dashboard Key | Console Label |
+|----------------|---------------|---------------|
+| `elbv2` | `elasticloadbalancing` | ELB |
+| `cloudwatch` | `logs` + `monitoring` | CloudWatch Logs / CloudWatch Metrics |
+| `cloudmap` | `servicediscovery` | Cloud Map |
+| `eventbridge` | `events` | EventBridge |
+| `resourcegroupstagging` | `tagging` | Resource Groups Tagging |
+| `stepfunctions` | `states` | Step Functions |
+| `opensearch` | `es` | OpenSearch |
+| `msk` | `kafka` | MSK (Kafka) |
+| `cognito` | `cognito-idp` | Cognito |
+| `kinesis` | `kinesis` + `firehose` | Kinesis / Kinesis Firehose |
 
 ## Development
 

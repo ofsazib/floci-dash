@@ -153,6 +153,36 @@ export function useFunctionUrl(name: string | null) {
   });
 }
 
+export function useDeleteFunctionUrl() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api(`/aws/lambda/functions/${name}/url`, { method: "DELETE" }),
+    onSuccess: (_data, name) =>
+      qc.invalidateQueries({ queryKey: ["aws", "lambda", "functions", name, "url"] }),
+  });
+}
+
+export function useCreateFunctionUrl() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, ...body }: any) =>
+      api(`/aws/lambda/functions/${name}/url`, { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: (_data, vars) =>
+      qc.invalidateQueries({ queryKey: ["aws", "lambda", "functions", vars.name, "url"] }),
+  });
+}
+
+export function useUpdateFunctionUrl() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, ...body }: any) =>
+      api(`/aws/lambda/functions/${name}/url`, { method: "PUT", body: JSON.stringify(body) }),
+    onSuccess: (_data, vars) =>
+      qc.invalidateQueries({ queryKey: ["aws", "lambda", "functions", vars.name, "url"] }),
+  });
+}
+
 // ─── CONCURRENCY ────────────────────────────────────────
 
 export function useFunctionConcurrency(name: string | null) {
@@ -160,5 +190,77 @@ export function useFunctionConcurrency(name: string | null) {
     queryKey: ["aws", "lambda", "functions", name, "concurrency"],
     queryFn: () => api<{ reservedConcurrentExecutions: number | undefined }>(`/lambda/functions/${name}/concurrency`),
     enabled: !!name,
+  });
+}
+
+export function useSetFunctionConcurrency() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, reservedConcurrentExecutions }: { name: string; reservedConcurrentExecutions: number }) =>
+      api(`/aws/lambda/functions/${name}/concurrency`, {
+        method: "PUT",
+        body: JSON.stringify({ reservedConcurrentExecutions }),
+      }),
+    onSuccess: (_data, vars) =>
+      qc.invalidateQueries({ queryKey: ["aws", "lambda", "functions", vars.name, "concurrency"] }),
+  });
+}
+
+export function useDeleteFunctionConcurrency() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api(`/aws/lambda/functions/${name}/concurrency`, { method: "DELETE" }),
+    onSuccess: (_data, name) =>
+      qc.invalidateQueries({ queryKey: ["aws", "lambda", "functions", name, "concurrency"] }),
+  });
+}
+
+// ─── EVENT INVOKE CONFIG ────────────────────────────────
+
+export function useEventInvokeConfig(name: string | null) {
+  return useQuery({
+    queryKey: ["aws", "lambda", "functions", name, "event-invoke-config"],
+    queryFn: () =>
+      api<{ maximumRetryAttempts?: number; maximumEventAgeInSeconds?: number; destinationConfig?: any; functionArn?: string }>(
+        `/lambda/functions/${name}/event-invoke-config`
+      ),
+    enabled: !!name,
+  });
+}
+
+export function usePutEventInvokeConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, ...body }: any) =>
+      api(`/aws/lambda/functions/${name}/event-invoke-config`, {
+        method: "PUT",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: (_data, vars) =>
+      qc.invalidateQueries({ queryKey: ["aws", "lambda", "functions", vars.name, "event-invoke-config"] }),
+  });
+}
+
+export function useDeleteEventInvokeConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api(`/aws/lambda/functions/${name}/event-invoke-config`, { method: "DELETE" }),
+    onSuccess: (_data, name) =>
+      qc.invalidateQueries({ queryKey: ["aws", "lambda", "functions", name, "event-invoke-config"] }),
+  });
+}
+
+// ─── CREATE LAYER VERSION ───────────────────────────────
+
+export function useCreateLayerVersion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, ...body }: any) =>
+      api(`/aws/lambda/layers/${name}/versions`, { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["aws", "lambda", "layers"] });
+    },
   });
 }

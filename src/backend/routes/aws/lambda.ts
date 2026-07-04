@@ -18,15 +18,30 @@ import {
   ListLayersCommand,
   ListLayerVersionsCommand,
   DeleteLayerVersionCommand,
+  PublishLayerVersionCommand,
   ListEventSourceMappingsCommand,
   DeleteEventSourceMappingCommand,
   ListTagsCommand,
   TagResourceCommand,
   UntagResourceCommand,
   GetFunctionUrlConfigCommand,
+  CreateFunctionUrlConfigCommand,
+  UpdateFunctionUrlConfigCommand,
   DeleteFunctionUrlConfigCommand,
   GetFunctionConcurrencyCommand,
+  PutFunctionConcurrencyCommand,
+  DeleteFunctionConcurrencyCommand,
   ListFunctionUrlConfigsCommand,
+  GetFunctionEventInvokeConfigCommand,
+  GetFunctionCodeSigningConfigCommand,
+  PutFunctionCodeSigningConfigCommand,
+  DeleteFunctionCodeSigningConfigCommand,
+  ListCodeSigningConfigsCommand,
+  CreateCodeSigningConfigCommand,
+  DeleteCodeSigningConfigCommand,
+  PutFunctionEventInvokeConfigCommand,
+  DeleteFunctionEventInvokeConfigCommand,
+  ListFunctionEventInvokeConfigsCommand,
 } from "@aws-sdk/client-lambda";
 import { getAwsConfig } from "../../clients/aws";
 import { sanitizeName, sanitizeText } from "../../clients/sanitize";
@@ -378,6 +393,224 @@ router.get("/functions/:name/concurrency", async (c: Context) => {
   } catch (err: any) {
     return c.json({ reservedConcurrentExecutions: undefined });
   }
+});
+
+router.put("/functions/:name/concurrency", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<any>();
+  const reservedConcurrentExecutions = body.reservedConcurrentExecutions;
+  if (reservedConcurrentExecutions == null)
+    return c.json({ error: "reservedConcurrentExecutions is required" }, 400);
+  const result = await lambda().send(
+    new PutFunctionConcurrencyCommand({
+      FunctionName: name,
+      ReservedConcurrentExecutions: Number(reservedConcurrentExecutions),
+    })
+  );
+  return c.json({ reservedConcurrentExecutions: result.ReservedConcurrentExecutions });
+});
+
+router.delete("/functions/:name/concurrency", async (c: Context) => {
+  const name = c.req.param("name");
+  await lambda().send(new DeleteFunctionConcurrencyCommand({ FunctionName: name }));
+  return c.json({ deleted: true });
+});
+
+// ─── EVENT INVOKE CONFIG ────────────────────────────────
+
+router.get("/functions/:name/event-invoke-config", async (c: Context) => {
+  const name = c.req.param("name");
+  try {
+    const result = await lambda().send(
+      new GetFunctionEventInvokeConfigCommand({ FunctionName: name })
+    );
+    return c.json({
+      maximumRetryAttempts: result.MaximumRetryAttempts,
+      maximumEventAgeInSeconds: result.MaximumEventAgeInSeconds,
+      destinationConfig: result.DestinationConfig,
+      functionArn: result.FunctionArn,
+    });
+  } catch (err: any) {
+    return c.json({});
+  }
+});
+
+router.put("/functions/:name/event-invoke-config", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<any>();
+  const result = await lambda().send(
+    new PutFunctionEventInvokeConfigCommand({
+      FunctionName: name,
+      MaximumRetryAttempts: body.maximumRetryAttempts,
+      MaximumEventAgeInSeconds: body.maximumEventAgeInSeconds,
+      DestinationConfig: body.destinationConfig,
+    })
+  );
+  return c.json({
+    maximumRetryAttempts: result.MaximumRetryAttempts,
+    maximumEventAgeInSeconds: result.MaximumEventAgeInSeconds,
+    destinationConfig: result.DestinationConfig,
+    functionArn: result.FunctionArn,
+  });
+});
+
+router.delete("/functions/:name/event-invoke-config", async (c: Context) => {
+  const name = c.req.param("name");
+  await lambda().send(new DeleteFunctionEventInvokeConfigCommand({ FunctionName: name }));
+  return c.json({ deleted: true });
+});
+
+// ─── FUNCTION URL CONFIG (CREATE + UPDATE) ──────────────
+
+router.post("/functions/:name/url", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<any>();
+  if (!body.authType) return c.json({ error: "authType is required" }, 400);
+  const result = await lambda().send(
+    new CreateFunctionUrlConfigCommand({
+      FunctionName: name,
+      AuthType: body.authType,
+      Cors: body.cors,
+      InvokeMode: body.invokeMode,
+    })
+  );
+  return c.json({
+    url: result.FunctionUrl,
+    authType: result.AuthType,
+    cors: result.Cors,
+    invokeMode: result.InvokeMode,
+  });
+});
+
+router.put("/functions/:name/url", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<any>();
+  const result = await lambda().send(
+    new UpdateFunctionUrlConfigCommand({
+      FunctionName: name,
+      AuthType: body.authType,
+      Cors: body.cors,
+      InvokeMode: body.invokeMode,
+    })
+  );
+  return c.json({
+    url: result.FunctionUrl,
+    authType: result.AuthType,
+    cors: result.Cors,
+    invokeMode: result.InvokeMode,
+  });
+});
+
+// ─── CREATE LAYER VERSION ───────────────────────────────
+
+router.post("/layers/:name/versions", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<any>();
+  if (!body.zipFile) return c.json({ error: "zipFile is required" }, 400);
+  const result = await lambda().send(
+    new PublishLayerVersionCommand({
+      LayerName: name,
+      Content: { ZipFile: new Uint8Array(Buffer.from(body.zipFile, "base64")) },
+      CompatibleRuntimes: body.compatibleRuntimes,
+      Description: body.description,
+      LicenseInfo: body.licenseInfo,
+    })
+  );
+  return c.json({
+    version: result.Version,
+    codeSize: result.Content?.CodeSize,
+    description: result.Description,
+    compatibleRuntimes: result.CompatibleRuntimes,
+    licenseInfo: result.LicenseInfo,
+    created: true,
+  });
+});
+
+// ─── CODE SIGNING CONFIG ────────────────────────────────
+
+router.get("/functions/:name/code-signing-config", async (c: Context) => {
+  const name = c.req.param("name");
+  try {
+    const result = await lambda().send(
+      new GetFunctionCodeSigningConfigCommand({ FunctionName: name })
+    );
+    return c.json({
+      codeSigningConfigArn: result.CodeSigningConfigArn,
+      functionName: result.FunctionName,
+    });
+  } catch (err: any) {
+    return c.json({});
+  }
+});
+
+router.put("/functions/:name/code-signing-config", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<any>();
+  if (!body.codeSigningConfigArn)
+    return c.json({ error: "codeSigningConfigArn is required" }, 400);
+  const result = await lambda().send(
+    new PutFunctionCodeSigningConfigCommand({
+      FunctionName: name,
+      CodeSigningConfigArn: body.codeSigningConfigArn,
+    })
+  );
+  return c.json({
+    codeSigningConfigArn: result.CodeSigningConfigArn,
+    functionName: result.FunctionName,
+  });
+});
+
+router.delete("/functions/:name/code-signing-config", async (c: Context) => {
+  const name = c.req.param("name");
+  await lambda().send(
+    new DeleteFunctionCodeSigningConfigCommand({ FunctionName: name })
+  );
+  return c.json({ deleted: true });
+});
+
+router.get("/code-signing-configs", async (c: Context) => {
+  const result = await lambda().send(new ListCodeSigningConfigsCommand({}));
+  const configs = (result.CodeSigningConfigs || []).map((csc: any) => ({
+    arn: csc.CodeSigningConfigArn,
+    description: csc.Description,
+    allowedPublishers: csc.AllowedPublishers,
+    codeSigningPolicies: csc.CodeSigningPolicies,
+    lastModified: csc.LastModified,
+  }));
+  return c.json({ codeSigningConfigs: configs, total: configs.length });
+});
+
+router.post("/code-signing-configs", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.signingProfileVersionArns || !body.signingProfileVersionArns.length)
+    return c.json({ error: "signingProfileVersionArns is required" }, 400);
+  const result = await lambda().send(
+    new CreateCodeSigningConfigCommand({
+      Description: body.description,
+      AllowedPublishers: {
+        SigningProfileVersionArns: body.signingProfileVersionArns,
+      },
+      CodeSigningPolicies: body.codeSigningPolicies,
+    })
+  );
+  return c.json({
+    codeSigningConfig: {
+      arn: result.CodeSigningConfig?.CodeSigningConfigArn,
+      description: result.CodeSigningConfig?.Description,
+      allowedPublishers: result.CodeSigningConfig?.AllowedPublishers,
+      codeSigningPolicies: result.CodeSigningConfig?.CodeSigningPolicies,
+      lastModified: result.CodeSigningConfig?.LastModified,
+    },
+    created: true,
+  });
+});
+
+router.delete("/code-signing-configs/:arn", async (c: Context) => {
+  const arn = decodeURIComponent(c.req.param("arn"));
+  await lambda().send(
+    new DeleteCodeSigningConfigCommand({ CodeSigningConfigArn: arn })
+  );
+  return c.json({ arn, deleted: true });
 });
 
 export default router;

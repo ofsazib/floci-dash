@@ -33,14 +33,28 @@ vi.mock("@aws-sdk/client-lambda", () => ({
   ListLayersCommand: createCmd("ListLayersCommand"),
   ListLayerVersionsCommand: createCmd("ListLayerVersionsCommand"),
   DeleteLayerVersionCommand: createCmd("DeleteLayerVersionCommand"),
+  PublishLayerVersionCommand: createCmd("PublishLayerVersionCommand"),
   ListEventSourceMappingsCommand: createCmd("ListEventSourceMappingsCommand"),
   DeleteEventSourceMappingCommand: createCmd("DeleteEventSourceMappingCommand"),
   ListTagsCommand: createCmd("ListTagsCommand"),
   TagResourceCommand: createCmd("TagResourceCommand"),
   UntagResourceCommand: createCmd("UntagResourceCommand"),
   GetFunctionUrlConfigCommand: createCmd("GetFunctionUrlConfigCommand"),
+  CreateFunctionUrlConfigCommand: createCmd("CreateFunctionUrlConfigCommand"),
+  UpdateFunctionUrlConfigCommand: createCmd("UpdateFunctionUrlConfigCommand"),
   DeleteFunctionUrlConfigCommand: createCmd("DeleteFunctionUrlConfigCommand"),
   GetFunctionConcurrencyCommand: createCmd("GetFunctionConcurrencyCommand"),
+  PutFunctionConcurrencyCommand: createCmd("PutFunctionConcurrencyCommand"),
+  DeleteFunctionConcurrencyCommand: createCmd("DeleteFunctionConcurrencyCommand"),
+  GetFunctionEventInvokeConfigCommand: createCmd("GetFunctionEventInvokeConfigCommand"),
+  PutFunctionEventInvokeConfigCommand: createCmd("PutFunctionEventInvokeConfigCommand"),
+  DeleteFunctionEventInvokeConfigCommand: createCmd("DeleteFunctionEventInvokeConfigCommand"),
+  GetFunctionCodeSigningConfigCommand: createCmd("GetFunctionCodeSigningConfigCommand"),
+  PutFunctionCodeSigningConfigCommand: createCmd("PutFunctionCodeSigningConfigCommand"),
+  DeleteFunctionCodeSigningConfigCommand: createCmd("DeleteFunctionCodeSigningConfigCommand"),
+  ListCodeSigningConfigsCommand: createCmd("ListCodeSigningConfigsCommand"),
+  CreateCodeSigningConfigCommand: createCmd("CreateCodeSigningConfigCommand"),
+  DeleteCodeSigningConfigCommand: createCmd("DeleteCodeSigningConfigCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -409,6 +423,239 @@ describe("Lambda Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.reservedConcurrentExecutions).toBeUndefined();
+    });
+
+    it("POST /functions/:name/url — creates function URL config", async () => {
+      mockSend.mockResolvedValueOnce({
+        FunctionUrl: "https://new.lambda-url.us-east-1.on.aws/",
+        AuthType: "NONE",
+        Cors: { AllowMethods: ["*"] },
+        InvokeMode: "BUFFERED",
+      });
+      const res = await post("/functions/my-function/url", {
+        authType: "NONE",
+        cors: { AllowMethods: ["*"] },
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.url).toContain("lambda-url");
+      expect(body.authType).toBe("NONE");
+    });
+
+    it("POST /functions/:name/url — rejects missing authType", async () => {
+      const res = await post("/functions/my-function/url", { cors: {} });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("authType");
+    });
+
+    it("PUT /functions/:name/url — updates function URL config", async () => {
+      mockSend.mockResolvedValueOnce({
+        FunctionUrl: "https://updated.lambda-url.us-east-1.on.aws/",
+        AuthType: "AWS_IAM",
+        Cors: { AllowMethods: ["POST"] },
+        InvokeMode: "BUFFERED",
+      });
+      const res = await put("/functions/my-function/url", {
+        authType: "AWS_IAM",
+        cors: { AllowMethods: ["POST"] },
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.authType).toBe("AWS_IAM");
+    });
+
+    it("PUT /functions/:name/concurrency — sets reserved concurrency", async () => {
+      mockSend.mockResolvedValueOnce({ ReservedConcurrentExecutions: 5 });
+      const res = await put("/functions/my-function/concurrency", {
+        reservedConcurrentExecutions: 5,
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.reservedConcurrentExecutions).toBe(5);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.ReservedConcurrentExecutions).toBe(5);
+    });
+
+    it("PUT /functions/:name/concurrency — rejects missing value", async () => {
+      const res = await put("/functions/my-function/concurrency", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE /functions/:name/concurrency — removes reserved concurrency", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/functions/my-function/concurrency");
+      expect(res.status).toBe(200);
+      expect((await res.json()).deleted).toBe(true);
+    });
+
+    it("GET /functions/:name/event-invoke-config — returns config when set", async () => {
+      mockSend.mockResolvedValueOnce({
+        MaximumRetryAttempts: 2,
+        MaximumEventAgeInSeconds: 3600,
+        DestinationConfig: { OnSuccess: { Destination: "arn:aws:sqs:...:queue" } },
+        FunctionArn: "arn:aws:lambda:...:function:my-function",
+      });
+      const res = await get("/functions/my-function/event-invoke-config");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.maximumRetryAttempts).toBe(2);
+      expect(body.maximumEventAgeInSeconds).toBe(3600);
+    });
+
+    it("GET /functions/:name/event-invoke-config — empty when not configured", async () => {
+      mockSend.mockRejectedValueOnce(new Error("ResourceNotFoundException"));
+      const res = await get("/functions/my-function/event-invoke-config");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(Object.keys(body).length).toBe(0);
+    });
+
+    it("PUT /functions/:name/event-invoke-config — updates config", async () => {
+      mockSend.mockResolvedValueOnce({
+        MaximumRetryAttempts: 1,
+        MaximumEventAgeInSeconds: 1800,
+        FunctionArn: "arn:aws:lambda:...:function:my-function",
+      });
+      const res = await put("/functions/my-function/event-invoke-config", {
+        maximumRetryAttempts: 1,
+        maximumEventAgeInSeconds: 1800,
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.maximumRetryAttempts).toBe(1);
+    });
+
+    it("DELETE /functions/:name/event-invoke-config — deletes config", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/functions/my-function/event-invoke-config");
+      expect(res.status).toBe(200);
+      expect((await res.json()).deleted).toBe(true);
+    });
+  });
+
+  describe("Layer Creation", () => {
+    it("POST /layers/:name/versions — creates layer version", async () => {
+      mockSend.mockResolvedValueOnce({
+        Version: 1,
+        Content: { CodeSize: 500 },
+        Description: "My layer",
+        CompatibleRuntimes: ["nodejs22.x"],
+        LicenseInfo: "MIT",
+      });
+      const res = await post("/layers/my-layer/versions", {
+        zipFile: Buffer.from("layer code").toString("base64"),
+        compatibleRuntimes: ["nodejs22.x"],
+        description: "My layer",
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.created).toBe(true);
+      expect(body.version).toBe(1);
+      expect(body.compatibleRuntimes).toEqual(["nodejs22.x"]);
+    });
+
+    it("POST /layers/:name/versions — rejects missing zipFile", async () => {
+      const res = await post("/layers/my-layer/versions", { description: "test" });
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe("Code Signing Config", () => {
+    it("GET /functions/:name/code-signing-config — returns config when set", async () => {
+      mockSend.mockResolvedValueOnce({
+        CodeSigningConfigArn: "arn:aws:lambda:us-east-1:1:code-signing-config:csc-001",
+        FunctionName: "my-function",
+      });
+      const res = await get("/functions/my-function/code-signing-config");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.codeSigningConfigArn).toContain("code-signing-config");
+    });
+
+    it("GET /functions/:name/code-signing-config — empty when not configured", async () => {
+      mockSend.mockRejectedValueOnce(new Error("ResourceNotFoundException"));
+      const res = await get("/functions/my-function/code-signing-config");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(Object.keys(body).length).toBe(0);
+    });
+
+    it("PUT /functions/:name/code-signing-config — sets code signing config", async () => {
+      mockSend.mockResolvedValueOnce({
+        CodeSigningConfigArn: "arn:aws:lambda:us-east-1:1:code-signing-config:csc-001",
+        FunctionName: "my-function",
+      });
+      const res = await put("/functions/my-function/code-signing-config", {
+        codeSigningConfigArn: "arn:aws:lambda:us-east-1:1:code-signing-config:csc-001",
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.codeSigningConfigArn).toContain("code-signing-config");
+    });
+
+    it("PUT /functions/:name/code-signing-config — rejects missing arn", async () => {
+      const res = await put("/functions/my-function/code-signing-config", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE /functions/:name/code-signing-config — deletes code signing config", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/functions/my-function/code-signing-config");
+      expect(res.status).toBe(200);
+      expect((await res.json()).deleted).toBe(true);
+    });
+
+    it("GET /code-signing-configs — lists code signing configs", async () => {
+      mockSend.mockResolvedValueOnce({
+        CodeSigningConfigs: [
+          {
+            CodeSigningConfigArn: "arn:aws:lambda:...:code-signing-config:csc-001",
+            Description: "My config",
+            AllowedPublishers: { SigningProfileVersionArns: ["arn:aws:signer:...:/signing-profiles/my-profile"] },
+            CodeSigningPolicies: { UntrustedArtifactOnDeployment: "Warn" },
+            LastModified: "2025-01-01T00:00:00Z",
+          },
+        ],
+      });
+      const res = await get("/code-signing-configs");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(body.codeSigningConfigs[0].description).toBe("My config");
+    });
+
+    it("POST /code-signing-configs — creates code signing config", async () => {
+      mockSend.mockResolvedValueOnce({
+        CodeSigningConfig: {
+          CodeSigningConfigArn: "arn:aws:lambda:...:code-signing-config:csc-002",
+          Description: "New config",
+          AllowedPublishers: { SigningProfileVersionArns: ["arn:aws:signer:...:/signing-profiles/my-profile"] },
+          CodeSigningPolicies: { UntrustedArtifactOnDeployment: "Enforce" },
+          LastModified: "2025-01-01T00:00:00Z",
+        },
+      });
+      const res = await post("/code-signing-configs", {
+        description: "New config",
+        signingProfileVersionArns: ["arn:aws:signer:...:/signing-profiles/my-profile"],
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.created).toBe(true);
+      expect(body.codeSigningConfig.description).toBe("New config");
+    });
+
+    it("POST /code-signing-configs — rejects missing signingProfileVersionArns", async () => {
+      const res = await post("/code-signing-configs", { description: "test" });
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE /code-signing-configs/:arn — deletes code signing config", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/code-signing-configs/arn%3Aaws%3Alambda%3Aus-east-1%3A1%3Acode-signing-config%3Acsc-001");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deleted).toBe(true);
     });
   });
 });

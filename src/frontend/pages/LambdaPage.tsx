@@ -33,6 +33,15 @@ import {
   useDeleteLayerVersion,
   useFunctionUrl,
   useFunctionConcurrency,
+  useCreateFunctionUrl,
+  useUpdateFunctionUrl,
+  useDeleteFunctionUrl,
+  useSetFunctionConcurrency,
+  useDeleteFunctionConcurrency,
+  useEventInvokeConfig,
+  usePutEventInvokeConfig,
+  useDeleteEventInvokeConfig,
+  useCreateLayerVersion,
 } from "../hooks/useLambda";
 import ResourceTable from "../components/ResourceTable";
 import DeleteButton from "../components/DeleteButton";
@@ -231,7 +240,22 @@ function LambdaFunctionDetail({ name, onBack }: { name: string; onBack: () => vo
   const { data: esm } = useEventSourceMappings(name);
   const { data: urlConfig } = useFunctionUrl(name);
   const { data: concurrency } = useFunctionConcurrency(name);
+  const { data: eventInvokeConfig } = useEventInvokeConfig(name);
   const publishVersion = usePublishVersion();
+  const createFunctionUrl = useCreateFunctionUrl();
+  const updateFunctionUrl = useUpdateFunctionUrl();
+  const deleteFunctionUrl = useDeleteFunctionUrl();
+  const setConcurrency = useSetFunctionConcurrency();
+  const deleteConcurrency = useDeleteFunctionConcurrency();
+  const putEventInvokeConfig = usePutEventInvokeConfig();
+  const deleteEventInvokeConfig = useDeleteEventInvokeConfig();
+
+  const [showUrlModal, setShowUrlModal] = useState(false);
+  const [urlForm, setUrlForm] = useState({ authType: "NONE", corsAllowMethods: "*" });
+  const [showConcurrencyModal, setShowConcurrencyModal] = useState(false);
+  const [concurrencyValue, setConcurrencyValue] = useState("");
+  const [showEventInvokeModal, setShowEventInvokeModal] = useState(false);
+  const [eicForm, setEicForm] = useState({ maxRetryAttempts: "2", maxEventAge: "3600" });
 
   if (isLoading) return <StatusIndicator type="loading">Loading function details...</StatusIndicator>;
   if (isError) return <StatusIndicator type="error">{(error as Error)?.message || "Failed to load"}</StatusIndicator>;
@@ -277,7 +301,16 @@ function LambdaFunctionDetail({ name, onBack }: { name: string; onBack: () => vo
             </div>
             <div>
               <Box fontSize="body-s" color="text-label">Reserved concurrency</Box>
-              <Box fontSize="body-m">{concurrency?.reservedConcurrentExecutions ?? "Not set"}</Box>
+              <SpaceBetween direction="horizontal" size="xs">
+                <Box fontSize="body-m">{concurrency?.reservedConcurrentExecutions ?? "Not set"}</Box>
+                <Button variant="inline-icon" iconName="edit" onClick={() => {
+                  setConcurrencyValue(String(concurrency?.reservedConcurrentExecutions ?? ""));
+                  setShowConcurrencyModal(true);
+                }} />
+                {concurrency?.reservedConcurrentExecutions != null && (
+                  <Button variant="inline-icon" iconName="remove" onClick={() => deleteConcurrency.mutate(name)} />
+                )}
+              </SpaceBetween>
             </div>
             <div>
               <Box fontSize="body-s" color="text-label">Architecture</Box>
@@ -308,16 +341,168 @@ function LambdaFunctionDetail({ name, onBack }: { name: string; onBack: () => vo
             </Box>
           )}
 
-          {urlConfig?.url && (
-            <Box padding={{ top: "l" }}>
-              <Box fontSize="body-s" color="text-label" padding={{ bottom: "xs" }}>Function URL</Box>
-              <Box fontSize="body-s">
-                <a href={urlConfig.url} target="_blank" rel="noreferrer">{urlConfig.url}</a>
-                <span style={{ marginLeft: "8px", opacity: 0.7 }}>({urlConfig.authType})</span>
-              </Box>
-            </Box>
-          )}
+          <Box padding={{ top: "l" }}>
+            <Box fontSize="body-s" color="text-label" padding={{ bottom: "xs" }}>Function URL</Box>
+            {urlConfig?.url ? (
+              <SpaceBetween direction="horizontal" size="xs">
+                <Box fontSize="body-s">
+                  <a href={urlConfig.url} target="_blank" rel="noreferrer">{urlConfig.url}</a>
+                  <span style={{ marginLeft: "8px", opacity: 0.7 }}>({urlConfig.authType})</span>
+                </Box>
+                <Button variant="inline-icon" iconName="edit" onClick={() => {
+                  setUrlForm({ authType: urlConfig.authType || "NONE", corsAllowMethods: urlConfig.cors?.AllowMethods?.join(", ") || "*" });
+                  setShowUrlModal(true);
+                }} />
+                <DeleteButton itemName={name} resourceType="function URL" loading={deleteFunctionUrl.isPending} onDelete={() => deleteFunctionUrl.mutateAsync(name)} />
+              </SpaceBetween>
+            ) : (
+              <SpaceBetween direction="horizontal" size="xs">
+                <Box fontSize="body-s" color="text-body-secondary">No URL configured</Box>
+                <Button variant="inline-icon" iconName="add-plus" onClick={() => {
+                  setUrlForm({ authType: "NONE", corsAllowMethods: "*" });
+                  setShowUrlModal(true);
+                }} />
+              </SpaceBetween>
+            )}
+          </Box>
+
+          <Box padding={{ top: "l" }}>
+            <Box fontSize="body-s" color="text-label" padding={{ bottom: "xs" }}>Event invoke config</Box>
+            {eventInvokeConfig?.maximumRetryAttempts != null ? (
+              <SpaceBetween direction="horizontal" size="xs">
+                <Box fontSize="body-s">
+                  Retry attempts: {eventInvokeConfig.maximumRetryAttempts} — Max age: {eventInvokeConfig.maximumEventAgeInSeconds}s
+                </Box>
+                <Button variant="inline-icon" iconName="edit" onClick={() => {
+                  setEicForm({
+                    maxRetryAttempts: String(eventInvokeConfig.maximumRetryAttempts || ""),
+                    maxEventAge: String(eventInvokeConfig.maximumEventAgeInSeconds || ""),
+                  });
+                  setShowEventInvokeModal(true);
+                }} />
+                <Button variant="inline-icon" iconName="remove" onClick={() => deleteEventInvokeConfig.mutate(name)} />
+              </SpaceBetween>
+            ) : (
+              <SpaceBetween direction="horizontal" size="xs">
+                <Box fontSize="body-s" color="text-body-secondary">No event invoke config set</Box>
+                <Button variant="inline-icon" iconName="add-plus" onClick={() => {
+                  setEicForm({ maxRetryAttempts: "2", maxEventAge: "3600" });
+                  setShowEventInvokeModal(true);
+                }} />
+              </SpaceBetween>
+            )}
+          </Box>
         </Container>
+      ),
+    },
+    {
+      id: "advanced",
+      label: "Advanced",
+      content: (
+        <SpaceBetween size="m">
+          {createFunctionUrl.isError && (
+            <Alert type="error" dismissible>{(createFunctionUrl.error as Error)?.message || "Failed to create URL"}</Alert>
+          )}
+          {setConcurrency.isError && (
+            <Alert type="error" dismissible>{(setConcurrency.error as Error)?.message || "Failed to set concurrency"}</Alert>
+          )}
+          {putEventInvokeConfig.isError && (
+            <Alert type="error" dismissible>{(putEventInvokeConfig.error as Error)?.message || "Failed to update event invoke config"}</Alert>
+          )}
+
+          <Container header={<Header variant="h3">Reserved concurrency</Header>}>
+            <SpaceBetween direction="horizontal" size="xs">
+              <Box fontSize="body-m">
+                Current: <strong>{concurrency?.reservedConcurrentExecutions ?? "Not set"}</strong>
+              </Box>
+              <Button variant="normal" onClick={() => {
+                setConcurrencyValue(String(concurrency?.reservedConcurrentExecutions ?? ""));
+                setShowConcurrencyModal(true);
+              }}>
+                Set concurrency
+              </Button>
+              {concurrency?.reservedConcurrentExecutions != null && (
+                <Button variant="normal" loading={deleteConcurrency.isPending} onClick={() => deleteConcurrency.mutate(name)}>
+                  Remove
+                </Button>
+              )}
+            </SpaceBetween>
+          </Container>
+
+          <Container header={<Header variant="h3">Function URL</Header>}>
+            {urlConfig?.url ? (
+              <SpaceBetween size="s">
+                <Box fontSize="body-m">
+                  URL: <a href={urlConfig.url} target="_blank" rel="noreferrer">{urlConfig.url}</a>
+                  <br />
+                  Auth type: {urlConfig.authType}
+                  {urlConfig.invokeMode && <><br />Invoke mode: {urlConfig.invokeMode}</>}
+                </Box>
+                <SpaceBetween direction="horizontal" size="xs">
+                  <Button variant="normal" onClick={() => {
+                    setUrlForm({ authType: urlConfig.authType || "NONE", corsAllowMethods: urlConfig.cors?.AllowMethods?.join(", ") || "*" });
+                    setShowUrlModal(true);
+                  }}>
+                    Update URL config
+                  </Button>
+                  <DeleteButton itemName={name} resourceType="function URL" loading={deleteFunctionUrl.isPending} onDelete={() => deleteFunctionUrl.mutateAsync(name)} />
+                </SpaceBetween>
+              </SpaceBetween>
+            ) : (
+              <SpaceBetween size="s">
+                <Box fontSize="body-m" color="text-body-secondary">No function URL configured.</Box>
+                <Button variant="normal" onClick={() => {
+                  setUrlForm({ authType: "NONE", corsAllowMethods: "*" });
+                  setShowUrlModal(true);
+                }}>
+                  Create URL
+                </Button>
+              </SpaceBetween>
+            )}
+          </Container>
+
+          <Container header={<Header variant="h3">Event invoke config</Header>}>
+            {eventInvokeConfig?.maximumRetryAttempts != null ? (
+              <SpaceBetween size="s">
+                <Box fontSize="body-m">
+                  Maximum retry attempts: <strong>{eventInvokeConfig.maximumRetryAttempts}</strong>
+                  <br />
+                  Maximum event age: <strong>{eventInvokeConfig.maximumEventAgeInSeconds}s</strong>
+                  {eventInvokeConfig.destinationConfig?.OnSuccess?.Destination && (
+                    <><br />On success: {eventInvokeConfig.destinationConfig.OnSuccess.Destination}</>
+                  )}
+                  {eventInvokeConfig.destinationConfig?.OnFailure?.Destination && (
+                    <><br />On failure: {eventInvokeConfig.destinationConfig.OnFailure.Destination}</>
+                  )}
+                </Box>
+                <SpaceBetween direction="horizontal" size="xs">
+                  <Button variant="normal" onClick={() => {
+                    setEicForm({
+                      maxRetryAttempts: String(eventInvokeConfig.maximumRetryAttempts || ""),
+                      maxEventAge: String(eventInvokeConfig.maximumEventAgeInSeconds || ""),
+                    });
+                    setShowEventInvokeModal(true);
+                  }}>
+                    Edit config
+                  </Button>
+                  <Button variant="normal" loading={deleteEventInvokeConfig.isPending} onClick={() => deleteEventInvokeConfig.mutate(name)}>
+                    Reset to defaults
+                  </Button>
+                </SpaceBetween>
+              </SpaceBetween>
+            ) : (
+              <SpaceBetween size="s">
+                <Box fontSize="body-m" color="text-body-secondary">No custom event invoke configuration set.</Box>
+                <Button variant="normal" onClick={() => {
+                  setEicForm({ maxRetryAttempts: "2", maxEventAge: "3600" });
+                  setShowEventInvokeModal(true);
+                }}>
+                  Configure
+                </Button>
+              </SpaceBetween>
+            )}
+          </Container>
+        </SpaceBetween>
       ),
     },
     {
@@ -453,6 +638,149 @@ function LambdaFunctionDetail({ name, onBack }: { name: string; onBack: () => vo
         <Button variant="link" iconName="arrow-left" onClick={onBack}>Back to Functions</Button>
         <Tabs activeTabId={tab} onChange={({ detail }) => setTab(detail.activeTabId)} tabs={detailTabs} />
       </SpaceBetween>
+
+      {/* URL config modal */}
+      <Modal
+        visible={showUrlModal}
+        onDismiss={() => setShowUrlModal(false)}
+        header={urlConfig?.url ? "Update function URL config" : "Create function URL config"}
+        size="medium"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowUrlModal(false)}>Cancel</Button>
+              <Button
+                variant="primary"
+                loading={createFunctionUrl.isPending || updateFunctionUrl.isPending}
+                onClick={() => {
+                  const payload = { name, authType: urlForm.authType };
+                  if (urlForm.corsAllowMethods) {
+                    (payload as any).cors = { AllowMethods: urlForm.corsAllowMethods.split(",").map((s: string) => s.trim()) };
+                  }
+                  if (urlConfig?.url) {
+                    updateFunctionUrl.mutate(payload, { onSuccess: () => setShowUrlModal(false) });
+                  } else {
+                    createFunctionUrl.mutate(payload, { onSuccess: () => setShowUrlModal(false) });
+                  }
+                }}
+              >
+                {urlConfig?.url ? "Update" : "Create"}
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          <SpaceBetween size="m">
+            <FormField label="Auth type">
+              <Select
+                selectedOption={{ label: urlForm.authType, value: urlForm.authType }}
+                onChange={({ detail }) => setUrlForm(p => ({ ...p, authType: detail.selectedOption.value || "NONE" }))}
+                options={[
+                  { label: "NONE", value: "NONE" },
+                  { label: "AWS_IAM", value: "AWS_IAM" },
+                ]}
+              />
+            </FormField>
+            <FormField label="CORS allowed methods (comma-separated)">
+              <Input
+                value={urlForm.corsAllowMethods}
+                onChange={({ detail }) => setUrlForm(p => ({ ...p, corsAllowMethods: detail.value }))}
+                placeholder="*"
+              />
+            </FormField>
+          </SpaceBetween>
+        </Form>
+      </Modal>
+
+      {/* Concurrency modal */}
+      <Modal
+        visible={showConcurrencyModal}
+        onDismiss={() => setShowConcurrencyModal(false)}
+        header="Set reserved concurrency"
+        size="small"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowConcurrencyModal(false)}>Cancel</Button>
+              <Button
+                variant="primary"
+                loading={setConcurrency.isPending}
+                disabled={!concurrencyValue}
+                onClick={() => {
+                  setConcurrency.mutate(
+                    { name, reservedConcurrentExecutions: Number(concurrencyValue) },
+                    { onSuccess: () => setShowConcurrencyModal(false) }
+                  );
+                }}
+              >
+                Set
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          <FormField label="Reserved concurrent executions">
+            <Input
+              type="number"
+              value={concurrencyValue}
+              onChange={({ detail }) => setConcurrencyValue(detail.value)}
+              placeholder="e.g. 10"
+            />
+          </FormField>
+        </Form>
+      </Modal>
+
+      {/* Event invoke config modal */}
+      <Modal
+        visible={showEventInvokeModal}
+        onDismiss={() => setShowEventInvokeModal(false)}
+        header="Configure event invoke config"
+        size="medium"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowEventInvokeModal(false)}>Cancel</Button>
+              <Button
+                variant="primary"
+                loading={putEventInvokeConfig.isPending}
+                onClick={() => {
+                  putEventInvokeConfig.mutate(
+                    {
+                      name,
+                      maximumRetryAttempts: Number(eicForm.maxRetryAttempts),
+                      maximumEventAgeInSeconds: Number(eicForm.maxEventAge),
+                    },
+                    { onSuccess: () => setShowEventInvokeModal(false) }
+                  );
+                }}
+              >
+                Save
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          <SpaceBetween size="m">
+            <FormField label="Maximum retry attempts">
+              <Input
+                type="number"
+                value={eicForm.maxRetryAttempts}
+                onChange={({ detail }) => setEicForm(p => ({ ...p, maxRetryAttempts: detail.value }))}
+              />
+            </FormField>
+            <FormField label="Maximum event age (seconds)">
+              <Input
+                type="number"
+                value={eicForm.maxEventAge}
+                onChange={({ detail }) => setEicForm(p => ({ ...p, maxEventAge: detail.value }))}
+              />
+            </FormField>
+          </SpaceBetween>
+        </Form>
+      </Modal>
     </ContentLayout>
   );
 }
@@ -462,6 +790,14 @@ function LambdaFunctionDetail({ name, onBack }: { name: string; onBack: () => vo
 function LambdaLayerList() {
   const { data, isLoading, isError, error } = useLambdaLayers();
   const deleteLayerVersion = useDeleteLayerVersion();
+  const createLayerVersion = useCreateLayerVersion();
+  const [showCreate, setShowCreate] = useState(false);
+  const [form, setForm] = useState({
+    name: "",
+    description: "",
+    compatibleRuntimes: "nodejs22.x",
+    licenseInfo: "",
+  });
 
   const items = (data?.layers || []).map((l: any) => ({
     name: l.name,
@@ -471,6 +807,20 @@ function LambdaLayerList() {
     codeSize: l.latestVersion?.codeSize,
     runtimes: l.latestVersion?.compatibleRuntimes,
   }));
+
+  function handleCreate() {
+    if (!form.name) return;
+    createLayerVersion.mutate(
+      {
+        name: form.name,
+        zipFile: Buffer.from("UEsDBBQAAAAAA").toString("base64"),
+        compatibleRuntimes: [form.compatibleRuntimes],
+        description: form.description || undefined,
+        licenseInfo: form.licenseInfo || undefined,
+      },
+      { onSuccess: () => setShowCreate(false) }
+    );
+  }
 
   return (
     <>
@@ -502,7 +852,45 @@ function LambdaLayerList() {
         filterEnabled
         filterPlaceholder="Find layers by name"
         filterFunction={(item: any, t: string) => item.name?.toLowerCase().includes(t.toLowerCase())}
+        onCreate={() => setShowCreate(true)}
       />
+
+      <Modal
+        visible={showCreate}
+        onDismiss={() => setShowCreate(false)}
+        header="Create layer version"
+        size="medium"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreate(false)}>Cancel</Button>
+              <Button variant="primary" loading={createLayerVersion.isPending} disabled={!form.name} onClick={handleCreate}>Create</Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          {createLayerVersion.isError && <Alert type="error" dismissible>{(createLayerVersion.error as Error)?.message || "Failed to create layer"}</Alert>}
+          <SpaceBetween size="m">
+            <FormField label="Layer name">
+              <Input value={form.name} onChange={({ detail }) => setForm(p => ({ ...p, name: detail.value }))} placeholder="my-layer" />
+            </FormField>
+            <FormField label="Compatible runtime">
+              <Select
+                selectedOption={{ label: form.compatibleRuntimes, value: form.compatibleRuntimes }}
+                onChange={({ detail }) => setForm(p => ({ ...p, compatibleRuntimes: detail.selectedOption.value || "nodejs22.x" }))}
+                options={RUNTIMES}
+              />
+            </FormField>
+            <FormField label="Description">
+              <Input value={form.description} onChange={({ detail }) => setForm(p => ({ ...p, description: detail.value }))} placeholder="Optional description" />
+            </FormField>
+            <FormField label="License info">
+              <Input value={form.licenseInfo} onChange={({ detail }) => setForm(p => ({ ...p, licenseInfo: detail.value }))} placeholder="Optional license info" />
+            </FormField>
+          </SpaceBetween>
+        </Form>
+      </Modal>
     </>
   );
 }

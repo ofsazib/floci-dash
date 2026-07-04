@@ -27,6 +27,15 @@ import {
   useLambdaTags,
   useFunctionUrl,
   useFunctionConcurrency,
+  useCreateFunctionUrl,
+  useUpdateFunctionUrl,
+  useDeleteFunctionUrl,
+  useSetFunctionConcurrency,
+  useDeleteFunctionConcurrency,
+  useEventInvokeConfig,
+  usePutEventInvokeConfig,
+  useDeleteEventInvokeConfig,
+  useCreateLayerVersion,
 } from "./useLambda";
 
 function createWrapper() {
@@ -317,5 +326,138 @@ describe("useFunctionConcurrency", () => {
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith("/lambda/functions/fn-1/concurrency");
+  });
+});
+
+describe("useSetFunctionConcurrency", () => {
+  it("calls api with PUT method, name in path, value in body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useSetFunctionConcurrency(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ name: "fn-1", reservedConcurrentExecutions: 5 });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/lambda/functions/fn-1/concurrency",
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({ reservedConcurrentExecutions: 5 }),
+      })
+    );
+  });
+});
+
+describe("useDeleteFunctionConcurrency", () => {
+  it("calls api with DELETE method and name in path", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useDeleteFunctionConcurrency(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("fn-1");
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/lambda/functions/fn-1/concurrency",
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
+});
+
+// ─── FUNCTION URL (CREATE/UPDATE) ───────────────────────
+
+describe("useCreateFunctionUrl", () => {
+  it("calls api with POST method, name in path, remaining fields in body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useCreateFunctionUrl(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ name: "fn-1", authType: "NONE" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/lambda/functions/fn-1/url",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ authType: "NONE" }),
+      })
+    );
+  });
+});
+
+describe("useUpdateFunctionUrl", () => {
+  it("calls api with PUT method, name in path, remaining fields in body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useUpdateFunctionUrl(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ name: "fn-1", authType: "AWS_IAM" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/lambda/functions/fn-1/url",
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({ authType: "AWS_IAM" }),
+      })
+    );
+  });
+});
+
+describe("useDeleteFunctionUrl", () => {
+  it("calls api with DELETE method and name in path", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useDeleteFunctionUrl(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("fn-1");
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/lambda/functions/fn-1/url",
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
+});
+
+// ─── EVENT INVOKE CONFIG ────────────────────────────────
+
+describe("useEventInvokeConfig", () => {
+  it("does NOT call api when name is null", () => {
+    renderHook(() => useEventInvokeConfig(null), { wrapper: createWrapper() });
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api with /event-invoke-config path when name provided", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useEventInvokeConfig("fn-1"), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/lambda/functions/fn-1/event-invoke-config");
+  });
+});
+
+describe("usePutEventInvokeConfig", () => {
+  it("calls api with PUT method, name in path, remaining fields in body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => usePutEventInvokeConfig(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ name: "fn-1", maximumRetryAttempts: 2 });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/lambda/functions/fn-1/event-invoke-config",
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({ maximumRetryAttempts: 2 }),
+      })
+    );
+  });
+});
+
+describe("useDeleteEventInvokeConfig", () => {
+  it("calls api with DELETE method and name in path", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useDeleteEventInvokeConfig(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("fn-1");
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/lambda/functions/fn-1/event-invoke-config",
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
+});
+
+// ─── CREATE LAYER VERSION ───────────────────────────────
+
+describe("useCreateLayerVersion", () => {
+  it("calls api with POST method, name in path, remaining fields in body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useCreateLayerVersion(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ name: "layer-1", zipFile: "base64...", compatibleRuntimes: ["nodejs22.x"] });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/lambda/layers/layer-1/versions",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ zipFile: "base64...", compatibleRuntimes: ["nodejs22.x"] }),
+      })
+    );
   });
 });

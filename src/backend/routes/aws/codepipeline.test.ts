@@ -188,8 +188,13 @@ describe("CodePipeline Routes", () => {
 
     it("POST /pipelines/:name/executions/:id/retry — retries stage", async () => {
       mockSend.mockResolvedValueOnce({ pipelineExecutionId: "exec-1" });
-      const res = await post("/pipelines/my-pipeline/executions/exec-1/retry", { retryMode: "FAILED_ACTIONS" });
+      const res = await post("/pipelines/my-pipeline/executions/exec-1/retry", { retryMode: "FAILED_ACTIONS", stageName: "Deploy" });
       expect(res.status).toBe(200);
+    });
+
+    it("POST /pipelines/:name/executions/:id/retry — rejects missing stageName", async () => {
+      const res = await post("/pipelines/my-pipeline/executions/exec-1/retry", { retryMode: "FAILED_ACTIONS" });
+      expect(res.status).toBe(400);
     });
   });
 
