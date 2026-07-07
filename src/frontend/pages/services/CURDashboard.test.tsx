@@ -14,6 +14,7 @@ const mockDeleteReport = vi.fn();
 const createState = vi.hoisted(() => ({
   isError: false,
   error: null as Error | null,
+  isPending: false,
 }));
 const deleteState = vi.hoisted(() => ({
   isPending: false,
@@ -24,7 +25,7 @@ vi.mock("../../hooks/useCUR", () => ({
   useReportDefinitions: (...args: any[]) => mockReportDefs(...args),
   useCreateReportDefinition: () => ({
     mutate: mockCreateReport,
-    isPending: false,
+    get isPending() { return createState.isPending; },
     isError: createState.isError,
     error: createState.error,
   }),
@@ -34,8 +35,8 @@ vi.mock("../../hooks/useCUR", () => ({
   }),
   useDeleteReportDefinition: () => ({
     mutateAsync: mockDeleteReport,
-    isPending: deleteState.isPending,
-    variables: deleteState.variables,
+    get isPending() { return deleteState.isPending; },
+    get variables() { return deleteState.variables; },
   }),
 }));
 
@@ -47,6 +48,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   createState.isError = false;
   createState.error = null;
+  createState.isPending = false;
   deleteState.isPending = false;
   deleteState.variables = null;
   mockReportDefs.mockReturnValue({
@@ -168,6 +170,14 @@ describe("CURDashboard — report definitions list", () => {
 
     createState.isError = false;
     createState.error = null;
+  });
+
+  it("shows create report loading state on Create report button", async () => {
+    createState.isPending = true;
+    const user = userEvent.setup();
+    render(<CURDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /create/i);
+    await waitFor(() => expect(screen.getByText("Create Cost & Usage Report")).toBeTruthy());
   });
 
   it("deletes a report definition", async () => {

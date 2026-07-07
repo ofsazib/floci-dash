@@ -5,6 +5,16 @@ import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
 
+// ─── vi.hoisted mutable states ──────────────────────────
+
+const assumeRoleState = vi.hoisted(() => ({
+  isPending: false,
+}));
+
+const sessionTokenState = vi.hoisted(() => ({
+  isPending: false,
+}));
+
 // ─── Mock hooks ─────────────────────────────────────────
 
 const mockCallerIdentity = vi.fn();
@@ -40,11 +50,11 @@ vi.mock("../../hooks/useSTS", () => ({
   useSTSCallerIdentity: (...args: any[]) => mockCallerIdentity(...args),
   useSTSAssumeRole: () => ({
     mutate: mockAssumeRole,
-    isPending: false,
+    get isPending() { return assumeRoleState.isPending; },
   }),
   useSTSGetSessionToken: () => ({
     mutate: mockGetSessionToken,
-    isPending: false,
+    get isPending() { return sessionTokenState.isPending; },
   }),
 }));
 
@@ -54,6 +64,8 @@ import { STSDashboard } from "./STSDashboard";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  assumeRoleState.isPending = false;
+  sessionTokenState.isPending = false;
   mockCallerIdentity.mockReturnValue({
     data: { account: "123456789012", userId: "AIDAEXAMPLE", arn: "arn:aws:iam::123456789012:user/test" },
     isLoading: false,
@@ -165,6 +177,34 @@ describe("STSDashboard — assume role tab", () => {
     expect(screen.getByText("AROA123456:session")).toBeTruthy();
     expect(screen.getByText("arn:aws:iam::123456789012:role/my-role")).toBeTruthy();
   });
+
+  it("shows assumeRole loading state on Assume button", async () => {
+    assumeRoleState.isPending = true;
+    const user = userEvent.setup();
+    render(<STSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /assume role/i }));
+    await waitFor(() => expect(screen.getByText(/No role assumed yet/i)).toBeTruthy());
+  });
+
+  it("shows assume role fallback dashes when result has null assumedRoleUser", async () => {
+    mockAssumeRole.mockImplementationOnce((_params: any, options?: { onSuccess?: (data: any) => void }) => {
+      options?.onSuccess?.({ credentials: { accessKeyId: "AKIA", secretAccessKey: "key", sessionToken: "tok", expiration: "2026-01-01T00:00:00Z" }, assumedRoleUser: null });
+    });
+    const user = userEvent.setup();
+    render(<STSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /assume role/i }));
+    await waitFor(() => expect(screen.getByText(/No role assumed yet/i)).toBeTruthy());
+    await clickButton(user, /^Assume role$/i);
+    const roleArnInput = screen.getByPlaceholderText(/arn:aws:iam/);
+    await user.type(roleArnInput, "arn:aws:iam::123456789012:role/my-role");
+    const assumeBtns = screen.getAllByRole("button", { name: /^Assume$/i });
+    await user.click(assumeBtns[assumeBtns.length - 1]);
+    await waitFor(() => {
+      expect(screen.getByText("AKIA")).toBeTruthy();
+    });
+    // assumedRoleUser is null, so the ARN section should not appear
+    expect(screen.queryByText(/Assumed Role ARN/)).toBeNull();
+  });
 });
 
 describe("STSDashboard — session token tab", () => {
@@ -215,6 +255,14 @@ describe("STSDashboard — session token tab", () => {
     });
     expect(screen.getByText("secretKey2")).toBeTruthy();
     expect(screen.getByText("token456")).toBeTruthy();
+  });
+
+  it("shows getSessionToken loading state on Get token button", async () => {
+    sessionTokenState.isPending = true;
+    const user = userEvent.setup();
+    render(<STSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /session token/i }));
+    await waitFor(() => expect(screen.getByText(/No session token requested/i)).toBeTruthy());
   });
 
   it("shows only fallback dashes when session result has null credentials", async () => {

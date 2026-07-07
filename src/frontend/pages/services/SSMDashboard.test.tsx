@@ -16,6 +16,12 @@ const mockDeleteParam = vi.fn();
 const putParamState = vi.hoisted(() => ({
   isError: false,
   error: null as Error | null,
+  isPending: false,
+}));
+
+const deleteParamState = vi.hoisted(() => ({
+  isPending: false,
+  variables: null as string | null,
 }));
 
 vi.mock("../../hooks/useSSM", () => ({
@@ -24,15 +30,15 @@ vi.mock("../../hooks/useSSM", () => ({
   useSSMParameterHistory: (...args: any[]) => mockParameterHistory(...args),
   usePutSSMParameter: () => ({
     mutate: mockPutParam,
-    isPending: false,
+    get isPending() { return putParamState.isPending; },
     isError: putParamState.isError,
     error: putParamState.error,
     reset: vi.fn(),
   }),
   useDeleteSSMParameter: () => ({
     mutateAsync: mockDeleteParam,
-    isPending: false,
-    variables: null,
+    get isPending() { return deleteParamState.isPending; },
+    get variables() { return deleteParamState.variables; },
   }),
 }));
 
@@ -49,6 +55,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   putParamState.isError = false;
   putParamState.error = null;
+  putParamState.isPending = false;
+  deleteParamState.isPending = false;
+  deleteParamState.variables = null;
   mockParameters.mockReturnValue({
     data: { parameters: [], total: 0 },
     isLoading: false,
@@ -226,6 +235,32 @@ describe("SSMDashboard — parameters list", () => {
     await waitFor(() => {
       expect(mockDeleteParam).toHaveBeenCalledWith("/myapp/db-url");
     });
+  });
+
+  it("shows putParam loading state on Create button", async () => {
+    putParamState.isPending = true;
+    const user = userEvent.setup();
+    render(<SSMDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /create/i);
+    await waitFor(() => expect(screen.getByText("Create parameter")).toBeTruthy());
+  });
+
+  it("shows deleteParam loading state", () => {
+    deleteParamState.isPending = true;
+    deleteParamState.variables = "/myapp/db-url";
+    mockParameters.mockReturnValue({
+      data: {
+        parameters: [
+          { Name: "/myapp/db-url", Type: "String", Version: 1 },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<SSMDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("/myapp/db-url")).toBeTruthy();
   });
 });
 

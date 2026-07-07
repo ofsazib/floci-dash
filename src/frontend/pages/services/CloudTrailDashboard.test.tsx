@@ -27,8 +27,8 @@ vi.mock("../../hooks/useCloudTrail", () => ({
   useCreateCloudTrailTrail: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteCloudTrailTrail: () => ({
     mutateAsync: mockDeleteTrail,
-    isPending: deleteTrailState.isPending,
-    variables: deleteTrailState.variables,
+    get isPending() { return deleteTrailState.isPending; },
+    get variables() { return deleteTrailState.variables; },
   }),
   useStartCloudTrailLogging: () => ({ mutate: vi.fn(), isPending: false }),
   useStopCloudTrailLogging: () => ({ mutate: vi.fn(), isPending: false }),
@@ -158,6 +158,51 @@ describe("CloudTrailDashboard — data", () => {
     await waitFor(() => {
       expect(mockDeleteTrail).toHaveBeenCalledWith("my-trail");
     });
+  });
+
+  it("renders trails with all boolean fields false showing No", () => {
+    mockTrails.mockReturnValue({
+      data: {
+        trails: [
+          {
+            Name: "no-features-trail",
+            TrailARN: "arn:aws:cloudtrail:us-east-1::trail/no-features",
+            S3BucketName: "bucket",
+            IsMultiRegionTrail: false,
+            IncludeGlobalServiceEvents: false,
+            IsOrganizationTrail: false,
+            HomeRegion: "us-east-1",
+            CreationDate: 1700000000,
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("no-features-trail")).toBeTruthy();
+    expect(screen.getAllByText("No").length).toBeGreaterThan(0);
+    // Creation date should be rendered (not "-")
+    expect(screen.queryAllByText("-").length).toBe(0);
+  });
+
+  it("filters trails by name", async () => {
+    mockTrails.mockReturnValue({
+      data: {
+        trails: [
+          { Name: "alpha-trail", TrailARN: "arn:aws:cloudtrail:us-east-1::trail/alpha", S3BucketName: "b1", IsMultiRegionTrail: true, IncludeGlobalServiceEvents: true, HomeRegion: "us-east-1", CreationDate: 1700000000 },
+          { Name: "beta-trail", TrailARN: "arn:aws:cloudtrail:us-east-1::trail/beta", S3BucketName: "b2", IsMultiRegionTrail: false, IncludeGlobalServiceEvents: false, HomeRegion: "us-west-2", CreationDate: 1700000000 },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("alpha-trail")).toBeTruthy());
+    const filterInput = screen.getByPlaceholderText("Find trails by name");
+    await user.type(filterInput, "beta");
+    await waitFor(() => expect(screen.queryByText("alpha-trail")).toBeNull());
   });
 
   it("shows delete loading state", () => {

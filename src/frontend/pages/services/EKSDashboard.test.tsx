@@ -5,6 +5,26 @@ import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
 
+// ─── vi.hoisted mutable states ──────────────────────────
+
+const createClusterState = vi.hoisted(() => ({
+  isPending: false,
+}));
+
+const deleteClusterState = vi.hoisted(() => ({
+  isPending: false,
+  variables: null as string | null,
+}));
+
+const createNgState = vi.hoisted(() => ({
+  isPending: false,
+}));
+
+const deleteNgState = vi.hoisted(() => ({
+  isPending: false,
+  variables: null as string | null,
+}));
+
 // ─── Mock hooks ─────────────────────────────────────────
 
 vi.mock("../../components/ConfirmDialog", () => ({
@@ -25,20 +45,22 @@ vi.mock("../../hooks/useEKS", () => ({
   useEKSClusters: (...args: any[]) => mockClusters(...args),
   useEKSCreateCluster: () => ({
     mutate: mockCreateCluster,
-    isPending: false,
+    get isPending() { return createClusterState.isPending; },
   }),
   useEKSDeleteCluster: () => ({
     mutateAsync: mockDeleteCluster,
-    isPending: false,
+    get isPending() { return deleteClusterState.isPending; },
+    get variables() { return deleteClusterState.variables; },
   }),
   useEKSNodegroups: (...args: any[]) => mockNodegroups(...args),
   useEKSCreateNodegroup: () => ({
     mutate: mockCreateNodegroup,
-    isPending: false,
+    get isPending() { return createNgState.isPending; },
   }),
   useEKSDeleteNodegroup: () => ({
     mutateAsync: mockDeleteNodegroup,
-    isPending: false,
+    get isPending() { return deleteNgState.isPending; },
+    get variables() { return deleteNgState.variables; },
   }),
 }));
 
@@ -68,6 +90,12 @@ function ngPanelProps(overrides: Record<string, any> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  createClusterState.isPending = false;
+  deleteClusterState.isPending = false;
+  deleteClusterState.variables = null;
+  createNgState.isPending = false;
+  deleteNgState.isPending = false;
+  deleteNgState.variables = null;
 
   mockClusters.mockReturnValue({
     data: { clusters: [], total: 0 },
@@ -292,6 +320,47 @@ describe("EKSDashboard — cluster list", () => {
     expect(screen.getByText("minimal-ng")).toBeTruthy();
   });
 
+  it("shows createNodegroup loading state", () => {
+    render(
+      <NodegroupsPanel
+        {...ngPanelProps({
+          nodegroupsData: {
+            nodegroups: [
+              { nodegroupName: "my-ng", status: "ACTIVE" },
+            ],
+            total: 1,
+          },
+          createNodegroup: { mutate: vi.fn(), get isPending() { return createNgState.isPending; } },
+          showCreateNodegroup: false,
+        })}
+      />,
+      { wrapper: createWrapper() },
+    );
+    createNgState.isPending = true;
+    expect(screen.getByText("my-ng")).toBeTruthy();
+    createNgState.isPending = false;
+  });
+
+  it("shows deleteNodegroup loading state", () => {
+    deleteNgState.isPending = true;
+    deleteNgState.variables = "my-ng";
+    render(
+      <NodegroupsPanel
+        {...ngPanelProps({
+          nodegroupsData: {
+            nodegroups: [
+              { nodegroupName: "my-ng", status: "ACTIVE" },
+            ],
+            total: 1,
+          },
+          deleteNodegroup: { mutateAsync: vi.fn(), get isPending() { return deleteNgState.isPending; }, get variables() { return deleteNgState.variables; } },
+        })}
+      />,
+      { wrapper: createWrapper() },
+    );
+    expect(screen.getByText("my-ng")).toBeTruthy();
+  });
+
   it("renders clusters with null data gracefully", () => {
     mockClusters.mockReturnValue({
       data: null,
@@ -362,6 +431,72 @@ describe("EKSDashboard — cluster list", () => {
 
     // Nodegroups panel should no longer be visible
     expect(screen.queryByText("Node Groups — drill-cluster")).toBeNull();
+  });
+
+  it("renders clusters with all fallback dashes for missing fields", () => {
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [
+          {
+            name: "bare-cluster",
+            status: "ACTIVE",
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<EKSDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("bare-cluster")).toBeTruthy();
+    // version, endpoint, created all fallback to "-"
+    expect(screen.getAllByText("-").length).toBeGreaterThan(0);
+  });
+
+  it("shows create cluster loading state", () => {
+    createClusterState.isPending = true;
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [
+          {
+            name: "my-cluster",
+            status: "ACTIVE",
+            version: "1.27",
+            createdAt: "2025-01-15T00:00:00Z",
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<EKSDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("my-cluster")).toBeTruthy();
+  });
+
+  it("shows delete cluster loading state", () => {
+    deleteClusterState.isPending = true;
+    deleteClusterState.variables = "my-cluster";
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [
+          {
+            name: "my-cluster",
+            status: "ACTIVE",
+            version: "1.27",
+            createdAt: "2025-01-15T00:00:00Z",
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<EKSDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("my-cluster")).toBeTruthy();
   });
 
   it("calls deleteCluster when delete is clicked", async () => {

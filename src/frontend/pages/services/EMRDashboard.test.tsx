@@ -5,6 +5,26 @@ import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
 
+// ─── vi.hoisted mutable states ──────────────────────────
+
+const terminateState = vi.hoisted(() => ({
+  isPending: false,
+  variables: null as string | null,
+}));
+
+const deleteSecConfigState = vi.hoisted(() => ({
+  isPending: false,
+  variables: null as string | null,
+}));
+
+const runJobFlowPendingState = vi.hoisted(() => ({
+  isPending: false,
+}));
+
+const createSecConfigPendingState = vi.hoisted(() => ({
+  isPending: false,
+}));
+
 // ─── Mock hooks ─────────────────────────────────────────
 
 vi.mock("../../components/ConfirmDialog", () => ({
@@ -32,12 +52,14 @@ vi.mock("../../hooks/useEMR", () => ({
   useRunEMRJobFlow: (...args: any[]) => mockRunJobFlowHook(...args),
   useTerminateEMRJobFlows: () => ({
     mutateAsync: mockTerminate,
-    isPending: false,
+    get isPending() { return terminateState.isPending; },
+    get variables() { return terminateState.variables; },
   }),
   useCreateEMRSecurityConfiguration: (...args: any[]) => mockCreateSecConfigHook(...args),
   useDeleteEMRSecurityConfiguration: () => ({
     mutateAsync: mockDeleteSecConfig,
-    isPending: false,
+    get isPending() { return deleteSecConfigState.isPending; },
+    get variables() { return deleteSecConfigState.variables; },
   }),
 }));
 
@@ -47,6 +69,12 @@ import { EMRDashboard } from "./EMRDashboard";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  terminateState.isPending = false;
+  terminateState.variables = null;
+  deleteSecConfigState.isPending = false;
+  deleteSecConfigState.variables = null;
+  runJobFlowPendingState.isPending = false;
+  createSecConfigPendingState.isPending = false;
 
   mockClusters.mockReturnValue({
     data: { clusters: [], total: 0 },
@@ -60,14 +88,14 @@ beforeEach(() => {
   });
   mockRunJobFlowHook.mockReturnValue({
     mutate: mockRunJobFlow,
-    isPending: false,
+    get isPending() { return runJobFlowPendingState.isPending; },
     isError: false,
     error: null as any,
     reset: vi.fn(),
   });
   mockCreateSecConfigHook.mockReturnValue({
     mutate: mockCreateSecConfig,
-    isPending: false,
+    get isPending() { return createSecConfigPendingState.isPending; },
     isError: false,
     error: null as any,
     reset: vi.fn(),
@@ -390,5 +418,103 @@ describe("EMRDashboard — security configurations", () => {
     await waitFor(() => {
       expect(mockDeleteSecConfig).toHaveBeenCalledWith("my-sec-config");
     });
+  });
+});
+
+describe("EMRDashboard — loading states", () => {
+  it("shows delete cluster loading state", () => {
+    terminateState.isPending = true;
+    terminateState.variables = "j-ABC123";
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [
+          {
+            Id: "j-ABC123",
+            Name: "my-cluster",
+            Status: { State: "RUNNING", Timeline: { CreationDateTime: 1700000000 } },
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<EMRDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("my-cluster")).toBeTruthy();
+  });
+
+  it("shows delete security config loading state", () => {
+    deleteSecConfigState.isPending = true;
+    deleteSecConfigState.variables = "my-sec";
+    mockSecConfigs.mockReturnValue({
+      data: {
+        securityConfigurations: [
+          {
+            Name: "my-sec",
+            CreationDateTime: 1700000000,
+          },
+        ],
+      },
+      isLoading: false,
+    });
+    render(<EMRDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("my-sec")).toBeTruthy();
+  });
+
+  it("shows runJobFlow loading state on Create button", () => {
+    runJobFlowPendingState.isPending = true;
+    render(<EMRDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No clusters/i)).toBeTruthy();
+  });
+
+  it("shows createSecConfig loading state on Create button", () => {
+    createSecConfigPendingState.isPending = true;
+    render(<EMRDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No clusters/i)).toBeTruthy();
+  });
+});
+
+describe("EMRDashboard — fallback branches", () => {
+  it("shows dash for cluster without status", () => {
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [
+          {
+            Id: "j-NOSTATUS",
+            Name: "no-status-cluster",
+            Status: null,
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<EMRDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("no-status-cluster")).toBeTruthy();
+    expect(screen.getAllByText("-").length).toBeGreaterThan(0);
+  });
+
+  it("shows dash for cluster without timeline", () => {
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [
+          {
+            Id: "j-NOTIMELINE",
+            Name: "no-timeline",
+            Status: { State: "RUNNING" },
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<EMRDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("no-timeline")).toBeTruthy();
+    expect(screen.getAllByText("-").length).toBeGreaterThan(0);
   });
 });
