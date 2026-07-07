@@ -125,6 +125,39 @@ describe("ECR Routes", () => {
       expect(body.repositoryName).toBe("my-repo");
       expect(body.deleted).toBe(true);
     });
+
+    it("GET /repositories — filters by repositoryNames query param", async () => {
+      mockSend.mockResolvedValueOnce({
+        repositories: [
+          {
+            repositoryName: "my-repo",
+            repositoryUri: "123456789.dkr.ecr.us-east-1.amazonaws.com/my-repo",
+            createdAt: new Date("2025-01-01"),
+            imageTagMutability: "MUTABLE",
+            encryptionConfiguration: { encryptionType: "AES256" },
+          },
+        ],
+      });
+      const res = await get("/repositories?repositoryNames=my-repo,other-repo");
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].repositoryNames).toEqual(["my-repo", "other-repo"]);
+    });
+
+    it("POST /repositories — creates a repo with tags (201)", async () => {
+      mockSend.mockResolvedValueOnce({
+        repository: { repositoryName: "tagged-repo" },
+      });
+      const res = await post("/repositories", {
+        repositoryName: "tagged-repo",
+        tags: { env: "prod", team: "platform" },
+      });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.repository.repositoryName).toBe("tagged-repo");
+      expect(mockSend.mock.calls[0][0].tags).toHaveLength(2);
+      expect(mockSend.mock.calls[0][0].tags[0].Key).toBe("env");
+      expect(mockSend.mock.calls[0][0].tags[0].Value).toBe("prod");
+    });
   });
 
   describe("Images", () => {
@@ -176,6 +209,17 @@ describe("ECR Routes", () => {
       expect(body.imageIds).toHaveLength(1);
       expect(body.failures).toEqual([]);
     });
+
+    it("DELETE /repositories/:name/images — 400 when imageIds missing", async () => {
+      const res = await router.request("/repositories/my-repo/images", {
+        method: "DELETE",
+        body: JSON.stringify({}),
+        headers: { "content-type": "application/json" },
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("imageIds");
+    });
   });
 
   describe("Repository Policy", () => {
@@ -190,6 +234,16 @@ describe("ECR Routes", () => {
       expect(body.policyText).toBe('{"Statement":[{"Effect":"Allow"}]}');
     });
 
+    it("GET /repositories/:name/policy — catches RepositoryPolicyNotFoundException", async () => {
+      const err = new Error("not found");
+      err.name = "RepositoryPolicyNotFoundException";
+      mockSend.mockRejectedValueOnce(err);
+      const res = await get("/repositories/my-repo/policy");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.policyText).toBeNull();
+    });
+
     it("PUT /repositories/:name/policy — sets policy", async () => {
       mockSend.mockResolvedValueOnce({
         policyText: '{"Statement":[{"Effect":"Allow"}]}',
@@ -201,6 +255,13 @@ describe("ECR Routes", () => {
       const body = await res.json();
       expect(body.repositoryName).toBe("my-repo");
       expect(body.policyText).toBe('{"Statement":[{"Effect":"Allow"}]}');
+    });
+
+    it("PUT /repositories/:name/policy — 400 when policyText missing", async () => {
+      const res = await put("/repositories/my-repo/policy", {});
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("policyText");
     });
 
     it("DELETE /repositories/:name/policy — deletes policy", async () => {
@@ -245,6 +306,51 @@ describe("ECR Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.lifecyclePolicyText).toBe('{"rules":[{"rulePriority":1}]}');
+    });
+
+    it("PUT /repositories/:name/lifecycle — 400 when lifecyclePolicyText missing", async () => {
+      const res = await put("/repositories/my-repo/lifecycle", {});
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("lifecyclePolicyText");
+    });
+
+  });
+
+  describe("Tags", () => {
+    it("GET /repositories/:name/tags — lists tags", async () => {
+      mockSend.mockResolvedValueOnce({
+        tags: [{ Key: "env", Value: "prod" }],
+      });
+      const res = await get("/repositories/my-repo/tags");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.tags).toHaveLength(1);
+      expect(body.tags[0].Key).toBe("env");
+    });
+
+    it("POST /repositories/:name/tags — adds tags", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/repositories/my-repo/tags", {
+        tags: { env: "prod", team: "platform" },
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+      expect(mockSend.mock.calls[0][0].tags).toHaveLength(2);
+    });
+
+    it("DELETE /repositories/:name/tags — removes tags", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await router.request("/repositories/my-repo/tags", {
+        method: "DELETE",
+        body: JSON.stringify({ tagKeys: ["env"] }),
+        headers: { "content-type": "application/json" },
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+      expect(mockSend.mock.calls[0][0].tagKeys).toEqual(["env"]);
     });
   });
 });

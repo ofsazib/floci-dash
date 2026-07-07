@@ -121,6 +121,13 @@ describe("Secrets Manager Routes", () => {
       expect(cmd.Tags[0].Key).toBe("env");
     });
 
+    it("POST /secrets — 400 when name is empty", async () => {
+      const res = await post("/secrets", { name: "", secretString: "password" });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("name is required");
+    });
+
     it("GET /secrets/:id — describes a secret with versions", async () => {
       mockSend
         .mockResolvedValueOnce({
@@ -256,6 +263,21 @@ describe("Secrets Manager Routes", () => {
       expect(body.rotated).toBe(true);
     });
 
+    it("POST /secrets/:id/rotate — with defaults (no autoDays, rotateImmediately false)", async () => {
+      mockSend.mockResolvedValueOnce({
+        ARN: "arn:aws:secretsmanager:...",
+        Name: "my-secret",
+      });
+      const res = await post("/secrets/my-secret/rotate", {
+        rotationLambdaARN: "arn:aws:lambda:...:function:rotator",
+        rotateImmediately: false,
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.RotateImmediately).toBe(false);
+      expect(cmd.RotationRules).toBeUndefined();
+    });
+
     it("POST /secrets/:id/tags — tags a secret", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await post("/secrets/my-secret/tags", {
@@ -270,6 +292,13 @@ describe("Secrets Manager Routes", () => {
       const res = await del("/secrets/my-secret/tags?keys=env,project");
       expect(res.status).toBe(200);
       expect((await res.json()).untagged).toBe(true);
+    });
+
+    it("DELETE /secrets/:id/tags — handles empty keys", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/secrets/my-secret/tags");
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].TagKeys).toEqual([]);
     });
 
     it("POST /random-password — generates random password", async () => {

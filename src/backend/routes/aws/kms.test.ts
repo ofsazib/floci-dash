@@ -197,6 +197,13 @@ describe("KMS Routes", () => {
       expect(body.rotationEnabled).toBe(true);
     });
 
+    it("POST /keys/:id/disable-rotation — disables rotation", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/keys/1234-abcd/disable-rotation");
+      const body = await res.json();
+      expect(body.rotationEnabled).toBe(false);
+    });
+
     it("PUT /keys/:id/description — updates description", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await put("/keys/1234-abcd/description", { description: "New desc" });
@@ -287,6 +294,29 @@ describe("KMS Routes", () => {
       expect(body.created).toBe(true);
       expect(mockSend.mock.calls[0][0].AliasName).toBe("alias/my-key");
     });
+
+    it("POST /aliases — creates an alias with alias/ prefix", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/aliases", { aliasName: "alias/my-key-2", targetKeyId: "5678-efgh" });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].AliasName).toBe("alias/my-key-2");
+    });
+
+    it("DELETE /aliases/:name — deletes an alias without alias/ prefix", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/aliases/my-key");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deleted).toBe(true);
+      expect(mockSend.mock.calls[0][0].AliasName).toBe("alias/my-key");
+    });
+
+    it("DELETE /aliases/:name — deletes an alias with alias/ prefix (URL-encoded)", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/aliases/alias%2Fmy-key");
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].AliasName).toBe("alias/my-key");
+    });
   });
 
   describe("Grants", () => {
@@ -298,6 +328,14 @@ describe("KMS Routes", () => {
       expect(body.revoked).toBe(true);
       expect(mockSend.mock.calls[0][0].GrantId).toBe("grant-1");
     });
+
+    it("POST /keys/:keyId/grants/retire — retires a grant", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/keys/1234-abcd/grants/retire", { grantId: "grant-2" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.retired).toBe(true);
+    });
   });
 
   describe("Tags", () => {
@@ -307,6 +345,26 @@ describe("KMS Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.tagged).toBe(true);
+    });
+
+    it("DELETE /keys/:id/tags — removes tags", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/keys/1234-abcd/tags?keys=env,project");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.untagged).toBe(true);
+      expect(mockSend.mock.calls[0][0].TagKeys).toEqual(["env", "project"]);
+    });
+  });
+
+  describe("Random", () => {
+    it("POST /random — generates random bytes with defaults", async () => {
+      mockSend.mockResolvedValueOnce({ Plaintext: new Uint8Array([1, 2, 3, 4]) });
+      const res = await post("/random", {});
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.plaintext).toBeTruthy();
+      expect(mockSend.mock.calls[0][0].NumberOfBytes).toBe(32);
     });
   });
 });

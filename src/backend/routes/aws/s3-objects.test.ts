@@ -97,6 +97,13 @@ describe("S3 Objects", () => {
       expect(res.status).toBe(400);
     });
 
+    it("PUT /buckets/:name/objects/*/tags — 400 when tags not an array", async () => {
+      const res = await put("/buckets/my-bucket/objects/mykey/tags", {
+        tags: "not-an-array",
+      });
+      expect(res.status).toBe(400);
+    });
+
     it("DELETE /buckets/:name/objects/*/tags — deletes tags", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await del("/buckets/my-bucket/objects/mykey/tags");
@@ -104,6 +111,7 @@ describe("S3 Objects", () => {
       const body = await res.json();
       expect(body.deleted).toBe(true);
     });
+
   });
 
   describe("Object Attributes", () => {
@@ -170,6 +178,7 @@ describe("S3 Objects", () => {
       expect(body.contentType).toBe("text/plain");
       expect(body.contentLength).toBe(512);
       expect(body.etag).toBe("xyz789");
+      expect(body.metadata).toEqual({ key: "value" });
     });
 
     it("HEAD /buckets/:name/objects/* — returns 404 when object not found", async () => {
@@ -179,5 +188,6 @@ describe("S3 Objects", () => {
       const body = await res.json();
       expect(body.exists).toBe(false);
     });
+
   });
 });

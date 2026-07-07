@@ -90,6 +90,13 @@ describe("CloudWatch Logs Routes", () => {
       expect(body.logGroups[0].logGroupName).toBe("/aws/lambda/my-func");
     });
 
+    it("GET /log-groups — supports prefix query param", async () => {
+      mockSend.mockResolvedValueOnce({ logGroups: [] });
+      const res = await get("/log-groups?prefix=/aws/lambda");
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].logGroupNamePrefix).toBe("/aws/lambda");
+    });
+
     it("GET /log-groups — returns empty list", async () => {
       mockSend.mockResolvedValueOnce({ logGroups: [] });
       const res = await get("/log-groups");
@@ -104,6 +111,18 @@ describe("CloudWatch Logs Routes", () => {
       const body = await res.json();
       expect(body.created).toBe(true);
       expect(mockSend.mock.calls[0][0].logGroupName).toBe("/aws/lambda/my-func");
+    });
+
+    it("POST /log-groups — creates a log group with tags and kmsKeyId", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/log-groups", {
+        logGroupName: "/aws/lambda/encrypted",
+        tags: { env: "prod" },
+        kmsKeyId: "arn:aws:kms:...:key/1234",
+      });
+      expect(res.status).toBe(201);
+      expect(mockSend.mock.calls[0][0].tags).toEqual({ env: "prod" });
+      expect(mockSend.mock.calls[0][0].kmsKeyId).toBe("arn:aws:kms:...:key/1234");
     });
 
     it("POST /log-groups — returns 400 without name", async () => {
@@ -126,6 +145,11 @@ describe("CloudWatch Logs Routes", () => {
       const body = await res.json();
       expect(body.updated).toBe(true);
       expect(mockSend.mock.calls[0][0].retentionInDays).toBe(30);
+    });
+
+    it("PUT /log-groups/:name/retention — 400 without retentionInDays", async () => {
+      const res = await put("/log-groups/%2Faws%2Flambda%2Fmy-func/retention", {});
+      expect(res.status).toBe(400);
     });
 
     it("DELETE /log-groups/:name/retention — removes retention policy", async () => {
@@ -151,12 +175,24 @@ describe("CloudWatch Logs Routes", () => {
       expect(body.logStreams[0].logStreamName).toBe("2025/01/01/stream-1");
     });
 
+    it("GET /log-groups/:name/streams — supports prefix query param", async () => {
+      mockSend.mockResolvedValueOnce({ logStreams: [] });
+      const res = await get("/log-groups/%2Faws%2Flambda%2Fmy-func/streams?prefix=2025");
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].logStreamNamePrefix).toBe("2025");
+    });
+
     it("POST /log-groups/:name/streams — creates a stream", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await post("/log-groups/%2Faws%2Flambda%2Fmy-func/streams", { logStreamName: "stream-1" });
       expect(res.status).toBe(201);
       const body = await res.json();
       expect(body.created).toBe(true);
+    });
+
+    it("POST /log-groups/:name/streams — 400 without logStreamName", async () => {
+      const res = await post("/log-groups/%2Faws%2Flambda%2Fmy-func/streams", {});
+      expect(res.status).toBe(400);
     });
 
     it("DELETE /log-groups/:name/streams/:stream — deletes a stream", async () => {
@@ -183,12 +219,38 @@ describe("CloudWatch Logs Routes", () => {
       expect(body.nextForwardToken).toBe("fwd");
     });
 
+    it("GET /log-groups/:name/streams/:stream/events — with query params", async () => {
+      mockSend.mockResolvedValueOnce({
+        events: [],
+        nextForwardToken: "fwd2",
+        nextBackwardToken: "bwd2",
+      });
+      const res = await get("/log-groups/%2Faws%2Flambda%2Fmy-func/streams/stream-1/events?startTime=1000&endTime=2000&limit=10&nextToken=abc&startFromHead=true");
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.startTime).toBe(1000);
+      expect(cmd.endTime).toBe(2000);
+      expect(cmd.limit).toBe(10);
+      expect(cmd.nextToken).toBe("abc");
+      expect(cmd.startFromHead).toBe(true);
+    });
+
     it("POST /log-groups/:name/streams/:stream/events — puts events", async () => {
       mockSend.mockResolvedValueOnce({ nextSequenceToken: "token-1" });
       const res = await post("/log-groups/%2Faws%2Flambda%2Fmy-func/streams/stream-1/events", { logEvents: [{ timestamp: Date.now(), message: "Hello" }] });
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.nextSequenceToken).toBe("token-1");
+    });
+
+    it("POST /log-groups/:name/streams/:stream/events — with sequenceToken", async () => {
+      mockSend.mockResolvedValueOnce({ nextSequenceToken: "token-2" });
+      const res = await post("/log-groups/%2Faws%2Flambda%2Fmy-func/streams/stream-1/events", {
+        logEvents: [{ timestamp: Date.now(), message: "Hello again" }],
+        sequenceToken: "token-1",
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].sequenceToken).toBe("token-1");
     });
 
     it("POST /log-groups/:name/streams/:stream/events — returns 400 without events", async () => {
@@ -207,6 +269,29 @@ describe("CloudWatch Logs Routes", () => {
       const body = await res.json();
       expect(body.events).toHaveLength(1);
       expect(body.events[0].message).toBe("ERROR");
+    });
+
+    it("POST /log-groups/:name/filter-events — with all optional params", async () => {
+      mockSend.mockResolvedValueOnce({
+        events: [],
+        searchedLogStreams: [],
+        nextToken: undefined,
+      });
+      const res = await post("/log-groups/%2Faws%2Flambda%2Fmy-func/filter-events", {
+        filterPattern: "ERROR",
+        startTime: 1000,
+        endTime: 2000,
+        limit: 50,
+        logStreamNames: ["stream-1"],
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.logGroupName).toBe("/aws/lambda/my-func");
+      expect(cmd.filterPattern).toBe("ERROR");
+      expect(cmd.startTime).toBe(1000);
+      expect(cmd.endTime).toBe(2000);
+      expect(cmd.limit).toBe(50);
+      expect(cmd.logStreamNames).toEqual(["stream-1"]);
     });
   });
 
@@ -228,6 +313,32 @@ describe("CloudWatch Logs Routes", () => {
       expect(res.status).toBe(201);
       const body = await res.json();
       expect(body.created).toBe(true);
+    });
+
+    it("POST /log-groups/:name/subscription-filters — 400 when filterName missing", async () => {
+      const res = await post("/log-groups/%2Faws%2Flambda%2Fmy-func/subscription-filters", { destinationArn: "arn:aws:lambda:..." });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /log-groups/:name/subscription-filters — 400 when destinationArn missing", async () => {
+      const res = await post("/log-groups/%2Faws%2Flambda%2Fmy-func/subscription-filters", { filterName: "my-filter" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /log-groups/:name/subscription-filters — with optional roleArn and distribution", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/log-groups/%2Faws%2Flambda%2Fmy-func/subscription-filters", {
+        filterName: "my-filter",
+        destinationArn: "arn:aws:lambda:...",
+        filterPattern: "ERROR",
+        distribution: "Random",
+        roleArn: "arn:aws:iam:...:role/logs",
+      });
+      expect(res.status).toBe(201);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.filterPattern).toBe("ERROR");
+      expect(cmd.distribution).toBe("Random");
+      expect(cmd.roleArn).toBe("arn:aws:iam:...:role/logs");
     });
 
     it("DELETE /log-groups/:name/subscription-filters/:filterName — deletes a filter", async () => {

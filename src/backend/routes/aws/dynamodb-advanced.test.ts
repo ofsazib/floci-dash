@@ -122,7 +122,12 @@ describe("DynamoDB Advanced", () => {
       expect(res.status).toBe(200);
     });
 
-    it("POST /batch-write — writes items", async () => {
+    it("POST /batch-get — 400 when requests missing", async () => {
+      const res = await post("/batch-get", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /batch-write — writes items (put)", async () => {
       mockSend.mockResolvedValueOnce({ UnprocessedItems: {} });
       const res = await post("/batch-write", {
         requests: [{ tableName: "my-table", type: "put", item: { pk: "123" } }],
@@ -130,6 +135,22 @@ describe("DynamoDB Advanced", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.wrote).toBe(1);
+    });
+
+    it("POST /batch-write — writes items (delete)", async () => {
+      mockSend.mockResolvedValueOnce({ UnprocessedItems: {} });
+      const res = await post("/batch-write", {
+        requests: [{ tableName: "my-table", type: "delete", key: { pk: "123" } }],
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.wrote).toBe(1);
+      expect(mockSend.mock.calls[0][0].RequestItems["my-table"][0].DeleteRequest).toBeDefined();
+    });
+
+    it("POST /batch-write — 400 when requests missing", async () => {
+      const res = await post("/batch-write", {});
+      expect(res.status).toBe(400);
     });
   });
 
@@ -147,7 +168,12 @@ describe("DynamoDB Advanced", () => {
       expect(body.responses).toBeDefined();
     });
 
-    it("POST /transaction/write — writes items", async () => {
+    it("POST /transaction/get — 400 when items missing", async () => {
+      const res = await post("/transaction/get", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /transaction/write — writes items (put)", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await post("/transaction/write", {
         items: [{ type: "put", tableName: "my-table", item: { pk: "123" } }],
@@ -155,6 +181,30 @@ describe("DynamoDB Advanced", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.written).toBe(1);
+    });
+
+    it("POST /transaction/write — writes items (delete)", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/transaction/write", {
+        items: [{ type: "delete", tableName: "my-table", key: { pk: "123" } }],
+      });
+      expect(res.status).toBe(200);
+      expect((await res.json()).written).toBe(1);
+    });
+
+    it("POST /transaction/write — writes items (update)", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/transaction/write", {
+        items: [{ type: "update", tableName: "my-table", key: { pk: "123" }, updates: { status: "active" } }],
+      });
+      expect(res.status).toBe(200);
+      expect((await res.json()).written).toBe(1);
+      expect(mockSend.mock.calls[0][0].TransactItems[0].Update).toBeDefined();
+    });
+
+    it("POST /transaction/write — 400 when items missing", async () => {
+      const res = await post("/transaction/write", {});
+      expect(res.status).toBe(400);
     });
   });
 
@@ -285,6 +335,26 @@ describe("DynamoDB Advanced", () => {
       const cmd = mockSend.mock.calls[0][0];
       expect(cmd.Statement).toBe("SELECT * FROM my-table");
       expect(cmd.Parameters).toBeUndefined();
+    });
+
+    it("POST /partiql/execute — 400 when statement missing", async () => {
+      const res = await post("/partiql/execute", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /partiql/execute — with consistentRead and nextToken", async () => {
+      mockSend.mockResolvedValueOnce({ Items: [], NextToken: "next-token" });
+      const res = await post("/partiql/execute", {
+        statement: "SELECT * FROM my-table",
+        consistentRead: true,
+        nextToken: "prev-token",
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.ConsistentRead).toBe(true);
+      expect(cmd.NextToken).toBe("prev-token");
+      const body = await res.json();
+      expect(body.nextToken).toBe("next-token");
     });
   });
 });
