@@ -146,4 +146,186 @@ describe("KMSPage", () => {
       expect(screen.getAllByRole("button", { name: /Enable/i }).length).toBeGreaterThan(0);
     });
   });
+
+  it("shows Schedule deletion button in detail modal", async () => {
+    const user = userEvent.setup();
+    mockKeyDetail.mockReturnValue({
+      data: { key: { keyId: "1234-abcd", keyState: "Enabled", description: "My key" }, tags: {}, aliases: [], grants: [], rotationEnabled: false },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Schedule deletion/i })).toBeTruthy();
+    });
+  });
+
+  it("shows Cancel deletion button for PendingDeletion key", async () => {
+    const user = userEvent.setup();
+    mockKeyDetail.mockReturnValue({
+      data: { key: { keyId: "1234-abcd", keyState: "PendingDeletion", description: "My key" }, tags: {}, aliases: [], grants: [], rotationEnabled: false },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Cancel deletion/i })).toBeTruthy();
+    });
+  });
+
+  it("shows rotation toggle button for enabled key", async () => {
+    const user = userEvent.setup();
+    mockKeyDetail.mockReturnValue({
+      data: { key: { keyId: "1234-abcd", keyState: "Enabled", description: "My key" }, tags: {}, aliases: [], grants: [], rotationEnabled: false },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Enable rotation/i })).toBeTruthy();
+    });
+  });
+
+  it("shows Disable rotation button for key with rotation enabled", async () => {
+    const user = userEvent.setup();
+    mockKeyDetail.mockReturnValue({
+      data: { key: { keyId: "1234-abcd", keyState: "Enabled", description: "My key" }, tags: {}, aliases: [], grants: [], rotationEnabled: true },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Disable rotation/i })).toBeTruthy();
+    });
+  });
+
+  it("shows Edit description button in detail modal", async () => {
+    const user = userEvent.setup();
+    mockKeyDetail.mockReturnValue({
+      data: { key: { keyId: "1234-abcd", keyState: "Enabled", description: "My key" }, tags: {}, aliases: [], grants: [], rotationEnabled: false },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Edit description/i })).toBeTruthy();
+    });
+  });
+
+  it("shows Aliases, Grants, and Encrypt/Decrypt tabs in detail modal", async () => {
+    const user = userEvent.setup();
+    mockKeyDetail.mockReturnValue({
+      data: { key: { keyId: "1234-abcd", keyState: "Enabled", description: "My key" }, tags: {}, aliases: [{ name: "alias/my-key", arn: "arn:aws:kms:alias/my-key", creationDate: "2025-01-01" }], grants: [{ grantId: "grant-1", name: "test-grant", granteePrincipal: "user", operations: ["Encrypt"], creationDate: "2025-01-01" }], rotationEnabled: false },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => {
+      expect(screen.getByText(/KMS Key:/i)).toBeTruthy();
+    });
+    // Check aliases tab
+    expect(screen.getByRole("tab", { name: /Aliases/i })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /Grants/i })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /Encrypt \/ Decrypt/i })).toBeTruthy();
+  });
+
+  it("shows tags in the key detail modal", async () => {
+    const user = userEvent.setup();
+    mockKeyDetail.mockReturnValue({
+      data: { key: { keyId: "1234-abcd", keyState: "Enabled", description: "My key" }, tags: { env: "prod", team: "core" }, aliases: [], grants: [], rotationEnabled: false },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => {
+      expect(screen.getByText(/env/)).toBeTruthy();
+      expect(screen.getByText(/prod/)).toBeTruthy();
+      expect(screen.getByText(/team/)).toBeTruthy();
+      expect(screen.getByText(/core/)).toBeTruthy();
+    });
+  });
+
+  it("shows 'No aliases' for empty aliases tab", async () => {
+    const user = userEvent.setup();
+    mockKeyDetail.mockReturnValue({
+      data: { key: { keyId: "1234-abcd", keyState: "Enabled", description: "My key" }, tags: {}, aliases: [], grants: [], rotationEnabled: false },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => {
+      expect(screen.getByText(/KMS Key:/i)).toBeTruthy();
+    });
+    await user.click(screen.getByRole("tab", { name: /Aliases/i }));
+    await waitFor(() => {
+      expect(screen.getByText("No aliases")).toBeTruthy();
+    });
+  });
+
+  it("shows 'No grants' for empty grants tab", async () => {
+    const user = userEvent.setup();
+    mockKeyDetail.mockReturnValue({
+      data: { key: { keyId: "1234-abcd", keyState: "Enabled", description: "My key" }, tags: {}, aliases: [], grants: [], rotationEnabled: false },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => {
+      expect(screen.getByText(/KMS Key:/i)).toBeTruthy();
+    });
+    await user.click(screen.getByRole("tab", { name: /Grants/i }));
+    await waitFor(() => {
+      expect(screen.getByText("No grants")).toBeTruthy();
+    });
+  });
+
+  it("shows Encrypt/Decrypt tab and encrypt button", async () => {
+    const user = userEvent.setup();
+    mockKeyDetail.mockReturnValue({
+      data: { key: { keyId: "1234-abcd", keyState: "Enabled", description: "My key" }, tags: {}, aliases: [], grants: [], rotationEnabled: false },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => {
+      expect(screen.getByText(/KMS Key:/i)).toBeTruthy();
+    });
+    await user.click(screen.getByRole("tab", { name: /Encrypt \/ Decrypt/i }));
+    await waitFor(() => {
+      const encryptBtn = screen.getByRole("button", { name: /Encrypt/i });
+      expect(encryptBtn).toBeTruthy();
+    });
+    expect(screen.getByPlaceholderText("SGVsbG8gV29ybGQ=")).toBeTruthy();
+  });
+
+  it("shows aliases tab with alias list and create alias button", async () => {
+    const user = userEvent.setup();
+    mockAliases.mockReturnValue({
+      data: { aliases: [{ name: "alias/my-key", targetKeyId: "1234-abcd" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Aliases/i }));
+    await waitFor(() => {
+      expect(screen.getByText("alias/my-key")).toBeTruthy();
+    });
+    expect(screen.getByRole("button", { name: /Create alias/i })).toBeTruthy();
+  });
+
+  it("opens create alias modal", async () => {
+    const user = userEvent.setup();
+    mockAliases.mockReturnValue({
+      data: { aliases: [], total: 0 },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Aliases/i }));
+    await waitFor(() => {
+      expect(screen.getByText("No aliases")).toBeTruthy();
+    });
+    await user.click(screen.getByRole("button", { name: /Create alias/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Create alias")).toBeTruthy();
+    });
+  });
 });

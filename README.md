@@ -98,7 +98,7 @@ docker run -p 3000:3000 -p 4566:4566 -v /var/run/docker.sock:/var/run/docker.soc
 
 Open [http://localhost:9877](http://localhost:9877) — the dashboard connects to Floci automatically. For the combined image, use [http://localhost:3000](http://localhost:3000).
 
-Floci runs on [http://localhost:9878](http://localhost:9878) (standard LocalStack-compatible endpoint).
+Floci runs on [http://localhost:9878](http://localhost:9878) (standard LocalStack-compatible endpoint) with docker-compose, or on [http://localhost:4566](http://localhost:4566) when using the combined image.
 
 That's it. No `pnpm install`, no `.env` files, no AWS credentials.
 

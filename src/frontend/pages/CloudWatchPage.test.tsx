@@ -108,13 +108,84 @@ describe("CloudWatchPage", () => {
   it("shows loading state for metrics", () => {
     mockCloudWatchMetrics.mockReturnValue({ data: undefined, isLoading: true, refetch: vi.fn() });
     render(<CloudWatchPage />, { wrapper: pageWrapper() });
-    // Just verify it doesn't crash
+    // Metrics tab is not active by default (Alarms is default)
     expect(true).toBe(true);
   });
 
   it("shows empty metrics state", () => {
     mockCloudWatchMetrics.mockReturnValue({ data: { namespaces: [], metrics: [] }, isLoading: false, refetch: vi.fn() });
     render(<CloudWatchPage />, { wrapper: pageWrapper() });
+  });
+
+  it("shows 'No metrics' empty message in metrics tab", async () => {
+    const user = userEvent.setup();
+    mockCloudWatchMetrics.mockReturnValue({ data: { namespaces: [], metrics: [] }, isLoading: false, refetch: vi.fn() });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    const metricsTabs = screen.getAllByText("Metrics");
+    await user.click(metricsTabs[metricsTabs.length - 1]);
+    await waitFor(() => {
+      expect(screen.getByText("No metrics")).toBeTruthy();
+    });
+  });
+
+  it("shows namespace Select in metrics tab", async () => {
+    const user = userEvent.setup();
+    mockCloudWatchMetrics.mockReturnValue({
+      data: { namespaces: ["AWS/Lambda", "AWS/EC2"], metrics: [{ namespace: "AWS/Lambda", metricName: "Invocations", dimensions: [] }] },
+      isLoading: false, refetch: vi.fn(),
+    });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    const metricsTabs = screen.getAllByText("Metrics");
+    await user.click(metricsTabs[metricsTabs.length - 1]);
+    await waitFor(() => {
+      expect(screen.getByText("Invocations")).toBeTruthy();
+    });
+    expect(screen.getByPlaceholderText("All namespaces")).toBeTruthy();
+  });
+
+  it("shows 'No datapoints' when a metric is selected but has no data", async () => {
+    const user = userEvent.setup();
+    mockCloudWatchMetrics.mockReturnValue({
+      data: { namespaces: ["AWS/Lambda"], metrics: [{ namespace: "AWS/Lambda", metricName: "Errors", dimensions: [] }] },
+      isLoading: false, refetch: vi.fn(),
+    });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    const metricsTabs = screen.getAllByText("Metrics");
+    await user.click(metricsTabs[metricsTabs.length - 1]);
+    await waitFor(() => {
+      expect(screen.getByText("Errors")).toBeTruthy();
+    });
+    // Click on the metric row to select it
+    const errorText = screen.getByText("Errors");
+    await user.click(errorText);
+    await waitFor(() => {
+      expect(screen.getByText(/No datapoints in the last hour/i)).toBeTruthy();
+    });
+  });
+
+  it("shows data point stats table after selection", async () => {
+    const user = userEvent.setup();
+    mockCloudWatchMetrics.mockReturnValue({
+      data: { namespaces: ["AWS/Lambda"], metrics: [{ namespace: "AWS/Lambda", metricName: "Duration", dimensions: [] }] },
+      isLoading: false, refetch: vi.fn(),
+    });
+    mockMetricStatistics.mockReturnValue({
+      data: {
+        datapoints: [
+          { timestamp: "2025-01-01T00:00:00Z", average: 100, sum: 200, minimum: 50, maximum: 150, sampleCount: 2, unit: "Milliseconds" },
+        ],
+      },
+      isLoading: false,
+    });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    const metricsTabs = screen.getAllByText("Metrics");
+    await user.click(metricsTabs[metricsTabs.length - 1]);
+    await waitFor(() => expect(screen.getByText("Duration")).toBeTruthy());
+    await user.click(screen.getByText("Duration"));
+    await waitFor(() => {
+      expect(screen.getByText("100")).toBeTruthy(); // Average
+      expect(screen.getByText("200")).toBeTruthy(); // Sum
+    });
   });
 
   it("opens put metric modal and submits", async () => {
