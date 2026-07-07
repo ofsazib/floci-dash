@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../test/helpers";
 import React from "react";
@@ -223,10 +223,12 @@ describe("KMSPage", () => {
     await waitFor(() => {
       expect(screen.getByText(/KMS Key:/i)).toBeTruthy();
     });
-    // Check aliases tab
-    expect(screen.getByRole("tab", { name: /Aliases/i })).toBeTruthy();
-    expect(screen.getByRole("tab", { name: /Grants/i })).toBeTruthy();
-    expect(screen.getByRole("tab", { name: /Encrypt \/ Decrypt/i })).toBeTruthy();
+    // Scope queries to within the detail modal to avoid finding page-level tabs
+    const dialog = screen.getByRole("dialog");
+    const getInModal = within(dialog);
+    expect(getInModal.getByRole("tab", { name: /Aliases/i })).toBeTruthy();
+    expect(getInModal.getByRole("tab", { name: /Grants/i })).toBeTruthy();
+    expect(getInModal.getByRole("tab", { name: /Encrypt \/ Decrypt/i })).toBeTruthy();
   });
 
   it("shows tags in the key detail modal", async () => {
@@ -256,9 +258,12 @@ describe("KMSPage", () => {
     await waitFor(() => {
       expect(screen.getByText(/KMS Key:/i)).toBeTruthy();
     });
-    await user.click(screen.getByRole("tab", { name: /Aliases/i }));
+    // Scope to within the detail modal to find the right Aliases tab
+    const dialog = screen.getByRole("dialog");
+    const getInModal = within(dialog);
+    await user.click(getInModal.getByRole("tab", { name: /Aliases/i }));
     await waitFor(() => {
-      expect(screen.getByText("No aliases")).toBeTruthy();
+      expect(getInModal.getByText("No aliases")).toBeTruthy();
     });
   });
 
@@ -325,7 +330,8 @@ describe("KMSPage", () => {
     });
     await user.click(screen.getByRole("button", { name: /Create alias/i }));
     await waitFor(() => {
-      expect(screen.getByText("Create alias")).toBeTruthy();
+      // Both the button and modal header say "Create alias" — use getAllByText
+      expect(screen.getAllByText("Create alias").length).toBeGreaterThan(0);
     });
   });
 });

@@ -307,6 +307,7 @@ describe("ServicePage — Unknown service", () => {
   });
 
   it("shows coming soon for unknown service", () => {
+    mockParams.mockReturnValue({ service: "madeupservice" });
     render(<ServicePage />, { wrapper: createWrapper() });
     expect(screen.getAllByText("Coming soon").length).toBeGreaterThan(0);
   });
