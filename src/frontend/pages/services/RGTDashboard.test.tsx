@@ -1,9 +1,21 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
+
+// ─── vi.hoisted mutable states ──────────────────────────
+
+const tagResourcesState = vi.hoisted(() => ({
+  isPending: false,
+}));
+
+const untagResourcesState = vi.hoisted(() => ({
+  isPending: false,
+}));
+
+// ─── Mock hooks ─────────────────────────────────────────
 
 const mockResources = vi.fn();
 const mockTagKeys = vi.fn();
@@ -15,14 +27,22 @@ vi.mock("../../hooks/useRGT", () => ({
   useRGTResources: (...args: any[]) => mockResources(...args),
   useRGTTagKeys: (...args: any[]) => mockTagKeys(...args),
   useRGTTagValues: (...args: any[]) => mockTagValues(...args),
-  useRGTTagResources: () => ({ mutate: mockTagResources, isPending: false }),
-  useRGTUntagResources: () => ({ mutate: mockUntagResources, isPending: false }),
+  useRGTTagResources: () => ({
+    mutate: mockTagResources,
+    get isPending() { return tagResourcesState.isPending; },
+  }),
+  useRGTUntagResources: () => ({
+    mutate: mockUntagResources,
+    get isPending() { return untagResourcesState.isPending; },
+  }),
 }));
 
 import { RGTDashboard } from "./RGTDashboard";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  tagResourcesState.isPending = false;
+  untagResourcesState.isPending = false;
   mockResources.mockReturnValue({ data: { resourceTagMappingList: [], total: 0 }, isLoading: false });
   mockTagKeys.mockReturnValue({ data: { tagKeys: [] } });
   mockTagValues.mockReturnValue({ data: { tagValues: [] } });
@@ -61,6 +81,30 @@ describe("RGTDashboard", () => {
     expect(screen.getByText("Project")).toBeTruthy();
   });
 
+  it("clicks a tag key and shows tag values", async () => {
+    mockTagKeys.mockReturnValue({ data: { tagKeys: ["Environment", "Project"] } });
+    mockTagValues.mockReturnValue({ data: { tagValues: ["prod", "dev", "staging"] } });
+    const user = userEvent.setup();
+    render(<RGTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Environment"));
+    await waitFor(() => {
+      expect(screen.getByText(/Values for "Environment"/)).toBeTruthy();
+      expect(screen.getByText("prod, dev, staging")).toBeTruthy();
+    });
+  });
+
+  it("shows No values when selected tag key has no values", async () => {
+    mockTagKeys.mockReturnValue({ data: { tagKeys: ["EmptyKey"] } });
+    mockTagValues.mockReturnValue({ data: { tagValues: [] } });
+    const user = userEvent.setup();
+    render(<RGTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("EmptyKey"));
+    await waitFor(() => {
+      expect(screen.getByText(/Values for "EmptyKey"/)).toBeTruthy();
+      expect(screen.getByText("No values")).toBeTruthy();
+    });
+  });
+
   it("shows tagged resources with formatted tags", () => {
     mockResources.mockReturnValue({
       data: {
@@ -71,6 +115,19 @@ describe("RGTDashboard", () => {
     });
     render(<RGTDashboard />, { wrapper: createWrapper() });
     expect(screen.getByText(/Environment=prod, Name=test/)).toBeTruthy();
+  });
+
+  it("renders resource with null/empty tags gracefully", () => {
+    mockResources.mockReturnValue({
+      data: {
+        resourceTagMappingList: [{ ResourceARN: "arn:aws:ec2:us-east-1:123:instance/i-null-tags", Tags: null }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<RGTDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/i-null-tags/)).toBeTruthy();
+    // Tags column should be empty string (no crash)
   });
 
   it("filters resources by ARN", async () => {
@@ -92,4 +149,5 @@ describe("RGTDashboard", () => {
     await user.type(filterInput, "i-002");
     await waitFor(() => expect(screen.queryByText(/i-001/)).toBeNull());
   });
+
 });
