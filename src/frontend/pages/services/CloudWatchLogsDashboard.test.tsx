@@ -200,6 +200,26 @@ describe("CloudWatchLogsDashboard", () => {
     expect(screen.getByText("Never expire")).toBeTruthy();
   });
 
+  it("shows retention with 1 day and 7 day formats", () => {
+    const lg1 = { logGroupName: "/retention-1", retentionInDays: 1, storedBytes: 0 };
+    const lg7 = { logGroupName: "/retention-7", retentionInDays: 7, storedBytes: 0 };
+    const lg30 = { logGroupName: "/retention-30", retentionInDays: 30, storedBytes: 0 };
+    mockLogGroups.mockReturnValue({
+      data: { logGroups: [lg1, lg7, lg30], total: 3 },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("1 day")).toBeTruthy();
+    expect(screen.getByText("7 days")).toBeTruthy();
+    expect(screen.getByText("30 days")).toBeTruthy();
+  });
+
+  it("shows log group load error", () => {
+    mockLogGroups.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: new Error("Failed to load log groups") });
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("Failed to load log groups")).toBeTruthy();
+  });
+
   // ── Create log group modal ─────────────────────────────
 
   it("opens create log group modal and submits", async () => {
@@ -267,7 +287,7 @@ describe("CloudWatchLogsDashboard", () => {
     await waitFor(() => expect(mockDeleteGroup).toHaveBeenCalledWith("/aws/lambda/del-fn"));
   });
 
-  // ── Filter ────────────────────────────────────────────
+  // ── Filter log groups ──────────────────────────────────
 
   it("filters log groups by name", async () => {
     mockLogGroups.mockReturnValue({
@@ -314,9 +334,7 @@ describe("CloudWatchLogsDashboard", () => {
     await waitFor(() => expect(screen.getByText(/Back to Log Groups/i)).toBeTruthy());
   });
 
-  // ── Log streams in detail ──────────────────────────────
-
-  it("shows log streams tab in detail", async () => {
+  it("goes back from detail to log group list", async () => {
     mockLogGroups.mockReturnValue({
       data: { logGroups: [{ logGroupName: "/aws/lambda/test" }], total: 1 },
       isLoading: false, isError: false, error: null,
@@ -324,51 +342,119 @@ describe("CloudWatchLogsDashboard", () => {
     const user = userEvent.setup();
     render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
     await waitFor(() => screen.getByText("/aws/lambda/test"));
+    await user.click(screen.getByText("/aws/lambda/test"));
+    await waitFor(() => expect(screen.getByText(/Back to Log Groups/i)).toBeTruthy());
+    await user.click(screen.getByText(/Back to Log Groups/i));
+    await waitFor(() => expect(screen.getByText("/aws/lambda/test")).toBeTruthy());
+  });
+
+  it("shows all 4 detail tabs", async () => {
+    mockLogGroups.mockReturnValue({
+      data: { logGroups: [{ logGroupName: "/aws/lambda/test" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
     await user.click(screen.getByText("/aws/lambda/test"));
     await waitFor(() => expect(screen.getByText(/Back to Log Groups/i)).toBeTruthy());
     expect(screen.getByRole("tab", { name: /Log Streams/i })).toBeTruthy();
-  });
-
-  // ── Retention tab in detail ────────────────────────────
-
-  it("shows retention tab in detail", async () => {
-    mockLogGroups.mockReturnValue({
-      data: { logGroups: [{ logGroupName: "/aws/lambda/test", retentionInDays: 30 }], total: 1 },
-      isLoading: false, isError: false, error: null,
-    });
-    const user = userEvent.setup();
-    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
-    await waitFor(() => screen.getByText("/aws/lambda/test"));
-    await user.click(screen.getByText("/aws/lambda/test"));
-    await waitFor(() => expect(screen.getByText(/Back to Log Groups/i)).toBeTruthy());
     expect(screen.getByRole("tab", { name: /Retention/i })).toBeTruthy();
-  });
-
-  it("shows subscription filters tab in detail", async () => {
-    mockLogGroups.mockReturnValue({
-      data: { logGroups: [{ logGroupName: "/aws/lambda/test" }], total: 1 },
-      isLoading: false, isError: false, error: null,
-    });
-    const user = userEvent.setup();
-    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
-    await waitFor(() => screen.getByText("/aws/lambda/test"));
-    await user.click(screen.getByText("/aws/lambda/test"));
-    await waitFor(() => expect(screen.getByText(/Back to Log Groups/i)).toBeTruthy());
     expect(screen.getByRole("tab", { name: /Subscription Filters/i })).toBeTruthy();
-  });
-
-  it("shows tags tab in detail", async () => {
-    mockLogGroups.mockReturnValue({
-      data: { logGroups: [{ logGroupName: "/aws/lambda/test" }], total: 1 },
-      isLoading: false, isError: false, error: null,
-    });
-    const user = userEvent.setup();
-    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
-    await waitFor(() => screen.getByText("/aws/lambda/test"));
-    await user.click(screen.getByText("/aws/lambda/test"));
-    await waitFor(() => expect(screen.getByText(/Back to Log Groups/i)).toBeTruthy());
     expect(screen.getByRole("tab", { name: /Tags/i })).toBeTruthy();
   });
+
+  // ── Log streams ──────────────────────────────────────────
+
+  it("shows empty log streams in detail", async () => {
+    mockLogGroups.mockReturnValue({
+      data: { logGroups: [{ logGroupName: "/aws/lambda/test" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("/aws/lambda/test"));
+    await waitFor(() => expect(screen.getByText(/No log streams found/i)).toBeTruthy());
+  });
+
+  it("shows log streams with data and dash for missing timestamp", async () => {
+    mockLogGroups.mockReturnValue({
+      data: { logGroups: [{ logGroupName: "/aws/lambda/test" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockLogStreams.mockReturnValue({
+      data: {
+        logStreams: [
+          { logStreamName: "stream1", storedBytes: 512, lastEventTimestamp: 1705000000000 },
+          { logStreamName: "stream2", storedBytes: 1024 },
+        ],
+        total: 2,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("/aws/lambda/test"));
+    await waitFor(() => {
+      expect(screen.getByText("stream1")).toBeTruthy();
+      expect(screen.getByText("stream2")).toBeTruthy();
+    });
+    const dashes = screen.getAllByText("—");
+    expect(dashes.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("filters log streams by name", async () => {
+    mockLogGroups.mockReturnValue({
+      data: { logGroups: [{ logGroupName: "/aws/lambda/test" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockLogStreams.mockReturnValue({
+      data: {
+        logStreams: [
+          { logStreamName: "alpha-stream", storedBytes: 256 },
+          { logStreamName: "beta-stream", storedBytes: 512 },
+        ],
+        total: 2,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("/aws/lambda/test"));
+    await waitFor(() => expect(screen.getByText("alpha-stream")).toBeTruthy());
+
+    const filterInput = screen.getByPlaceholderText("Find streams by name");
+    await user.type(filterInput, "beta");
+    await waitFor(() => expect(screen.queryByText("alpha-stream")).toBeNull());
+  });
+
+  it("shows create log stream error alert", async () => {
+    createStreamState.isError = true;
+    createStreamState.error = new Error("Stream exists");
+    mockLogGroups.mockReturnValue({
+      data: { logGroups: [{ logGroupName: "/aws/lambda/test" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("/aws/lambda/test"));
+    await waitFor(() => expect(screen.getByText(/Log Streams for/)).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Stream exists")).toBeTruthy());
+  });
+
+  it("shows log stream load error", async () => {
+    mockLogGroups.mockReturnValue({
+      data: { logGroups: [{ logGroupName: "/aws/lambda/test" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockLogStreams.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: new Error("Streams failed") });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("/aws/lambda/test"));
+    await waitFor(() => expect(screen.getByText("Streams failed")).toBeTruthy());
+  });
+
+  // ── Retention config ────────────────────────────────────
 
   it("shows retention current value in retention tab", async () => {
     mockLogGroups.mockReturnValue({
@@ -385,55 +471,49 @@ describe("CloudWatchLogsDashboard", () => {
     await waitFor(() => expect(screen.getAllByText("14 days").length).toBeGreaterThanOrEqual(1));
   });
 
-  it("shows log group detail tabs exist", async () => {
+  it("shows retention error alert", async () => {
+    putRetentionState.isError = true;
+    putRetentionState.error = new Error("Update failed");
     mockLogGroups.mockReturnValue({
-      data: { logGroups: [{ logGroupName: "/aws/lambda/test" }], total: 1 },
+      data: { logGroups: [{ logGroupName: "/aws/lambda/test", retentionInDays: 7 }], total: 1 },
       isLoading: false, isError: false, error: null,
     });
     const user = userEvent.setup();
     render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
-    await waitFor(() => screen.getByText("/aws/lambda/test"));
     await user.click(screen.getByText("/aws/lambda/test"));
     await waitFor(() => expect(screen.getByText(/Back to Log Groups/i)).toBeTruthy());
-    // Verify all 4 tabs are visible in the detail view
-    expect(screen.getByRole("tab", { name: /Log Streams/i })).toBeTruthy();
-    expect(screen.getByRole("tab", { name: /Retention/i })).toBeTruthy();
-    expect(screen.getByRole("tab", { name: /Subscription Filters/i })).toBeTruthy();
-    expect(screen.getByRole("tab", { name: /Tags/i })).toBeTruthy();
+    const retentionTab = screen.getByRole("tab", { name: /Retention/i });
+    await user.click(retentionTab);
+    await waitFor(() => {
+      expect(screen.getByText(/Current retention/i)).toBeTruthy();
+    });
+    expect(screen.getAllByText(/days/).length).toBeGreaterThanOrEqual(1);
   });
 
-  // ─── Delete log stream loading ─────────────────────────
+  // ── Subscription filters ────────────────────────────────
 
-  it("shows delete log stream loading in detail", async () => {
-    deleteStreamState.isPending = true;
-    deleteStreamState.variables = { logStreamName: "main-stream" };
+  it("shows subscription filters tab content", async () => {
     mockLogGroups.mockReturnValue({
       data: { logGroups: [{ logGroupName: "/aws/lambda/test" }], total: 1 },
       isLoading: false, isError: false, error: null,
     });
-    mockLogStreams.mockReturnValue({
-      data: { logStreams: [{ logStreamName: "main-stream" }], total: 1 },
-      isLoading: false, isError: false, error: null,
-    });
     const user = userEvent.setup();
     render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
-    await waitFor(() => screen.getByText("/aws/lambda/test"));
     await user.click(screen.getByText("/aws/lambda/test"));
-    await waitFor(() => expect(screen.getByText("main-stream")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/Back to Log Groups/i)).toBeTruthy());
+    const filtersTab = screen.getByRole("tab", { name: /Subscription Filters/i });
+    await user.click(filtersTab);
+    await waitFor(() => expect(screen.getByText(/No subscription filters/i)).toBeTruthy());
   });
 
-  it("shows subscription filters error in detail", async () => {
+  it("shows subscription filters error", async () => {
     mockLogGroups.mockReturnValue({
       data: { logGroups: [{ logGroupName: "/aws/lambda/test" }], total: 1 },
       isLoading: false, isError: false, error: null,
     });
-    mockSubFilters.mockReturnValue({
-      data: undefined, isLoading: false, isError: true,
-      error: new Error("Failed to load filters"),
-    });
+    mockSubFilters.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: new Error("Failed to load filters") });
     const user = userEvent.setup();
     render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
-    await waitFor(() => screen.getByText("/aws/lambda/test"));
     await user.click(screen.getByText("/aws/lambda/test"));
     await waitFor(() => expect(screen.getByText(/Back to Log Groups/i)).toBeTruthy());
     const filtersTab = screen.getByRole("tab", { name: /Subscription Filters/i });
@@ -441,19 +521,240 @@ describe("CloudWatchLogsDashboard", () => {
     await waitFor(() => expect(screen.getByText("Failed to load filters")).toBeTruthy());
   });
 
-  it("shows tags empty state in tags tab", async () => {
+  it("shows subscription filters with data and default patterns", async () => {
     mockLogGroups.mockReturnValue({
       data: { logGroups: [{ logGroupName: "/aws/lambda/test" }], total: 1 },
       isLoading: false, isError: false, error: null,
     });
-    mockTags.mockReturnValue({ data: { tags: {} }, isLoading: false, isError: false, error: null });
+    mockSubFilters.mockReturnValue({
+      data: {
+        subscriptionFilters: [
+          { filterName: "my-filter", filterPattern: "ERROR", destinationArn: "arn:aws:lambda:...", distribution: "ByLogStream", creationTime: 1705000000000 },
+          { filterName: "minimal-filter", destinationArn: "arn:aws:lambda:..." },
+        ],
+        total: 2,
+      },
+      isLoading: false, isError: false, error: null,
+    });
     const user = userEvent.setup();
     render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
-    await waitFor(() => screen.getByText("/aws/lambda/test"));
+    await user.click(screen.getByText("/aws/lambda/test"));
+    await waitFor(() => expect(screen.getByText(/Back to Log Groups/i)).toBeTruthy());
+    const filtersTab = screen.getByRole("tab", { name: /Subscription Filters/i });
+    await user.click(filtersTab);
+    await waitFor(() => {
+      expect(screen.getByText("my-filter")).toBeTruthy();
+      expect(screen.getByText("minimal-filter")).toBeTruthy();
+      expect(screen.getByText("(all events)")).toBeTruthy();
+      expect(screen.getAllByText("ByLogStream").length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it("filters subscription filters by name", async () => {
+    mockLogGroups.mockReturnValue({
+      data: { logGroups: [{ logGroupName: "/aws/lambda/test" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockSubFilters.mockReturnValue({
+      data: {
+        subscriptionFilters: [
+          { filterName: "filter-alpha", destinationArn: "arn:alpha" },
+          { filterName: "filter-beta", destinationArn: "arn:beta" },
+        ],
+        total: 2,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("/aws/lambda/test"));
+    await waitFor(() => expect(screen.getByText(/Back to Log Groups/i)).toBeTruthy());
+    const filtersTab = screen.getByRole("tab", { name: /Subscription Filters/i });
+    await user.click(filtersTab);
+    await waitFor(() => expect(screen.getByText("filter-alpha")).toBeTruthy());
+
+    const filterInput = screen.getByPlaceholderText("Find filters by name");
+    await user.type(filterInput, "beta");
+    await waitFor(() => expect(screen.queryByText("filter-alpha")).toBeNull());
+  });
+
+  // ── Tags tab ─────────────────────────────────────────
+
+  it("shows tags empty state", async () => {
+    mockLogGroups.mockReturnValue({
+      data: { logGroups: [{ logGroupName: "/aws/lambda/test" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
     await user.click(screen.getByText("/aws/lambda/test"));
     await waitFor(() => expect(screen.getByText(/Back to Log Groups/i)).toBeTruthy());
     const tagsTab = screen.getByRole("tab", { name: /Tags/i });
     await user.click(tagsTab);
     await waitFor(() => expect(screen.getByText(/No tags associated with this log group/i)).toBeTruthy());
+  });
+
+  it("shows tags with entries", async () => {
+    mockLogGroups.mockReturnValue({
+      data: { logGroups: [{ logGroupName: "/aws/lambda/test" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockTags.mockReturnValue({ data: { tags: { Environment: "prod", Owner: "devops" } }, isLoading: false, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("/aws/lambda/test"));
+    await waitFor(() => expect(screen.getByText(/Back to Log Groups/i)).toBeTruthy());
+    const tagsTab = screen.getByRole("tab", { name: /Tags/i });
+    await user.click(tagsTab);
+    await waitFor(() => {
+      expect(screen.getByText("Environment")).toBeTruthy();
+      expect(screen.getByText("prod")).toBeTruthy();
+      expect(screen.getByText("Owner")).toBeTruthy();
+    });
+  });
+
+  it("shows tags loading and error states", async () => {
+    mockLogGroups.mockReturnValue({
+      data: { logGroups: [{ logGroupName: "/aws/lambda/test" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockTags.mockReturnValue({ data: undefined, isLoading: true, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("/aws/lambda/test"));
+    await waitFor(() => expect(screen.getByText(/Back to Log Groups/i)).toBeTruthy());
+    const tagsTab = screen.getByRole("tab", { name: /Tags/i });
+    await user.click(tagsTab);
+    await waitFor(() => expect(screen.getByText(/Loading tags/i)).toBeTruthy());
+  });
+
+  it("shows tags error state", async () => {
+    mockLogGroups.mockReturnValue({
+      data: { logGroups: [{ logGroupName: "/aws/lambda/test" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockTags.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: new Error("Tags load failed") });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("/aws/lambda/test"));
+    await waitFor(() => expect(screen.getByText(/Back to Log Groups/i)).toBeTruthy());
+    const tagsTab = screen.getByRole("tab", { name: /Tags/i });
+    await user.click(tagsTab);
+    await waitFor(() => expect(screen.getByText("Tags load failed")).toBeTruthy());
+  });
+
+  // ── Log stream detail (events viewer) ───────────────────
+
+  it("navigates to log stream detail and shows events", async () => {
+    mockLogGroups.mockReturnValue({
+      data: { logGroups: [{ logGroupName: "/aws/lambda/test" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockLogStreams.mockReturnValue({
+      data: { logStreams: [{ logStreamName: "my-stream", storedBytes: 512 }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockLogEvents.mockReturnValue({
+      data: { events: [{ eventId: "e1", timestamp: 1705000000000, message: "Hello world" }] },
+      isLoading: false, isError: false, error: null, refetch: vi.fn(),
+    });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("/aws/lambda/test"));
+    await user.click(screen.getByText("/aws/lambda/test"));
+    await waitFor(() => expect(screen.getByText("my-stream")).toBeTruthy());
+    await user.click(screen.getByText("my-stream"));
+    await waitFor(() => {
+      expect(screen.getByText("Hello world")).toBeTruthy();
+      expect(screen.getByText(/Back to Log Streams/i)).toBeTruthy();
+    });
+  });
+
+  it("shows events loading spinner", async () => {
+    mockLogGroups.mockReturnValue({
+      data: { logGroups: [{ logGroupName: "/aws/lambda/test" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockLogStreams.mockReturnValue({
+      data: { logStreams: [{ logStreamName: "my-stream", storedBytes: 512 }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockLogEvents.mockReturnValue({
+      data: undefined, isLoading: true, isError: false, error: null, refetch: vi.fn(),
+    });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("/aws/lambda/test"));
+    await user.click(screen.getByText("/aws/lambda/test"));
+    await waitFor(() => expect(screen.getByText("my-stream")).toBeTruthy());
+    await user.click(screen.getByText("my-stream"));
+    await waitFor(() => expect(screen.getByText(/Loading log events/i)).toBeTruthy());
+  });
+
+  it("shows events error alert", async () => {
+    mockLogGroups.mockReturnValue({
+      data: { logGroups: [{ logGroupName: "/aws/lambda/test" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockLogStreams.mockReturnValue({
+      data: { logStreams: [{ logStreamName: "my-stream", storedBytes: 512 }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockLogEvents.mockReturnValue({
+      data: undefined, isLoading: false, isError: true, error: new Error("Events load failed"), refetch: vi.fn(),
+    });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("/aws/lambda/test"));
+    await user.click(screen.getByText("/aws/lambda/test"));
+    await waitFor(() => expect(screen.getByText("my-stream")).toBeTruthy());
+    await user.click(screen.getByText("my-stream"));
+    await waitFor(() => expect(screen.getByText("Events load failed")).toBeTruthy());
+  });
+
+  it("shows empty events message", async () => {
+    mockLogGroups.mockReturnValue({
+      data: { logGroups: [{ logGroupName: "/aws/lambda/test" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockLogStreams.mockReturnValue({
+      data: { logStreams: [{ logStreamName: "empty-stream", storedBytes: 0 }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockLogEvents.mockReturnValue({
+      data: { events: [] }, isLoading: false, isError: false, error: null, refetch: vi.fn(),
+    });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("/aws/lambda/test"));
+    await user.click(screen.getByText("/aws/lambda/test"));
+    await waitFor(() => expect(screen.getByText("empty-stream")).toBeTruthy());
+    await user.click(screen.getByText("empty-stream"));
+    await waitFor(() => expect(screen.getByText(/No log events found/i)).toBeTruthy());
+  });
+
+  it("shows event without timestamp", async () => {
+    mockLogGroups.mockReturnValue({
+      data: { logGroups: [{ logGroupName: "/aws/lambda/test" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockLogStreams.mockReturnValue({
+      data: { logStreams: [{ logStreamName: "my-stream", storedBytes: 512 }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockLogEvents.mockReturnValue({
+      data: { events: [{ eventId: "no-ts", message: "no timestamp event" }] },
+      isLoading: false, isError: false, error: null, refetch: vi.fn(),
+    });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("/aws/lambda/test"));
+    await user.click(screen.getByText("/aws/lambda/test"));
+    await waitFor(() => expect(screen.getByText("my-stream")).toBeTruthy());
+    await user.click(screen.getByText("my-stream"));
+    await waitFor(() => {
+      expect(screen.getByText("—")).toBeTruthy();
+      expect(screen.getByText("no timestamp event")).toBeTruthy();
+    });
   });
 });

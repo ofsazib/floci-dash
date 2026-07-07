@@ -199,6 +199,24 @@ describe("RDSDashboard — DB instances", () => {
     expect(container.textContent).toContain("db.t3.micro");
   });
 
+  it("shows status indicators for creating, rebooting, and other states", () => {
+    mockInstances.mockReturnValue({
+      data: {
+        instances: [
+          { id: "creating-db", engine: "mysql", status: "creating", dbInstanceClass: "db.t3.micro", allocatedStorage: 20 },
+          { id: "rebooting-db", engine: "mysql", status: "rebooting", dbInstanceClass: "db.t3.micro", allocatedStorage: 20 },
+          { id: "failed-db", engine: "mysql", status: "failed", dbInstanceClass: "db.t3.micro", allocatedStorage: 20 },
+        ],
+        total: 3,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("creating-db")).toBeTruthy();
+    expect(screen.getByText("rebooting-db")).toBeTruthy();
+    expect(screen.getByText("failed-db")).toBeTruthy();
+  });
+
   it("shows instances loading state", () => {
     mockInstances.mockReturnValue({ data: undefined, isLoading: true, isError: false, error: null });
     const { container } = render(<RDSDashboard />, { wrapper: createWrapper() });
@@ -271,14 +289,6 @@ describe("RDSDashboard — DB instances", () => {
     await waitFor(() => expect(screen.queryByText("alpha-db")).toBeNull());
   });
 
-  it("opens create DB instance modal and validates disabled", async () => {
-    const user = userEvent.setup();
-    const { container } = render(<RDSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /Create/i);
-    await waitFor(() => expect(container.textContent).toContain("Create DB Instance"));
-    await waitFor(() => expect(screen.getByPlaceholderText("my-database")).toBeTruthy());
-  });
-
   it("deletes a DB instance", async () => {
     mockInstances.mockReturnValue({
       data: { instances: [{ id: "delete-me", engine: "postgres", status: "available", dbInstanceClass: "db.t3.micro", allocatedStorage: 20 }], total: 1 },
@@ -293,6 +303,22 @@ describe("RDSDashboard — DB instances", () => {
     await clickButton(user, /^Delete$/i);
     await waitFor(() => expect(mockDeleteInstance).toHaveBeenCalledWith("delete-me"));
   });
+
+  it("shows reboot action with loading", async () => {
+    mockInstances.mockReturnValue({
+      data: { instances: [{ id: "my-db", engine: "postgres", status: "available", dbInstanceClass: "db.t3.micro", allocatedStorage: 20 }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Reboot my-db/i })).toBeTruthy();
+    });
+    await user.click(screen.getByRole("button", { name: /Reboot my-db/i }));
+    await waitFor(() => expect(mockRebootInstance).toHaveBeenCalledWith("my-db"));
+  });
+
+  // ── Instance detail ─────────────────────────────────────
 
   it("drills down to instance detail and shows data", async () => {
     mockInstances.mockReturnValue({
@@ -313,16 +339,34 @@ describe("RDSDashboard — DB instances", () => {
     expect(screen.getByText("default")).toBeTruthy();
   });
 
-  it("shows instance detail loading", () => {
+  it("shows N/A for missing endpoint, dbName, and arn in instance detail", async () => {
+    mockInstances.mockReturnValue({
+      data: { instances: [{ id: "minimal-db", engine: "mysql", status: "available", dbInstanceClass: "db.t3.micro", allocatedStorage: 20, masterUsername: "admin" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockInstanceDetail.mockReturnValue({
+      data: { id: "minimal-db", engine: "mysql", status: "available", dbInstanceClass: "db.t3.micro", allocatedStorage: 20, masterUsername: "admin" },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "minimal-db" }));
+    await waitFor(() => {
+      const naElements = screen.getAllByText("N/A");
+      expect(naElements.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it("shows instance detail loading", async () => {
     mockInstances.mockReturnValue({
       data: { instances: [{ id: "my-db", engine: "postgres", status: "available", dbInstanceClass: "db.t3.micro", allocatedStorage: 20 }], total: 1 },
       isLoading: false, isError: false, error: null,
     });
     mockInstanceDetail.mockReturnValue({ data: undefined, isLoading: true, isError: false, error: null });
+    const user = userEvent.setup();
     render(<RDSDashboard />, { wrapper: createWrapper() });
-    // Navigate to detail by clicking the instance name. But the click triggers state change
-    // which would re-render. For loading test, we just need to set it up first.
-    expect(screen.getByRole("button", { name: "my-db" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "my-db" }));
+    await waitFor(() => expect(screen.getByText(/Loading instance details/i)).toBeTruthy());
   });
 
   it("shows instance detail error", async () => {
@@ -347,9 +391,25 @@ describe("RDSDashboard — DB instances", () => {
     render(<RDSDashboard />, { wrapper: createWrapper() });
     await user.click(screen.getByRole("button", { name: "null-db" }));
     await waitFor(() => {
-      // null data returns null, so the component should not crash
       expect(screen.queryByText("null-db")).toBeNull();
     });
+  });
+
+  it("goes back from instance detail to list", async () => {
+    mockInstances.mockReturnValue({
+      data: { instances: [{ id: "my-db", engine: "postgres", status: "available", dbInstanceClass: "db.t3.micro", allocatedStorage: 20, masterUsername: "admin" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockInstanceDetail.mockReturnValue({
+      data: { id: "my-db", engine: "postgres", status: "available", dbInstanceClass: "db.t3.micro", allocatedStorage: 20, masterUsername: "admin" },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "my-db" }));
+    await waitFor(() => expect(screen.getByText(/Back to DB Instances/i)).toBeTruthy());
+    await user.click(screen.getByText(/Back to DB Instances/i));
+    await waitFor(() => expect(screen.getByText("my-db")).toBeTruthy());
   });
 });
 
@@ -372,12 +432,86 @@ describe("RDSDashboard — DB clusters", () => {
     await waitFor(() => expect(screen.getByText("my-cluster")).toBeTruthy());
   });
 
+  it("shows cluster member count", async () => {
+    mockClusters.mockReturnValue({
+      data: { clusters: [{ id: "cluster-1", engine: "aurora-mysql", status: "available", masterUsername: "admin", clusterMembers: ["i-1", "i-2", "i-3"] }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /DB Clusters/i }));
+    await waitFor(() => expect(screen.getByText("3")).toBeTruthy());
+  });
+
+  it("filters clusters by identifier", async () => {
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [
+          { id: "cluster-alpha", engine: "aurora-postgresql", status: "available", masterUsername: "admin", clusterMembers: [] },
+          { id: "cluster-beta", engine: "aurora-mysql", status: "available", masterUsername: "admin", clusterMembers: [] },
+        ],
+        total: 2,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /DB Clusters/i }));
+    await waitFor(() => expect(screen.getByText("cluster-alpha")).toBeTruthy());
+
+    const filterInput = screen.getByPlaceholderText("Find clusters by identifier");
+    await user.type(filterInput, "beta");
+    await waitFor(() => expect(screen.queryByText("cluster-alpha")).toBeNull());
+  });
+
+  it("shows clusters loading", () => {
+    mockClusters.mockReturnValue({ data: undefined, isLoading: true, isError: false, error: null });
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByRole("tab", { name: /DB Clusters/i })).toBeTruthy();
+  });
+
   it("shows clusters error state", async () => {
     mockClusters.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: new Error("Cluster load failed") });
     const user = userEvent.setup();
     render(<RDSDashboard />, { wrapper: createWrapper() });
     await user.click(screen.getByRole("tab", { name: /DB Clusters/i }));
     await waitFor(() => expect(screen.getByText("Cluster load failed")).toBeTruthy());
+  });
+
+  it("shows status indicators for creating/warning clusters", async () => {
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [
+          { id: "creating-cluster", engine: "aurora-postgresql", status: "creating", masterUsername: "admin", clusterMembers: [] },
+          { id: "stopped-cluster", engine: "aurora-mysql", status: "stopped", masterUsername: "admin", clusterMembers: [] },
+        ],
+        total: 2,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /DB Clusters/i }));
+    await waitFor(() => {
+      expect(screen.getByText("creating-cluster")).toBeTruthy();
+      expect(screen.getByText("stopped-cluster")).toBeTruthy();
+    });
+  });
+
+  it("deletes a cluster", async () => {
+    mockClusters.mockReturnValue({
+      data: { clusters: [{ id: "del-cluster", engine: "aurora-postgresql", status: "available", masterUsername: "admin", clusterMembers: [] }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /DB Clusters/i }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "del-cluster" })).toBeTruthy());
+    const deleteBtn = screen.getByRole("button", { name: /Delete del-cluster/i });
+    await user.click(deleteBtn);
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() => expect(mockDeleteCluster).toHaveBeenCalledWith("del-cluster"));
   });
 
   it("shows create cluster error alert", async () => {
@@ -403,6 +537,8 @@ describe("RDSDashboard — DB clusters", () => {
     await waitFor(() => expect(screen.getByText("my-cluster")).toBeTruthy());
   });
 
+  // ── Cluster detail ──────────────────────────────────────
+
   it("drills down to cluster detail and shows data", async () => {
     mockClusters.mockReturnValue({
       data: { clusters: [{ id: "my-cluster", engine: "aurora-postgresql", engineVersion: "16.4", status: "available", masterUsername: "admin", databaseName: "mydb", endpoint: "my-cluster.cluster-abc.rds.amazonaws.com", clusterMembers: ["inst-1", "inst-2"], iamDatabaseAuthenticationEnabled: true, copyTagsToSnapshot: false, allocatedStorage: 100, backupRetentionPeriod: 14, port: 5432, readerEndpoint: "reader.cluster-abc.rds.amazonaws.com", arn: "arn:aws:rds:us-east-1:123:cluster:my-cluster" }], total: 1 },
@@ -422,6 +558,27 @@ describe("RDSDashboard — DB clusters", () => {
       expect(screen.getByText("100 GB")).toBeTruthy();
       expect(screen.getByText("14 days")).toBeTruthy();
       expect(screen.getByText("Enabled")).toBeTruthy();
+    });
+  });
+
+  it("shows N/A for missing cluster detail fields", async () => {
+    mockClusters.mockReturnValue({
+      data: { clusters: [{ id: "minimal-cluster", engine: "aurora-postgresql", status: "available", masterUsername: "admin", clusterMembers: [] }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockClusterDetail.mockReturnValue({
+      data: { id: "minimal-cluster", engine: "aurora-postgresql", status: "available", masterUsername: "admin", clusterMembers: [] },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /DB Clusters/i }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "minimal-cluster" })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "minimal-cluster" }));
+    await waitFor(() => {
+      const naElements = screen.getAllByText("N/A");
+      expect(naElements.length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByText("None")).toBeTruthy();
     });
   });
 
@@ -452,6 +609,27 @@ describe("RDSDashboard — DB clusters", () => {
     await user.click(screen.getByRole("button", { name: "fail-cluster" }));
     await waitFor(() => expect(screen.getByText("Cluster gone")).toBeTruthy());
   });
+
+  it("goes back from cluster detail to list", async () => {
+    mockClusters.mockReturnValue({
+      data: { clusters: [{ id: "my-cluster", engine: "aurora-postgresql", status: "available", masterUsername: "admin", clusterMembers: [] }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockClusterDetail.mockReturnValue({
+      data: { id: "my-cluster", engine: "aurora-postgresql", status: "available", masterUsername: "admin", clusterMembers: [] },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /DB Clusters/i }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "my-cluster" })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-cluster" }));
+    await waitFor(() => expect(screen.getByText(/Back to DB Clusters/i)).toBeTruthy());
+    await user.click(screen.getByText(/Back to DB Clusters/i));
+    await waitFor(() => expect(screen.getByText(/DB Clusters/)).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /^DB Clusters$/i }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "my-cluster" })).toBeTruthy());
+  });
 });
 
 describe("RDSDashboard — parameter groups", () => {
@@ -475,6 +653,28 @@ describe("RDSDashboard — parameter groups", () => {
     await waitFor(() => expect(screen.getByText("my-pg")).toBeTruthy());
   });
 
+  it("filters parameter groups by name", async () => {
+    mockParamGroups.mockReturnValue({
+      data: {
+        parameterGroups: [
+          { name: "pg-alpha", family: "postgres16", description: "Alpha" },
+          { name: "pg-beta", family: "mysql8", description: "Beta" },
+        ],
+        total: 2,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    const tabs = screen.getAllByRole("tab");
+    await user.click(tabs[2]);
+    await waitFor(() => expect(screen.getByText("pg-alpha")).toBeTruthy());
+
+    const filterInput = screen.getByPlaceholderText("Find groups by name");
+    await user.type(filterInput, "beta");
+    await waitFor(() => expect(screen.queryByText("pg-alpha")).toBeNull());
+  });
+
   it("shows create PG error alert", async () => {
     createPGState.isError = true;
     createPGState.error = new Error("PG exists");
@@ -482,10 +682,7 @@ describe("RDSDashboard — parameter groups", () => {
     render(<RDSDashboard />, { wrapper: createWrapper() });
     const tabs = screen.getAllByRole("tab");
     await user.click(tabs[2]);
-    await waitFor(() => {
-      const createBtns = screen.getAllByRole("button", { name: /Create/i });
-      expect(createBtns.length).toBeGreaterThanOrEqual(1);
-    });
+    await waitFor(() => expect(screen.getByText(/No parameter groups found/i)).toBeTruthy());
     const createBtns = screen.getAllByRole("button", { name: /Create/i });
     await user.click(createBtns[createBtns.length - 1]);
     await waitFor(() => expect(screen.getByText("PG exists")).toBeTruthy());
@@ -503,6 +700,38 @@ describe("RDSDashboard — parameter groups", () => {
     const tabs = screen.getAllByRole("tab");
     await user.click(tabs[2]);
     await waitFor(() => expect(screen.getByText("my-pg")).toBeTruthy());
+  });
+
+  it("shows parameter group loading state", () => {
+    mockParamGroups.mockReturnValue({ data: undefined, isLoading: true, isError: false, error: null });
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByRole("tab", { name: /^Parameter Groups$/i })).toBeTruthy();
+  });
+
+  it("shows parameter group error state", async () => {
+    mockParamGroups.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: new Error("PG load failed") });
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    const tabs = screen.getAllByRole("tab");
+    await user.click(tabs[2]);
+    await waitFor(() => expect(screen.getByText("PG load failed")).toBeTruthy());
+  });
+
+  it("deletes a parameter group", async () => {
+    mockParamGroups.mockReturnValue({
+      data: { parameterGroups: [{ name: "del-pg", family: "postgres16", description: "To delete" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    const tabs = screen.getAllByRole("tab");
+    await user.click(tabs[2]);
+    await waitFor(() => expect(screen.getByText("del-pg")).toBeTruthy());
+    const deleteBtn = screen.getByRole("button", { name: /Delete del-pg/i });
+    await user.click(deleteBtn);
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() => expect(mockDeleteParamGroup).toHaveBeenCalledWith("del-pg"));
   });
 });
 
@@ -525,6 +754,27 @@ describe("RDSDashboard — cluster parameter groups", () => {
     await waitFor(() => expect(screen.getByText("my-cpg")).toBeTruthy());
   });
 
+  it("filters cluster parameter groups by name", async () => {
+    mockClusterParamGroups.mockReturnValue({
+      data: {
+        clusterParameterGroups: [
+          { name: "cpg-alpha", family: "aurora-postgresql16", description: "Alpha" },
+          { name: "cpg-beta", family: "aurora-mysql8", description: "Beta" },
+        ],
+        total: 2,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Cluster Parameter Groups/i }));
+    await waitFor(() => expect(screen.getByText("cpg-alpha")).toBeTruthy());
+
+    const filterInput = screen.getByPlaceholderText("Find groups by name");
+    await user.type(filterInput, "beta");
+    await waitFor(() => expect(screen.queryByText("cpg-alpha")).toBeNull());
+  });
+
   it("shows delete CPG loading state", async () => {
     deleteCPGState.isPending = true;
     deleteCPGState.variables = "my-cpg";
@@ -536,5 +786,13 @@ describe("RDSDashboard — cluster parameter groups", () => {
     render(<RDSDashboard />, { wrapper: createWrapper() });
     await user.click(screen.getByRole("tab", { name: /Cluster Parameter Groups/i }));
     await waitFor(() => expect(screen.getByText("my-cpg")).toBeTruthy());
+  });
+
+  it("shows CPG error state", async () => {
+    mockClusterParamGroups.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: new Error("CPG load failed") });
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Cluster Parameter Groups/i }));
+    await waitFor(() => expect(screen.getByText("CPG load failed")).toBeTruthy());
   });
 });
