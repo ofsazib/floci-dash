@@ -540,7 +540,7 @@ export function RGTDashboard() {
       <Header variant="h2">Tag Keys</Header>
       <Box>
         {(tagKeysData?.tagKeys || []).slice(0, 20).map((k: string) => (
-          <Button key={k} variant="link" onFollow={() => setSelectedTagKey(k)}>
+          <Button key={k} variant="link" onClick={() => setSelectedTagKey(k)}>
             {k}
           </Button>
         ))}
