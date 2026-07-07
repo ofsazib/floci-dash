@@ -5,7 +5,7 @@ All notable changes to Floci Dash will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.0] — 2026-07-07
+## [0.0.86] — 2026-07-07
 
 ### Added
 - **IoT Core:** Full service support — things (CRUD with attributes/types), certificates (create keys+bundle, activate/deactivate/revoke), policies (CRUD + versions), shadows, topic rules, jobs. Backend routes, hooks, dashboard, and comprehensive tests (85 backend + 54 hook tests).
@@ -32,7 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Project Structure:** Refactored `ServicePage` into per-service dashboard files. Added open-source project files (CODE_OF_CONDUCT.md, CONTRIBUTING.md, SECURITY.md, PULL_REQUEST_TEMPLATE.md, issue templates).
 - **Project Rename:** Renamed project to Floci Dash.
 
-## [0.1.0] — 2026-06-20
+## [0.0.85] — 2026-06-21
 
 ### Added
 - Initial public release

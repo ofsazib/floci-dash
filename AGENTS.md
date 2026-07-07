@@ -182,10 +182,23 @@ make typecheck
 
 ### Step 2: Determine Version Bump
 
-Read the commit log since the last tag to decide the bump:
+**First, check the actual latest published release on GitHub** — do NOT rely on local tags which may be stale:
 
 ```bash
+# Check the latest release on GitHub
+curl -s https://api.github.com/repos/ofsazib/floci-dash/releases/latest | grep '"tag_name"'
+```
+
+Then read the commit log since that tag to decide the bump:
+
+```bash
+git fetch --tags origin
 git log $(git describe --tags --abbrev=0)..HEAD --no-merges --oneline
+```
+
+**IMPORTANT:** If local tags don't match GitHub releases, delete stale local tags:
+```bash
+git tag -d <stale-tag>
 ```
 
 Version bump rules (semver):
