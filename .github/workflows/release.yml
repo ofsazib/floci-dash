@@ -19,7 +19,7 @@ on:
       - "v*"
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 jobs:
@@ -219,3 +219,11 @@ jobs:
               "ghcr.io/ofsazib/floci-dash@${{ steps.digests.outputs.combined-amd64 }}" \
               "ghcr.io/ofsazib/floci-dash@${{ steps.digests.outputs.combined-arm64 }}"
           done
+
+      # ── Create GitHub Release ──
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          make_latest: true
