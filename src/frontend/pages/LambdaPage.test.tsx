@@ -19,6 +19,17 @@ const mockLambdaLayers = vi.fn();
 const mockDeleteLayerVersionMutateAsync = vi.fn();
 const mockFunctionUrl = vi.fn();
 const mockFunctionConcurrency = vi.fn();
+const mockCodeSigningConfig = vi.fn();
+const mockAttachCodeSigningConfigMutate = vi.fn();
+const mockDetachCodeSigningConfigMutate = vi.fn();
+const mockEventInvokeConfig = vi.fn();
+const mockCreateLayerVersionMutate = vi.fn();
+const mockCreateFunctionUrlMutate = vi.fn();
+const mockUpdateFunctionUrlMutate = vi.fn();
+const mockSetConcurrencyMutate = vi.fn();
+const mockDeleteConcurrencyMutate = vi.fn();
+const mockPutEventInvokeConfigMutate = vi.fn();
+const mockDeleteEventInvokeConfigMutate = vi.fn();
 
 vi.mock("../hooks/useLambda", () => ({
   useLambdaFunctions: (...args: any[]) => mockFunctions(...args),
@@ -34,6 +45,18 @@ vi.mock("../hooks/useLambda", () => ({
   useDeleteLayerVersion: () => ({ mutateAsync: mockDeleteLayerVersionMutateAsync, isPending: false }),
   useFunctionUrl: (...args: any[]) => mockFunctionUrl(...args),
   useFunctionConcurrency: (...args: any[]) => mockFunctionConcurrency(...args),
+  useCodeSigningConfig: (...args: any[]) => mockCodeSigningConfig(...args),
+  useAttachCodeSigningConfig: () => ({ mutate: mockAttachCodeSigningConfigMutate, isPending: false, isError: false, error: null }),
+  useDetachCodeSigningConfig: () => ({ mutate: mockDetachCodeSigningConfigMutate, isPending: false, isError: false, error: null }),
+  useEventInvokeConfig: (...args: any[]) => mockEventInvokeConfig(...args),
+  useCreateLayerVersion: () => ({ mutate: mockCreateLayerVersionMutate, isPending: false, isError: false, error: null }),
+  useCreateFunctionUrl: () => ({ mutate: mockCreateFunctionUrlMutate, isPending: false, isError: false, error: null }),
+  useUpdateFunctionUrl: () => ({ mutate: mockUpdateFunctionUrlMutate, isPending: false, isError: false, error: null }),
+  useDeleteFunctionUrl: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useSetFunctionConcurrency: () => ({ mutate: mockSetConcurrencyMutate, isPending: false, isError: false, error: null }),
+  useDeleteFunctionConcurrency: () => ({ mutate: mockDeleteConcurrencyMutate, isPending: false }),
+  usePutEventInvokeConfig: () => ({ mutate: mockPutEventInvokeConfigMutate, isPending: false, isError: false, error: null }),
+  useDeleteEventInvokeConfig: () => ({ mutate: mockDeleteEventInvokeConfigMutate, isPending: false }),
 }));
 
 import LambdaPage from "./LambdaPage";
@@ -56,6 +79,8 @@ describe("LambdaPage", () => {
     mockLambdaLayers.mockReturnValue({ data: { layers: [] }, isLoading: false, isError: false, error: null });
     mockFunctionUrl.mockReturnValue({ data: {} });
     mockFunctionConcurrency.mockReturnValue({ data: {} });
+    mockCodeSigningConfig.mockReturnValue({ data: {} });
+    mockEventInvokeConfig.mockReturnValue({ data: {} });
   });
 
   // ─── Function List ────────────────────────────────────
@@ -389,7 +414,7 @@ describe("LambdaPage", () => {
       expect(screen.getByText("my-layer")).toBeTruthy();
       expect(screen.getByText("Test layer")).toBeTruthy();
       expect(screen.getByText(/1\.0 KB/)).toBeTruthy();
-      expect(screen.getByText("nodejs22.x")).toBeTruthy();
+      expect(screen.getAllByText("nodejs22.x").length).toBeGreaterThan(0);
     });
   });
 
@@ -419,6 +444,217 @@ describe("LambdaPage", () => {
     await user.click(screen.getByRole("tab", { name: /Layers/i }));
     await waitFor(() => {
       expect(screen.getAllByText("Layers").length).toBeGreaterThan(0);
+    });
+  });
+
+  // ─── Function List Filter ───────────────────────────────
+
+  it("filters functions by name", async () => {
+    const user = userEvent.setup();
+    mockFunctions.mockReturnValue({
+      data: {
+        functions: [
+          { name: "alpha-function", runtime: "nodejs22.x", handler: "index.handler", state: "Active", timeout: 3, memorySize: 128 },
+          { name: "beta-function", runtime: "nodejs22.x", handler: "index.handler", state: "Active", timeout: 3, memorySize: 128 },
+        ],
+        total: 2,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    expect(screen.getByText("alpha-function")).toBeTruthy();
+    expect(screen.getByText("beta-function")).toBeTruthy();
+    const filterInput = screen.getByPlaceholderText("Find functions by name");
+    await user.type(filterInput, "alpha");
+    await waitFor(() => {
+      expect(screen.getByText("alpha-function")).toBeTruthy();
+    });
+    expect(screen.queryByText("beta-function")).toBeFalsy();
+  });
+
+  // ─── Advanced Tab ───────────────────────────────────────
+
+  it("shows advanced tab with Reserved Concurrency section", async () => {
+    const user = userEvent.setup();
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByText("Back to Functions")).toBeTruthy();
+    });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Set concurrency")).toBeTruthy();
+    });
+  });
+
+  it("sets reserved concurrency from Advanced tab", async () => {
+    const user = userEvent.setup();
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByText("Back to Functions")).toBeTruthy();
+    });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await clickButton(user, /Set concurrency/i);
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/e\.g\. 10/)).toBeTruthy();
+    });
+    const input = screen.getByPlaceholderText(/e\.g\. 10/);
+    await user.type(input, "5");
+    await clickButton(user, /^Set$/i);
+    expect(mockSetConcurrencyMutate).toHaveBeenCalled();
+  });
+
+  it("removes reserved concurrency from Advanced tab", async () => {
+    const user = userEvent.setup();
+    mockFunctionConcurrency.mockReturnValue({ data: { reservedConcurrentExecutions: 5 } });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByText("Back to Functions")).toBeTruthy();
+    });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Remove/)).toBeTruthy();
+    });
+    await clickButton(user, /^Remove$/i);
+    expect(mockDeleteConcurrencyMutate).toHaveBeenCalled();
+  });
+
+  it("creates function URL from Advanced tab", async () => {
+    const user = userEvent.setup();
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByText("Back to Functions")).toBeTruthy();
+    });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Create URL/i)).toBeTruthy();
+    });
+    await clickButton(user, /Create URL/i);
+    await waitFor(() => {
+      expect(screen.getByText("Set reserved concurrency")).toBeTruthy();
+    });
+    await clickButton(user, /^Create$/i);
+    expect(mockCreateFunctionUrlMutate).toHaveBeenCalled();
+  });
+
+  it("updates function URL from Advanced tab", async () => {
+    const user = userEvent.setup();
+    mockFunctionUrl.mockReturnValue({ data: { url: "https://example.com/fn", authType: "AWS_IAM" } });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByText("Back to Functions")).toBeTruthy();
+    });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Update URL config/i)).toBeTruthy();
+    });
+    await clickButton(user, /Update URL config/i);
+    await waitFor(() => {
+      expect(screen.getByText("Set reserved concurrency")).toBeTruthy();
+    });
+    await clickButton(user, /^Update$/i, { last: true });
+    expect(mockUpdateFunctionUrlMutate).toHaveBeenCalled();
+  });
+
+  it("attaches code signing config from Advanced tab", async () => {
+    const user = userEvent.setup();
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByText("Back to Functions")).toBeTruthy();
+    });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Attach config/i)).toBeTruthy();
+    });
+    await clickButton(user, /Attach config/i);
+    await waitFor(() => {
+      expect(screen.getByText("Set reserved concurrency")).toBeTruthy();
+    });
+    const arnInput = screen.getByPlaceholderText(/code-signing-config:csc/);
+    await user.type(arnInput, "arn:aws:lambda:us-east-1:000000000000:code-signing-config:csc-001");
+    await clickButton(user, /^Attach$/i);
+    expect(mockAttachCodeSigningConfigMutate).toHaveBeenCalled();
+  });
+
+  it("detaches code signing config from Advanced tab", async () => {
+    const user = userEvent.setup();
+    mockCodeSigningConfig.mockReturnValue({ data: { codeSigningConfigArn: "arn:aws:lambda:us-east-1:000000000000:code-signing-config:csc-001" } });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByText("Back to Functions")).toBeTruthy();
+    });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Detach/i)).toBeTruthy();
+    });
+    await clickButton(user, /^Detach$/i);
+    expect(mockDetachCodeSigningConfigMutate).toHaveBeenCalled();
+  });
+
+  it("configures event invoke from Advanced tab", async () => {
+    const user = userEvent.setup();
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByText("Back to Functions")).toBeTruthy();
+    });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Configure event invoke config")).toBeTruthy();
+    });
+    await clickButton(user, /Configure/i);
+    await waitFor(() => {
+      expect(screen.getByText("Configure event invoke config")).toBeTruthy();
+    });
+    await clickButton(user, /Save/i);
+    expect(mockPutEventInvokeConfigMutate).toHaveBeenCalled();
+  });
+
+  it("edits and resets event invoke config from Advanced tab", async () => {
+    const user = userEvent.setup();
+    mockEventInvokeConfig.mockReturnValue({
+      data: { maximumRetryAttempts: 2, maximumEventAgeInSeconds: 3600 },
+    });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByText("Back to Functions")).toBeTruthy();
+    });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Reset to defaults/i)).toBeTruthy();
+    });
+    await clickButton(user, /Reset to defaults/i);
+    expect(mockDeleteEventInvokeConfigMutate).toHaveBeenCalled();
+  });
+
+  // ─── Layers Tab Delete ────────────────────────────────
+
+  it("deletes a layer version", async () => {
+    const user = userEvent.setup();
+    mockLambdaLayers.mockReturnValue({
+      data: { layers: [{ name: "my-layer", arn: "arn:aws:lambda:us-east-1::layer:my-layer:1", latestVersion: { version: 1, description: "Test layer", codeSize: 1024, compatibleRuntimes: ["nodejs22.x"] } }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Layers/i }));
+    await waitFor(() => {
+      expect(screen.getByText("my-layer")).toBeTruthy();
+    });
+    const deleteBtn = screen.getByRole("button", { name: /Delete my-layer:1/i });
+    await user.click(deleteBtn);
+    await waitFor(() => {
+      expect(screen.getByText(/Are you sure/)).toBeTruthy();
+    });
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() => {
+      expect(mockDeleteLayerVersionMutateAsync).toHaveBeenCalled();
     });
   });
 });

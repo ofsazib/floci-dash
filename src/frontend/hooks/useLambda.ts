@@ -264,3 +264,70 @@ export function useCreateLayerVersion() {
     },
   });
 }
+
+// ─── CODE SIGNING CONFIG ────────────────────────────────
+
+export function useCodeSigningConfig(name: string | null) {
+  return useQuery({
+    queryKey: ["aws", "lambda", "functions", name, "code-signing-config"],
+    queryFn: () =>
+      api<{ codeSigningConfigArn?: string; functionName?: string }>(
+        `/lambda/functions/${name}/code-signing-config`
+      ),
+    enabled: !!name,
+  });
+}
+
+export function useAttachCodeSigningConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, codeSigningConfigArn }: { name: string; codeSigningConfigArn: string }) =>
+      api(`/aws/lambda/functions/${name}/code-signing-config`, {
+        method: "PUT",
+        body: JSON.stringify({ codeSigningConfigArn }),
+      }),
+    onSuccess: (_data, vars) =>
+      qc.invalidateQueries({ queryKey: ["aws", "lambda", "functions", vars.name, "code-signing-config"] }),
+  });
+}
+
+export function useDetachCodeSigningConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api(`/aws/lambda/functions/${name}/code-signing-config`, { method: "DELETE" }),
+    onSuccess: (_data, name) =>
+      qc.invalidateQueries({ queryKey: ["aws", "lambda", "functions", name, "code-signing-config"] }),
+  });
+}
+
+export function useCodeSigningConfigs() {
+  return useQuery({
+    queryKey: ["aws", "lambda", "code-signing-configs"],
+    queryFn: () =>
+      api<{ codeSigningConfigs: any[]; total: number }>("/lambda/code-signing-configs"),
+  });
+}
+
+export function useCreateCodeSigningConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: any) =>
+      api(`/aws/lambda/code-signing-configs`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "lambda", "code-signing-configs"] }),
+  });
+}
+
+export function useDeleteCodeSigningConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (arn: string) =>
+      api(`/aws/lambda/code-signing-configs/${encodeURIComponent(arn)}`, { method: "DELETE" }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "lambda", "code-signing-configs"] }),
+  });
+}

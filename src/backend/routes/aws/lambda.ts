@@ -606,7 +606,7 @@ router.post("/code-signing-configs", async (c: Context) => {
 });
 
 router.delete("/code-signing-configs/:arn", async (c: Context) => {
-  const arn = decodeURIComponent(c.req.param("arn"));
+  const arn = decodeURIComponent(c.req.param("arn") ?? "");
   await lambda().send(
     new DeleteCodeSigningConfigCommand({ CodeSigningConfigArn: arn })
   );

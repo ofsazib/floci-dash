@@ -83,6 +83,14 @@ describe("Events (EventBridge) Routes", () => {
       expect(body.eventBuses[0].Name).toBe("default");
     });
 
+    it("GET /buses — handles missing EventBuses (|| [] branch)", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/buses");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.eventBuses).toEqual([]);
+    });
+
     it("POST /buses — creates an event bus", async () => {
       mockSend.mockResolvedValueOnce({
         EventBusArn: "arn:aws:events:us-east-1:...:event-bus/custom",
@@ -125,12 +133,28 @@ describe("Events (EventBridge) Routes", () => {
       expect(body.rules[0].Name).toBe("my-rule");
     });
 
+    it("GET /rules — handles missing Rules (|| [] branch)", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/rules");
+      expect(res.status).toBe(200);
+      expect((await res.json()).rules).toEqual([]);
+    });
+
     it("GET /rules?eventBusName= — filters by bus", async () => {
       mockSend.mockResolvedValueOnce({ Rules: [] });
       const res = await get("/rules?eventBusName=custom");
       expect(res.status).toBe(200);
       const cmd = mockSend.mock.calls[0][0];
       expect(cmd.EventBusName).toBe("custom");
+    });
+
+    it("GET /rules — calls without eventBusName param (ternary else branch)", async () => {
+      mockSend.mockResolvedValueOnce({ Rules: [] });
+      const res = await get("/rules");
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      // When no eventBusName, the command is called with empty object {}
+      expect(cmd.EventBusName).toBeUndefined();
     });
 
     it("POST /rules — creates a rule", async () => {
@@ -156,6 +180,14 @@ describe("Events (EventBridge) Routes", () => {
       const res = await del("/rules?name=my-rule");
       expect(res.status).toBe(200);
       expect((await res.json()).deleted).toBe(true);
+    });
+
+    it("DELETE /rules — without eventBusName (|| undefined branch)", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/rules?name=my-rule");
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.EventBusName).toBeUndefined();
     });
 
     it("DELETE /rules — 400 when name missing", async () => {
@@ -199,6 +231,21 @@ describe("Events (EventBridge) Routes", () => {
       expect(body.targets).toHaveLength(1);
     });
 
+    it("GET /targets — handles missing Targets (|| [] branch)", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/targets?rule=my-rule");
+      expect(res.status).toBe(200);
+      expect((await res.json()).targets).toEqual([]);
+    });
+
+    it("GET /targets — without eventBusName (|| undefined branch)", async () => {
+      mockSend.mockResolvedValueOnce({ Targets: [] });
+      const res = await get("/targets?rule=my-rule");
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.EventBusName).toBeUndefined();
+    });
+
     it("GET /targets — 400 when rule missing", async () => {
       const res = await get("/targets");
       expect(res.status).toBe(400);
@@ -228,6 +275,14 @@ describe("Events (EventBridge) Routes", () => {
       expect((await res.json()).removed).toBe(true);
     });
 
+    it("DELETE /targets — without eventBusName (|| undefined branch)", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/targets?rule=my-rule&ids=1,2");
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.EventBusName).toBeUndefined();
+    });
+
     it("DELETE /targets — 400 when required params missing", async () => {
       const res = await del("/targets?rule=my-rule");
       expect(res.status).toBe(400);
@@ -254,6 +309,15 @@ describe("Events (EventBridge) Routes", () => {
       expect(body.failedCount).toBe(0);
       expect(body.entries[0].EventId).toBe("evt-001");
     });
+
+    it("POST /put-events — handles missing fields (|| 0 and || [] branches)", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/put-events", { entries: [] });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.failedCount).toBe(0);
+      expect(body.entries).toEqual([]);
+    });
   });
 
   describe("Archives", () => {
@@ -267,6 +331,13 @@ describe("Events (EventBridge) Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.archives).toHaveLength(1);
+    });
+
+    it("GET /archives — handles missing Archives (|| [] branch)", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/archives");
+      expect(res.status).toBe(200);
+      expect((await res.json()).archives).toEqual([]);
     });
 
     it("POST /archives — creates an archive", async () => {
@@ -295,6 +366,13 @@ describe("Events (EventBridge) Routes", () => {
   describe("Replays", () => {
     it("GET /replays — lists replays", async () => {
       mockSend.mockResolvedValueOnce({ Replays: [] });
+      const res = await get("/replays");
+      expect(res.status).toBe(200);
+      expect((await res.json()).replays).toEqual([]);
+    });
+
+    it("GET /replays — handles missing Replays (|| [] branch)", async () => {
+      mockSend.mockResolvedValueOnce({});
       const res = await get("/replays");
       expect(res.status).toBe(200);
       expect((await res.json()).replays).toEqual([]);

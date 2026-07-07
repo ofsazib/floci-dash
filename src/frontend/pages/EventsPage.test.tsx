@@ -342,4 +342,77 @@ describe("EventsPage", () => {
     await clickButton(user, /Send/i, { last: true });
     expect(mockPutEventsMutate).toHaveBeenCalled();
   });
+
+  // ─── Delete Actions ──────────────────────────────────────
+
+  it("deletes a rule", async () => {
+    const user = userEvent.setup();
+    render(<EventsPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /Delete rule/i);
+    await waitFor(() => {
+      expect(mockDeleteRuleMutate).toHaveBeenCalled();
+    });
+  });
+
+  it("deletes an archive", async () => {
+    const user = userEvent.setup();
+    mockEventArchives.mockReturnValue({
+      data: {
+        archives: [
+          {
+            ArchiveName: "my-archive",
+            EventSourceArn: "arn:aws:events:us-east-1:000000000000:event-bus/default",
+            State: "ENABLED",
+            EventCount: 42,
+          },
+        ],
+      },
+      isLoading: false,
+    });
+    render(<EventsPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByText("Archives"));
+    await clickButton(user, /Delete archive/i);
+    await waitFor(() => {
+      expect(mockDeleteArchiveMutate).toHaveBeenCalled();
+    });
+  });
+
+  it("removes a target", async () => {
+    const user = userEvent.setup();
+    mockEventTargets.mockReturnValue({
+      data: { targets: [{ Id: "fn-target", Arn: "arn:aws:lambda:us-east-1:000000000000:function:my-fn" }] },
+      isLoading: false,
+    });
+    render(<EventsPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByText("my-rule"));
+    await waitFor(() => {
+      expect(screen.getByText("Targets for: my-rule")).toBeTruthy();
+    });
+    await clickButton(user, /Remove target/i);
+    await waitFor(() => {
+      expect(mockRemoveTargetMutate).toHaveBeenCalled();
+    });
+  });
+
+  // ─── Loading State Tests ─────────────────────────────────
+
+  it("shows buses loading state", async () => {
+    const user = userEvent.setup();
+    mockEventBuses.mockReturnValue({ data: undefined, isLoading: true });
+    render(<EventsPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByText("Event Buses"));
+    await waitFor(() => {
+      expect(screen.getAllByText("Event Buses").length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it("shows archives loading state", async () => {
+    const user = userEvent.setup();
+    mockEventArchives.mockReturnValue({ data: undefined, isLoading: true });
+    render(<EventsPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByText("Archives"));
+    await waitFor(() => {
+      expect(screen.getAllByText("Archives").length).toBeGreaterThanOrEqual(1);
+    });
+  });
 });

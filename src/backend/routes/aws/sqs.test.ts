@@ -383,6 +383,110 @@ describe("SQS Routes", () => {
     });
   });
 
+  describe("DLQ Move Tasks", () => {
+    it("POST /queues/dlq/move-tasks — moves messages from DLQ to source", async () => {
+      // ReceiveMessage returns 2 messages
+      mockSend.mockResolvedValueOnce({
+        Messages: [
+          {
+            MessageId: "msg-001",
+            Body: "Hello 1",
+            ReceiptHandle: "rh-001",
+            MessageAttributes: {},
+          },
+          {
+            MessageId: "msg-002",
+            Body: "Hello 2",
+            ReceiptHandle: "rh-002",
+            MessageAttributes: {},
+          },
+        ],
+      });
+      // SendMessage (called twice, once per message)
+      mockSend.mockResolvedValueOnce({ MessageId: "moved-001" });
+      // DeleteMessage (called twice)
+      mockSend.mockResolvedValueOnce({});
+      mockSend.mockResolvedValueOnce({ MessageId: "moved-002" });
+      mockSend.mockResolvedValueOnce({});
+
+      const res = await post("/queues/dlq/move-tasks", {
+        dlqUrl: "http://localhost:4566/000000000000/dlq",
+        sourceUrl: "http://localhost:4566/000000000000/source",
+        maxMessages: 10,
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.moved).toBe(2);
+      expect(body.failed).toBe(0);
+      expect(body.movedMessages).toHaveLength(2);
+      expect(body.movedMessages[0].messageId).toBe("msg-001");
+
+      // Verify ReceiveMessage was called with DLQ URL
+      expect(mockSend.mock.calls[0][0].QueueUrl).toContain("dlq");
+      // Verify SendMessage was called with source URL
+      expect(mockSend.mock.calls[1][0].QueueUrl).toContain("source");
+      expect(mockSend.mock.calls[1][0].MessageBody).toBe("Hello 1");
+    });
+
+    it("POST /queues/dlq/move-tasks — 400 when dlqUrl or sourceUrl missing", async () => {
+      const res = await post("/queues/dlq/move-tasks", {});
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("dlqUrl");
+    });
+
+    it("POST /queues/dlq/move-tasks — handles empty DLQ (no messages)", async () => {
+      mockSend.mockResolvedValueOnce({ Messages: [] });
+
+      const res = await post("/queues/dlq/move-tasks", {
+        dlqUrl: "http://localhost:4566/000000000000/dlq",
+        sourceUrl: "http://localhost:4566/000000000000/source",
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.moved).toBe(0);
+      expect(body.failed).toBe(0);
+      expect(body.movedMessages).toEqual([]);
+    });
+
+    it("POST /queues/dlq/move-tasks — handles send failure for one message", async () => {
+      mockSend.mockResolvedValueOnce({
+        Messages: [
+          {
+            MessageId: "msg-good",
+            Body: "Good message",
+            ReceiptHandle: "rh-good",
+            MessageAttributes: {},
+          },
+          {
+            MessageId: "msg-bad",
+            Body: "Bad message",
+            ReceiptHandle: "rh-bad",
+            MessageAttributes: {},
+          },
+        ],
+      });
+      // SendMessage succeeds for first, fails for second
+      mockSend.mockResolvedValueOnce({ MessageId: "moved-good" });
+      mockSend.mockResolvedValueOnce({}); // DeleteMessage for good
+      mockSend.mockRejectedValueOnce(new Error("Send failed")); // SendMessage for bad fails
+
+      const res = await post("/queues/dlq/move-tasks", {
+        dlqUrl: "http://localhost:4566/000000000000/dlq",
+        sourceUrl: "http://localhost:4566/000000000000/source",
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.moved).toBe(1);
+      expect(body.failed).toBe(1);
+      expect(body.movedMessages).toHaveLength(1);
+      expect(body.movedMessages[0].messageId).toBe("msg-good");
+      expect(body.failedMessages).toHaveLength(1);
+      expect(body.failedMessages[0].messageId).toBe("msg-bad");
+      expect(body.failedMessages[0].error).toBe("Send failed");
+    });
+  });
+
   describe("Permissions", () => {
     it("POST /queues/permissions — adds permission", async () => {
       mockSend.mockResolvedValueOnce({});

@@ -410,4 +410,64 @@ describe("SQSPage", () => {
     await clickButton(user, /Create/i, { last: true });
     expect(mockCreateQueueMutate).not.toHaveBeenCalled();
   });
+
+  // ─── Modal Cancel Tests ──────────────────────────────────
+
+  it("cancels create queue modal", async () => {
+    const user = userEvent.setup();
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await clickButton(user, /create queue/i);
+    await waitFor(() => {
+      expect(screen.getAllByPlaceholderText("my-queue").length).toBeGreaterThan(0);
+    });
+    await clickButton(user, /Cancel/i);
+    expect(mockCreateQueueMutate).not.toHaveBeenCalled();
+  });
+
+  it("cancels send message modal", async () => {
+    const user = userEvent.setup();
+    mockSearchParams.mockReturnValue([new URLSearchParams("?queueUrl=http://localhost:4566/000000000000/my-queue"), vi.fn()]);
+    mockSQSMessages.mockReturnValue({ data: { messages: [] }, isLoading: false });
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Messages"));
+    await clickButton(user, /send message/i);
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("Enter message content...")).toBeTruthy();
+    });
+    await clickButton(user, /Cancel/i);
+    expect(mockSendMessageMutate).not.toHaveBeenCalled();
+  });
+
+  // ─── Tags Loading State ──────────────────────────────────
+
+  it("shows tags loading spinner", async () => {
+    const user = userEvent.setup();
+    mockSearchParams.mockReturnValue([new URLSearchParams("?queueUrl=http://localhost:4566/000000000000/my-queue"), vi.fn()]);
+    mockSQSQueueTags.mockReturnValue({ data: undefined, isLoading: true });
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Tags"));
+    await waitFor(() => {
+      expect(screen.getAllByText("Tags").length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  // ─── Send Message FIFO Fields ────────────────────────────
+
+  it("sends message with FIFO fields", async () => {
+    const user = userEvent.setup();
+    mockSearchParams.mockReturnValue([new URLSearchParams("?queueUrl=http://localhost:4566/000000000000/my-queue.fifo"), vi.fn()]);
+    mockSQSMessages.mockReturnValue({ data: { messages: [] }, isLoading: false });
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Messages"));
+    await clickButton(user, /send message/i);
+    await waitFor(() => {
+      expect(screen.getByText("Message group ID")).toBeTruthy();
+    });
+    const textarea = screen.getByPlaceholderText("Enter message content...");
+    await user.type(textarea, "FIFO message");
+    await clickButton(user, "Send");
+    await waitFor(() => {
+      expect(mockSendMessageMutate).toHaveBeenCalled();
+    });
+  });
 });

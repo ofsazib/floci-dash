@@ -15,6 +15,7 @@ import {
   useEKSCreateCluster,
   useEKSDeleteCluster,
   useEKSNodegroups,
+  useEKSNodegroup,
   useEKSCreateNodegroup,
   useEKSDeleteNodegroup,
 } from "./useEKS";
@@ -85,6 +86,21 @@ describe("useEKSCreateCluster", () => {
       })
     );
   });
+
+  it("invalidates clusters query on success", async () => {
+    mockApi.mockResolvedValueOnce({ cluster: { name: "new-cluster" } });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useEKSCreateCluster(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync({
+      name: "new-cluster",
+      roleArn: "arn:aws:iam::123456789012:role/eks-role",
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["aws", "eks", "clusters"] });
+  });
 });
 
 // ─── DELETE CLUSTER ───────────────────────────────────────
@@ -98,6 +114,18 @@ describe("useEKSDeleteCluster", () => {
       "/aws/eks/clusters/my-cluster",
       expect.objectContaining({ method: "DELETE" })
     );
+  });
+
+  it("invalidates clusters query on success", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useEKSDeleteCluster(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync("my-cluster");
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["aws", "eks", "clusters"] });
   });
 });
 
@@ -114,6 +142,25 @@ describe("useEKSNodegroups", () => {
     const { result } = renderHook(() => useEKSNodegroups("my-cluster"), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith("/aws/eks/clusters/my-cluster/node-groups");
+  });
+});
+
+describe("useEKSNodegroup", () => {
+  it("does NOT call api when clusterName is null", () => {
+    renderHook(() => useEKSNodegroup(null, "my-ng"), { wrapper: createWrapper() });
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("does NOT call api when nodegroupName is null", () => {
+    renderHook(() => useEKSNodegroup("my-cluster", null), { wrapper: createWrapper() });
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api with cluster and nodegroup names", async () => {
+    mockApi.mockResolvedValueOnce({ nodegroup: { nodegroupName: "my-ng", status: "ACTIVE" } });
+    const { result } = renderHook(() => useEKSNodegroup("my-cluster", "my-ng"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/eks/clusters/my-cluster/node-groups/my-ng");
   });
 });
 
@@ -146,6 +193,24 @@ describe("useEKSCreateNodegroup", () => {
       })
     );
   });
+
+  it("invalidates nodegroups query on success", async () => {
+    mockApi.mockResolvedValueOnce({ nodegroup: { nodegroupName: "new-ng" } });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useEKSCreateNodegroup("my-cluster"), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync({
+      nodegroupName: "new-ng",
+      nodeRole: "arn:aws:iam::123456789012:role/node-role",
+      subnets: ["subnet-123"],
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["aws", "eks", "nodegroups", "my-cluster"],
+    });
+  });
 });
 
 // ─── DELETE NODEGROUP ─────────────────────────────────────
@@ -161,5 +226,19 @@ describe("useEKSDeleteNodegroup", () => {
       "/aws/eks/clusters/my-cluster/node-groups/my-ng",
       expect.objectContaining({ method: "DELETE" })
     );
+  });
+
+  it("invalidates nodegroups query on success", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useEKSDeleteNodegroup("my-cluster"), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync("my-ng");
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["aws", "eks", "nodegroups", "my-cluster"],
+    });
   });
 });

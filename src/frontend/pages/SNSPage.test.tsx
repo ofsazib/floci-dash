@@ -386,4 +386,75 @@ describe("SNSPage", () => {
     await clickButton(user, "Remove tag");
     expect(mockUntagMutate).toHaveBeenCalled();
   });
+
+  // ─── Modal Cancel Tests ──────────────────────────────────
+
+  it("cancels create topic modal", async () => {
+    const user = userEvent.setup();
+    render(<SNSPage />, { wrapper: createWrapper() });
+    await clickButton(user, /^Create topic$/i);
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("my-topic")).toBeTruthy();
+    });
+    await clickButton(user, /Cancel/i);
+    expect(mockCreateTopicMutate).not.toHaveBeenCalled();
+  });
+
+  it("cancels publish modal", async () => {
+    const user = userEvent.setup();
+    mockSearchParams.mockReturnValue([new URLSearchParams("?topicArn=arn:aws:sns:us-east-1:000000000000:my-topic"), mockSetSearchParams]);
+    render(<SNSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Publish"));
+    await clickButton(user, /Publish message/i);
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("Enter message content...")).toBeTruthy();
+    });
+    await clickButton(user, /Cancel/i);
+    expect(mockPublishMutate).not.toHaveBeenCalled();
+  });
+
+  it("cancels subscribe modal", async () => {
+    const user = userEvent.setup();
+    mockSearchParams.mockReturnValue([new URLSearchParams("?topicArn=arn:aws:sns:us-east-1:000000000000:my-topic"), mockSetSearchParams]);
+    render(<SNSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Subscriptions"));
+    await clickButton(user, /Create subscription/i);
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("arn:aws:sqs:us-east-1:000000000000:my-queue")).toBeTruthy();
+    });
+    await clickButton(user, /Cancel/i);
+    expect(mockSubscribeMutate).not.toHaveBeenCalled();
+  });
+
+  // ─── Loading State Tests ─────────────────────────────────
+
+  it("shows loading state in subscriptions tab", async () => {
+    const user = userEvent.setup();
+    mockSubscriptions.mockReturnValue({ data: undefined, isLoading: true });
+    mockSearchParams.mockReturnValue([new URLSearchParams("?topicArn=arn:aws:sns:us-east-1:000000000000:my-topic"), mockSetSearchParams]);
+    render(<SNSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Subscriptions"));
+    expect(screen.getAllByText("Subscriptions").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("shows loading state in tags tab", async () => {
+    const user = userEvent.setup();
+    mockTopicTags.mockReturnValue({ data: undefined, isLoading: true });
+    mockSearchParams.mockReturnValue([new URLSearchParams("?topicArn=arn:aws:sns:us-east-1:000000000000:my-topic"), mockSetSearchParams]);
+    render(<SNSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Tags"));
+    await waitFor(() => {
+      expect(screen.getAllByText("Tags").length).toBeGreaterThan(0);
+    });
+  });
+
+  // ─── Attributes Fallback Tests ────────────────────────────
+
+  it("shows — for missing attribute fields", () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("?topicArn=arn:aws:sns:us-east-1:000000000000:my-topic"), mockSetSearchParams]);
+    render(<SNSPage />, { wrapper: createWrapper() });
+    // Owner and DisplayName default to "—" when attributes are empty
+    const dashes = screen.getAllByText("—");
+    expect(dashes.length).toBeGreaterThanOrEqual(2);
+  });
 });

@@ -1475,6 +1475,14 @@ Each remaining service gets a standard list + create + delete pattern.
 | 22.b | Write tests for backend entry files (index.ts, types.ts) | Done | 2026-06-20 |
 | 22.c | Re-check Codecov number, iterate if below target | Done | 2026-06-20 |
 
+| 22.d | S3VectorsDashboard — fix 3 failing tests (15 pass), improve Query button targeting for duplicate matches | Done | 2026-07-06 |
+| 22.e | IoTDashboard — fix 3 failing tests (51 pass), improve coverage 35.05% → 67.81% branch (+32.76pp) | Done | 2026-07-06 |
+| 22.f | ECSDashboard — add 17+ tests on cluster detail (loading, filters, stop task, delete service, fallbacks), branch 38.75% → 62.50% (+23.75pp) | Done | 2026-07-06 |
+| 22.g | ElasticBeanstalkDashboard — add 10+ tests on cancel modals, error alerts (vi.spyOn), filter, health variants, deselect (29 total) | Done | 2026-07-06 |
+| 22.h | AppSyncDashboard — add 14 tests on detail tabs (data sources, resolvers, types, keys, functions), loading, fallbacks, branch 41.33% → 58.66% (+17.33pp) | Done | 2026-07-06 |
+| 22.i | CodePipelineDashboard — add 22 tests on stage states, webhooks, action types, filters, cancel modals, branch 45.54% → ~50% (+~5pp) | Done | 2026-07-06 |
+| 22.j | Fix pre-existing TS2345 typecheck error in lambda.ts — decodeURIComponent(c.req.param("arn")) ?? "" | Done | 2026-07-06 |
+
 ---
 
 ### Phase 13: E2E Integration Test Expansion
@@ -1563,3 +1571,36 @@ pnpm start
 npm run docker:dev
 npm run docker:down
 ```
+
+### Phase 15: Dashboard Test Coverage Deepening (July 2026)
+
+Deepen branch coverage on low-coverage dashboard component test files using `vi.hoisted` mutable state + reactive getters pattern.
+
+**Batch 1 — CodeBuild, AutoScaling, S3Vectors, DocDB** (2026-07-07)
+
+| # | Task | Status | Date |
+|---|------|--------|------|
+| 25.1 | CodeBuildDashboard — add `vi.hoisted` createProjectState, error alert test, createdAt date branch test | Done | 2026-07-07 |
+| 25.2 | AutoScalingDashboard — add `vi.hoisted` deleteGroupState, isPending/variables test | Done | 2026-07-07 |
+| 25.3 | S3VectorsDashboard — add putVectors/query error alert tests, vector data preview test | Done | 2026-07-07 |
+| 25.4 | DocDBDashboard — add `vi.hoisted` createClusterState + createInstanceState, error alert tests | Done | 2026-07-07 |
+| 25.5 | Verify: 55 tests pass, typecheck clean, all 56 dashboard test files pass (689→701 tests) | Done | 2026-07-07 |
+
+**Batch 2 — ECS, ELB** (2026-07-07)
+
+| # | Task | Status | Date |
+|---|------|--------|------|
+| 25.6 | ECSDashboard — add 5 `vi.hoisted` states (createCluster/createService/runTask/deleteCluster/deleteService) + error alert + loading tests (27→32 tests) | Done | 2026-07-07 |
+| 25.7 | ELBDashboard — add 4 `vi.hoisted` states (createLB/deleteLB/createTG/deleteTG) + loading state tests (7→11 tests) | Done | 2026-07-07 |
+| 25.8 | Verify: 43 tests pass (32 ECS + 11 ELB), typecheck clean | Done | 2026-07-07 |
+
+**Batch 3 — CloudTrail, ElastiCache, Cognito** (2026-07-07)
+
+| # | Task | Status | Date |
+|---|------|--------|------|
+| 25.9 | CloudTrailDashboard — add `vi.hoisted` deleteTrailState + loading test (8→9 tests) | Done | 2026-07-07 |
+| 25.10 | ElastiCacheDashboard — add 6 `vi.hoisted` states (createRG/deleteRG/createCC/deleteCC/createUser/deleteUser) + error alert + loading tests (8→14 tests) | Done | 2026-07-07 |
+| 25.11 | CognitoDashboard — add `vi.hoisted` deletePoolState + loading test + 4 detail view tests (users/groups/clients/missing-fields) (10→15 tests) | Done | 2026-07-07 |
+| 25.12 | EventsDashboard — no separate component exists (rendered inline in EventsPage.tsx) | Skipped | 2026-07-07 |
+| 25.13 | Verify: 38 tests pass (9+14+15), typecheck clean, full suite 701 tests | Done | 2026-07-07 |
+

@@ -42,6 +42,9 @@ import {
   usePutEventInvokeConfig,
   useDeleteEventInvokeConfig,
   useCreateLayerVersion,
+  useCodeSigningConfig,
+  useAttachCodeSigningConfig,
+  useDetachCodeSigningConfig,
 } from "../hooks/useLambda";
 import ResourceTable from "../components/ResourceTable";
 import DeleteButton from "../components/DeleteButton";
@@ -249,6 +252,9 @@ function LambdaFunctionDetail({ name, onBack }: { name: string; onBack: () => vo
   const deleteConcurrency = useDeleteFunctionConcurrency();
   const putEventInvokeConfig = usePutEventInvokeConfig();
   const deleteEventInvokeConfig = useDeleteEventInvokeConfig();
+  const { data: codeSigningConfig } = useCodeSigningConfig(name);
+  const attachCodeSigningConfig = useAttachCodeSigningConfig();
+  const detachCodeSigningConfig = useDetachCodeSigningConfig();
 
   const [showUrlModal, setShowUrlModal] = useState(false);
   const [urlForm, setUrlForm] = useState({ authType: "NONE", corsAllowMethods: "*" });
@@ -256,6 +262,8 @@ function LambdaFunctionDetail({ name, onBack }: { name: string; onBack: () => vo
   const [concurrencyValue, setConcurrencyValue] = useState("");
   const [showEventInvokeModal, setShowEventInvokeModal] = useState(false);
   const [eicForm, setEicForm] = useState({ maxRetryAttempts: "2", maxEventAge: "3600" });
+  const [showCodeSigningModal, setShowCodeSigningModal] = useState(false);
+  const [codeSigningArn, setCodeSigningArn] = useState("");
 
   if (isLoading) return <StatusIndicator type="loading">Loading function details...</StatusIndicator>;
   if (isError) return <StatusIndicator type="error">{(error as Error)?.message || "Failed to load"}</StatusIndicator>;
@@ -391,6 +399,28 @@ function LambdaFunctionDetail({ name, onBack }: { name: string; onBack: () => vo
                 }} />
               </SpaceBetween>
             )}
+          </Box>          <Box padding={{ top: "l" }}>
+            <Box fontSize="body-s" color="text-label" padding={{ bottom: "xs" }}>Code signing config</Box>
+            {codeSigningConfig?.codeSigningConfigArn ? (
+              <SpaceBetween direction="horizontal" size="xs">
+              <Box fontSize="body-s">
+                <span style={{ wordBreak: "break-all" }}>{codeSigningConfig.codeSigningConfigArn}</span>
+              </Box>
+              <Button variant="inline-icon" iconName="edit" onClick={() => {
+                  setCodeSigningArn(codeSigningConfig.codeSigningConfigArn || "");
+                  setShowCodeSigningModal(true);
+                }} />
+                <Button variant="inline-icon" iconName="remove" onClick={() => detachCodeSigningConfig.mutate(name)} />
+              </SpaceBetween>
+            ) : (
+              <SpaceBetween direction="horizontal" size="xs">
+                <Box fontSize="body-s" color="text-body-secondary">No code signing config attached</Box>
+                <Button variant="inline-icon" iconName="add-plus" onClick={() => {
+                  setCodeSigningArn("");
+                  setShowCodeSigningModal(true);
+                }} />
+              </SpaceBetween>
+            )}
           </Box>
         </Container>
       ),
@@ -408,6 +438,12 @@ function LambdaFunctionDetail({ name, onBack }: { name: string; onBack: () => vo
           )}
           {putEventInvokeConfig.isError && (
             <Alert type="error" dismissible>{(putEventInvokeConfig.error as Error)?.message || "Failed to update event invoke config"}</Alert>
+          )}
+          {attachCodeSigningConfig.isError && (
+            <Alert type="error" dismissible>{(attachCodeSigningConfig.error as Error)?.message || "Failed to attach code signing config"}</Alert>
+          )}
+          {detachCodeSigningConfig.isError && (
+            <Alert type="error" dismissible>{(detachCodeSigningConfig.error as Error)?.message || "Failed to detach code signing config"}</Alert>
           )}
 
           <Container header={<Header variant="h3">Reserved concurrency</Header>}>
@@ -456,6 +492,37 @@ function LambdaFunctionDetail({ name, onBack }: { name: string; onBack: () => vo
                   setShowUrlModal(true);
                 }}>
                   Create URL
+                </Button>
+              </SpaceBetween>
+            )}
+          </Container>
+
+          <Container header={<Header variant="h3">Code signing config</Header>}>
+            {codeSigningConfig?.codeSigningConfigArn ? (
+              <SpaceBetween size="s">
+                <Box fontSize="body-m">
+                  Config ARN: <strong style={{ wordBreak: "break-all" }}>{codeSigningConfig.codeSigningConfigArn}</strong>
+                </Box>
+                <SpaceBetween direction="horizontal" size="xs">
+                  <Button variant="normal" onClick={() => {
+                    setCodeSigningArn(codeSigningConfig.codeSigningConfigArn || "");
+                    setShowCodeSigningModal(true);
+                  }}>
+                    Attach different config
+                  </Button>
+                  <Button variant="normal" loading={detachCodeSigningConfig.isPending} onClick={() => detachCodeSigningConfig.mutate(name)}>
+                    Detach
+                  </Button>
+                </SpaceBetween>
+              </SpaceBetween>
+            ) : (
+              <SpaceBetween size="s">
+                <Box fontSize="body-m" color="text-body-secondary">No code signing config attached to this function.</Box>
+                <Button variant="normal" onClick={() => {
+                  setCodeSigningArn("");
+                  setShowCodeSigningModal(true);
+                }}>
+                  Attach config
                 </Button>
               </SpaceBetween>
             )}
@@ -727,6 +794,50 @@ function LambdaFunctionDetail({ name, onBack }: { name: string; onBack: () => vo
               value={concurrencyValue}
               onChange={({ detail }) => setConcurrencyValue(detail.value)}
               placeholder="e.g. 10"
+            />
+          </FormField>
+        </Form>
+      </Modal>
+
+      {/* Code signing config modal */}
+      <Modal
+        visible={showCodeSigningModal}
+        onDismiss={() => setShowCodeSigningModal(false)}
+        header="Attach code signing config"
+        size="medium"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCodeSigningModal(false)}>Cancel</Button>
+              <Button
+                variant="primary"
+                loading={attachCodeSigningConfig.isPending}
+                disabled={!codeSigningArn}
+                onClick={() => {
+                  attachCodeSigningConfig.mutate(
+                    { name, codeSigningConfigArn: codeSigningArn },
+                    { onSuccess: () => setShowCodeSigningModal(false) }
+                  );
+                }}
+              >
+                Attach
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          {attachCodeSigningConfig.isError && (
+            <Alert type="error" dismissible>{(attachCodeSigningConfig.error as Error)?.message || "Failed to attach"}</Alert>
+          )}
+          <FormField
+            label="Code signing config ARN"
+            description="The ARN of the code signing configuration to attach to this function"
+          >
+            <Input
+              value={codeSigningArn}
+              onChange={({ detail }) => setCodeSigningArn(detail.value)}
+              placeholder="arn:aws:lambda:us-east-1:000000000000:code-signing-config:csc-001"
             />
           </FormField>
         </Form>

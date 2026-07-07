@@ -524,173 +524,153 @@ export function EKSDashboard() {
 
   if (clustersLoading) return <TableSkeleton />;
 
+  if (selectedCluster) {
+    return (
+      <SpaceBetween size="l">
+        <Box>
+          <Button iconName="arrow-left" onClick={() => setSelectedCluster(null)}>
+            Back to clusters
+          </Button>
+        </Box>
+        <NodegroupsPanel
+          clusterName={selectedCluster}
+          nodegroupsData={nodegroupsData}
+          nodegroupsLoading={nodegroupsLoading}
+          createNodegroup={createNodegroup}
+          deleteNodegroup={deleteNodegroup}
+          showCreateNodegroup={showCreateNodegroup}
+          setShowCreateNodegroup={setShowCreateNodegroup}
+          ngName={ngName}
+          setNgName={setNgName}
+          ngNodeRole={ngNodeRole}
+          setNgNodeRole={setNgNodeRole}
+          ngSubnets={ngSubnets}
+          setNgSubnets={setNgSubnets}
+        />
+      </SpaceBetween>
+    );
+  }
+
   return (
-    <Tabs
-      activeTabId={selectedCluster ? "nodegroups" : "clusters"}
-      onChange={({ detail }) => {
-        if (detail.activeTabId === "clusters") {
-          setSelectedCluster(null);
+    <>
+      <ResourceTable
+        resourceName="Cluster"
+        headerTitle="EKS Clusters"
+        headerCounter={clustersData?.total}
+        items={(clustersData?.clusters || []).map((c: any) => ({
+          name: c.name,
+          status: c.status,
+          version: c.version || "-",
+          endpoint: c.endpoint || "-",
+          created: c.createdAt ? new Date(c.createdAt).toLocaleDateString() : "-",
+        }))}
+        loading={clustersLoading}
+        onCreate={() => setShowCreateCluster(true)}
+        emptyMessage="No EKS clusters"
+        columns={[
+          {
+            id: "name",
+            header: "Name",
+            cell: (item: any) => (
+              <Button
+                variant="link"
+                onClick={() => setSelectedCluster(item.name)}
+              >
+                {item.name}
+              </Button>
+            ),
+            isRowHeader: true,
+          },
+          { id: "status", header: "Status", cell: (item: any) => item.status },
+          { id: "version", header: "Version", cell: (item: any) => item.version },
+          { id: "created", header: "Created", cell: (item: any) => item.created },
+          {
+            id: "actions",
+            header: "",
+            cell: (item: any) => (
+              <DeleteButton
+                itemName={item.name}
+                resourceType="cluster"
+                loading={deleteCluster.isPending && deleteCluster.variables === item.name}
+                onDelete={() => deleteCluster.mutateAsync(item.name)}
+              />
+            ),
+          },
+        ]}
+        filterEnabled
+        filterPlaceholder="Find clusters by name"
+        filterFunction={(item: any, searchText: string) =>
+          item.name.toLowerCase().includes(searchText.toLowerCase())
         }
-      }}
-      tabs={[
-        {
-          id: "clusters",
-          label: "Clusters",
-          content: (
-            <>
-              {selectedCluster && (
-                <Box margin={{ bottom: "s" }}>
-                  <Button
-                    iconName="arrow-left"
-                    onClick={() => setSelectedCluster(null)}
-                  >
-                    Back to clusters
-                  </Button>
-                </Box>
-              )}
-              {!selectedCluster && (
-                <>
-                  <ResourceTable
-                    resourceName="Cluster"
-                    headerTitle="EKS Clusters"
-                    headerCounter={clustersData?.total}
-                    items={(clustersData?.clusters || []).map((c: any) => ({
-                      name: c.name,
-                      status: c.status,
-                      version: c.version || "-",
-                      endpoint: c.endpoint || "-",
-                      created: c.createdAt ? new Date(c.createdAt).toLocaleDateString() : "-",
-                    }))}
-                    loading={clustersLoading}
-                    onCreate={() => setShowCreateCluster(true)}
-                    emptyMessage="No EKS clusters"
-                    columns={[
-                      {
-                        id: "name",
-                        header: "Name",
-                        cell: (item: any) => (
-                          <Button
-                            variant="link"
-                            onClick={() => setSelectedCluster(item.name)}
-                          >
-                            {item.name}
-                          </Button>
-                        ),
-                        isRowHeader: true,
+      />
+      <Modal
+        visible={showCreateCluster}
+        onDismiss={() => setShowCreateCluster(false)}
+        header="Create EKS cluster"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreateCluster(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  createCluster.mutate(
+                    {
+                      name: clusterName,
+                      roleArn: clusterRoleArn,
+                      version: clusterVersion || undefined,
+                    },
+                    {
+                      onSuccess: () => {
+                        setShowCreateCluster(false);
+                        setClusterName("");
+                        setClusterRoleArn("");
+                        setClusterVersion("");
                       },
-                      { id: "status", header: "Status", cell: (item: any) => item.status },
-                      { id: "version", header: "Version", cell: (item: any) => item.version },
-                      { id: "created", header: "Created", cell: (item: any) => item.created },
-                      {
-                        id: "actions",
-                        header: "",
-                        cell: (item: any) => (
-                          <DeleteButton
-                            itemName={item.name}
-                            resourceType="cluster"
-                            loading={deleteCluster.isPending && deleteCluster.variables === item.name}
-                            onDelete={() => deleteCluster.mutateAsync(item.name)}
-                          />
-                        ),
-                      },
-                    ]}
-                    filterEnabled
-                    filterPlaceholder="Find clusters by name"
-                    filterFunction={(item: any, searchText: string) =>
-                      item.name.toLowerCase().includes(searchText.toLowerCase())
                     }
-                  />
-                  <Modal
-                    visible={showCreateCluster}
-                    onDismiss={() => setShowCreateCluster(false)}
-                    header="Create EKS cluster"
-                    footer={
-                      <Box float="right">
-                        <SpaceBetween direction="horizontal" size="xs">
-                          <Button variant="link" onClick={() => setShowCreateCluster(false)}>
-                            Cancel
-                          </Button>
-                          <Button
-                            variant="primary"
-                            onClick={() => {
-                              createCluster.mutate(
-                                {
-                                  name: clusterName,
-                                  roleArn: clusterRoleArn,
-                                  version: clusterVersion || undefined,
-                                },
-                                {
-                                  onSuccess: () => {
-                                    setShowCreateCluster(false);
-                                    setClusterName("");
-                                    setClusterRoleArn("");
-                                    setClusterVersion("");
-                                  },
-                                }
-                              );
-                            }}
-                            disabled={!clusterName || !clusterRoleArn}
-                            loading={createCluster.isPending}
-                          >
-                            Create
-                          </Button>
-                        </SpaceBetween>
-                      </Box>
-                    }
-                  >
-                    <Form>
-                      <FormField label="Cluster name">
-                        <Input
-                          value={clusterName}
-                          onChange={({ detail }) => setClusterName(detail.value)}
-                          placeholder="my-cluster"
-                        />
-                      </FormField>
-                      <FormField label="Role ARN">
-                        <Input
-                          value={clusterRoleArn}
-                          onChange={({ detail }) => setClusterRoleArn(detail.value)}
-                          placeholder="arn:aws:iam::123456789012:role/eks-role"
-                        />
-                      </FormField>
-                      <FormField label="Kubernetes version (optional)">
-                        <Input
-                          value={clusterVersion}
-                          onChange={({ detail }) => setClusterVersion(detail.value)}
-                          placeholder="1.27"
-                        />
-                      </FormField>
-                    </Form>
-                  </Modal>
-                </>
-              )}
-              {selectedCluster && (
-                <NodegroupsPanel
-                  clusterName={selectedCluster}
-                  nodegroupsData={nodegroupsData}
-                  nodegroupsLoading={nodegroupsLoading}
-                  createNodegroup={createNodegroup}
-                  deleteNodegroup={deleteNodegroup}
-                  showCreateNodegroup={showCreateNodegroup}
-                  setShowCreateNodegroup={setShowCreateNodegroup}
-                  ngName={ngName}
-                  setNgName={setNgName}
-                  ngNodeRole={ngNodeRole}
-                  setNgNodeRole={setNgNodeRole}
-                  ngSubnets={ngSubnets}
-                  setNgSubnets={setNgSubnets}
-                />
-              )}
-            </>
-          ),
-        },
-      ]}
-    />
+                  );
+                }}
+                disabled={!clusterName || !clusterRoleArn}
+                loading={createCluster.isPending}
+              >
+                Create
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          <FormField label="Cluster name">
+            <Input
+              value={clusterName}
+              onChange={({ detail }) => setClusterName(detail.value)}
+              placeholder="my-cluster"
+            />
+          </FormField>
+          <FormField label="Role ARN">
+            <Input
+              value={clusterRoleArn}
+              onChange={({ detail }) => setClusterRoleArn(detail.value)}
+              placeholder="arn:aws:iam::123456789012:role/eks-role"
+            />
+          </FormField>
+          <FormField label="Kubernetes version (optional)">
+            <Input
+              value={clusterVersion}
+              onChange={({ detail }) => setClusterVersion(detail.value)}
+              placeholder="1.27"
+            />
+          </FormField>
+        </Form>
+      </Modal>
+    </>
   );
 }
 
 
-function NodegroupsPanel({
+export function NodegroupsPanel({
   clusterName,
   nodegroupsData,
   nodegroupsLoading,

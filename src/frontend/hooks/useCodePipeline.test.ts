@@ -15,10 +15,15 @@ import {
   usePipeline,
   usePipelineState,
   useDeletePipeline,
+  useUpdatePipeline,
   usePipelineExecutions,
   useStartPipelineExecution,
   useStopPipelineExecution,
   useRetryStageExecution,
+  useDisableStageTransition,
+  useEnableStageTransition,
+  usePutApprovalResult,
+  useActionExecutions,
   useWebhooks,
   useCreateWebhook,
   useDeleteWebhook,
@@ -110,6 +115,18 @@ describe("useDeletePipeline", () => {
       expect.objectContaining({ method: "DELETE" }),
     );
   });
+
+  it("invalidates pipelines query on success", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useDeletePipeline(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync("my-pipeline");
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["aws", "codepipeline", "pipelines"] });
+  });
 });
 
 // ─── Executions ────────────────────────────────────────
@@ -164,6 +181,20 @@ describe("useStopPipelineExecution", () => {
       expect.objectContaining({ method: "POST" }),
     );
   });
+
+  it("invalidates executions query on success", async () => {
+    mockApi.mockResolvedValueOnce({ pipelineExecutionId: "exec-1" });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useStopPipelineExecution(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync({ name: "my-pipeline", executionId: "exec-1", abandon: false, reason: "test" });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["aws", "codepipeline", "pipelines", "my-pipeline", "executions"],
+    });
+  });
 });
 
 describe("useRetryStageExecution", () => {
@@ -175,6 +206,20 @@ describe("useRetryStageExecution", () => {
       "/aws/codepipeline/pipelines/my-pipeline/executions/exec-1/retry",
       expect.objectContaining({ method: "POST" }),
     );
+  });
+
+  it("invalidates executions query on success", async () => {
+    mockApi.mockResolvedValueOnce({ pipelineExecutionId: "exec-1" });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useRetryStageExecution(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync({ name: "my-pipeline", executionId: "exec-1", retryMode: "FAILED_ACTIONS" });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["aws", "codepipeline", "pipelines", "my-pipeline", "executions"],
+    });
   });
 });
 
@@ -257,5 +302,136 @@ describe("useCreateCustomActionType", () => {
     });
     await result.current.mutateAsync({ actionType: { category: "Build", provider: "MyProvider" } });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["aws", "codepipeline", "action-types"] });
+  });
+});
+
+// ─── UPDATE PIPELINE ─────────────────────────────────────
+
+describe("useUpdatePipeline", () => {
+  it("calls api with PUT method and encoded name", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useUpdatePipeline(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ name: "my-pipeline", pipelineVersion: 2 });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/codepipeline/pipelines/my-pipeline",
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ pipelineVersion: 2 }) }),
+    );
+  });
+
+  it("invalidates pipelines query on success", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useUpdatePipeline(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync({ name: "my-pipeline", pipelineVersion: 2 });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["aws", "codepipeline", "pipelines"] });
+  });
+});
+
+// ─── STAGE TRANSITIONS ───────────────────────────────────
+
+describe("useDisableStageTransition", () => {
+  it("calls api with POST method and encoded params", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useDisableStageTransition(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ name: "my-pipeline", stageName: "Source", reason: "testing" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/codepipeline/pipelines/my-pipeline/transitions/Source/disable",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("invalidates pipeline state query on success", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useDisableStageTransition(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync({ name: "my-pipeline", stageName: "Source", reason: "testing" });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["aws", "codepipeline", "pipelines", "my-pipeline", "state"],
+    });
+  });
+});
+
+describe("useEnableStageTransition", () => {
+  it("calls api with POST method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useEnableStageTransition(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ name: "my-pipeline", stageName: "Source" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/codepipeline/pipelines/my-pipeline/transitions/Source/enable",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("invalidates pipeline state query on success", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useEnableStageTransition(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync({ name: "my-pipeline", stageName: "Source" });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["aws", "codepipeline", "pipelines", "my-pipeline", "state"],
+    });
+  });
+});
+
+// ─── APPROVALS ───────────────────────────────────────────
+
+describe("usePutApprovalResult", () => {
+  it("calls api with POST method and encoded name", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => usePutApprovalResult(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ name: "my-pipeline", approvalResult: { status: "Approved", summary: "Looks good" } });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/codepipeline/pipelines/my-pipeline/approvals",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("invalidates pipeline state query on success", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => usePutApprovalResult(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync({ name: "my-pipeline", approvalResult: { status: "Approved", summary: "Looks good" } });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["aws", "codepipeline", "pipelines", "my-pipeline", "state"],
+    });
+  });
+});
+
+// ─── ACTION EXECUTIONS ───────────────────────────────────
+
+describe("useActionExecutions", () => {
+  it("does NOT call api when name is null", () => {
+    renderHook(() => useActionExecutions(null), { wrapper: createWrapper() });
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api with name in path and no executionId", async () => {
+    mockApi.mockResolvedValueOnce({ actions: [], total: 0 });
+    const { result } = renderHook(() => useActionExecutions("my-pipeline"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/codepipeline/pipelines/my-pipeline/actions");
+  });
+
+  it("calls api with executionId query param", async () => {
+    mockApi.mockResolvedValueOnce({ actions: [], total: 0 });
+    const { result } = renderHook(() => useActionExecutions("my-pipeline", "exec-123"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/codepipeline/pipelines/my-pipeline/actions?executionId=exec-123");
   });
 });
