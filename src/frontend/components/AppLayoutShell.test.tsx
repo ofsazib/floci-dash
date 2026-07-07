@@ -254,6 +254,35 @@ describe("AppLayoutShell — search", () => {
     );
     expect(screen.getByText("Expand all")).toBeTruthy();
   });
+
+  it("shows non-implemented services matching search query", async () => {
+    const user = userEvent.setup();
+    // Add a non-implemented service to the health response
+    (useHealth as any).mockReturnValue({
+      data: {
+        services: {
+          s3: "running",
+          dynamodb: "running",
+          ec2: "running",
+          lambda: "running",
+          sqs: "running",
+          sns: "running",
+          kms: "running",
+          redshift: "running",
+        },
+        stats: { running: 8, total: 8 },
+      },
+    });
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    const input = screen.getByPlaceholderText(/^Find services/);
+    await user.type(input, "redshift");
+    expect(screen.getByText("redshift")).toBeTruthy();
+  });
 });
 
 describe("AppLayoutShell — dark mode toggle", () => {
@@ -308,6 +337,23 @@ describe("AppLayoutShell — dark mode toggle", () => {
       { wrapper: createWrapper() },
     );
     expect(document.body.classList.contains("awsui-dark-mode")).toBe(false);
+  });
+});
+
+describe("AppLayoutShell — Expand all / Collapse all toggle", () => {
+  it("toggles between Expand all and Collapse all", async () => {
+    const user = userEvent.setup();
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    const toggle = screen.getByText("Expand all");
+    await user.click(toggle);
+    expect(screen.getByText("Collapse all")).toBeTruthy();
+    await user.click(screen.getByText("Collapse all"));
+    expect(screen.getByText("Expand all")).toBeTruthy();
   });
 });
 

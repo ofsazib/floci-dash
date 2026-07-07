@@ -15,8 +15,12 @@ import {
   useS3VectorsCreateBucket,
   useS3VectorsDeleteBucket,
   useS3VectorsIndexes,
+  useS3VectorsIndex,
   useS3VectorsCreateIndex,
   useS3VectorsDeleteIndex,
+  useS3VectorsGetVectors,
+  useS3VectorsPutVectors,
+  useS3VectorsDeleteVectors,
   useS3VectorsQuery,
 } from "./useS3Vectors";
 
@@ -97,8 +101,27 @@ describe("useS3VectorsIndexes", () => {
   });
 });
 
+describe("useS3VectorsIndex", () => {
+  it("calls api with correct URL when both params provided", async () => {
+    mockApi.mockResolvedValueOnce({ index: { indexName: "idx1", dimension: 128 } });
+    const { result } = renderHook(() => useS3VectorsIndex("b1", "idx1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/s3vectors/buckets/b1/indexes/idx1");
+  });
+
+  it("does NOT call api when bucketName is null", () => {
+    renderHook(() => useS3VectorsIndex(null, "idx1"), { wrapper: createWrapper() });
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("does NOT call api when indexName is null", () => {
+    renderHook(() => useS3VectorsIndex("b1", null), { wrapper: createWrapper() });
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+});
+
 describe("useS3VectorsCreateIndex", () => {
-  it("sends POST with correct body", async () => {
+  it("sends POST with required fields", async () => {
     mockApi.mockResolvedValueOnce({ index: { indexArn: "arn:test" } });
     const { result } = renderHook(() => useS3VectorsCreateIndex(), { wrapper: createWrapper() });
     result.current.mutate({ bucketName: "b1", indexName: "idx1", dimension: 128 });
@@ -106,6 +129,23 @@ describe("useS3VectorsCreateIndex", () => {
     expect(mockApi).toHaveBeenCalledWith("/aws/s3vectors/buckets/b1/indexes", {
       method: "POST",
       body: JSON.stringify({ indexName: "idx1", dimension: 128, dataType: undefined, distanceMetric: undefined }),
+    });
+  });
+
+  it("sends POST with optional fields", async () => {
+    mockApi.mockResolvedValueOnce({ index: { indexArn: "arn:test" } });
+    const { result } = renderHook(() => useS3VectorsCreateIndex(), { wrapper: createWrapper() });
+    result.current.mutate({
+      bucketName: "b1",
+      indexName: "idx2",
+      dimension: 256,
+      dataType: "float32",
+      distanceMetric: "cosine",
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/s3vectors/buckets/b1/indexes", {
+      method: "POST",
+      body: JSON.stringify({ indexName: "idx2", dimension: 256, dataType: "float32", distanceMetric: "cosine" }),
     });
   });
 });
@@ -117,6 +157,67 @@ describe("useS3VectorsDeleteIndex", () => {
     result.current.mutate({ bucketName: "b1", indexName: "idx1" });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith("/aws/s3vectors/buckets/b1/indexes/idx1", { method: "DELETE" });
+  });
+});
+
+describe("useS3VectorsPutVectors", () => {
+  it("sends PUT with correct body", async () => {
+    mockApi.mockResolvedValueOnce({ vectors: [] });
+    const { result } = renderHook(() => useS3VectorsPutVectors(), { wrapper: createWrapper() });
+    const vectors = [{ key: "vec1", data: { float32: [0.1, 0.2] } }];
+    result.current.mutate({ bucketName: "b1", indexName: "idx1", vectors });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/s3vectors/buckets/b1/indexes/idx1/vectors",
+      { method: "PUT", body: JSON.stringify({ vectors }) },
+    );
+  });
+});
+
+describe("useS3VectorsGetVectors", () => {
+  it("calls api with keys param when keys are provided", async () => {
+    mockApi.mockResolvedValueOnce({ vectors: [], total: 0 });
+    const { result } = renderHook(
+      () => useS3VectorsGetVectors("b1", "idx1", ["vec1", "vec2"]),
+      { wrapper: createWrapper() },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/s3vectors/buckets/b1/indexes/idx1/vectors?keys=vec1%2Cvec2&returnData=true&returnMetadata=true",
+    );
+  });
+
+  it("does NOT call api when bucketName is null", () => {
+    renderHook(() => useS3VectorsGetVectors(null, "idx1", ["vec1"]), { wrapper: createWrapper() });
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("does NOT call api when keys array is empty", () => {
+    renderHook(() => useS3VectorsGetVectors("b1", "idx1", []), { wrapper: createWrapper() });
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api without keys param when keys is empty", async () => {
+    mockApi.mockResolvedValueOnce({ vectors: [], total: 0 });
+    const { result } = renderHook(
+      () => useS3VectorsGetVectors("b1", "idx1", []),
+      { wrapper: createWrapper() },
+    );
+    // Query should not fire because keys.length === 0
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+});
+
+describe("useS3VectorsDeleteVectors", () => {
+  it("sends DELETE with correct body", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useS3VectorsDeleteVectors(), { wrapper: createWrapper() });
+    result.current.mutate({ bucketName: "b1", indexName: "idx1", keys: ["vec1"] });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/s3vectors/buckets/b1/indexes/idx1/vectors",
+      { method: "DELETE", body: JSON.stringify({ keys: ["vec1"] }) },
+    );
   });
 });
 
@@ -139,6 +240,28 @@ describe("useS3VectorsQuery", () => {
         topK: 5,
         filter: undefined,
         returnMetadata: true,
+      }),
+    });
+  });
+
+  it("sends POST with filter", async () => {
+    mockApi.mockResolvedValueOnce({ vectors: [], distanceMetric: "cosine" });
+    const { result } = renderHook(() => useS3VectorsQuery(), { wrapper: createWrapper() });
+    result.current.mutate({
+      bucketName: "b1",
+      indexName: "idx1",
+      queryVector: [0.5],
+      topK: 3,
+      filter: { color: "red" },
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/s3vectors/buckets/b1/indexes/idx1/query", {
+      method: "POST",
+      body: JSON.stringify({
+        queryVector: [0.5],
+        topK: 3,
+        filter: { color: "red" },
+        returnMetadata: undefined,
       }),
     });
   });

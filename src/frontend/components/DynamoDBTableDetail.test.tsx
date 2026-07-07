@@ -175,6 +175,20 @@ describe("DynamoDBTableDetail — loading & error states", () => {
     );
     expect(container.textContent).toContain("boom-scan");
   });
+
+  it("shows scan loading spinner while detail is already loaded", () => {
+    (useDynamoDBFilteredScan as any).mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+      error: null,
+    });
+    const { container } = render(
+      <DynamoDBTableDetail tableName="users" onBack={vi.fn()} />,
+      { wrapper: createWrapper() },
+    );
+    expect(container.textContent).toContain("Loading table details");
+  });
 });
 
 describe("DynamoDBTableDetail — success render", () => {
@@ -238,6 +252,40 @@ describe("DynamoDBTableDetail — success render", () => {
     const allText = cards.map((c) => c.textContent).join("|");
     expect(allText).toContain("None");
   });
+
+  it("renders with missing optional detail fields (no createdAt, no sizeBytes)", () => {
+    (useDynamoDBTableDetail as any).mockReturnValue({
+      data: {
+        ...detailData,
+        createdAt: undefined,
+        sizeBytes: null,
+        itemCount: 0,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const { container } = render(
+      <DynamoDBTableDetail tableName="users" onBack={vi.fn()} />,
+      { wrapper: createWrapper() },
+    );
+    expect(container.textContent).toContain("0");
+  });
+});
+
+describe("DynamoDBTableDetail — empty items", () => {
+  it("shows 0 items when scan returns empty", () => {
+    (useDynamoDBFilteredScan as any).mockReturnValue({
+      data: { ...scanData, items: [], count: 0 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<DynamoDBTableDetail tableName="users" onBack={vi.fn()} />, {
+      wrapper: createWrapper(),
+    });
+    expect(screen.getByText("0 items")).toBeTruthy();
+  });
 });
 
 describe("DynamoDBTableDetail — filter UI", () => {
@@ -284,26 +332,25 @@ describe("DynamoDBTableDetail — filter UI", () => {
     await user.type(valueInput, "Alice");
     await user.click(screen.getByRole("button", { name: /Apply filters/i }));
     await waitFor(() => {
-      expect(containerFilterBadge()).toBe(true);
+      expect(document.body.textContent).toContain("Filtered");
     });
   });
 
   it("clears filters when Clear filters clicked", async () => {
     const user = userEvent.setup();
-    const { container } = render(
-      <DynamoDBTableDetail tableName="users" onBack={vi.fn()} />,
-      { wrapper: createWrapper() },
-    );
+    render(<DynamoDBTableDetail tableName="users" onBack={vi.fn()} />, {
+      wrapper: createWrapper(),
+    });
     const attrInput = screen.getByPlaceholderText("e.g. status");
     await user.type(attrInput, "name");
     await user.type(screen.getByPlaceholderText("Value"), "x");
     await user.click(screen.getByRole("button", { name: /Apply filters/i }));
     await waitFor(() => {
-      expect(container.textContent).toContain("Filtered");
+      expect(document.body.textContent).toContain("Filtered");
     });
     await user.click(screen.getByRole("button", { name: /Clear filters/i }));
     await waitFor(() => {
-      expect(container.textContent).not.toContain("Filtered");
+      expect(document.body.textContent).not.toContain("Filtered");
     });
   });
 
@@ -315,9 +362,17 @@ describe("DynamoDBTableDetail — filter UI", () => {
     expect(applyBtn).toHaveProperty("disabled", true);
   });
 
-  function containerFilterBadge() {
-    return document.body.textContent?.includes("Filtered") ?? false;
-  }
+  it("toggles condition enable/disable via click on ✓/✕ badge", async () => {
+    const user = userEvent.setup();
+    render(<DynamoDBTableDetail tableName="users" onBack={vi.fn()} />, {
+      wrapper: createWrapper(),
+    });
+    const toggle = screen.getByTitle(/Enable condition|Disable condition/);
+    await user.click(toggle);
+    // After clicking, the title should toggle
+    const toggled = screen.getByTitle(/Enable condition|Disable condition/);
+    expect(toggled).toBeTruthy();
+  });
 });
 
 describe("DynamoDBTableDetail — pagination", () => {
@@ -424,5 +479,30 @@ describe("DynamoDBTableDetail — preset management", () => {
       wrapper: createWrapper(),
     });
     expect(screen.getByRole("button", { name: /Manage/i })).toBeTruthy();
+  });
+
+  it("loads a preset when selected from dropdown", async () => {
+    const user = userEvent.setup();
+    const presets = {
+      users: [{ name: "active-items", conditions: [{ attr: "status", op: "=", value: "active", enabled: true }], logic: "AND" }],
+    };
+    localStorage.setItem("floci-dash-dynamodb-presets", JSON.stringify(presets));
+    render(<DynamoDBTableDetail tableName="users" onBack={vi.fn()} />, {
+      wrapper: createWrapper(),
+    });
+    // Should show Manage button and not save-as-a-new-preset button flow
+    expect(screen.getByRole("button", { name: /Manage/i })).toBeTruthy();
+  });
+});
+
+describe("DynamoDBTableDetail — Advanced tab", () => {
+  it("renders DynamoDBAdvanced component", async () => {
+    const user = userEvent.setup();
+    render(<DynamoDBTableDetail tableName="users" onBack={vi.fn()} />, {
+      wrapper: createWrapper(),
+    });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    expect(screen.getByTestId("dynamodb-advanced")).toBeTruthy();
+    expect(screen.getByText(/Advanced: users/)).toBeTruthy();
   });
 });

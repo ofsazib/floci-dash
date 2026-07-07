@@ -258,6 +258,19 @@ describe("S3BucketConfig — Tags tab", () => {
     await user.click(screen.getByRole("button", { name: /Save tags/i }));
     expect(mockMutate).toHaveBeenCalledWith([{ Key: "env", Value: "prod" }]);
   });
+
+  it("shows error alert when tags update fails", async () => {
+    const user = userEvent.setup();
+    (useS3UpdateBucketTags as any).mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      isError: true,
+      error: new Error("Failed to update tags"),
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Tags" }));
+    expect(screen.getByText(/Failed to update tags/i)).toBeTruthy();
+  });
 });
 
 describe("S3BucketConfig — Policy tab", () => {
@@ -293,6 +306,20 @@ describe("S3BucketConfig — Policy tab", () => {
       await user.click(delBtn);
       expect(mockDelete).toHaveBeenCalled();
     }
+  });
+
+  it("shows error alert when policy update fails", async () => {
+    const user = userEvent.setup();
+    (useS3UpdateBucketPolicy as any).mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      isError: true,
+      error: new Error("Failed to update policy"),
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Policy" }));
+    await waitFor(() => expect(screen.getByDisplayValue(/Version/)).toBeTruthy());
+    expect(screen.getByText(/Failed to update policy/i)).toBeTruthy();
   });
 });
 
@@ -375,6 +402,24 @@ describe("S3BucketConfig — Lifecycle tab", () => {
       expect(mockMutate).toHaveBeenCalled();
     });
   });
+
+  it("shows error alert when lifecycle update fails", async () => {
+    const user = userEvent.setup();
+    (useS3UpdateBucketLifecycle as any).mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      isError: true,
+      error: new Error("Failed to update lifecycle rules"),
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Lifecycle" }));
+    // Open the modal so the error alert renders inside it
+    const addRuleBtns = screen.getAllByRole("button", { name: /Add lifecycle rule/i });
+    await user.click(addRuleBtns[0]);
+    await waitFor(() => {
+      expect(screen.getByText(/Failed to update lifecycle rules/i)).toBeTruthy();
+    });
+  });
 });
 
 describe("S3BucketConfig — CORS tab", () => {
@@ -397,6 +442,14 @@ describe("S3BucketConfig — CORS tab", () => {
     await user.click(screen.getByRole("button", { name: "CORS" }));
     await user.click(screen.getByRole("button", { name: /Delete CORS/i }));
     expect(mockDelete).toHaveBeenCalled();
+  });
+
+  it("shows CORS loading spinner", async () => {
+    const user = userEvent.setup();
+    (useS3BucketCors as any).mockReturnValue({ data: undefined, isLoading: true, isError: false, error: null });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "CORS" }));
+    expect(screen.queryByText("CORS Configuration")).toBeNull();
   });
 });
 
@@ -425,6 +478,14 @@ describe("S3BucketConfig — Website tab", () => {
     await user.click(screen.getByRole("button", { name: /Disable website hosting/i }));
     expect(mockDelete).toHaveBeenCalled();
   });
+
+  it("shows website loading spinner", async () => {
+    const user = userEvent.setup();
+    (useS3BucketWebsite as any).mockReturnValue({ data: undefined, isLoading: true, isError: false, error: null });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Website" }));
+    expect(screen.queryByText("Static Website Hosting")).toBeNull();
+  });
 });
 
 describe("S3BucketConfig — Public Access tab", () => {
@@ -437,6 +498,27 @@ describe("S3BucketConfig — Public Access tab", () => {
     expect(screen.getByText("Public Access Block Configuration")).toBeTruthy();
     await user.click(screen.getByRole("button", { name: /Save settings/i }));
     expect(mockMutate).toHaveBeenCalled();
+  });
+
+  it("shows error alert when public access block update fails", async () => {
+    const user = userEvent.setup();
+    (useS3UpdatePublicAccessBlock as any).mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      isError: true,
+      error: new Error("Failed to update public access block"),
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Public Access" }));
+    expect(screen.getByText(/Failed to update public access block/i)).toBeTruthy();
+  });
+
+  it("shows public access loading spinner", async () => {
+    const user = userEvent.setup();
+    (useS3PublicAccessBlock as any).mockReturnValue({ data: undefined, isLoading: true, isError: false, error: null });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Public Access" }));
+    expect(screen.queryByText("Public Access Block Configuration")).toBeNull();
   });
 });
 
@@ -458,6 +540,27 @@ describe("S3BucketConfig — Logging tab", () => {
     await waitFor(() => {
       expect(mockMutate).toHaveBeenCalledWith({ targetBucket: "log-bucket", targetPrefix: "" });
     });
+  });
+
+  it("shows error alert when logging update fails", async () => {
+    const user = userEvent.setup();
+    (useS3UpdateBucketLogging as any).mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      isError: true,
+      error: new Error("Failed to update logging"),
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Logging" }));
+    expect(screen.getByText(/Failed to update logging/i)).toBeTruthy();
+  });
+
+  it("shows logging loading spinner", async () => {
+    const user = userEvent.setup();
+    (useS3BucketLogging as any).mockReturnValue({ data: undefined, isLoading: true, isError: false, error: null });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Logging" }));
+    expect(screen.queryByText("Server Access Logging")).toBeNull();
   });
 });
 
@@ -511,6 +614,24 @@ describe("S3BucketConfig — Notifications tab", () => {
     render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
     await user.click(screen.getByRole("button", { name: "Notifications" }));
     expect(screen.getByText("SQS")).toBeTruthy();
+  });
+
+  it("shows notifications with SNS type", async () => {
+    (useS3BucketNotifications as any).mockReturnValue({
+      data: {
+        total: 1,
+        lambdaNotifications: [],
+        sqsNotifications: [],
+        snsNotifications: [{ TopicArn: "arn:aws:sns:topic:my-topic", Events: ["s3:ObjectCreated:*"] }],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Notifications" }));
+    expect(screen.getByText("SNS")).toBeTruthy();
   });
 
   it("shows loading spinner", async () => {
