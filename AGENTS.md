@@ -158,3 +158,98 @@ All commands use `make`. Run `make help` for the full list.
 - **Always use `make` commands** for Docker and build operations
 - **Always update README.md** after making changes
 - **Never push to GitHub unless explicitly instructed** — the agent may commit changes locally (e.g., `git add` + `git commit`) but MUST NOT run `git push` unless the user says "push" or "commit and push"
+
+## MANDATORY: Release Process
+
+When the user asks to release a new version, the agent MUST follow this checklist in order.
+
+### Step 1: Pre-release Verification
+
+Run and verify ALL of these before proceeding:
+
+```bash
+# 1. Full test suite (must pass)
+npx vitest run
+# Verify: all test files pass, 0 failures (integration tests may be skipped if Floci isn't running — that's OK)
+
+# 2. TypeScript typecheck
+make typecheck
+# Verify: exits with 0, no errors
+
+# 3. Check git status is clean
+# All changes must be committed. If there are uncommitted changes, commit them first with an appropriate conventional commit message.
+```
+
+### Step 2: Determine Version Bump
+
+Read the commit log since the last tag to decide the bump:
+
+```bash
+git log $(git describe --tags --abbrev=0)..HEAD --no-merges --oneline
+```
+
+Version bump rules (semver):
+- **Major (X.0.0):** Breaking changes, major UI overhaul, dropping service support
+- **Minor (0.X.0):** New features, new services, significant enhancements
+- **Patch (0.0.X):** Bug fixes, test improvements, docs, refactors
+
+If the user specifies a version, use it. Otherwise, decide based on the commit log.
+
+### Step 3: Update CHANGELOG.md
+
+Create or update `CHANGELOG.md` with the new version entry. Format:
+
+```markdown
+## [VERSION] — YYYY-MM-DD
+
+### Added
+- New features and services
+
+### Changed
+- Breaking changes and significant modifications
+
+### Fixed
+- Bug fixes
+
+### Improved
+- Test coverage improvements, refactors, performance
+```
+
+Categorize commits by conventional commit prefix:
+- `feat:` → Added
+- `fix:` → Fixed
+- `test:`, `refactor:`, `perf:` → Improved
+- `docs:`, `chore:` → Improved (unless significant, then skip)
+
+### Step 4: Bump Version
+
+1. Update `version` in `package.json`:
+   ```bash
+   # Use node to bump version
+   node -e "const p=require('./package.json'); p.version='NEW_VERSION'; require('fs').writeFileSync('package.json', JSON.stringify(p, null, 2) + '\\n')"
+   ```
+2. Run `pnpm install --no-frozen-lockfile` to update the lockfile
+3. Commit: `chore: bump version to NEW_VERSION`
+
+### Step 5: Create and Push Tag
+
+```bash
+git tag -a vNEW_VERSION -m "vNEW_VERSION"
+git push origin main
+git push origin vNEW_VERSION
+```
+
+Pushing the `v*` tag triggers the GitHub Actions release workflow (`.github/workflows/release.yml`) which:
+1. Runs full test suite with Floci
+2. Builds multi-arch Docker images (amd64 + arm64)
+3. Pushes to GHCR with semver tags
+
+**IMPORTANT: Only push if the user explicitly says "push" or "release." Always confirm before pushing.**
+
+### Quick Reference
+
+| When user says | Agent does |
+|---|---|
+| "release a new version" | Steps 1-5 (full release) |
+| "prepare a release" | Steps 1-4 (stop before pushing) |
+| "what version should we release" | Steps 1-2 (analyze only) |
