@@ -29,6 +29,17 @@ const deleteLayerState = vi.hoisted(() => ({
   variables: null as string | null,
 }));
 
+const invokeFnState = vi.hoisted(() => ({
+  isPending: false,
+  isError: false,
+  error: null as Error | null,
+  data: null as any,
+}));
+
+const publishVerState = vi.hoisted(() => ({
+  isPending: false,
+}));
+
 // ─── Mock hooks ─────────────────────────────────────────
 
 const mockFunctions = vi.fn();
@@ -59,7 +70,10 @@ vi.mock("../../hooks/useLambda", () => ({
   }),
   useLambdaFunction: (...args: any[]) => mockFnDetail(...args),
   useLambdaVersions: (...args: any[]) => mockVersions(...args),
-  usePublishVersion: () => ({ mutate: mockPublishVersion, isPending: false }),
+  usePublishVersion: () => ({
+    mutate: mockPublishVersion,
+    get isPending() { return publishVerState.isPending; },
+  }),
   useLambdaAliases: (...args: any[]) => mockAliases(...args),
   useEventSourceMappings: (...args: any[]) => mockEsm(...args),
   useLambdaLayers: (...args: any[]) => mockLayers(...args),
@@ -76,10 +90,10 @@ vi.mock("../../hooks/useLambda", () => ({
   }),
   useInvokeFunction: () => ({
     mutate: mockInvokeFn,
-    isPending: false,
-    isError: false,
-    error: null,
-    data: null,
+    get isPending() { return invokeFnState.isPending; },
+    get isError() { return invokeFnState.isError; },
+    get error() { return invokeFnState.error; },
+    get data() { return invokeFnState.data; },
   }),
   useFunctionUrl: () => ({ data: null }),
   useFunctionConcurrency: () => ({ data: null }),
@@ -110,6 +124,11 @@ beforeEach(() => {
   createLayerState.error = null;
   deleteLayerState.isPending = false;
   deleteLayerState.variables = null;
+  invokeFnState.isPending = false;
+  invokeFnState.isError = false;
+  invokeFnState.error = null;
+  invokeFnState.data = null;
+  publishVerState.isPending = false;
 
   mockFunctions.mockReturnValue({ data: { functions: [], total: 0 }, isLoading: false, isError: false, error: null });
   mockLayers.mockReturnValue({ data: { layers: [], total: 0 }, isLoading: false, isError: false, error: null });
@@ -140,10 +159,7 @@ describe("LambdaDashboard — functions tab", () => {
   it("renders functions with data", () => {
     mockFunctions.mockReturnValue({
       data: {
-        functions: [{
-          name: "my-fn", runtime: "nodejs22.x", handler: "index.handler",
-          timeout: 3, memorySize: 128, state: "Active", lastModified: "2024-01-15T00:00:00Z",
-        }],
+        functions: [{ name: "my-fn", runtime: "nodejs22.x", handler: "index.handler", timeout: 3, memorySize: 128, state: "Active", lastModified: "2024-01-15T00:00:00Z" }],
         total: 1,
       },
       isLoading: false, isError: false, error: null,
@@ -275,7 +291,7 @@ describe("LambdaDashboard — functions tab", () => {
     await waitFor(() => expect(screen.queryByText("alpha-fn")).toBeNull());
   });
 
-  // ── Detail view ────────────────────────────────────────
+  // ─── Detail view ────────────────────────────────────────
 
   it("navigates to function detail view", async () => {
     mockFunctions.mockReturnValue({
@@ -312,7 +328,58 @@ describe("LambdaDashboard — functions tab", () => {
     });
   });
 
-  it("shows detail versions tab", async () => {
+  it("shows config N/A for missing fields and failed state", async () => {
+    mockFunctions.mockReturnValue({
+      data: { functions: [{ name: "my-fn", state: "Active" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockFnDetail.mockReturnValue({
+      data: { configuration: { state: "Failed" } },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-fn"));
+    await waitFor(() => {
+      expect(screen.getAllByText("N/A").length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByText("Failed")).toBeTruthy();
+    });
+  });
+
+  it("shows detail loading state", async () => {
+    mockFunctions.mockReturnValue({
+      data: { functions: [{ name: "my-fn", state: "Active" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockFnDetail.mockReturnValue({
+      data: undefined, isLoading: true, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-fn"));
+    await waitFor(() => {
+      expect(screen.getByText(/Loading function details/i)).toBeTruthy();
+    });
+  });
+
+  it("shows detail error state", async () => {
+    mockFunctions.mockReturnValue({
+      data: { functions: [{ name: "my-fn", state: "Active" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockFnDetail.mockReturnValue({
+      data: undefined, isLoading: false, isError: true,
+      error: new Error("Detail load failed"),
+    });
+    const user = userEvent.setup();
+    render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-fn"));
+    await waitFor(() => {
+      expect(screen.getByText("Detail load failed")).toBeTruthy();
+    });
+  });
+
+  it("shows detail versions tab with data", async () => {
     mockFunctions.mockReturnValue({
       data: { functions: [{ name: "my-fn", state: "Active" }], total: 1 },
       isLoading: false, isError: false, error: null,
@@ -322,15 +389,143 @@ describe("LambdaDashboard — functions tab", () => {
       isLoading: false, isError: false, error: null,
     });
     mockVersions.mockReturnValue({
-      data: { versions: [{ version: "1" }], total: 1 },
+      data: { versions: [{ version: "1", lastModified: "2024-01-15T00:00:00Z", codeSize: 1024, description: "Initial version" }], total: 1 },
     });
     const user = userEvent.setup();
     render(<LambdaDashboard />, { wrapper: createWrapper() });
     await waitFor(() => screen.getByText("my-fn"));
     await user.click(screen.getByText("my-fn"));
-    await waitFor(() => {
-      expect(screen.getByRole("tab", { name: /Versions/ })).toBeTruthy();
+    await waitFor(() => expect(screen.getByRole("tab", { name: /Versions/ })).toBeTruthy());
+  });
+
+  it("shows detail version dashes for missing fields", async () => {
+    mockFunctions.mockReturnValue({
+      data: { functions: [{ name: "my-fn", state: "Active" }], total: 1 },
+      isLoading: false, isError: false, error: null,
     });
+    mockFnDetail.mockReturnValue({
+      data: { configuration: { runtime: "nodejs22.x", handler: "index.handler", state: "Active" } },
+      isLoading: false, isError: false, error: null,
+    });
+    mockVersions.mockReturnValue({
+      data: { versions: [{ }], total: 1 },
+    });
+    const user = userEvent.setup();
+    render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-fn"));
+    await user.click(screen.getByRole("tab", { name: /Versions/ }));
+    await waitFor(() => {
+      const dashes = screen.getAllByText("—");
+      expect(dashes.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it("shows detail aliases tab with data", async () => {
+    mockFunctions.mockReturnValue({
+      data: { functions: [{ name: "my-fn", state: "Active" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockFnDetail.mockReturnValue({
+      data: { configuration: { runtime: "nodejs22.x", handler: "index.handler", state: "Active" } },
+      isLoading: false, isError: false, error: null,
+    });
+    mockAliases.mockReturnValue({
+      data: { aliases: [{ name: "prod", functionVersion: "1", description: "Prod alias" }], total: 1 },
+    });
+    const user = userEvent.setup();
+    render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-fn"));
+    await user.click(screen.getByRole("tab", { name: /Aliases/ }));
+    await waitFor(() => expect(screen.getByText("prod")).toBeTruthy());
+  });
+
+  it("shows detail triggers tab with data", async () => {
+    mockFunctions.mockReturnValue({
+      data: { functions: [{ name: "my-fn", state: "Active" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockFnDetail.mockReturnValue({
+      data: { configuration: { runtime: "nodejs22.x", handler: "index.handler", state: "Active" } },
+      isLoading: false, isError: false, error: null,
+    });
+    mockEsm.mockReturnValue({
+      data: { eventSourceMappings: [{ eventSourceArn: "arn:aws:sqs:...", state: "Enabled", batchSize: 10, lastProcessingResult: "OK" }], total: 1 },
+    });
+    const user = userEvent.setup();
+    render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-fn"));
+    await user.click(screen.getByRole("tab", { name: /Triggers/ }));
+    await waitFor(() => expect(screen.getByText("arn:aws:sqs:...")).toBeTruthy());
+  });
+
+  it("shows detail invoke tab with error alert", async () => {
+    mockFunctions.mockReturnValue({
+      data: { functions: [{ name: "my-fn", state: "Active" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockFnDetail.mockReturnValue({
+      data: { configuration: { runtime: "nodejs22.x", handler: "index.handler", state: "Active" } },
+      isLoading: false, isError: false, error: null,
+    });
+    invokeFnState.isError = true;
+    invokeFnState.error = new Error("Invoke failed");
+    const user = userEvent.setup();
+    render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-fn"));
+    await user.click(screen.getByRole("tab", { name: /Test/ }));
+    await waitFor(() => expect(screen.getByText("Invoke failed")).toBeTruthy());
+  });
+
+  it("shows detail invoke response data", async () => {
+    mockFunctions.mockReturnValue({
+      data: { functions: [{ name: "my-fn", state: "Active" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockFnDetail.mockReturnValue({
+      data: { configuration: { runtime: "nodejs22.x", handler: "index.handler", state: "Active" } },
+      isLoading: false, isError: false, error: null,
+    });
+    invokeFnState.data = { statusCode: 200, functionError: undefined };
+    const user = userEvent.setup();
+    render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-fn"));
+    await user.click(screen.getByRole("tab", { name: /Test/ }));
+    await waitFor(() => expect(screen.getByText(/200/)).toBeTruthy());
+  });
+
+  it("shows invoke response with functionError", async () => {
+    mockFunctions.mockReturnValue({
+      data: { functions: [{ name: "my-fn", state: "Active" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockFnDetail.mockReturnValue({
+      data: { configuration: { runtime: "nodejs22.x", handler: "index.handler", state: "Active" } },
+      isLoading: false, isError: false, error: null,
+    });
+    invokeFnState.data = { statusCode: 500, functionError: "Unhandled" };
+    const user = userEvent.setup();
+    render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-fn"));
+    await user.click(screen.getByRole("tab", { name: /Test/ }));
+    await waitFor(() => {
+      expect(screen.getByText(/Unhandled/)).toBeTruthy();
+    });
+  });
+
+  it("shows publish version loading state", async () => {
+    publishVerState.isPending = true;
+    mockFunctions.mockReturnValue({
+      data: { functions: [{ name: "my-fn", state: "Active" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockFnDetail.mockReturnValue({
+      data: { configuration: { runtime: "nodejs22.x", handler: "index.handler", state: "Active" } },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-fn"));
+    await waitFor(() => expect(screen.getByText(/Publish version/)).toBeTruthy());
   });
 
   it("goes back from detail to list", async () => {
@@ -349,6 +544,21 @@ describe("LambdaDashboard — functions tab", () => {
     await waitFor(() => expect(screen.getByText(/Back to Functions/i)).toBeTruthy());
     await user.click(screen.getByText(/Back to Functions/i));
     await waitFor(() => expect(screen.getByText("my-fn")).toBeTruthy());
+  });
+
+  it("shows detail config with architecture", async () => {
+    mockFunctions.mockReturnValue({
+      data: { functions: [{ name: "my-fn", state: "Active" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockFnDetail.mockReturnValue({
+      data: { configuration: { runtime: "nodejs22.x", handler: "index.handler", timeout: 3, memorySize: 256, state: "Active", codeSize: 2048, lastModified: "2024-01-15T00:00:00Z", architectures: ["arm64"] } },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-fn"));
+    await waitFor(() => expect(screen.getByText("arm64")).toBeTruthy());
   });
 });
 
@@ -397,10 +607,7 @@ describe("LambdaDashboard — layers tab", () => {
 
   it("shows dash for missing layer fields", async () => {
     mockLayers.mockReturnValue({
-      data: {
-        layers: [{ name: "bare-layer", arn: "arn:..." }],
-        total: 1,
-      },
+      data: { layers: [{ name: "bare-layer", arn: "arn:..." }], total: 1 },
       isLoading: false, isError: false, error: null,
     });
     const user = userEvent.setup();
@@ -416,10 +623,7 @@ describe("LambdaDashboard — layers tab", () => {
     deleteLayerState.isPending = true;
     deleteLayerState.variables = "my-layer:1";
     mockLayers.mockReturnValue({
-      data: {
-        layers: [{ name: "my-layer", arn: "arn:...", latestVersion: { version: 1 } }],
-        total: 1,
-      },
+      data: { layers: [{ name: "my-layer", arn: "arn:...", latestVersion: { version: 1 } }], total: 1 },
       isLoading: false, isError: false, error: null,
     });
     const user = userEvent.setup();

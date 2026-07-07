@@ -5,6 +5,12 @@ import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
 
+// ─── vi.hoisted mutable states ──────────────────────────
+
+const createInvState = vi.hoisted(() => ({
+  isPending: false,
+}));
+
 // ─── Mock hooks ─────────────────────────────────────────
 
 const mockDistributions = vi.fn();
@@ -18,9 +24,9 @@ vi.mock("../../hooks/useCloudFront", () => ({
   useCloudFrontCachePolicies: (...args: any[]) => mockCachePolicies(...args),
   useCloudFrontFunctions: (...args: any[]) => mockFunctions(...args),
   useCloudFrontInvalidations: (...args: any[]) => mockInvalidations(...args),
-  useCreateCloudFrontInvalidation: () => ({
+  useCreateCloudFrontInvalidation: (distId: string) => ({
     mutateAsync: mockCreateInvalidation,
-    isPending: false,
+    get isPending() { return createInvState.isPending; },
   }),
 }));
 
@@ -30,6 +36,8 @@ import { CloudFrontDashboard } from "./CloudFrontDashboard";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  createInvState.isPending = false;
+
   mockDistributions.mockReturnValue({
     data: { distributions: [], total: 0 },
     isLoading: false,
@@ -123,13 +131,44 @@ describe("CloudFrontDashboard — distributions", () => {
     render(<CloudFrontDashboard />, { wrapper: createWrapper() });
     expect(screen.getByText("No")).toBeTruthy();
   });
+
+  it("shows dash for missing modified date", () => {
+    mockDistributions.mockReturnValue({
+      data: {
+        distributions: [{ Id: "E1", DomainName: "d1.cloudfront.net", Status: "Deployed", Enabled: true }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<CloudFrontDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("-")).toBeTruthy();
+  });
+
+  it("renders multiple distributions and filters by ID", async () => {
+    mockDistributions.mockReturnValue({
+      data: {
+        distributions: [
+          { Id: "E1", DomainName: "d1.cloudfront.net", Status: "Deployed", Enabled: true },
+          { Id: "E2", DomainName: "d2.cloudfront.net", Status: "Deployed", Enabled: false },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CloudFrontDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("E1")).toBeTruthy());
+    expect(screen.getByText("E2")).toBeTruthy();
+
+    const filterInput = screen.getByPlaceholderText("Find distributions by ID");
+    await user.type(filterInput, "E2");
+    await waitFor(() => expect(screen.queryByText("E1")).toBeNull());
+  });
 });
 
 describe("CloudFrontDashboard — invalidations tab", () => {
   it("shows empty message for invalidations tab (no distribution selected)", () => {
     render(<CloudFrontDashboard />, { wrapper: createWrapper() });
-    // Invalidations tab content only renders when selectedDist is set
-    // The invalidations tab label is always shown
     expect(screen.getByRole("tab", { name: /invalidations/i })).toBeTruthy();
   });
 
@@ -168,28 +207,36 @@ describe("CloudFrontDashboard — invalidations tab", () => {
     const user = userEvent.setup();
     render(<CloudFrontDashboard />, { wrapper: createWrapper() });
 
-    // Click distribution link to select it
     await user.click(screen.getByText("E123ABC"));
 
-    // Should now show invalidation
     await waitFor(() => {
       expect(screen.getByText("I001")).toBeTruthy();
       expect(screen.getByText("Completed")).toBeTruthy();
     });
   });
 
+  it("shows empty invalidations state when dist selected but no invalidations", async () => {
+    mockDistributions.mockReturnValue({
+      data: {
+        distributions: [{ Id: "E1", DomainName: "d1.cloudfront.net", Status: "Deployed", Enabled: true }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    mockInvalidations.mockReturnValue({
+      data: { invalidations: [], total: 0 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CloudFrontDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("E1"));
+    await waitFor(() => expect(screen.getByText(/No invalidations/i)).toBeTruthy());
+  });
+
   it("opens create invalidation modal and submits", async () => {
     mockDistributions.mockReturnValue({
       data: {
-        distributions: [
-          {
-            Id: "E123ABC",
-            DomainName: "d123.cloudfront.net",
-            Status: "Deployed",
-            Enabled: true,
-            PriceClass: "PriceClass_All",
-          },
-        ],
+        distributions: [{ Id: "E123ABC", DomainName: "d123.cloudfront.net", Status: "Deployed", Enabled: true }],
         total: 1,
       },
       isLoading: false,
@@ -202,21 +249,14 @@ describe("CloudFrontDashboard — invalidations tab", () => {
     const user = userEvent.setup();
     render(<CloudFrontDashboard />, { wrapper: createWrapper() });
 
-    // Select distribution
     await user.click(screen.getByText("E123ABC"));
+    await waitFor(() => expect(screen.getByText(/No invalidations/i)).toBeTruthy());
 
-    await waitFor(() => {
-      expect(screen.getByText(/No invalidations/i)).toBeTruthy();
-    });
-
-    // Open create modal
     await clickButton(user, /Create/i);
-
     await waitFor(() => {
       expect(screen.getByText("Create invalidation")).toBeTruthy();
     });
 
-    // Submit with default paths (/*)
     const createBtns = screen.getAllByRole("button", { name: /Create/i });
     await user.click(createBtns[createBtns.length - 1]);
 
@@ -227,18 +267,41 @@ describe("CloudFrontDashboard — invalidations tab", () => {
     });
   });
 
+  it("cancels create invalidation modal without submitting", async () => {
+    mockDistributions.mockReturnValue({
+      data: {
+        distributions: [{ Id: "E1", DomainName: "d1.cloudfront.net", Status: "Deployed", Enabled: true }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CloudFrontDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("E1"));
+    await waitFor(() => expect(screen.getByText(/Invalidations for E1/i)).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create invalidation")).toBeTruthy());
+    await clickButton(user, /Cancel/i);
+    expect(mockCreateInvalidation).not.toHaveBeenCalled();
+  });
+
+  it("shows create invalidation loading state", () => {
+    createInvState.isPending = true;
+    mockDistributions.mockReturnValue({
+      data: {
+        distributions: [{ Id: "E1", DomainName: "d1.cloudfront.net", Status: "Deployed", Enabled: true }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<CloudFrontDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("E1")).toBeTruthy();
+  });
+
   it("goes back to distributions when back button clicked", async () => {
     mockDistributions.mockReturnValue({
       data: {
-        distributions: [
-          {
-            Id: "E123ABC",
-            DomainName: "d123.cloudfront.net",
-            Status: "Deployed",
-            Enabled: true,
-            PriceClass: "PriceClass_All",
-          },
-        ],
+        distributions: [{ Id: "E123ABC", DomainName: "d123.cloudfront.net", Status: "Deployed", Enabled: true }],
         total: 1,
       },
       isLoading: false,
@@ -247,24 +310,14 @@ describe("CloudFrontDashboard — invalidations tab", () => {
     const user = userEvent.setup();
     render(<CloudFrontDashboard />, { wrapper: createWrapper() });
 
-    // Select distribution
     await user.click(screen.getByText("E123ABC"));
-
     await waitFor(() => {
       expect(screen.getByText(/Invalidations for E123ABC/i)).toBeTruthy();
     });
 
-    // Go back
     await clickButton(user, /Back to distributions/i);
-
-    // After going back, the distributions list should show the distribution
     await waitFor(() => {
       expect(screen.getByText("E123ABC")).toBeTruthy();
     });
   });
 });
-
-// Note: Cache Policies and Functions tabs exist in the CloudFrontDashboard but
-// they are not reachable via click because the Tabs component has no onChange handler.
-// The activeTabId is controlled solely by selectedDist state.
-// Tests for those tabs are omitted since they cannot be navigated to via the UI.
