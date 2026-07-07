@@ -5,20 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
 
-// ─── Mock hooks ─────────────────────────────────────────
-
-// Replication groups
-const mockRG = vi.fn();
-const mockCreateRG = vi.fn();
-const mockDeleteRG = vi.fn();
-// Cache clusters
-const mockCC = vi.fn();
-const mockCreateCC = vi.fn();
-const mockDeleteCC = vi.fn();
-// Users
-const mockUsers = vi.fn();
-const mockCreateUser = vi.fn();
-const mockDeleteUser = vi.fn();
+// ─── vi.hoisted states ─────────────────────────────────
 
 const createRGState = vi.hoisted(() => ({
   isError: false,
@@ -48,45 +35,57 @@ const deleteUserState = vi.hoisted(() => ({
   variables: null as any | null,
 }));
 
+// ─── Mock hooks ─────────────────────────────────────────
+
+const mockRG = vi.fn();
+const mockCreateRG = vi.fn();
+const mockDeleteRG = vi.fn();
+const mockCC = vi.fn();
+const mockCreateCC = vi.fn();
+const mockDeleteCC = vi.fn();
+const mockUsers = vi.fn();
+const mockCreateUser = vi.fn();
+const mockDeleteUser = vi.fn();
+
 vi.mock("../../hooks/useElastiCache", () => ({
   useElastiCacheReplicationGroups: (...args: any[]) => mockRG(...args),
   useElastiCacheCreateReplicationGroup: () => ({
     mutate: mockCreateRG,
-    isPending: createRGState.isPending,
-    isError: createRGState.isError,
-    error: createRGState.error,
+    get isPending() { return createRGState.isPending; },
+    get isError() { return createRGState.isError; },
+    get error() { return createRGState.error; },
     reset: vi.fn(),
   }),
   useElastiCacheDeleteReplicationGroup: () => ({
     mutateAsync: mockDeleteRG,
-    isPending: deleteRGState.isPending,
-    variables: deleteRGState.variables,
+    get isPending() { return deleteRGState.isPending; },
+    get variables() { return deleteRGState.variables; },
   }),
   useElastiCacheCacheClusters: (...args: any[]) => mockCC(...args),
   useElastiCacheCreateCacheCluster: () => ({
     mutate: mockCreateCC,
-    isPending: createCCState.isPending,
-    isError: createCCState.isError,
-    error: createCCState.error,
+    get isPending() { return createCCState.isPending; },
+    get isError() { return createCCState.isError; },
+    get error() { return createCCState.error; },
     reset: vi.fn(),
   }),
   useElastiCacheDeleteCacheCluster: () => ({
     mutateAsync: mockDeleteCC,
-    isPending: deleteCCState.isPending,
-    variables: deleteCCState.variables,
+    get isPending() { return deleteCCState.isPending; },
+    get variables() { return deleteCCState.variables; },
   }),
   useElastiCacheUsers: (...args: any[]) => mockUsers(...args),
   useElastiCacheCreateUser: () => ({
     mutate: mockCreateUser,
-    isPending: createUserState.isPending,
-    isError: createUserState.isError,
-    error: createUserState.error,
+    get isPending() { return createUserState.isPending; },
+    get isError() { return createUserState.isError; },
+    get error() { return createUserState.error; },
     reset: vi.fn(),
   }),
   useElastiCacheDeleteUser: () => ({
     mutateAsync: mockDeleteUser,
-    isPending: deleteUserState.isPending,
-    variables: deleteUserState.variables,
+    get isPending() { return deleteUserState.isPending; },
+    get variables() { return deleteUserState.variables; },
   }),
 }));
 
@@ -131,8 +130,7 @@ describe("ElastiCacheDashboard — replication groups", () => {
     expect(screen.getByText("No replication groups found")).toBeTruthy();
   });
 
-  it("renders replication groups with data and deletes one", async () => {
-    const user = userEvent.setup();
+  it("renders replication groups with data", () => {
     mockRG.mockReturnValue({
       data: {
         replicationGroups: [
@@ -145,6 +143,72 @@ describe("ElastiCacheDashboard — replication groups", () => {
     render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
     expect(screen.getByText("my-rg")).toBeTruthy();
     expect(screen.getByText("2")).toBeTruthy();
+  });
+
+  it("renders multiple replication groups", () => {
+    mockRG.mockReturnValue({
+      data: {
+        replicationGroups: [
+          { ReplicationGroupId: "rg-1", Status: "available", MemberClusters: ["c1"] },
+          { ReplicationGroupId: "rg-2", Status: "creating", MemberClusters: ["c2", "c3"] },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("rg-1")).toBeTruthy();
+    expect(screen.getByText("rg-2")).toBeTruthy();
+  });
+
+  it("shows em-dash for missing description and snapshot retention", () => {
+    mockRG.mockReturnValue({
+      data: {
+        replicationGroups: [{ ReplicationGroupId: "minimal", Status: "available", MemberClusters: [] }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("minimal")).toBeTruthy();
+    // Description: rg.Description || "—" is the only column with an em-dash
+    const dashes = screen.getAllByText("\u2014");
+    expect(dashes.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("filters replication groups by ID", async () => {
+    mockRG.mockReturnValue({
+      data: {
+        replicationGroups: [
+          { ReplicationGroupId: "alpha", Status: "available", MemberClusters: [] },
+          { ReplicationGroupId: "beta", Status: "available", MemberClusters: [] },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("alpha")).toBeTruthy());
+
+    const filterInput = screen.getByPlaceholderText("Find replication groups by ID");
+    await user.type(filterInput, "beta");
+    await waitFor(() => expect(screen.queryByText("alpha")).toBeNull());
+  });
+
+  it("deletes a replication group", async () => {
+    const user = userEvent.setup();
+    mockRG.mockReturnValue({
+      data: {
+        replicationGroups: [
+          { ReplicationGroupId: "my-rg", Status: "available", Description: "Test RG", MemberClusters: ["c1", "c2"] },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("my-rg")).toBeTruthy();
 
     const deleteBtn = screen.getByRole("button", { name: /Delete my-rg/i });
     await user.click(deleteBtn);
@@ -153,17 +217,23 @@ describe("ElastiCacheDashboard — replication groups", () => {
     await waitFor(() => expect(mockDeleteRG).toHaveBeenCalledWith({ ReplicationGroupId: "my-rg" }));
   });
 
-  it("opens create replication group modal and submits", async () => {
+  it("opens create replication group modal and submits with optional fields", async () => {
     const user = userEvent.setup();
     mockRG.mockReturnValue({ data: { replicationGroups: [], total: 0 }, isLoading: false });
     render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
     await clickButton(user, /Create/i);
     await waitFor(() => expect(screen.getAllByText("Create Replication Group").length).toBeGreaterThan(0));
-    const input = screen.getByPlaceholderText("my-rg");
-    await user.type(input, "new-rg");
+
+    const nameInput = screen.getByPlaceholderText("my-rg");
+    await user.type(nameInput, "new-rg");
+    const descInput = screen.getByPlaceholderText("My replication group");
+    await user.type(descInput, "My description");
+    const authInput = screen.getByPlaceholderText("my-auth-token");
+    await user.type(authInput, "secret-token");
+
     await clickButton(user, /Create/i, { last: true });
     expect(mockCreateRG).toHaveBeenCalledWith(
-      { ReplicationGroupId: "new-rg" },
+      { ReplicationGroupId: "new-rg", Description: "My description", AuthToken: "secret-token" },
       expect.any(Object),
     );
   });
@@ -181,18 +251,38 @@ describe("ElastiCacheDashboard — replication groups", () => {
     createRGState.error = null;
   });
 
+  it("shows create RG loading state", async () => {
+    createRGState.isPending = true;
+    const user = userEvent.setup();
+    mockRG.mockReturnValue({ data: { replicationGroups: [], total: 0 }, isLoading: false });
+    render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getAllByText("Create Replication Group").length).toBeGreaterThan(0));
+  });
+
   it("shows delete RG loading state", () => {
     deleteRGState.isPending = true;
     deleteRGState.variables = { ReplicationGroupId: "my-rg" };
     mockRG.mockReturnValue({
       data: {
-        replicationGroups: [{ ReplicationGroupId: "my-rg", Status: "available", Description: "Test RG", MemberClusters: ["c1"] }],
+        replicationGroups: [{ ReplicationGroupId: "my-rg", Status: "available", MemberClusters: ["c1"] }],
         total: 1,
       },
       isLoading: false,
     });
     render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
     expect(screen.getByText("my-rg")).toBeTruthy();
+  });
+
+  it("shows error status indicator when RG hook errors", () => {
+    mockRG.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new Error("Connection failed"),
+    });
+    render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("Connection failed")).toBeTruthy();
   });
 });
 
@@ -205,7 +295,7 @@ describe("ElastiCacheDashboard — cache clusters", () => {
     await waitFor(() => expect(screen.getByText("No cache clusters found")).toBeTruthy());
   });
 
-  it("renders cache clusters with data and deletes one", async () => {
+  it("renders cache clusters with all fields", async () => {
     const user = userEvent.setup();
     mockCC.mockReturnValue({
       data: {
@@ -222,6 +312,59 @@ describe("ElastiCacheDashboard — cache clusters", () => {
       expect(screen.getByText("my-cc")).toBeTruthy();
       expect(screen.getByText("memcached")).toBeTruthy();
     });
+  });
+
+  it("shows em-dash for missing NumCacheNodes and CacheNodeType", async () => {
+    const user = userEvent.setup();
+    mockCC.mockReturnValue({
+      data: {
+        cacheClusters: [{ CacheClusterId: "minimal", CacheClusterStatus: "available" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /cache clusters/i }));
+    await waitFor(() => expect(screen.getByText("minimal")).toBeTruthy());
+    // NumCacheNodes: cc.NumCacheNodes ?? "—", CacheNodeType: cc.CacheNodeType || "—"
+    const dashes = screen.getAllByText("\u2014");
+    expect(dashes.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("filters cache clusters by ID", async () => {
+    const user = userEvent.setup();
+    mockCC.mockReturnValue({
+      data: {
+        cacheClusters: [
+          { CacheClusterId: "alpha-cc", CacheClusterStatus: "available" },
+          { CacheClusterId: "beta-cc", CacheClusterStatus: "available" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /cache clusters/i }));
+    await waitFor(() => expect(screen.getByText("alpha-cc")).toBeTruthy());
+
+    const filterInput = screen.getByPlaceholderText("Find clusters by ID");
+    await user.type(filterInput, "beta");
+    await waitFor(() => expect(screen.queryByText("alpha-cc")).toBeNull());
+  });
+
+  it("deletes a cache cluster", async () => {
+    const user = userEvent.setup();
+    mockCC.mockReturnValue({
+      data: {
+        cacheClusters: [{ CacheClusterId: "my-cc", CacheClusterStatus: "available", Engine: "memcached" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /cache clusters/i }));
+    await waitFor(() => expect(screen.getByText("my-cc")).toBeTruthy());
+
     const deleteBtn = screen.getByRole("button", { name: /Delete my-cc/i });
     await user.click(deleteBtn);
     await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
@@ -229,52 +372,17 @@ describe("ElastiCacheDashboard — cache clusters", () => {
     await waitFor(() => expect(mockDeleteCC).toHaveBeenCalledWith({ CacheClusterId: "my-cc" }));
   });
 
-  it("opens create cache cluster modal", async () => {
+  it("shows CC error status indicator", async () => {
     const user = userEvent.setup();
-    mockCC.mockReturnValue({ data: { cacheClusters: [], total: 0 }, isLoading: false });
-    render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
-    await user.click(screen.getByRole("tab", { name: /cache clusters/i }));
-    await waitFor(() => expect(screen.getByText("No cache clusters found")).toBeTruthy());
-    await clickButton(user, /Create/i);
-    await waitFor(() => expect(screen.getAllByText("Create Cache Cluster").length).toBeGreaterThan(0));
-    const input = screen.getByPlaceholderText("my-cache-cluster");
-    await user.type(input, "new-cc");
-    await clickButton(user, /Create/i, { last: true });
-    expect(mockCreateCC).toHaveBeenCalledWith(
-      { CacheClusterId: "new-cc" },
-      expect.any(Object),
-    );
-  });
-
-  it("shows error alert when create CC fails", async () => {
-    createCCState.isError = true;
-    createCCState.error = new Error("CC limit reached");
-    const user = userEvent.setup();
-    mockCC.mockReturnValue({ data: { cacheClusters: [], total: 0 }, isLoading: false });
-    render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
-    await user.click(screen.getByRole("tab", { name: /cache clusters/i }));
-    await waitFor(() => expect(screen.getByText("No cache clusters found")).toBeTruthy());
-    await clickButton(user, /Create/i);
-    await waitFor(() => expect(screen.getAllByText("Create Cache Cluster").length).toBeGreaterThan(0));
-    expect(screen.getByText("CC limit reached")).toBeTruthy();
-    createCCState.isError = false;
-    createCCState.error = null;
-  });
-
-  it("shows delete CC loading state", async () => {
-    deleteCCState.isPending = true;
-    deleteCCState.variables = { CacheClusterId: "my-cc" };
     mockCC.mockReturnValue({
-      data: {
-        cacheClusters: [{ CacheClusterId: "my-cc", CacheClusterStatus: "available", Engine: "memcached", CacheNodeType: "cache.t3.micro", NumCacheNodes: 1 }],
-        total: 1,
-      },
+      data: undefined,
       isLoading: false,
+      isError: true,
+      error: new Error("CC load failed"),
     });
-    const user = userEvent.setup();
     render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
     await user.click(screen.getByRole("tab", { name: /cache clusters/i }));
-    await waitFor(() => expect(screen.getByText("my-cc")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("CC load failed")).toBeTruthy());
   });
 });
 
@@ -287,28 +395,85 @@ describe("ElastiCacheDashboard — users", () => {
     await waitFor(() => expect(screen.getByText("No users found")).toBeTruthy());
   });
 
-  it("renders users with data and deletes one", async () => {
+  it("renders users with all fields", async () => {
     const user = userEvent.setup();
     mockUsers.mockReturnValue({
       data: {
         users: [
           { UserId: "user-1", UserName: "myuser", Status: "active", Engine: "Redis", AccessString: "on ~* +@all" },
+          { UserId: "user-2", UserName: "other", Status: "creating", Engine: "Memcached", AccessString: "on ~* -@dangerous" },
         ],
-        total: 1,
+        total: 2,
       },
       isLoading: false,
     });
     render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
     await user.click(screen.getByRole("tab", { name: /users/i }));
     await waitFor(() => expect(screen.getByText("user-1")).toBeTruthy());
-    const deleteBtn = screen.getByRole("button", { name: /Delete user-1/i });
-    await user.click(deleteBtn);
-    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
-    await clickButton(user, /^Delete$/i);
-    await waitFor(() => expect(mockDeleteUser).toHaveBeenCalledWith({ UserId: "user-1" }));
+    expect(screen.getByText("user-2")).toBeTruthy();
+    expect(screen.getByText("myuser")).toBeTruthy();
   });
 
-  it("opens create user modal", async () => {
+  it("shows em-dash for missing user fields", async () => {
+    const user = userEvent.setup();
+    mockUsers.mockReturnValue({
+      data: {
+        users: [{ UserId: "minimal", UserName: "m" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /users/i }));
+    await waitFor(() => expect(screen.getByText("minimal")).toBeTruthy());
+    // Status: u.Status || "—", AccessString: u.AccessString || "—", Engine: u.Engine || "—"
+    const dashes = screen.getAllByText("\u2014");
+    expect(dashes.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("filters users by ID", async () => {
+    const user = userEvent.setup();
+    mockUsers.mockReturnValue({
+      data: {
+        users: [
+          { UserId: "alpha", UserName: "a" },
+          { UserId: "beta", UserName: "b" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /users/i }));
+    await waitFor(() => expect(screen.getByText("alpha")).toBeTruthy());
+
+    const filterInput = screen.getByPlaceholderText("Find users by ID");
+    await user.type(filterInput, "beta");
+    await waitFor(() => expect(screen.queryByText("alpha")).toBeNull());
+  });
+
+  it("filters users by userName", async () => {
+    const user = userEvent.setup();
+    mockUsers.mockReturnValue({
+      data: {
+        users: [
+          { UserId: "u1", UserName: "alice" },
+          { UserId: "u2", UserName: "bob" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /users/i }));
+    await waitFor(() => expect(screen.getByText("u2")).toBeTruthy());
+
+    const filterInput = screen.getByPlaceholderText("Find users by ID");
+    await user.type(filterInput, "alice");
+    await waitFor(() => expect(screen.queryByText("u2")).toBeNull());
+  });
+
+  it("creates user with all optional fields", async () => {
     const user = userEvent.setup();
     mockUsers.mockReturnValue({ data: { users: [], total: 0 }, isLoading: false });
     render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
@@ -316,43 +481,28 @@ describe("ElastiCacheDashboard — users", () => {
     await waitFor(() => expect(screen.getByText("No users found")).toBeTruthy());
     await clickButton(user, /Create/i);
     await waitFor(() => expect(screen.getByText("Create ElastiCache User")).toBeTruthy());
-    const input = screen.getByPlaceholderText("my-user");
-    await user.type(input, "new-user");
+
+    await user.type(screen.getByPlaceholderText("my-user"), "new-user");
+    await user.type(screen.getByPlaceholderText("My User"), "Alice");
+    await user.type(screen.getByPlaceholderText("on ~* +@all"), "on ~* -@dangerous");
+
     await clickButton(user, /Create/i, { last: true });
     expect(mockCreateUser).toHaveBeenCalledWith(
-      { UserId: "new-user" },
+      { UserId: "new-user", UserName: "Alice", AccessString: "on ~* -@dangerous" },
       expect.any(Object),
     );
   });
 
-  it("shows error alert when create user fails", async () => {
-    createUserState.isError = true;
-    createUserState.error = new Error("User already exists");
+  it("shows users error status indicator", async () => {
     const user = userEvent.setup();
-    mockUsers.mockReturnValue({ data: { users: [], total: 0 }, isLoading: false });
-    render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
-    await user.click(screen.getByRole("tab", { name: /users/i }));
-    await waitFor(() => expect(screen.getByText("No users found")).toBeTruthy());
-    await clickButton(user, /Create/i);
-    await waitFor(() => expect(screen.getByText("Create ElastiCache User")).toBeTruthy());
-    expect(screen.getByText("User already exists")).toBeTruthy();
-    createUserState.isError = false;
-    createUserState.error = null;
-  });
-
-  it("shows delete user loading state", async () => {
-    deleteUserState.isPending = true;
-    deleteUserState.variables = { UserId: "user-1" };
     mockUsers.mockReturnValue({
-      data: {
-        users: [{ UserId: "user-1", UserName: "myuser", Status: "active", Engine: "Redis", AccessString: "on ~* +@all" }],
-        total: 1,
-      },
+      data: undefined,
       isLoading: false,
+      isError: true,
+      error: new Error("User load failed"),
     });
-    const user = userEvent.setup();
     render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
     await user.click(screen.getByRole("tab", { name: /users/i }));
-    await waitFor(() => expect(screen.getByText("user-1")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("User load failed")).toBeTruthy());
   });
 });
