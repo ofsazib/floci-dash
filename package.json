@@ -1,6 +1,6 @@
 {
   "name": "floci-dash",
-  "version": "0.0.86",
+  "version": "0.0.99",
   "private": true,
   "type": "module",
   "description": "AWS Console-style web UI for Floci, the local AWS emulator",
