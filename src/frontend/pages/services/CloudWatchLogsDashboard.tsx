@@ -1086,6 +1086,13 @@ function CloudWatchLogStreamDetail({
 
   const events = (activeData?.events || []).slice().reverse(); // newest first
 
+  // When a search returns nothing within a bounded window, the events may simply be
+  // older than the window (live-tail ignores time, so they can still show there).
+  // Nudge the user to widen the range rather than assume there's no match at all.
+  const searchEmptyMessage = startTimeOffsetMs
+    ? `No events matched this filter within ${timeRange.label} — widen the time range to search further back.`
+    : "No events matched this filter.";
+
   function handleSearch() {
     setAppliedFilter(filterInput.trim());
     setAutoScroll(false);
@@ -1162,7 +1169,7 @@ function CloudWatchLogStreamDetail({
                 onKeyDown={({ detail }) => {
                   if (detail.key === "Enter") handleSearch();
                 }}
-                placeholder={'Filter pattern — e.g. ?ERROR ?WARN  or  { $.level = "ERROR" }'}
+                placeholder={"Search log events — e.g. Application startup complete"}
                 ariaLabel="Filter pattern"
                 type="search"
               />
@@ -1184,8 +1191,8 @@ function CloudWatchLogStreamDetail({
           </div>
           <Box fontSize="body-s" color="text-body-secondary">
             {isSearchMode
-              ? `Searching this stream with a CloudWatch filter pattern (${timeRange.label}).`
-              : "Enter a CloudWatch filter pattern to search this stream. Term matching (ERROR), OR (?A ?B), and JSON ({ $.level = \"ERROR\" }) syntax are supported."}
+              ? `Searching this stream (${timeRange.label}) — case-sensitive substring match.`
+              : 'Case-sensitive substring match — type any word or phrase (e.g. Application startup complete). Floci matches the literal text; CloudWatch operators like ?A ?B and { $.level = "ERROR" } are not supported.'}
           </Box>
         </SpaceBetween>
       </Container>
@@ -1202,9 +1209,7 @@ function CloudWatchLogStreamDetail({
 
       {events.length === 0 && !isActiveLoading && !isActiveError && (
         <Box textAlign="center" padding="xl" color="text-body-secondary">
-          {isSearchMode
-            ? "No events matched this filter."
-            : "No log events found for this stream."}
+          {isSearchMode ? searchEmptyMessage : "No log events found for this stream."}
         </Box>
       )}
 

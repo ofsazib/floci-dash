@@ -1717,8 +1717,10 @@ describe("CloudWatchLogsDashboard", () => {
   it("shows the filter-pattern search box in the stream viewer", async () => {
     const user = userEvent.setup();
     await gotoStream(user);
-    expect(screen.getByPlaceholderText(/ERROR/i)).toBeTruthy();
+    expect(screen.getByLabelText("Filter pattern")).toBeTruthy();
     expect(screen.getByRole("button", { name: /^Search$/i })).toBeTruthy();
+    // Hint reflects Floci's actual behaviour (case-sensitive substring match).
+    expect(screen.getByText(/case-sensitive/i)).toBeTruthy();
   });
 
   it("runs a filter-pattern search scoped to the current stream", async () => {
@@ -1728,7 +1730,7 @@ describe("CloudWatchLogsDashboard", () => {
       isLoading: false, isError: false, error: null, refetch: vi.fn(),
     });
     await gotoStream(user);
-    await user.type(screen.getByPlaceholderText(/ERROR/i), "ERROR");
+    await user.type(screen.getByLabelText("Filter pattern"), "ERROR");
     await user.click(screen.getByRole("button", { name: /^Search$/i }));
     await waitFor(() =>
       expect(mockFilteredLogEvents).toHaveBeenLastCalledWith(
@@ -1747,15 +1749,18 @@ describe("CloudWatchLogsDashboard", () => {
       data: { events: [] }, isLoading: false, isError: false, error: null, refetch: vi.fn(),
     });
     await gotoStream(user);
-    await user.type(screen.getByPlaceholderText(/ERROR/i), "NOPE");
+    await user.type(screen.getByLabelText("Filter pattern"), "NOPE");
     await user.click(screen.getByRole("button", { name: /^Search$/i }));
-    await waitFor(() => expect(screen.getByText(/No events matched/i)).toBeTruthy());
+    // Default window is "Last 1 hour" — the empty state should nudge widening it.
+    await waitFor(() =>
+      expect(screen.getByText(/No events matched .* widen the time range/i)).toBeTruthy()
+    );
   });
 
   it("clears the search and returns to live-tail mode", async () => {
     const user = userEvent.setup();
     await gotoStream(user);
-    await user.type(screen.getByPlaceholderText(/ERROR/i), "ERROR");
+    await user.type(screen.getByLabelText("Filter pattern"), "ERROR");
     await user.click(screen.getByRole("button", { name: /^Search$/i }));
     await waitFor(() =>
       expect(mockFilteredLogEvents).toHaveBeenLastCalledWith(
