@@ -21,7 +21,7 @@ import {
   useDeleteLogStream,
   useLogEvents,
   usePutLogEvents,
-  useFilterLogEvents,
+  useFilteredLogEvents,
   useSubscriptionFilters,
   usePutSubscriptionFilter,
   useDeleteSubscriptionFilter,
@@ -321,18 +321,68 @@ describe("usePutLogEvents", () => {
   });
 });
 
-describe("useFilterLogEvents", () => {
-  it("calls api with POST method, encoded group in path, filter body", async () => {
+describe("useFilteredLogEvents", () => {
+  it("does NOT call api when filterPattern is empty", () => {
+    renderHook(
+      () => useFilteredLogEvents("/aws/lambda/test", "my-stream", { filterPattern: "" }),
+      { wrapper: createWrapper() }
+    );
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("does NOT call api when logStreamName is null", () => {
+    renderHook(
+      () => useFilteredLogEvents("/aws/lambda/test", null, { filterPattern: "ERROR" }),
+      { wrapper: createWrapper() }
+    );
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("POSTs to filter-events, scopes to the stream, and computes startTime from offset", async () => {
+    const now = 1_700_000_000_000;
+    vi.spyOn(Date, "now").mockReturnValue(now);
     mockApi.mockResolvedValueOnce({ events: [] });
-    const { result } = renderHook(() => useFilterLogEvents("/aws/lambda/test"), {
-      wrapper: createWrapper(),
-    });
-    await result.current.mutateAsync({ filterPattern: "ERROR", limit: 10 });
+    const { result } = renderHook(
+      () =>
+        useFilteredLogEvents("/aws/lambda/test", "my-stream", {
+          filterPattern: "ERROR",
+          startTimeOffsetMs: 3_600_000,
+          limit: 100,
+        }),
+      { wrapper: createWrapper() }
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith(
       `/aws/logs/log-groups/${encodeURIComponent("/aws/lambda/test")}/filter-events`,
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({ filterPattern: "ERROR", limit: 10 }),
+        body: JSON.stringify({
+          filterPattern: "ERROR",
+          logStreamNames: ["my-stream"],
+          startTime: now - 3_600_000,
+          limit: 100,
+        }),
+      })
+    );
+  });
+
+  it("omits startTime when no offset is given (All time)", async () => {
+    mockApi.mockResolvedValueOnce({ events: [] });
+    const { result } = renderHook(
+      () =>
+        useFilteredLogEvents("/g", "s", { filterPattern: "ERROR", limit: 50 }),
+      { wrapper: createWrapper() }
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/logs/log-groups/${encodeURIComponent("/g")}/filter-events`,
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          filterPattern: "ERROR",
+          logStreamNames: ["s"],
+          limit: 50,
+        }),
       })
     );
   });

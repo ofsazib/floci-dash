@@ -282,19 +282,59 @@ export function usePutLogEvents() {
 
 // ─── Filter Log Events ────────────────────────────────
 
-export function useFilterLogEvents(logGroupName: string | null) {
-  return useMutation({
-    mutationFn: (data: {
-      filterPattern?: string;
-      startTime?: number;
-      endTime?: number;
-      limit?: number;
-      logStreamNames?: string[];
-    }) =>
-      api(`/aws/logs/log-groups/${encodeURIComponent(logGroupName!)}/filter-events`, {
-        method: "POST",
-        body: JSON.stringify(data),
-      }),
+/**
+ * Search a single log stream with a CloudWatch filter pattern via FilterLogEvents.
+ *
+ * `startTimeOffsetMs` is a window size relative to "now" (e.g. 3_600_000 for the last
+ * hour); the absolute `startTime` is recomputed on every fetch so the window tracks the
+ * present time across auto-refresh ticks. Omit it to search all time. The query is only
+ * enabled once a log group, stream, and non-empty filter pattern are all present.
+ */
+export function useFilteredLogEvents(
+  logGroupName: string | null,
+  logStreamName: string | null,
+  options: {
+    filterPattern?: string;
+    startTimeOffsetMs?: number;
+    limit?: number;
+  },
+  autoRefresh?: boolean
+) {
+  return useQuery<FilteredLogEventsResponse>({
+    queryKey: [
+      "aws",
+      "logs",
+      "log-groups",
+      logGroupName,
+      "streams",
+      logStreamName,
+      "filter-events",
+      options,
+    ],
+    queryFn: () => {
+      const body: {
+        filterPattern?: string;
+        logStreamNames: string[];
+        startTime?: number;
+        limit?: number;
+      } = {
+        filterPattern: options.filterPattern,
+        logStreamNames: [logStreamName!],
+      };
+      if (options.startTimeOffsetMs) {
+        body.startTime = Date.now() - options.startTimeOffsetMs;
+      }
+      if (options.limit) body.limit = options.limit;
+      return api(
+        `/aws/logs/log-groups/${encodeURIComponent(logGroupName!)}/filter-events`,
+        {
+          method: "POST",
+          body: JSON.stringify(body),
+        }
+      );
+    },
+    enabled: !!logGroupName && !!logStreamName && !!options.filterPattern,
+    refetchInterval: autoRefresh !== false ? 5000 : false,
   });
 }
 
