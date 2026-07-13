@@ -206,12 +206,67 @@ router.get("/stacks/:name/change-sets", async (c: Context) => {
   const changeSets = (result.Summaries || []).map((cs: any) => ({
     id: cs.ChangeSetId,
     name: cs.ChangeSetName,
-    status: cs.ExecutionStatus,
+    status: cs.Status,
+    executionStatus: cs.ExecutionStatus,
     statusReason: cs.StatusReason,
     creationTime: cs.CreationTime,
     description: cs.Description,
   }));
   return c.json({ changeSets, total: changeSets.length });
+});
+
+router.get("/stacks/:name/change-sets/:changeSetName", async (c: Context) => {
+  const stackName = c.req.param("name");
+  const changeSetName = c.req.param("changeSetName");
+  try {
+    const result = await cfn().send(new DescribeChangeSetCommand({
+      StackName: stackName,
+      ChangeSetName: changeSetName,
+    }));
+    const cs = {
+      id: result.ChangeSetId,
+      name: result.ChangeSetName,
+      stackId: result.StackId,
+      stackName: result.StackName,
+      status: result.Status,
+      executionStatus: result.ExecutionStatus,
+      statusReason: result.StatusReason,
+      creationTime: result.CreationTime,
+      description: result.Description,
+      parameters: (result.Parameters || []).map((p: any) => ({
+        key: p.ParameterKey,
+        value: p.ParameterValue,
+        usePreviousValue: p.UsePreviousValue,
+      })),
+      changes: (result.Changes || []).map((ch: any) => ({
+        type: ch.Type,
+        resourceChange: ch.ResourceChange ? {
+          action: ch.ResourceChange.Action,
+          logicalResourceId: ch.ResourceChange.LogicalResourceId,
+          physicalResourceId: ch.ResourceChange.PhysicalResourceId,
+          resourceType: ch.ResourceChange.ResourceType,
+          replacement: ch.ResourceChange.Replacement,
+          scope: ch.ResourceChange.Scope || [],
+          details: (ch.ResourceChange.Details || []).map((d: any) => ({
+            target: d.Target ? {
+              attribute: d.Target.Attribute,
+              name: d.Target.Name,
+              requiresRecreation: d.Target.RequiresRecreation,
+            } : null,
+            evaluation: d.Evaluation,
+            changeSource: d.ChangeSource,
+            causingEntity: d.CausingEntity,
+          })),
+        } : null,
+      })),
+    };
+    return c.json({ changeSet: cs });
+  } catch (err: any) {
+    if (err.name === "ChangeSetNotFoundException") {
+      return c.json({ error: "Change set not found" }, 404);
+    }
+    throw err;
+  }
 });
 
 router.post("/change-sets", async (c: Context) => {

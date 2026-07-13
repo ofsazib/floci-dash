@@ -32,6 +32,11 @@ import {
   useDeleteStack,
   useValidateTemplate,
   useExports,
+  useChangeSets,
+  useChangeSet,
+  useCreateChangeSet,
+  useExecuteChangeSet,
+  useDeleteChangeSet,
 } from "../hooks/useCloudFormation";
 
 const STATUS_COLORS: Record<string, "green" | "red" | "blue" | "grey"> = {
@@ -300,6 +305,449 @@ function StackDetailModal({ stackName, onClose }: { stackName: string; onClose: 
   );
 }
 
+function ChangeSetsTab() {
+  const { showToast } = useToast();
+  const stacksQuery = useStacks();
+  const [selectedStack, setSelectedStack] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [viewingChangeSet, setViewingChangeSet] = useState<string | null>(null);
+
+  const stacks = stacksQuery.data?.stacks || [];
+
+  const changeSetsQuery = useChangeSets(selectedStack);
+  const createChangeSet = useCreateChangeSet();
+  const executeChangeSet = useExecuteChangeSet();
+  const deleteChangeSet = useDeleteChangeSet();
+
+  const changeSets = changeSetsQuery.data?.changeSets || [];
+
+  return (
+    <SpaceBetween size="l">
+      <Container header={<Header variant="h2">Change Sets</Header>}>
+        <SpaceBetween size="m">
+          <FormField label="Select a stack">
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {stacks.map((s: any) => (
+                <Button
+                  key={s.name}
+                  variant={selectedStack === s.name ? "primary" : "normal"}
+                  onClick={() => { setSelectedStack(s.name); setViewingChangeSet(null); }}
+                >
+                  {s.name}
+                </Button>
+              ))}
+              {stacks.length === 0 && !stacksQuery.isLoading && (
+                <Box color="text-body-secondary">No stacks available. Create a stack first.</Box>
+              )}
+            </div>
+          </FormField>
+
+          {selectedStack && (
+            <>
+              <Box float="right">
+                <Button variant="primary" onClick={() => setShowCreate(true)}>
+                  Create change set
+                </Button>
+              </Box>
+
+              <Table
+                header={
+                  <Header
+                    variant="h3"
+                    counter={`(${changeSets.length})`}
+                  >
+                    Change sets for {selectedStack}
+                  </Header>
+                }
+                columnDefinitions={[
+                  { id: "name", header: "Name", cell: (cs: any) => cs.name },
+                  {
+                    id: "status",
+                    header: "Status",
+                    cell: (cs: any) => (
+                      <Badge color={cs.executionStatus === "AVAILABLE" ? "green" : cs.executionStatus === "EXECUTE_COMPLETE" ? "blue" : "grey"}>
+                        {cs.executionStatus || cs.status || "-"}
+                      </Badge>
+                    ),
+                  },
+                  { id: "desc", header: "Description", cell: (cs: any) => cs.description || "-" },
+                  {
+                    id: "created",
+                    header: "Created",
+                    cell: (cs: any) =>
+                      cs.creationTime ? new Date(cs.creationTime).toLocaleString() : "-",
+                  },
+                  {
+                    id: "actions",
+                    header: "",
+                    cell: (cs: any) => (
+                      <SpaceBetween direction="horizontal" size="xs">
+                        <Button onClick={() => setViewingChangeSet(cs.name)}>View</Button>
+                        {cs.executionStatus === "AVAILABLE" && (
+                          <Button
+                            variant="primary"
+                            loading={executeChangeSet.isPending}
+                            onClick={async () => {
+                              try {
+                                await executeChangeSet.mutateAsync({
+                                  stackName: selectedStack,
+                                  changeSetName: cs.name,
+                                });
+                                showToast("success", `Change set "${cs.name}" executed`);
+                              } catch (e: any) {
+                                showToast("error", e.message);
+                              }
+                            }}
+                          >
+                            Execute
+                          </Button>
+                        )}
+                        <Button
+                          variant="icon"
+                          iconName="remove"
+                          ariaLabel={`Delete ${cs.name}`}
+                          loading={deleteChangeSet.isPending && deleteChangeSet.variables?.changeSetName === cs.name}
+                          onClick={async () => {
+                            try {
+                              await deleteChangeSet.mutateAsync({
+                                stackName: selectedStack,
+                                changeSetName: cs.name,
+                              });
+                              showToast("success", `Change set "${cs.name}" deleted`);
+                              if (viewingChangeSet === cs.name) setViewingChangeSet(null);
+                            } catch (e: any) {
+                              showToast("error", e.message);
+                            }
+                          }}
+                        />
+                      </SpaceBetween>
+                    ),
+                  },
+                ]}
+                items={changeSets}
+                loading={changeSetsQuery.isLoading}
+                trackBy={(cs: any) => cs.id || cs.name}
+                empty={
+                  <Box textAlign="center" padding={{ top: "xl" }}>
+                    <b>No change sets</b>
+                    <Box variant="p" color="text-body-secondary" padding={{ top: "s" }}>
+                      Create a change set to preview stack changes before applying them.
+                    </Box>
+                  </Box>
+                }
+              />
+            </>
+          )}
+        </SpaceBetween>
+      </Container>
+
+      {showCreate && selectedStack && (
+        <CreateChangeSetModal
+          stackName={selectedStack}
+          onClose={() => setShowCreate(false)}
+          onSubmit={async (data) => {
+            try {
+              await createChangeSet.mutateAsync(data);
+              showToast("success", `Change set "${data.changeSetName}" created`);
+              setShowCreate(false);
+            } catch (e: any) {
+              showToast("error", e.message);
+            }
+          }}
+        />
+      )}
+
+      {viewingChangeSet && selectedStack && (
+        <ChangeSetDetail
+          stackName={selectedStack}
+          changeSetName={viewingChangeSet}
+          onClose={() => setViewingChangeSet(null)}
+          onExecute={async () => {
+            try {
+              await executeChangeSet.mutateAsync({
+                stackName: selectedStack,
+                changeSetName: viewingChangeSet,
+              });
+              showToast("success", `Change set "${viewingChangeSet}" executed`);
+              setViewingChangeSet(null);
+            } catch (e: any) {
+              showToast("error", e.message);
+            }
+          }}
+        />
+      )}
+    </SpaceBetween>
+  );
+}
+
+function CreateChangeSetModal({
+  stackName,
+  onClose,
+  onSubmit,
+}: {
+  stackName: string;
+  onClose: () => void;
+  onSubmit: (data: any) => void;
+}) {
+  const { showToast } = useToast();
+  const [changeSetName, setChangeSetName] = useState("");
+  const [templateBody, setTemplateBody] = useState("");
+  const [description, setDescription] = useState("");
+  const validateMut = useValidateTemplate();
+
+  const defaultTemplate = `AWSTemplateFormatVersion: '2010-09-09'
+Description: Updated stack
+Resources:
+  MyBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: my-updated-bucket`;
+
+  return (
+    <Modal
+      visible={true}
+      onDismiss={onClose}
+      header={`Create change set for ${stackName}`}
+      size="large"
+      footer={
+        <Box float="right">
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button variant="link" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              disabled={!changeSetName.trim()}
+              onClick={() =>
+                onSubmit({
+                  stackName,
+                  changeSetName: changeSetName.trim(),
+                  templateBody: templateBody || defaultTemplate,
+                  description: description.trim() || undefined,
+                })
+              }
+            >
+              Create
+            </Button>
+          </SpaceBetween>
+        </Box>
+      }
+    >
+      <Form>
+        <SpaceBetween size="m">
+          <FormField label="Change set name">
+            <Input
+              value={changeSetName}
+              onChange={({ detail }) => setChangeSetName(detail.value)}
+              placeholder="my-change-set"
+            />
+          </FormField>
+          <FormField label="Description (optional)">
+            <Input
+              value={description}
+              onChange={({ detail }) => setDescription(detail.value)}
+              placeholder="What this change set does"
+            />
+          </FormField>
+          <FormField
+            label="Updated template (YAML or JSON)"
+            secondaryControl={
+              <Button
+                onClick={async () => {
+                  try {
+                    const res = (await validateMut.mutateAsync({
+                      templateBody: templateBody || defaultTemplate,
+                    })) as any;
+                    showToast("success", `Valid template — ${res.parameters?.length || 0} parameters`);
+                  } catch (e: any) {
+                    showToast("error", e.message);
+                  }
+                }}
+              >
+                Validate
+              </Button>
+            }
+          >
+            <Textarea
+              value={templateBody || defaultTemplate}
+              onChange={({ detail }) => setTemplateBody(detail.value)}
+              rows={10}
+            />
+          </FormField>
+        </SpaceBetween>
+      </Form>
+    </Modal>
+  );
+}
+
+function ChangeSetDetail({
+  stackName,
+  changeSetName,
+  onClose,
+  onExecute,
+}: {
+  stackName: string;
+  changeSetName: string;
+  onClose: () => void;
+  onExecute: () => void;
+}) {
+  const { data, isLoading, isError, error } = useChangeSet(stackName, changeSetName);
+  const cs = data?.changeSet;
+  const executeChangeSet = useExecuteChangeSet();
+
+  if (isLoading) {
+    return (
+      <Container header={<Header variant="h3">Change Set: {changeSetName}</Header>}>
+        <Box textAlign="center" padding={{ top: "xl", bottom: "xl" }}>
+          Loading...
+        </Box>
+      </Container>
+    );
+  }
+
+  if (isError || !cs) {
+    return (
+      <Container header={<Header variant="h3">Change Set: {changeSetName}</Header>}>
+        <Alert type="error">{(error as any)?.message || "Failed to load change set"}</Alert>
+        <Button onClick={onClose}>Close</Button>
+      </Container>
+    );
+  }
+
+  return (
+    <Container
+      header={
+        <Header
+          variant="h3"
+          actions={
+            <SpaceBetween direction="horizontal" size="xs">
+              {cs.executionStatus === "AVAILABLE" && (
+                <Button
+                  variant="primary"
+                  loading={executeChangeSet.isPending}
+                  onClick={onExecute}
+                >
+                  Execute
+                </Button>
+              )}
+              <Button onClick={onClose}>Close</Button>
+            </SpaceBetween>
+          }
+        >
+          Change Set: {changeSetName}
+        </Header>
+      }
+    >
+      <SpaceBetween size="l">
+        <ColumnLayout columns={3} variant="text-grid">
+          <div>
+            <Box variant="small" color="text-body-secondary">Status</Box>
+            <Badge
+              color={
+                cs.executionStatus === "AVAILABLE"
+                  ? "green"
+                  : cs.executionStatus === "EXECUTE_COMPLETE"
+                  ? "blue"
+                  : "grey"
+              }
+            >
+              {cs.executionStatus || cs.status || "-"}
+            </Badge>
+          </div>
+          <div>
+            <Box variant="small" color="text-body-secondary">Created</Box>
+            <Box>{cs.creationTime ? new Date(cs.creationTime).toLocaleString() : "-"}</Box>
+          </div>
+          <div>
+            <Box variant="small" color="text-body-secondary">Description</Box>
+            <Box>{cs.description || "-"}</Box>
+          </div>
+        </ColumnLayout>
+
+        {cs.changes && cs.changes.length > 0 && (
+          <Container header={<Header variant="h3">Changes ({cs.changes.length})</Header>}>
+            <Table
+              columnDefinitions={[
+                {
+                  id: "action",
+                  header: "Action",
+                  cell: (c: any) => {
+                    const action = c.resourceChange?.action;
+                    return (
+                      <Badge
+                        color={
+                          action === "Add"
+                            ? "green"
+                            : action === "Remove"
+                            ? "red"
+                            : action === "Modify"
+                            ? "blue"
+                            : "grey"
+                        }
+                      >
+                        {action || c.type || "-"}
+                      </Badge>
+                    );
+                  },
+                },
+                {
+                  id: "logicalId",
+                  header: "Logical ID",
+                  cell: (c: any) => c.resourceChange?.logicalResourceId || "-",
+                },
+                {
+                  id: "type",
+                  header: "Resource Type",
+                  cell: (c: any) => (
+                    <span style={{ fontSize: 12 }}>
+                      {c.resourceChange?.resourceType || "-"}
+                    </span>
+                  ),
+                },
+                {
+                  id: "replacement",
+                  header: "Replacement",
+                  cell: (c: any) => {
+                    const repl = c.resourceChange?.replacement;
+                    return repl ? (
+                      <Badge color={repl === "True" ? "red" : "grey"}>{repl}</Badge>
+                    ) : (
+                      "-"
+                    );
+                  },
+                },
+                {
+                  id: "scope",
+                  header: "Scope",
+                  cell: (c: any) =>
+                    (c.resourceChange?.scope || []).length > 0
+                      ? (c.resourceChange?.scope || []).join(", ")
+                      : "-",
+                },
+              ]}
+              items={cs.changes}
+              trackBy={(c: any) => c.resourceChange?.logicalResourceId || c.type || "change"}
+              empty={<Box>No changes to display</Box>}
+            />
+          </Container>
+        )}
+
+        {cs.parameters && cs.parameters.length > 0 && (
+          <Container header={<Header variant="h3">Parameters ({cs.parameters.length})</Header>}>
+            <ColumnLayout columns={2} variant="text-grid">
+              {cs.parameters.map((p: any) => (
+                <div key={p.key}>
+                  <b>{p.key}:</b> {p.value || "(use previous)"}
+                </div>
+              ))}
+            </ColumnLayout>
+          </Container>
+        )}
+      </SpaceBetween>
+    </Container>
+  );
+}
+
 function ExportsTab() {
   const exportsQuery = useExports();
   const exportsList = exportsQuery.data?.exports || [];
@@ -330,6 +778,7 @@ export default function CloudFormationPage() {
 
   const tabs: TabsProps.Tab[] = [
     { id: "stacks", label: "Stacks", content: <StacksTab /> },
+    { id: "changesets", label: "Change Sets", content: <ChangeSetsTab /> },
     { id: "exports", label: "Exports", content: <ExportsTab /> },
   ];
 

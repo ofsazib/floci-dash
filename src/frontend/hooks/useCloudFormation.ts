@@ -55,3 +55,74 @@ export function useExports() {
     queryFn: () => api<{ exports: any[]; total: number }>("/aws/cloudformation/exports"),
   });
 }
+
+// ─── CHANGE SETS ──────────────────────────────────────
+
+export function useChangeSets(stackName: string | null) {
+  return useQuery({
+    queryKey: ["aws", "cloudformation", "stacks", stackName, "changeSets"],
+    queryFn: () => api<{ changeSets: any[]; total: number }>(
+      `/aws/cloudformation/stacks/${stackName}/change-sets`
+    ),
+    enabled: !!stackName,
+  });
+}
+
+export function useChangeSet(stackName: string | null, changeSetName: string | null) {
+  return useQuery({
+    queryKey: ["aws", "cloudformation", "stacks", stackName, "changeSets", changeSetName],
+    queryFn: () => api<{ changeSet: any }>(
+      `/aws/cloudformation/stacks/${stackName}/change-sets/${changeSetName}`
+    ),
+    enabled: !!stackName && !!changeSetName,
+  });
+}
+
+export function useCreateChangeSet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: any) =>
+      api("/aws/cloudformation/change-sets", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({
+        queryKey: ["aws", "cloudformation", "stacks", variables.stackName, "changeSets"],
+      });
+    },
+  });
+}
+
+export function useExecuteChangeSet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { stackName: string; changeSetName: string }) =>
+      api("/aws/cloudformation/change-sets/execute", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({
+        queryKey: ["aws", "cloudformation", "stacks", variables.stackName, "changeSets"],
+      });
+      qc.invalidateQueries({
+        queryKey: ["aws", "cloudformation", "stacks", variables.stackName],
+      });
+      qc.invalidateQueries({ queryKey: ["aws", "cloudformation", "stacks"] });
+    },
+  });
+}
+
+export function useDeleteChangeSet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { stackName: string; changeSetName: string }) =>
+      api(
+        `/aws/cloudformation/change-sets?name=${encodeURIComponent(params.changeSetName)}&stack=${encodeURIComponent(params.stackName)}`,
+        { method: "DELETE" }
+      ),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({
+        queryKey: ["aws", "cloudformation", "stacks", variables.stackName, "changeSets"],
+      });
+    },
+  });
+}

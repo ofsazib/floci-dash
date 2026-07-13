@@ -210,6 +210,51 @@ describe("CloudFormation Routes", () => {
       expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteChangeSetCommand");
     });
 
+    it("GET /stacks/:name/change-sets/:changeSetName — describes a change set", async () => {
+      mockSend.mockResolvedValueOnce({
+        ChangeSetId: "arn:aws:cloudformation:us-east-1:123456789:changeSet/my-cs/abc",
+        ChangeSetName: "my-cs",
+        StackId: "arn:aws:cloudformation:us-east-1:123456789:stack/my-stack/def",
+        StackName: "my-stack",
+        Status: "CREATE_COMPLETE",
+        ExecutionStatus: "AVAILABLE",
+        CreationTime: new Date("2025-01-01"),
+        Description: "My change set",
+        Parameters: [{ ParameterKey: "BucketName", ParameterValue: "my-bucket" }],
+        Changes: [
+          {
+            Type: "Resource",
+            ResourceChange: {
+              Action: "Add",
+              LogicalResourceId: "MyBucket",
+              PhysicalResourceId: "",
+              ResourceType: "AWS::S3::Bucket",
+              Replacement: "False",
+              Scope: ["Properties"],
+              Details: [],
+            },
+          },
+        ],
+      });
+      const res = await get("/stacks/my-stack/change-sets/my-cs");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.changeSet.name).toBe("my-cs");
+      expect(body.changeSet.executionStatus).toBe("AVAILABLE");
+      expect(body.changeSet.changes).toHaveLength(1);
+      expect(body.changeSet.changes[0].resourceChange.action).toBe("Add");
+    });
+
+    it("GET /stacks/:name/change-sets/:changeSetName — 404 for not found", async () => {
+      const err = new Error("ChangeSetNotFound") as any;
+      err.name = "ChangeSetNotFoundException";
+      mockSend.mockRejectedValueOnce(err);
+      const res = await get("/stacks/my-stack/change-sets/nonexistent");
+      expect(res.status).toBe(404);
+      const body = await res.json();
+      expect(body.error).toContain("not found");
+    });
+
     it("DELETE /change-sets — 400 when name or stack missing", async () => {
       const res1 = await router.request("/change-sets", { method: "DELETE" });
       expect(res1.status).toBe(400);

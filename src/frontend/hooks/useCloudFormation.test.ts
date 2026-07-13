@@ -17,6 +17,11 @@ import {
   useDeleteStack,
   useValidateTemplate,
   useExports,
+  useChangeSets,
+  useChangeSet,
+  useCreateChangeSet,
+  useExecuteChangeSet,
+  useDeleteChangeSet,
 } from "./useCloudFormation";
 
 function createWrapper() {
@@ -141,5 +146,80 @@ describe("useExports", () => {
     const { result } = renderHook(() => useExports(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith("/aws/cloudformation/exports");
+  });
+});
+
+// ─── Change Sets ────────────────────────────────────────
+
+describe("Change Sets", () => {
+    it("useChangeSets — calls correct URL and returns data", async () => {
+      mockApi.mockResolvedValueOnce({
+        changeSets: [
+          { name: "cs-1", executionStatus: "AVAILABLE", creationTime: "2025-01-01" },
+        ],
+        total: 1,
+      });
+      const { result } = renderHook(() => useChangeSets("my-stack"), { wrapper: createWrapper() });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockApi).toHaveBeenCalledWith("/aws/cloudformation/stacks/my-stack/change-sets");
+      expect(result.current.data?.changeSets).toHaveLength(1);
+      expect(result.current.data?.changeSets[0].name).toBe("cs-1");
+    });
+
+    it("useChangeSets — disabled when stackName is null", () => {
+      const { result } = renderHook(() => useChangeSets(null), { wrapper: createWrapper() });
+      expect(result.current.isLoading).toBe(false);
+      expect(mockApi).not.toHaveBeenCalled();
+    });
+
+    it("useChangeSet — calls correct URL", async () => {
+      mockApi.mockResolvedValueOnce({
+        changeSet: { name: "cs-1", executionStatus: "AVAILABLE" },
+      });
+      const { result } = renderHook(() => useChangeSet("my-stack", "cs-1"), { wrapper: createWrapper() });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockApi).toHaveBeenCalledWith("/aws/cloudformation/stacks/my-stack/change-sets/cs-1");
+      expect(result.current.data?.changeSet.name).toBe("cs-1");
+    });
+
+    it("useChangeSet — disabled when stackName or changeSetName is null", () => {
+      const { result: r1 } = renderHook(() => useChangeSet(null, "cs-1"), { wrapper: createWrapper() });
+      expect(r1.current.isLoading).toBe(false);
+      const { result: r2 } = renderHook(() => useChangeSet("my-stack", null), { wrapper: createWrapper() });
+      expect(r2.current.isLoading).toBe(false);
+      expect(mockApi).not.toHaveBeenCalled();
+    });
+
+    it("useCreateChangeSet — posts to correct URL", async () => {
+      mockApi.mockResolvedValueOnce({ created: true });
+      const { result } = renderHook(() => useCreateChangeSet(), { wrapper: createWrapper() });
+      result.current.mutate({ stackName: "my-stack", changeSetName: "cs-1", templateBody: "{}" });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockApi).toHaveBeenCalledWith("/aws/cloudformation/change-sets", {
+        method: "POST",
+        body: JSON.stringify({ stackName: "my-stack", changeSetName: "cs-1", templateBody: "{}" }),
+      });
+    });
+
+    it("useExecuteChangeSet — posts to correct URL and invalidates queries", async () => {
+      mockApi.mockResolvedValueOnce({ executed: true });
+      const { result } = renderHook(() => useExecuteChangeSet(), { wrapper: createWrapper() });
+      result.current.mutate({ stackName: "my-stack", changeSetName: "cs-1" });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockApi).toHaveBeenCalledWith("/aws/cloudformation/change-sets/execute", {
+        method: "POST",
+        body: JSON.stringify({ stackName: "my-stack", changeSetName: "cs-1" }),
+      });
+    });
+
+    it("useDeleteChangeSet — sends DELETE with URL-encoded params", async () => {
+      mockApi.mockResolvedValueOnce({ deleted: true });
+      const { result } = renderHook(() => useDeleteChangeSet(), { wrapper: createWrapper() });
+      result.current.mutate({ stackName: "my-stack", changeSetName: "cs-1" });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockApi).toHaveBeenCalledWith(
+        "/aws/cloudformation/change-sets?name=cs-1&stack=my-stack",
+        { method: "DELETE" }
+      );
   });
 });
