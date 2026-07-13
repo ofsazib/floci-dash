@@ -42,6 +42,7 @@ import {
   useS3UpdateObjectTags,
   type S3Tag,
 } from "../hooks/useS3Config";
+import { useS3Select } from "../hooks/useS3Select";
 import StatCard from "../components/StatCard";
 import S3BucketConfig from "../components/S3BucketConfig";
 import { useToast } from "../components/Toast";
@@ -149,6 +150,11 @@ export default function S3Page() {
           label: "Configuration",
           id: "config",
           content: <S3BucketConfig bucket={selectedBucket} />,
+        },
+        {
+          label: "S3 Select",
+          id: "select",
+          content: <S3SelectQueryEditor bucket={selectedBucket} />,
         },
       ]
     : [
@@ -938,6 +944,279 @@ function S3ObjectViewer({ bucket, objectKey, onBack }: { bucket: string; objectK
           </Box>
         )}
       </Container>
+    </SpaceBetween>
+  );
+}
+
+// ─── S3 Select Query Editor ─────────────────────────────────
+
+const EXAMPLE_QUERIES: Record<string, string> = {
+  CSV: 'SELECT * FROM S3Object LIMIT 10',
+  JSON: 'SELECT * FROM S3Object s LIMIT 10',
+};
+
+function S3SelectQueryEditor({ bucket }: { bucket: string }) {
+  const selectMutation = useS3Select(bucket);
+  const [objectKey, setObjectKey] = useState("");
+  const [expression, setExpression] = useState(EXAMPLE_QUERIES.CSV);
+  const [inputType, setInputType] = useState<"CSV" | "JSON">("CSV");
+  const [outputFormat, setOutputFormat] = useState<"CSV" | "JSON">("CSV");
+  const [fileHeaderInfo, setFileHeaderInfo] = useState<"USE" | "IGNORE" | "NONE">("NONE");
+  const [result, setResult] = useState<string | null>(null);
+  const [stats, setStats] = useState<{ bytesScanned: number; bytesProcessed: number; bytesReturned: number } | null>(null);
+
+  function handleRunQuery() {
+    if (!objectKey.trim() || !expression.trim()) return;
+    setResult(null);
+    setStats(null);
+    selectMutation.mutate(
+      { key: objectKey.trim(), expression: expression.trim(), inputType, outputFormat, fileHeaderInfo },
+      {
+        onSuccess: (data) => {
+          setResult(data.result);
+          setStats(data.stats);
+        },
+      }
+    );
+  }
+
+  function handleInputTypeChange(newType: "CSV" | "JSON") {
+    setInputType(newType);
+    if (expression === EXAMPLE_QUERIES.CSV || expression === EXAMPLE_QUERIES.JSON) {
+      setExpression(EXAMPLE_QUERIES[newType]);
+    }
+  }
+
+  return (
+    <SpaceBetween size="l">
+      <Container
+        header={
+          <Header
+            variant="h2"
+            description="Run SQL queries on CSV and JSON objects stored in S3"
+            actions={
+              <Button
+                variant="primary"
+                iconName="play"
+                loading={selectMutation.isPending}
+                disabled={!objectKey.trim() || !expression.trim()}
+                onClick={handleRunQuery}
+              >
+                Run query
+              </Button>
+            }
+          >
+            S3 Select
+          </Header>
+        }
+      >
+        <SpaceBetween size="m">
+          <Form>
+            {selectMutation.isError && (
+              <Alert type="error" dismissible>
+                {(selectMutation.error as Error)?.message || "Query failed"}
+              </Alert>
+            )}
+
+            <FormField
+              label="Object key"
+              description="The S3 object key to query (e.g. data.csv or logs/2024/events.json)"
+            >
+              <Input
+                value={objectKey}
+                onChange={({ detail }) => setObjectKey(detail.value)}
+                placeholder="data.csv"
+              />
+            </FormField>
+
+            <FormField
+              label="SQL expression"
+              description={
+                <span>
+                  Use <code>SELECT ... FROM S3Object</code> syntax.
+                  For CSV with headers, use column names. For CSV without headers, use <code>_1</code>, <code>_2</code>, etc.
+                </span>
+              }
+            >
+              <div style={{ fontFamily: "monospace" }}>
+                <textarea
+                  value={expression}
+                  onChange={(e) => setExpression(e.target.value)}
+                  rows={4}
+                  placeholder="SELECT * FROM S3Object LIMIT 10"
+                  style={{
+                    width: "100%",
+                    padding: "10px 12px",
+                    fontSize: "14px",
+                    fontFamily: "'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace",
+                    border: "1px solid var(--color-border-control-default, #aab7b8)",
+                    borderRadius: "2px",
+                    boxSizing: "border-box",
+                    resize: "vertical",
+                    lineHeight: 1.5,
+                    outline: "none",
+                    background: "var(--color-background-input-default, #fff)",
+                    color: "var(--color-text-body-default, #16191f)",
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = "var(--color-border-control-focus, #0972d3)";
+                    e.target.style.boxShadow = "0 0 0 2px rgba(9, 114, 211, 0.3)";
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = "var(--color-border-control-default, #aab7b8)";
+                    e.target.style.boxShadow = "none";
+                  }}
+                />
+              </div>
+            </FormField>
+
+            <ColumnLayout columns={3} variant="text-grid">
+              <FormField label="Input format">
+                <div style={{ display: "flex", gap: 8 }}>
+                  <Button
+                    variant={inputType === "CSV" ? "primary" : "normal"}
+                    onClick={() => handleInputTypeChange("CSV")}
+                  >
+                    CSV
+                  </Button>
+                  <Button
+                    variant={inputType === "JSON" ? "primary" : "normal"}
+                    onClick={() => handleInputTypeChange("JSON")}
+                  >
+                    JSON
+                  </Button>
+                </div>
+              </FormField>
+
+              <FormField label="Output format">
+                <div style={{ display: "flex", gap: 8 }}>
+                  <Button
+                    variant={outputFormat === "CSV" ? "primary" : "normal"}
+                    onClick={() => setOutputFormat("CSV")}
+                  >
+                    CSV
+                  </Button>
+                  <Button
+                    variant={outputFormat === "JSON" ? "primary" : "normal"}
+                    onClick={() => setOutputFormat("JSON")}
+                  >
+                    JSON
+                  </Button>
+                </div>
+              </FormField>
+
+              {inputType === "CSV" && (
+                <FormField label="Header treatment" description="How to interpret the first row">
+                  <div style={{ display: "flex", gap: 4 }}>
+                    <Button
+                      variant={fileHeaderInfo === "NONE" ? "primary" : "normal"}
+                      onClick={() => setFileHeaderInfo("NONE")}
+                    >
+                      None
+                    </Button>
+                    <Button
+                      variant={fileHeaderInfo === "USE" ? "primary" : "normal"}
+                      onClick={() => setFileHeaderInfo("USE")}
+                    >
+                      Use
+                    </Button>
+                    <Button
+                      variant={fileHeaderInfo === "IGNORE" ? "primary" : "normal"}
+                      onClick={() => setFileHeaderInfo("IGNORE")}
+                    >
+                      Ignore
+                    </Button>
+                  </div>
+                </FormField>
+              )}
+            </ColumnLayout>
+          </Form>
+        </SpaceBetween>
+      </Container>
+
+      {stats && (
+        <Container header={<Header variant="h3">Query statistics</Header>}>
+          <ColumnLayout columns={3} variant="text-grid">
+            <div className="fd-accent-card">
+              <Box variant="small" color="text-body-secondary">Scanned</Box>
+              <Box variant="h3" padding={{ top: "xxs" }}>
+                <span className="fd-accent-info">{formatBytes(stats.bytesScanned)}</span>
+              </Box>
+            </div>
+            <div className="fd-accent-card">
+              <Box variant="small" color="text-body-secondary">Processed</Box>
+              <Box variant="h3" padding={{ top: "xxs" }}>
+                <span className="fd-accent-purple">{formatBytes(stats.bytesProcessed)}</span>
+              </Box>
+            </div>
+            <div className="fd-accent-card">
+              <Box variant="small" color="text-body-secondary">Returned</Box>
+              <Box variant="h3" padding={{ top: "xxs" }}>
+                <span className="fd-accent-success">{formatBytes(stats.bytesReturned)}</span>
+              </Box>
+            </div>
+          </ColumnLayout>
+        </Container>
+      )}
+
+      {result !== null && (
+        <Container header={<Header variant="h3">Results</Header>}>
+          {result ? (
+            <Box variant="code">
+              <pre className="fd-code-block" style={{ maxHeight: "500px", overflow: "auto" }}>
+                {result}
+              </pre>
+            </Box>
+          ) : (
+            <Box color="text-body-secondary" padding={{ top: "m", bottom: "m" }}>
+              Query returned no results.
+            </Box>
+          )}
+        </Container>
+      )}
+
+      {selectMutation.isPending && (
+        <Box textAlign="center" padding={{ top: "xl", bottom: "xl" }}>
+          <Spinner size="large" />
+          <Box variant="p" color="text-body-secondary" padding={{ top: "m" }}>
+            Running query...
+          </Box>
+        </Box>
+      )}
+
+      {!result && !selectMutation.isPending && (
+        <Container
+          header={<Header variant="h3">SQL reference</Header>}
+        >
+          <Box variant="p" padding={{ bottom: "s" }}>
+            S3 Select supports a subset of SQL. Here are some examples:
+          </Box>
+          <Box variant="code">
+            <pre className="fd-code-block">
+{`-- Select all columns, limit rows
+SELECT * FROM S3Object LIMIT 100
+
+-- Select specific columns (CSV with headers)
+SELECT name, age, city FROM S3Object
+
+-- Select with WHERE clause
+SELECT * FROM S3Object WHERE age > 30
+
+-- For CSV without headers, use _1, _2, etc.
+SELECT _1, _2 FROM S3Object WHERE CAST(_3 AS INT) > 100
+
+-- JSON: access nested fields
+SELECT s.name, s.address.city FROM S3Object s
+
+-- Aggregate functions
+SELECT COUNT(*) FROM S3Object
+
+-- LIKE pattern matching
+SELECT * FROM S3Object WHERE name LIKE 'A%'`}
+            </pre>
+          </Box>
+        </Container>
+      )}
     </SpaceBetween>
   );
 }

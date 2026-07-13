@@ -1604,3 +1604,123 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 | 25.12 | EventsDashboard — no separate component exists (rendered inline in EventsPage.tsx) | Skipped | 2026-07-07 |
 | 25.13 | Verify: 38 tests pass (9+14+15), typecheck clean, full suite 701 tests | Done | 2026-07-07 |
 
+
+---
+
+## ═══════════════════════════════════════════════════════════
+## GAP ANALYSIS — Floci Operations Not Yet Exposed in Dashboard
+## ═══════════════════════════════════════════════════════════
+
+> **Audit date:** 2026-07-13 (verified against dashboard codebase)
+> **Method:** Compared every `case` statement in Floci's Java handlers against the dashboard's backend route files. Each item was verified by searching for the corresponding AWS command in both Floci handlers and dashboard routes.
+> **Result:** All 66 Floci services have basic CRUD in the dashboard. However, many services have significant Floci-supported operations NOT yet exposed. Several items from the initial audit (G.5 old, G.10 old, G.12 old partial, G.18 old, G.27 old) were found to be already implemented and have been removed.
+
+### Priority Tiers
+
+| Tier | Meaning |
+|------|---------|
+| **P1** | High-value — significant Floci operations with clear UI benefit |
+| **P2** | Moderate-value — useful operations for completeness |
+| **P3** | Low-value — niche operations, stubs, or rarely used |
+
+---
+
+### P1 — High-Value Missing Features (15 items)
+
+| # | Service | Missing Operations | Floci Handler | Dashboard Impact |
+|---|---------|-------------------|---------------|-----------------|
+| G.1 | **DynamoDB Streams** | ListStreams, DescribeStream, GetShardIterator, GetRecords | `DynamoDbStreamsJsonHandler` | Done 2026-07-13 — users can't see item-level changes |
+| G.2 | **EC2 Flow Logs** | CreateFlowLogs, DescribeFlowLogs, DeleteFlowLogs | `Ec2QueryHandler` | No Flow Logs tab in EC2 page |
+| G.3 | **EC2 Network ACLs** | CreateNetworkAcl, DescribeNetworkAcls, DeleteNetworkAcl, CreateNetworkAclEntry, ReplaceNetworkAclEntry, DeleteNetworkAclEntry, ReplaceNetworkAclAssociation | `Ec2QueryHandler` | Done 2026-07-13 | — missing entire network ACL resource type |
+| G.4 | **S3 Select** | SelectObjectContent (SQL queries on CSV/JSON objects) | `S3SelectService` + `S3Controller` | Done 2026-07-13 | — users can't query object contents with SQL |
+| G.5 | **CloudFormation** (Stack Sets) | CreateStackSet, DescribeStackSet, ListStackSets, UpdateStackSet, DeleteStackSet, CreateStackInstances, ListStackInstances, DescribeStackInstance, DeleteStackInstances, ListStackSetOperations, DescribeStackSetOperation | `CloudFormationQueryHandler` + `StackSetService` | No stack set management — missing entire multi-account/multi-region deployment feature |
+| G.6 | **CloudFormation** (Events + Stack Resources) | DescribeStackEvents, DescribeStackResource, SetStackPolicy, GetStackPolicy | `CloudFormationQueryHandler` | No event log per stack, no individual resource detail, no stack policy editor |
+| G.7 | **Glue** (Schema Registry) | CreateRegistry, GetRegistry, ListRegistries, UpdateRegistry, DeleteRegistry, CreateSchema, RegisterSchemaVersion, GetSchemaVersion, GetSchema, ListSchemas, ListSchemaVersions, DeleteSchema, GetSchemaVersionsDiff, CheckSchemaVersionValidity, PutSchemaVersionMetadata, RemoveSchemaVersionMetadata, QuerySchemaVersionMetadata | `GlueJsonHandler` | No schema registry browser — missing entire Glue Schema Registry feature |
+| G.8 | **Glue** (UDFs + Column Stats + Partitions) | CreateUserDefinedFunction, GetUserDefinedFunction, GetUserDefinedFunctions, UpdateUserDefinedFunction, DeleteUserDefinedFunction, UpdateColumnStatisticsForTable, GetColumnStatisticsForTable, DeleteColumnStatisticsForTable (same for Partition), BatchCreatePartition, BatchUpdatePartition, BatchGetPartition, UpdatePartition, DeletePartition, GetPartition | `GlueJsonHandler` | No UDF list, no column statistics viewer, no batch partition operations |
+| G.9 | **WAFv2** (Regex Pattern Sets) | CreateRegexPatternSet, GetRegexPatternSet, UpdateRegexPatternSet, DeleteRegexPatternSet, ListRegexPatternSets | `WafV2Handler` | Regex Pattern Sets missing (IP Sets and Rule Groups already implemented) |
+| G.10 | **WAFv2** (Logging + Associations) | PutLoggingConfiguration, GetLoggingConfiguration, DeleteLoggingConfiguration, ListLoggingConfigurations, AssociateWebACL, DisassociateWebACL, GetWebACLForResource, ListResourcesForWebACL, PutPermissionPolicy, GetPermissionPolicy, DeletePermissionPolicy | `WafV2Handler` | No logging config, no resource associations, no permission policies |
+| G.11 | **SES** (Identity Notifications + Feedback) | SetIdentityNotificationTopic, GetIdentityNotificationAttributes, SetIdentityFeedbackForwardingEnabled, SetIdentityHeadersInNotificationsEnabled | `SesQueryHandler` | No identity notification topic config, no feedback forwarding settings (DKIM + MailFrom already implemented) |
+| G.12 | **SES** (Config Set Event Destinations) | CreateConfigurationSetEventDestination, UpdateConfigurationSetEventDestination, DeleteConfigurationSetEventDestination, UpdateConfigurationSetSendingEnabled, CreateConfigurationSetTrackingOptions, UpdateConfigurationSetTrackingOptions, DeleteConfigurationSetTrackingOptions, UpdateConfigurationSetReputationMetricsEnabled, PutConfigurationSetDeliveryOptions | `SesQueryHandler` | No event destination management, no tracking options, no delivery options |
+| G.13 | **ELBv2** (SSL, Certificates, Settings) | SetSecurityGroups, SetSubnets, SetIpAddressType, ModifyTargetGroupAttributes, DescribeTargetGroupAttributes, ModifyListenerAttributes, DescribeListenerAttributes, SetRulePriorities, DescribeAccountLimits, DescribeSSLPolicies, AddListenerCertificates, RemoveListenerCertificates, DescribeListenerCertificates | `ElbV2QueryHandler` | No SSL policy viewer, no listener certificates, no LB security group/subnet management |
+| G.14 | **Auto Scaling** (Instance Refresh + Tags + LB) | StartInstanceRefresh, DescribeInstanceRefreshes, CreateOrUpdateTags, DeleteTags, AttachLoadBalancerTargetGroups, DetachLoadBalancerTargetGroups, DescribeLoadBalancerTargetGroups, AttachLoadBalancers, DetachLoadBalancers, DescribeLoadBalancers | `AutoScalingQueryHandler` | No instance refresh, no ASG tags, no LB attachment management |
+| G.15 | **Cognito** (Resource Servers + MFA + Custom Attrs) | CreateResourceServer, DescribeResourceServer, ListResourceServers, UpdateResourceServer, DeleteResourceServer, AddCustomAttributes, GetUserPoolMfaConfig, SetUserPoolMfaConfig, AdminDeleteUserAttributes, AdminUserGlobalSignOut, AdminRespondToAuthChallenge, AdminConfirmSignUp, ConfirmForgotPassword, GetUser, UpdateUserAttributes, DeleteUserAttributes, ListUsersInGroup, AdminListGroupsForUser, GetTokensFromRefreshToken, ListUserPoolClientSecrets, AddUserPoolClientSecret, DeleteUserPoolClientSecret | `CognitoJsonHandler` | No resource servers tab, no MFA config, no custom attributes, missing several auth flows and user management ops |
+
+---
+
+### P2 — Moderate-Value Missing Features (14 items)
+
+| # | Service | Missing Operations | Impact |
+|---|---------|-------------------|--------|
+| G.16 | **DynamoDB** (Kinesis Streaming) | EnableKinesisStreamingDestination, DisableKinesisStreamingDestination, DescribeKinesisStreamingDestination | No Kinesis streaming destination config |
+| G.17 | **DynamoDB** (Exports + UpdateTable) | ExportTableToPointInTime, DescribeExport, ListExports, UpdateTable (modify GSIs, billing mode, SSE, stream spec) | No PITR export UI, no table modification after creation |
+| G.18 | **DynamoDB** (PartiQL Transactions) | ExecuteTransaction, BatchExecuteStatement | No PartiQL transaction/batch execution |
+| G.19 | **S3** (ACLs) | GetObjectAcl, PutObjectAcl, GetBucketAcl, PutBucketAcl | No ACL editor (private, public-read, etc.) |
+| G.20 | **CloudTrail** (Lookup + Event Selectors) | LookupEvents, PutEventSelectors | No event lookup/search, no event selector config |
+| G.21 | **Kinesis** (Enhanced Fan-out) | SubscribeToShard | No enhanced fan-out consumer display |
+| G.22 | **CodePipeline** (Advanced) | RollbackStage, OverrideStageCondition, ListRuleExecutions, CreateCustomActionType, UpdateActionType, GetActionType, DeleteCustomActionType, ListActionTypes, PutActionRevision, PollForJobs, AcknowledgeJob, GetJobDetails, PutJobSuccessResult, PutJobFailureResult | No rollback, no action type browser, no job polling (webhooks already implemented) |
+| G.23 | **ECS** (Account Settings + Task Sets) | PutAccountSetting, PutAccountSettingDefault, DeleteAccountSetting, ListAccountSettings, PutAttributes, DeleteAttributes, ListAttributes, CreateTaskSet, UpdateTaskSet, DeleteTaskSet, DescribeTaskSets, UpdateServicePrimaryTaskSet, DescribeServiceDeployments, ListServiceDeployments, DescribeServiceRevisions | No account settings, no attributes, no task sets, no service deployments |
+| G.24 | **IoT** (MQTT Broker + Shadows) | MQTT broker status, client connections, list subscriptions, disconnect client, ListNamedShadowsForThing | No MQTT broker status, no client management, no named shadows list |
+| G.25 | **API Gateway V2** (WebSocket) | WebSocket connection management, route resolution display | No WebSocket connection viewer |
+| G.26 | **MemoryDB** (Users + ACLs) | CreateUser, DescribeUsers, DeleteUser, CreateACL, DescribeACLs, DeleteACL | Users/ACLs not yet exposed in dashboard |
+| G.27 | **CloudWatch Logs** (Data Protection) | GetDataProtectionPolicy | No data protection policy viewer |
+| G.28 | **Config Service** (Compliance Status) | DescribeComplianceByConfigRule, DescribeConfigRuleEvaluationStatus, DescribeConformancePackStatus, DescribeConfigurationRecorderStatus | No compliance/status detail views (basic CRUD for rules/packs/recorders already implemented) |
+| G.29 | **RDS** (Subnet Groups + Cluster PGs) | CreateDBSubnetGroup, DescribeDBSubnetGroups, ModifyDBSubnetGroup, DeleteDBSubnetGroup, CreateDBClusterParameterGroup, DescribeDBClusterParameterGroups, DeleteDBClusterParameterGroup, ModifyDBClusterParameterGroup, DescribeDBClusterParameters, DescribeOrderableDBInstanceOptions | No DB Subnet Group management, no Cluster Parameter Group management |
+
+---
+
+### P3 — Low-Value / Niche Missing Features (9 items)
+
+| # | Service | Missing Operations | Impact |
+|---|---------|-------------------|--------|
+| G.30 | **S3 Control** | listTagsForResource, tagResource, untagResource (S3 Access Points) | No Access Points tag management |
+| G.31 | **EC2** (Prefix Lists + SG Rule Descriptions) | DescribePrefixLists, UpdateSecurityGroupRuleDescriptionsIngress, UpdateSecurityGroupRuleDescriptionsEgress | No prefix list display, no SG rule description editor |
+| G.32 | **ECR** (Scanning Config) | BatchGetRepositoryScanningConfiguration | No scanning config display |
+| G.33 | **SES** (Verified Emails) | ListVerifiedEmailAddresses, DeleteVerifiedEmailAddress | No verified email list (separate from identities) |
+| G.34 | **Auto Scaling** (Describe Types) | DescribeAutoScalingNotificationTypes, DescribeTerminationPolicyTypes, DescribeAdjustmentTypes, DescribeAccountLimits, DescribeLifecycleHookTypes, DescribeMetricCollectionTypes | No limit/type info display |
+| G.35 | **ELBv2** (Capacity Reservation) | DescribeCapacityReservation | No capacity reservation display |
+| G.36 | **CodeDeploy** (On-Premises + Advanced) | RegisterOnPremisesInstance, DeregisterOnPremisesInstance, GetOnPremisesInstance, BatchGetOnPremisesInstances, ListOnPremisesInstances, AddTagsToOnPremisesInstances, RemoveTagsFromOnPremisesInstances, ContinueDeployment, PutLifecycleEventHookExecutionStatus, ListDeploymentTargets, BatchGetDeploymentTargets | No on-premises instance management, no deployment continuation |
+| G.37 | **Step Functions** (Version Management) | PublishStateMachineVersion, ListStateMachineVersions, DeleteStateMachineVersion | No version management for state machines |
+| G.38 | **CloudFormation** (Stack Policy) | SetStackPolicy, GetStackPolicy (stubbed as empty response in Floci) | No stack policy editor (Floci stubs these) |
+
+---
+
+### Already Implemented (Removed from Gap List)
+
+These items were in the initial audit but found to be already implemented upon code verification:
+
+| Original # | Service | Feature | Verified In |
+|------------|---------|---------|-------------|
+| G.5 (old) | CloudFormation Change Sets | CreateChangeSet, DescribeChangeSet, ExecuteChangeSet, DeleteChangeSet, ListChangeSets | `cloudformation.ts` — full CRUD routes |
+| G.7 (old) partial | CloudFormation Templates/Exports | GetTemplate, ValidateTemplate, ListExports | `cloudformation.ts` — routes exist |
+| G.10 (old) partial | WAFv2 IP Sets | CreateIPSet, GetIPSet, UpdateIPSet, DeleteIPSet, ListIPSets | `wafv2.ts` — full CRUD routes |
+| G.10 (old) partial | WAFv2 Rule Groups | CreateRuleGroup, GetRuleGroup, UpdateRuleGroup, DeleteRuleGroup, ListRuleGroups | `wafv2.ts` — full CRUD routes |
+| G.12 (old) partial | SES DKIM + MailFrom | GetIdentityDkimAttributes, SetIdentityDkimEnabled, SetIdentityMailFromDomain, GetIdentityMailFromDomainAttributes | `ses.ts` — routes exist + included in identity list/detail |
+| G.18 (old) full | Config Service Conformance Packs + Recorder | PutConformancePack, DeleteConformancePack, DescribeConformancePacks, PutConfigurationRecorder, DescribeConfigurationRecorders, StartConfigurationRecorder, StopConfigurationRecorder, PutDeliveryChannel, DescribeDeliveryChannels, StartConfigRulesEvaluation | `configservice.ts` — all routes exist |
+| G.27 (old) full | Athena Work Groups + Query Results + Data Catalogs | GetWorkGroup, CreateWorkGroup, DeleteWorkGroup, GetQueryResults, StopQueryExecution, ListDataCatalogs, GetDataCatalog, ListDatabases, ListTableMetadata | `athena.ts` — all routes exist |
+
+---
+
+### Summary Statistics
+
+| Metric | Count |
+|--------|-------|
+| Total gap items identified | 38 |
+| P1 (high-value) | 15 |
+| P2 (moderate-value) | 14 |
+| P3 (low-value) | 9 |
+| Already implemented (removed) | 6 feature groups |
+| Services with P1 gaps | 11 unique services |
+| Services with any gaps | 20+ unique services |
+
+### Recommended Implementation Order
+
+1. **G.1 — DynamoDB Streams** — Done 2026-07-13, Floci has 4 dedicated Streams operations
+2. **G.2 — EC2 Flow Logs** — Done 2026-07-13 (3 operations)
+3. **G.3 — EC2 Network ACLs** — Done 2026-07-13 (7 operations)
+4. **G.5 — CloudFormation Stack Sets** — Major feature gap, Floci has full StackSetService (11 operations)
+5. **G.9-G.10 — WAFv2 Regex Pattern Sets + Logging** — Complete WAFv2 coverage (14 operations)
+6. **G.7-G.8 — Glue Schema Registry + UDFs + Partitions** — Large feature area completely missing (~20 operations)
+7. **G.15 — Cognito Resource Servers + MFA + Custom Attrs** — Completes Cognito management (~22 operations)
+8. **G.4 — S3 Select** — Unique feature, high demo value, Floci has S3SelectService + S3SelectEvaluator
+9. **G.11-G.12 — SES Notifications + Config Set Event Destinations** — Completes SES management (13 operations)
+10. **G.13 — ELBv2 SSL/Certificates/Security Groups** — Completes ELBv2 management (13 operations)
