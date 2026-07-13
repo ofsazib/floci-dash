@@ -48,6 +48,14 @@ export function useIPSets(scope: string = "REGIONAL") {
   });
 }
 
+export function useIPSet(id: string | null, name: string | null, scope: string = "REGIONAL") {
+  return useQuery({
+    queryKey: ["aws", "wafv2", "ip-sets", scope, id],
+    queryFn: () => api<any>(`/aws/wafv2/ip-sets/${encodeURIComponent(id!)}?name=${encodeURIComponent(name!)}&scope=${scope}`),
+    enabled: !!id && !!name,
+  });
+}
+
 export function useCreateIPSet() {
   const qc = useQueryClient();
   return useMutation({
@@ -55,6 +63,16 @@ export function useCreateIPSet() {
       api("/aws/wafv2/ip-sets", { method: "POST", body: JSON.stringify(body) }),
     onSuccess: (_data, variables) =>
       qc.invalidateQueries({ queryKey: ["aws", "wafv2", "ip-sets", (variables as any).Scope || "REGIONAL"] }),
+  });
+}
+
+export function useUpdateIPSet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { Id: string; Name: string; Scope: string; LockToken: string; Addresses: string[]; Description?: string }) =>
+      api(`/aws/wafv2/ip-sets/${encodeURIComponent(body.Id)}`, { method: "PUT", body: JSON.stringify(body) }),
+    onSuccess: (_data, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "wafv2", "ip-sets", variables.Scope] }),
   });
 }
 
@@ -74,6 +92,14 @@ export function useRegexPatternSets(scope: string = "REGIONAL") {
   return useQuery({
     queryKey: ["aws", "wafv2", "regex-pattern-sets", scope],
     queryFn: () => api<{ regexPatternSets: any[]; total: number }>(`/aws/wafv2/regex-pattern-sets?scope=${scope}`),
+  });
+}
+
+export function useRegexPatternSet(id: string | null, name: string | null, scope: string = "REGIONAL") {
+  return useQuery({
+    queryKey: ["aws", "wafv2", "regex-pattern-sets", scope, id],
+    queryFn: () => api<any>(`/aws/wafv2/regex-pattern-sets/${encodeURIComponent(id!)}?name=${encodeURIComponent(name!)}&scope=${scope}`),
+    enabled: !!id && !!name,
   });
 }
 
@@ -103,6 +129,14 @@ export function useRuleGroups(scope: string = "REGIONAL") {
   return useQuery({
     queryKey: ["aws", "wafv2", "rule-groups", scope],
     queryFn: () => api<{ ruleGroups: any[]; total: number }>(`/aws/wafv2/rule-groups?scope=${scope}`),
+  });
+}
+
+export function useRuleGroup(id: string | null, name: string | null, scope: string = "REGIONAL") {
+  return useQuery({
+    queryKey: ["aws", "wafv2", "rule-groups", scope, id],
+    queryFn: () => api<any>(`/aws/wafv2/rule-groups/${encodeURIComponent(id!)}?name=${encodeURIComponent(name!)}&scope=${scope}`),
+    enabled: !!id && !!name,
   });
 }
 

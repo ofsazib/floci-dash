@@ -510,10 +510,20 @@ export function WafV2Dashboard() {
   const createWebAcl = useCreateWebACL();
   const deleteWebAcl = useDeleteWebACL();
   const ipSetsQuery = useIPSets();
+  const createIPSet = useCreateIPSet();
+  const deleteIPSet = useDeleteIPSet();
   const regexSetsQuery = useRegexPatternSets();
+  const createRegexSet = useCreateRegexPatternSet();
+  const deleteRegexSet = useDeleteRegexPatternSet();
   const ruleGroupsQuery = useRuleGroups();
+  const createRuleGroup = useCreateRuleGroup();
+  const deleteRuleGroup = useDeleteRuleGroup();
   const [showCreate, setShowCreate] = useState(false);
   const [aclName, setAclName] = useState("");
+  const [showCreateIPSet, setShowCreateIPSet] = useState(false);
+  const [showCreateRegexSet, setShowCreateRegexSet] = useState(false);
+  const [showCreateRuleGroup, setShowCreateRuleGroup] = useState(false);
+  const { showToast } = useToast();
 
   const webAcls = (webAclsQuery.data?.webAcls || []).map((a: any) => ({
     name: a.Name,
@@ -591,39 +601,105 @@ export function WafV2Dashboard() {
         onCreate={() => setShowCreate(true)}
       />
 
-      <Container header={<Header variant="h3" counter={ipSetsQuery.data?.total}>IP Sets</Header>}>
+      <Container
+        header={
+          <Header
+            variant="h3"
+            counter={ipSetsQuery.data?.total}
+            actions={<Button onClick={() => setShowCreateIPSet(true)}>Create IP set</Button>}
+          >
+            IP Sets
+          </Header>
+        }
+      >
         <ResourceTable
           resourceName="IP Set"
           items={ipSets}
           columns={[
             { id: "name", header: "Name", cell: (item: any) => item.name, isRowHeader: true },
             { id: "description", header: "Description", cell: (item: any) => item.description },
+            {
+              id: "actions",
+              header: "",
+              cell: (item: any) => (
+                <DeleteButton
+                  itemName={item.name}
+                  resourceType="IP set"
+                  loading={deleteIPSet.isPending && deleteIPSet.variables?.Name === item.name}
+                  onDelete={() => deleteIPSet.mutateAsync({ Id: item.id, Name: item.name, Scope: "REGIONAL", LockToken: "placeholder" })}
+                />
+              ),
+            },
           ]}
           loading={ipSetsQuery.isLoading}
           emptyMessage="No IP sets found"
         />
       </Container>
 
-      <Container header={<Header variant="h3" counter={regexSetsQuery.data?.total}>Regex Pattern Sets</Header>}>
+      <Container
+        header={
+          <Header
+            variant="h3"
+            counter={regexSetsQuery.data?.total}
+            actions={<Button onClick={() => setShowCreateRegexSet(true)}>Create regex set</Button>}
+          >
+            Regex Pattern Sets
+          </Header>
+        }
+      >
         <ResourceTable
           resourceName="Regex Pattern Set"
           items={regexSets}
           columns={[
             { id: "name", header: "Name", cell: (item: any) => item.name, isRowHeader: true },
             { id: "description", header: "Description", cell: (item: any) => item.description },
+            {
+              id: "actions",
+              header: "",
+              cell: (item: any) => (
+                <DeleteButton
+                  itemName={item.name}
+                  resourceType="regex set"
+                  loading={deleteRegexSet.isPending && deleteRegexSet.variables?.Name === item.name}
+                  onDelete={() => deleteRegexSet.mutateAsync({ Id: item.id, Name: item.name, Scope: "REGIONAL", LockToken: "placeholder" })}
+                />
+              ),
+            },
           ]}
           loading={regexSetsQuery.isLoading}
           emptyMessage="No regex pattern sets found"
         />
       </Container>
 
-      <Container header={<Header variant="h3" counter={ruleGroupsQuery.data?.total}>Rule Groups</Header>}>
+      <Container
+        header={
+          <Header
+            variant="h3"
+            counter={ruleGroupsQuery.data?.total}
+            actions={<Button onClick={() => setShowCreateRuleGroup(true)}>Create rule group</Button>}
+          >
+            Rule Groups
+          </Header>
+        }
+      >
         <ResourceTable
           resourceName="Rule Group"
           items={ruleGroups}
           columns={[
             { id: "name", header: "Name", cell: (item: any) => item.name, isRowHeader: true },
             { id: "description", header: "Description", cell: (item: any) => item.description },
+            {
+              id: "actions",
+              header: "",
+              cell: (item: any) => (
+                <DeleteButton
+                  itemName={item.name}
+                  resourceType="rule group"
+                  loading={deleteRuleGroup.isPending && deleteRuleGroup.variables?.Name === item.name}
+                  onDelete={() => deleteRuleGroup.mutateAsync({ Id: item.id, Name: item.name, Scope: "REGIONAL", LockToken: "placeholder" })}
+                />
+              ),
+            },
           ]}
           loading={ruleGroupsQuery.isLoading}
           emptyMessage="No rule groups found"
@@ -646,7 +722,157 @@ export function WafV2Dashboard() {
           <Input value={aclName} onChange={({ detail }) => setAclName(detail.value)} placeholder="my-web-acl" />
         </FormField>
       </Modal>
+
+      {showCreateIPSet && (
+        <CreateIPSetModal
+          onClose={() => setShowCreateIPSet(false)}
+          onCreated={() => { setShowCreateIPSet(false); showToast("success", "IP set created"); }}
+          createIPSet={createIPSet}
+        />
+      )}
+
+      {showCreateRegexSet && (
+        <CreateRegexSetModal
+          onClose={() => setShowCreateRegexSet(false)}
+          onCreated={() => { setShowCreateRegexSet(false); showToast("success", "Regex pattern set created"); }}
+          createRegexSet={createRegexSet}
+        />
+      )}
+
+      {showCreateRuleGroup && (
+        <CreateRuleGroupModal
+          onClose={() => setShowCreateRuleGroup(false)}
+          onCreated={() => { setShowCreateRuleGroup(false); showToast("success", "Rule group created"); }}
+          createRuleGroup={createRuleGroup}
+        />
+      )}
     </SpaceBetween>
+  );
+}
+
+function CreateIPSetModal({
+  onClose,
+  onCreated,
+  createIPSet,
+}: {
+  onClose: () => void;
+  onCreated: () => void;
+  createIPSet: ReturnType<typeof useCreateIPSet>;
+}) {
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [addresses, setAddresses] = useState("");
+
+  function handleCreate() {
+    if (!name.trim()) return;
+    const addrList = addresses
+      .split(/[,\n\s]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    createIPSet.mutate(
+      { Name: name.trim(), Scope: "REGIONAL", Description: description.trim() || undefined, IPAddressVersion: "IPV4", Addresses: addrList },
+      { onSuccess: onCreated }
+    );
+  }
+
+  return (
+    <Modal visible onDismiss={onClose} header="Create IP Set" size="medium" footer={
+      <SpaceBetween direction="horizontal" size="xs">
+        <Button variant="link" onClick={onClose}>Cancel</Button>
+        <Button variant="primary" loading={createIPSet.isPending} onClick={handleCreate} disabled={!name.trim()}>Create</Button>
+      </SpaceBetween>
+    }>
+      <SpaceBetween size="m">
+        <FormField label="Name"><Input value={name} onChange={({ detail }) => setName(detail.value)} placeholder="my-ip-set" /></FormField>
+        <FormField label="Description (optional)"><Input value={description} onChange={({ detail }) => setDescription(detail.value)} placeholder="Blocked IPs" /></FormField>
+        <FormField label="IP addresses" description="CIDR notation, comma or newline separated">
+          <Textarea value={addresses} onChange={({ detail }) => setAddresses(detail.value)} placeholder="10.0.0.0/8" rows={3} />
+        </FormField>
+      </SpaceBetween>
+    </Modal>
+  );
+}
+
+function CreateRegexSetModal({
+  onClose,
+  onCreated,
+  createRegexSet,
+}: {
+  onClose: () => void;
+  onCreated: () => void;
+  createRegexSet: ReturnType<typeof useCreateRegexPatternSet>;
+}) {
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [patterns, setPatterns] = useState("");
+
+  function handleCreate() {
+    if (!name.trim()) return;
+    const patternList = patterns
+      .split(/\n/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((s) => ({ RegexString: s }));
+    createRegexSet.mutate(
+      { Name: name.trim(), Scope: "REGIONAL", Description: description.trim() || undefined, RegularExpressionList: patternList },
+      { onSuccess: onCreated }
+    );
+  }
+
+  return (
+    <Modal visible onDismiss={onClose} header="Create Regex Pattern Set" size="medium" footer={
+      <SpaceBetween direction="horizontal" size="xs">
+        <Button variant="link" onClick={onClose}>Cancel</Button>
+        <Button variant="primary" loading={createRegexSet.isPending} onClick={handleCreate} disabled={!name.trim()}>Create</Button>
+      </SpaceBetween>
+    }>
+      <SpaceBetween size="m">
+        <FormField label="Name"><Input value={name} onChange={({ detail }) => setName(detail.value)} placeholder="my-regex-set" /></FormField>
+        <FormField label="Description (optional)"><Input value={description} onChange={({ detail }) => setDescription(detail.value)} placeholder="SQL injection patterns" /></FormField>
+        <FormField label="Regex patterns" description="One per line">
+          <Textarea value={patterns} onChange={({ detail }) => setPatterns(detail.value)} placeholder=".*union.*select.*" rows={3} />
+        </FormField>
+      </SpaceBetween>
+    </Modal>
+  );
+}
+
+function CreateRuleGroupModal({
+  onClose,
+  onCreated,
+  createRuleGroup,
+}: {
+  onClose: () => void;
+  onCreated: () => void;
+  createRuleGroup: ReturnType<typeof useCreateRuleGroup>;
+}) {
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [capacity, setCapacity] = useState(100);
+
+  function handleCreate() {
+    if (!name.trim()) return;
+    createRuleGroup.mutate(
+      { Name: name.trim(), Scope: "REGIONAL", Description: description.trim() || undefined, Capacity: capacity },
+      { onSuccess: onCreated }
+    );
+  }
+
+  return (
+    <Modal visible onDismiss={onClose} header="Create Rule Group" size="medium" footer={
+      <SpaceBetween direction="horizontal" size="xs">
+        <Button variant="link" onClick={onClose}>Cancel</Button>
+        <Button variant="primary" loading={createRuleGroup.isPending} onClick={handleCreate} disabled={!name.trim()}>Create</Button>
+      </SpaceBetween>
+    }>
+      <SpaceBetween size="m">
+        <FormField label="Name"><Input value={name} onChange={({ detail }) => setName(detail.value)} placeholder="my-rule-group" /></FormField>
+        <FormField label="Description (optional)"><Input value={description} onChange={({ detail }) => setDescription(detail.value)} placeholder="Rate limiting rules" /></FormField>
+        <FormField label="Capacity" description="Maximum WCU capacity">
+          <Input value={String(capacity)} onChange={({ detail }) => setCapacity(Number(detail.value) || 100)} type="number" />
+        </FormField>
+      </SpaceBetween>
+    </Modal>
   );
 }
 

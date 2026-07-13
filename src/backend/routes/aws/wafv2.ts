@@ -10,14 +10,17 @@ import {
   ListIPSetsCommand,
   CreateIPSetCommand,
   GetIPSetCommand,
+  UpdateIPSetCommand,
   DeleteIPSetCommand,
   ListRegexPatternSetsCommand,
   CreateRegexPatternSetCommand,
   GetRegexPatternSetCommand,
+  UpdateRegexPatternSetCommand,
   DeleteRegexPatternSetCommand,
   ListRuleGroupsCommand,
   CreateRuleGroupCommand,
   GetRuleGroupCommand,
+  UpdateRuleGroupCommand,
   DeleteRuleGroupCommand,
   ListTagsForResourceCommand,
   TagResourceCommand,
@@ -115,6 +118,37 @@ router.post("/ip-sets", async (c: Context) => {
   return c.json({ summary: result.Summary, created: true }, 201);
 });
 
+router.get("/ip-sets/:id", async (c: Context) => {
+  const id = c.req.param("id")!;
+  const scope = c.req.query("scope") || "REGIONAL";
+  const name = c.req.query("name");
+  if (!name) return c.json({ error: "name query param required" }, 400);
+
+  const client = getClient();
+  const result = await client.send(new GetIPSetCommand({ Id: id, Name: name, Scope: scope as any }));
+  const ipSet = result.IPSet;
+  return c.json({ ipSet });
+});
+
+router.put("/ip-sets/:id", async (c: Context) => {
+  const id = c.req.param("id")!;
+  const body = await c.req.json<any>();
+  if (!body.Name || !body.Scope || !body.LockToken) return c.json({ error: "Name, Scope, and LockToken are required" }, 400);
+
+  const client = getClient();
+  const result = await client.send(
+    new UpdateIPSetCommand({
+      Id: id,
+      Name: body.Name,
+      Scope: body.Scope,
+      LockToken: body.LockToken,
+      Description: body.Description,
+      Addresses: body.Addresses || [],
+    })
+  );
+  return c.json({ lockToken: result.LockToken, updated: true });
+});
+
 router.post("/ip-sets/delete", async (c: Context) => {
   const body = await c.req.json<any>();
   if (!body.Id || !body.Name || !body.Scope) return c.json({ error: "Id, Name, and Scope are required" }, 400);
@@ -152,6 +186,36 @@ router.post("/regex-pattern-sets", async (c: Context) => {
     })
   );
   return c.json({ summary: result.Summary, created: true }, 201);
+});
+
+router.get("/regex-pattern-sets/:id", async (c: Context) => {
+  const id = c.req.param("id")!;
+  const scope = c.req.query("scope") || "REGIONAL";
+  const name = c.req.query("name");
+  if (!name) return c.json({ error: "name query param required" }, 400);
+
+  const client = getClient();
+  const result = await client.send(new GetRegexPatternSetCommand({ Id: id, Name: name, Scope: scope as any }));
+  return c.json({ regexPatternSet: result.RegexPatternSet });
+});
+
+router.put("/regex-pattern-sets/:id", async (c: Context) => {
+  const id = c.req.param("id")!;
+  const body = await c.req.json<any>();
+  if (!body.Name || !body.Scope || !body.LockToken) return c.json({ error: "Name, Scope, and LockToken are required" }, 400);
+
+  const client = getClient();
+  const result = await client.send(
+    new UpdateRegexPatternSetCommand({
+      Id: id,
+      Name: body.Name,
+      Scope: body.Scope,
+      LockToken: body.LockToken,
+      Description: body.Description,
+      RegularExpressionList: body.RegularExpressionList || [],
+    })
+  );
+  return c.json({ lockToken: result.LockToken, updated: true });
 });
 
 router.post("/regex-pattern-sets/delete", async (c: Context) => {
@@ -193,6 +257,37 @@ router.post("/rule-groups", async (c: Context) => {
     })
   );
   return c.json({ summary: result.Summary, created: true }, 201);
+});
+
+router.get("/rule-groups/:id", async (c: Context) => {
+  const id = c.req.param("id")!;
+  const scope = c.req.query("scope") || "REGIONAL";
+  const name = c.req.query("name");
+  if (!name) return c.json({ error: "name query param required" }, 400);
+
+  const client = getClient();
+  const result = await client.send(new GetRuleGroupCommand({ Id: id, Name: name, Scope: scope as any }));
+  return c.json({ ruleGroup: result.RuleGroup });
+});
+
+router.put("/rule-groups/:id", async (c: Context) => {
+  const id = c.req.param("id")!;
+  const body = await c.req.json<any>();
+  if (!body.Name || !body.Scope || !body.LockToken) return c.json({ error: "Name, Scope, and LockToken are required" }, 400);
+
+  const client = getClient();
+  const result = await client.send(
+    new UpdateRuleGroupCommand({
+      Id: id,
+      Name: body.Name,
+      Scope: body.Scope,
+      LockToken: body.LockToken,
+      Description: body.Description,
+      Rules: body.Rules,
+      VisibilityConfig: body.VisibilityConfig || { SampledRequestsEnabled: false, CloudWatchMetricsEnabled: false, MetricName: "floci" },
+    })
+  );
+  return c.json({ lockToken: result.LockToken, updated: true });
 });
 
 router.post("/rule-groups/delete", async (c: Context) => {
