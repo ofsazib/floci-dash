@@ -37,6 +37,12 @@ import {
   useCreateChangeSet,
   useExecuteChangeSet,
   useDeleteChangeSet,
+  useStackSets,
+  useStackSet,
+  useCreateStackSet,
+  useDeleteStackSet,
+  useCreateStackInstances,
+  useDeleteStackInstances,
 } from "../hooks/useCloudFormation";
 
 const STATUS_COLORS: Record<string, "green" | "red" | "blue" | "grey"> = {
@@ -748,6 +754,446 @@ function ChangeSetDetail({
   );
 }
 
+// ─── STACK SETS TAB ─────────────────────────────────────
+
+function StackSetsTab() {
+  const { showToast } = useToast();
+  const [showCreate, setShowCreate] = useState(false);
+  const [selectedStackSet, setSelectedStackSet] = useState<string | null>(null);
+
+  const stackSetsQuery = useStackSets();
+  const createStackSet = useCreateStackSet();
+  const deleteStackSet = useDeleteStackSet();
+
+  const stackSets = stackSetsQuery.data?.stackSets || [];
+
+  return (
+    <SpaceBetween size="l">
+      <Table
+        header={
+          <Header
+            variant="h2"
+            counter={`(${stackSets.length})`}
+            actions={<Button onClick={() => setShowCreate(true)}>Create stack set</Button>}
+          >
+            Stack Sets
+          </Header>
+        }
+        columnDefinitions={[
+          { id: "name", header: "Name", cell: (ss: any) => ss.name },
+          {
+            id: "status",
+            header: "Status",
+            cell: (ss: any) => (
+              <Badge color={ss.status === "ACTIVE" ? "green" : "grey"}>{ss.status}</Badge>
+            ),
+          },
+          {
+            id: "description",
+            header: "Description",
+            cell: (ss: any) => ss.description || "-",
+          },
+          {
+            id: "actions",
+            header: "",
+            cell: (ss: any) => (
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button onClick={() => setSelectedStackSet(ss.name)}>View</Button>
+                <DeleteButton
+                  itemName={ss.name}
+                  resourceType="stack set"
+                  onDelete={async () => {
+                    try {
+                      await deleteStackSet.mutateAsync(ss.name);
+                      showToast("success", `Stack set "${ss.name}" deleted`);
+                    } catch (e: any) {
+                      showToast("error", e.message);
+                    }
+                  }}
+                />
+              </SpaceBetween>
+            ),
+          },
+        ]}
+        items={stackSets}
+        loading={stackSetsQuery.isLoading}
+        trackBy={(ss: any) => ss.id || ss.name}
+        empty={
+          <Box textAlign="center" padding={{ top: "xl" }}>
+            <b>No stack sets</b>
+            <Box variant="p" color="text-body-secondary" padding={{ top: "s" }}>
+              Create a stack set to deploy across multiple accounts and regions.
+            </Box>
+          </Box>
+        }
+      />
+
+      {showCreate && (
+        <CreateStackSetModal
+          onClose={() => setShowCreate(false)}
+          onSubmit={async (data) => {
+            try {
+              await createStackSet.mutateAsync(data);
+              showToast("success", `Stack set "${data.name}" created`);
+              setShowCreate(false);
+            } catch (e: any) {
+              showToast("error", e.message);
+            }
+          }}
+        />
+      )}
+
+      {selectedStackSet && (
+        <StackSetDetailModal
+          stackSetName={selectedStackSet}
+          onClose={() => setSelectedStackSet(null)}
+        />
+      )}
+    </SpaceBetween>
+  );
+}
+
+function CreateStackSetModal({
+  onClose,
+  onSubmit,
+}: {
+  onClose: () => void;
+  onSubmit: (data: any) => void;
+}) {
+  const [name, setName] = useState("");
+  const [templateBody, setTemplateBody] = useState("");
+  const [description, setDescription] = useState("");
+
+  const defaultTemplate = `AWSTemplateFormatVersion: '2010-09-09'
+Description: Stack set template
+Resources:
+  LogBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub \${AWS::AccountId}-logs`;
+
+  return (
+    <Modal
+      visible={true}
+      onDismiss={onClose}
+      header="Create stack set"
+      size="large"
+      footer={
+        <Box float="right">
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button variant="link" onClick={onClose}>Cancel</Button>
+            <Button
+              variant="primary"
+              disabled={!name.trim()}
+              onClick={() =>
+                onSubmit({
+                  name: name.trim(),
+                  templateBody: templateBody || defaultTemplate,
+                  description: description.trim() || undefined,
+                })
+              }
+            >
+              Create
+            </Button>
+          </SpaceBetween>
+        </Box>
+      }
+    >
+      <Form>
+        <SpaceBetween size="m">
+          <FormField label="Stack set name">
+            <Input
+              value={name}
+              onChange={({ detail }) => setName(detail.value)}
+              placeholder="my-stack-set"
+            />
+          </FormField>
+          <FormField label="Description (optional)">
+            <Input
+              value={description}
+              onChange={({ detail }) => setDescription(detail.value)}
+              placeholder="Multi-account deployment"
+            />
+          </FormField>
+          <FormField label="Template (YAML or JSON)">
+            <Textarea
+              value={templateBody || defaultTemplate}
+              onChange={({ detail }) => setTemplateBody(detail.value)}
+              rows={10}
+            />
+          </FormField>
+        </SpaceBetween>
+      </Form>
+    </Modal>
+  );
+}
+
+function StackSetDetailModal({
+  stackSetName,
+  onClose,
+}: {
+  stackSetName: string;
+  onClose: () => void;
+}) {
+  const { data, isLoading } = useStackSet(stackSetName);
+  const createInstances = useCreateStackInstances();
+  const deleteInstances = useDeleteStackInstances();
+  const { showToast } = useToast();
+  const [showAddInstances, setShowAddInstances] = useState(false);
+
+  const ss = data?.stackSet;
+  const instances = data?.instances || [];
+  const operations = data?.operations || [];
+
+  if (isLoading) {
+    return (
+      <Modal visible={true} onDismiss={onClose} header={`Stack Set: ${stackSetName}`}>
+        <Box textAlign="center" padding={{ top: "xl", bottom: "xl" }}>Loading...</Box>
+      </Modal>
+    );
+  }
+
+  return (
+    <>
+      <Modal
+        visible={true}
+        onDismiss={onClose}
+        header={`Stack Set: ${stackSetName}`}
+        size="large"
+        footer={<Button onClick={onClose}>Close</Button>}
+      >
+        <SpaceBetween size="l">
+          {ss && (
+            <>
+              <ColumnLayout columns={3} variant="text-grid">
+                <div>
+                  <Box variant="small" color="text-body-secondary">Status</Box>
+                  <Badge color={ss.status === "ACTIVE" ? "green" : "grey"}>{ss.status}</Badge>
+                </div>
+                <div>
+                  <Box variant="small" color="text-body-secondary">Permission Model</Box>
+                  <Box>{ss.permissionModel || "SELF_MANAGED"}</Box>
+                </div>
+                <div>
+                  <Box variant="small" color="text-body-secondary">Description</Box>
+                  <Box>{ss.description || "-"}</Box>
+                </div>
+              </ColumnLayout>
+
+              {ss.parameters?.length > 0 && (
+                <Container header={<Header variant="h3">Parameters</Header>}>
+                  <ColumnLayout columns={2} variant="text-grid">
+                    {ss.parameters.map((p: any) => (
+                      <div key={p.key}>
+                        <b>{p.key}:</b> {p.value}
+                      </div>
+                    ))}
+                  </ColumnLayout>
+                </Container>
+              )}
+            </>
+          )}
+
+          <Container
+            header={
+              <Header
+                variant="h3"
+                counter={`(${instances.length})`}
+                actions={
+                  <Button variant="primary" onClick={() => setShowAddInstances(true)}>
+                    Add instances
+                  </Button>
+                }
+              >
+                Instances
+              </Header>
+            }
+          >
+            {instances.length > 0 ? (
+              <Table
+                columnDefinitions={[
+                  { id: "account", header: "Account", cell: (i: any) => i.account },
+                  { id: "region", header: "Region", cell: (i: any) => i.region },
+                  {
+                    id: "status",
+                    header: "Status",
+                    cell: (i: any) => (
+                      <Badge color={i.status === "CURRENT" ? "green" : "red"}>{i.status}</Badge>
+                    ),
+                  },
+                  { id: "stackId", header: "Stack", cell: (i: any) => <span style={{ fontSize: 11 }}>{i.stackId || "-"}</span> },
+                  {
+                    id: "delete",
+                    header: "",
+                    cell: (i: any) => (
+                      <Button
+                        variant="icon"
+                        iconName="remove"
+                        ariaLabel={`Remove instance ${i.account}/${i.region}`}
+                        loading={deleteInstances.isPending}
+                        onClick={async () => {
+                          try {
+                            await deleteInstances.mutateAsync({
+                              stackSetName,
+                              accounts: [i.account],
+                              regions: [i.region],
+                            });
+                            showToast("success", `Instance ${i.account}/${i.region} deleted`);
+                          } catch (e: any) {
+                            showToast("error", e.message);
+                          }
+                        }}
+                      />
+                    ),
+                  },
+                ]}
+                items={instances}
+                trackBy={(i: any) => `${i.account}:${i.region}`}
+              />
+            ) : (
+              <Box color="text-body-secondary" padding={{ top: "m", bottom: "m" }}>
+                No instances deployed. Add target accounts and regions.
+              </Box>
+            )}
+          </Container>
+
+          {operations.length > 0 && (
+            <Container
+              header={<Header variant="h3" counter={`(${operations.length})`}>Operations</Header>}
+            >
+              <Table
+                columnDefinitions={[
+                  { id: "id", header: "Operation ID", cell: (o: any) => <span style={{ fontSize: 11 }}>{o.id}</span> },
+                  {
+                    id: "action",
+                    header: "Action",
+                    cell: (o: any) => (
+                      <Badge
+                        color={o.action === "CREATE" ? "green" : o.action === "DELETE" ? "red" : "blue"}
+                      >
+                        {o.action}
+                      </Badge>
+                    ),
+                  },
+                  {
+                    id: "status",
+                    header: "Status",
+                    cell: (o: any) => (
+                      <Badge color={o.status === "SUCCEEDED" ? "green" : "red"}>{o.status}</Badge>
+                    ),
+                  },
+                  {
+                    id: "created",
+                    header: "Created",
+                    cell: (o: any) => o.creationTime ? new Date(o.creationTime).toLocaleString() : "-",
+                  },
+                ]}
+                items={operations}
+                trackBy={(o: any) => o.id}
+              />
+            </Container>
+          )}
+        </SpaceBetween>
+      </Modal>
+
+      {showAddInstances && (
+        <AddInstancesModal
+          stackSetName={stackSetName}
+          onClose={() => setShowAddInstances(false)}
+          onSubmit={async (data) => {
+            try {
+              await createInstances.mutateAsync({
+                stackSetName,
+                accounts: data.accounts,
+                regions: data.regions,
+              });
+              showToast("success", "Instances deployment started");
+              setShowAddInstances(false);
+            } catch (e: any) {
+              showToast("error", e.message);
+            }
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function AddInstancesModal({
+  stackSetName,
+  onClose,
+  onSubmit,
+}: {
+  stackSetName: string;
+  onClose: () => void;
+  onSubmit: (data: { accounts: string[]; regions: string[] }) => void;
+}) {
+  const [accountsText, setAccountsText] = useState("");
+  const [regionsText, setRegionsText] = useState("us-east-1");
+
+  function parseList(text: string): string[] {
+    return text
+      .split(/[,\n\s]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+
+  return (
+    <Modal
+      visible={true}
+      onDismiss={onClose}
+      header={`Add instances to ${stackSetName}`}
+      size="medium"
+      footer={
+        <Box float="right">
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button variant="link" onClick={onClose}>Cancel</Button>
+            <Button
+              variant="primary"
+              disabled={!accountsText.trim() || !regionsText.trim()}
+              onClick={() =>
+                onSubmit({
+                  accounts: parseList(accountsText),
+                  regions: parseList(regionsText),
+                })
+              }
+            >
+              Deploy
+            </Button>
+          </SpaceBetween>
+        </Box>
+      }
+    >
+      <Form>
+        <SpaceBetween size="m">
+          <FormField
+            label="Target accounts"
+            description="Comma or newline separated account IDs"
+          >
+            <Textarea
+              value={accountsText}
+              onChange={({ detail }) => setAccountsText(detail.value)}
+              placeholder="123456789012"
+              rows={3}
+            />
+          </FormField>
+          <FormField
+            label="Target regions"
+            description="Comma or newline separated region names"
+          >
+            <Textarea
+              value={regionsText}
+              onChange={({ detail }) => setRegionsText(detail.value)}
+              placeholder="us-east-1"
+              rows={3}
+            />
+          </FormField>
+        </SpaceBetween>
+      </Form>
+    </Modal>
+  );
+}
+
 function ExportsTab() {
   const exportsQuery = useExports();
   const exportsList = exportsQuery.data?.exports || [];
@@ -779,6 +1225,7 @@ export default function CloudFormationPage() {
   const tabs: TabsProps.Tab[] = [
     { id: "stacks", label: "Stacks", content: <StacksTab /> },
     { id: "changesets", label: "Change Sets", content: <ChangeSetsTab /> },
+    { id: "stacksets", label: "Stack Sets", content: <StackSetsTab /> },
     { id: "exports", label: "Exports", content: <ExportsTab /> },
   ];
 

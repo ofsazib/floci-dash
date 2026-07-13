@@ -18,6 +18,14 @@ import {
   ExecuteChangeSetCommand,
   DeleteChangeSetCommand,
   ListChangeSetsCommand,
+  ListStackSetsCommand,
+  CreateStackSetCommand,
+  DescribeStackSetCommand,
+  DeleteStackSetCommand,
+  CreateStackInstancesCommand,
+  ListStackInstancesCommand,
+  DeleteStackInstancesCommand,
+  ListStackSetOperationsCommand,
 } from "@aws-sdk/client-cloudformation";
 import { getAwsConfig } from "../../clients/aws";
 import { sanitizeName, sanitizeText, validateJson } from "../../clients/sanitize";
@@ -321,6 +329,121 @@ router.get("/exports", async (c: Context) => {
     exportingStackId: e.ExportingStackId,
   }));
   return c.json({ exports, total: exports.length });
+});
+
+// ─── STACK SETS ──────────────────────────────────────────
+
+router.get("/stacksets", async (c: Context) => {
+  const result = await cfn().send(new ListStackSetsCommand({ Status: "ACTIVE" }));
+  const stackSets = (result.Summaries || []).map((ss: any) => ({
+    id: ss.StackSetId,
+    name: ss.StackSetName,
+    status: ss.Status,
+    description: ss.Description,
+  }));
+  return c.json({ stackSets, total: stackSets.length });
+});
+
+router.post("/stacksets", async (c: Context) => {
+  const body = await c.req.json<any>();
+  const name = sanitizeName(body.name || "", 128);
+  if (!name) return c.json({ error: "name is required" }, 400);
+  if (body.templateBody) {
+    const validation = validateJson(body.templateBody);
+    if (!validation.valid) {
+      return c.json({ error: `Invalid template: ${validation.error}` }, 400);
+    }
+  }
+  await cfn().send(
+    new CreateStackSetCommand({
+      StackSetName: name,
+      TemplateBody: body.templateBody,
+      Description: sanitizeText(body.description || "", 1024),
+      Parameters: (body.parameters || []).map((p: any) => ({
+        ParameterKey: sanitizeName(p.key || "", 256),
+        ParameterValue: sanitizeText(p.value || "", 4096),
+      })),
+      Capabilities: body.capabilities || ["CAPABILITY_IAM", "CAPABILITY_NAMED_IAM"],
+      PermissionModel: body.permissionModel || "SELF_MANAGED",
+    })
+  );
+  return c.json({ name, created: true });
+});
+
+router.get("/stacksets/:name", async (c: Context) => {
+  const name = c.req.param("name");
+  const [ssRes, instRes, opsRes] = await Promise.all([
+    cfn().send(new DescribeStackSetCommand({ StackSetName: name })),
+    cfn().send(new ListStackInstancesCommand({ StackSetName: name })),
+    cfn().send(new ListStackSetOperationsCommand({ StackSetName: name })),
+  ]);
+  const stackSet = {
+    id: ssRes.StackSet?.StackSetId,
+    name: ssRes.StackSet?.StackSetName,
+    status: ssRes.StackSet?.Status,
+    description: ssRes.StackSet?.Description,
+    templateBody: ssRes.StackSet?.TemplateBody,
+    parameters: (ssRes.StackSet?.Parameters || []).map((p: any) => ({
+      key: p.ParameterKey,
+      value: p.ParameterValue,
+    })),
+    capabilities: ssRes.StackSet?.Capabilities || [],
+    permissionModel: ssRes.StackSet?.PermissionModel,
+  };
+  const instances = (instRes.Summaries || []).map((i: any) => ({
+    account: i.Account,
+    region: i.Region,
+    stackId: i.StackId,
+    status: i.Status,
+    statusReason: i.StatusReason,
+  }));
+  const operations = (opsRes.Summaries || []).map((o: any) => ({
+    id: o.OperationId,
+    action: o.Action,
+    status: o.Status,
+    creationTime: o.CreationTimestamp,
+    endTime: o.EndTimestamp,
+  }));
+  return c.json({ stackSet, instances, operations });
+});
+
+router.delete("/stacksets/:name", async (c: Context) => {
+  const name = c.req.param("name");
+  await cfn().send(new DeleteStackSetCommand({ StackSetName: name }));
+  return c.json({ name, deleted: true });
+});
+
+router.post("/stacksets/:name/instances", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<any>();
+  if (!body.accounts?.length || !body.regions?.length) {
+    return c.json({ error: "accounts and regions arrays are required" }, 400);
+  }
+  await cfn().send(
+    new CreateStackInstancesCommand({
+      StackSetName: name,
+      Accounts: body.accounts,
+      Regions: body.regions,
+    })
+  );
+  return c.json({ name, instancesCreated: true });
+});
+
+router.delete("/stacksets/:name/instances", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<any>();
+  if (!body.accounts?.length || !body.regions?.length) {
+    return c.json({ error: "accounts and regions arrays are required" }, 400);
+  }
+  await cfn().send(
+    new DeleteStackInstancesCommand({
+      StackSetName: name,
+      Accounts: body.accounts,
+      Regions: body.regions,
+      RetainStacks: body.retainStacks ?? false,
+    })
+  );
+  return c.json({ name, instancesDeleted: true });
 });
 
 export default router;

@@ -22,6 +22,12 @@ import {
   useCreateChangeSet,
   useExecuteChangeSet,
   useDeleteChangeSet,
+  useStackSets,
+  useStackSet,
+  useCreateStackSet,
+  useDeleteStackSet,
+  useCreateStackInstances,
+  useDeleteStackInstances,
 } from "./useCloudFormation";
 
 function createWrapper() {
@@ -222,4 +228,75 @@ describe("Change Sets", () => {
         { method: "DELETE" }
       );
   });
+
+// ─── Stack Sets ───────────────────────────────────────
+
+describe("Stack Sets", () => {
+  it("useStackSets — calls correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ stackSets: [{ name: "ss-1", status: "ACTIVE" }], total: 1 });
+    const { result } = renderHook(() => useStackSets(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/cloudformation/stacksets");
+    expect(result.current.data?.stackSets).toHaveLength(1);
+  });
+
+  it("useStackSet — calls correct URL", async () => {
+    mockApi.mockResolvedValueOnce({
+      stackSet: { name: "ss-1", status: "ACTIVE" },
+      instances: [],
+      operations: [],
+    });
+    const { result } = renderHook(() => useStackSet("ss-1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/cloudformation/stacksets/ss-1");
+  });
+
+  it("useStackSet — disabled when name is null", () => {
+    const { result } = renderHook(() => useStackSet(null), { wrapper: createWrapper() });
+    expect(result.current.isLoading).toBe(false);
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("useCreateStackSet — posts to correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ created: true });
+    const { result } = renderHook(() => useCreateStackSet(), { wrapper: createWrapper() });
+    result.current.mutate({ name: "ss-1", templateBody: "{}" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/cloudformation/stacksets", {
+      method: "POST",
+      body: JSON.stringify({ name: "ss-1", templateBody: "{}" }),
+    });
+  });
+
+  it("useDeleteStackSet — sends DELETE", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useDeleteStackSet(), { wrapper: createWrapper() });
+    result.current.mutate("ss-1");
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/cloudformation/stacksets/ss-1", { method: "DELETE" });
+  });
+
+  it("useCreateStackInstances — posts to correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ instancesCreated: true });
+    const { result } = renderHook(() => useCreateStackInstances(), { wrapper: createWrapper() });
+    result.current.mutate({ stackSetName: "ss-1", accounts: ["123"], regions: ["us-east-1"] });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/cloudformation/stacksets/ss-1/instances", {
+      method: "POST",
+      body: JSON.stringify({ accounts: ["123"], regions: ["us-east-1"] }),
+    });
+  });
+
+  it("useDeleteStackInstances — sends DELETE", async () => {
+    mockApi.mockResolvedValueOnce({ instancesDeleted: true });
+    const { result } = renderHook(() => useDeleteStackInstances(), { wrapper: createWrapper() });
+    result.current.mutate({ stackSetName: "ss-1", accounts: ["123"], regions: ["us-east-1"] });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/cloudformation/stacksets/ss-1/instances", {
+      method: "DELETE",
+      body: JSON.stringify({ accounts: ["123"], regions: ["us-east-1"], retainStacks: undefined }),
+    });
+  });
+});
+
 });

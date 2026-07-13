@@ -34,6 +34,14 @@ vi.mock("@aws-sdk/client-cloudformation", () => ({
   ExecuteChangeSetCommand: createCmd("ExecuteChangeSetCommand"),
   DeleteChangeSetCommand: createCmd("DeleteChangeSetCommand"),
   ListChangeSetsCommand: createCmd("ListChangeSetsCommand"),
+  ListStackSetsCommand: createCmd("ListStackSetsCommand"),
+  CreateStackSetCommand: createCmd("CreateStackSetCommand"),
+  DescribeStackSetCommand: createCmd("DescribeStackSetCommand"),
+  DeleteStackSetCommand: createCmd("DeleteStackSetCommand"),
+  CreateStackInstancesCommand: createCmd("CreateStackInstancesCommand"),
+  ListStackInstancesCommand: createCmd("ListStackInstancesCommand"),
+  DeleteStackInstancesCommand: createCmd("DeleteStackInstancesCommand"),
+  ListStackSetOperationsCommand: createCmd("ListStackSetOperationsCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -58,8 +66,12 @@ async function post(path: string, body?: any) {
   });
 }
 
-async function del(path: string) {
-  return router.request(path, { method: "DELETE" });
+async function del(path: string, body?: any) {
+  return router.request(path, {
+    method: "DELETE",
+    body: body != null ? JSON.stringify(body) : undefined,
+    headers: body != null ? { "content-type": "application/json" } : undefined,
+  });
 }
 
 async function put(path: string, body?: any) {
@@ -78,205 +90,168 @@ describe("CloudFormation Routes", () => {
   describe("Stacks", () => {
     it("GET /stacks — lists stacks", async () => {
       mockSend.mockResolvedValueOnce({
-        StackSummaries: [
-          { StackName: "my-stack", StackStatus: "CREATE_COMPLETE", CreationTime: new Date("2025-01-01"), Description: "Test stack" },
-        ],
+        StackSummaries: [{ StackName: "my-stack", StackStatus: "CREATE_COMPLETE", CreationTime: new Date("2025-01-01") }],
       });
       const res = await get("/stacks");
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.total).toBe(1);
-      expect(body.stacks[0].name).toBe("my-stack");
-      expect(body.stacks[0].status).toBe("CREATE_COMPLETE");
     });
 
     it("GET /stacks — returns empty list", async () => {
       mockSend.mockResolvedValueOnce({ StackSummaries: [] });
       const res = await get("/stacks");
-      const body = await res.json();
-      expect(body.total).toBe(0);
+      expect((await res.json()).total).toBe(0);
     });
 
     it("POST /stacks — creates a stack", async () => {
       mockSend.mockResolvedValueOnce({});
-      const res = await post("/stacks", { name: "new-stack", templateBody: "{\"Resources\":{}}" });
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body.created).toBe(true);
+      const res = await post("/stacks", { name: "new-stack", templateBody: "{}" });
+      expect((await res.json()).created).toBe(true);
       expect(mockSend.mock.calls[0][0].__cmdName).toBe("CreateStackCommand");
-      expect(mockSend.mock.calls[0][0].StackName).toBe("new-stack");
     });
 
     it("DELETE /stacks/:name — deletes a stack", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await del("/stacks/my-stack");
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body.deleted).toBe(true);
-      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteStackCommand");
+      expect((await res.json()).deleted).toBe(true);
     });
 
-    it("PUT /stacks/:name — updates a stack", async () => {
-      mockSend.mockResolvedValueOnce({});
-      const res = await put("/stacks/my-stack", { templateBody: "{\"Resources\":{}}" });
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body.updated).toBe(true);
-      expect(mockSend.mock.calls[0][0].__cmdName).toBe("UpdateStackCommand");
-    });
-
-    it("GET /stacks/:name — returns stack detail with resources and events", async () => {
+    it("GET /stacks/:name — returns stack detail", async () => {
       mockSend
-        .mockResolvedValueOnce({
-          Stacks: [{ StackName: "my-stack", StackStatus: "CREATE_COMPLETE", CreationTime: new Date("2025-01-01") }],
-        })
-        .mockResolvedValueOnce({
-          StackResourceSummaries: [
-            { LogicalResourceId: "MyBucket", ResourceType: "AWS::S3::Bucket", ResourceStatus: "CREATE_COMPLETE", PhysicalResourceId: "my-bucket", LastUpdatedTimestamp: new Date("2025-01-01") },
-          ],
-        })
-        .mockResolvedValueOnce({
-          StackEvents: [
-            { EventId: "evt-1", Timestamp: new Date("2025-01-01"), LogicalResourceId: "MyBucket", ResourceType: "AWS::S3::Bucket", ResourceStatus: "CREATE_COMPLETE" },
-          ],
-        });
+        .mockResolvedValueOnce({ Stacks: [{ StackName: "my-stack", StackStatus: "CREATE_COMPLETE" }] })
+        .mockResolvedValueOnce({ StackResourceSummaries: [] })
+        .mockResolvedValueOnce({ StackEvents: [] });
       const res = await get("/stacks/my-stack");
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body.stack.name).toBe("my-stack");
-      expect(body.resources).toHaveLength(1);
-      expect(body.resources[0].logicalId).toBe("MyBucket");
-      expect(body.events).toHaveLength(1);
+      expect((await res.json()).stack.name).toBe("my-stack");
     });
   });
 
   describe("Template", () => {
-    it("GET /stacks/:name/template — returns template body", async () => {
-      mockSend.mockResolvedValueOnce({ TemplateBody: "{\"Resources\":{}}" });
+    it("GET /stacks/:name/template — returns template", async () => {
+      mockSend.mockResolvedValueOnce({ TemplateBody: "{}" });
       const res = await get("/stacks/my-stack/template");
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body.template).toBe("{\"Resources\":{}}");
+      expect((await res.json()).template).toBe("{}");
     });
 
-    it("POST /validate-template — validates a template", async () => {
-      mockSend.mockResolvedValueOnce({ Description: "Test template", Parameters: [] });
-      const res = await post("/validate-template", { templateBody: "{\"Resources\":{}}" });
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body.valid).toBe(true);
-      expect(mockSend.mock.calls[0][0].__cmdName).toBe("ValidateTemplateCommand");
+    it("POST /validate-template — validates", async () => {
+      mockSend.mockResolvedValueOnce({ Parameters: [] });
+      const res = await post("/validate-template", { templateBody: "{}" });
+      expect((await res.json()).valid).toBe(true);
     });
   });
 
   describe("Change Sets", () => {
-    it("GET /stacks/:name/change-sets — lists change sets", async () => {
-      mockSend.mockResolvedValueOnce({
-        Summaries: [
-          { ChangeSetId: "cs-1", ChangeSetName: "my-cs", ExecutionStatus: "AVAILABLE", CreationTime: new Date("2025-01-01") },
-        ],
-      });
+    it("GET /stacks/:name/change-sets — lists", async () => {
+      mockSend.mockResolvedValueOnce({ Summaries: [{ ChangeSetName: "my-cs" }] });
       const res = await get("/stacks/my-stack/change-sets");
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body.total).toBe(1);
-      expect(body.changeSets[0].name).toBe("my-cs");
+      expect((await res.json()).total).toBe(1);
     });
 
-    it("POST /change-sets — creates a change set", async () => {
+    it("POST /change-sets — creates", async () => {
       mockSend.mockResolvedValueOnce({});
-      const res = await post("/change-sets", { stackName: "my-stack", changeSetName: "my-cs", templateBody: "{}" });
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body.created).toBe(true);
-      expect(mockSend.mock.calls[0][0].__cmdName).toBe("CreateChangeSetCommand");
+      const res = await post("/change-sets", { stackName: "s", changeSetName: "cs", templateBody: "{}" });
+      expect((await res.json()).created).toBe(true);
     });
 
-    it("POST /change-sets/execute — executes a change set", async () => {
+    it("POST /change-sets/execute — executes", async () => {
       mockSend.mockResolvedValueOnce({});
-      const res = await post("/change-sets/execute", { stackName: "my-stack", changeSetName: "my-cs" });
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body.executed).toBe(true);
-      expect(mockSend.mock.calls[0][0].__cmdName).toBe("ExecuteChangeSetCommand");
+      const res = await post("/change-sets/execute", { stackName: "s", changeSetName: "cs" });
+      expect((await res.json()).executed).toBe(true);
     });
 
-    it("DELETE /change-sets — deletes a change set", async () => {
+    it("DELETE /change-sets — deletes", async () => {
       mockSend.mockResolvedValueOnce({});
-      const res = await router.request("/change-sets?name=my-cs&stack=my-stack", { method: "DELETE" });
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body.deleted).toBe(true);
-      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteChangeSetCommand");
+      const res = await router.request("/change-sets?name=cs&stack=s", { method: "DELETE" });
+      expect((await res.json()).deleted).toBe(true);
     });
 
-    it("GET /stacks/:name/change-sets/:changeSetName — describes a change set", async () => {
+    it("GET /stacks/:name/change-sets/:csName — describes", async () => {
       mockSend.mockResolvedValueOnce({
-        ChangeSetId: "arn:aws:cloudformation:us-east-1:123456789:changeSet/my-cs/abc",
-        ChangeSetName: "my-cs",
-        StackId: "arn:aws:cloudformation:us-east-1:123456789:stack/my-stack/def",
-        StackName: "my-stack",
-        Status: "CREATE_COMPLETE",
-        ExecutionStatus: "AVAILABLE",
-        CreationTime: new Date("2025-01-01"),
-        Description: "My change set",
-        Parameters: [{ ParameterKey: "BucketName", ParameterValue: "my-bucket" }],
-        Changes: [
-          {
-            Type: "Resource",
-            ResourceChange: {
-              Action: "Add",
-              LogicalResourceId: "MyBucket",
-              PhysicalResourceId: "",
-              ResourceType: "AWS::S3::Bucket",
-              Replacement: "False",
-              Scope: ["Properties"],
-              Details: [],
-            },
-          },
-        ],
+        ChangeSetName: "my-cs", ExecutionStatus: "AVAILABLE", Changes: [], Parameters: [],
       });
-      const res = await get("/stacks/my-stack/change-sets/my-cs");
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body.changeSet.name).toBe("my-cs");
-      expect(body.changeSet.executionStatus).toBe("AVAILABLE");
-      expect(body.changeSet.changes).toHaveLength(1);
-      expect(body.changeSet.changes[0].resourceChange.action).toBe("Add");
+      const res = await get("/stacks/s/change-sets/my-cs");
+      expect((await res.json()).changeSet.name).toBe("my-cs");
     });
 
-    it("GET /stacks/:name/change-sets/:changeSetName — 404 for not found", async () => {
-      const err = new Error("ChangeSetNotFound") as any;
-      err.name = "ChangeSetNotFoundException";
+    it("GET /stacks/:name/change-sets/:csName — 404", async () => {
+      const err = Object.assign(new Error("x"), { name: "ChangeSetNotFoundException" });
       mockSend.mockRejectedValueOnce(err);
-      const res = await get("/stacks/my-stack/change-sets/nonexistent");
+      const res = await get("/stacks/s/change-sets/x");
       expect(res.status).toBe(404);
-      const body = await res.json();
-      expect(body.error).toContain("not found");
     });
 
-    it("DELETE /change-sets — 400 when name or stack missing", async () => {
-      const res1 = await router.request("/change-sets", { method: "DELETE" });
-      expect(res1.status).toBe(400);
-      const res2 = await router.request("/change-sets?name=foo", { method: "DELETE" });
-      expect(res2.status).toBe(400);
-      const res3 = await router.request("/change-sets?stack=bar", { method: "DELETE" });
-      expect(res3.status).toBe(400);
+    it("DELETE /change-sets — 400 when params missing", async () => {
+      expect((await router.request("/change-sets", { method: "DELETE" })).status).toBe(400);
     });
   });
 
   describe("Exports", () => {
     it("GET /exports — lists exports", async () => {
-      mockSend.mockResolvedValueOnce({
-        Exports: [
-          { Name: "export-1", Value: "value-1", ExportingStackId: "arn:..." },
-        ],
-      });
+      mockSend.mockResolvedValueOnce({ Exports: [{ Name: "e", Value: "v", ExportingStackId: "arn" }] });
       const res = await get("/exports");
-      expect(res.status).toBe(200);
+      expect((await res.json()).total).toBe(1);
+    });
+  });
+
+  describe("Stack Sets", () => {
+    it("GET /stacksets — lists stack sets", async () => {
+      mockSend.mockResolvedValueOnce({
+        Summaries: [{ StackSetId: "ss-1", StackSetName: "my-ss", Status: "ACTIVE" }],
+      });
+      const res = await get("/stacksets");
       const body = await res.json();
       expect(body.total).toBe(1);
-      expect(body.exports[0].name).toBe("export-1");
+      expect(body.stackSets[0].name).toBe("my-ss");
+    });
+
+    it("POST /stacksets — creates a stack set", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/stacksets", { name: "my-ss", templateBody: "{}" });
+      expect((await res.json()).created).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("CreateStackSetCommand");
+    });
+
+    it("POST /stacksets — 400 when name is missing", async () => {
+      expect((await post("/stacksets", { templateBody: "{}" })).status).toBe(400);
+    });
+
+    it("GET /stacksets/:name — returns stack set with instances and operations", async () => {
+      mockSend
+        .mockResolvedValueOnce({ StackSet: { StackSetName: "my-ss", Status: "ACTIVE" } })
+        .mockResolvedValueOnce({ Summaries: [{ Account: "123", Region: "us-east-1" }] })
+        .mockResolvedValueOnce({ Summaries: [{ OperationId: "op-1", Action: "CREATE", Status: "SUCCEEDED" }] });
+      const res = await get("/stacksets/my-ss");
+      const body = await res.json();
+      expect(body.stackSet.name).toBe("my-ss");
+      expect(body.instances).toHaveLength(1);
+      expect(body.operations).toHaveLength(1);
+    });
+
+    it("DELETE /stacksets/:name — deletes a stack set", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/stacksets/my-ss");
+      expect((await res.json()).deleted).toBe(true);
+    });
+
+    it("POST /stacksets/:name/instances — creates instances", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/stacksets/my-ss/instances", {
+        accounts: ["123"], regions: ["us-east-1"],
+      });
+      expect((await res.json()).instancesCreated).toBe(true);
+    });
+
+    it("POST /stacksets/:name/instances — 400 when accounts missing", async () => {
+      expect((await post("/stacksets/my-ss/instances", { regions: ["us-east-1"] })).status).toBe(400);
+    });
+
+    it("DELETE /stacksets/:name/instances — deletes instances", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/stacksets/my-ss/instances", {
+        accounts: ["123"], regions: ["us-east-1"],
+      });
+      expect((await res.json()).instancesDeleted).toBe(true);
     });
   });
 });

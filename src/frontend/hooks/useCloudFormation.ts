@@ -126,3 +126,76 @@ export function useDeleteChangeSet() {
     },
   });
 }
+
+// ─── STACK SETS ───────────────────────────────────────
+
+export function useStackSets() {
+  return useQuery({
+    queryKey: ["aws", "cloudformation", "stacksets"],
+    queryFn: () => api<{ stackSets: any[]; total: number }>("/aws/cloudformation/stacksets"),
+  });
+}
+
+export function useStackSet(name: string | null) {
+  return useQuery({
+    queryKey: ["aws", "cloudformation", "stacksets", name],
+    queryFn: () => api<{ stackSet: any; instances: any[]; operations: any[] }>(
+      `/aws/cloudformation/stacksets/${name}`
+    ),
+    enabled: !!name,
+  });
+}
+
+export function useCreateStackSet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: any) =>
+      api("/aws/cloudformation/stacksets", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cloudformation", "stacksets"] }),
+  });
+}
+
+export function useDeleteStackSet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api(`/aws/cloudformation/stacksets/${name}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cloudformation", "stacksets"] }),
+  });
+}
+
+export function useCreateStackInstances() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { stackSetName: string; accounts: string[]; regions: string[] }) =>
+      api(`/aws/cloudformation/stacksets/${body.stackSetName}/instances`, {
+        method: "POST",
+        body: JSON.stringify({ accounts: body.accounts, regions: body.regions }),
+      }),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({
+        queryKey: ["aws", "cloudformation", "stacksets", variables.stackSetName],
+      });
+    },
+  });
+}
+
+export function useDeleteStackInstances() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { stackSetName: string; accounts: string[]; regions: string[]; retainStacks?: boolean }) =>
+      api(`/aws/cloudformation/stacksets/${body.stackSetName}/instances`, {
+        method: "DELETE",
+        body: JSON.stringify({
+          accounts: body.accounts,
+          regions: body.regions,
+          retainStacks: body.retainStacks,
+        }),
+      }),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({
+        queryKey: ["aws", "cloudformation", "stacksets", variables.stackSetName],
+      });
+    },
+  });
+}

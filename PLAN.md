@@ -1690,7 +1690,7 @@ These items were in the initial audit but found to be already implemented upon c
 
 | Original # | Service | Feature | Verified In |
 |------------|---------|---------|-------------|
-| G.5 (old) | CloudFormation Change Sets | CreateChangeSet, DescribeChangeSet, ExecuteChangeSet, DeleteChangeSet, ListChangeSets | `cloudformation.ts` — full CRUD routes |
+| G.5 | **CloudFormation** (Change Sets) | CreateChangeSet, DescribeChangeSet, ExecuteChangeSet, DeleteChangeSet, ListChangeSets | `CloudFormationQueryHandler` | Done 2026-07-13 |
 | G.7 (old) partial | CloudFormation Templates/Exports | GetTemplate, ValidateTemplate, ListExports | `cloudformation.ts` — routes exist |
 | G.10 (old) partial | WAFv2 IP Sets | CreateIPSet, GetIPSet, UpdateIPSet, DeleteIPSet, ListIPSets | `wafv2.ts` — full CRUD routes |
 | G.10 (old) partial | WAFv2 Rule Groups | CreateRuleGroup, GetRuleGroup, UpdateRuleGroup, DeleteRuleGroup, ListRuleGroups | `wafv2.ts` — full CRUD routes |
