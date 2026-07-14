@@ -27,6 +27,17 @@ vi.mock("@aws-sdk/client-glue", () => ({
   DeleteSchemaCommand: createCmd("DeleteSchemaCommand"),
   ListSchemaVersionsCommand: createCmd("ListSchemaVersionsCommand"),
   RegisterSchemaVersionCommand: createCmd("RegisterSchemaVersionCommand"),
+  GetUserDefinedFunctionsCommand: createCmd("GetUserDefinedFunctionsCommand"),
+  CreateUserDefinedFunctionCommand: createCmd("CreateUserDefinedFunctionCommand"),
+  GetUserDefinedFunctionCommand: createCmd("GetUserDefinedFunctionCommand"),
+  DeleteUserDefinedFunctionCommand: createCmd("DeleteUserDefinedFunctionCommand"),
+  UpdateUserDefinedFunctionCommand: createCmd("UpdateUserDefinedFunctionCommand"),
+  GetColumnStatisticsForTableCommand: createCmd("GetColumnStatisticsForTableCommand"),
+  UpdateColumnStatisticsForTableCommand: createCmd("UpdateColumnStatisticsForTableCommand"),
+  DeleteColumnStatisticsForTableCommand: createCmd("DeleteColumnStatisticsForTableCommand"),
+  GetColumnStatisticsForPartitionCommand: createCmd("GetColumnStatisticsForPartitionCommand"),
+  UpdateColumnStatisticsForPartitionCommand: createCmd("UpdateColumnStatisticsForPartitionCommand"),
+  DeleteColumnStatisticsForPartitionCommand: createCmd("DeleteColumnStatisticsForPartitionCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({ create: (Ctor: any, extra?: any) => new Ctor(extra) }));
@@ -243,5 +254,143 @@ describe("Glue Routes", () => {
   it("POST /registries/:regName/schemas/:schemaName/versions — 400 if definition missing", async () => {
     const res = await post("/registries/reg-1/schemas/s-1/versions", {});
     expect(res.status).toBe(400);
+  });
+
+  // UDFs
+  it("GET /databases/:dbName/functions — lists UDFs", async () => {
+    mockSend.mockResolvedValueOnce({
+      UserDefinedFunctions: [{ FunctionName: "my_udf", ClassName: "com.example.MyUDF", OwnerName: "admin", OwnerType: "USER" }],
+    });
+    const res = await get("/databases/mydb/functions");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.total).toBe(1);
+    expect(body.functions[0].name).toBe("my_udf");
+  });
+
+  it("GET /databases/:dbName/functions — empty list", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/databases/mydb/functions");
+    const body = await res.json();
+    expect(body.total).toBe(0);
+  });
+
+  it("POST /databases/:dbName/functions — creates UDF (201)", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/databases/mydb/functions", { name: "my_udf", className: "com.example.MyUDF" });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.created).toBe(true);
+  });
+
+  it("POST /databases/:dbName/functions — 400 if name missing", async () => {
+    const res = await post("/databases/mydb/functions", { className: "c" });
+    expect(res.status).toBe(400);
+  });
+
+  it("GET /databases/:dbName/functions/:funcName — gets UDF", async () => {
+    mockSend.mockResolvedValueOnce({ UserDefinedFunction: { FunctionName: "my_udf", ClassName: "c" } });
+    const res = await get("/databases/mydb/functions/my_udf");
+    expect(res.status).toBe(200);
+  });
+
+  it("DELETE /databases/:dbName/functions/:funcName — deletes UDF", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await del("/databases/mydb/functions/my_udf");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.deleted).toBe(true);
+  });
+
+  it("PUT /databases/:dbName/functions/:funcName — updates UDF", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await router.request("/databases/mydb/functions/my_udf", {
+      method: "PUT",
+      body: JSON.stringify({ className: "com.example.New" }),
+      headers: { "content-type": "application/json" },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.updated).toBe(true);
+  });
+
+  // Column Stats (Table)
+  it("GET /databases/:dbName/tables/:tableName/column-stats — lists stats", async () => {
+    mockSend.mockResolvedValueOnce({
+      ColumnStatisticsList: [{ ColumnName: "col1", ColumnType: "string", AnalyzedTime: new Date() }],
+    });
+    const res = await get("/databases/mydb/tables/tbl1/column-stats");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.total).toBe(1);
+    expect(body.columnStats[0].columnName).toBe("col1");
+  });
+
+  it("GET /databases/:dbName/tables/:tableName/column-stats — error returns empty", async () => {
+    mockSend.mockRejectedValueOnce(new Error("not found"));
+    const res = await get("/databases/mydb/tables/tbl1/column-stats");
+    const body = await res.json();
+    expect(body.total).toBe(0);
+  });
+
+  it("POST /databases/:dbName/tables/:tableName/column-stats — updates stats", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/databases/mydb/tables/tbl1/column-stats", { columnStatisticsList: [{ ColumnName: "col1" }] });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.updated).toBe(true);
+  });
+
+  it("POST /databases/:dbName/tables/:tableName/column-stats — 400 if list missing", async () => {
+    const res = await post("/databases/mydb/tables/tbl1/column-stats", {});
+    expect(res.status).toBe(400);
+  });
+
+  it("DELETE /databases/:dbName/tables/:tableName/column-stats — deletes column stat", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await router.request("/databases/mydb/tables/tbl1/column-stats?column=col1", { method: "DELETE" });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.deleted).toBe(true);
+  });
+
+  it("DELETE /databases/:dbName/tables/:tableName/column-stats — 400 if column missing", async () => {
+    const res = await router.request("/databases/mydb/tables/tbl1/column-stats", { method: "DELETE" });
+    expect(res.status).toBe(400);
+  });
+
+  // Column Stats (Partition)
+  it("GET with values — lists partition stats", async () => {
+    mockSend.mockResolvedValueOnce({
+      ColumnStatisticsList: [{ ColumnName: "col1", ColumnType: "string" }],
+    });
+    const res = await get("/databases/mydb/tables/tbl1/partitions/column-stats?values=2024");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.total).toBe(1);
+  });
+
+  it("GET with values — 400 if values missing", async () => {
+    const res = await get("/databases/mydb/tables/tbl1/partitions/column-stats");
+    expect(res.status).toBe(400);
+  });
+
+  it("POST partitions/column-stats — updates partition stats", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/databases/mydb/tables/tbl1/partitions/column-stats", {
+      partitionValues: ["2024"],
+      columnStatisticsList: [{ ColumnName: "col1" }],
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.updated).toBe(true);
+  });
+
+  it("DELETE partitions/column-stats — deletes partition stat", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await router.request("/databases/mydb/tables/tbl1/partitions/column-stats?column=col1&values=2024", { method: "DELETE" });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.deleted).toBe(true);
   });
 });

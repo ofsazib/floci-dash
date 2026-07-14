@@ -299,6 +299,14 @@ import {
   useDeleteGlueSchema,
   useGlueSchemaVersions,
   useRegisterGlueSchemaVersion,
+  useGlueUDFs,
+  useCreateGlueUDF,
+  useUpdateGlueUDF,
+  useDeleteGlueUDF,
+  useGlueColumnStats,
+  useGluePartitionColumnStats,
+  useUpdateGlueColumnStats,
+  useDeleteGlueColumnStats,
 } from "../../hooks/useGlue";
 import {
   useFirehoseStreams,
@@ -618,6 +626,8 @@ export function GlueDashboard() {
       ),
     },
     { id: "schemaRegistry", label: "Schema Registry", content: <SchemaRegistryTab /> },
+    { id: "udfs", label: "UDFs", content: <UDFsTab /> },
+    { id: "columnStats", label: "Column Stats", content: <ColumnStatsTab /> },
   ];
 
   return <Tabs tabs={tabs} activeTabId={activeTab} onChange={({ detail }) => setActiveTab(detail.activeTabId)} />;
@@ -863,6 +873,251 @@ function CreateSchemaModal({
         <FormField label="Description (optional)"><Input value={description} onChange={({ detail }) => setDescription(detail.value)} placeholder="Schema description" /></FormField>
       </SpaceBetween>
     </Modal>
+  );
+}
+
+// ─── UDFs Tab ──────────────────────────────────────────
+
+function UDFsTab() {
+  const { showToast } = useToast();
+  const { data: dbData } = useGlueDatabases();
+  const databases = dbData?.databases || [];
+  const [selectedDb, setSelectedDb] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
+  const [editTarget, setEditTarget] = useState<{ name: string; className: string } | null>(null);
+  const [name, setName] = useState("");
+  const [className, setClassName] = useState("");
+
+  const udfsQuery = useGlueUDFs(selectedDb);
+  const createUDF = useCreateGlueUDF(selectedDb || "");
+  const updateUDF = useUpdateGlueUDF(selectedDb || "");
+  const deleteUDF = useDeleteGlueUDF(selectedDb || "");
+
+  const udfs = udfsQuery.data?.functions || [];
+
+  return (
+    <SpaceBetween size="l">
+      <Container header={<Header variant="h2">User-Defined Functions</Header>}>
+        <SpaceBetween size="m">
+          <FormField label="Select a database">
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {databases.map((d: any) => (
+                <Button key={d.Name} variant={selectedDb === d.Name ? "primary" : "normal"} onClick={() => setSelectedDb(d.Name)}>
+                  {d.Name}
+                </Button>
+              ))}
+            </div>
+          </FormField>
+
+          {selectedDb && (
+            <ResourceTable
+              resourceName="Function"
+              headerTitle={`UDFs in ${selectedDb}`}
+              headerCounter={udfsQuery.data?.total}
+              items={udfs}
+              columns={[
+                { id: "name", header: "Name", cell: (f: any) => f.name, isRowHeader: true },
+                { id: "className", header: "Class", cell: (f: any) => <span style={{ fontSize: 12 }}>{f.className}</span> },
+                { id: "owner", header: "Owner", cell: (f: any) => `${f.ownerName || "-"} (${f.ownerType || "-"})` },
+                { id: "created", header: "Created", cell: (f: any) => f.createTime ? new Date(f.createTime).toLocaleString() : "-" },
+                {
+                  id: "actions",
+                  header: "",
+                  cell: (f: any) => (
+                    <SpaceBetween direction="horizontal" size="xs">
+                      <Button onClick={() => { setEditTarget({ name: f.name, className: f.className }); setClassName(f.className); setShowEdit(true); }}>Edit</Button>
+                      <DeleteButton
+                        itemName={f.name}
+                        resourceType="function"
+                        loading={deleteUDF.isPending && deleteUDF.variables === f.name}
+                        onDelete={() => deleteUDF.mutateAsync(f.name)}
+                      />
+                    </SpaceBetween>
+                  ),
+                },
+              ]}
+              loading={udfsQuery.isLoading}
+              emptyMessage={selectedDb ? "No UDFs found" : "Select a database"}
+              onCreate={() => setShowCreate(true)}
+            />
+          )}
+        </SpaceBetween>
+      </Container>
+
+      {showCreate && selectedDb && (
+        <Modal visible onDismiss={() => { setShowCreate(false); setName(""); setClassName(""); }} header={`Create UDF in ${selectedDb}`} size="medium" footer={
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button variant="link" onClick={() => { setShowCreate(false); setName(""); setClassName(""); }}>Cancel</Button>
+            <Button variant="primary" loading={createUDF.isPending} disabled={!name.trim() || !className.trim()} onClick={() => {
+              createUDF.mutate({ name: name.trim(), className: className.trim() }, {
+                onSuccess: () => { setShowCreate(false); setName(""); setClassName(""); showToast("success", "UDF created"); },
+                onError: (e: any) => showToast("error", e.message),
+              });
+            }}>Create</Button>
+          </SpaceBetween>
+        }>
+          <SpaceBetween size="m">
+            <FormField label="Function name"><Input value={name} onChange={({ detail }) => setName(detail.value)} placeholder="my_function" /></FormField>
+            <FormField label="Class name"><Input value={className} onChange={({ detail }) => setClassName(detail.value)} placeholder="com.example.MyUDF" /></FormField>
+          </SpaceBetween>
+        </Modal>
+      )}
+
+      {showEdit && editTarget && selectedDb && (
+        <Modal visible onDismiss={() => { setShowEdit(false); setEditTarget(null); }} header={`Edit UDF: ${editTarget.name}`} size="medium" footer={
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button variant="link" onClick={() => { setShowEdit(false); setEditTarget(null); }}>Cancel</Button>
+            <Button variant="primary" loading={updateUDF.isPending} disabled={!className.trim()} onClick={() => {
+              updateUDF.mutate({ funcName: editTarget.name, className: className.trim() }, {
+                onSuccess: () => { setShowEdit(false); setEditTarget(null); showToast("success", "UDF updated"); },
+                onError: (e: any) => showToast("error", e.message),
+              });
+            }}>Save</Button>
+          </SpaceBetween>
+        }>
+          <SpaceBetween size="m">
+            <FormField label="Function name"><Input value={editTarget.name} disabled /></FormField>
+            <FormField label="Class name"><Input value={className} onChange={({ detail }) => setClassName(detail.value)} /></FormField>
+          </SpaceBetween>
+        </Modal>
+      )}
+    </SpaceBetween>
+  );
+}
+
+// ─── Column Stats Tab ──────────────────────────────────
+
+function ColumnStatsTab() {
+  const { showToast } = useToast();
+  const { data: dbData } = useGlueDatabases();
+  const databases = dbData?.databases || [];
+  const [selectedDb, setSelectedDb] = useState<string | null>(null);
+  const [selectedTable, setSelectedTable] = useState<string | null>(null);
+  const [partitionValues, setPartitionValues] = useState("");
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [updateColName, setUpdateColName] = useState("");
+  const [updateColType, setUpdateColType] = useState("string");
+  const [updateNumNull, setUpdateNumNull] = useState(0);
+  const [updateNumDistinct, setUpdateNumDistinct] = useState(0);
+
+  const { data: tblData } = useGlueTables(selectedDb);
+  const tables = tblData?.tables || [];
+
+  const partValues = partitionValues.split(/[,\n\s]+/).filter(Boolean);
+  const tableStatsQuery = useGlueColumnStats(selectedDb, selectedTable);
+  const partitionStatsQuery = useGluePartitionColumnStats(selectedDb, selectedTable, partValues);
+  const statsQuery = partValues.length > 0 ? partitionStatsQuery : tableStatsQuery;
+  const updateStats = useUpdateGlueColumnStats(selectedDb || "", selectedTable || "");
+  const deleteStats = useDeleteGlueColumnStats(selectedDb || "", selectedTable || "");
+
+  const columnStats = statsQuery.data?.columnStats || [];
+
+  return (
+    <SpaceBetween size="l">
+      <Container header={<Header variant="h2">Column Statistics</Header>}>
+        <SpaceBetween size="m">
+          <FormField label="Select a database">
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {databases.map((d: any) => (
+                <Button key={d.Name} variant={selectedDb === d.Name ? "primary" : "normal"} onClick={() => { setSelectedDb(d.Name); setSelectedTable(null); }}>
+                  {d.Name}
+                </Button>
+              ))}
+            </div>
+          </FormField>
+
+          {selectedDb && (
+            <>
+              <FormField label="Select a table">
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {tables.map((t: any) => (
+                    <Button key={t.Name} variant={selectedTable === t.Name ? "primary" : "normal"} onClick={() => setSelectedTable(t.Name)}>
+                      {t.Name}
+                    </Button>
+                  ))}
+                </div>
+              </FormField>
+
+              {selectedTable && (
+                <>
+                  <FormField label="Partition values (comma-separated, optional)" description="Leave empty for table-level statistics. Set to view partition-level stats.">
+                    <Input value={partitionValues} onChange={({ detail }) => setPartitionValues(detail.value)} placeholder="e.g. 2024,01" />
+                  </FormField>
+
+                  <Box float="right">
+                    <Button variant="primary" onClick={() => setShowUpdateModal(true)}>Update Statistics</Button>
+                  </Box>
+
+                  <ResourceTable
+                    resourceName="Column"
+                    headerTitle={`Stats for ${selectedTable}${partValues.length ? ` (partition: ${partValues})` : ""}`}
+                    headerCounter={statsQuery.data?.total}
+                    items={columnStats}
+                    columns={[
+                      { id: "column", header: "Column", cell: (s: any) => s.columnName, isRowHeader: true },
+                      { id: "type", header: "Type", cell: (s: any) => <span style={{ fontSize: 12 }}>{s.columnType || "-"}</span> },
+                      { id: "data", header: "Statistics", cell: (s: any) => (
+                        <pre style={{ fontSize: 10, margin: 0, maxHeight: 60, overflow: "auto" }}>{s.statisticsData ? JSON.stringify(s.statisticsData, null, 2) : "-"}</pre>
+                      )},
+                      { id: "analyzed", header: "Analyzed", cell: (s: any) => s.analyzedTime ? new Date(s.analyzedTime).toLocaleString() : "-" },
+                      {
+                        id: "actions",
+                        header: "",
+                        cell: (s: any) => (
+                          <DeleteButton
+                            itemName={s.columnName}
+                            resourceType="column statistic"
+                            loading={deleteStats.isPending && deleteStats.variables === s.columnName}
+                            onDelete={() => deleteStats.mutateAsync(s.columnName)}
+                          />
+                        ),
+                      },
+                    ]}
+                    loading={statsQuery.isLoading}
+                    emptyMessage="No column statistics. Click Update Statistics to add."
+                  />
+                </>
+              )}
+            </>
+          )}
+        </SpaceBetween>
+      </Container>
+
+      {showUpdateModal && selectedTable && selectedDb && (
+        <Modal visible onDismiss={() => setShowUpdateModal(false)} header={`Update Statistics for ${selectedTable}`} size="medium" footer={
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button variant="link" onClick={() => setShowUpdateModal(false)}>Cancel</Button>
+            <Button variant="primary" loading={updateStats.isPending} disabled={!updateColName.trim()} onClick={() => {
+              const statsData: any = {
+                NumberOfNulls: Number(updateNumNull),
+                NumberOfDistinctValues: Number(updateNumDistinct),
+              };
+              // Wrap in the correct type-specific key for Glue SDK
+              const typeKey = `${updateColType.charAt(0).toUpperCase() + updateColType.slice(1)}ColumnStatisticsData`;
+              const entry: any = { ColumnName: updateColName.trim(), ColumnType: updateColType, StatisticsData: { [typeKey]: statsData } };
+              updateStats.mutate({ columnStatisticsList: [entry] }, {
+                onSuccess: () => { setShowUpdateModal(false); showToast("success", "Statistics updated"); },
+                onError: (e: any) => showToast("error", e.message),
+              });
+            }}>Update</Button>
+          </SpaceBetween>
+        }>
+          <SpaceBetween size="m">
+            <FormField label="Column name"><Input value={updateColName} onChange={({ detail }) => setUpdateColName(detail.value)} placeholder="column_name" /></FormField>
+            <FormField label="Column type">
+              <Select selectedOption={{ label: updateColType, value: updateColType }} onChange={({ detail }) => setUpdateColType(detail.selectedOption.value || "string")} options={["string", "integer", "long", "double", "boolean", "date", "binary"].map(v => ({ label: v, value: v }))} />
+            </FormField>
+            <FormField label="Number of nulls">
+              <Input type="number" value={String(updateNumNull)} onChange={({ detail }) => setUpdateNumNull(Number(detail.value) || 0)} />
+            </FormField>
+            <FormField label="Number of distinct values">
+              <Input type="number" value={String(updateNumDistinct)} onChange={({ detail }) => setUpdateNumDistinct(Number(detail.value) || 0)} />
+            </FormField>
+          </SpaceBetween>
+        </Modal>
+      )}
+    </SpaceBetween>
   );
 }
 

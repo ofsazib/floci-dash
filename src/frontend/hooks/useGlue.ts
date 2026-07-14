@@ -158,3 +158,103 @@ export function useRegisterGlueSchemaVersion(registryName: string, schemaName: s
       }),
   });
 }
+
+// ─── User-Defined Functions ─────────────────────────────
+
+export function useGlueUDFs(databaseName: string | null) {
+  return useQuery<{ functions: any[]; total: number }>({
+    queryKey: ["aws", "glue", "databases", databaseName, "functions"],
+    queryFn: () => api(`/aws/glue/databases/${encodeURIComponent(databaseName!)}/functions`),
+    enabled: !!databaseName,
+  });
+}
+
+export function useCreateGlueUDF(databaseName: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { name: string; className: string; ownerName?: string; ownerType?: string }) =>
+      api(`/aws/glue/databases/${encodeURIComponent(databaseName)}/functions`, {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "glue", "databases", databaseName, "functions"] }),
+  });
+}
+
+export function useDeleteGlueUDF(databaseName: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (funcName: string) =>
+      api(`/aws/glue/databases/${encodeURIComponent(databaseName)}/functions/${encodeURIComponent(funcName)}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "glue", "databases", databaseName, "functions"] }),
+  });
+}
+
+export function useUpdateGlueUDF(databaseName: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { funcName: string; className?: string; ownerName?: string; ownerType?: string }) =>
+      api(`/aws/glue/databases/${encodeURIComponent(databaseName)}/functions/${encodeURIComponent(params.funcName)}`, {
+        method: "PUT",
+        body: JSON.stringify({ className: params.className, ownerName: params.ownerName, ownerType: params.ownerType }),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "glue", "databases", databaseName, "functions"] }),
+  });
+}
+
+// ─── Column Statistics ──────────────────────────────────
+
+export function useGlueColumnStats(databaseName: string | null, tableName: string | null) {
+  return useQuery<{ columnStats: any[]; total: number }>({
+    queryKey: ["aws", "glue", "databases", databaseName, "tables", tableName, "columnStats"],
+    queryFn: () => api(`/aws/glue/databases/${encodeURIComponent(databaseName!)}/tables/${encodeURIComponent(tableName!)}/column-stats`),
+    enabled: !!databaseName && !!tableName,
+  });
+}
+
+export function useUpdateGlueColumnStats(databaseName: string, tableName: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { columnStatisticsList: any[] }) =>
+      api(`/aws/glue/databases/${encodeURIComponent(databaseName)}/tables/${encodeURIComponent(tableName)}/column-stats`, {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "glue", "databases", databaseName, "tables", tableName, "columnStats"] }),
+  });
+}
+
+export function useGluePartitionColumnStats(
+  databaseName: string | null,
+  tableName: string | null,
+  partitionValues: string[]
+) {
+  const queryString = partitionValues.map((v) => `values=${encodeURIComponent(v)}`).join("&");
+  return useQuery<{ columnStats: any[]; total: number }>({
+    queryKey: ["aws", "glue", "databases", databaseName, "tables", tableName, "partitions", "columnStats", partitionValues],
+    queryFn: () =>
+      api(
+        `/aws/glue/databases/${encodeURIComponent(databaseName!)}/tables/${encodeURIComponent(tableName!)}/partitions/column-stats?${queryString}`
+      ),
+    enabled: !!databaseName && !!tableName && partitionValues.length > 0,
+  });
+}
+
+export function useDeleteGlueColumnStats(databaseName: string, tableName: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (columnName: string) =>
+      api(
+        `/aws/glue/databases/${encodeURIComponent(databaseName)}/tables/${encodeURIComponent(tableName)}/column-stats?column=${encodeURIComponent(columnName)}`,
+        { method: "DELETE" }
+      ),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "glue", "databases", databaseName, "tables", tableName, "columnStats"] }),
+  });
+}

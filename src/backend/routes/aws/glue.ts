@@ -21,6 +21,17 @@ import {
   DeleteSchemaCommand,
   ListSchemaVersionsCommand,
   RegisterSchemaVersionCommand,
+  GetUserDefinedFunctionsCommand,
+  CreateUserDefinedFunctionCommand,
+  GetUserDefinedFunctionCommand,
+  DeleteUserDefinedFunctionCommand,
+  UpdateUserDefinedFunctionCommand,
+  GetColumnStatisticsForTableCommand,
+  UpdateColumnStatisticsForTableCommand,
+  DeleteColumnStatisticsForTableCommand,
+  GetColumnStatisticsForPartitionCommand,
+  UpdateColumnStatisticsForPartitionCommand,
+  DeleteColumnStatisticsForPartitionCommand,
 } from "@aws-sdk/client-glue";
 
 const router = new Hono();
@@ -249,6 +260,218 @@ router.post("/registries/:regName/schemas/:schemaName/versions", async (c: Conte
     })
   );
   return c.json({ versionId: result.SchemaVersionId, registered: true }, 201);
+});
+
+// ── User-Defined Functions ──────────────────────────────
+
+router.get("/databases/:dbName/functions", async (c: Context) => {
+  const dbName = c.req.param("dbName");
+  const pattern = c.req.query("pattern") || "*";
+  const client = getClient();
+  const result = await client.send(
+    new GetUserDefinedFunctionsCommand({ DatabaseName: dbName, Pattern: pattern })
+  );
+  const functions = (result.UserDefinedFunctions || []).map((f: any) => ({
+    name: f.FunctionName,
+    className: f.ClassName,
+    ownerName: f.OwnerName,
+    ownerType: f.OwnerType,
+    createTime: f.CreateTime,
+    resourceUris: f.ResourceUris || [],
+  }));
+  return c.json({ functions, total: functions.length });
+});
+
+router.post("/databases/:dbName/functions", async (c: Context) => {
+  const dbName = c.req.param("dbName");
+  const body = await c.req.json<{ name: string; className: string; ownerName?: string; ownerType?: string }>();
+  if (!body.name || !body.className) return c.json({ error: "name and className are required" }, 400);
+  const client = getClient();
+  await client.send(
+    new CreateUserDefinedFunctionCommand({
+      DatabaseName: dbName,
+      FunctionInput: {
+        FunctionName: body.name,
+        ClassName: body.className,
+        OwnerName: body.ownerName || "admin",
+        OwnerType: body.ownerType || "USER",
+      },
+    })
+  );
+  return c.json({ name: body.name, created: true }, 201);
+});
+
+router.get("/databases/:dbName/functions/:funcName", async (c: Context) => {
+  const dbName = c.req.param("dbName");
+  const funcName = c.req.param("funcName");
+  const client = getClient();
+  const result = await client.send(
+    new GetUserDefinedFunctionCommand({ DatabaseName: dbName, FunctionName: funcName })
+  );
+  const f = result.UserDefinedFunction;
+  if (!f) return c.json({ error: "Function not found" }, 404);
+  return c.json({
+    function: {
+      name: f.FunctionName,
+      className: f.ClassName,
+      ownerName: f.OwnerName,
+      ownerType: f.OwnerType,
+      createTime: f.CreateTime,
+      resourceUris: f.ResourceUris || [],
+    },
+  });
+});
+
+router.delete("/databases/:dbName/functions/:funcName", async (c: Context) => {
+  const dbName = c.req.param("dbName");
+  const funcName = c.req.param("funcName");
+  const client = getClient();
+  await client.send(
+    new DeleteUserDefinedFunctionCommand({ DatabaseName: dbName, FunctionName: funcName })
+  );
+  return c.json({ name: funcName, deleted: true });
+});
+
+router.put("/databases/:dbName/functions/:funcName", async (c: Context) => {
+  const dbName = c.req.param("dbName");
+  const funcName = c.req.param("funcName");
+  const body = await c.req.json<{ className?: string; ownerName?: string; ownerType?: string }>();
+  const client = getClient();
+  await client.send(
+    new UpdateUserDefinedFunctionCommand({
+      DatabaseName: dbName,
+      FunctionName: funcName,
+      FunctionInput: {
+        FunctionName: funcName,
+        ClassName: body.className,
+        OwnerName: body.ownerName,
+        OwnerType: body.ownerType,
+      },
+    })
+  );
+  return c.json({ name: funcName, updated: true });
+});
+
+// ── Column Statistics (Table) ───────────────────────────
+
+router.get("/databases/:dbName/tables/:tableName/column-stats", async (c: Context) => {
+  const dbName = c.req.param("dbName");
+  const tableName = c.req.param("tableName");
+  const client = getClient();
+  try {
+    const result = await client.send(
+      new GetColumnStatisticsForTableCommand({
+        DatabaseName: dbName,
+        TableName: tableName,
+      })
+    );
+    const stats = (result.ColumnStatisticsList || []).map((cs: any) => ({
+      columnName: cs.ColumnName,
+      columnType: cs.ColumnType,
+      analyzedTime: cs.AnalyzedTime,
+      statisticsData: cs.StatisticsData,
+    }));
+    return c.json({ columnStats: stats, total: stats.length });
+  } catch {
+    return c.json({ columnStats: [], total: 0 });
+  }
+});
+
+router.post("/databases/:dbName/tables/:tableName/column-stats", async (c: Context) => {
+  const dbName = c.req.param("dbName");
+  const tableName = c.req.param("tableName");
+  const body = await c.req.json<{ columnStatisticsList: any[] }>();
+  if (!body.columnStatisticsList?.length) return c.json({ error: "columnStatisticsList is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new UpdateColumnStatisticsForTableCommand({
+      DatabaseName: dbName,
+      TableName: tableName,
+      ColumnStatisticsList: body.columnStatisticsList,
+    })
+  );
+  return c.json({ updated: true });
+});
+
+router.delete("/databases/:dbName/tables/:tableName/column-stats", async (c: Context) => {
+  const dbName = c.req.param("dbName");
+  const tableName = c.req.param("tableName");
+  const columnName = c.req.query("column");
+  if (!columnName) return c.json({ error: "column query parameter is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new DeleteColumnStatisticsForTableCommand({
+      DatabaseName: dbName,
+      TableName: tableName,
+      ColumnName: columnName,
+    })
+  );
+  return c.json({ column: columnName, deleted: true });
+});
+
+// ── Column Statistics (Partition) ───────────────────────
+
+router.get("/databases/:dbName/tables/:tableName/partitions/column-stats", async (c: Context) => {
+  const dbName = c.req.param("dbName");
+  const tableName = c.req.param("tableName");
+  const partitionValues = c.req.queries("values") || [];
+  if (!partitionValues.length) return c.json({ error: "values query parameter is required" }, 400);
+  const client = getClient();
+  try {
+    const result = await client.send(
+      new GetColumnStatisticsForPartitionCommand({
+        DatabaseName: dbName,
+        TableName: tableName,
+        PartitionValues: partitionValues,
+      })
+    );
+    const stats = (result.ColumnStatisticsList || []).map((cs: any) => ({
+      columnName: cs.ColumnName,
+      columnType: cs.ColumnType,
+      analyzedTime: cs.AnalyzedTime,
+      statisticsData: cs.StatisticsData,
+    }));
+    return c.json({ columnStats: stats, total: stats.length });
+  } catch {
+    return c.json({ columnStats: [], total: 0 });
+  }
+});
+
+router.post("/databases/:dbName/tables/:tableName/partitions/column-stats", async (c: Context) => {
+  const dbName = c.req.param("dbName");
+  const tableName = c.req.param("tableName");
+  const body = await c.req.json<{ partitionValues: string[]; columnStatisticsList: any[] }>();
+  if (!body.partitionValues?.length) return c.json({ error: "partitionValues is required" }, 400);
+  if (!body.columnStatisticsList?.length) return c.json({ error: "columnStatisticsList is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new UpdateColumnStatisticsForPartitionCommand({
+      DatabaseName: dbName,
+      TableName: tableName,
+      PartitionValues: body.partitionValues,
+      ColumnStatisticsList: body.columnStatisticsList,
+    })
+  );
+  return c.json({ updated: true });
+});
+
+router.delete("/databases/:dbName/tables/:tableName/partitions/column-stats", async (c: Context) => {
+  const dbName = c.req.param("dbName");
+  const tableName = c.req.param("tableName");
+  const columnName = c.req.query("column");
+  const partitionValues = c.req.queries("values") || [];
+  if (!columnName) return c.json({ error: "column query parameter is required" }, 400);
+  if (!partitionValues.length) return c.json({ error: "values query parameter is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new DeleteColumnStatisticsForPartitionCommand({
+      DatabaseName: dbName,
+      TableName: tableName,
+      ColumnName: columnName,
+      PartitionValues: partitionValues,
+    })
+  );
+  return c.json({ column: columnName, deleted: true });
 });
 
 export default router;
