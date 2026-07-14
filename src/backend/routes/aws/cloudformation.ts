@@ -9,6 +9,7 @@ import {
   DeleteStackCommand,
   DescribeStackResourcesCommand,
   ListStackResourcesCommand,
+  DescribeStackResourceCommand,
   DescribeStackEventsCommand,
   GetTemplateCommand,
   ValidateTemplateCommand,
@@ -174,6 +175,38 @@ router.delete("/stacks/:name", async (c: Context) => {
   const name = c.req.param("name");
   await cfn().send(new DeleteStackCommand({ StackName: name }));
   return c.json({ name, deleted: true });
+});
+
+// ─── RESOURCE DETAIL ─────────────────────────────────────
+
+router.get("/stacks/:name/resources/:logicalId", async (c: Context) => {
+  const stackName = c.req.param("name");
+  const logicalId = c.req.param("logicalId");
+  const result = await cfn().send(
+    new DescribeStackResourceCommand({ StackName: stackName, LogicalResourceId: logicalId })
+  );
+  const detail = result.StackResourceDetail;
+  if (!detail) return c.json({ error: "Resource not found" }, 404);
+  return c.json({
+    resource: {
+      logicalId: detail.LogicalResourceId,
+      physicalId: detail.PhysicalResourceId,
+      resourceType: detail.ResourceType,
+      status: detail.ResourceStatus,
+      statusReason: detail.ResourceStatusReason,
+      description: detail.Description,
+      lastUpdated: detail.LastUpdatedTimestamp,
+      metadata: detail.Metadata,
+      driftInformation: detail.DriftInformation ? {
+        stackResourceDriftStatus: detail.DriftInformation.StackResourceDriftStatus,
+        lastCheckTimestamp: detail.DriftInformation.LastCheckTimestamp,
+      } : null,
+      moduleInfo: detail.ModuleInfo ? {
+        typeHierarchy: detail.ModuleInfo.TypeHierarchy,
+        logicalIdHierarchy: detail.ModuleInfo.LogicalIdHierarchy,
+      } : null,
+    },
+  });
 });
 
 // ─── TEMPLATE ────────────────────────────────────────────

@@ -25,6 +25,7 @@ vi.mock("@aws-sdk/client-cloudformation", () => ({
   DeleteStackCommand: createCmd("DeleteStackCommand"),
   ListStackResourcesCommand: createCmd("ListStackResourcesCommand"),
   DescribeStackResourcesCommand: createCmd("DescribeStackResourcesCommand"),
+  DescribeStackResourceCommand: createCmd("DescribeStackResourceCommand"),
   DescribeStackEventsCommand: createCmd("DescribeStackEventsCommand"),
   GetTemplateCommand: createCmd("GetTemplateCommand"),
   ValidateTemplateCommand: createCmd("ValidateTemplateCommand"),
@@ -252,6 +253,33 @@ describe("CloudFormation Routes", () => {
         accounts: ["123"], regions: ["us-east-1"],
       });
       expect((await res.json()).instancesDeleted).toBe(true);
+    });
+  });
+
+  describe("Resource Detail", () => {
+    it("GET /stacks/:name/resources/:logicalId — returns resource detail", async () => {
+      mockSend.mockResolvedValueOnce({
+        StackResourceDetail: {
+          LogicalResourceId: "MyBucket",
+          PhysicalResourceId: "my-test-bucket",
+          ResourceType: "AWS::S3::Bucket",
+          ResourceStatus: "CREATE_COMPLETE",
+          LastUpdatedTimestamp: new Date("2025-01-01"),
+          Metadata: '{"key":"value"}',
+          DriftInformation: { StackResourceDriftStatus: "IN_SYNC" },
+        },
+      });
+      const res = await get("/stacks/my-stack/resources/MyBucket");
+      const body = await res.json();
+      expect(body.resource.logicalId).toBe("MyBucket");
+      expect(body.resource.resourceType).toBe("AWS::S3::Bucket");
+      expect(body.resource.driftInformation.stackResourceDriftStatus).toBe("IN_SYNC");
+    });
+
+    it("GET /stacks/:name/resources/:logicalId — 404 when not found", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/stacks/my-stack/resources/x");
+      expect(res.status).toBe(404);
     });
   });
 });

@@ -49,6 +49,16 @@ export function useValidateTemplate() {
   });
 }
 
+export function useStackResource(stackName: string | null, logicalId: string | null) {
+  return useQuery({
+    queryKey: ["aws", "cloudformation", "stacks", stackName, "resources", logicalId],
+    queryFn: () => api<{ resource: any }>(
+      `/aws/cloudformation/stacks/${stackName}/resources/${logicalId}`
+    ),
+    enabled: !!stackName && !!logicalId,
+  });
+}
+
 export function useExports() {
   return useQuery({
     queryKey: ["aws", "cloudformation", "exports"],

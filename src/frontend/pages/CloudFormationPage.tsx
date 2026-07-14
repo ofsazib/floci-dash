@@ -28,6 +28,7 @@ import {
   useStacks,
   useStack,
   useStackTemplate,
+  useStackResource,
   useCreateStack,
   useDeleteStack,
   useValidateTemplate,
@@ -60,6 +61,61 @@ const STATUS_COLORS: Record<string, "green" | "red" | "blue" | "grey"> = {
   UPDATE_ROLLBACK_COMPLETE: "red",
   REVIEW_IN_PROGRESS: "blue",
 };
+
+function ResourceDetailContainer({ resource, onClose }: { resource: any; onClose: () => void }) {
+  const r = resource;
+  return (
+    <Container
+      header={
+        <Header
+          variant="h3"
+          actions={<Button variant="icon" iconName="close" onClick={onClose} ariaLabel="Close resource detail" />}
+        >
+          Resource: {r.logicalId}
+        </Header>
+      }
+    >
+      <SpaceBetween size="m">
+        <ColumnLayout columns={2} variant="text-grid">
+          <div>
+            <Box variant="small" color="text-body-secondary">Resource Type</Box>
+            <Box><span style={{ fontSize: 12 }}>{r.resourceType}</span></Box>
+          </div>
+          <div>
+            <Box variant="small" color="text-body-secondary">Status</Box>
+            <Badge color={STATUS_COLORS[r.status] || "grey"}>{r.status}</Badge>
+          </div>
+          <div>
+            <Box variant="small" color="text-body-secondary">Physical ID</Box>
+            <Box><span style={{ fontSize: 12 }}>{r.physicalId || "-"}</span></Box>
+          </div>
+          <div>
+            <Box variant="small" color="text-body-secondary">Last Updated</Box>
+            <Box>{r.lastUpdated ? new Date(r.lastUpdated).toLocaleString() : "-"}</Box>
+          </div>
+        </ColumnLayout>
+        {r.statusReason && (
+          <div><Box variant="small" color="text-body-secondary">Status Reason</Box><Box>{r.statusReason}</Box></div>
+        )}
+        {r.description && (
+          <div><Box variant="small" color="text-body-secondary">Description</Box><Box>{r.description}</Box></div>
+        )}
+        {r.driftInformation && (
+          <div>
+            <Box variant="small" color="text-body-secondary">Drift Status</Box>
+            <Badge color={r.driftInformation.stackResourceDriftStatus === "IN_SYNC" ? "green" : "red"}>{r.driftInformation.stackResourceDriftStatus}</Badge>
+          </div>
+        )}
+        {r.metadata && (
+          <div>
+            <Box variant="small" color="text-body-secondary">Metadata</Box>
+            <pre className="fd-code-bg" style={{ fontSize: 11, padding: 8, borderRadius: 4, maxHeight: 200, overflow: "auto" }}>{typeof r.metadata === "string" ? r.metadata : JSON.stringify(r.metadata, null, 2)}</pre>
+          </div>
+        )}
+      </SpaceBetween>
+    </Container>
+  );
+}
 
 function StacksTab() {
   const { showToast } = useToast();
@@ -204,7 +260,14 @@ Resources:
 function StackDetailModal({ stackName, onClose }: { stackName: string; onClose: () => void }) {
   const stackQuery = useStack(stackName);
   const templateQuery = useStackTemplate(stackName);
+  const [selectedResource, setSelectedResource] = useState<string | null>(null);
+  const resourceQuery = useStackResource(stackName, selectedResource);
   const [activeTab, setActiveTab] = useState("overview");
+
+  function handleViewResource(logicalId: string) {
+    setSelectedResource(logicalId);
+    setActiveTab("overview");
+  }
 
   const s = stackQuery.data?.stack;
   const resources = stackQuery.data?.resources || [];
@@ -243,6 +306,13 @@ function StackDetailModal({ stackName, onClose }: { stackName: string; onClose: 
             </Container>
           )}
 
+          {selectedResource && resourceQuery.data?.resource && (
+            <ResourceDetailContainer
+              resource={resourceQuery.data.resource}
+              onClose={() => setSelectedResource(null)}
+            />
+          )}
+
           <Container header={<Header variant="h3">Tags</Header>}>
             {s.tags?.length ? (
               <SpaceBetween size="xs">
@@ -264,6 +334,7 @@ function StackDetailModal({ stackName, onClose }: { stackName: string; onClose: 
             { id: "physical", header: "Physical ID", cell: (r: any) => <span style={{ fontSize: 12 }}>{r.physicalId || "-"}</span> },
             { id: "status", header: "Status", cell: (r: any) => <Badge color={STATUS_COLORS[r.status] || "grey"}>{r.status}</Badge> },
             { id: "updated", header: "Updated", cell: (r: any) => r.lastUpdated ? new Date(r.lastUpdated).toLocaleString() : "-" },
+            { id: "actions", header: "", cell: (r: any) => <Button onClick={() => handleViewResource(r.logicalId)}>View</Button> },
           ]}
           items={resources}
           trackBy={(r: any) => r.logicalId}

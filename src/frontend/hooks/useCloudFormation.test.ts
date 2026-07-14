@@ -13,6 +13,7 @@ import {
   useStacks,
   useStack,
   useStackTemplate,
+  useStackResource,
   useCreateStack,
   useDeleteStack,
   useValidateTemplate,
@@ -296,6 +297,30 @@ describe("Stack Sets", () => {
       method: "DELETE",
       body: JSON.stringify({ accounts: ["123"], regions: ["us-east-1"], retainStacks: undefined }),
     });
+  });
+});
+
+// ─── Resource Detail ───────────────────────────────────
+
+describe("useStackResource", () => {
+  it("calls api with correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ resource: { logicalId: "MyBucket", resourceType: "AWS::S3::Bucket" } });
+    const { result } = renderHook(() => useStackResource("my-stack", "MyBucket"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/cloudformation/stacks/my-stack/resources/MyBucket");
+    expect(result.current.data?.resource.logicalId).toBe("MyBucket");
+  });
+
+  it("disabled when stackName is null", () => {
+    const { result } = renderHook(() => useStackResource(null, "MyBucket"), { wrapper: createWrapper() });
+    expect(result.current.isLoading).toBe(false);
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("disabled when logicalId is null", () => {
+    const { result } = renderHook(() => useStackResource("my-stack", null), { wrapper: createWrapper() });
+    expect(result.current.isLoading).toBe(false);
+    expect(mockApi).not.toHaveBeenCalled();
   });
 });
 
