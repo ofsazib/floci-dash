@@ -291,6 +291,14 @@ import {
   useDeleteGlueDatabase,
   useGlueTables,
   useDeleteGlueTable,
+  useGlueRegistries,
+  useCreateGlueRegistry,
+  useDeleteGlueRegistry,
+  useGlueSchemas,
+  useCreateGlueSchema,
+  useDeleteGlueSchema,
+  useGlueSchemaVersions,
+  useRegisterGlueSchemaVersion,
 } from "../../hooks/useGlue";
 import {
   useFirehoseStreams,
@@ -511,35 +519,84 @@ export function GlueDashboard() {
   const [selectedDb, setSelectedDb] = useState<string | null>(null);
   const { data: tblData } = useGlueTables(selectedDb);
   const deleteTbl = useDeleteGlueTable(selectedDb || "");
+  const [activeTab, setActiveTab] = useState("databases");
 
   if (isLoading) return <TableSkeleton />;
 
-  if (selectedDb) {
-    return (
-      <>
-        <Box margin={{ bottom: "s" }}>
-          <Button iconName="arrow-left" onClick={() => setSelectedDb(null)}>
-            Back to databases
-          </Button>
-        </Box>
+  const tabs: TabsProps.Tab[] = [
+    {
+      id: "databases",
+      label: "Databases & Tables",
+      content: selectedDb ? (
+        <>
+          <Box margin={{ bottom: "s" }}>
+            <Button iconName="arrow-left" onClick={() => setSelectedDb(null)}>
+              Back to databases
+            </Button>
+          </Box>
+          <ResourceTable
+            resourceName="Table"
+            headerTitle={`Tables in ${selectedDb}`}
+            headerCounter={tblData?.total}
+            items={(tblData?.tables || []).map((t: any) => ({
+              name: t.Name,
+              type: t.TableType || "-",
+              location: t.StorageDescriptor?.Location || "-",
+              columns: t.StorageDescriptor?.Columns?.length || 0,
+              created: t.CreateTime ? new Date(t.CreateTime).toLocaleDateString() : "-",
+            }))}
+            loading={false}
+            emptyMessage="No tables"
+            columns={[
+              { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+              { id: "type", header: "Type", cell: (i: any) => i.type },
+              { id: "location", header: "Location", cell: (i: any) => i.location },
+              { id: "columns", header: "Columns", cell: (i: any) => i.columns },
+              { id: "created", header: "Created", cell: (i: any) => i.created },
+              {
+                id: "actions",
+                header: "",
+                cell: (i: any) => (
+                  <DeleteButton
+                    itemName={i.name}
+                    resourceType="table"
+                    loading={deleteTbl.isPending && deleteTbl.variables === i.name}
+                    onDelete={() => deleteTbl.mutateAsync(i.name)}
+                  />
+                ),
+              },
+            ]}
+            filterEnabled
+            filterPlaceholder="Find tables"
+            filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+          />
+        </>
+      ) : (
         <ResourceTable
-          resourceName="Table"
-          headerTitle={`Tables in ${selectedDb}`}
-          headerCounter={tblData?.total}
-          items={(tblData?.tables || []).map((t: any) => ({
-            name: t.Name,
-            type: t.TableType || "-",
-            location: t.StorageDescriptor?.Location || "-",
-            columns: t.StorageDescriptor?.Columns?.length || 0,
-            created: t.CreateTime ? new Date(t.CreateTime).toLocaleDateString() : "-",
+          resourceName="Database"
+          headerTitle="Glue Databases"
+          headerCounter={dbData?.total}
+          items={(dbData?.databases || []).map((d: any) => ({
+            name: d.Name,
+            description: d.Description || "-",
+            location: d.LocationUri || "-",
+            created: d.CreateTime ? new Date(d.CreateTime).toLocaleDateString() : "-",
           }))}
-          loading={false}
-          emptyMessage="No tables"
+          loading={isLoading}
+          emptyMessage="No Glue databases"
           columns={[
-            { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
-            { id: "type", header: "Type", cell: (i: any) => i.type },
+            {
+              id: "name",
+              header: "Name",
+              cell: (i: any) => (
+                <Button variant="link" onClick={() => setSelectedDb(i.name)}>
+                  {i.name}
+                </Button>
+              ),
+              isRowHeader: true,
+            },
+            { id: "description", header: "Description", cell: (i: any) => i.description },
             { id: "location", header: "Location", cell: (i: any) => i.location },
-            { id: "columns", header: "Columns", cell: (i: any) => i.columns },
             { id: "created", header: "Created", cell: (i: any) => i.created },
             {
               id: "actions",
@@ -547,66 +604,265 @@ export function GlueDashboard() {
               cell: (i: any) => (
                 <DeleteButton
                   itemName={i.name}
-                  resourceType="table"
-                  loading={deleteTbl.isPending && deleteTbl.variables === i.name}
-                  onDelete={() => deleteTbl.mutateAsync(i.name)}
+                  resourceType="database"
+                  loading={deleteDb.isPending && deleteDb.variables === i.name}
+                  onDelete={() => deleteDb.mutateAsync(i.name)}
                 />
               ),
             },
           ]}
           filterEnabled
-          filterPlaceholder="Find tables"
+          filterPlaceholder="Find databases"
           filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
         />
-      </>
-    );
-  }
+      ),
+    },
+    { id: "schemaRegistry", label: "Schema Registry", content: <SchemaRegistryTab /> },
+  ];
+
+  return <Tabs tabs={tabs} activeTabId={activeTab} onChange={({ detail }) => setActiveTab(detail.activeTabId)} />;
+}
+
+function SchemaRegistryTab() {
+  const { showToast } = useToast();
+  const registriesQuery = useGlueRegistries();
+  const createRegistry = useCreateGlueRegistry();
+  const deleteRegistry = useDeleteGlueRegistry();
+  const [selectedRegistry, setSelectedRegistry] = useState<string | null>(null);
+  const [showCreateRegistry, setShowCreateRegistry] = useState(false);
+  const [regName, setRegName] = useState("");
+  const [showCreateSchema, setShowCreateSchema] = useState(false);
+  const [selectedSchema, setSelectedSchema] = useState<string | null>(null);
+  const schemasQuery = useGlueSchemas(selectedRegistry);
+  const createSchema = useCreateGlueSchema(selectedRegistry || "");
+  const deleteSchema = useDeleteGlueSchema(selectedRegistry || "");
+  const versionsQuery = useGlueSchemaVersions(selectedRegistry, selectedSchema);
+  const registerVersion = useRegisterGlueSchemaVersion(selectedRegistry || "", selectedSchema || "");
+  const [showRegisterVersion, setShowRegisterVersion] = useState(false);
+  const [schemaDef, setSchemaDef] = useState("{}");
+
+  const registries = registriesQuery.data?.registries || [];
+  const schemas = schemasQuery.data?.schemas || [];
+  const versions = versionsQuery.data?.versions || [];
 
   return (
-    <ResourceTable
-      resourceName="Database"
-      headerTitle="Glue Databases"
-      headerCounter={dbData?.total}
-      items={(dbData?.databases || []).map((d: any) => ({
-        name: d.Name,
-        description: d.Description || "-",
-        location: d.LocationUri || "-",
-        tables: "-",
-        created: d.CreateTime ? new Date(d.CreateTime).toLocaleDateString() : "-",
-      }))}
-      loading={isLoading}
-      emptyMessage="No Glue databases"
-      columns={[
-        {
-          id: "name",
-          header: "Name",
-          cell: (i: any) => (
-            <Button variant="link" onClick={() => setSelectedDb(i.name)}>
-              {i.name}
+    <SpaceBetween size="l">
+      <Container
+        header={
+          <Header
+            variant="h2"
+            counter={`(${registries.length})`}
+            actions={<Button onClick={() => setShowCreateRegistry(true)}>Create registry</Button>}
+          >
+            Registries
+          </Header>
+        }
+      >
+        <ResourceTable
+          resourceName="Registry"
+          items={registries}
+          columns={[
+            {
+              id: "name",
+              header: "Name",
+              cell: (r: any) => (
+                <Button
+                  variant="link"
+                  onClick={() => {
+                    setSelectedRegistry(r.name);
+                    setSelectedSchema(null);
+                  }}
+                >
+                  {r.name}
+                </Button>
+              ),
+              isRowHeader: true,
+            },
+            { id: "status", header: "Status", cell: (r: any) => <StatusIndicator type={r.status === "AVAILABLE" ? "success" : "warning"}>{r.status}</StatusIndicator> },
+            { id: "description", header: "Description", cell: (r: any) => r.description || "-" },
+            {
+              id: "actions",
+              header: "",
+              cell: (r: any) => (
+                <DeleteButton
+                  itemName={r.name}
+                  resourceType="registry"
+                  loading={deleteRegistry.isPending && deleteRegistry.variables === r.name}
+                  onDelete={() => { deleteRegistry.mutateAsync(r.name); if (selectedRegistry === r.name) setSelectedRegistry(null); }}
+                />
+              ),
+            },
+          ]}
+          loading={registriesQuery.isLoading}
+          emptyMessage="No registries"
+        />
+      </Container>
+
+      {selectedRegistry && (
+        <>
+          <Box>
+            <Button iconName="arrow-left" onClick={() => setSelectedRegistry(null)}>
+              Back to registries
             </Button>
-          ),
-          isRowHeader: true,
-        },
-        { id: "description", header: "Description", cell: (i: any) => i.description },
-        { id: "location", header: "Location", cell: (i: any) => i.location },
-        { id: "created", header: "Created", cell: (i: any) => i.created },
-        {
-          id: "actions",
-          header: "",
-          cell: (i: any) => (
-            <DeleteButton
-              itemName={i.name}
-              resourceType="database"
-              loading={deleteDb.isPending && deleteDb.variables === i.name}
-              onDelete={() => deleteDb.mutateAsync(i.name)}
+          </Box>
+          <Container
+            header={
+              <Header
+                variant="h3"
+                counter={`(${schemas.length})`}
+                description={`Registry: ${selectedRegistry}`}
+                actions={<Button onClick={() => setShowCreateSchema(true)}>Create schema</Button>}
+              >
+                Schemas
+              </Header>
+            }
+          >
+            <ResourceTable
+              resourceName="Schema"
+              items={schemas}
+              columns={[
+                {
+                  id: "name",
+                  header: "Name",
+                  cell: (s: any) => (
+                    <Button variant="link" onClick={() => setSelectedSchema(s.name)}>
+                      {s.name}
+                    </Button>
+                  ),
+                  isRowHeader: true,
+                },
+                { id: "format", header: "Format", cell: (s: any) => s.dataFormat || "-" },
+                { id: "compatibility", header: "Compatibility", cell: (s: any) => s.compatibility || "-" },
+                { id: "status", header: "Status", cell: (s: any) => <StatusIndicator type={s.status === "AVAILABLE" ? "success" : "warning"}>{s.status}</StatusIndicator> },
+                {
+                  id: "actions",
+                  header: "",
+                  cell: (s: any) => (
+                    <DeleteButton
+                      itemName={s.name}
+                      resourceType="schema"
+                      loading={deleteSchema.isPending && deleteSchema.variables === s.name}
+                      onDelete={() => { deleteSchema.mutateAsync(s.name); if (selectedSchema === s.name) setSelectedSchema(null); }}
+                    />
+                  ),
+                },
+              ]}
+              loading={schemasQuery.isLoading}
+              emptyMessage="No schemas"
             />
-          ),
-        },
-      ]}
-      filterEnabled
-      filterPlaceholder="Find databases"
-      filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
-    />
+          </Container>
+        </>
+      )}
+
+      {selectedSchema && (
+        <Container
+          header={
+            <Header
+              variant="h3"
+              counter={`(${versions.length})`}
+              description={`Schema: ${selectedSchema}`}
+              actions={<Button onClick={() => setShowRegisterVersion(true)}>Register version</Button>}
+            >
+              Schema Versions
+            </Header>
+          }
+        >
+          <ResourceTable
+            resourceName="Version"
+            items={versions}
+            columns={[
+              { id: "version", header: "Version", cell: (v: any) => `v${v.versionNumber}` },
+              { id: "id", header: "Version ID", cell: (v: any) => <span style={{ fontSize: 11 }}>{v.versionId || "-"}</span> },
+              { id: "status", header: "Status", cell: (v: any) => <StatusIndicator type={v.status === "AVAILABLE" ? "success" : "warning"}>{v.status}</StatusIndicator> },
+              { id: "created", header: "Created", cell: (v: any) => v.createdTime ? new Date(v.createdTime).toLocaleString() : "-" },
+            ]}
+            loading={versionsQuery.isLoading}
+            emptyMessage="No versions registered"
+          />
+        </Container>
+      )}
+
+      {showCreateRegistry && (
+        <Modal visible onDismiss={() => { setShowCreateRegistry(false); setRegName(""); }} header="Create Registry" size="medium" footer={
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button variant="link" onClick={() => { setShowCreateRegistry(false); setRegName(""); }}>Cancel</Button>
+            <Button variant="primary" loading={createRegistry.isPending} disabled={!regName.trim()} onClick={() => {
+              createRegistry.mutate({ name: regName.trim() }, {
+                onSuccess: () => { setShowCreateRegistry(false); setRegName(""); showToast("success", "Registry created"); },
+                onError: (e: any) => showToast("error", e.message),
+              });
+            }}>Create</Button>
+          </SpaceBetween>
+        }>
+          <SpaceBetween size="m">
+            <FormField label="Registry name"><Input value={regName} onChange={({ detail }) => setRegName(detail.value)} placeholder="my-registry" /></FormField>
+          </SpaceBetween>
+        </Modal>
+      )}
+
+      {showCreateSchema && (
+        <CreateSchemaModal
+          onClose={() => setShowCreateSchema(false)}
+          onCreated={() => { setShowCreateSchema(false); showToast("success", "Schema created"); }}
+          createSchema={createSchema}
+        />
+      )}
+
+      {showRegisterVersion && (
+        <Modal visible onDismiss={() => { setShowRegisterVersion(false); setSchemaDef("{}"); }} header="Register Schema Version" size="large" footer={
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button variant="link" onClick={() => { setShowRegisterVersion(false); setSchemaDef("{}"); }}>Cancel</Button>
+            <Button variant="primary" loading={registerVersion.isPending} disabled={!schemaDef.trim()} onClick={() => {
+              registerVersion.mutate({ definition: schemaDef }, {
+                onSuccess: () => { setShowRegisterVersion(false); setSchemaDef("{}"); showToast("success", "Version registered"); },
+                onError: (e: any) => showToast("error", e.message),
+              });
+            }}>Register</Button>
+          </SpaceBetween>
+        }>
+          <FormField label="Schema definition" description="JSON Avro schema definition">
+            <Textarea value={schemaDef} onChange={({ detail }) => setSchemaDef(detail.value)} rows={8} placeholder='{"type":"record","name":"MyRecord","fields":[{"name":"id","type":"int"}]}' />
+          </FormField>
+        </Modal>
+      )}
+    </SpaceBetween>
+  );
+}
+
+function CreateSchemaModal({
+  onClose,
+  onCreated,
+  createSchema,
+}: {
+  onClose: () => void;
+  onCreated: () => void;
+  createSchema: ReturnType<typeof useCreateGlueSchema>;
+}) {
+  const [name, setName] = useState("");
+  const [dataFormat, setDataFormat] = useState("AVRO");
+  const [compatibility, setCompatibility] = useState("NONE");
+  const [description, setDescription] = useState("");
+
+  return (
+    <Modal visible onDismiss={onClose} header="Create Schema" size="medium" footer={
+      <SpaceBetween direction="horizontal" size="xs">
+        <Button variant="link" onClick={onClose}>Cancel</Button>
+        <Button variant="primary" loading={createSchema.isPending} onClick={() => {
+          createSchema.mutate({ name: name.trim(), dataFormat, compatibility, description: description.trim() || undefined }, { onSuccess: onCreated });
+        }} disabled={!name.trim()}>Create</Button>
+      </SpaceBetween>
+    }>
+      <SpaceBetween size="m">
+        <FormField label="Schema name"><Input value={name} onChange={({ detail }) => setName(detail.value)} placeholder="my-schema" /></FormField>
+        <FormField label="Data format">
+          <Select selectedOption={{ label: dataFormat, value: dataFormat }} onChange={({ detail }) => setDataFormat(detail.selectedOption.value || "AVRO")} options={[{ label: "AVRO", value: "AVRO" }, { label: "JSON", value: "JSON" }]} />
+        </FormField>
+        <FormField label="Compatibility mode">
+          <Select selectedOption={{ label: compatibility, value: compatibility }} onChange={({ detail }) => setCompatibility(detail.selectedOption.value || "NONE")} options={["NONE", "DISABLED", "BACKWARD", "FORWARD", "FULL"].map(v => ({ label: v, value: v }))} />
+        </FormField>
+        <FormField label="Description (optional)"><Input value={description} onChange={({ detail }) => setDescription(detail.value)} placeholder="Schema description" /></FormField>
+      </SpaceBetween>
+    </Modal>
   );
 }
 

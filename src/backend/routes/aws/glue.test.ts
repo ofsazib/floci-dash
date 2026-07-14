@@ -17,6 +17,16 @@ vi.mock("@aws-sdk/client-glue", () => ({
   GetTableCommand: createCmd("GetTableCommand"),
   CreateTableCommand: createCmd("CreateTableCommand"),
   DeleteTableCommand: createCmd("DeleteTableCommand"),
+  ListRegistriesCommand: createCmd("ListRegistriesCommand"),
+  CreateRegistryCommand: createCmd("CreateRegistryCommand"),
+  GetRegistryCommand: createCmd("GetRegistryCommand"),
+  DeleteRegistryCommand: createCmd("DeleteRegistryCommand"),
+  ListSchemasCommand: createCmd("ListSchemasCommand"),
+  CreateSchemaCommand: createCmd("CreateSchemaCommand"),
+  GetSchemaCommand: createCmd("GetSchemaCommand"),
+  DeleteSchemaCommand: createCmd("DeleteSchemaCommand"),
+  ListSchemaVersionsCommand: createCmd("ListSchemaVersionsCommand"),
+  RegisterSchemaVersionCommand: createCmd("RegisterSchemaVersionCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({ create: (Ctor: any, extra?: any) => new Ctor(extra) }));
@@ -109,5 +119,129 @@ describe("Glue Routes", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.deleted).toBe(true);
+  });
+
+  // Schema Registry
+  it("GET /registries — lists registries", async () => {
+    mockSend.mockResolvedValueOnce({
+      Registries: [{ RegistryName: "reg-1", RegistryArn: "arn:...", Status: "AVAILABLE", Description: "Test" }],
+    });
+    const res = await get("/registries");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.total).toBe(1);
+    expect(body.registries[0].name).toBe("reg-1");
+  });
+
+  it("GET /registries — empty list", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/registries");
+    const body = await res.json();
+    expect(body.total).toBe(0);
+  });
+
+  it("POST /registries — creates registry (201)", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/registries", { name: "reg-1" });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.created).toBe(true);
+  });
+
+  it("POST /registries — 400 if name missing", async () => {
+    const res = await post("/registries", {});
+    expect(res.status).toBe(400);
+  });
+
+  it("GET /registries/:name — gets a registry", async () => {
+    mockSend.mockResolvedValueOnce({ RegistryName: "reg-1", Status: "AVAILABLE" });
+    const res = await get("/registries/reg-1");
+    expect(res.status).toBe(200);
+  });
+
+  it("DELETE /registries/:name — deletes registry", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await del("/registries/reg-1");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.deleted).toBe(true);
+  });
+
+  // Schemas
+  it("GET /registries/:regName/schemas — lists schemas", async () => {
+    mockSend.mockResolvedValueOnce({
+      Schemas: [{ SchemaName: "s-1", SchemaStatus: "AVAILABLE", DataFormat: "AVRO", Compatibility: "NONE" }],
+    });
+    const res = await get("/registries/reg-1/schemas");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.total).toBe(1);
+    expect(body.schemas[0].name).toBe("s-1");
+  });
+
+  it("GET /registries/:regName/schemas — empty list", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/registries/reg-1/schemas");
+    const body = await res.json();
+    expect(body.total).toBe(0);
+  });
+
+  it("POST /registries/:regName/schemas — creates schema (201)", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/registries/reg-1/schemas", { name: "s-1" });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.created).toBe(true);
+  });
+
+  it("POST /registries/:regName/schemas — 400 if name missing", async () => {
+    const res = await post("/registries/reg-1/schemas", {});
+    expect(res.status).toBe(400);
+  });
+
+  it("GET /registries/:regName/schemas/:schemaName — gets a schema", async () => {
+    mockSend.mockResolvedValueOnce({ SchemaName: "s-1" });
+    const res = await get("/registries/reg-1/schemas/s-1");
+    expect(res.status).toBe(200);
+  });
+
+  it("DELETE /registries/:regName/schemas/:schemaName — deletes schema", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await del("/registries/reg-1/schemas/s-1");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.deleted).toBe(true);
+  });
+
+  // Schema Versions
+  it("GET /registries/:regName/schemas/:schemaName/versions — lists versions", async () => {
+    mockSend.mockResolvedValueOnce({
+      Schemas: [{ SchemaVersionId: "v1", VersionNumber: 1, Status: "AVAILABLE", CreatedTime: "2025-01-01" }],
+    });
+    const res = await get("/registries/reg-1/schemas/s-1/versions");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.total).toBe(1);
+    expect(body.versions[0].versionNumber).toBe(1);
+  });
+
+  it("GET /registries/:regName/schemas/:schemaName/versions — empty list", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/registries/reg-1/schemas/s-1/versions");
+    const body = await res.json();
+    expect(body.total).toBe(0);
+  });
+
+  it("POST /registries/:regName/schemas/:schemaName/versions — registers version (201)", async () => {
+    mockSend.mockResolvedValueOnce({ SchemaVersionId: "v1" });
+    const res = await post("/registries/reg-1/schemas/s-1/versions", { definition: '{"type":"record"}' });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.registered).toBe(true);
+  });
+
+  it("POST /registries/:regName/schemas/:schemaName/versions — 400 if definition missing", async () => {
+    const res = await post("/registries/reg-1/schemas/s-1/versions", {});
+    expect(res.status).toBe(400);
   });
 });

@@ -1692,7 +1692,7 @@ These items were in the initial audit but found to be already implemented upon c
 |------------|---------|---------|-------------|
 | G.5 | **CloudFormation** (Change Sets) | CreateChangeSet, DescribeChangeSet, ExecuteChangeSet, DeleteChangeSet, ListChangeSets | `CloudFormationQueryHandler` | Done 2026-07-13 |
 | G.7 (old) partial | CloudFormation Templates/Exports | GetTemplate, ValidateTemplate, ListExports | `cloudformation.ts` — routes exist |
-| G.10 (old) partial | WAFv2 IP Sets | CreateIPSet, GetIPSet, UpdateIPSet, DeleteIPSet, ListIPSets | `wafv2.ts` — full CRUD routes |
+| G.10 (old) partial | WAFv2 IP Sets | CreateIPSet, GetIPSet, UpdateIPSet, DeleteIPSet, ListIPSets | `wafv2.ts` — full CRUD routes | (G.10 done)
 | G.10 (old) partial | WAFv2 Rule Groups | CreateRuleGroup, GetRuleGroup, UpdateRuleGroup, DeleteRuleGroup, ListRuleGroups | `wafv2.ts` — full CRUD routes |
 | G.12 (old) partial | SES DKIM + MailFrom | GetIdentityDkimAttributes, SetIdentityDkimEnabled, SetIdentityMailFromDomain, GetIdentityMailFromDomainAttributes | `ses.ts` — routes exist + included in identity list/detail |
 | G.18 (old) full | Config Service Conformance Packs + Recorder | PutConformancePack, DeleteConformancePack, DescribeConformancePacks, PutConfigurationRecorder, DescribeConfigurationRecorders, StartConfigurationRecorder, StopConfigurationRecorder, PutDeliveryChannel, DescribeDeliveryChannels, StartConfigRulesEvaluation | `configservice.ts` — all routes exist |

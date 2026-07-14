@@ -71,3 +71,90 @@ export function useDeleteGlueTable(databaseName: string) {
       qc.invalidateQueries({ queryKey: ["aws", "glue", "tables", databaseName] }),
   });
 }
+
+// ─── Schema Registry ────────────────────────────────────
+
+export function useGlueRegistries() {
+  return useQuery<{ registries: any[]; total: number }>({
+    queryKey: ["aws", "glue", "registries"],
+    queryFn: () => api("/aws/glue/registries"),
+  });
+}
+
+export function useCreateGlueRegistry() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { name: string; description?: string }) =>
+      api("/aws/glue/registries", { method: "POST", body: JSON.stringify(params) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "glue", "registries"] }),
+  });
+}
+
+export function useDeleteGlueRegistry() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api(`/aws/glue/registries/${encodeURIComponent(name)}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "glue", "registries"] }),
+  });
+}
+
+export function useGlueSchemas(registryName: string | null) {
+  return useQuery<{ schemas: any[]; total: number }>({
+    queryKey: ["aws", "glue", "registries", registryName, "schemas"],
+    queryFn: () => api(`/aws/glue/registries/${encodeURIComponent(registryName!)}/schemas`),
+    enabled: !!registryName,
+  });
+}
+
+export function useCreateGlueSchema(registryName: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { name: string; dataFormat?: string; compatibility?: string; description?: string; definition?: string }) =>
+      api(`/aws/glue/registries/${encodeURIComponent(registryName)}/schemas`, {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "glue", "registries", registryName, "schemas"] }),
+  });
+}
+
+export function useDeleteGlueSchema(registryName: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (schemaName: string) =>
+      api(
+        `/aws/glue/registries/${encodeURIComponent(registryName)}/schemas/${encodeURIComponent(schemaName)}`,
+        { method: "DELETE" }
+      ),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "glue", "registries", registryName, "schemas"] }),
+  });
+}
+
+export function useGlueSchemaVersions(registryName: string | null, schemaName: string | null) {
+  return useQuery<{ versions: any[]; total: number }>({
+    queryKey: ["aws", "glue", "registries", registryName, "schemas", schemaName, "versions"],
+    queryFn: () =>
+      api(
+        `/aws/glue/registries/${encodeURIComponent(registryName!)}/schemas/${encodeURIComponent(schemaName!)}/versions`
+      ),
+    enabled: !!registryName && !!schemaName,
+  });
+}
+
+export function useRegisterGlueSchemaVersion(registryName: string, schemaName: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { definition: string }) =>
+      api(
+        `/aws/glue/registries/${encodeURIComponent(registryName)}/schemas/${encodeURIComponent(schemaName)}/versions`,
+        { method: "POST", body: JSON.stringify(params) }
+      ),
+    onSuccess: () =>
+      qc.invalidateQueries({
+        queryKey: ["aws", "glue", "registries", registryName, "schemas", schemaName, "versions"],
+      }),
+  });
+}
