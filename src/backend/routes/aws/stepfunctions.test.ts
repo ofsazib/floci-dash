@@ -19,6 +19,9 @@ vi.mock("@aws-sdk/client-sfn", () => ({
   StopExecutionCommand: createCmd("StopExecutionCommand"),
   GetExecutionHistoryCommand: createCmd("GetExecutionHistoryCommand"),
   ListActivitiesCommand: createCmd("ListActivitiesCommand"),
+  PublishStateMachineVersionCommand: createCmd("PublishStateMachineVersionCommand"),
+  ListStateMachineVersionsCommand: createCmd("ListStateMachineVersionsCommand"),
+  DeleteStateMachineVersionCommand: createCmd("DeleteStateMachineVersionCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({ create: (Ctor: any, extra?: any) => new Ctor(extra) }));
@@ -119,5 +122,39 @@ describe("Step Functions Routes", () => {
     const res = await get("/activities");
     const body = await res.json();
     expect(body.total).toBe(1);
+  });
+
+  // ── Versions ────────────────────────────────────────
+
+  it("POST /state-machines/:arn/versions — publishes version (201)", async () => {
+    mockSend.mockResolvedValueOnce({ stateMachineVersionArn: ARN + ":1", creationDate: 456 });
+    const res = await post(`/state-machines/${ARN_ENC}/versions`, {});
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.stateMachineVersionArn).toBe(ARN + ":1");
+  });
+
+  it("GET /state-machines/:arn/versions — lists versions", async () => {
+    mockSend.mockResolvedValueOnce({ stateMachineVersions: [{ stateMachineVersionArn: ARN + ":1" }, { stateMachineVersionArn: ARN + ":2" }] });
+    const res = await get(`/state-machines/${ARN_ENC}/versions`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.total).toBe(2);
+  });
+
+  it("GET /state-machines/:arn/versions — empty result", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get(`/state-machines/${ARN_ENC}/versions`);
+    const body = await res.json();
+    expect(body.total).toBe(0);
+  });
+
+  it("DELETE /state-machines/:arn/versions/:versionArn — deletes version", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const versionArn = ARN + ":1";
+    const res = await del(`/state-machines/${ARN_ENC}/versions/${encodeURIComponent(versionArn)}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.deleted).toBe(true);
   });
 });

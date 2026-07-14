@@ -71,6 +71,41 @@ export function useExecutionHistory(arn: string | null) {
   });
 }
 
+// ── Versions ────────────────────────────────────────────
+
+export function usePublishStateMachineVersion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (arn: string) =>
+      api(`/aws/stepfunctions/state-machines/${encodeURIComponent(arn)}/versions`, { method: "POST" }),
+    onSuccess: (_data, arn) => {
+      qc.invalidateQueries({ queryKey: ["aws", "stepfunctions", "versions", arn] });
+    },
+  });
+}
+
+export function useStateMachineVersions(arn: string | null) {
+  return useQuery<{ versions: any[]; total: number }>({
+    queryKey: ["aws", "stepfunctions", "versions", arn],
+    queryFn: () => api(`/aws/stepfunctions/state-machines/${encodeURIComponent(arn!)}/versions`),
+    enabled: !!arn,
+  });
+}
+
+export function useDeleteStateMachineVersion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ arn, versionArn }: { arn: string; versionArn: string }) =>
+      api(
+        `/aws/stepfunctions/state-machines/${encodeURIComponent(arn)}/versions/${encodeURIComponent(versionArn)}`,
+        { method: "DELETE" }
+      ),
+    onSuccess: (_data, { arn }) => {
+      qc.invalidateQueries({ queryKey: ["aws", "stepfunctions", "versions", arn] });
+    },
+  });
+}
+
 // ── Activities ───────────────────────────────────────────
 
 export function useActivities() {

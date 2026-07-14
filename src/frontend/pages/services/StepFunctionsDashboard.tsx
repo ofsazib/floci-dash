@@ -302,6 +302,9 @@ import {
   useDeleteStateMachine,
   useStateMachineExecutions,
   useActivities,
+  useStateMachineVersions,
+  usePublishStateMachineVersion,
+  useDeleteStateMachineVersion,
 } from "../../hooks/useStepFunctions";
 import {
   useOpenSearchDomains,
@@ -509,8 +512,12 @@ export function StepFunctionsDashboard() {
   const { data: smData, isLoading } = useStateMachines();
   const deleteSm = useDeleteStateMachine();
   const [selectedSm, setSelectedSm] = useState<string | null>(null);
+  const [versionSm, setVersionSm] = useState<string | null>(null);
   const { data: execData } = useStateMachineExecutions(selectedSm);
   const { data: actData } = useActivities();
+  const { data: versionsData } = useStateMachineVersions(versionSm);
+  const publishVersion = usePublishStateMachineVersion();
+  const deleteVersion = useDeleteStateMachineVersion();
 
   if (isLoading) return <TableSkeleton />;
 
@@ -623,6 +630,79 @@ export function StepFunctionsDashboard() {
               filterPlaceholder="Find activities"
               filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
             />
+          ),
+        },
+        {
+          id: "versions",
+          label: "Versions",
+          content: (
+            <>
+              <Box margin={{ bottom: "s" }}>
+                <SpaceBetween direction="horizontal" size="s">
+                  <Select
+                    selectedOption={versionSm ? { value: versionSm } : null}
+                    onChange={({ detail }) => setVersionSm(detail.selectedOption?.value ?? null)}
+                    options={(smData?.stateMachines || []).map((sm: any) => ({
+                      value: sm.stateMachineArn,
+                      label: sm.name,
+                    }))}
+                    placeholder="Choose a state machine"
+                    selectedAriaLabel="Selected"
+                  />
+                  <Button
+                    iconName="add-plus"
+                    variant="primary"
+                    loading={publishVersion.isPending}
+                    onClick={() => publishVersion.mutateAsync(versionSm!)}
+                    disabled={!versionSm}
+                  >
+                    Publish Version
+                  </Button>
+                </SpaceBetween>
+              </Box>
+              <ResourceTable
+                resourceName="Version"
+                headerTitle="State Machine Versions"
+                headerCounter={versionsData?.total}
+                items={(versionsData?.versions || []).map((v: any) => ({
+                  arn: v.stateMachineVersionArn,
+                  revision: v.stateMachineVersionArn?.split(":").pop() || "-",
+                  created: v.creationDate ? new Date(v.creationDate).toLocaleString() : "-",
+                }))}
+                loading={false}
+                                emptyMessage={versionSm ? "No versions published yet" : "Select a state machine to view versions"}
+                columns={[
+                  {
+                    id: "revision",
+                    header: "Revision",
+                    cell: (i: any) => i.revision,
+                    isRowHeader: true,
+                  },
+                  { id: "arn", header: "Version ARN", cell: (i: any) => i.arn },
+                  { id: "created", header: "Published", cell: (i: any) => i.created },
+                  {
+                    id: "actions",
+                    header: "",
+                    cell: (i: any) => (
+                      <DeleteButton
+                        itemName={i.revision}
+                        resourceType="version"
+                        loading={deleteVersion.isPending && deleteVersion.variables?.versionArn === i.arn}
+                        onDelete={() =>
+                          deleteVersion.mutateAsync({
+                            arn: versionSm!,
+                            versionArn: i.arn,
+                          })
+                        }
+                      />
+                    ),
+                  },
+                ]}
+                filterEnabled
+                filterPlaceholder="Find versions"
+                filterFunction={(i: any, s: string) => i.arn?.toLowerCase().includes(s.toLowerCase())}
+              />
+            </>
           ),
         },
       ]}

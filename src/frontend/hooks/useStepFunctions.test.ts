@@ -18,6 +18,9 @@ import {
   useStateMachineExecutions,
   useExecutionHistory,
   useActivities,
+  usePublishStateMachineVersion,
+  useStateMachineVersions,
+  useDeleteStateMachineVersion,
 } from "./useStepFunctions";
 
 beforeEach(() => mockApi.mockReset());
@@ -90,5 +93,39 @@ describe("useStepFunctions hooks", () => {
     const { result } = renderHook(() => useActivities(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith("/aws/stepfunctions/activities");
+  });
+
+  // ── Versions ──────────────────────────────────────────
+
+  it("useStateMachineVersions calls correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ versions: [], total: 0 });
+    const { result } = renderHook(() => useStateMachineVersions(ARN), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(`/aws/stepfunctions/state-machines/${encodeURIComponent(ARN)}/versions`);
+  });
+
+  it("useStateMachineVersions disabled when null", () => {
+    const { result } = renderHook(() => useStateMachineVersions(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+
+  it("usePublishStateMachineVersion calls POST", async () => {
+    mockApi.mockResolvedValueOnce({ stateMachineVersionArn: ARN + ":1", creationDate: 456 });
+    const { result } = renderHook(() => usePublishStateMachineVersion(), { wrapper: createWrapper() });
+    await result.current.mutateAsync(ARN);
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/stepfunctions/state-machines/${encodeURIComponent(ARN)}/versions`,
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+
+  it("useDeleteStateMachineVersion calls DELETE", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useDeleteStateMachineVersion(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ arn: ARN, versionArn: ARN + ":1" });
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/stepfunctions/state-machines/${encodeURIComponent(ARN)}/versions/${encodeURIComponent(ARN + ":1")}`,
+      { method: "DELETE" }
+    );
   });
 });

@@ -13,6 +13,9 @@ import {
   StopExecutionCommand,
   GetExecutionHistoryCommand,
   ListActivitiesCommand,
+  PublishStateMachineVersionCommand,
+  ListStateMachineVersionsCommand,
+  DeleteStateMachineVersionCommand,
 } from "@aws-sdk/client-sfn";
 
 const router = new Hono();
@@ -111,6 +114,36 @@ router.get("/executions/:arn/history", async (c: Context) => {
   const result = await client.send(new GetExecutionHistoryCommand({ executionArn: arn }));
   const events = result.events || [];
   return c.json({ events, total: events.length });
+});
+
+// ── Versions ────────────────────────────────────────────
+
+router.post("/state-machines/:arn/versions", async (c: Context) => {
+  const arn = decodeURIComponent(c.req.param("arn")!);
+  const client = getClient();
+  const result = await client.send(
+    new PublishStateMachineVersionCommand({ stateMachineArn: arn })
+  );
+  return c.json({ stateMachineVersionArn: result.stateMachineVersionArn, creationDate: result.creationDate }, 201);
+});
+
+router.get("/state-machines/:arn/versions", async (c: Context) => {
+  const arn = decodeURIComponent(c.req.param("arn")!);
+  const client = getClient();
+  const result = await client.send(
+    new ListStateMachineVersionsCommand({ stateMachineArn: arn })
+  );
+  const versions = result.stateMachineVersions || [];
+  return c.json({ versions, total: versions.length });
+});
+
+router.delete("/state-machines/:arn/versions/:versionArn", async (c: Context) => {
+  const versionArn = decodeURIComponent(c.req.param("versionArn")!);
+  const client = getClient();
+  await client.send(
+    new DeleteStateMachineVersionCommand({ stateMachineVersionArn: versionArn })
+  );
+  return c.json({ deleted: true });
 });
 
 // ── Activities ───────────────────────────────────────────
