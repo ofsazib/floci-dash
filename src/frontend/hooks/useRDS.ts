@@ -365,3 +365,128 @@ export function useRDSDeleteClusterParameterGroup() {
       }),
   });
 }
+
+// ─── DB Subnet Group Types ──────────────────────────────
+
+export interface SubnetInfo {
+  id: string;
+  az?: string;
+  status?: string;
+}
+
+export interface DBSubnetGroup {
+  name: string;
+  description?: string;
+  vpcId?: string;
+  status?: string;
+  subnets: SubnetInfo[];
+  arn?: string;
+}
+
+export interface SubnetGroupListResponse {
+  subnetGroups: DBSubnetGroup[];
+  total: number;
+}
+
+// ─── DB Subnet Group Hooks ──────────────────────────────
+
+export function useDBSubnetGroups() {
+  return useQuery<SubnetGroupListResponse>({
+    queryKey: ["aws", "rds", "db-subnet-groups"],
+    queryFn: () => api("/aws/rds/db-subnet-groups"),
+  });
+}
+
+export function useCreateDBSubnetGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: {
+      dbSubnetGroupName: string;
+      dbSubnetGroupDescription?: string;
+      subnetIds: string[];
+    }) =>
+      api("/aws/rds/db-subnet-groups", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "rds", "db-subnet-groups"] }),
+  });
+}
+
+export function useDeleteDBSubnetGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api(`/aws/rds/db-subnet-groups/${name}`, { method: "DELETE" }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "rds", "db-subnet-groups"] }),
+  });
+}
+
+export function useModifyDBSubnetGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      name,
+      ...data
+    }: {
+      name: string;
+      dbSubnetGroupDescription?: string;
+      subnetIds: string[];
+    }) =>
+      api(`/aws/rds/db-subnet-groups/${name}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "rds", "db-subnet-groups"] }),
+  });
+}
+
+// ─── Orderable DB Instance Options ───────────────────────
+
+export function useOrderableDBInstanceOptions(engine: string | null) {
+  return useQuery<{ options: any[]; engine: string; total: number }>({
+    queryKey: ["aws", "rds", "orderable-options", engine],
+    queryFn: () =>
+      api(
+        `/aws/rds/orderable-db-instance-options?engine=${encodeURIComponent(engine!)}`
+      ),
+    enabled: !!engine,
+  });
+}
+
+// ─── Cluster Parameter Group Parameters Modification ────
+
+export function useRDSModifyClusterParameterGroupParameters() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      name,
+      parameters,
+    }: {
+      name: string;
+      parameters: Array<{
+        parameterName: string;
+        parameterValue: string;
+        applyMethod?: string;
+      }>;
+    }) =>
+      api(`/aws/rds/cluster-parameter-groups/${name}/parameters`, {
+        method: "PATCH",
+        body: JSON.stringify({ parameters }),
+      }),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({
+        queryKey: [
+          "aws",
+          "rds",
+          "cluster-parameter-group",
+          variables.name,
+          "parameters",
+        ],
+      });
+    },
+  });
+}

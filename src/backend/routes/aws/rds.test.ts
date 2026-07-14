@@ -31,6 +31,11 @@ vi.mock("@aws-sdk/client-rds", () => ({
   DeleteDBClusterParameterGroupCommand: createCmd("DeleteDBClusterParameterGroupCommand"),
   ModifyDBClusterParameterGroupCommand: createCmd("ModifyDBClusterParameterGroupCommand"),
   DescribeDBClusterParametersCommand: createCmd("DescribeDBClusterParametersCommand"),
+  CreateDBSubnetGroupCommand: createCmd("CreateDBSubnetGroupCommand"),
+  DescribeDBSubnetGroupsCommand: createCmd("DescribeDBSubnetGroupsCommand"),
+  ModifyDBSubnetGroupCommand: createCmd("ModifyDBSubnetGroupCommand"),
+  DeleteDBSubnetGroupCommand: createCmd("DeleteDBSubnetGroupCommand"),
+  DescribeOrderableDBInstanceOptionsCommand: createCmd("DescribeOrderableDBInstanceOptionsCommand"),
 }));
 
 import router from "./rds";
@@ -442,6 +447,107 @@ describe("RDS Routes", () => {
       const cmd = mockSend.mock.calls[0][0];
       expect(cmd.DBClusterParameterGroupName).toBe("cpg-001");
       expect(cmd.Parameters[0].ParameterName).toBe("timezone");
+    });
+  });
+
+  describe("DB Subnet Groups", () => {
+    it("GET /db-subnet-groups — lists subnet groups", async () => {
+      mockSend.mockResolvedValueOnce({
+        DBSubnetGroups: [{
+          DBSubnetGroupName: "sg-001",
+          DBSubnetGroupDescription: "My subnet group",
+          VpcId: "vpc-001",
+          SubnetGroupStatus: "Complete",
+          Subnets: [{ SubnetIdentifier: "subnet-abc", SubnetAvailabilityZone: { Name: "us-east-1a" }, SubnetStatus: "Active" }],
+          DBSubnetGroupArn: "arn:...",
+        }],
+      });
+      const res = await get("/db-subnet-groups");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(body.subnetGroups[0].name).toBe("sg-001");
+      expect(body.subnetGroups[0].subnets.length).toBe(1);
+    });
+
+    it("GET /db-subnet-groups — empty list", async () => {
+      mockSend.mockResolvedValueOnce({ DBSubnetGroups: [] });
+      const res = await get("/db-subnet-groups");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+    });
+
+    it("POST /db-subnet-groups — creates subnet group", async () => {
+      mockSend.mockResolvedValueOnce({
+        DBSubnetGroup: { DBSubnetGroupName: "sg-new", DBSubnetGroupArn: "arn:..." },
+      });
+      const res = await post("/db-subnet-groups", {
+        dbSubnetGroupName: "sg-new",
+        dbSubnetGroupDescription: "My group",
+        subnetIds: ["subnet-abc", "subnet-def"],
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.created).toBe(true);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.DBSubnetGroupName).toBe("sg-new");
+      expect(cmd.SubnetIds).toEqual(["subnet-abc", "subnet-def"]);
+    });
+
+    it("POST /db-subnet-groups — 400 when name missing", async () => {
+      const res = await post("/db-subnet-groups", { subnetIds: ["subnet-abc"] });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /db-subnet-groups — 400 when subnetIds missing", async () => {
+      const res = await post("/db-subnet-groups", { dbSubnetGroupName: "sg" });
+      expect(res.status).toBe(400);
+    });
+
+    it("PATCH /db-subnet-groups/:name — modifies subnet group", async () => {
+      mockSend.mockResolvedValueOnce({ DBSubnetGroup: { DBSubnetGroupName: "sg-001" } });
+      const res = await patch("/db-subnet-groups/sg-001", {
+        dbSubnetGroupDescription: "Updated",
+        subnetIds: ["subnet-xyz"],
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.modified).toBe(true);
+    });
+
+    it("PATCH /db-subnet-groups/:name — 400 when subnetIds missing", async () => {
+      const res = await patch("/db-subnet-groups/sg-001", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE /db-subnet-groups/:name — deletes subnet group", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/db-subnet-groups/sg-001");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deleted).toBe(true);
+    });
+  });
+
+  describe("Orderable DB Instance Options", () => {
+    it("GET /orderable-db-instance-options — lists options", async () => {
+      mockSend.mockResolvedValueOnce({
+        OrderableDBInstanceOptions: [{ EngineVersion: "16.4", DBInstanceClass: "db.t3.micro", Vpc: true }],
+      });
+      const res = await get("/orderable-db-instance-options?engine=postgres");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(body.engine).toBe("postgres");
+    });
+
+    it("GET /orderable-db-instance-options — defaults to postgres", async () => {
+      mockSend.mockResolvedValueOnce({ OrderableDBInstanceOptions: [] });
+      const res = await get("/orderable-db-instance-options");
+      const body = await res.json();
+      expect(body.engine).toBe("postgres");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.Engine).toBe("postgres");
     });
   });
 });

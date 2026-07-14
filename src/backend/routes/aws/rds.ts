@@ -21,6 +21,11 @@ import {
   DeleteDBClusterParameterGroupCommand,
   ModifyDBClusterParameterGroupCommand,
   DescribeDBClusterParametersCommand,
+  CreateDBSubnetGroupCommand,
+  DescribeDBSubnetGroupsCommand,
+  ModifyDBSubnetGroupCommand,
+  DeleteDBSubnetGroupCommand,
+  DescribeOrderableDBInstanceOptionsCommand,
 } from "@aws-sdk/client-rds";
 import { getAwsConfig } from "../../clients/aws";
 
@@ -575,6 +580,116 @@ router.patch("/cluster-parameter-groups/:name/parameters", async (c: Context) =>
   );
 
   return c.json({ clusterParameterGroup: name, modified: true });
+});
+
+// ──────────────────────────────────────────────
+//  DB Subnet Groups
+// ──────────────────────────────────────────────
+
+router.get("/db-subnet-groups", async (c: Context) => {
+  const result = await rds().send(new DescribeDBSubnetGroupsCommand({}));
+  const groups = (result.DBSubnetGroups || []).map((g) => ({
+    name: g.DBSubnetGroupName,
+    description: g.DBSubnetGroupDescription,
+    vpcId: g.VpcId,
+    status: g.SubnetGroupStatus,
+    subnets: (g.Subnets || []).map((s: any) => ({
+      id: s.SubnetIdentifier,
+      az: s.SubnetAvailabilityZone?.Name,
+      status: s.SubnetStatus,
+    })),
+    arn: g.DBSubnetGroupArn,
+  }));
+  return c.json({ subnetGroups: groups, total: groups.length });
+});
+
+router.post("/db-subnet-groups", async (c: Context) => {
+  const body = await c.req.json<{
+    dbSubnetGroupName: string;
+    dbSubnetGroupDescription?: string;
+    subnetIds: string[];
+  }>();
+
+  if (!body.dbSubnetGroupName) {
+    return c.json({ error: "DBSubnetGroupName is required" }, 400);
+  }
+  if (!body.subnetIds || body.subnetIds.length === 0) {
+    return c.json({ error: "subnetIds are required" }, 400);
+  }
+
+  const result = await rds().send(
+    new CreateDBSubnetGroupCommand({
+      DBSubnetGroupName: body.dbSubnetGroupName,
+      DBSubnetGroupDescription:
+        body.dbSubnetGroupDescription ||
+        `Subnet group for ${body.dbSubnetGroupName}`,
+      SubnetIds: body.subnetIds,
+    })
+  );
+
+  return c.json({
+    name: result.DBSubnetGroup?.DBSubnetGroupName,
+    arn: result.DBSubnetGroup?.DBSubnetGroupArn,
+    created: true,
+  });
+});
+
+router.patch("/db-subnet-groups/:name", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<{
+    dbSubnetGroupDescription?: string;
+    subnetIds: string[];
+  }>();
+
+  if (!body.subnetIds || body.subnetIds.length === 0) {
+    return c.json({ error: "subnetIds are required" }, 400);
+  }
+
+  const result = await rds().send(
+    new ModifyDBSubnetGroupCommand({
+      DBSubnetGroupName: name,
+      DBSubnetGroupDescription: body.dbSubnetGroupDescription,
+      SubnetIds: body.subnetIds,
+    })
+  );
+
+  return c.json({
+    name: result.DBSubnetGroup?.DBSubnetGroupName,
+    modified: true,
+  });
+});
+
+router.delete("/db-subnet-groups/:name", async (c: Context) => {
+  const name = c.req.param("name");
+  await rds().send(
+    new DeleteDBSubnetGroupCommand({
+      DBSubnetGroupName: name,
+    })
+  );
+  return c.json({ name, deleted: true });
+});
+
+// ──────────────────────────────────────────────
+//  Orderable DB Instance Options
+// ──────────────────────────────────────────────
+
+router.get("/orderable-db-instance-options", async (c: Context) => {
+  const engine = c.req.query("engine") || "postgres";
+  const result = await rds().send(
+    new DescribeOrderableDBInstanceOptionsCommand({ Engine: engine })
+  );
+  const options = (result.OrderableDBInstanceOptions || []).map((o) => ({
+    engineVersion: o.EngineVersion,
+    dbInstanceClass: o.DBInstanceClass,
+    vpc: o.Vpc || false,
+    multiAZCapable: o.MultiAZCapable || false,
+    supportsIamAuth: o.SupportsIAMDatabaseAuthentication || false,
+    supportsEncryption: o.SupportsStorageEncryption || false,
+    maxStorage: o.MaxStorageSize,
+    minStorage: o.MinStorageSize,
+    storageType: o.StorageType,
+  }));
+  return c.json({ options, engine, total: options.length });
 });
 
 export default router;

@@ -28,6 +28,11 @@ import {
   useRDSClusterParameterGroups,
   useRDSCreateClusterParameterGroup,
   useRDSDeleteClusterParameterGroup,
+  useRDSModifyClusterParameterGroupParameters,
+  useDBSubnetGroups,
+  useCreateDBSubnetGroup,
+  useDeleteDBSubnetGroup,
+  useOrderableDBInstanceOptions,
 } from "./useRDS";
 
 function createWrapper() {
@@ -295,5 +300,84 @@ describe("useRDSDeleteClusterParameterGroup", () => {
       "/aws/rds/cluster-parameter-groups/cpg-1",
       expect.objectContaining({ method: "DELETE" }),
     );
+  });
+});
+
+// ─── Cluster Parameter Group Parameter Modification ────────────────
+
+describe("useRDSModifyClusterParameterGroupParameters", () => {
+  it("calls api with PATCH method on cluster PG path", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useRDSModifyClusterParameterGroupParameters(), {
+      wrapper: createWrapper(),
+    });
+    const params = [{ parameterName: "timezone", parameterValue: "UTC" }];
+    await result.current.mutateAsync({ name: "cpg-1", parameters: params });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/rds/cluster-parameter-groups/cpg-1/parameters",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ parameters: params }),
+      }),
+    );
+  });
+});
+
+// ─── DB Subnet Groups ──────────────────────────────────────────────
+
+describe("useDBSubnetGroups", () => {
+  it("calls api with correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ subnetGroups: [], total: 0 });
+    const { result } = renderHook(() => useDBSubnetGroups(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/rds/db-subnet-groups");
+  });
+});
+
+describe("useCreateDBSubnetGroup", () => {
+  it("calls api with POST method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useCreateDBSubnetGroup(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({
+      dbSubnetGroupName: "sg-1",
+      subnetIds: ["subnet-abc"],
+    });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/rds/db-subnet-groups",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+});
+
+describe("useDeleteDBSubnetGroup", () => {
+  it("calls api with DELETE method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useDeleteDBSubnetGroup(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("sg-1");
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/rds/db-subnet-groups/sg-1",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+});
+
+// ─── Orderable DB Instance Options ─────────────────────────────────
+
+describe("useOrderableDBInstanceOptions", () => {
+  it("does not call api when engine is null", async () => {
+    const { result } = renderHook(() => useOrderableDBInstanceOptions(null), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.fetchStatus).toBe("idle"));
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api with correct URL when engine is provided", async () => {
+    mockApi.mockResolvedValueOnce({ options: [], engine: "postgres", total: 0 });
+    const { result } = renderHook(() => useOrderableDBInstanceOptions("postgres"), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/rds/orderable-db-instance-options?engine=postgres");
   });
 });

@@ -73,6 +73,10 @@ import {
   useRDSClusterParameterGroups,
   useRDSCreateClusterParameterGroup,
   useRDSDeleteClusterParameterGroup,
+  useRDSModifyClusterParameterGroupParameters,
+  useDBSubnetGroups,
+  useCreateDBSubnetGroup,
+  useDeleteDBSubnetGroup,
   type ParameterListResponse,
 } from "../../hooks/useRDS";
 import { api } from "../../lib/client";
@@ -549,6 +553,11 @@ export function RDSDashboard() {
       id: "cluster-parameter-groups",
       label: "Cluster Parameter Groups",
       content: <RDSClusterParameterGroupList />,
+    },
+    {
+      id: "db-subnet-groups",
+      label: "DB Subnet Groups",
+      content: <RDSSubnetGroupList />,
     },
   ];
 
@@ -1464,6 +1473,7 @@ function RDSParameterGroupParametersView({
   });
 
   const modifyParams = useRDSModifyParameterGroupParameters();
+  const modifyClusterParams = useRDSModifyClusterParameterGroupParameters();
 
   const [editParam, setEditParam] = useState<{
     parameterName: string;
@@ -1559,18 +1569,20 @@ function RDSParameterGroupParametersView({
               </Button>
               <Button
                 variant="primary"
-                loading={modifyParams.isPending}
+                loading={isCluster ? modifyClusterParams.isPending : modifyParams.isPending}
                 onClick={() => {
                   if (!editParam) return;
-                  modifyParams.mutate(
-                    {
-                      name,
-                      parameters: [editParam],
-                    },
-                    {
-                      onSuccess: () => setEditParam(null),
-                    }
-                  );
+                  if (isCluster) {
+                    modifyClusterParams.mutate(
+                      { name, parameters: [editParam] },
+                      { onSuccess: () => setEditParam(null) }
+                    );
+                  } else {
+                    modifyParams.mutate(
+                      { name, parameters: [editParam] },
+                      { onSuccess: () => setEditParam(null) }
+                    );
+                  }
                 }}
               >
                 Save
@@ -1595,6 +1607,194 @@ function RDSParameterGroupParametersView({
         </Form>
       </Modal>
     </SpaceBetween>
+  );
+}
+
+// ─── DB Subnet Group List ──────────────────────────────
+
+
+function RDSSubnetGroupList() {
+  const { data, isLoading, isError, error } = useDBSubnetGroups();
+  const createSG = useCreateDBSubnetGroup();
+  const deleteSG = useDeleteDBSubnetGroup();
+
+  const [showCreate, setShowCreate] = useState(false);
+  const [form, setForm] = useState({
+    dbSubnetGroupName: "",
+    dbSubnetGroupDescription: "",
+    subnetIds: "",
+  });
+
+  const items = (data?.subnetGroups || []).map((g) => ({
+    name: g.name,
+    description: g.description || "-",
+    vpcId: g.vpcId || "-",
+    status: g.status || "-",
+    subnetCount: g.subnets?.length || 0,
+  }));
+
+  function resetForm() {
+    setForm({ dbSubnetGroupName: "", dbSubnetGroupDescription: "", subnetIds: "" });
+  }
+
+  function handleCreate() {
+    if (!form.dbSubnetGroupName || !form.subnetIds.trim()) return;
+    createSG.mutate(
+      {
+        dbSubnetGroupName: form.dbSubnetGroupName,
+        dbSubnetGroupDescription: form.dbSubnetGroupDescription || undefined,
+        subnetIds: form.subnetIds.split(",").map((s) => s.trim()).filter(Boolean),
+      },
+      { onSuccess: () => { setShowCreate(false); resetForm(); } }
+    );
+  }
+
+  return (
+    <>
+      {isError && (
+        <StatusIndicator type="error">
+          {(error as Error)?.message || "Failed to load subnet groups"}
+        </StatusIndicator>
+      )}
+
+      <ResourceTable
+        resourceName="DB Subnet Group"
+        headerTitle="DB Subnet Groups"
+        headerCounter={data?.total}
+        items={items}
+        columns={[
+          {
+            id: "name",
+            header: "Name",
+            cell: (item: any) => item.name,
+            isRowHeader: true,
+          },
+          {
+            id: "description",
+            header: "Description",
+            cell: (item: any) => item.description,
+          },
+          {
+            id: "vpcId",
+            header: "VPC",
+            cell: (item: any) => item.vpcId,
+          },
+          {
+            id: "status",
+            header: "Status",
+            cell: (item: any) => (
+              <StatusIndicator
+                type={
+                  item.status === "Complete"
+                    ? "success"
+                    : "in-progress"
+                }
+              >
+                {item.status}
+              </StatusIndicator>
+            ),
+          },
+          {
+            id: "subnetCount",
+            header: "Subnets",
+            cell: (item: any) => item.subnetCount,
+          },
+          {
+            id: "actions",
+            header: "",
+            cell: (item: any) => (
+              <DeleteButton
+                itemName={item.name}
+                resourceType="subnet group"
+                loading={
+                  deleteSG.isPending && deleteSG.variables === item.name
+                }
+                onDelete={() => deleteSG.mutateAsync(item.name)}
+              />
+            ),
+          },
+        ]}
+        loading={isLoading}
+        emptyMessage="No DB subnet groups found"
+        filterEnabled
+        filterPlaceholder="Find subnet groups by name"
+        filterFunction={(item: any, searchText: string) =>
+          item.name.toLowerCase().includes(searchText.toLowerCase())
+        }
+        onCreate={() => setShowCreate(true)}
+      />
+
+      <Modal
+        visible={showCreate}
+        onDismiss={() => { setShowCreate(false); resetForm(); }}
+        header="Create DB Subnet Group"
+        size="medium"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button
+                variant="link"
+                onClick={() => { setShowCreate(false); resetForm(); }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                loading={createSG.isPending}
+                disabled={!form.dbSubnetGroupName || !form.subnetIds.trim()}
+                onClick={handleCreate}
+              >
+                Create subnet group
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          {createSG.isError && (
+            <Alert type="error" dismissible>
+              {(createSG.error as Error)?.message ||
+                "Failed to create subnet group"}
+            </Alert>
+          )}
+          <SpaceBetween size="m">
+            <FormField
+              label="Subnet group name"
+              description="Must be unique within your account."
+            >
+              <Input
+                value={form.dbSubnetGroupName}
+                onChange={({ detail }) =>
+                  setForm((p) => ({ ...p, dbSubnetGroupName: detail.value }))
+                }
+                placeholder="my-subnet-group"
+              />
+            </FormField>
+            <FormField label="Description (optional)">
+              <Input
+                value={form.dbSubnetGroupDescription}
+                onChange={({ detail }) =>
+                  setForm((p) => ({ ...p, dbSubnetGroupDescription: detail.value }))
+                }
+                placeholder="My subnet group"
+              />
+            </FormField>
+            <FormField
+              label="Subnet IDs"
+              description="Comma-separated list of subnet IDs"
+            >
+              <Input
+                value={form.subnetIds}
+                onChange={({ detail }) =>
+                  setForm((p) => ({ ...p, subnetIds: detail.value }))
+                }
+                placeholder="subnet-abc123, subnet-def456"
+              />
+            </FormField>
+          </SpaceBetween>
+        </Form>
+      </Modal>
+    </>
   );
 }
 
