@@ -18,6 +18,19 @@ import {
   SetIdentityNotificationTopicCommand,
   SetIdentityFeedbackForwardingEnabledCommand,
   SetIdentityHeadersInNotificationsEnabledCommand,
+  ListConfigurationSetsCommand,
+  CreateConfigurationSetCommand,
+  DescribeConfigurationSetCommand,
+  DeleteConfigurationSetCommand,
+  CreateConfigurationSetEventDestinationCommand,
+  UpdateConfigurationSetEventDestinationCommand,
+  DeleteConfigurationSetEventDestinationCommand,
+  UpdateConfigurationSetSendingEnabledCommand,
+  CreateConfigurationSetTrackingOptionsCommand,
+  UpdateConfigurationSetTrackingOptionsCommand,
+  DeleteConfigurationSetTrackingOptionsCommand,
+  UpdateConfigurationSetReputationMetricsEnabledCommand,
+  PutConfigurationSetDeliveryOptionsCommand,
 } from "@aws-sdk/client-ses";
 
 const router = new Hono();
@@ -229,6 +242,192 @@ router.post("/send-email", async (c: Context) => {
     })
   );
   return c.json({ messageId: result.MessageId });
+});
+
+// ── Configuration Sets ─────────────────────────────────────
+
+router.get("/configuration-sets", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new ListConfigurationSetsCommand({}));
+  const sets = result.ConfigurationSets || [];
+  return c.json({ configurationSets: sets, total: sets.length });
+});
+
+router.post("/configuration-sets", async (c: Context) => {
+  const body = await c.req.json<{ name: string }>();
+  if (!body.name) return c.json({ error: "name is required" }, 400);
+  const client = getClient();
+  await client.send(new CreateConfigurationSetCommand({ ConfigurationSet: { Name: body.name } }));
+  return c.json({ name: body.name, created: true }, 201);
+});
+
+router.get("/configuration-sets/:name", async (c: Context) => {
+  const name = decodeURIComponent(c.req.param("name") || "");
+  const client = getClient();
+  const result = await client.send(
+    new DescribeConfigurationSetCommand({
+      ConfigurationSetName: name,
+      ConfigurationSetAttributeNames: [
+        "eventDestinations",
+        "trackingOptions",
+        "deliveryOptions",
+        "reputationOptions",
+      ],
+    })
+  );
+  const cs = result.ConfigurationSet;
+  if (!cs) return c.json({ error: "Configuration set not found" }, 404);
+  return c.json({
+    name: cs.Name,
+    eventDestinations: result.EventDestinations || [],
+    trackingOptions: cs.TrackingOptions || null,
+    deliveryOptions: cs.DeliveryOptions || null,
+    reputationOptions: cs.ReputationOptions || null,
+  });
+});
+
+router.delete("/configuration-sets/:name", async (c: Context) => {
+  const name = decodeURIComponent(c.req.param("name") || "");
+  const client = getClient();
+  await client.send(new DeleteConfigurationSetCommand({ ConfigurationSetName: name }));
+  return c.json({ name, deleted: true });
+});
+
+// ── Event Destinations ─────────────────────────────────────
+
+router.post("/configuration-sets/:name/event-destinations", async (c: Context) => {
+  const name = decodeURIComponent(c.req.param("name") || "");
+  const body = await c.req.json<any>();
+  if (!body.eventDestinationName) return c.json({ error: "eventDestinationName is required" }, 400);
+  if (!body.matchingEventTypes?.length) return c.json({ error: "matchingEventTypes is required" }, 400);
+
+  const client = getClient();
+  const dest: any = {
+    Name: body.eventDestinationName,
+    Enabled: body.enabled !== false,
+    MatchingEventTypes: body.matchingEventTypes,
+  };
+  if (body.snsTopicARN) dest.SNSDestination = { TopicARN: body.snsTopicARN };
+  if (body.cloudWatchDestination) dest.CloudWatchDestination = body.cloudWatchDestination;
+  if (body.kinesisFirehoseDestination) dest.KinesisFirehoseDestination = body.kinesisFirehoseDestination;
+
+  await client.send(
+    new CreateConfigurationSetEventDestinationCommand({
+      ConfigurationSetName: name,
+      EventDestination: dest,
+    })
+  );
+  return c.json({ name, eventDestinationName: body.eventDestinationName, created: true }, 201);
+});
+
+router.put("/configuration-sets/:name/event-destinations/:edName", async (c: Context) => {
+  const name = decodeURIComponent(c.req.param("name") || "");
+  const edName = decodeURIComponent(c.req.param("edName") || "");
+  const body = await c.req.json<any>();
+  if (!body.matchingEventTypes?.length) return c.json({ error: "matchingEventTypes is required" }, 400);
+
+  const client = getClient();
+  const dest: any = {
+    Name: edName,
+    Enabled: body.enabled !== false,
+    MatchingEventTypes: body.matchingEventTypes,
+  };
+  if (body.snsTopicARN) dest.SNSDestination = { TopicARN: body.snsTopicARN };
+  if (body.cloudWatchDestination) dest.CloudWatchDestination = body.cloudWatchDestination;
+  if (body.kinesisFirehoseDestination) dest.KinesisFirehoseDestination = body.kinesisFirehoseDestination;
+
+  await client.send(
+    new UpdateConfigurationSetEventDestinationCommand({
+      ConfigurationSetName: name,
+      EventDestination: dest,
+    })
+  );
+  return c.json({ name, eventDestinationName: edName, updated: true });
+});
+
+router.delete("/configuration-sets/:name/event-destinations/:edName", async (c: Context) => {
+  const name = decodeURIComponent(c.req.param("name") || "");
+  const edName = decodeURIComponent(c.req.param("edName") || "");
+  const client = getClient();
+  await client.send(
+    new DeleteConfigurationSetEventDestinationCommand({
+      ConfigurationSetName: name,
+      EventDestinationName: edName,
+    })
+  );
+  return c.json({ name, eventDestinationName: edName, deleted: true });
+});
+
+// ── Sending Enabled ────────────────────────────────────────
+
+router.put("/configuration-sets/:name/sending-enabled", async (c: Context) => {
+  const name = decodeURIComponent(c.req.param("name") || "");
+  const body = await c.req.json<{ enabled: boolean }>();
+  if (typeof body.enabled !== "boolean") return c.json({ error: "enabled (boolean) is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new UpdateConfigurationSetSendingEnabledCommand({
+      ConfigurationSetName: name,
+      Enabled: body.enabled,
+    })
+  );
+  return c.json({ name, sendingEnabled: body.enabled, updated: true });
+});
+
+// ── Tracking Options ───────────────────────────────────────
+
+router.put("/configuration-sets/:name/tracking-options", async (c: Context) => {
+  const name = decodeURIComponent(c.req.param("name") || "");
+  const body = await c.req.json<{ customRedirectDomain: string }>();
+  if (!body.customRedirectDomain) return c.json({ error: "customRedirectDomain is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new CreateConfigurationSetTrackingOptionsCommand({
+      ConfigurationSetName: name,
+      TrackingOptions: { CustomRedirectDomain: body.customRedirectDomain },
+    })
+  );
+  return c.json({ name, trackingOptions: { customRedirectDomain: body.customRedirectDomain }, created: true });
+});
+
+router.delete("/configuration-sets/:name/tracking-options", async (c: Context) => {
+  const name = decodeURIComponent(c.req.param("name") || "");
+  const client = getClient();
+  await client.send(
+    new DeleteConfigurationSetTrackingOptionsCommand({ ConfigurationSetName: name })
+  );
+  return c.json({ name, deleted: true });
+});
+
+// ── Reputation Metrics ────────────────────────────────────
+
+router.put("/configuration-sets/:name/reputation-metrics", async (c: Context) => {
+  const name = decodeURIComponent(c.req.param("name") || "");
+  const body = await c.req.json<{ enabled: boolean }>();
+  if (typeof body.enabled !== "boolean") return c.json({ error: "enabled (boolean) is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new UpdateConfigurationSetReputationMetricsEnabledCommand({
+      ConfigurationSetName: name,
+      Enabled: body.enabled,
+    })
+  );
+  return c.json({ name, reputationMetricsEnabled: body.enabled, updated: true });
+});
+
+// ── Delivery Options ───────────────────────────────────────
+
+router.put("/configuration-sets/:name/delivery-options", async (c: Context) => {
+  const name = decodeURIComponent(c.req.param("name") || "");
+  const body = await c.req.json<{ tlsPolicy?: string }>();
+  const client = getClient();
+  await client.send(
+    new PutConfigurationSetDeliveryOptionsCommand({
+      ConfigurationSetName: name,
+      DeliveryOptions: { TlsPolicy: body.tlsPolicy },
+    })
+  );
+  return c.json({ name, deliveryOptions: { tlsPolicy: body.tlsPolicy }, updated: true });
 });
 
 // ── Verified Emails ───────────────────────────────────────

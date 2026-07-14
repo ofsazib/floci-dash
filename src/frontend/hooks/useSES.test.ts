@@ -22,6 +22,18 @@ import {
   useSESSetHeadersInNotifications,
   useSESSetDkimEnabled,
   useSESSetMailFromDomain,
+  useConfigurationSets,
+  useCreateConfigurationSet,
+  useDescribeConfigurationSet,
+  useDeleteConfigurationSet,
+  useCreateEventDestination,
+  useUpdateEventDestination,
+  useDeleteEventDestination,
+  useSetConfigSendingEnabled,
+  useSetTrackingOptions,
+  useDeleteTrackingOptions,
+  useSetReputationMetrics,
+  useSetDeliveryOptions,
 } from "./useSES";
 
 function createWrapper() {
@@ -285,5 +297,159 @@ describe("useSESSetMailFromDomain", () => {
     );
     const callArgs = mockApi.mock.calls[0][1];
     expect(JSON.parse(callArgs.body)).toEqual({ mailFromDomain: "mail.example.com" });
+  });
+});
+
+// ─── CONFIGURATION SETS ─────────────────────────────────
+
+describe("useConfigurationSets", () => {
+  it("calls api with correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ configurationSets: [], total: 0 });
+    const { result } = renderHook(() => useConfigurationSets(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/email/configuration-sets");
+  });
+});
+
+describe("useCreateConfigurationSet", () => {
+  it("calls api with POST method and name", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useCreateConfigurationSet(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("my-cs");
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/email/configuration-sets",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+});
+
+describe("useDescribeConfigurationSet", () => {
+  it("does NOT call api when name is null", () => {
+    renderHook(() => useDescribeConfigurationSet(null), { wrapper: createWrapper() });
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api with URL-encoded name", async () => {
+    mockApi.mockResolvedValueOnce({ name: "cs1", eventDestinations: [], trackingOptions: null, deliveryOptions: null, reputationOptions: null });
+    const { result } = renderHook(() => useDescribeConfigurationSet("my set"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/email/configuration-sets/my%20set");
+  });
+});
+
+describe("useDeleteConfigurationSet", () => {
+  it("calls api with DELETE method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useDeleteConfigurationSet(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("my-cs");
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/email/configuration-sets/my-cs",
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
+});
+
+describe("useCreateEventDestination", () => {
+  it("calls api with POST method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useCreateEventDestination(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({
+      configSetName: "cs1",
+      eventDestinationName: "ed1",
+      matchingEventTypes: ["send"],
+      snsTopicARN: "arn:sns:1",
+    });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/email/configuration-sets/cs1/event-destinations",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+});
+
+describe("useDeleteEventDestination", () => {
+  it("calls api with DELETE method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useDeleteEventDestination(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ configSetName: "cs1", eventDestinationName: "ed1" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/email/configuration-sets/cs1/event-destinations/ed1",
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
+});
+
+describe("useUpdateEventDestination", () => {
+  it("calls api with PUT method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useUpdateEventDestination(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({
+      configSetName: "cs1",
+      eventDestinationName: "ed1",
+      matchingEventTypes: ["send", "bounce"],
+    });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/email/configuration-sets/cs1/event-destinations/ed1",
+      expect.objectContaining({ method: "PUT" })
+    );
+  });
+});
+
+describe("useSetConfigSendingEnabled", () => {
+  it("calls api with PUT method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useSetConfigSendingEnabled(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ configSetName: "cs1", enabled: false });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/email/configuration-sets/cs1/sending-enabled",
+      expect.objectContaining({ method: "PUT" })
+    );
+  });
+});
+
+describe("useSetTrackingOptions", () => {
+  it("calls api with PUT method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useSetTrackingOptions(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ configSetName: "cs1", customRedirectDomain: "click.example.com" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/email/configuration-sets/cs1/tracking-options",
+      expect.objectContaining({ method: "PUT" })
+    );
+  });
+});
+
+describe("useDeleteTrackingOptions", () => {
+  it("calls api with DELETE method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useDeleteTrackingOptions(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("cs1");
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/email/configuration-sets/cs1/tracking-options",
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
+});
+
+describe("useSetReputationMetrics", () => {
+  it("calls api with PUT method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useSetReputationMetrics(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ configSetName: "cs1", enabled: true });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/email/configuration-sets/cs1/reputation-metrics",
+      expect.objectContaining({ method: "PUT" })
+    );
+  });
+});
+
+describe("useSetDeliveryOptions", () => {
+  it("calls api with PUT method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useSetDeliveryOptions(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ configSetName: "cs1", tlsPolicy: "Require" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/email/configuration-sets/cs1/delivery-options",
+      expect.objectContaining({ method: "PUT" })
+    );
   });
 });

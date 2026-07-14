@@ -164,3 +164,175 @@ export function useSESSetMailFromDomain() {
       qc.invalidateQueries({ queryKey: ["aws", "ses", "identities"] }),
   });
 }
+
+// ─── Configuration Sets ──────────────────────────────────
+
+export function useConfigurationSets() {
+  return useQuery<{ configurationSets: { Name: string }[]; total: number }>({
+    queryKey: ["aws", "ses", "configuration-sets"],
+    queryFn: () => api("/aws/email/configuration-sets"),
+  });
+}
+
+export function useCreateConfigurationSet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api("/aws/email/configuration-sets", {
+        method: "POST",
+        body: JSON.stringify({ name }),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "ses", "configuration-sets"] }),
+  });
+}
+
+export function useDescribeConfigurationSet(name: string | null) {
+  return useQuery<{
+    name: string;
+    eventDestinations: any[];
+    trackingOptions: any;
+    deliveryOptions: any;
+    reputationOptions: any;
+  }>({
+    queryKey: ["aws", "ses", "configuration-sets", name],
+    queryFn: () => api(`/aws/email/configuration-sets/${encodeURIComponent(name!)}`),
+    enabled: !!name,
+  });
+}
+
+export function useDeleteConfigurationSet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api(`/aws/email/configuration-sets/${encodeURIComponent(name)}`, { method: "DELETE" }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "ses", "configuration-sets"] }),
+  });
+}
+
+// ─── Event Destinations ─────────────────────────────────
+
+export function useCreateEventDestination() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      configSetName: string;
+      eventDestinationName: string;
+      matchingEventTypes: string[];
+      snsTopicARN?: string;
+      enabled?: boolean;
+      cloudWatchDestination?: any;
+      kinesisFirehoseDestination?: any;
+    }) =>
+      api(`/aws/email/configuration-sets/${encodeURIComponent(body.configSetName)}/event-destinations`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: (_data, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "ses", "configuration-sets", variables.configSetName] }),
+  });
+}
+
+export function useUpdateEventDestination() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      configSetName: string;
+      eventDestinationName: string;
+      matchingEventTypes: string[];
+      snsTopicARN?: string;
+      enabled?: boolean;
+    }) =>
+      api(`/aws/email/configuration-sets/${encodeURIComponent(body.configSetName)}/event-destinations/${encodeURIComponent(body.eventDestinationName)}`, {
+        method: "PUT",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: (_data, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "ses", "configuration-sets", variables.configSetName] }),
+  });
+}
+
+export function useDeleteEventDestination() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { configSetName: string; eventDestinationName: string }) =>
+      api(`/aws/email/configuration-sets/${encodeURIComponent(body.configSetName)}/event-destinations/${encodeURIComponent(body.eventDestinationName)}`, {
+        method: "DELETE",
+      }),
+    onSuccess: (_data, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "ses", "configuration-sets", variables.configSetName] }),
+  });
+}
+
+// ─── Sending Enabled ────────────────────────────────────
+
+export function useSetConfigSendingEnabled() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { configSetName: string; enabled: boolean }) =>
+      api(`/aws/email/configuration-sets/${encodeURIComponent(body.configSetName)}/sending-enabled`, {
+        method: "PUT",
+        body: JSON.stringify({ enabled: body.enabled }),
+      }),
+    onSuccess: (_data, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "ses", "configuration-sets", variables.configSetName] }),
+  });
+}
+
+// ─── Tracking Options ───────────────────────────────────
+
+export function useSetTrackingOptions() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { configSetName: string; customRedirectDomain: string }) =>
+      api(`/aws/email/configuration-sets/${encodeURIComponent(body.configSetName)}/tracking-options`, {
+        method: "PUT",
+        body: JSON.stringify({ customRedirectDomain: body.customRedirectDomain }),
+      }),
+    onSuccess: (_data, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "ses", "configuration-sets", variables.configSetName] }),
+  });
+}
+
+export function useDeleteTrackingOptions() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (configSetName: string) =>
+      api(`/aws/email/configuration-sets/${encodeURIComponent(configSetName)}/tracking-options`, {
+        method: "DELETE",
+      }),
+    onSuccess: (_data, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "ses", "configuration-sets", variables] }),
+  });
+}
+
+// ─── Reputation Metrics ─────────────────────────────────
+
+export function useSetReputationMetrics() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { configSetName: string; enabled: boolean }) =>
+      api(`/aws/email/configuration-sets/${encodeURIComponent(body.configSetName)}/reputation-metrics`, {
+        method: "PUT",
+        body: JSON.stringify({ enabled: body.enabled }),
+      }),
+    onSuccess: (_data, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "ses", "configuration-sets", variables.configSetName] }),
+  });
+}
+
+// ─── Delivery Options ───────────────────────────────────
+
+export function useSetDeliveryOptions() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { configSetName: string; tlsPolicy?: string }) =>
+      api(`/aws/email/configuration-sets/${encodeURIComponent(body.configSetName)}/delivery-options`, {
+        method: "PUT",
+        body: JSON.stringify({ tlsPolicy: body.tlsPolicy }),
+      }),
+    onSuccess: (_data, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "ses", "configuration-sets", variables.configSetName] }),
+  });
+}

@@ -33,6 +33,19 @@ vi.mock("@aws-sdk/client-ses", () => ({
   SetIdentityNotificationTopicCommand: createCmd("SetIdentityNotificationTopicCommand"),
   SetIdentityFeedbackForwardingEnabledCommand: createCmd("SetIdentityFeedbackForwardingEnabledCommand"),
   SetIdentityHeadersInNotificationsEnabledCommand: createCmd("SetIdentityHeadersInNotificationsEnabledCommand"),
+  ListConfigurationSetsCommand: createCmd("ListConfigurationSetsCommand"),
+  CreateConfigurationSetCommand: createCmd("CreateConfigurationSetCommand"),
+  DescribeConfigurationSetCommand: createCmd("DescribeConfigurationSetCommand"),
+  DeleteConfigurationSetCommand: createCmd("DeleteConfigurationSetCommand"),
+  CreateConfigurationSetEventDestinationCommand: createCmd("CreateConfigurationSetEventDestinationCommand"),
+  UpdateConfigurationSetEventDestinationCommand: createCmd("UpdateConfigurationSetEventDestinationCommand"),
+  DeleteConfigurationSetEventDestinationCommand: createCmd("DeleteConfigurationSetEventDestinationCommand"),
+  UpdateConfigurationSetSendingEnabledCommand: createCmd("UpdateConfigurationSetSendingEnabledCommand"),
+  CreateConfigurationSetTrackingOptionsCommand: createCmd("CreateConfigurationSetTrackingOptionsCommand"),
+  UpdateConfigurationSetTrackingOptionsCommand: createCmd("UpdateConfigurationSetTrackingOptionsCommand"),
+  DeleteConfigurationSetTrackingOptionsCommand: createCmd("DeleteConfigurationSetTrackingOptionsCommand"),
+  UpdateConfigurationSetReputationMetricsEnabledCommand: createCmd("UpdateConfigurationSetReputationMetricsEnabledCommand"),
+  PutConfigurationSetDeliveryOptionsCommand: createCmd("PutConfigurationSetDeliveryOptionsCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -385,6 +398,165 @@ describe("SES Routes", () => {
         enabled: 1,
       });
       expect(res.status).toBe(400);
+    });
+  });
+
+  describe("Configuration Sets", () => {
+    it("GET /configuration-sets — lists sets", async () => {
+      mockSend.mockResolvedValueOnce({ ConfigurationSets: [{ Name: "cs1" }, { Name: "cs2" }] });
+      const res = await get("/configuration-sets");
+      const body = await res.json();
+      expect(body.configurationSets).toHaveLength(2);
+      expect(body.total).toBe(2);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("ListConfigurationSetsCommand");
+    });
+
+    it("GET /configuration-sets — returns empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/configuration-sets");
+      const body = await res.json();
+      expect(body.configurationSets).toEqual([]);
+      expect(body.total).toBe(0);
+    });
+
+    it("POST /configuration-sets — creates set", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/configuration-sets", { name: "my-cs" });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.created).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("CreateConfigurationSetCommand");
+      expect(mockSend.mock.calls[0][0].ConfigurationSet.Name).toBe("my-cs");
+    });
+
+    it("POST /configuration-sets — 400 when name missing", async () => {
+      const res = await post("/configuration-sets", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("GET /configuration-sets/:name — describes set", async () => {
+      mockSend.mockResolvedValueOnce({
+        ConfigurationSet: { Name: "my-cs" },
+        EventDestinations: [{ Name: "ed1", MatchingEventTypes: ["send"] }],
+      });
+      const res = await get("/configuration-sets/my-cs");
+      const body = await res.json();
+      expect(body.name).toBe("my-cs");
+      expect(body.eventDestinations).toHaveLength(1);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DescribeConfigurationSetCommand");
+    });
+
+    it("GET /configuration-sets/:name — 404 when not found", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/configuration-sets/nonexistent");
+      expect(res.status).toBe(404);
+    });
+
+    it("DELETE /configuration-sets/:name — deletes set", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/configuration-sets/my-cs");
+      const body = await res.json();
+      expect(body.deleted).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteConfigurationSetCommand");
+    });
+  });
+
+  describe("Event Destinations", () => {
+    it("POST /configuration-sets/:name/event-destinations — creates destination", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/configuration-sets/my-cs/event-destinations", {
+        eventDestinationName: "ed1",
+        matchingEventTypes: ["send", "bounce"],
+        snsTopicARN: "arn:sns:bounce",
+      });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.created).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("CreateConfigurationSetEventDestinationCommand");
+      expect(mockSend.mock.calls[0][0].EventDestination.Name).toBe("ed1");
+      expect(mockSend.mock.calls[0][0].EventDestination.SNSDestination.TopicARN).toBe("arn:sns:bounce");
+    });
+
+    it("POST /configuration-sets/:name/event-destinations — 400 when missing params", async () => {
+      const res = await post("/configuration-sets/my-cs/event-destinations", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("PUT — updates destination", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/configuration-sets/my-cs/event-destinations/ed1", {
+        matchingEventTypes: ["delivery"],
+      });
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("UpdateConfigurationSetEventDestinationCommand");
+    });
+
+    it("DELETE — deletes destination", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/configuration-sets/my-cs/event-destinations/ed1");
+      const body = await res.json();
+      expect(body.deleted).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteConfigurationSetEventDestinationCommand");
+    });
+  });
+
+  describe("Config Set Features", () => {
+    it("PUT sending-enabled — enables", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/configuration-sets/my-cs/sending-enabled", { enabled: true });
+      const body = await res.json();
+      expect(body.sendingEnabled).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("UpdateConfigurationSetSendingEnabledCommand");
+    });
+
+    it("PUT sending-enabled — 400 when not boolean", async () => {
+      const res = await put("/configuration-sets/my-cs/sending-enabled", { enabled: "yes" });
+      expect(res.status).toBe(400);
+    });
+
+    it("PUT tracking-options — sets domain", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/configuration-sets/my-cs/tracking-options", { customRedirectDomain: "click.example.com" });
+      const body = await res.json();
+      expect(body.created).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("CreateConfigurationSetTrackingOptionsCommand");
+      expect(mockSend.mock.calls[0][0].TrackingOptions.CustomRedirectDomain).toBe("click.example.com");
+    });
+
+    it("PUT tracking-options — 400 when missing domain", async () => {
+      const res = await put("/configuration-sets/my-cs/tracking-options", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE tracking-options — removes", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/configuration-sets/my-cs/tracking-options");
+      const body = await res.json();
+      expect(body.deleted).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteConfigurationSetTrackingOptionsCommand");
+    });
+
+    it("PUT reputation-metrics — enables", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/configuration-sets/my-cs/reputation-metrics", { enabled: false });
+      const body = await res.json();
+      expect(body.reputationMetricsEnabled).toBe(false);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("UpdateConfigurationSetReputationMetricsEnabledCommand");
+    });
+
+    it("PUT reputation-metrics — 400 when not boolean", async () => {
+      const res = await put("/configuration-sets/my-cs/reputation-metrics", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("PUT delivery-options — sets TLS policy", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/configuration-sets/my-cs/delivery-options", { tlsPolicy: "Require" });
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("PutConfigurationSetDeliveryOptionsCommand");
+      expect(mockSend.mock.calls[0][0].DeliveryOptions.TlsPolicy).toBe("Require");
     });
   });
 });

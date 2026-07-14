@@ -178,6 +178,18 @@ import {
   useSESSetHeadersInNotifications,
   useSESSetDkimEnabled,
   useSESSetMailFromDomain,
+  useConfigurationSets,
+  useCreateConfigurationSet,
+  useDeleteConfigurationSet,
+  useDescribeConfigurationSet,
+  useCreateEventDestination,
+  useUpdateEventDestination,
+  useDeleteEventDestination,
+  useSetConfigSendingEnabled,
+  useSetTrackingOptions,
+  useDeleteTrackingOptions,
+  useSetReputationMetrics,
+  useSetDeliveryOptions,
 } from "../../hooks/useSES";
 import {
   useSTSCallerIdentity,
@@ -541,6 +553,33 @@ export function SESDashboard() {
   const [mailFromInput, setMailFromInput] = useState("");
   const selectedIdentityData = data?.identities?.find((i: any) => i.identity === selectedIdentity);
 
+  // ── Configuration Sets ──
+  const configSetsQuery = useConfigurationSets();
+  const createConfigSet = useCreateConfigurationSet();
+  const deleteConfigSet = useDeleteConfigurationSet();
+  const [showCreateConfigSet, setShowCreateConfigSet] = useState(false);
+  const [configSetName, setConfigSetName] = useState("");
+  const [selectedConfigSet, setSelectedConfigSet] = useState<string | null>(null);
+  const configSetDetail = useDescribeConfigurationSet(selectedConfigSet);
+  const createEventDest = useCreateEventDestination();
+  const updateEventDest = useUpdateEventDestination();
+  const deleteEventDest = useDeleteEventDestination();
+  const setSendingEnabled = useSetConfigSendingEnabled();
+  const setTrackingOpts = useSetTrackingOptions();
+  const deleteTrackingOpts = useDeleteTrackingOptions();
+  const setRepMetrics = useSetReputationMetrics();
+  const setDeliveryOpts = useSetDeliveryOptions();
+  const [showCreateEventDest, setShowCreateEventDest] = useState(false);
+  const [showEditEventDest, setShowEditEventDest] = useState(false);
+  const [editingEventDestName, setEditingEventDestName] = useState("");
+  const [showTrackingOpts, setShowTrackingOpts] = useState(false);
+  const [showDeliveryOpts, setShowDeliveryOpts] = useState(false);
+  const [eventDestName, setEventDestName] = useState("");
+  const [eventTypes, setEventTypes] = useState("");
+  const [snsTopicARN, setSnsTopicARN] = useState("");
+  const [trackingDomain, setTrackingDomain] = useState("");
+  const [tlsPolicy, setTlsPolicy] = useState("");
+
   if (isLoading) return <TableSkeleton />;
 
   return (
@@ -886,6 +925,175 @@ export function SESDashboard() {
         </Form>
       </Modal>
 
+      {/* ── Configuration Sets ── */}
+      <Container
+        header={
+          <Header
+            variant="h2"
+            counter={configSetsQuery.data?.total}
+            actions={<Button onClick={() => setShowCreateConfigSet(true)}>Create config set</Button>}
+          >
+            Configuration Sets
+          </Header>
+        }
+      >
+        <ResourceTable
+          resourceName="Configuration Set"
+          items={(configSetsQuery.data?.configurationSets || []).map((cs: any) => ({
+            name: cs.Name,
+          }))}
+          columns={[
+            { id: "name", header: "Name", cell: (item: any) => item.name, isRowHeader: true },
+            {
+              id: "view",
+              header: "",
+              cell: (item: any) => (
+                <Button variant="link" onClick={() => setSelectedConfigSet(item.name)}>
+                  View
+                </Button>
+              ),
+            },
+            {
+              id: "actions",
+              header: "",
+              cell: (item: any) => (
+                <DeleteButton
+                  itemName={item.name}
+                  resourceType="configuration set"
+                  loading={deleteConfigSet.isPending && deleteConfigSet.variables === item.name}
+                  onDelete={() => deleteConfigSet.mutateAsync(item.name)}
+                />
+              ),
+            },
+          ]}
+          loading={configSetsQuery.isLoading}
+          emptyMessage="No configuration sets found"
+        />
+
+        {selectedConfigSet && (
+          <Box padding={{ top: "l" }}>
+            <Header
+              variant="h3"
+              actions={<Button variant="link" onClick={() => setSelectedConfigSet(null)}>Close</Button>}
+            >
+              {selectedConfigSet}
+            </Header>
+            {configSetDetail.isLoading ? (
+              <Spinner />
+            ) : configSetDetail.data ? (
+              <SpaceBetween size="l">
+                <Box>
+                  <Header variant="h3" actions={<Button onClick={() => setShowCreateEventDest(true)}>Add destination</Button>}>
+                    Event Destinations
+                  </Header>
+                  {(configSetDetail.data.eventDestinations || []).length === 0 ? (
+                    <Box variant="small" color="text-status-inactive">No event destinations configured.</Box>
+                  ) : (
+                    <SpaceBetween size="s">
+                      {(configSetDetail.data.eventDestinations || []).map((ed: any) => (
+                        <Box key={ed.Name}>
+                          <Box variant="awsui-key-label">{ed.Name}</Box>
+                          <Box variant="small">
+                            Enabled: {ed.Enabled ? "Yes" : "No"} | Types: {(ed.MatchingEventTypes || []).join(", ")}
+                          </Box>
+                          <SpaceBetween direction="horizontal" size="xs">
+                            <Button
+                              variant="link"
+                              onClick={() => {
+                                setEditingEventDestName(ed.Name);
+                                setEventDestName(ed.Name);
+                                setEventTypes((ed.MatchingEventTypes || []).join(", "));
+                                setSnsTopicARN(ed.SNSDestination?.TopicARN || "");
+                                setShowEditEventDest(true);
+                              }}
+                            >
+                              Edit
+                            </Button>
+                            <DeleteButton
+                            itemName={ed.Name}
+                            resourceType="event destination"
+                            loading={deleteEventDest.isPending && deleteEventDest.variables?.eventDestinationName === ed.Name}                              onDelete={() =>
+                              deleteEventDest.mutateAsync({ configSetName: selectedConfigSet, eventDestinationName: ed.Name })
+                            }
+                          />
+                          </SpaceBetween>
+                        </Box>
+                      ))}
+                    </SpaceBetween>
+                  )}
+                </Box>
+
+                <Box>
+                  <Header variant="h3">Sending</Header>
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <Button onClick={() => setSendingEnabled.mutate({ configSetName: selectedConfigSet, enabled: true })}>
+                      Enable sending
+                    </Button>
+                    <Button onClick={() => setSendingEnabled.mutate({ configSetName: selectedConfigSet, enabled: false })}>
+                      Disable sending
+                    </Button>
+                  </SpaceBetween>
+                </Box>
+
+                <Box>
+                  <Header variant="h3">Tracking Options</Header>
+                  {configSetDetail.data.trackingOptions ? (
+                    <SpaceBetween direction="horizontal" size="xs">
+                      <Box variant="small">Domain: {configSetDetail.data.trackingOptions.CustomRedirectDomain}</Box>
+                      <Button variant="link" onClick={() => {
+                        setTrackingDomain(configSetDetail.data.trackingOptions.CustomRedirectDomain || "");
+                        setShowTrackingOpts(true);
+                      }}>Edit</Button>
+                      <DeleteButton
+                        itemName="tracking options"
+                        resourceType="tracking options"
+                        loading={deleteTrackingOpts.isPending}
+                        onDelete={() => deleteTrackingOpts.mutateAsync(selectedConfigSet)}
+                      />
+                    </SpaceBetween>
+                  ) : (
+                    <SpaceBetween direction="horizontal" size="xs">
+                      <Box variant="small" color="text-status-inactive">Not configured</Box>
+                      <Button variant="link" onClick={() => { setTrackingDomain(""); setShowTrackingOpts(true); }}>Set</Button>
+                    </SpaceBetween>
+                  )}
+                </Box>
+
+                <Box>
+                  <Header variant="h3">Reputation Metrics</Header>
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <StatusIndicator type={configSetDetail.data.reputationOptions?.ReputationMetricsEnabled ? "success" : "stopped"}>
+                      {configSetDetail.data.reputationOptions?.ReputationMetricsEnabled ? "Enabled" : "Disabled"}
+                    </StatusIndicator>
+                    <Button variant="link" onClick={() =>
+                      setRepMetrics.mutate({
+                        configSetName: selectedConfigSet,
+                        enabled: !configSetDetail.data.reputationOptions?.ReputationMetricsEnabled,
+                      })
+                    }>
+                      {configSetDetail.data.reputationOptions?.ReputationMetricsEnabled ? "Disable" : "Enable"}
+                    </Button>
+                  </SpaceBetween>
+                </Box>
+
+                <Box>
+                  <Header variant="h3">Delivery Options</Header>
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <Box variant="small">TLS Policy: {configSetDetail.data.deliveryOptions?.TlsPolicy || "Not set"}</Box>
+                    <Button variant="link" onClick={() => {
+                      setTlsPolicy(configSetDetail.data.deliveryOptions?.TlsPolicy || "");
+                      setShowDeliveryOpts(true);
+                    }}>Edit</Button>
+                  </SpaceBetween>
+                </Box>
+              </SpaceBetween>
+            ) : (
+              <Alert type="error">Failed to load configuration set details.</Alert>
+            )}
+          </Box>
+        )}
+      </Container>
+
       {/* ── Set Notification Topic Modal ── */}
       <Modal
         visible={showNotificationTopic}
@@ -964,6 +1172,220 @@ export function SESDashboard() {
               value={mailFromInput}
               onChange={({ detail }) => setMailFromInput(detail.value)}
               placeholder="mail.example.com"
+            />
+          </FormField>
+        </Form>
+      </Modal>
+
+      {/* ── Create Configuration Set Modal ── */}
+      <Modal
+        visible={showCreateConfigSet}
+        onDismiss={() => setShowCreateConfigSet(false)}
+        header="Create Configuration Set"
+        size="small"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreateConfigSet(false)}>Cancel</Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  if (configSetName.trim()) {
+                    createConfigSet.mutate(configSetName.trim(), {
+                      onSuccess: () => { setShowCreateConfigSet(false); setConfigSetName(""); },
+                    });
+                  }
+                }}
+                disabled={!configSetName.trim()}
+                loading={createConfigSet.isPending}
+              >
+                Create
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          <FormField label="Configuration set name">
+            <Input
+              value={configSetName}
+              onChange={({ detail }) => setConfigSetName(detail.value)}
+              placeholder="my-config-set"
+            />
+          </FormField>
+        </Form>
+      </Modal>
+
+      {/* ── Create Event Destination Modal ── */}
+      <Modal
+        visible={showCreateEventDest}
+        onDismiss={() => setShowCreateEventDest(false)}
+        header="Add Event Destination"
+        size="medium"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreateEventDest(false)}>Cancel</Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  if (selectedConfigSet && eventDestName.trim() && eventTypes.trim()) {
+                    createEventDest.mutate({
+                      configSetName: selectedConfigSet,
+                      eventDestinationName: eventDestName.trim(),
+                      matchingEventTypes: eventTypes.split(/[,\n]+/).map((s: string) => s.trim()).filter(Boolean),
+                      snsTopicARN: snsTopicARN.trim() || undefined,
+                    }, {
+                      onSuccess: () => { setShowCreateEventDest(false); setEventDestName(""); setEventTypes(""); setSnsTopicARN(""); },
+                    });
+                  }
+                }}
+                disabled={!eventDestName.trim() || !eventTypes.trim()}
+                loading={createEventDest.isPending}
+              >
+                Add
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <SpaceBetween size="m">
+          <FormField label="Destination name">
+            <Input value={eventDestName} onChange={({ detail }) => setEventDestName(detail.value)} placeholder="my-sns-destination" />
+          </FormField>
+          <FormField label="Event types" description="Comma or newline separated (e.g. send, bounce, complaint, delivery, open, click)">
+            <Textarea value={eventTypes} onChange={({ detail }) => setEventTypes(detail.value)} placeholder="send, bounce" rows={2} />
+          </FormField>
+          <FormField label="SNS Topic ARN (optional)">
+            <Input value={snsTopicARN} onChange={({ detail }) => setSnsTopicARN(detail.value)} placeholder="arn:aws:sns:us-east-1:123456789:my-topic" />
+          </FormField>
+        </SpaceBetween>
+      </Modal>
+
+      {/* ── Edit Event Destination Modal ── */}
+      <Modal
+        visible={showEditEventDest}
+        onDismiss={() => setShowEditEventDest(false)}
+        header={`Edit Event Destination: ${editingEventDestName}`}
+        size="medium"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowEditEventDest(false)}>Cancel</Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  if (selectedConfigSet && eventDestName.trim() && eventTypes.trim()) {
+                    updateEventDest.mutate({
+                      configSetName: selectedConfigSet,
+                      eventDestinationName: editingEventDestName,
+                      matchingEventTypes: eventTypes.split(/[,\n]+/).map((s: string) => s.trim()).filter(Boolean),
+                      snsTopicARN: snsTopicARN.trim() || undefined,
+                    }, {
+                      onSuccess: () => { setShowEditEventDest(false); },
+                    });
+                  }
+                }}
+                disabled={!eventDestName.trim() || !eventTypes.trim()}
+                loading={updateEventDest.isPending}
+              >
+                Save
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <SpaceBetween size="m">
+          <FormField label="Destination name">
+            <Input value={eventDestName} disabled />
+          </FormField>
+          <FormField label="Event types" description="Comma or newline separated (e.g. send, bounce, complaint, delivery, open, click)">
+            <Textarea value={eventTypes} onChange={({ detail }) => setEventTypes(detail.value)} placeholder="send, bounce" rows={2} />
+          </FormField>
+          <FormField label="SNS Topic ARN (optional)">
+            <Input value={snsTopicARN} onChange={({ detail }) => setSnsTopicARN(detail.value)} placeholder="arn:aws:sns:us-east-1:123456789:my-topic" />
+          </FormField>
+        </SpaceBetween>
+      </Modal>
+
+      {/* ── Tracking Options Modal ── */}
+      <Modal
+        visible={showTrackingOpts}
+        onDismiss={() => setShowTrackingOpts(false)}
+        header="Set Tracking Options"
+        size="medium"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowTrackingOpts(false)}>Cancel</Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  if (selectedConfigSet && trackingDomain.trim()) {
+                    setTrackingOpts.mutate(
+                      { configSetName: selectedConfigSet, customRedirectDomain: trackingDomain.trim() },
+                      { onSuccess: () => setShowTrackingOpts(false) }
+                    );
+                  }
+                }}
+                disabled={!trackingDomain.trim()}
+                loading={setTrackingOpts.isPending}
+              >
+                Save
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          <FormField label="Custom redirect domain" description="The domain to use for click/open tracking redirects.">
+            <Input
+              value={trackingDomain}
+              onChange={({ detail }) => setTrackingDomain(detail.value)}
+              placeholder="click.example.com"
+            />
+          </FormField>
+        </Form>
+      </Modal>
+
+      {/* ── Delivery Options Modal ── */}
+      <Modal
+        visible={showDeliveryOpts}
+        onDismiss={() => setShowDeliveryOpts(false)}
+        header="Set Delivery Options"
+        size="medium"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowDeliveryOpts(false)}>Cancel</Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  if (selectedConfigSet) {
+                    setDeliveryOpts.mutate(
+                      { configSetName: selectedConfigSet, tlsPolicy: tlsPolicy || undefined },
+                      { onSuccess: () => setShowDeliveryOpts(false) }
+                    );
+                  }
+                }}
+                loading={setDeliveryOpts.isPending}
+              >
+                Save
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          <FormField label="TLS Policy" description="Require or Optional. Leave empty for default.">
+            <Select
+              selectedOption={tlsPolicy ? { label: tlsPolicy, value: tlsPolicy } : null}
+              onChange={({ detail }) => setTlsPolicy(detail.selectedOption?.value || "")}
+              options={[
+                { label: "Require", value: "Require" },
+                { label: "Optional", value: "Optional" },
+              ]}
+              placeholder="Select TLS policy"
             />
           </FormField>
         </Form>
