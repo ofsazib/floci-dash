@@ -37,6 +37,17 @@ vi.mock("@aws-sdk/client-wafv2", () => ({
   ListTagsForResourceCommand: createCmd("ListTagsForResourceCommand"),
   TagResourceCommand: createCmd("TagResourceCommand"),
   UntagResourceCommand: createCmd("UntagResourceCommand"),
+  ListLoggingConfigurationsCommand: createCmd("ListLoggingConfigurationsCommand"),
+  GetLoggingConfigurationCommand: createCmd("GetLoggingConfigurationCommand"),
+  PutLoggingConfigurationCommand: createCmd("PutLoggingConfigurationCommand"),
+  DeleteLoggingConfigurationCommand: createCmd("DeleteLoggingConfigurationCommand"),
+  AssociateWebACLCommand: createCmd("AssociateWebACLCommand"),
+  DisassociateWebACLCommand: createCmd("DisassociateWebACLCommand"),
+  GetWebACLForResourceCommand: createCmd("GetWebACLForResourceCommand"),
+  ListResourcesForWebACLCommand: createCmd("ListResourcesForWebACLCommand"),
+  GetPermissionPolicyCommand: createCmd("GetPermissionPolicyCommand"),
+  PutPermissionPolicyCommand: createCmd("PutPermissionPolicyCommand"),
+  DeletePermissionPolicyCommand: createCmd("DeletePermissionPolicyCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -316,6 +327,205 @@ describe("WAFv2 Routes — Tags", () => {
 
   it("POST /tags/untag — 400 when tagKeys missing", async () => {
     const res = await post("/tags/untag", { resourceArn: "arn:1" });
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("WAFv2 Routes — Logging Configuration", () => {
+  it("GET /logging-config — lists logging configs", async () => {
+    mockSend.mockResolvedValueOnce({ LoggingConfigurations: [{ ResourceArn: "arn:1", LogDestinationConfigs: ["arn:log:1"] }] });
+    const res = await get("/logging-config?scope=REGIONAL");
+    const json = await res.json();
+    expect(json.loggingConfigurations).toHaveLength(1);
+    expect(json.total).toBe(1);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("ListLoggingConfigurationsCommand");
+  });
+
+  it("GET /logging-config — returns empty list", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/logging-config");
+    const json = await res.json();
+    expect(json.loggingConfigurations).toEqual([]);
+    expect(json.total).toBe(0);
+  });
+
+  it("GET /logging-config/:resourceArn — gets config", async () => {
+    mockSend.mockResolvedValueOnce({ LoggingConfiguration: { ResourceArn: "arn:1", LogDestinationConfigs: ["arn:log:1"] } });
+    const res = await get("/logging-config/arn%3A1");
+    const json = await res.json();
+    expect(json.loggingConfiguration).toBeDefined();
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetLoggingConfigurationCommand");
+    expect(mockSend.mock.calls[0][0].ResourceArn).toBe("arn:1");
+  });
+
+  it("PUT /logging-config — creates logging config", async () => {
+    mockSend.mockResolvedValueOnce({ LoggingConfiguration: { ResourceArn: "arn:1", LogDestinationConfigs: ["arn:log:1"] } });
+    const res = await router.request("/logging-config", {
+      method: "PUT",
+      body: JSON.stringify({ ResourceArn: "arn:1", LogDestinationConfigs: ["arn:log:1"] }),
+      headers: { "content-type": "application/json" },
+    });
+    const json = await res.json();
+    expect(json.created).toBe(true);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("PutLoggingConfigurationCommand");
+    expect(mockSend.mock.calls[0][0].LoggingConfiguration.ResourceArn).toBe("arn:1");
+  });
+
+  it("PUT /logging-config — 400 when missing params", async () => {
+    const res = await router.request("/logging-config", {
+      method: "PUT",
+      body: JSON.stringify({ ResourceArn: "arn:1" }),
+      headers: { "content-type": "application/json" },
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("POST /logging-config/delete — deletes config", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/logging-config/delete", { ResourceArn: "arn:1" });
+    const json = await res.json();
+    expect(json.deleted).toBe(true);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteLoggingConfigurationCommand");
+    expect(mockSend.mock.calls[0][0].ResourceArn).toBe("arn:1");
+  });
+
+  it("POST /logging-config/delete — 400 when ResourceArn missing", async () => {
+    const res = await post("/logging-config/delete", {});
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("WAFv2 Routes — Web ACL Associations", () => {
+  it("POST /associate — associates web ACL", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/associate", { WebACLArn: "arn:waf:1", ResourceArn: "arn:elb:1" });
+    const json = await res.json();
+    expect(json.associated).toBe(true);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("AssociateWebACLCommand");
+    expect(mockSend.mock.calls[0][0].WebACLArn).toBe("arn:waf:1");
+    expect(mockSend.mock.calls[0][0].ResourceArn).toBe("arn:elb:1");
+  });
+
+  it("POST /associate — 400 when missing params", async () => {
+    const res = await post("/associate", {});
+    expect(res.status).toBe(400);
+  });
+
+  it("POST /associate — 400 when ResourceArn missing", async () => {
+    const res = await post("/associate", { WebACLArn: "arn:waf:1" });
+    expect(res.status).toBe(400);
+  });
+
+  it("POST /disassociate — disassociates web ACL", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/disassociate", { ResourceArn: "arn:elb:1" });
+    const json = await res.json();
+    expect(json.disassociated).toBe(true);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("DisassociateWebACLCommand");
+    expect(mockSend.mock.calls[0][0].ResourceArn).toBe("arn:elb:1");
+  });
+
+  it("POST /disassociate — 400 when ResourceArn missing", async () => {
+    const res = await post("/disassociate", {});
+    expect(res.status).toBe(400);
+  });
+
+  it("GET /web-acl-for-resource — finds web ACL", async () => {
+    mockSend.mockResolvedValueOnce({ WebACL: { Name: "my-acl", ARN: "arn:waf:1" } });
+    const res = await get("/web-acl-for-resource?resourceArn=arn:elb:1");
+    const json = await res.json();
+    expect(json.webAcl.Name).toBe("my-acl");
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetWebACLForResourceCommand");
+  });
+
+  it("GET /web-acl-for-resource — returns null when no ACL", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/web-acl-for-resource?resourceArn=arn:elb:1");
+    const json = await res.json();
+    expect(json.webAcl).toBeNull();
+  });
+
+  it("GET /web-acl-for-resource — 400 when resourceArn missing", async () => {
+    const res = await get("/web-acl-for-resource");
+    expect(res.status).toBe(400);
+  });
+
+  it("GET /resources-for-web-acl — lists resources", async () => {
+    mockSend.mockResolvedValueOnce({ ResourceArns: ["arn:elb:1", "arn:elb:2"] });
+    const res = await get("/resources-for-web-acl?webACLArn=arn:waf:1");
+    const json = await res.json();
+    expect(json.resourceArns).toHaveLength(2);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("ListResourcesForWebACLCommand");
+  });
+
+  it("GET /resources-for-web-acl — returns empty list", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/resources-for-web-acl?webACLArn=arn:waf:1");
+    const json = await res.json();
+    expect(json.resourceArns).toEqual([]);
+  });
+
+  it("GET /resources-for-web-acl — 400 when webACLArn missing", async () => {
+    const res = await get("/resources-for-web-acl");
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("WAFv2 Routes — Permission Policy", () => {
+  it("GET /permission-policy — gets policy", async () => {
+    mockSend.mockResolvedValueOnce({ Policy: '{"Version":"2012-10-17"}' });
+    const res = await get("/permission-policy?resourceArn=arn:waf:1");
+    const json = await res.json();
+    expect(json.policy).toBe('{"Version":"2012-10-17"}');
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetPermissionPolicyCommand");
+  });
+
+  it("GET /permission-policy — returns null when no policy", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/permission-policy?resourceArn=arn:waf:1");
+    const json = await res.json();
+    expect(json.policy).toBeNull();
+  });
+
+  it("GET /permission-policy — 400 when resourceArn missing", async () => {
+    const res = await get("/permission-policy");
+    expect(res.status).toBe(400);
+  });
+
+  it("PUT /permission-policy — puts policy", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await router.request("/permission-policy", {
+      method: "PUT",
+      body: JSON.stringify({ ResourceArn: "arn:waf:1", Policy: '{"Version":"2012-10-17"}' }),
+      headers: { "content-type": "application/json" },
+    });
+    const json = await res.json();
+    expect(json.created).toBe(true);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("PutPermissionPolicyCommand");
+    expect(mockSend.mock.calls[0][0].ResourceArn).toBe("arn:waf:1");
+    expect(mockSend.mock.calls[0][0].Policy).toBe('{"Version":"2012-10-17"}');
+  });
+
+  it("PUT /permission-policy — 400 when missing params", async () => {
+    const res = await router.request("/permission-policy", {
+      method: "PUT",
+      body: JSON.stringify({ ResourceArn: "arn:waf:1" }),
+      headers: { "content-type": "application/json" },
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("POST /permission-policy/delete — deletes policy", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/permission-policy/delete", { ResourceArn: "arn:waf:1" });
+    const json = await res.json();
+    expect(json.deleted).toBe(true);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeletePermissionPolicyCommand");
+    expect(mockSend.mock.calls[0][0].ResourceArn).toBe("arn:waf:1");
+  });
+
+  it("POST /permission-policy/delete — 400 when ResourceArn missing", async () => {
+    const res = await post("/permission-policy/delete", {});
     expect(res.status).toBe(400);
   });
 });

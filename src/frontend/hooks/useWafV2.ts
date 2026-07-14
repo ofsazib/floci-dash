@@ -187,3 +187,111 @@ export function useUntagWafResource() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "wafv2", "tags"] }),
   });
 }
+
+// ─── Logging Configuration ──────────────────────────────
+
+export function useLoggingConfigurations(scope: string = "REGIONAL") {
+  return useQuery({
+    queryKey: ["aws", "wafv2", "logging-config", scope],
+    queryFn: () => api<{ loggingConfigurations: any[]; total: number }>(`/aws/wafv2/logging-config?scope=${scope}`),
+  });
+}
+
+export function useLoggingConfiguration(resourceArn: string | null) {
+  return useQuery({
+    queryKey: ["aws", "wafv2", "logging-config", resourceArn],
+    queryFn: () => api<{ loggingConfiguration: any }>(`/aws/wafv2/logging-config/${encodeURIComponent(resourceArn!)}`),
+    enabled: !!resourceArn,
+  });
+}
+
+export function usePutLoggingConfiguration() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { ResourceArn: string; LogDestinationConfigs: string[]; RedactedFields?: any; LoggingFilter?: any }) =>
+      api("/aws/wafv2/logging-config", { method: "PUT", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "wafv2", "logging-config"] }),
+  });
+}
+
+export function useDeleteLoggingConfiguration() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { ResourceArn: string }) =>
+      api("/aws/wafv2/logging-config/delete", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "wafv2", "logging-config"] }),
+  });
+}
+
+// ─── Web ACL Associations ────────────────────────────────
+
+export function useAssociateWebACL() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { WebACLArn: string; ResourceArn: string }) =>
+      api("/aws/wafv2/associate", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["aws", "wafv2", "web-acl-for-resource"] });
+      qc.invalidateQueries({ queryKey: ["aws", "wafv2", "resources-for-web-acl"] });
+    },
+  });
+}
+
+export function useDisassociateWebACL() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { ResourceArn: string }) =>
+      api("/aws/wafv2/disassociate", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["aws", "wafv2", "web-acl-for-resource"] });
+      qc.invalidateQueries({ queryKey: ["aws", "wafv2", "resources-for-web-acl"] });
+    },
+  });
+}
+
+export function useGetWebACLForResource(resourceArn: string | null) {
+  return useQuery({
+    queryKey: ["aws", "wafv2", "web-acl-for-resource", resourceArn],
+    queryFn: () =>
+      api<{ webAcl: any | null }>(`/aws/wafv2/web-acl-for-resource?resourceArn=${encodeURIComponent(resourceArn!)}`),
+    enabled: !!resourceArn,
+  });
+}
+
+export function useResourcesForWebACL(webACLArn: string | null) {
+  return useQuery({
+    queryKey: ["aws", "wafv2", "resources-for-web-acl", webACLArn],
+    queryFn: () =>
+      api<{ resourceArns: string[] }>(`/aws/wafv2/resources-for-web-acl?webACLArn=${encodeURIComponent(webACLArn!)}`),
+    enabled: !!webACLArn,
+  });
+}
+
+// ─── Permission Policy ──────────────────────────────────
+
+export function usePermissionPolicy(resourceArn: string | null) {
+  return useQuery({
+    queryKey: ["aws", "wafv2", "permission-policy", resourceArn],
+    queryFn: () =>
+      api<{ policy: string | null }>(`/aws/wafv2/permission-policy?resourceArn=${encodeURIComponent(resourceArn!)}`),
+    enabled: !!resourceArn,
+  });
+}
+
+export function usePutPermissionPolicy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { ResourceArn: string; Policy: string }) =>
+      api("/aws/wafv2/permission-policy", { method: "PUT", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "wafv2", "permission-policy"] }),
+  });
+}
+
+export function useDeletePermissionPolicy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { ResourceArn: string }) =>
+      api("/aws/wafv2/permission-policy/delete", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "wafv2", "permission-policy"] }),
+  });
+}

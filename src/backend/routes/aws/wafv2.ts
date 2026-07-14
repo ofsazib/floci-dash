@@ -25,6 +25,17 @@ import {
   ListTagsForResourceCommand,
   TagResourceCommand,
   UntagResourceCommand,
+  ListLoggingConfigurationsCommand,
+  GetLoggingConfigurationCommand,
+  PutLoggingConfigurationCommand,
+  DeleteLoggingConfigurationCommand,
+  AssociateWebACLCommand,
+  DisassociateWebACLCommand,
+  GetWebACLForResourceCommand,
+  ListResourcesForWebACLCommand,
+  GetPermissionPolicyCommand,
+  PutPermissionPolicyCommand,
+  DeletePermissionPolicyCommand,
 } from "@aws-sdk/client-wafv2";
 
 const router = new Hono();
@@ -329,6 +340,120 @@ router.post("/tags/untag", async (c: Context) => {
   const client = getClient();
   await client.send(new UntagResourceCommand({ ResourceARN: body.resourceArn, TagKeys: body.tagKeys }));
   return c.json({ untagged: true });
+});
+
+// ── Logging Configuration ────────────────────────────────
+
+router.get("/logging-config", async (c: Context) => {
+  const scope = c.req.query("scope") || "REGIONAL";
+  const client = getClient();
+  const result = await client.send(new ListLoggingConfigurationsCommand({ Scope: scope as any }));
+  const loggingConfigurations = result.LoggingConfigurations || [];
+  return c.json({ loggingConfigurations, total: loggingConfigurations.length });
+});
+
+router.get("/logging-config/:resourceArn", async (c: Context) => {
+  const resourceArn = c.req.param("resourceArn")!;
+  const client = getClient();
+  const result = await client.send(new GetLoggingConfigurationCommand({ ResourceArn: resourceArn }));
+  return c.json({ loggingConfiguration: result.LoggingConfiguration || null });
+});
+
+router.put("/logging-config", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.ResourceArn || !body.LogDestinationConfigs) return c.json({ error: "ResourceArn and LogDestinationConfigs are required" }, 400);
+
+  const client = getClient();
+  const result = await client.send(
+    new PutLoggingConfigurationCommand({
+      LoggingConfiguration: {
+        ResourceArn: body.ResourceArn,
+        LogDestinationConfigs: body.LogDestinationConfigs,
+        RedactedFields: body.RedactedFields,
+        ManagedByFirewallManager: body.ManagedByFirewallManager,
+        LoggingFilter: body.LoggingFilter,
+        LogScope: body.LogScope,
+        LogType: body.LogType,
+      },
+    })
+  );
+  return c.json({ loggingConfiguration: result.LoggingConfiguration, created: true });
+});
+
+router.post("/logging-config/delete", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.ResourceArn) return c.json({ error: "ResourceArn is required" }, 400);
+
+  const client = getClient();
+  await client.send(new DeleteLoggingConfigurationCommand({ ResourceArn: body.ResourceArn }));
+  return c.json({ deleted: true });
+});
+
+// ── Web ACL Associations ─────────────────────────────────
+
+router.post("/associate", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.WebACLArn || !body.ResourceArn) return c.json({ error: "WebACLArn and ResourceArn are required" }, 400);
+
+  const client = getClient();
+  await client.send(new AssociateWebACLCommand({ WebACLArn: body.WebACLArn, ResourceArn: body.ResourceArn }));
+  return c.json({ associated: true });
+});
+
+router.post("/disassociate", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.ResourceArn) return c.json({ error: "ResourceArn is required" }, 400);
+
+  const client = getClient();
+  await client.send(new DisassociateWebACLCommand({ ResourceArn: body.ResourceArn }));
+  return c.json({ disassociated: true });
+});
+
+router.get("/web-acl-for-resource", async (c: Context) => {
+  const resourceArn = c.req.query("resourceArn");
+  if (!resourceArn) return c.json({ error: "resourceArn query param required" }, 400);
+
+  const client = getClient();
+  const result = await client.send(new GetWebACLForResourceCommand({ ResourceArn: resourceArn }));
+  return c.json({ webAcl: result.WebACL || null });
+});
+
+router.get("/resources-for-web-acl", async (c: Context) => {
+  const webACLArn = c.req.query("webACLArn");
+  if (!webACLArn) return c.json({ error: "webACLArn query param required" }, 400);
+
+  const client = getClient();
+  const result = await client.send(new ListResourcesForWebACLCommand({ WebACLArn: webACLArn }));
+  return c.json({ resourceArns: result.ResourceArns || [] });
+});
+
+// ── Permission Policy ────────────────────────────────────
+
+router.get("/permission-policy", async (c: Context) => {
+  const resourceArn = c.req.query("resourceArn");
+  if (!resourceArn) return c.json({ error: "resourceArn query param required" }, 400);
+
+  const client = getClient();
+  const result = await client.send(new GetPermissionPolicyCommand({ ResourceArn: resourceArn }));
+  return c.json({ policy: result.Policy || null });
+});
+
+router.put("/permission-policy", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.ResourceArn || !body.Policy) return c.json({ error: "ResourceArn and Policy are required" }, 400);
+
+  const client = getClient();
+  await client.send(new PutPermissionPolicyCommand({ ResourceArn: body.ResourceArn, Policy: body.Policy }));
+  return c.json({ created: true });
+});
+
+router.post("/permission-policy/delete", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.ResourceArn) return c.json({ error: "ResourceArn is required" }, 400);
+
+  const client = getClient();
+  await client.send(new DeletePermissionPolicyCommand({ ResourceArn: body.ResourceArn }));
+  return c.json({ deleted: true });
 });
 
 export default router;

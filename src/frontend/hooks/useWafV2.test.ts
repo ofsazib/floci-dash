@@ -26,6 +26,16 @@ import {
   useWafTags,
   useTagWafResource,
   useUntagWafResource,
+  useLoggingConfigurations,
+  usePutLoggingConfiguration,
+  useDeleteLoggingConfiguration,
+  useAssociateWebACL,
+  useDisassociateWebACL,
+  useGetWebACLForResource,
+  useResourcesForWebACL,
+  usePermissionPolicy,
+  usePutPermissionPolicy,
+  useDeletePermissionPolicy,
 } from "./useWafV2";
 
 function createWrapper() {
@@ -272,5 +282,151 @@ describe("useUntagWafResource", () => {
       resourceArn: "arn:1",
       tagKeys: ["env"],
     });
+  });
+});
+
+// ─── Logging Configuration ──────────────────────────────
+
+describe("useLoggingConfigurations", () => {
+  it("calls api with scope param", async () => {
+    mockApi.mockResolvedValueOnce({ loggingConfigurations: [], total: 0 });
+    const { result } = renderHook(() => useLoggingConfigurations("REGIONAL"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/wafv2/logging-config?scope=REGIONAL");
+  });
+
+  it("defaults to REGIONAL scope", async () => {
+    mockApi.mockResolvedValueOnce({ loggingConfigurations: [], total: 0 });
+    const { result } = renderHook(() => useLoggingConfigurations(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/wafv2/logging-config?scope=REGIONAL");
+  });
+});
+
+describe("usePutLoggingConfiguration", () => {
+  it("calls api with PUT method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => usePutLoggingConfiguration(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ ResourceArn: "arn:1", LogDestinationConfigs: ["arn:log:1"] });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/wafv2/logging-config",
+      expect.objectContaining({ method: "PUT" })
+    );
+  });
+});
+
+describe("useDeleteLoggingConfiguration", () => {
+  it("calls api with POST method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useDeleteLoggingConfiguration(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ ResourceArn: "arn:1" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/wafv2/logging-config/delete",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+});
+
+// ─── Web ACL Associations ────────────────────────────────
+
+describe("useAssociateWebACL", () => {
+  it("calls api with POST method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useAssociateWebACL(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ WebACLArn: "arn:waf:1", ResourceArn: "arn:elb:1" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/wafv2/associate",
+      expect.objectContaining({ method: "POST" })
+    );
+    const callArgs = mockApi.mock.calls[0][1];
+    expect(JSON.parse(callArgs.body)).toEqual({
+      WebACLArn: "arn:waf:1",
+      ResourceArn: "arn:elb:1",
+    });
+  });
+});
+
+describe("useDisassociateWebACL", () => {
+  it("calls api with POST method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useDisassociateWebACL(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ ResourceArn: "arn:elb:1" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/wafv2/disassociate",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+});
+
+describe("useGetWebACLForResource", () => {
+  it("does NOT call api when resourceArn is null", () => {
+    renderHook(() => useGetWebACLForResource(null), { wrapper: createWrapper() });
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api with URL-encoded resourceArn", async () => {
+    mockApi.mockResolvedValueOnce({ webAcl: { Name: "my-acl" } });
+    const { result } = renderHook(() => useGetWebACLForResource("arn:elb:1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/wafv2/web-acl-for-resource?resourceArn=arn%3Aelb%3A1");
+  });
+});
+
+describe("useResourcesForWebACL", () => {
+  it("does NOT call api when webACLArn is null", () => {
+    renderHook(() => useResourcesForWebACL(null), { wrapper: createWrapper() });
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api with URL-encoded webACLArn", async () => {
+    mockApi.mockResolvedValueOnce({ resourceArns: [] });
+    const { result } = renderHook(() => useResourcesForWebACL("arn:waf:1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/wafv2/resources-for-web-acl?webACLArn=arn%3Awaf%3A1");
+  });
+});
+
+// ─── Permission Policy ──────────────────────────────────
+
+describe("usePermissionPolicy", () => {
+  it("does NOT call api when resourceArn is null", () => {
+    renderHook(() => usePermissionPolicy(null), { wrapper: createWrapper() });
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api with URL-encoded resourceArn", async () => {
+    mockApi.mockResolvedValueOnce({ policy: '{"Version":"2012-10-17"}' });
+    const { result } = renderHook(() => usePermissionPolicy("arn:waf:1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/wafv2/permission-policy?resourceArn=arn%3Awaf%3A1");
+  });
+});
+
+describe("usePutPermissionPolicy", () => {
+  it("calls api with PUT method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => usePutPermissionPolicy(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ ResourceArn: "arn:waf:1", Policy: '{"Version":"2012-10-17"}' });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/wafv2/permission-policy",
+      expect.objectContaining({ method: "PUT" })
+    );
+    const callArgs = mockApi.mock.calls[0][1];
+    expect(JSON.parse(callArgs.body)).toEqual({
+      ResourceArn: "arn:waf:1",
+      Policy: '{"Version":"2012-10-17"}',
+    });
+  });
+});
+
+describe("useDeletePermissionPolicy", () => {
+  it("calls api with POST method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useDeletePermissionPolicy(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ ResourceArn: "arn:waf:1" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/wafv2/permission-policy/delete",
+      expect.objectContaining({ method: "POST" })
+    );
   });
 });

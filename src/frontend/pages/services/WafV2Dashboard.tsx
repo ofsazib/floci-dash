@@ -416,6 +416,16 @@ import {
   useRuleGroups,
   useCreateRuleGroup,
   useDeleteRuleGroup,
+  useLoggingConfigurations,
+  usePutLoggingConfiguration,
+  useDeleteLoggingConfiguration,
+  useAssociateWebACL,
+  useDisassociateWebACL,
+  useGetWebACLForResource,
+  useResourcesForWebACL,
+  usePermissionPolicy,
+  usePutPermissionPolicy,
+  useDeletePermissionPolicy,
 } from "../../hooks/useWafV2";
 import {
   useElastiCacheReplicationGroups,
@@ -524,6 +534,28 @@ export function WafV2Dashboard() {
   const [showCreateRegexSet, setShowCreateRegexSet] = useState(false);
   const [showCreateRuleGroup, setShowCreateRuleGroup] = useState(false);
   const { showToast } = useToast();
+
+  // ── Logging + Associations + Permission Policy ──
+  const loggingConfigsQuery = useLoggingConfigurations();
+  const putLoggingConfig = usePutLoggingConfiguration();
+  const deleteLoggingConfig = useDeleteLoggingConfiguration();
+  const associateWebACL = useAssociateWebACL();
+  const disassociateWebACL = useDisassociateWebACL();
+  const putPermission = usePutPermissionPolicy();
+  const deletePermission = useDeletePermissionPolicy();
+  const [showPutLogging, setShowPutLogging] = useState(false);
+  const [showAssociate, setShowAssociate] = useState(false);
+  const [showDisassociate, setShowDisassociate] = useState(false);
+  const [showPutPermission, setShowPutPermission] = useState(false);
+  const [lookupResourceArn, setLookupResourceArn] = useState("");
+  const [lookupWebACLArn, setLookupWebACLArn] = useState("");
+  const [permissionResourceArn, setPermissionResourceArn] = useState("");
+  const [submittedResourceArn, setSubmittedResourceArn] = useState("");
+  const [submittedWebACLArn, setSubmittedWebACLArn] = useState("");
+  const [submittedPermissionArn, setSubmittedPermissionArn] = useState("");
+  const webAclForResourceQuery = useGetWebACLForResource(submittedResourceArn || null);
+  const resourcesForWebAclQuery = useResourcesForWebACL(submittedWebACLArn || null);
+  const permissionQuery = usePermissionPolicy(submittedPermissionArn || null);
 
   const webAcls = (webAclsQuery.data?.webAcls || []).map((a: any) => ({
     name: a.Name,
@@ -706,6 +738,145 @@ export function WafV2Dashboard() {
         />
       </Container>
 
+      {/* ── Logging Configuration ── */}
+      <Container
+        header={
+          <Header
+            variant="h3"
+            counter={loggingConfigsQuery.data?.total}
+            actions={<Button onClick={() => setShowPutLogging(true)}>Configure logging</Button>}
+          >
+            Logging Configuration
+          </Header>
+        }
+      >
+        <ResourceTable
+          resourceName="Logging Config"
+          items={(loggingConfigsQuery.data?.loggingConfigurations || []).map((lc: any) => ({
+            resourceArn: lc.ResourceArn,
+            logDestinations: (lc.LogDestinationConfigs || []).join(", ") || "\u2014",
+            managedByFms: lc.ManagedByFirewallManager ? "Yes" : "No",
+          }))}
+          columns={[
+            { id: "resourceArn", header: "Resource ARN", cell: (item: any) => item.resourceArn, isRowHeader: true },
+            { id: "logDestinations", header: "Log Destinations", cell: (item: any) => item.logDestinations },
+            { id: "managedByFms", header: "FMS Managed", cell: (item: any) => item.managedByFms },
+            {
+              id: "actions",
+              header: "",
+              cell: (item: any) => (
+                <DeleteButton
+                  itemName={item.resourceArn}
+                  resourceType="logging config"
+                  loading={deleteLoggingConfig.isPending && deleteLoggingConfig.variables?.ResourceArn === item.resourceArn}
+                  onDelete={() => deleteLoggingConfig.mutateAsync({ ResourceArn: item.resourceArn })}
+                />
+              ),
+            },
+          ]}
+          loading={loggingConfigsQuery.isLoading}
+          emptyMessage="No logging configurations found"
+        />
+      </Container>
+
+      {/* ── Web ACL Associations ── */}
+      <Container
+        header={<Header variant="h3">Web ACL Associations</Header>}
+      >
+        <SpaceBetween size="m">
+          <Box>
+            <Box variant="awsui-key-label" padding={{ bottom: "xs" }}>Find Web ACL for Resource</Box>
+            <SpaceBetween direction="horizontal" size="xs">
+              <Input
+                value={lookupResourceArn}
+                onChange={({ detail }) => setLookupResourceArn(detail.value)}
+                placeholder="arn:aws:elasticloadbalancing:..."
+              />
+              <Button onClick={() => setSubmittedResourceArn(lookupResourceArn.trim())} disabled={!lookupResourceArn.trim()}>
+                Look up
+              </Button>
+            </SpaceBetween>
+            {webAclForResourceQuery.data && (
+              <Box padding={{ top: "s" }}>
+                {webAclForResourceQuery.data.webAcl ? (
+                  <Alert type="success" header="Associated Web ACL">
+                    {webAclForResourceQuery.data.webAcl.Name} ({webAclForResourceQuery.data.webAcl.ARN})
+                  </Alert>
+                ) : (
+                  <Alert type="info">No Web ACL associated with this resource.</Alert>
+                )}
+              </Box>
+            )}
+          </Box>
+          <Box>
+            <Box variant="awsui-key-label" padding={{ bottom: "xs" }}>List Resources for Web ACL</Box>
+            <SpaceBetween direction="horizontal" size="xs">
+              <Input
+                value={lookupWebACLArn}
+                onChange={({ detail }) => setLookupWebACLArn(detail.value)}
+                placeholder="arn:aws:wafv2:...:webacl/..."
+              />
+              <Button onClick={() => setSubmittedWebACLArn(lookupWebACLArn.trim())} disabled={!lookupWebACLArn.trim()}>
+                Look up
+              </Button>
+            </SpaceBetween>
+            {resourcesForWebAclQuery.data && (
+              <Box padding={{ top: "s" }}>
+                {resourcesForWebAclQuery.data.resourceArns.length > 0 ? (
+                  <ul>
+                    {resourcesForWebAclQuery.data.resourceArns.map((arn: string) => (
+                      <li key={arn} style={{ fontSize: 13, wordBreak: "break-all" }}>{arn}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <Alert type="info">No resources associated with this Web ACL.</Alert>
+                )}
+              </Box>
+            )}
+          </Box>
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button onClick={() => setShowAssociate(true)}>Associate Web ACL</Button>
+            <Button onClick={() => setShowDisassociate(true)}>Disassociate Web ACL</Button>
+          </SpaceBetween>
+        </SpaceBetween>
+      </Container>
+
+      {/* ── Permission Policy ── */}
+      <Container
+        header={<Header variant="h3">Permission Policy</Header>}
+      >
+        <SpaceBetween size="m">
+          <SpaceBetween direction="horizontal" size="xs">
+            <Input
+              value={permissionResourceArn}
+              onChange={({ detail }) => setPermissionResourceArn(detail.value)}
+              placeholder="arn:aws:wafv2:...:webacl/..."
+            />
+            <Button onClick={() => setSubmittedPermissionArn(permissionResourceArn.trim())} disabled={!permissionResourceArn.trim()}>
+              Load policy
+            </Button>
+            <Button onClick={() => setShowPutPermission(true)}>Put policy</Button>
+            <DeleteButton
+              itemName={permissionResourceArn}
+              resourceType="permission policy"
+              loading={deletePermission.isPending && deletePermission.variables?.ResourceArn === permissionResourceArn}
+              onDelete={() => deletePermission.mutateAsync({ ResourceArn: permissionResourceArn.trim() })}
+            />
+          </SpaceBetween>
+          {permissionQuery.data && (
+            <Box>
+              {permissionQuery.data.policy ? (
+                <pre style={{ fontSize: 12, padding: 12, background: "#f8f8f8", borderRadius: 4, overflow: "auto", maxHeight: 300 }}>
+                  {permissionQuery.data.policy}
+                </pre>
+              ) : (
+                <Alert type="info">No permission policy set for this resource.</Alert>
+              )}
+            </Box>
+          )}
+        </SpaceBetween>
+      </Container>
+
       <Modal
         visible={showCreate}
         onDismiss={() => setShowCreate(false)}
@@ -744,6 +915,42 @@ export function WafV2Dashboard() {
           onClose={() => setShowCreateRuleGroup(false)}
           onCreated={() => { setShowCreateRuleGroup(false); showToast("success", "Rule group created"); }}
           createRuleGroup={createRuleGroup}
+        />
+      )}
+
+      {/* ── Logging Configuration Modal ── */}
+      {showPutLogging && (
+        <PutLoggingConfigModal
+          onClose={() => setShowPutLogging(false)}
+          onCreated={() => { setShowPutLogging(false); showToast("success", "Logging configuration saved"); }}
+          putLoggingConfig={putLoggingConfig}
+        />
+      )}
+
+      {/* ── Associate Web ACL Modal ── */}
+      {showAssociate && (
+        <AssociateWebACLModal
+          onClose={() => setShowAssociate(false)}
+          onCreated={() => { setShowAssociate(false); showToast("success", "Web ACL associated"); }}
+          associateWebACL={associateWebACL}
+        />
+      )}
+
+      {/* ── Disassociate Web ACL Modal ── */}
+      {showDisassociate && (
+        <DisassociateWebACLModal
+          onClose={() => setShowDisassociate(false)}
+          onCreated={() => { setShowDisassociate(false); showToast("success", "Web ACL disassociated"); }}
+          disassociateWebACL={disassociateWebACL}
+        />
+      )}
+
+      {/* ── Put Permission Policy Modal ── */}
+      {showPutPermission && (
+        <PutPermissionPolicyModal
+          onClose={() => setShowPutPermission(false)}
+          onCreated={() => { setShowPutPermission(false); showToast("success", "Permission policy saved"); }}
+          putPermission={putPermission}
         />
       )}
     </SpaceBetween>
@@ -870,6 +1077,165 @@ function CreateRuleGroupModal({
         <FormField label="Description (optional)"><Input value={description} onChange={({ detail }) => setDescription(detail.value)} placeholder="Rate limiting rules" /></FormField>
         <FormField label="Capacity" description="Maximum WCU capacity">
           <Input value={String(capacity)} onChange={({ detail }) => setCapacity(Number(detail.value) || 100)} type="number" />
+        </FormField>
+      </SpaceBetween>
+    </Modal>
+  );
+}
+
+// ── Logging Configuration Modal ──
+
+function PutLoggingConfigModal({
+  onClose,
+  onCreated,
+  putLoggingConfig,
+}: {
+  onClose: () => void;
+  onCreated: () => void;
+  putLoggingConfig: ReturnType<typeof usePutLoggingConfiguration>;
+}) {
+  const [resourceArn, setResourceArn] = useState("");
+  const [logDestinations, setLogDestinations] = useState("");
+
+  function handleSave() {
+    if (!resourceArn.trim() || !logDestinations.trim()) return;
+    const destinations = logDestinations.split(/[,\n]+/).map((s) => s.trim()).filter(Boolean);
+    putLoggingConfig.mutate(
+      { ResourceArn: resourceArn.trim(), LogDestinationConfigs: destinations },
+      { onSuccess: onCreated }
+    );
+  }
+
+  return (
+    <Modal visible onDismiss={onClose} header="Configure Logging" size="medium" footer={
+      <SpaceBetween direction="horizontal" size="xs">
+        <Button variant="link" onClick={onClose}>Cancel</Button>
+        <Button variant="primary" loading={putLoggingConfig.isPending} onClick={handleSave} disabled={!resourceArn.trim() || !logDestinations.trim()}>Save</Button>
+      </SpaceBetween>
+    }>
+      <SpaceBetween size="m">
+        <FormField label="Resource ARN">
+          <Input value={resourceArn} onChange={({ detail }) => setResourceArn(detail.value)} placeholder="arn:aws:wafv2:...:webacl/..." />
+        </FormField>
+        <FormField label="Log Destination ARNs" description="ARNs of CloudWatch Logs groups, S3 buckets, or Kinesis Firehose. Comma or newline separated.">
+          <Textarea value={logDestinations} onChange={({ detail }) => setLogDestinations(detail.value)} placeholder="arn:aws:logs:..." rows={3} />
+        </FormField>
+      </SpaceBetween>
+    </Modal>
+  );
+}
+
+// ── Associate Web ACL Modal ──
+
+function AssociateWebACLModal({
+  onClose,
+  onCreated,
+  associateWebACL,
+}: {
+  onClose: () => void;
+  onCreated: () => void;
+  associateWebACL: ReturnType<typeof useAssociateWebACL>;
+}) {
+  const [webACLArn, setWebACLArn] = useState("");
+  const [resourceArn, setResourceArn] = useState("");
+
+  function handleAssociate() {
+    if (!webACLArn.trim() || !resourceArn.trim()) return;
+    associateWebACL.mutate(
+      { WebACLArn: webACLArn.trim(), ResourceArn: resourceArn.trim() },
+      { onSuccess: onCreated }
+    );
+  }
+
+  return (
+    <Modal visible onDismiss={onClose} header="Associate Web ACL" size="medium" footer={
+      <SpaceBetween direction="horizontal" size="xs">
+        <Button variant="link" onClick={onClose}>Cancel</Button>
+        <Button variant="primary" loading={associateWebACL.isPending} onClick={handleAssociate} disabled={!webACLArn.trim() || !resourceArn.trim()}>Associate</Button>
+      </SpaceBetween>
+    }>
+      <SpaceBetween size="m">
+        <FormField label="Web ACL ARN">
+          <Input value={webACLArn} onChange={({ detail }) => setWebACLArn(detail.value)} placeholder="arn:aws:wafv2:...:webacl/..." />
+        </FormField>
+        <FormField label="Resource ARN">
+          <Input value={resourceArn} onChange={({ detail }) => setResourceArn(detail.value)} placeholder="arn:aws:elasticloadbalancing:..." />
+        </FormField>
+      </SpaceBetween>
+    </Modal>
+  );
+}
+
+// ── Disassociate Web ACL Modal ──
+
+function DisassociateWebACLModal({
+  onClose,
+  onCreated,
+  disassociateWebACL,
+}: {
+  onClose: () => void;
+  onCreated: () => void;
+  disassociateWebACL: ReturnType<typeof useDisassociateWebACL>;
+}) {
+  const [resourceArn, setResourceArn] = useState("");
+
+  function handleDisassociate() {
+    if (!resourceArn.trim()) return;
+    disassociateWebACL.mutate(
+      { ResourceArn: resourceArn.trim() },
+      { onSuccess: onCreated }
+    );
+  }
+
+  return (
+    <Modal visible onDismiss={onClose} header="Disassociate Web ACL" size="medium" footer={
+      <SpaceBetween direction="horizontal" size="xs">
+        <Button variant="link" onClick={onClose}>Cancel</Button>
+        <Button variant="primary" loading={disassociateWebACL.isPending} onClick={handleDisassociate} disabled={!resourceArn.trim()}>Disassociate</Button>
+      </SpaceBetween>
+    }>
+      <FormField label="Resource ARN">
+        <Input value={resourceArn} onChange={({ detail }) => setResourceArn(detail.value)} placeholder="arn:aws:elasticloadbalancing:..." />
+      </FormField>
+    </Modal>
+  );
+}
+
+// ── Put Permission Policy Modal ──
+
+function PutPermissionPolicyModal({
+  onClose,
+  onCreated,
+  putPermission,
+}: {
+  onClose: () => void;
+  onCreated: () => void;
+  putPermission: ReturnType<typeof usePutPermissionPolicy>;
+}) {
+  const [resourceArn, setResourceArn] = useState("");
+  const [policy, setPolicy] = useState("");
+
+  function handleSave() {
+    if (!resourceArn.trim() || !policy.trim()) return;
+    putPermission.mutate(
+      { ResourceArn: resourceArn.trim(), Policy: policy },
+      { onSuccess: onCreated }
+    );
+  }
+
+  return (
+    <Modal visible onDismiss={onClose} header="Put Permission Policy" size="medium" footer={
+      <SpaceBetween direction="horizontal" size="xs">
+        <Button variant="link" onClick={onClose}>Cancel</Button>
+        <Button variant="primary" loading={putPermission.isPending} onClick={handleSave} disabled={!resourceArn.trim() || !policy.trim()}>Save</Button>
+      </SpaceBetween>
+    }>
+      <SpaceBetween size="m">
+        <FormField label="Resource ARN">
+          <Input value={resourceArn} onChange={({ detail }) => setResourceArn(detail.value)} placeholder="arn:aws:wafv2:...:webacl/..." />
+        </FormField>
+        <FormField label="Policy (JSON string)">
+          <Textarea value={policy} onChange={({ detail }) => setPolicy(detail.value)} placeholder='{"Version": "2012-10-17", ...}' rows={5} />
         </FormField>
       </SpaceBetween>
     </Modal>
