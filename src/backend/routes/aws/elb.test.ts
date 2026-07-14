@@ -38,6 +38,14 @@ vi.mock("@aws-sdk/client-elastic-load-balancing-v2", () => ({
   DescribeTargetHealthCommand: createCmd("DescribeTargetHealthCommand"),
   AddTagsCommand: createCmd("AddTagsCommand"),
   RemoveTagsCommand: createCmd("RemoveTagsCommand"),
+  SetSecurityGroupsCommand: createCmd("SetSecurityGroupsCommand"),
+  SetSubnetsCommand: createCmd("SetSubnetsCommand"),
+  SetIpAddressTypeCommand: createCmd("SetIpAddressTypeCommand"),
+  DescribeSSLPoliciesCommand: createCmd("DescribeSSLPoliciesCommand"),
+  AddListenerCertificatesCommand: createCmd("AddListenerCertificatesCommand"),
+  RemoveListenerCertificatesCommand: createCmd("RemoveListenerCertificatesCommand"),
+  DescribeListenerCertificatesCommand: createCmd("DescribeListenerCertificatesCommand"),
+  DescribeAccountLimitsCommand: createCmd("DescribeAccountLimitsCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -380,6 +388,120 @@ describe("ELB Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.updated).toBe(true);
+    });
+  });
+
+  describe("Advanced LB Settings", () => {
+    it("PUT /load-balancers/:arn/security-groups — sets SGs", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/load-balancers/arn:lb1/security-groups", { securityGroups: ["sg-1", "sg-2"] });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("SetSecurityGroupsCommand");
+      expect(mockSend.mock.calls[0][0].SecurityGroups).toEqual(["sg-1", "sg-2"]);
+    });
+
+    it("PUT /load-balancers/:arn/security-groups — 400 when empty", async () => {
+      const res = await put("/load-balancers/arn:lb1/security-groups", { securityGroups: [] });
+      expect(res.status).toBe(400);
+    });
+
+    it("PUT /load-balancers/:arn/subnets — sets subnets", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/load-balancers/arn:lb1/subnets", { subnets: ["subnet-1", "subnet-2"] });
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("SetSubnetsCommand");
+      expect(mockSend.mock.calls[0][0].Subnets).toEqual(["subnet-1", "subnet-2"]);
+    });
+
+    it("PUT /load-balancers/:arn/ip-address-type — sets IP type", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/load-balancers/arn:lb1/ip-address-type", { ipAddressType: "dualstack" });
+      const body = await res.json();
+      expect(body.ipAddressType).toBe("dualstack");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("SetIpAddressTypeCommand");
+    });
+
+    it("PUT /load-balancers/:arn/ip-address-type — 400 when missing", async () => {
+      const res = await put("/load-balancers/arn:lb1/ip-address-type", {});
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe("SSL Policies", () => {
+    it("GET /ssl-policies — returns policies", async () => {
+      mockSend.mockResolvedValueOnce({
+        SslPolicies: [{ Name: "ELBSecurityPolicy-2016-08", SslProtocols: ["TLSv1.2"], Ciphers: [{ Name: "ECDHE" }] }],
+      });
+      const res = await get("/ssl-policies");
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(body.sslPolicies[0].name).toBe("ELBSecurityPolicy-2016-08");
+    });
+
+    it("GET /ssl-policies — returns empty", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/ssl-policies");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+    });
+  });
+
+  describe("Listener Certificates", () => {
+    it("GET — returns certificates", async () => {
+      mockSend.mockResolvedValueOnce({ Certificates: [{ CertificateArn: "arn:acm:cert1" }] });
+      const res = await get("/listeners/arn:l1/certificates");
+      const body = await res.json();
+      expect(body.certificates).toHaveLength(1);
+    });
+
+    it("POST — adds certificate", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/listeners/arn:l1/certificates", { certificateArn: "arn:acm:cert1" });
+      const body = await res.json();
+      expect(body.added).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("AddListenerCertificatesCommand");
+    });
+
+    it("POST — 400 when missing", async () => {
+      const res = await post("/listeners/arn:l1/certificates", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /remove — removes certificate", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/listeners/arn:l1/certificates/remove", { certificateArn: "arn:acm:cert1" });
+      const body = await res.json();
+      expect(body.removed).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("RemoveListenerCertificatesCommand");
+    });
+  });
+
+  describe("Listener Attributes", () => {
+    it("PUT — modifies attributes", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/listeners/arn:l1/attributes", { attributes: { "routing.http2.enabled": "true" } });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("ModifyListenerAttributesCommand");
+    });
+  });
+
+  describe("Target Group Attributes", () => {
+    it("PUT — modifies TG attributes", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/target-groups/arn:tg1/attributes", { attributes: { "stickiness.enabled": "true" } });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("ModifyTargetGroupAttributesCommand");
+    });
+  });
+
+  describe("Account Limits", () => {
+    it("GET — returns limits", async () => {
+      mockSend.mockResolvedValueOnce({ Limits: [{ Name: "load-balancers", Max: "20" }] });
+      const res = await get("/account-limits");
+      const body = await res.json();
+      expect(body.limits).toHaveLength(1);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DescribeAccountLimitsCommand");
     });
   });
 });

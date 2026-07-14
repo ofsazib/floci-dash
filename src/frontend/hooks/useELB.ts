@@ -158,3 +158,141 @@ export function useELBDeregisterTargets(tgArn: string) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "elb", "target-health", tgArn] }),
   });
 }
+
+// ─── Advanced LB Settings ────────────────────────────────
+
+export function useELBSetSecurityGroups() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { arn: string; securityGroups: string[] }) =>
+      api(`/aws/elasticloadbalancing/load-balancers/${encodeURIComponent(body.arn)}/security-groups`, {
+        method: "PUT",
+        body: JSON.stringify({ securityGroups: body.securityGroups }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "elb", "load-balancers"] }),
+  });
+}
+
+export function useELBSetSubnets() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { arn: string; subnets: string[] }) =>
+      api(`/aws/elasticloadbalancing/load-balancers/${encodeURIComponent(body.arn)}/subnets`, {
+        method: "PUT",
+        body: JSON.stringify({ subnets: body.subnets }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "elb", "load-balancers"] }),
+  });
+}
+
+export function useELBSetIpAddressType() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { arn: string; ipAddressType: string }) =>
+      api(`/aws/elasticloadbalancing/load-balancers/${encodeURIComponent(body.arn)}/ip-address-type`, {
+        method: "PUT",
+        body: JSON.stringify({ ipAddressType: body.ipAddressType }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "elb", "load-balancers"] }),
+  });
+}
+
+// ─── SSL Policies ────────────────────────────────────────
+
+export function useELBSSLPolicies() {
+  return useQuery<{ sslPolicies: Array<{ name: string; sslProtocols: string[]; ciphers: string[] }>; total: number }>({
+    queryKey: ["aws", "elb", "ssl-policies"],
+    queryFn: () => api("/aws/elasticloadbalancing/ssl-policies"),
+  });
+}
+
+// ─── Listener Certificates ───────────────────────────────
+
+export function useELBListenerCertificates(listenerArn: string | null) {
+  return useQuery<{ certificates: any[]; total: number }>({
+    queryKey: ["aws", "elb", "listener-certificates", listenerArn],
+    queryFn: () => api(`/aws/elasticloadbalancing/listeners/${encodeURIComponent(listenerArn!)}/certificates`),
+    enabled: !!listenerArn,
+  });
+}
+
+export function useELBAddListenerCertificate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { listenerArn: string; certificateArn: string }) =>
+      api(`/aws/elasticloadbalancing/listeners/${encodeURIComponent(body.listenerArn)}/certificates`, {
+        method: "POST",
+        body: JSON.stringify({ certificateArn: body.certificateArn }),
+      }),
+    onSuccess: (_data, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "elb", "listener-certificates", variables.listenerArn] }),
+  });
+}
+
+export function useELBRemoveListenerCertificate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { listenerArn: string; certificateArn: string }) =>
+      api(`/aws/elasticloadbalancing/listeners/${encodeURIComponent(body.listenerArn)}/certificates/remove`, {
+        method: "POST",
+        body: JSON.stringify({ certificateArn: body.certificateArn }),
+      }),
+    onSuccess: (_data, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "elb", "listener-certificates", variables.listenerArn] }),
+  });
+}
+
+// ─── Listener Attributes ─────────────────────────────────
+
+export function useELBListenerAttributes(listenerArn: string | null) {
+  return useQuery<{ listenerArn: string; attributes: Record<string, string> }>({
+    queryKey: ["aws", "elb", "listener-attributes", listenerArn],
+    queryFn: () => api(`/aws/elasticloadbalancing/listeners/${encodeURIComponent(listenerArn!)}/attributes`),
+    enabled: !!listenerArn,
+  });
+}
+
+export function useELBModifyListenerAttributes() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { arn: string; attributes: Record<string, string> }) =>
+      api(`/aws/elasticloadbalancing/listeners/${encodeURIComponent(body.arn)}/attributes`, {
+        method: "PUT",
+        body: JSON.stringify({ attributes: body.attributes }),
+      }),
+    onSuccess: (_data, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "elb", "listener-attributes", variables.arn] }),
+  });
+}
+
+// ─── Target Group Attributes ─────────────────────────────
+
+export function useELBTargetGroupAttributes(tgArn: string | null) {
+  return useQuery<{ targetGroupArn: string; attributes: Record<string, string> }>({
+    queryKey: ["aws", "elb", "tg-attributes", tgArn],
+    queryFn: () => api(`/aws/elasticloadbalancing/target-groups/${encodeURIComponent(tgArn!)}/attributes`),
+    enabled: !!tgArn,
+  });
+}
+
+export function useELBModifyTargetGroupAttributes() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { arn: string; attributes: Record<string, string> }) =>
+      api(`/aws/elasticloadbalancing/target-groups/${encodeURIComponent(body.arn)}/attributes`, {
+        method: "PUT",
+        body: JSON.stringify({ attributes: body.attributes }),
+      }),
+    onSuccess: (_data, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "elb", "tg-attributes", variables.arn] }),
+  });
+}
+
+// ─── Account Limits ─────────────────────────────────────
+
+export function useELBAccountLimits() {
+  return useQuery<{ limits: Array<{ name: string; max: string }>; total: number }>({
+    queryKey: ["aws", "elb", "account-limits"],
+    queryFn: () => api("/aws/elasticloadbalancing/account-limits"),
+  });
+}

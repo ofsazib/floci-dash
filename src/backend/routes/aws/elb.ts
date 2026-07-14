@@ -23,6 +23,14 @@ import {
   DescribeTargetHealthCommand,
   AddTagsCommand,
   RemoveTagsCommand,
+  SetSecurityGroupsCommand,
+  SetSubnetsCommand,
+  SetIpAddressTypeCommand,
+  DescribeSSLPoliciesCommand,
+  AddListenerCertificatesCommand,
+  RemoveListenerCertificatesCommand,
+  DescribeListenerCertificatesCommand,
+  DescribeAccountLimitsCommand,
 } from "@aws-sdk/client-elastic-load-balancing-v2";
 
 const router = new Hono();
@@ -299,6 +307,125 @@ router.post("/target-groups/:arn/deregister", async (c: Context) => {
     })
   );
   return c.json({ deregistered: true });
+});
+
+// ── Advanced LB Settings ──────────────────────────────────
+
+router.put("/load-balancers/:arn/security-groups", async (c: Context) => {
+  const arn = decodeURIComponent(c.req.param("arn") || "");
+  const body = await c.req.json<{ securityGroups: string[] }>();
+  if (!body.securityGroups?.length) return c.json({ error: "securityGroups is required" }, 400);
+  const client = getClient();
+  await client.send(new SetSecurityGroupsCommand({ LoadBalancerArn: arn, SecurityGroups: body.securityGroups }));
+  return c.json({ loadBalancerArn: arn, updated: true });
+});
+
+router.put("/load-balancers/:arn/subnets", async (c: Context) => {
+  const arn = decodeURIComponent(c.req.param("arn") || "");
+  const body = await c.req.json<{ subnets: string[] }>();
+  if (!body.subnets?.length) return c.json({ error: "subnets is required" }, 400);
+  const client = getClient();
+  await client.send(new SetSubnetsCommand({ LoadBalancerArn: arn, Subnets: body.subnets }));
+  return c.json({ loadBalancerArn: arn, updated: true });
+});
+
+router.put("/load-balancers/:arn/ip-address-type", async (c: Context) => {
+  const arn = decodeURIComponent(c.req.param("arn") || "");
+  const body = await c.req.json<{ ipAddressType: string }>();
+  if (!body.ipAddressType) return c.json({ error: "ipAddressType is required" }, 400);
+  const client = getClient();
+  await client.send(new SetIpAddressTypeCommand({ LoadBalancerArn: arn, IpAddressType: body.ipAddressType as any }));
+  return c.json({ loadBalancerArn: arn, ipAddressType: body.ipAddressType, updated: true });
+});
+
+// ── SSL Policies ──────────────────────────────────────────
+
+router.get("/ssl-policies", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new DescribeSSLPoliciesCommand({}));
+  const policies = (result.SslPolicies || []).map((p) => ({
+    name: p.Name,
+    sslProtocols: p.SslProtocols || [],
+    ciphers: p.Ciphers || [],
+  }));
+  return c.json({ sslPolicies: policies, total: policies.length });
+});
+
+// ── Listener Certificates ─────────────────────────────────
+
+router.get("/listeners/:arn/certificates", async (c: Context) => {
+  const arn = decodeURIComponent(c.req.param("arn") || "");
+  const client = getClient();
+  const result = await client.send(new DescribeListenerCertificatesCommand({ ListenerArn: arn }));
+  return c.json({ certificates: result.Certificates || [], total: result.Certificates?.length || 0 });
+});
+
+router.post("/listeners/:arn/certificates", async (c: Context) => {
+  const arn = decodeURIComponent(c.req.param("arn") || "");
+  const body = await c.req.json<{ certificateArn: string }>();
+  if (!body.certificateArn) return c.json({ error: "certificateArn is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new AddListenerCertificatesCommand({
+      ListenerArn: arn,
+      Certificates: [{ CertificateArn: body.certificateArn }],
+    })
+  );
+  return c.json({ listenerArn: arn, added: true });
+});
+
+router.post("/listeners/:arn/certificates/remove", async (c: Context) => {
+  const arn = decodeURIComponent(c.req.param("arn") || "");
+  const body = await c.req.json<{ certificateArn: string }>();
+  if (!body.certificateArn) return c.json({ error: "certificateArn is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new RemoveListenerCertificatesCommand({
+      ListenerArn: arn,
+      Certificates: [{ CertificateArn: body.certificateArn }],
+    })
+  );
+  return c.json({ listenerArn: arn, removed: true });
+});
+
+// ── Listener Attributes ───────────────────────────────────
+
+router.put("/listeners/:arn/attributes", async (c: Context) => {
+  const arn = decodeURIComponent(c.req.param("arn") || "");
+  const body = await c.req.json<{ attributes: Record<string, string> }>();
+  if (!body.attributes || !Object.keys(body.attributes).length) {
+    return c.json({ error: "attributes are required" }, 400);
+  }
+  const client = getClient();
+  const attributes = Object.entries(body.attributes).map(([Key, Value]) => ({ Key, Value }));
+  await client.send(new ModifyListenerAttributesCommand({ ListenerArn: arn, Attributes: attributes }));
+  return c.json({ listenerArn: arn, updated: true });
+});
+
+// ── Target Group Attributes ───────────────────────────────
+
+router.put("/target-groups/:arn/attributes", async (c: Context) => {
+  const arn = decodeURIComponent(c.req.param("arn") || "");
+  const body = await c.req.json<{ attributes: Record<string, string> }>();
+  if (!body.attributes || !Object.keys(body.attributes).length) {
+    return c.json({ error: "attributes are required" }, 400);
+  }
+  const client = getClient();
+  const attributes = Object.entries(body.attributes).map(([Key, Value]) => ({ Key, Value }));
+  await client.send(new ModifyTargetGroupAttributesCommand({ TargetGroupArn: arn, Attributes: attributes }));
+  return c.json({ targetGroupArn: arn, updated: true });
+});
+
+// ── Account Limits ────────────────────────────────────────
+
+router.get("/account-limits", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new DescribeAccountLimitsCommand({}));
+  const limits = (result.Limits || []).map((l) => ({
+    name: l.Name,
+    max: l.Max,
+  }));
+  return c.json({ limits, total: limits.length });
 });
 
 // ── Tags ──────────────────────────────────────────────────

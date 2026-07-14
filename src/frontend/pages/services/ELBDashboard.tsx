@@ -164,6 +164,18 @@ import {
   useELBListeners,
   useELBCreateListener,
   useELBDeleteListener,
+  useELBSetSecurityGroups,
+  useELBSetSubnets,
+  useELBSetIpAddressType,
+  useELBSSLPolicies,
+  useELBListenerCertificates,
+  useELBAddListenerCertificate,
+  useELBRemoveListenerCertificate,
+  useELBListenerAttributes,
+  useELBModifyListenerAttributes,
+  useELBTargetGroupAttributes,
+  useELBModifyTargetGroupAttributes,
+  useELBAccountLimits,
 } from "../../hooks/useELB";
 import {
   useSESIdentities,
@@ -520,6 +532,32 @@ export function ELBDashboard() {
   const [tgProtocol, setTGProtocol] = useState<SelectProps.Option>({ label: "HTTP", value: "HTTP" });
   const [tgPort, setTGPort] = useState("80");
 
+  // ── Advanced Settings State ──
+  const [selectedLBArn, setSelectedLBArn] = useState<string | null>(null);
+  const [selectedListenerArn, setSelectedListenerArn] = useState<string | null>(null);
+  const [selectedTGArn, setSelectedTGArn] = useState<string | null>(null);
+  const [sgList, setSgList] = useState("");
+  const [subnetList, setSubnetList] = useState("");
+  const [ipType, setIpType] = useState("");
+  const [certArn, setCertArn] = useState("");
+  const [showSgModal, setShowSgModal] = useState(false);
+  const [showSubnetModal, setShowSubnetModal] = useState(false);
+  const [showIpModal, setShowIpModal] = useState(false);
+  const [showCertModal, setShowCertModal] = useState(false);
+  const setSgs = useELBSetSecurityGroups();
+  const setSubnets = useELBSetSubnets();
+  const setIpAddrType = useELBSetIpAddressType();
+  const sslPolicies = useELBSSLPolicies();
+  const listenerCerts = useELBListenerCertificates(selectedListenerArn);
+  const addCert = useELBAddListenerCertificate();
+  const removeCert = useELBRemoveListenerCertificate();
+  const listenerAttrs = useELBListenerAttributes(selectedListenerArn);
+  const modifyListenerAttrs = useELBModifyListenerAttributes();
+  const tgAttrs = useELBTargetGroupAttributes(selectedTGArn);
+  const modifyTgAttrs = useELBModifyTargetGroupAttributes();
+  const accountLimits = useELBAccountLimits();
+  const selectedLBListeners = useELBListeners(selectedLBArn);
+
   const PROTOCOL_OPTIONS: SelectProps.Option[] = [
     { label: "HTTP", value: "HTTP" },
     { label: "HTTPS", value: "HTTPS" },
@@ -732,6 +770,236 @@ export function ELBDashboard() {
                 </Form>
               </Modal>
             </>
+          ),
+        },
+        {
+          id: "advanced",
+          label: "Advanced",
+          content: (
+            <SpaceBetween size="l">
+              {/* SSL Policies */}
+              <Container header={<Header variant="h2" counter={sslPolicies.data?.total}>SSL Policies</Header>}>
+                <ResourceTable
+                  resourceName="SSL Policy"
+                  items={(sslPolicies.data?.sslPolicies || []).map((p: any) => ({
+                    name: p.name,
+                    sslProtocols: (p.sslProtocols || []).join(", "),
+                    ciphers: (p.ciphers || []).length + " ciphers",
+                  }))}
+                  columns={[
+                    { id: "name", header: "Name", cell: (item: any) => item.name, isRowHeader: true },
+                    { id: "protocols", header: "SSL Protocols", cell: (item: any) => item.sslProtocols },
+                    { id: "ciphers", header: "Ciphers", cell: (item: any) => item.ciphers },
+                  ]}
+                  loading={sslPolicies.isLoading}
+                  emptyMessage="No SSL policies found"
+                />
+              </Container>
+
+              {/* Account Limits */}
+              <Container header={<Header variant="h2" counter={accountLimits.data?.total}>Account Limits</Header>}>
+                <ResourceTable
+                  resourceName="Limit"
+                  items={(accountLimits.data?.limits || []).map((l: any) => ({
+                    name: l.name,
+                    max: l.max,
+                  }))}
+                  columns={[
+                    { id: "name", header: "Limit", cell: (item: any) => item.name, isRowHeader: true },
+                    { id: "max", header: "Maximum", cell: (item: any) => item.max },
+                  ]}
+                  loading={accountLimits.isLoading}
+                  emptyMessage="No limits found"
+                />
+              </Container>
+
+              {/* LB Advanced Settings */}
+              <Container header={<Header variant="h2">Load Balancer Advanced Settings</Header>}>
+                <SpaceBetween size="m">
+                  <FormField label="Select Load Balancer">
+                    <Select
+                      selectedOption={selectedLBArn ? { label: selectedLBArn, value: selectedLBArn } : null}
+                      onChange={({ detail }) => setSelectedLBArn(detail.selectedOption?.value || null)}
+                      options={(lbs?.loadBalancers || []).map((lb: any) => ({
+                        label: lb.loadBalancerName + " (" + lb.loadBalancerArn + ")",
+                        value: lb.loadBalancerArn,
+                      }))}
+                      placeholder="Select a load balancer..."
+                    />
+                  </FormField>
+
+                  {selectedLBArn && (
+                    <SpaceBetween size="l">
+                      {/* Security Groups */}
+                      <Box>
+                        <Header variant="h3" actions={<Button onClick={() => setShowSgModal(true)}>Edit</Button>}>
+                          Security Groups
+                        </Header>
+                        <Button variant="link" onClick={() => setShowSgModal(true)}>Set security groups</Button>
+                      </Box>
+
+                      {/* Subnets */}
+                      <Box>
+                        <Header variant="h3" actions={<Button onClick={() => setShowSubnetModal(true)}>Edit</Button>}>
+                          Subnets
+                        </Header>
+                        <Button variant="link" onClick={() => setShowSubnetModal(true)}>Set subnets</Button>
+                      </Box>
+
+                      {/* IP Address Type */}
+                      <Box>
+                        <Header variant="h3">IP Address Type</Header>
+                        <SpaceBetween direction="horizontal" size="xs">
+                          <Button onClick={() => setIpAddrType.mutate({ arn: selectedLBArn, ipAddressType: "ipv4" })}>
+                            Set IPv4
+                          </Button>
+                          <Button onClick={() => setIpAddrType.mutate({ arn: selectedLBArn, ipAddressType: "dualstack" })}>
+                            Set Dualstack
+                          </Button>
+                        </SpaceBetween>
+                      </Box>
+
+                      {/* Listeners + Certificates */}
+                      <Box>
+                        <Header variant="h3">Listeners</Header>
+                        {selectedLBListeners.data?.listeners?.length ? (
+                          <SpaceBetween size="s">
+                            {selectedLBListeners.data.listeners.map((l: any) => (
+                              <Box key={l.listenerArn}>
+                                <Box variant="awsui-key-label">{l.protocol}:{l.port}</Box>
+                                <SpaceBetween direction="horizontal" size="xs">
+                                  <Button variant="link" onClick={() => {
+                                    setSelectedListenerArn(l.listenerArn);
+                                    setSelectedTGArn(null);
+                                  }}>
+                                    Certificates
+                                  </Button>
+                                  <Button variant="link" onClick={() => {
+                                    setSelectedListenerArn(l.listenerArn);
+                                    setSelectedTGArn(null);
+                                  }}>
+                                    Attributes
+                                  </Button>
+                                </SpaceBetween>
+                              </Box>
+                            ))}
+                          </SpaceBetween>
+                        ) : (
+                          <Box variant="small" color="text-status-inactive">No listeners found.</Box>
+                        )}
+                      </Box>
+
+                      {/* Listener Certificates */}
+                      {selectedListenerArn && listenerCerts.data && (
+                        <Box>
+                          <Header variant="h3" actions={<Button onClick={() => setShowCertModal(true)}>Add certificate</Button>}>
+                            Listener Certificates
+                          </Header>
+                          {(listenerCerts.data.certificates || []).length === 0 ? (
+                            <Box variant="small" color="text-status-inactive">No certificates</Box>
+                          ) : (
+                            <SpaceBetween size="xs">
+                              {listenerCerts.data.certificates.map((c: any) => (
+                                <Box key={c.CertificateArn}>
+                                  <Box variant="small">{c.CertificateArn}</Box>
+                                  <DeleteButton
+                                    itemName={c.CertificateArn}
+                                    resourceType="certificate"
+                                    onDelete={() => removeCert.mutateAsync({ listenerArn: selectedListenerArn, certificateArn: c.CertificateArn })}
+                                  />
+                                </Box>
+                              ))}
+                            </SpaceBetween>
+                          )}
+                        </Box>
+                      )}
+
+                      {/* Listener Attributes */}
+                      {selectedListenerArn && listenerAttrs.data && (
+                        <Box>
+                          <Header variant="h3">Listener Attributes</Header>
+                          <Box variant="small">
+                            {JSON.stringify(listenerAttrs.data.attributes, null, 2)}
+                          </Box>
+                        </Box>
+                      )}
+                    </SpaceBetween>
+                  )}
+                </SpaceBetween>
+              </Container>
+
+              {/* Target Group Attributes */}
+              <Container header={<Header variant="h2">Target Group Attributes</Header>}>
+                <SpaceBetween size="m">
+                  <FormField label="Select Target Group">
+                    <Select
+                      selectedOption={selectedTGArn ? { label: selectedTGArn, value: selectedTGArn } : null}
+                      onChange={({ detail }) => setSelectedTGArn(detail.selectedOption?.value || null)}
+                      options={(tgs?.targetGroups || []).map((tg: any) => ({
+                        label: tg.targetGroupName,
+                        value: tg.targetGroupArn,
+                      }))}
+                      placeholder="Select a target group..."
+                    />
+                  </FormField>
+                  {selectedTGArn && tgAttrs.data && (
+                    <Box variant="small">
+                      <pre>{JSON.stringify(tgAttrs.data.attributes, null, 2)}</pre>
+                    </Box>
+                  )}
+                </SpaceBetween>
+              </Container>
+
+              {/* Modals */}
+              {showSgModal && (
+                <Modal visible onDismiss={() => setShowSgModal(false)} header="Set Security Groups" size="medium" footer={
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <Button variant="link" onClick={() => setShowSgModal(false)}>Cancel</Button>
+                    <Button variant="primary" loading={setSgs.isPending} onClick={() => {
+                      if (selectedLBArn && sgList.trim()) {
+                        setSgs.mutate({ arn: selectedLBArn, securityGroups: sgList.split(/[,\n]+/).map((s: string) => s.trim()).filter(Boolean) }, { onSuccess: () => setShowSgModal(false) });
+                      }
+                    }} disabled={!sgList.trim()}>Save</Button>
+                  </SpaceBetween>
+                }>
+                  <FormField label="Security Group IDs" description="Comma or newline separated">
+                    <Textarea value={sgList} onChange={({ detail }) => setSgList(detail.value)} placeholder="sg-12345678" rows={3} />
+                  </FormField>
+                </Modal>
+              )}
+              {showSubnetModal && (
+                <Modal visible onDismiss={() => setShowSubnetModal(false)} header="Set Subnets" size="medium" footer={
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <Button variant="link" onClick={() => setShowSubnetModal(false)}>Cancel</Button>
+                    <Button variant="primary" loading={setSubnets.isPending} onClick={() => {
+                      if (selectedLBArn && subnetList.trim()) {
+                        setSubnets.mutate({ arn: selectedLBArn, subnets: subnetList.split(/[,\n]+/).map((s: string) => s.trim()).filter(Boolean) }, { onSuccess: () => setShowSubnetModal(false) });
+                      }
+                    }} disabled={!subnetList.trim()}>Save</Button>
+                  </SpaceBetween>
+                }>
+                  <FormField label="Subnet IDs" description="Comma or newline separated">
+                    <Textarea value={subnetList} onChange={({ detail }) => setSubnetList(detail.value)} placeholder="subnet-12345678" rows={3} />
+                  </FormField>
+                </Modal>
+              )}
+              {showCertModal && (
+                <Modal visible onDismiss={() => setShowCertModal(false)} header="Add Listener Certificate" size="medium" footer={
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <Button variant="link" onClick={() => setShowCertModal(false)}>Cancel</Button>
+                    <Button variant="primary" loading={addCert.isPending} onClick={() => {
+                      if (selectedListenerArn && certArn.trim()) {
+                        addCert.mutate({ listenerArn: selectedListenerArn, certificateArn: certArn.trim() }, { onSuccess: () => { setShowCertModal(false); setCertArn(""); } });
+                      }
+                    }} disabled={!certArn.trim()}>Add</Button>
+                  </SpaceBetween>
+                }>
+                  <FormField label="Certificate ARN">
+                    <Input value={certArn} onChange={({ detail }) => setCertArn(detail.value)} placeholder="arn:aws:acm:..." />
+                  </FormField>
+                </Modal>
+              )}
+            </SpaceBetween>
           ),
         },
       ]}

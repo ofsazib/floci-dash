@@ -23,6 +23,18 @@ import {
   useELBDeleteListener,
   useELBRegisterTargets,
   useELBDeregisterTargets,
+  useELBSetSecurityGroups,
+  useELBSetSubnets,
+  useELBSetIpAddressType,
+  useELBSSLPolicies,
+  useELBListenerCertificates,
+  useELBAddListenerCertificate,
+  useELBRemoveListenerCertificate,
+  useELBListenerAttributes,
+  useELBModifyListenerAttributes,
+  useELBTargetGroupAttributes,
+  useELBModifyTargetGroupAttributes,
+  useELBAccountLimits,
 } from "./useELB";
 
 const LB_ARN = "arn:aws:elasticloadbalancing:us-east-1:123:loadbalancer/my-lb";
@@ -235,5 +247,151 @@ describe("useELBTargetHealth", () => {
     expect(mockApi).toHaveBeenCalledWith(
       `/aws/elasticloadbalancing/target-groups/${ENC_TG}/health`
     );
+  });
+});
+
+// ─── ADVANCED LB SETTINGS ─────────────────────────────────
+
+describe("useELBSetSecurityGroups", () => {
+  it("calls api with PUT method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useELBSetSecurityGroups(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ arn: LB_ARN, securityGroups: ["sg-1"] });
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/elasticloadbalancing/load-balancers/${ENC_LB}/security-groups`,
+      expect.objectContaining({ method: "PUT" })
+    );
+  });
+});
+
+describe("useELBSetSubnets", () => {
+  it("calls api with PUT method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useELBSetSubnets(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ arn: LB_ARN, subnets: ["subnet-1"] });
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/elasticloadbalancing/load-balancers/${ENC_LB}/subnets`,
+      expect.objectContaining({ method: "PUT" })
+    );
+  });
+});
+
+describe("useELBSetIpAddressType", () => {
+  it("calls api with PUT method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useELBSetIpAddressType(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ arn: LB_ARN, ipAddressType: "dualstack" });
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/elasticloadbalancing/load-balancers/${ENC_LB}/ip-address-type`,
+      expect.objectContaining({ method: "PUT" })
+    );
+  });
+});
+
+describe("useELBSSLPolicies", () => {
+  it("calls api with correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ sslPolicies: [], total: 0 });
+    const { result } = renderHook(() => useELBSSLPolicies(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/elasticloadbalancing/ssl-policies");
+  });
+});
+
+describe("useELBListenerCertificates", () => {
+  it("does NOT call api when listenerArn is null", () => {
+    renderHook(() => useELBListenerCertificates(null), { wrapper: createWrapper() });
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api when listenerArn provided", async () => {
+    mockApi.mockResolvedValueOnce({ certificates: [], total: 0 });
+    const { result } = renderHook(() => useELBListenerCertificates(LB_ARN), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(`/aws/elasticloadbalancing/listeners/${ENC_LB}/certificates`);
+  });
+});
+
+describe("useELBAddListenerCertificate", () => {
+  it("calls api with POST method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useELBAddListenerCertificate(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ listenerArn: LB_ARN, certificateArn: "arn:acm:cert1" });
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/elasticloadbalancing/listeners/${ENC_LB}/certificates`,
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+});
+
+describe("useELBRemoveListenerCertificate", () => {
+  it("calls api with POST method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useELBRemoveListenerCertificate(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ listenerArn: LB_ARN, certificateArn: "arn:acm:cert1" });
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/elasticloadbalancing/listeners/${ENC_LB}/certificates/remove`,
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+});
+
+describe("useELBListenerAttributes", () => {
+  it("does NOT call api when listenerArn is null", () => {
+    renderHook(() => useELBListenerAttributes(null), { wrapper: createWrapper() });
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api when provided", async () => {
+    mockApi.mockResolvedValueOnce({ listenerArn: "arn", attributes: {} });
+    const { result } = renderHook(() => useELBListenerAttributes(LB_ARN), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(`/aws/elasticloadbalancing/listeners/${ENC_LB}/attributes`);
+  });
+});
+
+describe("useELBModifyListenerAttributes", () => {
+  it("calls api with PUT method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useELBModifyListenerAttributes(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ arn: LB_ARN, attributes: { key: "val" } });
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/elasticloadbalancing/listeners/${ENC_LB}/attributes`,
+      expect.objectContaining({ method: "PUT" })
+    );
+  });
+});
+
+describe("useELBTargetGroupAttributes", () => {
+  it("does NOT call api when tgArn is null", () => {
+    renderHook(() => useELBTargetGroupAttributes(null), { wrapper: createWrapper() });
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api when provided", async () => {
+    mockApi.mockResolvedValueOnce({ targetGroupArn: "arn", attributes: {} });
+    const { result } = renderHook(() => useELBTargetGroupAttributes(TG_ARN), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(`/aws/elasticloadbalancing/target-groups/${ENC_TG}/attributes`);
+  });
+});
+
+describe("useELBModifyTargetGroupAttributes", () => {
+  it("calls api with PUT method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useELBModifyTargetGroupAttributes(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ arn: TG_ARN, attributes: { key: "val" } });
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/elasticloadbalancing/target-groups/${ENC_TG}/attributes`,
+      expect.objectContaining({ method: "PUT" })
+    );
+  });
+});
+
+describe("useELBAccountLimits", () => {
+  it("calls api with correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ limits: [], total: 0 });
+    const { result } = renderHook(() => useELBAccountLimits(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/elasticloadbalancing/account-limits");
   });
 });
