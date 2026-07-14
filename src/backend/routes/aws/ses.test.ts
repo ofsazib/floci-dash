@@ -29,6 +29,10 @@ vi.mock("@aws-sdk/client-ses", () => ({
   SetIdentityMailFromDomainCommand: createCmd("SetIdentityMailFromDomainCommand"),
   GetIdentityMailFromDomainAttributesCommand: createCmd("GetIdentityMailFromDomainAttributesCommand"),
   ListVerifiedEmailAddressesCommand: createCmd("ListVerifiedEmailAddressesCommand"),
+  GetIdentityNotificationAttributesCommand: createCmd("GetIdentityNotificationAttributesCommand"),
+  SetIdentityNotificationTopicCommand: createCmd("SetIdentityNotificationTopicCommand"),
+  SetIdentityFeedbackForwardingEnabledCommand: createCmd("SetIdentityFeedbackForwardingEnabledCommand"),
+  SetIdentityHeadersInNotificationsEnabledCommand: createCmd("SetIdentityHeadersInNotificationsEnabledCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -259,6 +263,128 @@ describe("SES Routes", () => {
       const body = await res.json();
       expect(body.total).toBe(0);
       expect(body.emails).toEqual([]);
+    });
+  });
+
+  describe("Notification Attributes", () => {
+    it("GET /identities/:value/notification-attributes — returns attributes", async () => {
+      mockSend.mockResolvedValueOnce({
+        NotificationAttributes: {
+          "test@example.com": {
+            BounceTopic: { TopicArn: "arn:sns:bounce" },
+            ComplaintTopic: { TopicArn: "arn:sns:complaint" },
+            DeliveryTopic: null,
+            ForwardingEnabled: true,
+            HeadersInBounceNotificationsEnabled: true,
+            HeadersInComplaintNotificationsEnabled: false,
+            HeadersInDeliveryNotificationsEnabled: true,
+          },
+        },
+      });
+      const res = await get("/identities/test%40example.com/notification-attributes");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.identity).toBe("test@example.com");
+      expect(body.bounceTopic.TopicArn).toBe("arn:sns:bounce");
+      expect(body.deliveryTopic).toBeNull();
+      expect(body.forwardingEnabled).toBe(true);
+      expect(body.headersInBounceNotifications).toBe(true);
+      expect(body.headersInComplaintNotifications).toBe(false);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetIdentityNotificationAttributesCommand");
+    });
+
+    it("GET /identities/:value/notification-attributes — returns nulls when no attrs", async () => {
+      mockSend.mockResolvedValueOnce({ NotificationAttributes: {} });
+      const res = await get("/identities/test%40example.com/notification-attributes");
+      const body = await res.json();
+      expect(body.bounceTopic).toBeNull();
+      expect(body.complaintTopic).toBeNull();
+      expect(body.deliveryTopic).toBeNull();
+      expect(body.forwardingEnabled).toBe(true); // defaults to true
+    });
+  });
+
+  describe("Set Notification Topic", () => {
+    it("PUT /identities/:value/notification-topic — sets topic", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/identities/test%40example.com/notification-topic", {
+        notificationType: "Bounce",
+        snsTopic: "arn:sns:bounce",
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+      expect(body.notificationType).toBe("Bounce");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("SetIdentityNotificationTopicCommand");
+      expect(mockSend.mock.calls[0][0].NotificationType).toBe("Bounce");
+      expect(mockSend.mock.calls[0][0].SnsTopic).toBe("arn:sns:bounce");
+    });
+
+    it("PUT /identities/:value/notification-topic — clears topic when snsTopic omitted", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/identities/test%40example.com/notification-topic", {
+        notificationType: "Delivery",
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].SnsTopic).toBeUndefined();
+    });
+
+    it("PUT /identities/:value/notification-topic — 400 when notificationType missing", async () => {
+      const res = await put("/identities/test%40example.com/notification-topic", { snsTopic: "arn:sns:bounce" });
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe("Feedback Forwarding", () => {
+    it("PUT /identities/:value/feedback-forwarding — enables forwarding", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/identities/test%40example.com/feedback-forwarding", { forwardingEnabled: true });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.forwardingEnabled).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("SetIdentityFeedbackForwardingEnabledCommand");
+      expect(mockSend.mock.calls[0][0].ForwardingEnabled).toBe(true);
+    });
+
+    it("PUT /identities/:value/feedback-forwarding — disables forwarding", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/identities/test%40example.com/feedback-forwarding", { forwardingEnabled: false });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].ForwardingEnabled).toBe(false);
+    });
+
+    it("PUT /identities/:value/feedback-forwarding — 400 when forwardingEnabled not boolean", async () => {
+      const res = await put("/identities/test%40example.com/feedback-forwarding", { forwardingEnabled: "true" });
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe("Headers in Notifications", () => {
+    it("PUT /identities/:value/headers-in-notifications — enables headers", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/identities/test%40example.com/headers-in-notifications", {
+        notificationType: "Bounce",
+        enabled: true,
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.enabled).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("SetIdentityHeadersInNotificationsEnabledCommand");
+      expect(mockSend.mock.calls[0][0].NotificationType).toBe("Bounce");
+      expect(mockSend.mock.calls[0][0].Enabled).toBe(true);
+    });
+
+    it("PUT /identities/:value/headers-in-notifications — 400 when notificationType missing", async () => {
+      const res = await put("/identities/test%40example.com/headers-in-notifications", { enabled: true });
+      expect(res.status).toBe(400);
+    });
+
+    it("PUT /identities/:value/headers-in-notifications — 400 when enabled not boolean", async () => {
+      const res = await put("/identities/test%40example.com/headers-in-notifications", {
+        notificationType: "Complaint",
+        enabled: 1,
+      });
+      expect(res.status).toBe(400);
     });
   });
 });

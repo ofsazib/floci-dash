@@ -14,6 +14,10 @@ import {
   SetIdentityMailFromDomainCommand,
   GetIdentityMailFromDomainAttributesCommand,
   ListVerifiedEmailAddressesCommand,
+  GetIdentityNotificationAttributesCommand,
+  SetIdentityNotificationTopicCommand,
+  SetIdentityFeedbackForwardingEnabledCommand,
+  SetIdentityHeadersInNotificationsEnabledCommand,
 } from "@aws-sdk/client-ses";
 
 const router = new Hono();
@@ -120,6 +124,75 @@ router.put("/identities/:value/mail-from", async (c: Context) => {
     })
   );
   return c.json({ identity: value, mailFromDomain: body.mailFromDomain });
+});
+
+// ── Notification Attributes ─────────────────────────────
+
+router.get("/identities/:value/notification-attributes", async (c: Context) => {
+  const value = decodeURIComponent(c.req.param("value") || "");
+  const client = getClient();
+  const result = await client.send(
+    new GetIdentityNotificationAttributesCommand({ Identities: [value] })
+  );
+  const attrs = result.NotificationAttributes?.[value];
+  return c.json({
+    identity: value,
+    bounceTopic: attrs?.BounceTopic || null,
+    complaintTopic: attrs?.ComplaintTopic || null,
+    deliveryTopic: attrs?.DeliveryTopic || null,
+    forwardingEnabled: attrs?.ForwardingEnabled ?? true,
+    headersInBounceNotifications: attrs?.HeadersInBounceNotificationsEnabled,
+    headersInComplaintNotifications: attrs?.HeadersInComplaintNotificationsEnabled,
+    headersInDeliveryNotifications: attrs?.HeadersInDeliveryNotificationsEnabled,
+  });
+});
+
+router.put("/identities/:value/notification-topic", async (c: Context) => {
+  const value = decodeURIComponent(c.req.param("value") || "");
+  const body = await c.req.json<{ notificationType: string; snsTopic?: string }>();
+  if (!body.notificationType) return c.json({ error: "notificationType is required" }, 400);
+
+  const client = getClient();
+  const result = await client.send(
+    new SetIdentityNotificationTopicCommand({
+      Identity: value,
+      NotificationType: body.notificationType as any,
+      SnsTopic: body.snsTopic,
+    })
+  );
+  return c.json({ identity: value, notificationType: body.notificationType, updated: true });
+});
+
+router.put("/identities/:value/feedback-forwarding", async (c: Context) => {
+  const value = decodeURIComponent(c.req.param("value") || "");
+  const body = await c.req.json<{ forwardingEnabled: boolean }>();
+  if (typeof body.forwardingEnabled !== "boolean") return c.json({ error: "forwardingEnabled (boolean) is required" }, 400);
+
+  const client = getClient();
+  await client.send(
+    new SetIdentityFeedbackForwardingEnabledCommand({
+      Identity: value,
+      ForwardingEnabled: body.forwardingEnabled,
+    })
+  );
+  return c.json({ identity: value, forwardingEnabled: body.forwardingEnabled, updated: true });
+});
+
+router.put("/identities/:value/headers-in-notifications", async (c: Context) => {
+  const value = decodeURIComponent(c.req.param("value") || "");
+  const body = await c.req.json<{ notificationType: string; enabled: boolean }>();
+  if (!body.notificationType) return c.json({ error: "notificationType is required" }, 400);
+  if (typeof body.enabled !== "boolean") return c.json({ error: "enabled (boolean) is required" }, 400);
+
+  const client = getClient();
+  await client.send(
+    new SetIdentityHeadersInNotificationsEnabledCommand({
+      Identity: value,
+      NotificationType: body.notificationType as any,
+      Enabled: body.enabled,
+    })
+  );
+  return c.json({ identity: value, notificationType: body.notificationType, enabled: body.enabled, updated: true });
 });
 
 // ── Send Email ────────────────────────────────────────────

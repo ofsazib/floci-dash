@@ -172,6 +172,12 @@ import {
   useSESDeleteIdentity,
   useSESSendEmail,
   useSESVerifiedEmails,
+  useSESNotificationAttributes,
+  useSESSetNotificationTopic,
+  useSESSetFeedbackForwarding,
+  useSESSetHeadersInNotifications,
+  useSESSetDkimEnabled,
+  useSESSetMailFromDomain,
 } from "../../hooks/useSES";
 import {
   useSTSCallerIdentity,
@@ -521,6 +527,19 @@ export function SESDashboard() {
   const [sendTo, setSendTo] = useState("");
   const [sendSubject, setSendSubject] = useState("");
   const [sendBody, setSendBody] = useState("");
+  const [selectedIdentity, setSelectedIdentity] = useState<string | null>(null);
+  const [showNotificationTopic, setShowNotificationTopic] = useState(false);
+  const [notifType, setNotifType] = useState("Bounce");
+  const [snsTopic, setSnsTopic] = useState("");
+  const notifQuery = useSESNotificationAttributes(selectedIdentity);
+  const setNotificationTopic = useSESSetNotificationTopic();
+  const setFeedbackForwarding = useSESSetFeedbackForwarding();
+  const setHeadersInNotifications = useSESSetHeadersInNotifications();
+  const setDkimEnabled = useSESSetDkimEnabled();
+  const setMailFromDomain = useSESSetMailFromDomain();
+  const [showMailFrom, setShowMailFrom] = useState(false);
+  const [mailFromInput, setMailFromInput] = useState("");
+  const selectedIdentityData = data?.identities?.find((i: any) => i.identity === selectedIdentity);
 
   if (isLoading) return <TableSkeleton />;
 
@@ -550,6 +569,15 @@ export function SESDashboard() {
           { id: "dkim", header: "DKIM", cell: (item: any) => item.dkim },
           { id: "mailFrom", header: "Mail From", cell: (item: any) => item.mailFrom },
           {
+            id: "notifications",
+            header: "",
+            cell: (item: any) => (
+              <Button variant="link" onClick={() => setSelectedIdentity(item.identity)}>
+                Notifications
+              </Button>
+            ),
+          },
+          {
             id: "actions",
             header: "",
             cell: (item: any) => (
@@ -575,6 +603,149 @@ export function SESDashboard() {
               <div key={email}>{email}</div>
             ))}
           </Box>
+        </Container>
+      )}
+
+      {/* ── Identity Notification Detail ── */}
+      {selectedIdentity && (
+        <Container
+          header={
+            <Header
+              variant="h2"
+              actions={<Button variant="link" onClick={() => setSelectedIdentity(null)}>Close</Button>}
+            >
+              Identity Details: {selectedIdentity}
+            </Header>
+          }
+        >
+          {notifQuery.isLoading ? (
+            <Spinner />
+          ) : notifQuery.data ? (
+            <SpaceBetween size="l">
+              {/* Notification Topics */}
+              <Box>
+                <Header variant="h3">Notification Topics</Header>
+                <SpaceBetween size="s" direction="horizontal">
+                  {(["Bounce", "Complaint", "Delivery"] as const).map((type) => {
+                    const key = type.toLowerCase() + "Topic" as keyof typeof notifQuery.data;
+                    const topic = notifQuery.data[key];
+                    return (
+                      <Box key={type}>
+                        <Box variant="awsui-key-label">{type}</Box>
+                        <Box variant="small" color={topic ? "text-status-success" : "text-status-inactive"}>
+                          {topic ? topic.TopicArn || "(set)" : "Not configured"}
+                        </Box>
+                        <Button
+                          variant="link"
+                          onClick={() => {
+                            setNotifType(type);
+                            setSnsTopic(topic?.TopicArn || "");
+                            setShowNotificationTopic(true);
+                          }}
+                        >
+                          {topic ? "Edit" : "Set"}
+                        </Button>
+                      </Box>
+                    );
+                  })}
+                </SpaceBetween>
+              </Box>
+
+              {/* Feedback Forwarding */}
+              <Box>
+                <Header variant="h3">Feedback Forwarding</Header>
+                <SpaceBetween direction="horizontal" size="xs">
+                  <StatusIndicator type={notifQuery.data.forwardingEnabled ? "success" : "stopped"}>
+                    {notifQuery.data.forwardingEnabled ? "Enabled" : "Disabled"}
+                  </StatusIndicator>
+                  <Button
+                    variant="link"
+                    onClick={() =>
+                      setFeedbackForwarding.mutate({
+                        identity: selectedIdentity,
+                        forwardingEnabled: !notifQuery.data.forwardingEnabled,
+                      })
+                    }
+                  >
+                    {notifQuery.data.forwardingEnabled ? "Disable" : "Enable"}
+                  </Button>
+                </SpaceBetween>
+              </Box>
+
+              {/* DKIM */}
+              <Box>
+                <Header variant="h3">DKIM Signing</Header>
+                <SpaceBetween direction="horizontal" size="xs">
+                  <StatusIndicator type={selectedIdentityData?.dkimEnabled ? "success" : "stopped"}>
+                    {selectedIdentityData?.dkimEnabled ? "Enabled" : "Disabled"}
+                  </StatusIndicator>
+                  <Button
+                    variant="link"
+                    onClick={() =>
+                      setDkimEnabled.mutate({
+                        identity: selectedIdentity,
+                        enabled: !selectedIdentityData?.dkimEnabled,
+                      })
+                    }
+                  >
+                    {selectedIdentityData?.dkimEnabled ? "Disable" : "Enable"}
+                  </Button>
+                </SpaceBetween>
+              </Box>
+
+              {/* MAIL FROM */}
+              <Box>
+                <Header variant="h3">MAIL FROM Domain</Header>
+                <SpaceBetween direction="horizontal" size="xs">
+                  <StatusIndicator type={selectedIdentityData?.mailFromDomain && selectedIdentityData.mailFromDomain !== "-" ? "success" : "stopped"}>
+                    {selectedIdentityData?.mailFromDomain || "Not configured"}
+                  </StatusIndicator>
+                  <Button
+                    variant="link"
+                    onClick={() => {
+                      setMailFromInput(selectedIdentityData?.mailFromDomain || "");
+                      setShowMailFrom(true);
+                    }}
+                  >
+                    {selectedIdentityData?.mailFromDomain ? "Edit" : "Set"}
+                  </Button>
+                </SpaceBetween>
+              </Box>
+
+              {/* Headers in Notifications */}
+              <Box>
+                <Header variant="h3">Headers in Notifications</Header>
+                <SpaceBetween size="s" direction="horizontal">
+                  {(["Bounce", "Complaint", "Delivery"] as const).map((type) => {
+                    const headerKey = `headersIn${type}Notifications` as keyof typeof notifQuery.data;
+                    const enabled = notifQuery.data[headerKey] as boolean | undefined;
+                    return (
+                      <Box key={type}>
+                        <Box variant="awsui-key-label">{type}</Box>
+                        <StatusIndicator type={enabled ? "success" : "stopped"}>
+                          {enabled ? "Included" : "Excluded"}
+                        </StatusIndicator>
+                        <Button
+                          variant="link"
+                          onClick={() =>
+                            setHeadersInNotifications.mutate({
+                              identity: selectedIdentity,
+                              notificationType: type,
+                              enabled: !enabled,
+                            })
+                          }
+                        >
+                          {enabled ? "Exclude" : "Include"}
+                        </Button>
+                      </Box>
+                    );
+                  })}
+                </SpaceBetween>
+              </Box>
+            </SpaceBetween>
+          ) : (
+            <Alert type="error">Failed to load notification attributes.</Alert>
+          )}
         </Container>
       )}
       <Modal
@@ -710,6 +881,89 @@ export function SESDashboard() {
               value={sendBody}
               onChange={({ detail }) => setSendBody(detail.value)}
               placeholder="Hello from SES"
+            />
+          </FormField>
+        </Form>
+      </Modal>
+
+      {/* ── Set Notification Topic Modal ── */}
+      <Modal
+        visible={showNotificationTopic}
+        onDismiss={() => setShowNotificationTopic(false)}
+        header={`Set ${notifType} Notification Topic`}
+        size="medium"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowNotificationTopic(false)}>Cancel</Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  if (selectedIdentity) {
+                    setNotificationTopic.mutate(
+                      {
+                        identity: selectedIdentity,
+                        notificationType: notifType,
+                        snsTopic: snsTopic.trim() || undefined,
+                      },
+                      { onSuccess: () => setShowNotificationTopic(false) }
+                    );
+                  }
+                }}
+                loading={setNotificationTopic.isPending}
+              >
+                Save
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          <FormField label="SNS Topic ARN" description="Leave empty to clear the notification topic.">
+            <Input
+              value={snsTopic}
+              onChange={({ detail }) => setSnsTopic(detail.value)}
+              placeholder="arn:aws:sns:us-east-1:123456789:my-topic"
+            />
+          </FormField>
+        </Form>
+      </Modal>
+
+      {/* ── Set Mail From Domain Modal ── */}
+      <Modal
+        visible={showMailFrom}
+        onDismiss={() => setShowMailFrom(false)}
+        header="Set MAIL FROM Domain"
+        size="medium"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowMailFrom(false)}>Cancel</Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  if (selectedIdentity && mailFromInput.trim()) {
+                    setMailFromDomain.mutate(
+                      { identity: selectedIdentity, mailFromDomain: mailFromInput.trim() },
+                      { onSuccess: () => setShowMailFrom(false) }
+                    );
+                  }
+                }}
+                disabled={!mailFromInput.trim()}
+                loading={setMailFromDomain.isPending}
+              >
+                Save
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          <FormField label="MAIL FROM Domain" description="The domain that emails appear to come from. Leave empty to clear.">
+            <Input
+              value={mailFromInput}
+              onChange={({ detail }) => setMailFromInput(detail.value)}
+              placeholder="mail.example.com"
             />
           </FormField>
         </Form>

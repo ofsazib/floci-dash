@@ -16,6 +16,12 @@ import {
   useSESDeleteIdentity,
   useSESSendEmail,
   useSESVerifiedEmails,
+  useSESNotificationAttributes,
+  useSESSetNotificationTopic,
+  useSESSetFeedbackForwarding,
+  useSESSetHeadersInNotifications,
+  useSESSetDkimEnabled,
+  useSESSetMailFromDomain,
 } from "./useSES";
 
 function createWrapper() {
@@ -169,5 +175,115 @@ describe("useSESVerifiedEmails", () => {
     mockApi.mockRejectedValueOnce(new Error("fail"));
     const { result } = renderHook(() => useSESVerifiedEmails(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isError).toBe(true));
+  });
+});
+
+// ─── NOTIFICATION ATTRIBUTES ────────────────────────────
+
+describe("useSESNotificationAttributes", () => {
+  it("does NOT call api when identity is null", () => {
+    renderHook(() => useSESNotificationAttributes(null), { wrapper: createWrapper() });
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api with URL-encoded identity", async () => {
+    mockApi.mockResolvedValueOnce({
+      identity: "test@example.com",
+      bounceTopic: null,
+      complaintTopic: null,
+      deliveryTopic: null,
+      forwardingEnabled: true,
+    });
+    const { result } = renderHook(() => useSESNotificationAttributes("test@example.com"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/email/identities/test%40example.com/notification-attributes");
+  });
+});
+
+describe("useSESSetNotificationTopic", () => {
+  it("calls api with PUT method and body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useSESSetNotificationTopic(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({
+      identity: "test@example.com",
+      notificationType: "Bounce",
+      snsTopic: "arn:sns:bounce",
+    });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/email/identities/test%40example.com/notification-topic",
+      expect.objectContaining({ method: "PUT" })
+    );
+    const callArgs = mockApi.mock.calls[0][1];
+    expect(JSON.parse(callArgs.body)).toEqual({
+      notificationType: "Bounce",
+      snsTopic: "arn:sns:bounce",
+    });
+  });
+});
+
+describe("useSESSetFeedbackForwarding", () => {
+  it("calls api with PUT method and body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useSESSetFeedbackForwarding(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ identity: "test@example.com", forwardingEnabled: false });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/email/identities/test%40example.com/feedback-forwarding",
+      expect.objectContaining({ method: "PUT" })
+    );
+    const callArgs = mockApi.mock.calls[0][1];
+    expect(JSON.parse(callArgs.body)).toEqual({ forwardingEnabled: false });
+  });
+});
+
+describe("useSESSetHeadersInNotifications", () => {
+  it("calls api with PUT method and body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useSESSetHeadersInNotifications(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({
+      identity: "test@example.com",
+      notificationType: "Complaint",
+      enabled: true,
+    });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/email/identities/test%40example.com/headers-in-notifications",
+      expect.objectContaining({ method: "PUT" })
+    );
+    const callArgs = mockApi.mock.calls[0][1];
+    expect(JSON.parse(callArgs.body)).toEqual({
+      notificationType: "Complaint",
+      enabled: true,
+    });
+  });
+});
+
+// ─── DKIM ────────────────────────────────────────────────
+
+describe("useSESSetDkimEnabled", () => {
+  it("calls api with PUT method and body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useSESSetDkimEnabled(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ identity: "test@example.com", enabled: false });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/email/identities/test%40example.com/dkim",
+      expect.objectContaining({ method: "PUT" })
+    );
+    const callArgs = mockApi.mock.calls[0][1];
+    expect(JSON.parse(callArgs.body)).toEqual({ enabled: false });
+  });
+});
+
+// ─── MAIL FROM ───────────────────────────────────────────
+
+describe("useSESSetMailFromDomain", () => {
+  it("calls api with PUT method and body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useSESSetMailFromDomain(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ identity: "test@example.com", mailFromDomain: "mail.example.com" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/email/identities/test%40example.com/mail-from",
+      expect.objectContaining({ method: "PUT" })
+    );
+    const callArgs = mockApi.mock.calls[0][1];
+    expect(JSON.parse(callArgs.body)).toEqual({ mailFromDomain: "mail.example.com" });
   });
 });
