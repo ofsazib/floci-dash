@@ -150,3 +150,46 @@ export function useDynamoDBDeleteItem(table: string) {
       qc.invalidateQueries({ queryKey: ["aws", "dynamodb", "items", table] }),
   });
 }
+
+// ─── Kinesis Streaming ──────────────────────────────────
+
+export interface KinesisStreamingDestination {
+  streamArn: string;
+  destinationStatus: string;
+  destinationStatusDescription: string;
+}
+
+export function useDynamoDBKinesisStreaming(table: string | null) {
+  return useQuery<{ destinations: KinesisStreamingDestination[]; total: number }>({
+    queryKey: ["aws", "dynamodb", "kinesis-streaming", table],
+    queryFn: () => api(`/aws/dynamodb/tables/${table}/kinesis-streaming`),
+    enabled: !!table,
+    refetchInterval: 15000,
+  });
+}
+
+export function useDynamoDBEnableKinesisStreaming(table: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (streamArn: string) =>
+      api(`/aws/dynamodb/tables/${table}/kinesis-streaming/enable`, {
+        method: "POST",
+        body: JSON.stringify({ streamArn }),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "dynamodb", "kinesis-streaming", table] }),
+  });
+}
+
+export function useDynamoDBDisableKinesisStreaming(table: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (streamArn: string) =>
+      api(`/aws/dynamodb/tables/${table}/kinesis-streaming/disable`, {
+        method: "POST",
+        body: JSON.stringify({ streamArn }),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "dynamodb", "kinesis-streaming", table] }),
+  });
+}

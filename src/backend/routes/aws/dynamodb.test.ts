@@ -29,6 +29,9 @@ vi.mock("@aws-sdk/client-dynamodb", () => ({
   GetItemCommand: createCmd("GetItemCommand"),
   PutItemCommand: createCmd("PutItemCommand"),
   DeleteItemCommand: createCmd("DeleteItemCommand"),
+  EnableKinesisStreamingDestinationCommand: createCmd("EnableKinesisStreamingDestinationCommand"),
+  DescribeKinesisStreamingDestinationCommand: createCmd("DescribeKinesisStreamingDestinationCommand"),
+  DisableKinesisStreamingDestinationCommand: createCmd("DisableKinesisStreamingDestinationCommand"),
   KeyType: { HASH: "HASH", RANGE: "RANGE" },
   ScalarAttributeType: { S: "S", N: "N", B: "B" },
 }));
@@ -434,6 +437,72 @@ describe("DynamoDB Routes", () => {
       const res = await post("/tables/users/items/query", {});
       const body = await res.json();
       expect(body.lastEvaluatedKey).toBeDefined();
+    });
+  });
+
+  describe("Kinesis Streaming", () => {
+    it("GET /tables/:name/kinesis-streaming — describes destinations", async () => {
+      mockSend.mockResolvedValueOnce({
+        KinesisDataStreamDestinations: [
+          {
+            StreamArn: "arn:aws:kinesis:us-east-1:000000000000:stream/my-stream",
+            DestinationStatus: "ACTIVE",
+            DestinationStatusDescription: "Stream is active",
+          },
+        ],
+      });
+      const res = await get("/tables/users/kinesis-streaming");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(body.destinations[0].streamArn).toBe("arn:aws:kinesis:us-east-1:000000000000:stream/my-stream");
+      expect(body.destinations[0].destinationStatus).toBe("ACTIVE");
+    });
+
+    it("GET /tables/:name/kinesis-streaming — returns empty list", async () => {
+      mockSend.mockResolvedValueOnce({ KinesisDataStreamDestinations: [] });
+      const res = await get("/tables/users/kinesis-streaming");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.destinations).toEqual([]);
+    });
+
+    it("POST /tables/:name/kinesis-streaming/enable — enables streaming", async () => {
+      mockSend.mockResolvedValueOnce({ DestinationStatus: "ACTIVE" });
+      const res = await post("/tables/users/kinesis-streaming/enable", {
+        streamArn: "arn:aws:kinesis:us-east-1:000000000000:stream/my-stream",
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.enabled).toBe(true);
+      expect(body.destinationStatus).toBe("ACTIVE");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.TableName).toBe("users");
+      expect(cmd.StreamArn).toBe("arn:aws:kinesis:us-east-1:000000000000:stream/my-stream");
+    });
+
+    it("POST /tables/:name/kinesis-streaming/enable — 400 when streamArn missing", async () => {
+      const res = await post("/tables/users/kinesis-streaming/enable", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /tables/:name/kinesis-streaming/disable — disables streaming", async () => {
+      mockSend.mockResolvedValueOnce({ DestinationStatus: "DISABLED" });
+      const res = await post("/tables/users/kinesis-streaming/disable", {
+        streamArn: "arn:aws:kinesis:us-east-1:000000000000:stream/my-stream",
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.disabled).toBe(true);
+      expect(body.destinationStatus).toBe("DISABLED");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.TableName).toBe("users");
+      expect(cmd.StreamArn).toBe("arn:aws:kinesis:us-east-1:000000000000:stream/my-stream");
+    });
+
+    it("POST /tables/:name/kinesis-streaming/disable — 400 when streamArn missing", async () => {
+      const res = await post("/tables/users/kinesis-streaming/disable", {});
+      expect(res.status).toBe(400);
     });
   });
 });

@@ -19,6 +19,9 @@ import {
   useDynamoDBPutItem,
   useDynamoDBFilteredScan,
   useDynamoDBDeleteItem,
+  useDynamoDBKinesisStreaming,
+  useDynamoDBEnableKinesisStreaming,
+  useDynamoDBDisableKinesisStreaming,
 } from "./useDynamoDB";
 
 function createWrapper() {
@@ -226,6 +229,61 @@ describe("useDynamoDBDeleteItem", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ key: { id: "xyz" } }),
+      }),
+    );
+  });
+});
+
+describe("useDynamoDBKinesisStreaming", () => {
+  it("does not call api when table is null", async () => {
+    const { result } = renderHook(() => useDynamoDBKinesisStreaming(null), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.fetchStatus).toBe("idle"));
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api with correct URL when table is provided", async () => {
+    mockApi.mockResolvedValueOnce({ destinations: [], total: 0 });
+    const { result } = renderHook(() => useDynamoDBKinesisStreaming("orders"), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/dynamodb/tables/orders/kinesis-streaming");
+  });
+});
+
+describe("useDynamoDBEnableKinesisStreaming", () => {
+  it("calls api with POST method and streamArn body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useDynamoDBEnableKinesisStreaming("orders"), {
+      wrapper: createWrapper(),
+    });
+    const streamArn = "arn:aws:kinesis:us-east-1:000000000000:stream/my-stream";
+    await result.current.mutateAsync(streamArn);
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/dynamodb/tables/orders/kinesis-streaming/enable",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ streamArn }),
+      }),
+    );
+  });
+});
+
+describe("useDynamoDBDisableKinesisStreaming", () => {
+  it("calls api with POST method and streamArn body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useDynamoDBDisableKinesisStreaming("orders"), {
+      wrapper: createWrapper(),
+    });
+    const streamArn = "arn:aws:kinesis:us-east-1:000000000000:stream/my-stream";
+    await result.current.mutateAsync(streamArn);
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/dynamodb/tables/orders/kinesis-streaming/disable",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ streamArn }),
       }),
     );
   });

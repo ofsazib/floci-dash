@@ -27,6 +27,8 @@ import ResourceTable from "./ResourceTable";
 import DeleteButton from "./DeleteButton";
 import StatCard from "./StatCard";
 import DynamoDBAdvanced from "./DynamoDBAdvanced";
+import DynamoDBStreams from "./DynamoDBStreams";
+import DynamoDBKinesisStreaming from "./DynamoDBKinesisStreaming";
 import { formatBytes, formatItemValue } from "../lib/utils";
 
 const FILTER_OPERATORS: SelectProps.Option[] = [
@@ -733,6 +735,16 @@ export default function DynamoDBTableDetail({
       </div>
               </SpaceBetween>
             ),
+          },
+          {
+            label: "Streams",
+            id: "streams",
+            content: <DynamoDBStreams tableName={tableName} />,
+          },
+          {
+            label: "Kinesis Streaming",
+            id: "kinesis-streaming",
+            content: <DynamoDBKinesisStreaming tableName={tableName} />,
           },
           {
             label: "Advanced",

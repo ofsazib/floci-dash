@@ -10,6 +10,9 @@ import {
   GetItemCommand,
   PutItemCommand,
   DeleteItemCommand,
+  EnableKinesisStreamingDestinationCommand,
+  DescribeKinesisStreamingDestinationCommand,
+  DisableKinesisStreamingDestinationCommand,
   KeyType,
   ScalarAttributeType,
 } from "@aws-sdk/client-dynamodb";
@@ -242,6 +245,41 @@ router.post("/tables/:name/items/delete", async (c: Context) => {
   if (!key) return c.json({ error: "Item key is required" }, 400);
   await ddb().send(new DeleteItemCommand({ TableName: name, Key: marshall(key) }));
   return c.json({ deleted: true });
+});
+
+// ── Kinesis Streaming ─────────────────────────────────────
+
+router.get("/tables/:name/kinesis-streaming", async (c: Context) => {
+  const name = c.req.param("name");
+  const result = await ddb().send(new DescribeKinesisStreamingDestinationCommand({ TableName: name }));
+  const destinations = (result.KinesisDataStreamDestinations || []).map((d: any) => ({
+    streamArn: d.StreamArn,
+    destinationStatus: d.DestinationStatus,
+    destinationStatusDescription: d.DestinationStatusDescription,
+  }));
+  return c.json({ destinations, total: destinations.length });
+});
+
+router.post("/tables/:name/kinesis-streaming/enable", async (c: Context) => {
+  const name = c.req.param("name");
+  const { streamArn } = await c.req.json<{ streamArn: string }>();
+  if (!streamArn) return c.json({ error: "Stream ARN is required" }, 400);
+  const result = await ddb().send(new EnableKinesisStreamingDestinationCommand({
+    TableName: name,
+    StreamArn: streamArn,
+  }));
+  return c.json({ enabled: true, streamArn, destinationStatus: result.DestinationStatus });
+});
+
+router.post("/tables/:name/kinesis-streaming/disable", async (c: Context) => {
+  const name = c.req.param("name");
+  const { streamArn } = await c.req.json<{ streamArn: string }>();
+  if (!streamArn) return c.json({ error: "Stream ARN is required" }, 400);
+  const result = await ddb().send(new DisableKinesisStreamingDestinationCommand({
+    TableName: name,
+    StreamArn: streamArn,
+  }));
+  return c.json({ disabled: true, streamArn, destinationStatus: result.DestinationStatus });
 });
 
 export default router;
