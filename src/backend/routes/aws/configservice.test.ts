@@ -22,6 +22,10 @@ vi.mock("@aws-sdk/client-config-service", () => ({
   DescribeConformancePacksCommand: createCmd("DescribeConformancePacksCommand"),
   PutConformancePackCommand: createCmd("PutConformancePackCommand"),
   DeleteConformancePackCommand: createCmd("DeleteConformancePackCommand"),
+  DescribeConformancePackStatusCommand: createCmd("DescribeConformancePackStatusCommand"),
+  DescribeComplianceByConfigRuleCommand: createCmd("DescribeComplianceByConfigRuleCommand"),
+  DescribeConfigRuleEvaluationStatusCommand: createCmd("DescribeConfigRuleEvaluationStatusCommand"),
+  StartConfigRulesEvaluationCommand: createCmd("StartConfigRulesEvaluationCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({ create: (Ctor: any, extra?: any) => new Ctor(extra) }));
@@ -149,5 +153,70 @@ describe("Config Service Routes", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.deleted).toBe(true);
+  });
+
+  // ── Conformance Pack Status ──────────────────────────
+
+  it("GET /conformance-packs/status — lists pack statuses", async () => {
+    mockSend.mockResolvedValueOnce({ ConformancePackStatusDetails: [{ ConformancePackName: "pack-1", ConformancePackState: "CREATE_COMPLETE" }] });
+    const res = await get("/conformance-packs/status");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.total).toBe(1);
+  });
+
+  it("GET /conformance-packs/status — empty", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/conformance-packs/status");
+    const body = await res.json();
+    expect(body.total).toBe(0);
+  });
+
+  // ── Compliance & Evaluation ──────────────────────────
+
+  it("GET /rules/compliance — lists compliance", async () => {
+    mockSend.mockResolvedValueOnce({ ComplianceByConfigRules: [{ ConfigRuleName: "rule-1", Compliance: { ComplianceType: "COMPLIANT" } }] });
+    const res = await get("/rules/compliance");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.total).toBe(1);
+  });
+
+  it("GET /rules/compliance — empty", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/rules/compliance");
+    const body = await res.json();
+    expect(body.total).toBe(0);
+  });
+
+  it("GET /rules/evaluation-status — lists eval statuses", async () => {
+    mockSend.mockResolvedValueOnce({ ConfigRulesEvaluationStatus: [{ ConfigRuleName: "rule-1", LastStatus: "SUCCEEDED" }] });
+    const res = await get("/rules/evaluation-status");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.total).toBe(1);
+  });
+
+  it("GET /rules/evaluation-status — empty", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/rules/evaluation-status");
+    const body = await res.json();
+    expect(body.total).toBe(0);
+  });
+
+  it("POST /rules/evaluate — starts evaluation", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/rules/evaluate", { ruleNames: ["rule-1"] });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.started).toBe(true);
+  });
+
+  it("POST /rules/evaluate — starts evaluation with no rule names", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/rules/evaluate", {});
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.started).toBe(true);
   });
 });

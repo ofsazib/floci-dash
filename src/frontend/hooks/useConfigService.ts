@@ -82,3 +82,41 @@ export function useDeleteConformancePack() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "config", "conformance-packs"] }),
   });
 }
+
+// ── Conformance Pack Status ──────────────────────────────
+
+export function useConformancePackStatuses() {
+  return useQuery<{ statuses: any[]; total: number }>({
+    queryKey: ["aws", "config", "conformance-pack-statuses"],
+    queryFn: () => api("/aws/config/conformance-packs/status"),
+  });
+}
+
+// ── Compliance & Evaluation ──────────────────────────────
+
+export function useComplianceByConfigRule() {
+  return useQuery<{ compliance: any[]; total: number }>({
+    queryKey: ["aws", "config", "compliance"],
+    queryFn: () => api("/aws/config/rules/compliance"),
+    refetchInterval: 30000,
+  });
+}
+
+export function useConfigRuleEvaluationStatus() {
+  return useQuery<{ statuses: any[]; total: number }>({
+    queryKey: ["aws", "config", "evaluation-statuses"],
+    queryFn: () => api("/aws/config/rules/evaluation-status"),
+  });
+}
+
+export function useStartConfigRulesEvaluation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ruleNames?: string[]) =>
+      api("/aws/config/rules/evaluate", { method: "POST", body: JSON.stringify({ ruleNames }) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["aws", "config", "evaluation-statuses"] });
+      qc.invalidateQueries({ queryKey: ["aws", "config", "compliance"] });
+    },
+  });
+}

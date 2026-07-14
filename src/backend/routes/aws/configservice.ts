@@ -16,6 +16,10 @@ import {
   DescribeConformancePacksCommand,
   PutConformancePackCommand,
   DeleteConformancePackCommand,
+  DescribeConformancePackStatusCommand,
+  DescribeComplianceByConfigRuleCommand,
+  DescribeConfigRuleEvaluationStatusCommand,
+  StartConfigRulesEvaluationCommand,
 } from "@aws-sdk/client-config-service";
 
 const router = new Hono();
@@ -135,6 +139,40 @@ router.post("/delivery-channels", async (c: Context) => {
     })
   );
   return c.json({ created: true }, 201);
+});
+
+// ── Conformance Pack Status ──────────────────────────────
+
+router.get("/conformance-packs/status", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new DescribeConformancePackStatusCommand({}));
+  const statuses = result.ConformancePackStatusDetails || [];
+  return c.json({ statuses, total: statuses.length });
+});
+
+// ── Compliance & Evaluation ──────────────────────────────
+
+router.get("/rules/compliance", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new DescribeComplianceByConfigRuleCommand({}));
+  const compliance = result.ComplianceByConfigRules || [];
+  return c.json({ compliance, total: compliance.length });
+});
+
+router.get("/rules/evaluation-status", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new DescribeConfigRuleEvaluationStatusCommand({}));
+  const statuses = result.ConfigRulesEvaluationStatus || [];
+  return c.json({ statuses, total: statuses.length });
+});
+
+router.post("/rules/evaluate", async (c: Context) => {
+  const body = await c.req.json<{ ruleNames?: string[] }>();
+  const client = getClient();
+  await client.send(
+    new StartConfigRulesEvaluationCommand({ ConfigRuleNames: body.ruleNames })
+  );
+  return c.json({ started: true });
 });
 
 // ── Conformance Packs ────────────────────────────────────

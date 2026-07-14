@@ -262,8 +262,13 @@ import {
   usePutConfigRule,
   useDeleteConfigRule,
   useConfigRecorders,
+  useConfigRecorderStatuses,
   useConformancePacks,
   useDeleteConformancePack,
+  useConformancePackStatuses,
+  useComplianceByConfigRule,
+  useConfigRuleEvaluationStatus,
+  useStartConfigRulesEvaluation,
 } from "../../hooks/useConfigService";
 import {
   useAppConfigApplications,
@@ -509,8 +514,13 @@ export function ConfigServiceDashboard() {
   const { data: rulesData, isLoading } = useConfigRules();
   const deleteRule = useDeleteConfigRule();
   const { data: recordersData } = useConfigRecorders();
+  const { data: recorderStatusesData } = useConfigRecorderStatuses();
   const { data: packsData } = useConformancePacks();
   const deletePack = useDeleteConformancePack();
+  const { data: packStatusesData } = useConformancePackStatuses();
+  const { data: complianceData } = useComplianceByConfigRule();
+  const { data: evalStatusData } = useConfigRuleEvaluationStatus();
+  const startEval = useStartConfigRulesEvaluation();
 
   if (isLoading) return <TableSkeleton />;
 
@@ -615,6 +625,156 @@ export function ConfigServiceDashboard() {
               filterPlaceholder="Find packs"
               filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
             />
+          ),
+        },
+        {
+          id: "advanced",
+          label: "Advanced",
+          content: (
+            <SpaceBetween size="l">
+              {/* ── Compliance by Rule ──────────────────── */}
+              <ResourceTable
+                resourceName="Compliance"
+                headerTitle="Compliance by Config Rule"
+                headerCounter={complianceData?.total}
+                items={(complianceData?.compliance || []).map((c: any) => ({
+                  name: c.ConfigRuleName,
+                  compliance: c.Compliance?.ComplianceType || "-",
+                  contributorCount: c.Compliance?.ContributorCount?.CappedCount ?? "-",
+                }))}
+                loading={false}
+                emptyMessage="No compliance data"
+                columns={[
+                  { id: "name", header: "Rule Name", cell: (i: any) => i.name, isRowHeader: true },
+                  {
+                    id: "compliance",
+                    header: "Compliance",
+                    cell: (i: any) => (
+                      <StatusIndicator type={i.compliance === "COMPLIANT" ? "success" : i.compliance === "NON_COMPLIANT" ? "error" : "warning"}>
+                        {i.compliance}
+                      </StatusIndicator>
+                    ),
+                  },
+                  { id: "contributorCount", header: "Resources", cell: (i: any) => i.contributorCount },
+                ]}
+                filterEnabled
+                filterPlaceholder="Find rules"
+                filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+              />
+
+              {/* ── Evaluation Status ───────────────────── */}
+              <Box margin={{ top: "s" }}>
+                <SpaceBetween direction="horizontal" size="s">
+                  <Box variant="h3">Evaluation Status</Box>
+                  <Button
+                    iconName="play"
+                    variant="primary"
+                    loading={startEval.isPending}
+                    onClick={() => startEval.mutateAsync(undefined)}
+                  >
+                    Evaluate All Rules
+                  </Button>
+                </SpaceBetween>
+              </Box>
+              <ResourceTable
+                resourceName="Status"
+                headerTitle="Rule Evaluation Status"
+                headerCounter={evalStatusData?.total}
+                items={(evalStatusData?.statuses || []).map((s: any) => ({
+                  name: s.ConfigRuleName,
+                  status: s.LastStatus || "-",
+                  invocationTime: s.LastSuccessfulInvocationTime
+                    ? new Date(s.LastSuccessfulInvocationTime).toLocaleString()
+                    : "-",
+                  error: s.LastErrorMessage || "-",
+                }))}
+                loading={false}
+                emptyMessage="No evaluation status"
+                columns={[
+                  { id: "name", header: "Rule Name", cell: (i: any) => i.name, isRowHeader: true },
+                  {
+                    id: "status",
+                    header: "Last Status",
+                    cell: (i: any) => (
+                      <StatusIndicator type={i.status === "SUCCEEDED" ? "success" : i.status === "FAILED" ? "error" : "warning"}>
+                        {i.status}
+                      </StatusIndicator>
+                    ),
+                  },
+                  { id: "invocationTime", header: "Last Invocation", cell: (i: any) => i.invocationTime },
+                  { id: "error", header: "Error", cell: (i: any) => i.error },
+                ]}
+                filterEnabled
+                filterPlaceholder="Find rules"
+                filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+              />
+
+              {/* ── Conformance Pack Status ─────────────── */}
+              <ResourceTable
+                resourceName="Pack Status"
+                headerTitle="Conformance Pack Status"
+                headerCounter={packStatusesData?.total}
+                items={(packStatusesData?.statuses || []).map((s: any) => ({
+                  name: s.ConformancePackName,
+                  state: s.ConformancePackState || "-",
+                  arn: s.ConformancePackArn || "-",
+                  reason: s.ConformancePackStatusReason || "-",
+                  updated: s.LastUpdateTime
+                    ? new Date(s.LastUpdateTime).toLocaleString()
+                    : "-",
+                }))}
+                loading={false}
+                emptyMessage="No pack status"
+                columns={[
+                  { id: "name", header: "Pack Name", cell: (i: any) => i.name, isRowHeader: true },
+                  {
+                    id: "state",
+                    header: "State",
+                    cell: (i: any) => (
+                      <StatusIndicator type={i.state === "CREATE_COMPLETE" ? "success" : i.state === "CREATE_FAILED" || i.state === "DELETE_FAILED" ? "error" : "in-progress"}>
+                        {i.state}
+                      </StatusIndicator>
+                    ),
+                  },
+                  { id: "updated", header: "Last Updated", cell: (i: any) => i.updated },
+                  { id: "reason", header: "Status Reason", cell: (i: any) => i.reason },
+                ]}
+                filterEnabled
+                filterPlaceholder="Find packs"
+                filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+              />
+
+              {/* ── Recorder Status ─────────────────────── */}
+              <ResourceTable
+                resourceName="Recorder Status"
+                headerTitle="Configuration Recorder Status"
+                headerCounter={recorderStatusesData?.total}
+                items={(recorderStatusesData?.statuses || []).map((s: any) => ({
+                  name: s.name,
+                  recording: s.recording ? "Yes" : "No",
+                  lastStart: s.lastStartTime ? new Date(s.lastStartTime).toLocaleString() : "-",
+                  lastStop: s.lastStopTime ? new Date(s.lastStopTime).toLocaleString() : "-",
+                  lastStatus: s.lastStatus || "-",
+                }))}
+                loading={false}
+                emptyMessage="No recorder status"
+                columns={[
+                  { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+                  {
+                    id: "recording",
+                    header: "Recording",
+                    cell: (i: any) => (
+                      <StatusIndicator type={i.recording === "Yes" ? "success" : "stopped"}>
+                        {i.recording}
+                      </StatusIndicator>
+                    ),
+                  },
+                  { id: "lastStatus", header: "Last Status", cell: (i: any) => i.lastStatus },
+                  { id: "lastStart", header: "Last Start", cell: (i: any) => i.lastStart },
+                  { id: "lastStop", header: "Last Stop", cell: (i: any) => i.lastStop },
+                ]}
+              />
+            </SpaceBetween>
           ),
         },
       ]}

@@ -18,6 +18,10 @@ import {
   useConfigRecorderStatuses,
   useConformancePacks,
   useDeleteConformancePack,
+  useConformancePackStatuses,
+  useComplianceByConfigRule,
+  useConfigRuleEvaluationStatus,
+  useStartConfigRulesEvaluation,
 } from "./useConfigService";
 
 beforeEach(() => mockApi.mockReset());
@@ -73,5 +77,50 @@ describe("useConfigService hooks", () => {
     const { result } = renderHook(() => useDeleteConformancePack(), { wrapper: createWrapper() });
     await result.current.mutateAsync("pack-1");
     expect(mockApi).toHaveBeenCalledWith("/aws/config/conformance-packs/pack-1", { method: "DELETE" });
+  });
+
+  // ── Conformance Pack Status ──────────────────────────
+
+  it("useConformancePackStatuses calls correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ statuses: [], total: 0 });
+    const { result } = renderHook(() => useConformancePackStatuses(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/config/conformance-packs/status");
+  });
+
+  // ── Compliance & Evaluation ──────────────────────────
+
+  it("useComplianceByConfigRule calls correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ compliance: [], total: 0 });
+    const { result } = renderHook(() => useComplianceByConfigRule(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/config/rules/compliance");
+  });
+
+  it("useConfigRuleEvaluationStatus calls correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ statuses: [], total: 0 });
+    const { result } = renderHook(() => useConfigRuleEvaluationStatus(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/config/rules/evaluation-status");
+  });
+
+  it("useStartConfigRulesEvaluation calls POST", async () => {
+    mockApi.mockResolvedValueOnce({ started: true });
+    const { result } = renderHook(() => useStartConfigRulesEvaluation(), { wrapper: createWrapper() });
+    await result.current.mutateAsync(["rule-1"]);
+    expect(mockApi).toHaveBeenCalledWith("/aws/config/rules/evaluate", {
+      method: "POST",
+      body: JSON.stringify({ ruleNames: ["rule-1"] }),
+    });
+  });
+
+  it("useStartConfigRulesEvaluation calls POST with no rule names", async () => {
+    mockApi.mockResolvedValueOnce({ started: true });
+    const { result } = renderHook(() => useStartConfigRulesEvaluation(), { wrapper: createWrapper() });
+    await result.current.mutateAsync(undefined);
+    expect(mockApi).toHaveBeenCalledWith("/aws/config/rules/evaluate", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
   });
 });
