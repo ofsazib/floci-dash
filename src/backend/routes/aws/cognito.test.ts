@@ -31,6 +31,20 @@ vi.mock("@aws-sdk/client-cognito-identity-provider", () => ({
   DescribeUserPoolClientCommand: createCmd("DescribeUserPoolClientCommand"),
   CreateUserPoolClientCommand: createCmd("CreateUserPoolClientCommand"),
   DeleteUserPoolClientCommand: createCmd("DeleteUserPoolClientCommand"),
+  ListResourceServersCommand: createCmd("ListResourceServersCommand"),
+  CreateResourceServerCommand: createCmd("CreateResourceServerCommand"),
+  DescribeResourceServerCommand: createCmd("DescribeResourceServerCommand"),
+  UpdateResourceServerCommand: createCmd("UpdateResourceServerCommand"),
+  DeleteResourceServerCommand: createCmd("DeleteResourceServerCommand"),
+  GetUserPoolMfaConfigCommand: createCmd("GetUserPoolMfaConfigCommand"),
+  SetUserPoolMfaConfigCommand: createCmd("SetUserPoolMfaConfigCommand"),
+  AddCustomAttributesCommand: createCmd("AddCustomAttributesCommand"),
+  AdminDeleteUserAttributesCommand: createCmd("AdminDeleteUserAttributesCommand"),
+  AdminUserGlobalSignOutCommand: createCmd("AdminUserGlobalSignOutCommand"),
+  AdminConfirmSignUpCommand: createCmd("AdminConfirmSignUpCommand"),
+  AdminListGroupsForUserCommand: createCmd("AdminListGroupsForUserCommand"),
+  ListUsersInGroupCommand: createCmd("ListUsersInGroupCommand"),
+  ListUserPoolClientSecretsCommand: createCmd("ListUserPoolClientSecretsCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -260,6 +274,166 @@ describe("Cognito Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.deleted).toBe(true);
+    });
+  });
+
+  describe("Resource Servers", () => {
+    it("GET /user-pools/:id/resource-servers — lists resource servers", async () => {
+      mockSend.mockResolvedValueOnce({
+        ResourceServers: [{ Identifier: "https://api.example.com", Name: "My API" }],
+      });
+      const res = await get("/user-pools/us-east-1_abc/resource-servers");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(1);
+    });
+
+    it("GET /user-pools/:id/resource-servers — returns empty list", async () => {
+      mockSend.mockResolvedValueOnce({ ResourceServers: [] });
+      const res = await get("/user-pools/us-east-1_abc/resource-servers");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+    });
+
+    it("POST /user-pools/:id/resource-servers — creates resource server (201)", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/user-pools/us-east-1_abc/resource-servers", {
+        identifier: "https://api.example.com",
+        name: "My API",
+      });
+      expect(res.status).toBe(201);
+    });
+
+    it("POST /user-pools/:id/resource-servers — 400 if identifier or name missing", async () => {
+      const res1 = await post("/user-pools/us-east-1_abc/resource-servers", {});
+      expect(res1.status).toBe(400);
+      const res2 = await post("/user-pools/us-east-1_abc/resource-servers", { identifier: "x" });
+      expect(res2.status).toBe(400);
+    });
+
+    it("GET /user-pools/:id/resource-servers/:identifier — describes resource server", async () => {
+      mockSend.mockResolvedValueOnce({ ResourceServer: { Identifier: "x", Name: "X" } });
+      const res = await get("/user-pools/us-east-1_abc/resource-servers/x");
+      expect(res.status).toBe(200);
+    });
+
+    it("PUT /user-pools/:id/resource-servers/:identifier — updates resource server", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/user-pools/us-east-1_abc/resource-servers/x", { name: "Updated" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+    });
+
+    it("PUT /user-pools/:id/resource-servers/:identifier — 400 if name missing", async () => {
+      const res = await put("/user-pools/us-east-1_abc/resource-servers/x", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE /user-pools/:id/resource-servers/:identifier — deletes resource server", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/user-pools/us-east-1_abc/resource-servers/x");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deleted).toBe(true);
+    });
+  });
+
+  describe("MFA Config", () => {
+    it("GET /user-pools/:id/mfa-config — returns MFA config", async () => {
+      mockSend.mockResolvedValueOnce({ MfaConfiguration: "OFF" });
+      const res = await get("/user-pools/us-east-1_abc/mfa-config");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.mfaConfiguration).toBe("OFF");
+    });
+
+    it("PUT /user-pools/:id/mfa-config — updates MFA config", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/user-pools/us-east-1_abc/mfa-config", { mfaConfiguration: "ON" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+    });
+
+    it("PUT /user-pools/:id/mfa-config — 400 if mfaConfiguration missing", async () => {
+      const res = await put("/user-pools/us-east-1_abc/mfa-config", {});
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe("Custom Attributes", () => {
+    it("POST /user-pools/:id/custom-attributes — adds custom attributes", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/user-pools/us-east-1_abc/custom-attributes", {
+        customAttributes: [{ Name: "custom:role", AttributeDataType: "string" }],
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.added).toBe(true);
+    });
+
+    it("POST /user-pools/:id/custom-attributes — 400 if customAttributes missing", async () => {
+      const res = await post("/user-pools/us-east-1_abc/custom-attributes", {});
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe("Admin User Operations", () => {
+    it("POST /user-pools/:id/users/:username/delete-attributes — deletes user attributes", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/user-pools/us-east-1_abc/users/user1/delete-attributes", {
+        userAttributeNames: ["custom:role"],
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deleted).toBe(true);
+    });
+
+    it("POST /user-pools/:id/users/:username/delete-attributes — 400 if userAttributeNames missing", async () => {
+      const res = await post("/user-pools/us-east-1_abc/users/user1/delete-attributes", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /user-pools/:id/users/:username/sign-out — signs out user", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/user-pools/us-east-1_abc/users/user1/sign-out");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.signedOut).toBe(true);
+    });
+
+    it("POST /user-pools/:id/users/:username/confirm — confirms sign up", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/user-pools/us-east-1_abc/users/user1/confirm");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.confirmed).toBe(true);
+    });
+
+    it("GET /user-pools/:id/users/:username/groups — lists groups for user", async () => {
+      mockSend.mockResolvedValueOnce({ Groups: [{ GroupName: "admins" }] });
+      const res = await get("/user-pools/us-east-1_abc/users/user1/groups");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(1);
+    });
+  });
+
+  describe("Group Members", () => {
+    it("GET /user-pools/:id/groups/:groupName/users — lists users in group", async () => {
+      mockSend.mockResolvedValueOnce({ Users: [{ Username: "user1" }] });
+      const res = await get("/user-pools/us-east-1_abc/groups/admins/users");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(1);
+    });
+
+    it("GET /user-pools/:id/groups/:groupName/users — returns empty", async () => {
+      mockSend.mockResolvedValueOnce({ Users: [] });
+      const res = await get("/user-pools/us-east-1_abc/groups/admins/users");
+      const body = await res.json();
+      expect(body.total).toBe(0);
     });
   });
 });

@@ -20,6 +20,20 @@ import {
   DescribeUserPoolClientCommand,
   CreateUserPoolClientCommand,
   DeleteUserPoolClientCommand,
+  ListResourceServersCommand,
+  CreateResourceServerCommand,
+  DescribeResourceServerCommand,
+  UpdateResourceServerCommand,
+  DeleteResourceServerCommand,
+  GetUserPoolMfaConfigCommand,
+  SetUserPoolMfaConfigCommand,
+  AddCustomAttributesCommand,
+  AdminDeleteUserAttributesCommand,
+  AdminUserGlobalSignOutCommand,
+  AdminConfirmSignUpCommand,
+  AdminListGroupsForUserCommand,
+  ListUsersInGroupCommand,
+  ListUserPoolClientSecretsCommand,
 } from "@aws-sdk/client-cognito-identity-provider";
 
 const router = new Hono();
@@ -223,6 +237,155 @@ router.delete("/user-pools/:id/clients/:clientId", async (c: Context) => {
   const client = getClient();
   await client.send(new DeleteUserPoolClientCommand({ UserPoolId: id, ClientId: clientId }));
   return c.json({ deleted: true });
+});
+
+// ── Client Secrets ───────────────────────────────────────
+
+router.get("/user-pools/:id/clients/:clientId/secrets", async (c: Context) => {
+  const id = c.req.param("id");
+  const clientId = c.req.param("clientId");
+  const client = getClient();
+  const result = await client.send(new ListUserPoolClientSecretsCommand({ UserPoolId: id, ClientId: clientId }));
+  return c.json({ secrets: result.Secrets || [] });
+});
+
+// ── Resource Servers ─────────────────────────────────────
+
+router.get("/user-pools/:id/resource-servers", async (c: Context) => {
+  const id = c.req.param("id");
+  const client = getClient();
+  const result = await client.send(new ListResourceServersCommand({ UserPoolId: id, MaxResults: 60 }));
+  return c.json({ resourceServers: result.ResourceServers || [], total: result.ResourceServers?.length || 0 });
+});
+
+router.post("/user-pools/:id/resource-servers", async (c: Context) => {
+  const id = c.req.param("id");
+  const body = await c.req.json<{ identifier: string; name: string; scopes?: { ScopeName: string; ScopeDescription: string }[] }>();
+  if (!body.identifier || !body.name) return c.json({ error: "identifier and name are required" }, 400);
+  const client = getClient();
+  await client.send(new CreateResourceServerCommand({
+    UserPoolId: id, Identifier: body.identifier, Name: body.name, Scopes: body.scopes,
+  }));
+  return c.json({ created: true }, 201);
+});
+
+router.get("/user-pools/:id/resource-servers/:identifier", async (c: Context) => {
+  const id = c.req.param("id");
+  const identifier = c.req.param("identifier");
+  const client = getClient();
+  const result = await client.send(new DescribeResourceServerCommand({ UserPoolId: id, Identifier: identifier }));
+  return c.json({ resourceServer: result.ResourceServer });
+});
+
+router.put("/user-pools/:id/resource-servers/:identifier", async (c: Context) => {
+  const id = c.req.param("id");
+  const identifier = c.req.param("identifier");
+  const body = await c.req.json<{ name: string; scopes?: { ScopeName: string; ScopeDescription: string }[] }>();
+  if (!body.name) return c.json({ error: "name is required" }, 400);
+  const client = getClient();
+  await client.send(new UpdateResourceServerCommand({
+    UserPoolId: id, Identifier: identifier, Name: body.name, Scopes: body.scopes,
+  }));
+  return c.json({ updated: true });
+});
+
+router.delete("/user-pools/:id/resource-servers/:identifier", async (c: Context) => {
+  const id = c.req.param("id");
+  const identifier = c.req.param("identifier");
+  const client = getClient();
+  await client.send(new DeleteResourceServerCommand({ UserPoolId: id, Identifier: identifier }));
+  return c.json({ deleted: true });
+});
+
+// ── MFA Config ───────────────────────────────────────────
+
+router.get("/user-pools/:id/mfa-config", async (c: Context) => {
+  const id = c.req.param("id");
+  const client = getClient();
+  const result = await client.send(new GetUserPoolMfaConfigCommand({ UserPoolId: id }));
+  return c.json({
+    mfaConfiguration: result.MfaConfiguration,
+    smsMfaConfiguration: result.SmsMfaConfiguration,
+    softwareTokenMfaConfiguration: result.SoftwareTokenMfaConfiguration,
+  });
+});
+
+router.put("/user-pools/:id/mfa-config", async (c: Context) => {
+  const id = c.req.param("id");
+  const body = await c.req.json<{ mfaConfiguration: string; smsAuthenticationMessage?: string }>();
+  if (!body.mfaConfiguration) return c.json({ error: "mfaConfiguration is required" }, 400);
+  const client = getClient();
+  await client.send(new SetUserPoolMfaConfigCommand({
+    UserPoolId: id,
+    MfaConfiguration: body.mfaConfiguration as any,
+    SmsMfaConfiguration: body.smsAuthenticationMessage ? {
+      SmsAuthenticationMessage: body.smsAuthenticationMessage,
+      SmsConfiguration: { SnsCallerArn: "" },
+    } : undefined,
+    SoftwareTokenMfaConfiguration: body.mfaConfiguration === "ON" ? { Enabled: true } : undefined,
+  }));
+  return c.json({ updated: true });
+});
+
+// ── Custom Attributes ────────────────────────────────────
+
+router.post("/user-pools/:id/custom-attributes", async (c: Context) => {
+  const id = c.req.param("id");
+  const body = await c.req.json<{ customAttributes: { Name: string; AttributeDataType?: string; Mutable?: boolean; Required?: boolean }[] }>();
+  if (!body.customAttributes?.length) return c.json({ error: "customAttributes is required" }, 400);
+  const client = getClient();
+  await client.send(new AddCustomAttributesCommand({
+    UserPoolId: id, CustomAttributes: body.customAttributes,
+  }));
+  return c.json({ added: true });
+});
+
+// ── Admin User Operations ────────────────────────────────
+
+router.post("/user-pools/:id/users/:username/delete-attributes", async (c: Context) => {
+  const id = c.req.param("id");
+  const username = c.req.param("username");
+  const body = await c.req.json<{ userAttributeNames: string[] }>();
+  if (!body.userAttributeNames?.length) return c.json({ error: "userAttributeNames is required" }, 400);
+  const client = getClient();
+  await client.send(new AdminDeleteUserAttributesCommand({
+    UserPoolId: id, Username: username, UserAttributeNames: body.userAttributeNames,
+  }));
+  return c.json({ deleted: true });
+});
+
+router.post("/user-pools/:id/users/:username/sign-out", async (c: Context) => {
+  const id = c.req.param("id");
+  const username = c.req.param("username");
+  const client = getClient();
+  await client.send(new AdminUserGlobalSignOutCommand({ UserPoolId: id, Username: username }));
+  return c.json({ signedOut: true });
+});
+
+router.post("/user-pools/:id/users/:username/confirm", async (c: Context) => {
+  const id = c.req.param("id");
+  const username = c.req.param("username");
+  const client = getClient();
+  await client.send(new AdminConfirmSignUpCommand({ UserPoolId: id, Username: username }));
+  return c.json({ confirmed: true });
+});
+
+router.get("/user-pools/:id/users/:username/groups", async (c: Context) => {
+  const id = c.req.param("id");
+  const username = c.req.param("username");
+  const client = getClient();
+  const result = await client.send(new AdminListGroupsForUserCommand({ UserPoolId: id, Username: username }));
+  return c.json({ groups: result.Groups || [], total: result.Groups?.length || 0 });
+});
+
+// ── Group Members ────────────────────────────────────────
+
+router.get("/user-pools/:id/groups/:groupName/users", async (c: Context) => {
+  const id = c.req.param("id");
+  const groupName = c.req.param("groupName");
+  const client = getClient();
+  const result = await client.send(new ListUsersInGroupCommand({ UserPoolId: id, GroupName: groupName }));
+  return c.json({ users: result.Users || [], total: result.Users?.length || 0 });
 });
 
 export default router;

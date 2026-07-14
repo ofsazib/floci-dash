@@ -234,6 +234,12 @@ import {
   useCognitoUserPoolClients,
   useCreateCognitoUserPoolClient,
   useDeleteCognitoUserPoolClient,
+  useResourceServers,
+  useCreateResourceServer,
+  useDeleteResourceServer,
+  useMfaConfig,
+  useSetMfaConfig,
+  useAddCustomAttributes,
 } from "../../hooks/useCognito";
 import {
   useApiGatewayV2Apis,
@@ -513,6 +519,23 @@ export function CognitoDashboard() {
   const { data: groupsData } = useCognitoGroups(selectedPool);
   const { data: clientsData } = useCognitoUserPoolClients(selectedPool);
 
+  // Advanced tab state & hooks
+  const { data: resourceServersData } = useResourceServers(selectedPool);
+  const { data: mfaConfigData } = useMfaConfig(selectedPool);
+  const createResourceServer = useCreateResourceServer(selectedPool!);
+  const deleteResourceServer = useDeleteResourceServer(selectedPool!);
+  const setMfaConfig = useSetMfaConfig(selectedPool!);
+  const addCustomAttrs = useAddCustomAttributes(selectedPool!);
+
+  const [showCreateResourceServer, setShowCreateResourceServer] = useState(false);
+  const [showAddCustomAttrs, setShowAddCustomAttrs] = useState(false);
+  const [rsIdentifier, setRsIdentifier] = useState("");
+  const [rsName, setRsName] = useState("");
+  const [rsScopes, setRsScopes] = useState("");
+  const [mfaMode, setMfaMode] = useState("");
+  const [customAttrName, setCustomAttrName] = useState("");
+  const [customAttrType, setCustomAttrType] = useState("string");
+
   if (isLoading) return <TableSkeleton />;
 
   if (selectedPool) {
@@ -613,8 +636,221 @@ export function CognitoDashboard() {
                 />
               ),
             },
+            {
+              id: "advanced",
+              label: "Advanced",
+              content: (
+                <SpaceBetween size="l">
+                  {/* Resource Servers */}
+                  <Container
+                    header={
+                      <Header
+                        variant="h3"
+                        actions={
+                          <Button
+                            iconName="add-plus"
+                            onClick={() => {
+                              setRsIdentifier("");
+                              setRsName("");
+                              setRsScopes("");
+                              setShowCreateResourceServer(true);
+                            }}
+                          >
+                            Create Resource Server
+                          </Button>
+                        }
+                      >
+                        Resource Servers
+                      </Header>
+                    }
+                  >
+                    {!resourceServersData?.resourceServers?.length ? (
+                      <Box padding="m" textAlign="center" color="text-status-inactive">
+                        No resource servers found
+                      </Box>
+                    ) : (
+                      <SpaceBetween size="xs">
+                        {(resourceServersData.resourceServers || []).map((rs: any) => (
+                          <Box key={rs.Identifier} padding={{ vertical: "xs" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <div>
+                                <strong>{rs.Name}</strong>
+                                <Box variant="small" color="text-body-secondary">
+                                  {rs.Identifier}
+                                  {rs.Scopes?.length ? ` — ${rs.Scopes.length} scope(s)` : ""}
+                                </Box>
+                              </div>
+                              <DeleteButton
+                                itemName={rs.Name || rs.Identifier}
+                                resourceType="resource server"
+                                loading={deleteResourceServer.isPending && deleteResourceServer.variables === rs.Identifier}
+                                onDelete={() => deleteResourceServer.mutateAsync(rs.Identifier)}
+                              />
+                            </div>
+                          </Box>
+                        ))}
+                      </SpaceBetween>
+                    )}
+                  </Container>
+
+                  {/* MFA Config */}
+                  <Container header={<Header variant="h3">MFA Configuration</Header>}>
+                    <SpaceBetween size="s">
+                      <div>
+                        <Box variant="awsui-key-label">Current MFA Setting</Box>
+                        <Box margin={{ top: "xxs" }}>
+                          <StatusIndicator type={mfaConfigData?.mfaConfiguration && mfaConfigData.mfaConfiguration !== "OFF" ? "success" : "info"}>
+                            {mfaConfigData?.mfaConfiguration || "OFF"}
+                          </StatusIndicator>
+                        </Box>
+                      </div>
+                      <FormField label="Change MFA Mode">
+                        <Select
+                          selectedOption={{ label: mfaMode || "Select", value: mfaMode || "" }}
+                          onChange={({ detail }) => setMfaMode(detail.selectedOption.value!)}
+                          options={[
+                            { label: "OFF", value: "OFF" },
+                            { label: "ON", value: "ON" },
+                            { label: "OPTIONAL", value: "OPTIONAL" },
+                          ]}
+                          placeholder="Select MFA mode"
+                          selectedAriaLabel="Selected MFA mode"
+                        />
+                      </FormField>
+                      <Button
+                        variant="primary"
+                        disabled={!mfaMode}
+                        loading={setMfaConfig.isPending}
+                        onClick={() => { setMfaConfig.mutateAsync({ mfaConfiguration: mfaMode }); setMfaMode(""); }}
+                      >
+                        Update MFA
+                      </Button>
+                    </SpaceBetween>
+                  </Container>
+
+                  {/* Custom Attributes */}
+                  <Container
+                    header={
+                      <Header
+                        variant="h3"
+                        actions={
+                          <Button
+                            iconName="add-plus"
+                            onClick={() => {
+                              setCustomAttrName("");
+                              setCustomAttrType("string");
+                              setShowAddCustomAttrs(true);
+                            }}
+                          >
+                            Add Custom Attribute
+                          </Button>
+                        }
+                      >
+                        Custom Attributes
+                      </Header>
+                    }
+                  >
+                    <Box padding="m" textAlign="center" color="text-status-inactive">
+                      Custom attributes defined during pool creation. Use the button above to add new ones.
+                    </Box>
+                  </Container>
+                </SpaceBetween>
+              ),
+            },
           ]}
         />
+
+        {/* Create Resource Server Modal */}
+        <Modal
+          visible={showCreateResourceServer}
+          onDismiss={() => setShowCreateResourceServer(false)}
+          header="Create Resource Server"
+        >
+          <Form
+            actions={
+              <>
+                <Button variant="link" onClick={() => setShowCreateResourceServer(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  loading={createResourceServer.isPending}
+                  disabled={!rsIdentifier || !rsName}
+                  onClick={async () => {
+                    const scopes = rsScopes
+                      ? rsScopes.split(/[,\n]+/).map((s: string) => s.trim()).filter(Boolean).map((s) => ({ ScopeName: s, ScopeDescription: s }))
+                      : [];
+                    await createResourceServer.mutateAsync({ identifier: rsIdentifier, name: rsName, scopes });
+                    setShowCreateResourceServer(false);
+                  }}
+                >
+                  Create
+                </Button>
+              </>
+            }
+          >
+            <SpaceBetween size="s">
+              <FormField label="Identifier" description="A unique resource server identifier (e.g., https://api.example.com)">
+                <Input value={rsIdentifier} onChange={({ detail }) => setRsIdentifier(detail.value)} placeholder="https://api.example.com" />
+              </FormField>
+              <FormField label="Name">
+                <Input value={rsName} onChange={({ detail }) => setRsName(detail.value)} placeholder="My API" />
+              </FormField>
+              <FormField label="Scopes" description="Comma-separated scope names">
+                <Input value={rsScopes} onChange={({ detail }) => setRsScopes(detail.value)} placeholder="read, write, admin" />
+              </FormField>
+            </SpaceBetween>
+          </Form>
+        </Modal>
+
+        {/* Add Custom Attributes Modal */}
+        <Modal
+          visible={showAddCustomAttrs}
+          onDismiss={() => setShowAddCustomAttrs(false)}
+          header="Add Custom Attributes"
+        >
+          <Form
+            actions={
+              <>
+                <Button variant="link" onClick={() => setShowAddCustomAttrs(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  loading={addCustomAttrs.isPending}
+                  disabled={!customAttrName}
+                  onClick={async () => {
+                    await addCustomAttrs.mutateAsync({
+                      customAttributes: [{ Name: customAttrName, AttributeDataType: customAttrType, Mutable: true, Required: false }],
+                    });
+                    setShowAddCustomAttrs(false);
+                  }}
+                >
+                  Add
+                </Button>
+              </>
+            }
+          >
+            <SpaceBetween size="s">
+              <FormField label="Attribute Name" description="Must start with 'custom:' prefix">
+                <Input value={customAttrName} onChange={({ detail }) => setCustomAttrName(detail.value)} placeholder="custom:myAttribute" />
+              </FormField>
+              <FormField label="Data Type">
+                <Select
+                  selectedOption={{ label: customAttrType, value: customAttrType }}
+                  onChange={({ detail }) => setCustomAttrType(detail.selectedOption.value!)}
+                  options={[
+                    { label: "String", value: "string" },
+                    { label: "Number", value: "number" },
+                    { label: "Boolean", value: "boolean" },
+                    { label: "DateTime", value: "datetime" },
+                  ]}
+                  selectedAriaLabel="Selected data type"
+                />
+              </FormField>
+            </SpaceBetween>
+          </Form>
+        </Modal>
       </>
     );
   }

@@ -221,3 +221,108 @@ export function useDeleteCognitoUserPoolClient(userPoolId: string) {
       qc.invalidateQueries({ queryKey: ["aws", "cognito", "clients", userPoolId] }),
   });
 }
+
+// ─── Resource Servers ────────────────────────────────────
+
+export function useResourceServers(userPoolId: string | null) {
+  return useQuery<{ resourceServers: any[]; total: number }>({
+    queryKey: ["aws", "cognito", "resource-servers", userPoolId],
+    queryFn: () => api(`/aws/cognito/user-pools/${encodeURIComponent(userPoolId!)}/resource-servers`),
+    enabled: !!userPoolId,
+  });
+}
+
+export function useCreateResourceServer(userPoolId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { identifier: string; name: string; scopes?: { ScopeName: string; ScopeDescription: string }[] }) =>
+      api(`/aws/cognito/user-pools/${encodeURIComponent(userPoolId)}/resource-servers`, { method: "POST", body: JSON.stringify(params) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cognito", "resource-servers", userPoolId] }),
+  });
+}
+
+export function useDeleteResourceServer(userPoolId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (identifier: string) =>
+      api(`/aws/cognito/user-pools/${encodeURIComponent(userPoolId)}/resource-servers/${encodeURIComponent(identifier)}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cognito", "resource-servers", userPoolId] }),
+  });
+}
+
+// ─── MFA Config ──────────────────────────────────────────
+
+export function useMfaConfig(userPoolId: string | null) {
+  return useQuery<any>({
+    queryKey: ["aws", "cognito", "mfa-config", userPoolId],
+    queryFn: () => api(`/aws/cognito/user-pools/${encodeURIComponent(userPoolId!)}/mfa-config`),
+    enabled: !!userPoolId,
+  });
+}
+
+export function useSetMfaConfig(userPoolId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { mfaConfiguration: string; smsAuthenticationMessage?: string }) =>
+      api(`/aws/cognito/user-pools/${encodeURIComponent(userPoolId)}/mfa-config`, { method: "PUT", body: JSON.stringify(params) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cognito", "mfa-config", userPoolId] }),
+  });
+}
+
+// ─── Custom Attributes ───────────────────────────────────
+
+export function useAddCustomAttributes(userPoolId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { customAttributes: { Name: string; AttributeDataType?: string; Mutable?: boolean; Required?: boolean }[] }) =>
+      api(`/aws/cognito/user-pools/${encodeURIComponent(userPoolId)}/custom-attributes`, { method: "POST", body: JSON.stringify(params) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cognito", "user-pool", userPoolId] }),
+  });
+}
+
+// ─── Admin User Operations ───────────────────────────────
+
+export function useAdminDeleteUserAttributes(userPoolId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { username: string; userAttributeNames: string[] }) =>
+      api(`/aws/cognito/user-pools/${encodeURIComponent(userPoolId)}/users/${encodeURIComponent(params.username)}/delete-attributes`, { method: "POST", body: JSON.stringify({ userAttributeNames: params.userAttributeNames }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cognito", "users", userPoolId] }),
+  });
+}
+
+export function useAdminUserGlobalSignOut(userPoolId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (username: string) =>
+      api(`/aws/cognito/user-pools/${encodeURIComponent(userPoolId)}/users/${encodeURIComponent(username)}/sign-out`, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cognito", "users", userPoolId] }),
+  });
+}
+
+export function useAdminConfirmSignUp(userPoolId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (username: string) =>
+      api(`/aws/cognito/user-pools/${encodeURIComponent(userPoolId)}/users/${encodeURIComponent(username)}/confirm`, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cognito", "users", userPoolId] }),
+  });
+}
+
+export function useAdminListGroupsForUser(userPoolId: string | null, username: string | null) {
+  return useQuery<{ groups: any[]; total: number }>({
+    queryKey: ["aws", "cognito", "user-groups", userPoolId, username],
+    queryFn: () => api(`/aws/cognito/user-pools/${encodeURIComponent(userPoolId!)}/users/${encodeURIComponent(username!)}/groups`),
+    enabled: !!userPoolId && !!username,
+  });
+}
+
+// ─── Group Members ───────────────────────────────────────
+
+export function useListUsersInGroup(userPoolId: string | null, groupName: string | null) {
+  return useQuery<{ users: any[]; total: number }>({
+    queryKey: ["aws", "cognito", "group-users", userPoolId, groupName],
+    queryFn: () => api(`/aws/cognito/user-pools/${encodeURIComponent(userPoolId!)}/groups/${encodeURIComponent(groupName!)}/users`),
+    enabled: !!userPoolId && !!groupName,
+  });
+}
