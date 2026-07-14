@@ -22,6 +22,16 @@ vi.mock("@aws-sdk/client-auto-scaling", () => ({
   DescribeLaunchConfigurationsCommand: createCmd("DescribeLaunchConfigurationsCommand"),
   DescribePoliciesCommand: createCmd("DescribePoliciesCommand"),
   DescribeScalingActivitiesCommand: createCmd("DescribeScalingActivitiesCommand"),
+  StartInstanceRefreshCommand: createCmd("StartInstanceRefreshCommand"),
+  DescribeInstanceRefreshesCommand: createCmd("DescribeInstanceRefreshesCommand"),
+  CreateOrUpdateTagsCommand: createCmd("CreateOrUpdateTagsCommand"),
+  DeleteTagsCommand: createCmd("DeleteTagsCommand"),
+  AttachLoadBalancerTargetGroupsCommand: createCmd("AttachLoadBalancerTargetGroupsCommand"),
+  DetachLoadBalancerTargetGroupsCommand: createCmd("DetachLoadBalancerTargetGroupsCommand"),
+  DescribeLoadBalancerTargetGroupsCommand: createCmd("DescribeLoadBalancerTargetGroupsCommand"),
+  AttachLoadBalancersCommand: createCmd("AttachLoadBalancersCommand"),
+  DetachLoadBalancersCommand: createCmd("DetachLoadBalancersCommand"),
+  DescribeLoadBalancersCommand: createCmd("DescribeLoadBalancersCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -220,6 +230,104 @@ describe("Auto Scaling Routes", () => {
       const res = await get("/groups/asg-1/activities");
       const body = await res.json();
       expect(body.total).toBe(0);
+    });
+  });
+
+  describe("Instance Refresh", () => {
+    it("POST /groups/:name/instance-refresh — starts refresh", async () => {
+      mockSend.mockResolvedValueOnce({ InstanceRefreshId: "ir-1" });
+      const res = await post("/groups/asg-1/instance-refresh", { minHealthyPercentage: 90 });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.instanceRefreshId).toBe("ir-1");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("StartInstanceRefreshCommand");
+    });
+
+    it("GET /groups/:name/instance-refreshes — lists refreshes", async () => {
+      mockSend.mockResolvedValueOnce({
+        InstanceRefreshes: [{ InstanceRefreshId: "ir-1", Status: "InProgress", PercentageComplete: 50 }],
+      });
+      const res = await get("/groups/asg-1/instance-refreshes");
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(body.instanceRefreshes[0].status).toBe("InProgress");
+    });
+
+    it("GET /groups/:name/instance-refreshes — returns empty", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/groups/asg-1/instance-refreshes");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+    });
+  });
+
+  describe("Tags", () => {
+    it("POST /groups/:name/tags — creates tags", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/groups/asg-1/tags", { tags: [{ key: "env", value: "prod" }] });
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("CreateOrUpdateTagsCommand");
+    });
+
+    it("POST /groups/:name/tags — 400 when tags empty", async () => {
+      const res = await post("/groups/asg-1/tags", { tags: [] });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /groups/:name/tags/delete — deletes tags", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/groups/asg-1/tags/delete", { tagKeys: ["env"] });
+      const body = await res.json();
+      expect(body.deleted).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteTagsCommand");
+    });
+  });
+
+  describe("LB Target Groups", () => {
+    it("GET /groups/:name/lb-target-groups — lists", async () => {
+      mockSend.mockResolvedValueOnce({ LoadBalancerTargetGroups: [{ LoadBalancerTargetGroupARN: "arn:tg1" }] });
+      const res = await get("/groups/asg-1/lb-target-groups");
+      const body = await res.json();
+      expect(body.targetGroups).toHaveLength(1);
+    });
+
+    it("POST /groups/:name/lb-target-groups — attaches", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/groups/asg-1/lb-target-groups", { targetGroupARNs: ["arn:tg1"] });
+      const body = await res.json();
+      expect(body.attached).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("AttachLoadBalancerTargetGroupsCommand");
+    });
+
+    it("POST /groups/:name/lb-target-groups/detach — detaches", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/groups/asg-1/lb-target-groups/detach", { targetGroupARNs: ["arn:tg1"] });
+      const body = await res.json();
+      expect(body.detached).toBe(true);
+    });
+  });
+
+  describe("Classic Load Balancers", () => {
+    it("GET /groups/:name/load-balancers — lists", async () => {
+      mockSend.mockResolvedValueOnce({ LoadBalancers: [{ LoadBalancerName: "my-clb" }] });
+      const res = await get("/groups/asg-1/load-balancers");
+      const body = await res.json();
+      expect(body.loadBalancers).toHaveLength(1);
+    });
+
+    it("POST /groups/:name/load-balancers — attaches", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/groups/asg-1/load-balancers", { loadBalancerNames: ["my-clb"] });
+      const body = await res.json();
+      expect(body.attached).toBe(true);
+    });
+
+    it("POST /groups/:name/load-balancers/detach — detaches", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/groups/asg-1/load-balancers/detach", { loadBalancerNames: ["my-clb"] });
+      const body = await res.json();
+      expect(body.detached).toBe(true);
     });
   });
 });

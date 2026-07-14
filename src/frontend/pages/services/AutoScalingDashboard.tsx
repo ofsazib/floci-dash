@@ -191,6 +191,16 @@ import {
   useCreateAutoScalingGroup,
   useDeleteAutoScalingGroup,
   useLaunchConfigurations,
+  useStartInstanceRefresh,
+  useInstanceRefreshes,
+  useCreateOrUpdateTags,
+  useDeleteTags,
+  useASGLoadBalancerTargetGroups,
+  useAttachLBTargetGroups,
+  useDetachLBTargetGroups,
+  useASGLoadBalancers,
+  useAttachLoadBalancers,
+  useDetachLoadBalancers,
 } from "../../hooks/useAutoScaling";
 import {
   useCloudFrontDistributions,
@@ -517,6 +527,28 @@ export function AutoScalingDashboard() {
   const [desired, setDesired] = useState("2");
   const [lcName, setLcName] = useState("");
 
+  // ── Advanced State ──
+  const [selectedASG, setSelectedASG] = useState<string | null>(null);
+  const [minHealthy, setMinHealthy] = useState("90");
+  const [tagKey, setTagKey] = useState("");
+  const [tagValue, setTagValue] = useState("");
+  const [tgArnsList, setTgArnsList] = useState("");
+  const [lbNamesList, setLbNamesList] = useState("");
+  const startRefresh = useStartInstanceRefresh();
+  const instanceRefreshes = useInstanceRefreshes(selectedASG);
+  const lbTargetGroups = useASGLoadBalancerTargetGroups(selectedASG);
+  const asgLoadBalancers = useASGLoadBalancers(selectedASG);
+  const createOrUpdateTags = useCreateOrUpdateTags();
+  const deleteTags = useDeleteTags();
+  const attachTGs = useAttachLBTargetGroups();
+  const detachTGs = useDetachLBTargetGroups();
+  const attachLBs = useAttachLoadBalancers();
+  const detachLBs = useDetachLoadBalancers();
+  const [showStartRefresh, setShowStartRefresh] = useState(false);
+  const [showAddTag, setShowAddTag] = useState(false);
+  const [showAttachTGs, setShowAttachTGs] = useState(false);
+  const [showAttachLBs, setShowAttachLBs] = useState(false);
+
   if (isLoading) return <TableSkeleton />;
 
   return (
@@ -595,6 +627,186 @@ export function AutoScalingDashboard() {
               filterPlaceholder="Find launch configs"
               filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
             />
+          ),
+        },
+        {
+          id: "advanced",
+          label: "Advanced",
+          content: (
+            <SpaceBetween size="l">
+              {/* ASG Selector */}
+              <FormField label="Select Auto Scaling Group">
+                <Select
+                  selectedOption={selectedASG ? { label: selectedASG, value: selectedASG } : null}
+                  onChange={({ detail }) => setSelectedASG(detail.selectedOption?.value || null)}
+                  options={(data?.groups || []).map((g: any) => ({
+                    label: g.AutoScalingGroupName,
+                    value: g.AutoScalingGroupName,
+                  }))}
+                  placeholder="Select an ASG..."
+                />
+              </FormField>
+
+              {selectedASG && (
+                <SpaceBetween size="l">
+                  {/* Instance Refresh */}
+                  <Container header={<Header variant="h2" actions={<Button onClick={() => setShowStartRefresh(true)}>Start Refresh</Button>}>
+                    Instance Refresh
+                  </Header>}>
+                    {instanceRefreshes.data?.instanceRefreshes?.length ? (
+                      <ResourceTable
+                        resourceName="Instance Refresh"
+                        items={instanceRefreshes.data.instanceRefreshes.map((r: any) => ({
+                          id: r.instanceRefreshId,
+                          status: r.status,
+                          percent: r.percentageComplete + "%",
+                          start: r.startTime ? new Date(r.startTime).toLocaleString() : "-",
+                        }))}
+                        columns={[
+                          { id: "id", header: "Refresh ID", cell: (i: any) => i.id, isRowHeader: true },
+                          { id: "status", header: "Status", cell: (i: any) => i.status },
+                          { id: "percent", header: "Complete", cell: (i: any) => i.percent },
+                          { id: "start", header: "Started", cell: (i: any) => i.start },
+                        ]}
+                        loading={instanceRefreshes.isLoading}
+                        emptyMessage="No instance refreshes"
+                      />
+                    ) : (
+                      <Box variant="small" color="text-status-inactive">No instance refreshes found.</Box>
+                    )}
+                  </Container>
+
+                  {/* Tags */}
+                  <Container header={<Header variant="h2" actions={<Button onClick={() => setShowAddTag(true)}>Add tag</Button>}>
+                    Tags
+                  </Header>}>
+                    {(data?.groups?.find((g: any) => g.AutoScalingGroupName === selectedASG)?.Tags || []).length > 0 ? (
+                      <ResourceTable
+                        resourceName="Tag"
+                        items={(data?.groups?.find((g: any) => g.AutoScalingGroupName === selectedASG)?.Tags || []).map((t: any) => ({
+                          key: t.Key,
+                          value: t.Value,
+                        }))}
+                        columns={[
+                          { id: "key", header: "Key", cell: (i: any) => i.key, isRowHeader: true },
+                          { id: "value", header: "Value", cell: (i: any) => i.value },
+                        ]}
+                        emptyMessage="No tags"
+                      />
+                    ) : (
+                      <Box variant="small" color="text-status-inactive">No tags on this ASG.</Box>
+                    )}
+                  </Container>
+
+                  {/* LB Target Groups */}
+                  <Container header={<Header variant="h2" actions={<Button onClick={() => setShowAttachTGs(true)}>Attach</Button>}>
+                    LB Target Groups
+                  </Header>}>
+                    {lbTargetGroups.data?.targetGroups?.length ? (
+                      <SpaceBetween size="xs">
+                        {lbTargetGroups.data.targetGroups.map((tg: any) => (
+                          <Box key={tg.loadBalancerTargetGroupARN}>
+                            <Box variant="small">{tg.loadBalancerTargetGroupARN}</Box>
+                            <DeleteButton
+                              itemName={tg.loadBalancerTargetGroupARN}
+                              resourceType="target group attachment"
+                              onDelete={() => detachTGs.mutateAsync({ name: selectedASG, targetGroupARNs: [tg.loadBalancerTargetGroupARN] })}
+                            />
+                          </Box>
+                        ))}
+                      </SpaceBetween>
+                    ) : (
+                      <Box variant="small" color="text-status-inactive">No target groups attached.</Box>
+                    )}
+                  </Container>
+
+                  {/* Classic Load Balancers */}
+                  <Container header={<Header variant="h2" actions={<Button onClick={() => setShowAttachLBs(true)}>Attach</Button>}>
+                    Classic Load Balancers
+                  </Header>}>
+                    {asgLoadBalancers.data?.loadBalancers?.length ? (
+                      <SpaceBetween size="xs">
+                        {asgLoadBalancers.data.loadBalancers.map((lb: any) => (
+                          <Box key={lb.loadBalancerName}>
+                            <Box variant="small">{lb.loadBalancerName}</Box>
+                            <DeleteButton
+                              itemName={lb.loadBalancerName}
+                              resourceType="load balancer attachment"
+                              onDelete={() => detachLBs.mutateAsync({ name: selectedASG, loadBalancerNames: [lb.loadBalancerName] })}
+                            />
+                          </Box>
+                        ))}
+                      </SpaceBetween>
+                    ) : (
+                      <Box variant="small" color="text-status-inactive">No classic load balancers attached.</Box>
+                    )}
+                  </Container>
+                </SpaceBetween>
+              )}
+
+              {/* Modals */}
+              {showStartRefresh && (
+                <Modal visible onDismiss={() => setShowStartRefresh(false)} header="Start Instance Refresh" size="small" footer={
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <Button variant="link" onClick={() => setShowStartRefresh(false)}>Cancel</Button>
+                    <Button variant="primary" loading={startRefresh.isPending} onClick={() => {
+                      if (selectedASG) startRefresh.mutate({ name: selectedASG, minHealthyPercentage: Number(minHealthy) || 90 }, { onSuccess: () => setShowStartRefresh(false) });
+                    }}>Start</Button>
+                  </SpaceBetween>
+                }>
+                  <FormField label="Min Healthy %" description="Minimum percentage of instances to keep healthy">
+                    <Input value={minHealthy} onChange={({ detail }) => setMinHealthy(detail.value)} placeholder="90" type="number" />
+                  </FormField>
+                </Modal>
+              )}
+              {showAddTag && (
+                <Modal visible onDismiss={() => setShowAddTag(false)} header="Add Tag" size="small" footer={
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <Button variant="link" onClick={() => setShowAddTag(false)}>Cancel</Button>
+                    <Button variant="primary" loading={createOrUpdateTags.isPending} onClick={() => {
+                      if (selectedASG && tagKey.trim() && tagValue.trim()) {
+                        createOrUpdateTags.mutate({ name: selectedASG, tags: [{ key: tagKey.trim(), value: tagValue.trim() }] }, { onSuccess: () => { setShowAddTag(false); setTagKey(""); setTagValue(""); } });
+                      }
+                    }} disabled={!tagKey.trim() || !tagValue.trim()}>Add</Button>
+                  </SpaceBetween>
+                }>
+                  <FormField label="Key"><Input value={tagKey} onChange={({ detail }) => setTagKey(detail.value)} placeholder="env" /></FormField>
+                  <FormField label="Value"><Input value={tagValue} onChange={({ detail }) => setTagValue(detail.value)} placeholder="production" /></FormField>
+                </Modal>
+              )}
+              {showAttachTGs && (
+                <Modal visible onDismiss={() => setShowAttachTGs(false)} header="Attach LB Target Groups" size="medium" footer={
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <Button variant="link" onClick={() => setShowAttachTGs(false)}>Cancel</Button>
+                    <Button variant="primary" loading={attachTGs.isPending} onClick={() => {
+                      if (selectedASG && tgArnsList.trim()) {
+                        attachTGs.mutate({ name: selectedASG, targetGroupARNs: tgArnsList.split(/[,\n]+/).map((s: string) => s.trim()).filter(Boolean) }, { onSuccess: () => { setShowAttachTGs(false); setTgArnsList(""); } });
+                      }
+                    }} disabled={!tgArnsList.trim()}>Attach</Button>
+                  </SpaceBetween>
+                }>
+                  <FormField label="Target Group ARNs" description="Comma or newline separated">
+                    <Textarea value={tgArnsList} onChange={({ detail }) => setTgArnsList(detail.value)} placeholder="arn:aws:elasticloadbalancing:..." rows={3} />
+                  </FormField>
+                </Modal>
+              )}
+              {showAttachLBs && (
+                <Modal visible onDismiss={() => setShowAttachLBs(false)} header="Attach Classic Load Balancers" size="medium" footer={
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <Button variant="link" onClick={() => setShowAttachLBs(false)}>Cancel</Button>
+                    <Button variant="primary" loading={attachLBs.isPending} onClick={() => {
+                      if (selectedASG && lbNamesList.trim()) {
+                        attachLBs.mutate({ name: selectedASG, loadBalancerNames: lbNamesList.split(/[,\n]+/).map((s: string) => s.trim()).filter(Boolean) }, { onSuccess: () => { setShowAttachLBs(false); setLbNamesList(""); } });
+                      }
+                    }} disabled={!lbNamesList.trim()}>Attach</Button>
+                  </SpaceBetween>
+                }>
+                  <FormField label="Load Balancer Names" description="Comma or newline separated">
+                    <Textarea value={lbNamesList} onChange={({ detail }) => setLbNamesList(detail.value)} placeholder="my-classic-lb" rows={3} />
+                  </FormField>
+                </Modal>
+              )}
+            </SpaceBetween>
           ),
         },
       ]}

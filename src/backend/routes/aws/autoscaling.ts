@@ -11,6 +11,16 @@ import {
   DescribeLaunchConfigurationsCommand,
   DescribePoliciesCommand,
   DescribeScalingActivitiesCommand,
+  StartInstanceRefreshCommand,
+  DescribeInstanceRefreshesCommand,
+  CreateOrUpdateTagsCommand,
+  DeleteTagsCommand,
+  AttachLoadBalancerTargetGroupsCommand,
+  DetachLoadBalancerTargetGroupsCommand,
+  DescribeLoadBalancerTargetGroupsCommand,
+  AttachLoadBalancersCommand,
+  DetachLoadBalancersCommand,
+  DescribeLoadBalancersCommand,
 } from "@aws-sdk/client-auto-scaling";
 
 const router = new Hono();
@@ -151,6 +161,169 @@ router.get("/groups/:name/activities", async (c: Context) => {
   );
   const activities = result.Activities || [];
   return c.json({ activities, total: activities.length });
+});
+
+// ── Instance Refresh ─────────────────────────────────────
+
+router.post("/groups/:name/instance-refresh", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<{ minHealthyPercentage?: number; instanceWarmup?: number; checkpoints?: any[] }>();
+  const client = getClient();
+  const result = await client.send(
+    new StartInstanceRefreshCommand({
+      AutoScalingGroupName: name,
+      Preferences: body.minHealthyPercentage !== undefined ? {
+        MinHealthyPercentage: body.minHealthyPercentage,
+        InstanceWarmup: body.instanceWarmup,
+        CheckpointPercentages: body.checkpoints,
+      } : undefined,
+    })
+  );
+  return c.json({ instanceRefreshId: result.InstanceRefreshId, started: true }, 201);
+});
+
+router.get("/groups/:name/instance-refreshes", async (c: Context) => {
+  const name = c.req.param("name");
+  const client = getClient();
+  const result = await client.send(
+    new DescribeInstanceRefreshesCommand({ AutoScalingGroupName: name })
+  );
+  const refreshes = (result.InstanceRefreshes || []).map((r) => ({
+    instanceRefreshId: r.InstanceRefreshId,
+    status: r.Status,
+    statusReason: r.StatusReason,
+    startTime: r.StartTime?.toISOString(),
+    endTime: r.EndTime?.toISOString(),
+    percentageComplete: r.PercentageComplete,
+    instancesToUpdate: r.InstancesToUpdate,
+  }));
+  return c.json({ instanceRefreshes: refreshes, total: refreshes.length });
+});
+
+// ── Tags ─────────────────────────────────────────────────
+
+router.post("/groups/:name/tags", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<{ tags: { key: string; value: string; propagateAtLaunch?: boolean }[] }>();
+  if (!body.tags?.length) return c.json({ error: "tags is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new CreateOrUpdateTagsCommand({
+      Tags: body.tags.map((t) => ({
+        ResourceId: name,
+        ResourceType: "auto-scaling-group",
+        Key: t.key,
+        Value: t.value,
+        PropagateAtLaunch: t.propagateAtLaunch ?? true,
+      })),
+    })
+  );
+  return c.json({ updated: true });
+});
+
+router.post("/groups/:name/tags/delete", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<{ tagKeys: string[] }>();
+  if (!body.tagKeys?.length) return c.json({ error: "tagKeys is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new DeleteTagsCommand({
+      Tags: body.tagKeys.map((key) => ({
+        ResourceId: name,
+        ResourceType: "auto-scaling-group",
+        Key: key,
+        Value: "",
+        PropagateAtLaunch: true,
+      })),
+    })
+  );
+  return c.json({ deleted: true });
+});
+
+// ── LB Target Groups ─────────────────────────────────────
+
+router.get("/groups/:name/lb-target-groups", async (c: Context) => {
+  const name = c.req.param("name");
+  const client = getClient();
+  const result = await client.send(
+    new DescribeLoadBalancerTargetGroupsCommand({ AutoScalingGroupName: name })
+  );
+  const tgs = (result.LoadBalancerTargetGroups || []).map((tg) => ({
+    loadBalancerTargetGroupARN: tg.LoadBalancerTargetGroupARN,
+    state: tg.State,
+  }));
+  return c.json({ targetGroups: tgs, total: tgs.length });
+});
+
+router.post("/groups/:name/lb-target-groups", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<{ targetGroupARNs: string[] }>();
+  if (!body.targetGroupARNs?.length) return c.json({ error: "targetGroupARNs is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new AttachLoadBalancerTargetGroupsCommand({
+      AutoScalingGroupName: name,
+      TargetGroupARNs: body.targetGroupARNs,
+    })
+  );
+  return c.json({ attached: true });
+});
+
+router.post("/groups/:name/lb-target-groups/detach", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<{ targetGroupARNs: string[] }>();
+  if (!body.targetGroupARNs?.length) return c.json({ error: "targetGroupARNs is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new DetachLoadBalancerTargetGroupsCommand({
+      AutoScalingGroupName: name,
+      TargetGroupARNs: body.targetGroupARNs,
+    })
+  );
+  return c.json({ detached: true });
+});
+
+// ── Classic Load Balancers ───────────────────────────────
+
+router.get("/groups/:name/load-balancers", async (c: Context) => {
+  const name = c.req.param("name");
+  const client = getClient();
+  const result = await client.send(
+    new DescribeLoadBalancersCommand({ AutoScalingGroupName: name })
+  );
+  const lbs = (result.LoadBalancers || []).map((lb) => ({
+    loadBalancerName: lb.LoadBalancerName,
+    state: lb.State,
+  }));
+  return c.json({ loadBalancers: lbs, total: lbs.length });
+});
+
+router.post("/groups/:name/load-balancers", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<{ loadBalancerNames: string[] }>();
+  if (!body.loadBalancerNames?.length) return c.json({ error: "loadBalancerNames is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new AttachLoadBalancersCommand({
+      AutoScalingGroupName: name,
+      LoadBalancerNames: body.loadBalancerNames,
+    })
+  );
+  return c.json({ attached: true });
+});
+
+router.post("/groups/:name/load-balancers/detach", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<{ loadBalancerNames: string[] }>();
+  if (!body.loadBalancerNames?.length) return c.json({ error: "loadBalancerNames is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new DetachLoadBalancersCommand({
+      AutoScalingGroupName: name,
+      LoadBalancerNames: body.loadBalancerNames,
+    })
+  );
+  return c.json({ detached: true });
 });
 
 export default router;

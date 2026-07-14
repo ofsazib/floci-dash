@@ -28,6 +28,16 @@ import {
   useLaunchConfigurations,
   useScalingPolicies,
   useScalingActivities,
+  useStartInstanceRefresh,
+  useInstanceRefreshes,
+  useCreateOrUpdateTags,
+  useDeleteTags,
+  useASGLoadBalancerTargetGroups,
+  useAttachLBTargetGroups,
+  useDetachLBTargetGroups,
+  useASGLoadBalancers,
+  useAttachLoadBalancers,
+  useDetachLoadBalancers,
 } from "./useAutoScaling";
 
 beforeEach(() => {
@@ -152,6 +162,132 @@ describe("useAutoScaling hooks", () => {
       });
       expect(result.current.fetchStatus).toBe("idle");
       expect(mockApi).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("useStartInstanceRefresh", () => {
+    it("calls api with POST method", async () => {
+      mockApi.mockResolvedValueOnce({});
+      const { result } = renderHook(() => useStartInstanceRefresh(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ name: "asg-1", minHealthyPercentage: 90 });
+      expect(mockApi).toHaveBeenCalledWith(
+        "/aws/autoscaling/groups/asg-1/instance-refresh",
+        expect.objectContaining({ method: "POST" })
+      );
+    });
+  });
+
+  describe("useInstanceRefreshes", () => {
+    it("does NOT call api when null", () => {
+      renderHook(() => useInstanceRefreshes(null), { wrapper: createWrapper() });
+      expect(mockApi).not.toHaveBeenCalled();
+    });
+
+    it("calls api when provided", async () => {
+      mockApi.mockResolvedValueOnce({ instanceRefreshes: [], total: 0 });
+      const { result } = renderHook(() => useInstanceRefreshes("asg-1"), { wrapper: createWrapper() });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockApi).toHaveBeenCalledWith("/aws/autoscaling/groups/asg-1/instance-refreshes");
+    });
+  });
+
+  describe("useCreateOrUpdateTags", () => {
+    it("calls api with POST method", async () => {
+      mockApi.mockResolvedValueOnce({});
+      const { result } = renderHook(() => useCreateOrUpdateTags(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ name: "asg-1", tags: [{ key: "env", value: "prod" }] });
+      expect(mockApi).toHaveBeenCalledWith(
+        "/aws/autoscaling/groups/asg-1/tags",
+        expect.objectContaining({ method: "POST" })
+      );
+    });
+  });
+
+  describe("useDeleteTags", () => {
+    it("calls api with POST method", async () => {
+      mockApi.mockResolvedValueOnce({});
+      const { result } = renderHook(() => useDeleteTags(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ name: "asg-1", tagKeys: ["env"] });
+      expect(mockApi).toHaveBeenCalledWith(
+        "/aws/autoscaling/groups/asg-1/tags/delete",
+        expect.objectContaining({ method: "POST" })
+      );
+    });
+  });
+
+  describe("useASGLoadBalancerTargetGroups", () => {
+    it("does NOT call api when null", () => {
+      renderHook(() => useASGLoadBalancerTargetGroups(null), { wrapper: createWrapper() });
+      expect(mockApi).not.toHaveBeenCalled();
+    });
+
+    it("calls api when provided", async () => {
+      mockApi.mockResolvedValueOnce({ targetGroups: [], total: 0 });
+      const { result } = renderHook(() => useASGLoadBalancerTargetGroups("asg-1"), { wrapper: createWrapper() });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockApi).toHaveBeenCalledWith("/aws/autoscaling/groups/asg-1/lb-target-groups");
+    });
+  });
+
+  describe("useAttachLBTargetGroups", () => {
+    it("calls api with POST method", async () => {
+      mockApi.mockResolvedValueOnce({});
+      const { result } = renderHook(() => useAttachLBTargetGroups(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ name: "asg-1", targetGroupARNs: ["arn:tg1"] });
+      expect(mockApi).toHaveBeenCalledWith(
+        "/aws/autoscaling/groups/asg-1/lb-target-groups",
+        expect.objectContaining({ method: "POST" })
+      );
+    });
+  });
+
+  describe("useDetachLBTargetGroups", () => {
+    it("calls api with POST method", async () => {
+      mockApi.mockResolvedValueOnce({});
+      const { result } = renderHook(() => useDetachLBTargetGroups(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ name: "asg-1", targetGroupARNs: ["arn:tg1"] });
+      expect(mockApi).toHaveBeenCalledWith(
+        "/aws/autoscaling/groups/asg-1/lb-target-groups/detach",
+        expect.objectContaining({ method: "POST" })
+      );
+    });
+  });
+
+  describe("useASGLoadBalancers", () => {
+    it("does NOT call api when null", () => {
+      renderHook(() => useASGLoadBalancers(null), { wrapper: createWrapper() });
+      expect(mockApi).not.toHaveBeenCalled();
+    });
+
+    it("calls api when provided", async () => {
+      mockApi.mockResolvedValueOnce({ loadBalancers: [], total: 0 });
+      const { result } = renderHook(() => useASGLoadBalancers("asg-1"), { wrapper: createWrapper() });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockApi).toHaveBeenCalledWith("/aws/autoscaling/groups/asg-1/load-balancers");
+    });
+  });
+
+  describe("useAttachLoadBalancers", () => {
+    it("calls api with POST method", async () => {
+      mockApi.mockResolvedValueOnce({});
+      const { result } = renderHook(() => useAttachLoadBalancers(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ name: "asg-1", loadBalancerNames: ["my-clb"] });
+      expect(mockApi).toHaveBeenCalledWith(
+        "/aws/autoscaling/groups/asg-1/load-balancers",
+        expect.objectContaining({ method: "POST" })
+      );
+    });
+  });
+
+  describe("useDetachLoadBalancers", () => {
+    it("calls api with POST method", async () => {
+      mockApi.mockResolvedValueOnce({});
+      const { result } = renderHook(() => useDetachLoadBalancers(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ name: "asg-1", loadBalancerNames: ["my-clb"] });
+      expect(mockApi).toHaveBeenCalledWith(
+        "/aws/autoscaling/groups/asg-1/load-balancers/detach",
+        expect.objectContaining({ method: "POST" })
+      );
     });
   });
 });

@@ -166,3 +166,125 @@ export function useScalingActivities(groupName: string | null) {
     enabled: !!groupName,
   });
 }
+
+// ─── Instance Refresh ────────────────────────────────────
+
+export function useStartInstanceRefresh() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { name: string; minHealthyPercentage?: number; instanceWarmup?: number }) =>
+      api(`/aws/autoscaling/groups/${encodeURIComponent(params.name)}/instance-refresh`, {
+        method: "POST",
+        body: JSON.stringify({ minHealthyPercentage: params.minHealthyPercentage, instanceWarmup: params.instanceWarmup }),
+      }),
+    onSuccess: (_data, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "autoscaling", "instance-refreshes", variables.name] }),
+  });
+}
+
+export function useInstanceRefreshes(groupName: string | null) {
+  return useQuery<{ instanceRefreshes: any[]; total: number }>({
+    queryKey: ["aws", "autoscaling", "instance-refreshes", groupName],
+    queryFn: () => api(`/aws/autoscaling/groups/${encodeURIComponent(groupName!)}/instance-refreshes`),
+    enabled: !!groupName,
+    refetchInterval: 5000,
+  });
+}
+
+// ─── Tags ────────────────────────────────────────────────
+
+export function useCreateOrUpdateTags() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { name: string; tags: { key: string; value: string; propagateAtLaunch?: boolean }[] }) =>
+      api(`/aws/autoscaling/groups/${encodeURIComponent(params.name)}/tags`, {
+        method: "POST",
+        body: JSON.stringify({ tags: params.tags }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "autoscaling", "groups"] }),
+  });
+}
+
+export function useDeleteTags() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { name: string; tagKeys: string[] }) =>
+      api(`/aws/autoscaling/groups/${encodeURIComponent(params.name)}/tags/delete`, {
+        method: "POST",
+        body: JSON.stringify({ tagKeys: params.tagKeys }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "autoscaling", "groups"] }),
+  });
+}
+
+// ─── LB Target Groups ────────────────────────────────────
+
+export function useASGLoadBalancerTargetGroups(groupName: string | null) {
+  return useQuery<{ targetGroups: any[]; total: number }>({
+    queryKey: ["aws", "autoscaling", "lb-target-groups", groupName],
+    queryFn: () => api(`/aws/autoscaling/groups/${encodeURIComponent(groupName!)}/lb-target-groups`),
+    enabled: !!groupName,
+  });
+}
+
+export function useAttachLBTargetGroups() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { name: string; targetGroupARNs: string[] }) =>
+      api(`/aws/autoscaling/groups/${encodeURIComponent(params.name)}/lb-target-groups`, {
+        method: "POST",
+        body: JSON.stringify({ targetGroupARNs: params.targetGroupARNs }),
+      }),
+    onSuccess: (_data, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "autoscaling", "lb-target-groups", variables.name] }),
+  });
+}
+
+export function useDetachLBTargetGroups() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { name: string; targetGroupARNs: string[] }) =>
+      api(`/aws/autoscaling/groups/${encodeURIComponent(params.name)}/lb-target-groups/detach`, {
+        method: "POST",
+        body: JSON.stringify({ targetGroupARNs: params.targetGroupARNs }),
+      }),
+    onSuccess: (_data, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "autoscaling", "lb-target-groups", variables.name] }),
+  });
+}
+
+// ─── Classic Load Balancers ──────────────────────────────
+
+export function useASGLoadBalancers(groupName: string | null) {
+  return useQuery<{ loadBalancers: any[]; total: number }>({
+    queryKey: ["aws", "autoscaling", "load-balancers", groupName],
+    queryFn: () => api(`/aws/autoscaling/groups/${encodeURIComponent(groupName!)}/load-balancers`),
+    enabled: !!groupName,
+  });
+}
+
+export function useAttachLoadBalancers() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { name: string; loadBalancerNames: string[] }) =>
+      api(`/aws/autoscaling/groups/${encodeURIComponent(params.name)}/load-balancers`, {
+        method: "POST",
+        body: JSON.stringify({ loadBalancerNames: params.loadBalancerNames }),
+      }),
+    onSuccess: (_data, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "autoscaling", "load-balancers", variables.name] }),
+  });
+}
+
+export function useDetachLoadBalancers() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { name: string; loadBalancerNames: string[] }) =>
+      api(`/aws/autoscaling/groups/${encodeURIComponent(params.name)}/load-balancers/detach`, {
+        method: "POST",
+        body: JSON.stringify({ loadBalancerNames: params.loadBalancerNames }),
+      }),
+    onSuccess: (_data, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "autoscaling", "load-balancers", variables.name] }),
+  });
+}
