@@ -1696,7 +1696,7 @@ These items were in the initial audit but found to be already implemented upon c
 | G.10 (old) partial | WAFv2 Rule Groups | CreateRuleGroup, GetRuleGroup, UpdateRuleGroup, DeleteRuleGroup, ListRuleGroups | `wafv2.ts` — full CRUD routes |
 | G.12 (old) partial | SES DKIM + MailFrom | GetIdentityDkimAttributes, SetIdentityDkimEnabled, SetIdentityMailFromDomain, GetIdentityMailFromDomainAttributes | `ses.ts` — routes exist + included in identity list/detail |
 | G.18 (old) full | Config Service Conformance Packs + Recorder | PutConformancePack, DeleteConformancePack, DescribeConformancePacks, PutConfigurationRecorder, DescribeConfigurationRecorders, StartConfigurationRecorder, StopConfigurationRecorder, PutDeliveryChannel, DescribeDeliveryChannels, StartConfigRulesEvaluation | `configservice.ts` — all routes exist |
-| G.27 (old) full | Athena Work Groups + Query Results + Data Catalogs | GetWorkGroup, CreateWorkGroup, DeleteWorkGroup, GetQueryResults, StopQueryExecution, ListDataCatalogs, GetDataCatalog, ListDatabases, ListTableMetadata | `athena.ts` — all routes exist |
+| G.27 (old) full | Athena Work Groups + Query Results + Data Catalogs | GetWorkGroup, CreateWorkGroup, DeleteWorkGroup, GetQueryResults, StopQueryExecution, ListDataCatalogs, GetDataCatalog, ListDatabases, ListTableMetadata | Done 2026-07-14 (Query Results viewer, Stop query, Work Group detail, Catalog/Database/Table browser + metadata) |
 
 ---
 
