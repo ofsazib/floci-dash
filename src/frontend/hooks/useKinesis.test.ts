@@ -26,6 +26,9 @@ import {
   useDeleteKinesisStream,
   useKinesisShards,
   useKinesisConsumers,
+  useRegisterKinesisConsumer,
+  useDeregisterKinesisConsumer,
+  useSubscribeToShard,
   usePutKinesisRecord,
   usePutKinesisRecords,
   useKinesisRecords,
@@ -202,6 +205,57 @@ describe("useKinesis hooks", () => {
         wrapper: createWrapper(),
       });
       expect(result.current.fetchStatus).toBe("idle");
+    });
+  });
+
+  describe("useRegisterKinesisConsumer", () => {
+    it("calls POST with correct URL", async () => {
+      mockApi.mockResolvedValueOnce({ consumer: { ConsumerName: "my-consumer" } });
+      const { result } = renderHook(() => useRegisterKinesisConsumer("stream-1"), {
+        wrapper: createWrapper(),
+      });
+      await result.current.mutateAsync("my-consumer");
+      expect(mockApi).toHaveBeenCalledWith("/aws/kinesis/streams/stream-1/consumers", {
+        method: "POST",
+        body: JSON.stringify({ consumerName: "my-consumer" }),
+      });
+    });
+  });
+
+  describe("useDeregisterKinesisConsumer", () => {
+    it("calls DELETE with correct URL", async () => {
+      mockApi.mockResolvedValueOnce({ deregistered: true });
+      const { result } = renderHook(() => useDeregisterKinesisConsumer("stream-1"), {
+        wrapper: createWrapper(),
+      });
+      await result.current.mutateAsync("my-consumer");
+      expect(mockApi).toHaveBeenCalledWith(
+        "/aws/kinesis/streams/stream-1/consumers/my-consumer",
+        { method: "DELETE" }
+      );
+    });
+  });
+
+  describe("useSubscribeToShard", () => {
+    it("calls POST with correct URL and params", async () => {
+      mockApi.mockResolvedValueOnce({ events: [], total: 0 });
+      const { result } = renderHook(() => useSubscribeToShard("stream-1"), {
+        wrapper: createWrapper(),
+      });
+      await result.current.mutateAsync({
+        consumerARN: "arn:aws:kinesis:...:consumer/my-consumer",
+        shardId: "shardId-000000000001",
+      });
+      expect(mockApi).toHaveBeenCalledWith(
+        "/aws/kinesis/streams/stream-1/subscribe-to-shard",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            consumerARN: "arn:aws:kinesis:...:consumer/my-consumer",
+            shardId: "shardId-000000000001",
+          }),
+        }
+      );
     });
   });
 });

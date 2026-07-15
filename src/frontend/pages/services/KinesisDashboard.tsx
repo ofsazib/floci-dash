@@ -204,6 +204,10 @@ import {
   useCreateKinesisStream,
   useDeleteKinesisStream,
   useKinesisShards,
+  useKinesisConsumers,
+  useRegisterKinesisConsumer,
+  useDeregisterKinesisConsumer,
+  useSubscribeToShard,
   usePutKinesisRecord,
 } from "../../hooks/useKinesis";
 import {
@@ -513,19 +517,39 @@ export function KinesisDashboard() {
   const [name, setName] = useState("");
   const [shardCount, setShardCount] = useState("1");
   const [selectedStream, setSelectedStream] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState("streams");
+
+  // Shards
   const { data: shardsData } = useKinesisShards(selectedStream);
   const putRecord = usePutKinesisRecord(selectedStream || "");
   const [showPutRecord, setShowPutRecord] = useState(false);
   const [recordData, setRecordData] = useState("");
   const [recordKey, setRecordKey] = useState("");
 
+  // Consumers
+  const { data: consumersData } = useKinesisConsumers(selectedStream);
+  const registerConsumer = useRegisterKinesisConsumer(selectedStream || "");
+  const deregisterConsumer = useDeregisterKinesisConsumer(selectedStream || "");
+  const subscribeToShard = useSubscribeToShard(selectedStream || "");
+  const [showRegisterConsumer, setShowRegisterConsumer] = useState(false);
+  const [consumerName, setConsumerName] = useState("");
+  const [showSubscribe, setShowSubscribe] = useState(false);
+  const [subscribeShardId, setSubscribeShardId] = useState("");
+  const [subscribeStartingPos, setSubscribeStartingPos] = useState<string>("TRIM_HORIZON");
+  const [subscribeConsumerArn, setSubscribeConsumerArn] = useState("");
+  const [subscribeEvents, setSubscribeEvents] = useState<any[] | null>(null);
+
   if (isLoading) return <TableSkeleton />;
 
   return (
     <Tabs
-      activeTabId={selectedStream ? "detail" : "streams"}
+      activeTabId={activeTab}
       onChange={({ detail }) => {
-        if (detail.activeTabId === "streams") setSelectedStream(null);
+        setActiveTab(detail.activeTabId);
+        if (detail.activeTabId === "streams") {
+          setSelectedStream(null);
+          setSubscribeEvents(null);
+        }
       }}
       tabs={[
         {
@@ -535,7 +559,10 @@ export function KinesisDashboard() {
             <>
               {selectedStream && (
                 <Box margin={{ bottom: "s" }}>
-                  <Button iconName="arrow-left" onClick={() => setSelectedStream(null)}>
+                  <Button iconName="arrow-left" onClick={() => {
+                    setSelectedStream(null);
+                    setActiveTab("streams");
+                  }}>
                     Back to streams
                   </Button>
                 </Box>
@@ -562,7 +589,10 @@ export function KinesisDashboard() {
                     id: "name",
                     header: "Name",
                     cell: (i: any) => (
-                      <Button variant="link" onClick={() => setSelectedStream(i.name)}>
+                      <Button variant="link" onClick={() => {
+                        setSelectedStream(i.name);
+                        setActiveTab("detail");
+                      }}>
                         {i.name}
                       </Button>
                     ),
@@ -641,7 +671,10 @@ export function KinesisDashboard() {
           content: selectedStream ? (
             <>
               <Box margin={{ bottom: "s" }}>
-                <Button onClick={() => setShowPutRecord(true)}>Put record</Button>
+                <SpaceBetween direction="horizontal" size="xs">
+                  <Button onClick={() => setShowPutRecord(true)}>Put record</Button>
+                  <Button onClick={() => setActiveTab("consumers")}>View consumers</Button>
+                </SpaceBetween>
               </Box>
               <ResourceTable
                 resourceName="Shard"
@@ -707,6 +740,219 @@ export function KinesisDashboard() {
             </>
           ) : (
             <Alert type="info">Select a stream to view its shards.</Alert>
+          ),
+        },
+        {
+          id: "consumers",
+          label: selectedStream ? `Consumers: ${selectedStream}` : "Consumers",
+          disabled: !selectedStream,
+          content: selectedStream ? (
+            <>
+              <Box margin={{ bottom: "s" }}>
+                <SpaceBetween direction="horizontal" size="xs">
+                  <Button onClick={() => { setShowRegisterConsumer(true); setConsumerName(""); }}>
+                    Register consumer
+                  </Button>
+                  <Button onClick={() => { setActiveTab("detail"); }}>Back to shards</Button>
+                </SpaceBetween>
+              </Box>
+
+              <ResourceTable
+                resourceName="Consumer"
+                headerTitle={`Consumers for ${selectedStream}`}
+                headerCounter={consumersData?.total}
+                items={(consumersData?.consumers || []).map((c: any) => ({
+                  name: c.ConsumerName,
+                  arn: c.ConsumerARN,
+                  status: c.ConsumerStatus,
+                  created: c.ConsumerCreationTimestamp
+                    ? new Date(c.ConsumerCreationTimestamp).toLocaleDateString()
+                    : "-",
+                  streamArn: c.StreamARN,
+                }))}
+                loading={false}
+                emptyMessage="No consumers registered. Register a consumer to use enhanced fan-out."
+                columns={[
+                  { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+                  { id: "arn", header: "ARN", cell: (i: any) => <span style={{ fontSize: 12 }}>{i.arn}</span> },
+                  { id: "status", header: "Status", cell: (i: any) => <StatusIndicator type={i.status === "ACTIVE" ? "success" : "pending"}>{i.status}</StatusIndicator> },
+                  { id: "created", header: "Created", cell: (i: any) => i.created },
+                  {
+                    id: "actions",
+                    header: "",
+                    cell: (i: any) => (
+                      <SpaceBetween direction="horizontal" size="xs">
+                        <Button
+                          variant="normal"
+                          iconName="play"
+                          onClick={() => {
+                            setSubscribeConsumerArn(i.arn);
+                            setSubscribeShardId("");
+                            setSubscribeEvents(null);
+                            setShowSubscribe(true);
+                          }}
+                        >
+                          Subscribe
+                        </Button>
+                        <DeleteButton
+                          itemName={i.name}
+                          resourceType="consumer"
+                          loading={deregisterConsumer.isPending && deregisterConsumer.variables === i.name}
+                          onDelete={() => deregisterConsumer.mutateAsync(i.name)}
+                        />
+                      </SpaceBetween>
+                    ),
+                  },
+                ]}
+              />
+
+              {/* Register Consumer Modal */}
+              <Modal
+                visible={showRegisterConsumer}
+                onDismiss={() => setShowRegisterConsumer(false)}
+                header="Register Stream Consumer"
+                footer={
+                  <Box>
+                    <Button
+                      variant="primary"
+                      loading={registerConsumer.isPending}
+                      onClick={() => {
+                        registerConsumer.mutateAsync(consumerName).then(() => {
+                          setShowRegisterConsumer(false);
+                          setConsumerName("");
+                        });
+                      }}
+                    >
+                      Register
+                    </Button>
+                    <Button onClick={() => setShowRegisterConsumer(false)}>Cancel</Button>
+                  </Box>
+                }
+              >
+                <Form>
+                  <FormField label="Consumer name">
+                    <Input
+                      value={consumerName}
+                      onChange={({ detail }) => setConsumerName(detail.value)}
+                      placeholder="my-consumer"
+                    />
+                  </FormField>
+                </Form>
+              </Modal>
+
+              {/* Subscribe to Shard Modal */}
+              <Modal
+                visible={showSubscribe}
+                onDismiss={() => { setShowSubscribe(false); setSubscribeEvents(null); }}
+                header={`Subscribe to Shard — ${selectedStream}`}
+                size="large"
+                footer={
+                  <Box>
+                    <Button onClick={() => { setShowSubscribe(false); setSubscribeEvents(null); }}>Close</Button>
+                  </Box>
+                }
+              >
+                <Form>
+                  <FormField
+                    label="Shard ID"
+                    description="Select a shard to subscribe to"
+                  >
+                    <Select
+                      selectedOption={subscribeShardId
+                        ? { label: subscribeShardId, value: subscribeShardId }
+                        : { label: "Select a shard...", value: "" }
+                      }
+                      onChange={({ detail }) =>
+                        setSubscribeShardId(detail.selectedOption.value || "")
+                      }
+                      options={(shardsData?.shards || []).map((sh: any) => ({
+                        label: sh.ShardId,
+                        value: sh.ShardId,
+                      }))}
+                      placeholder="Select a shard"
+                    />
+                  </FormField>
+                  <FormField label="Starting position">
+                    <Select
+                      selectedOption={
+                        subscribeStartingPos === "LATEST"
+                          ? { label: "LATEST", value: "LATEST" }
+                          : subscribeStartingPos === "AT_TIMESTAMP"
+                          ? { label: "AT_TIMESTAMP", value: "AT_TIMESTAMP" }
+                          : { label: "TRIM_HORIZON (oldest)", value: "TRIM_HORIZON" }
+                      }
+                      onChange={({ detail }) =>
+                        setSubscribeStartingPos(detail.selectedOption.value || "TRIM_HORIZON")
+                      }
+                      options={[
+                        { label: "TRIM_HORIZON (oldest)", value: "TRIM_HORIZON" },
+                        { label: "LATEST", value: "LATEST" },
+                        { label: "AT_TIMESTAMP", value: "AT_TIMESTAMP" },
+                      ]}
+                    />
+                  </FormField>
+                  <Box margin={{ top: "s" }}>
+                    <Button
+                      variant="primary"
+                      loading={subscribeToShard.isPending}
+                      disabled={!subscribeShardId}
+                      onClick={() => {
+                        subscribeToShard
+                          .mutateAsync({
+                            consumerARN: subscribeConsumerArn,
+                            shardId: subscribeShardId,
+                            startingPosition: { Type: subscribeStartingPos },
+                          })
+                          .then((result) => {
+                            setSubscribeEvents(result.events);
+                          });
+                      }}
+                    >
+                      Fetch records
+                    </Button>
+                  </Box>
+
+                  {subscribeToShard.isError && (
+                    <Alert type="error" header="Subscribe error">
+                      {subscribeToShard.error?.message || "Failed to subscribe to shard"}
+                    </Alert>
+                  )}
+                </Form>
+
+                {subscribeEvents !== null && (
+                  <Box margin={{ top: "l" }}>
+                    <Header variant="h3">
+                      Records ({subscribeEvents.length})
+                    </Header>
+                    {subscribeEvents.length === 0 ? (
+                      <Alert type="info">No records received from shard.</Alert>
+                    ) : (
+                      <Container>
+                        <SpaceBetween size="s">
+                          {subscribeEvents.map((ev: any, idx: number) => (
+                            <Box
+                              key={idx}
+                              padding="s"
+                              variant="awsui-key-label"
+                            >
+                              <Box variant="awsui-key-label">Record {idx + 1}</Box>
+                              <Box><strong>Partition Key:</strong> {ev.partitionKey}</Box>
+                              <Box><strong>Sequence:</strong> {ev.sequenceNumber}</Box>
+                              <Box><strong>Data (base64):</strong> {ev.data}</Box>
+                              {ev.approximateArrivalTimestamp && (
+                                <Box><strong>Arrival:</strong> {new Date(ev.approximateArrivalTimestamp).toLocaleString()}</Box>
+                              )}
+                            </Box>
+                          ))}
+                        </SpaceBetween>
+                      </Container>
+                    )}
+                  </Box>
+                )}
+              </Modal>
+            </>
+          ) : (
+            <Alert type="info">Select a stream to view and manage its consumers.</Alert>
           ),
         },
       ]}

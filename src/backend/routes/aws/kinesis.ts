@@ -10,6 +10,10 @@ import {
   DeleteStreamCommand,
   ListShardsCommand,
   ListStreamConsumersCommand,
+  RegisterStreamConsumerCommand,
+  DeregisterStreamConsumerCommand,
+  DescribeStreamConsumerCommand,
+  SubscribeToShardCommand,
   PutRecordCommand,
   PutRecordsCommand,
   GetShardIteratorCommand,
@@ -95,6 +99,101 @@ router.get("/streams/:name/consumers", async (c: Context) => {
   const result = await client.send(new ListStreamConsumersCommand({ StreamARN: streamARN }));
   const consumers = result.Consumers || [];
   return c.json({ consumers, total: consumers.length });
+});
+
+router.post("/streams/:name/consumers", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<{ consumerName: string }>();
+  if (!body.consumerName) return c.json({ error: "consumerName is required" }, 400);
+
+  const client = getClient();
+  const describeResult = await client.send(new DescribeStreamCommand({ StreamName: name }));
+  const streamARN = describeResult.StreamDescription?.StreamARN;
+  if (!streamARN) return c.json({ error: "stream not found" }, 404);
+
+  const result = await client.send(
+    new RegisterStreamConsumerCommand({
+      StreamARN: streamARN,
+      ConsumerName: body.consumerName,
+    })
+  );
+  return c.json({ consumer: result.Consumer }, 201);
+});
+
+router.delete("/streams/:name/consumers/:consumerName", async (c: Context) => {
+  const name = c.req.param("name");
+  const consumerName = c.req.param("consumerName");
+  const client = getClient();
+  const describeResult = await client.send(new DescribeStreamCommand({ StreamName: name }));
+  const streamARN = describeResult.StreamDescription?.StreamARN;
+  if (!streamARN) return c.json({ error: "stream not found" }, 404);
+
+  await client.send(
+    new DeregisterStreamConsumerCommand({
+      StreamARN: streamARN,
+      ConsumerName: consumerName,
+    })
+  );
+  return c.json({ deregistered: true });
+});
+
+router.get("/streams/:name/consumers/:consumerName", async (c: Context) => {
+  const name = c.req.param("name");
+  const consumerName = c.req.param("consumerName");
+  const client = getClient();
+  const describeResult = await client.send(new DescribeStreamCommand({ StreamName: name }));
+  const streamARN = describeResult.StreamDescription?.StreamARN;
+  if (!streamARN) return c.json({ error: "stream not found" }, 404);
+
+  const result = await client.send(
+    new DescribeStreamConsumerCommand({
+      StreamARN: streamARN,
+      ConsumerName: consumerName,
+    })
+  );
+  return c.json({ consumer: result.ConsumerDescription });
+});
+
+// ── SubscribeToShard (Enhanced Fan-out) ──────────────────
+
+router.post("/streams/:name/subscribe-to-shard", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<{
+    consumerARN: string;
+    shardId: string;
+    startingPosition?: { Type: string; SequenceNumber?: string; Timestamp?: number };
+  }>();
+  if (!body.consumerARN) return c.json({ error: "consumerARN is required" }, 400);
+  if (!body.shardId) return c.json({ error: "shardId is required" }, 400);
+
+  const client = getClient();
+  const result = await client.send(
+    new SubscribeToShardCommand({
+      ConsumerARN: body.consumerARN,
+      ShardId: body.shardId,
+      StartingPosition: body.startingPosition || { Type: "TRIM_HORIZON" },
+    })
+  );
+
+  // Collect all events from the async event stream
+  const events: any[] = [];
+  if (result.EventStream) {
+    for await (const event of result.EventStream) {
+      if (event.Records) {
+        for (const rec of event.Records) {
+          events.push({
+            sequenceNumber: rec.SequenceNumber,
+            data: rec.Data ? Buffer.from(rec.Data).toString("base64") : null,
+            partitionKey: rec.PartitionKey,
+            approximateArrivalTimestamp: rec.ApproximateArrivalTimestamp,
+            encryptionType: rec.EncryptionType,
+          });
+        }
+      }
+    }
+  }
+
+  return c.json({ events, total: events.length });
 });
 
 // ── Records (Data Plane) ─────────────────────────────────

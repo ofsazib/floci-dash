@@ -110,6 +110,70 @@ export function useKinesisConsumers(streamName: string | null) {
   });
 }
 
+export function useRegisterKinesisConsumer(streamName: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (consumerName: string) =>
+      api(`/aws/kinesis/streams/${encodeURIComponent(streamName)}/consumers`, {
+        method: "POST",
+        body: JSON.stringify({ consumerName }),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "kinesis", "consumers", streamName] }),
+  });
+}
+
+export function useDeregisterKinesisConsumer(streamName: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (consumerName: string) =>
+      api(
+        `/aws/kinesis/streams/${encodeURIComponent(streamName)}/consumers/${encodeURIComponent(consumerName)}`,
+        { method: "DELETE" }
+      ),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "kinesis", "consumers", streamName] }),
+  });
+}
+
+export function useDescribeKinesisConsumer(
+  streamName: string | null,
+  consumerName: string | null
+) {
+  return useQuery<{ consumer: KinesisConsumer }>({
+    queryKey: ["aws", "kinesis", "consumer", streamName, consumerName],
+    queryFn: () =>
+      api(
+        `/aws/kinesis/streams/${encodeURIComponent(streamName!)}/consumers/${encodeURIComponent(consumerName!)}`
+      ),
+    enabled: !!streamName && !!consumerName,
+  });
+}
+
+// ── SubscribeToShard (Enhanced Fan-out) ──────────────────
+
+export interface SubscribeToShardEvent {
+  sequenceNumber: string;
+  data: string | null;
+  partitionKey: string;
+  approximateArrivalTimestamp?: Date;
+  encryptionType?: string;
+}
+
+export function useSubscribeToShard(streamName: string) {
+  return useMutation<
+    { events: SubscribeToShardEvent[]; total: number },
+    Error,
+    { consumerARN: string; shardId: string; startingPosition?: { Type: string } }
+  >({
+    mutationFn: (params) =>
+      api(`/aws/kinesis/streams/${encodeURIComponent(streamName)}/subscribe-to-shard`, {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+  });
+}
+
 // ── Records ──────────────────────────────────────────────
 
 export function usePutKinesisRecord(streamName: string) {

@@ -21,6 +21,10 @@ vi.mock("@aws-sdk/client-kinesis", () => ({
   DeleteStreamCommand: createCmd("DeleteStreamCommand"),
   ListShardsCommand: createCmd("ListShardsCommand"),
   ListStreamConsumersCommand: createCmd("ListStreamConsumersCommand"),
+  RegisterStreamConsumerCommand: createCmd("RegisterStreamConsumerCommand"),
+  DeregisterStreamConsumerCommand: createCmd("DeregisterStreamConsumerCommand"),
+  DescribeStreamConsumerCommand: createCmd("DescribeStreamConsumerCommand"),
+  SubscribeToShardCommand: createCmd("SubscribeToShardCommand"),
   PutRecordCommand: createCmd("PutRecordCommand"),
   PutRecordsCommand: createCmd("PutRecordsCommand"),
   GetShardIteratorCommand: createCmd("GetShardIteratorCommand"),
@@ -162,6 +166,120 @@ describe("Kinesis Routes", () => {
       const res = await get("/streams/stream-1/consumers");
       const body = await res.json();
       expect(body.total).toBe(0);
+    });
+
+    it("POST /streams/:name/consumers — registers consumer (201)", async () => {
+      mockSend
+        .mockResolvedValueOnce({
+          StreamDescription: { StreamARN: "arn:aws:kinesis:us-east-1:123:stream/stream-1" },
+        })
+        .mockResolvedValueOnce({
+          Consumer: { ConsumerName: "my-consumer", ConsumerStatus: "ACTIVE" },
+        });
+      const res = await post("/streams/stream-1/consumers", { consumerName: "my-consumer" });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.consumer.ConsumerName).toBe("my-consumer");
+    });
+
+    it("POST /streams/:name/consumers — 400 if consumerName missing", async () => {
+      const res = await post("/streams/stream-1/consumers", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /streams/:name/consumers — 404 if stream not found", async () => {
+      mockSend.mockResolvedValueOnce({ StreamDescription: {} });
+      const res = await post("/streams/stream-1/consumers", { consumerName: "my-consumer" });
+      expect(res.status).toBe(404);
+    });
+
+    it("DELETE /streams/:name/consumers/:consumerName — deregisters consumer", async () => {
+      mockSend.mockResolvedValueOnce({
+        StreamDescription: { StreamARN: "arn:aws:kinesis:us-east-1:123:stream/stream-1" },
+      }).mockResolvedValueOnce({});
+      const res = await del("/streams/stream-1/consumers/my-consumer");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deregistered).toBe(true);
+    });
+
+    it("DELETE /streams/:name/consumers/:consumerName — 404 if stream not found", async () => {
+      mockSend.mockResolvedValueOnce({ StreamDescription: {} });
+      const res = await del("/streams/stream-1/consumers/my-consumer");
+      expect(res.status).toBe(404);
+    });
+
+    it("GET /streams/:name/consumers/:consumerName — describes consumer", async () => {
+      mockSend.mockResolvedValueOnce({
+        StreamDescription: { StreamARN: "arn:aws:kinesis:us-east-1:123:stream/stream-1" },
+      }).mockResolvedValueOnce({
+        ConsumerDescription: { ConsumerName: "my-consumer", ConsumerStatus: "ACTIVE", ConsumerARN: "arn:..." },
+      });
+      const res = await get("/streams/stream-1/consumers/my-consumer");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.consumer.ConsumerName).toBe("my-consumer");
+    });
+
+    it("GET /streams/:name/consumers/:consumerName — 404 if stream not found", async () => {
+      mockSend.mockResolvedValueOnce({ StreamDescription: {} });
+      const res = await get("/streams/stream-1/consumers/my-consumer");
+      expect(res.status).toBe(404);
+    });
+  });
+
+  describe("SubscribeToShard", () => {
+    it("POST /streams/:name/subscribe-to-shard — subscribes and returns events", async () => {
+      // Mock an async event stream that yields a SubscribeToShardEvent
+      const mockEventStream = (async function* () {
+        yield {
+          Records: [
+            {
+              SequenceNumber: "123",
+              Data: Buffer.from("hello"),
+              PartitionKey: "key1",
+              ApproximateArrivalTimestamp: new Date("2026-01-01"),
+              EncryptionType: "KMS",
+            },
+          ],
+        };
+      })();
+
+      mockSend.mockResolvedValueOnce({
+        EventStream: mockEventStream,
+      });
+
+      const res = await post("/streams/stream-1/subscribe-to-shard", {
+        consumerARN: "arn:aws:kinesis:us-east-1:123:stream/stream-1/consumer/my-consumer",
+        shardId: "shardId-000000000001",
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(body.events[0].sequenceNumber).toBe("123");
+      expect(body.events[0].partitionKey).toBe("key1");
+      expect(body.events[0].data).toBe("aGVsbG8="); // Buffer.from("hello") base64
+    });
+
+    it("POST /streams/:name/subscribe-to-shard — 400 if consumerARN missing", async () => {
+      const res = await post("/streams/stream-1/subscribe-to-shard", { shardId: "shard-1" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /streams/:name/subscribe-to-shard — 400 if shardId missing", async () => {
+      const res = await post("/streams/stream-1/subscribe-to-shard", { consumerARN: "arn:..." });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /streams/:name/subscribe-to-shard — empty when no EventStream", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/streams/stream-1/subscribe-to-shard", {
+        consumerARN: "arn:...",
+        shardId: "shard-1",
+      });
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.events).toEqual([]);
     });
   });
 
