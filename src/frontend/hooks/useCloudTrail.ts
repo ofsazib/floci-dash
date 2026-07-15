@@ -86,3 +86,84 @@ export function useStopCloudTrailLogging() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cloudtrail", "trails"] }),
   });
 }
+
+// ── Lookup Events ────────────────────────────────────────
+
+export interface LookupEventsParams {
+  startTime?: string;
+  endTime?: string;
+  lookupAttributes?: Array<{ AttributeKey: string; AttributeValue: string }>;
+  maxResults?: number;
+  nextToken?: string;
+  eventCategory?: string;
+}
+
+export interface CloudTrailEvent {
+  eventId: string;
+  eventName: string;
+  eventTime: string;
+  eventSource: string;
+  username: string;
+  cloudTrailEvent: string;
+  resources?: Array<{ ResourceType?: string; ResourceName?: string }>;
+}
+
+export interface LookupEventsResult {
+  events: CloudTrailEvent[];
+  nextToken: string | null;
+  total: number;
+}
+
+export function useLookupEvents() {
+  return useMutation({
+    mutationFn: (params: LookupEventsParams) =>
+      api<LookupEventsResult>("/aws/cloudtrail/trails/lookup-events", {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+  });
+}
+
+// ── Event Selectors ──────────────────────────────────────
+
+export interface EventSelector {
+  ReadWriteType?: string;
+  IncludeManagementEvents?: boolean;
+  DataResources?: Array<{ Type: string; Values: string[] }>;
+  ExcludeManagementEventSources?: string[];
+}
+
+export interface AdvancedEventSelector {
+  Name?: string;
+  FieldSelectors: Array<{ Field: string; Equals?: string[]; StartsWith?: string[]; EndsWith?: string[]; NotEquals?: string[]; NotStartsWith?: string[]; NotEndsWith?: string[] }>;
+}
+
+export interface EventSelectorsResult {
+  trailName: string;
+  eventSelectors: EventSelector[];
+  advancedEventSelectors: AdvancedEventSelector[];
+}
+
+export function useEventSelectors(trailName: string | null) {
+  return useQuery<EventSelectorsResult>({
+    queryKey: ["aws", "cloudtrail", "event-selectors", trailName],
+    queryFn: () => api(`/aws/cloudtrail/trails/${encodeURIComponent(trailName!)}/event-selectors`),
+    enabled: !!trailName,
+  });
+}
+
+export function usePutEventSelectors(trailName: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: {
+      eventSelectors?: EventSelector[];
+      advancedEventSelectors?: AdvancedEventSelector[];
+    }) =>
+      api(`/aws/cloudtrail/trails/${encodeURIComponent(trailName)}/event-selectors`, {
+        method: "PUT",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "cloudtrail", "event-selectors", trailName] }),
+  });
+}
