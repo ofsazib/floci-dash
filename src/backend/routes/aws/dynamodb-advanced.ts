@@ -15,6 +15,9 @@ import {
   DescribeContinuousBackupsCommand,
   UpdateContinuousBackupsCommand,
   ExecuteStatementCommand,
+  ExportTableToPointInTimeCommand,
+  ListExportsCommand,
+  DescribeExportCommand,
 } from "@aws-sdk/client-dynamodb";
 import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
 import { getAwsConfig } from "../../clients/aws";
@@ -297,6 +300,92 @@ router.post("/partiql/execute", async (c: Context) => {
     items,
     count: result.Items?.length || 0,
     nextToken: result.NextToken || null,
+  });
+});
+
+// ─── Exports ───────────────────────────────────────────────────────
+
+router.get("/tables/:name/exports", async (c: Context) => {
+  const name = c.req.param("name");
+  const maxResults = parseInt(c.req.query("maxResults") || "25", 10);
+  const nextToken = c.req.query("nextToken") || undefined;
+  const arn = `arn:aws:dynamodb:${getAwsConfig().region}:${getAwsConfig().credentials.accessKeyId}:table/${name}`;
+
+  const result = await ddb().send(new ListExportsCommand({
+    TableArn: arn,
+    MaxResults: Math.min(maxResults, 25),
+    NextToken: nextToken,
+  }));
+
+  const exports = (result.ExportSummaries || []).map((e: any) => ({
+    exportArn: e.ExportArn,
+    exportStatus: e.ExportStatus,
+    exportType: e.ExportType,
+    startTime: e.StartTime?.toISOString() || null,
+    endTime: e.EndTime?.toISOString() || null,
+    itemCount: e.ItemCount,
+    exportManifest: e.ExportManifest,
+  }));
+
+  return c.json({ exports, total: exports.length, nextToken: result.NextToken || null });
+});
+
+router.post("/tables/:name/exports", async (c: Context) => {
+  const name = c.req.param("name");
+  const { s3Bucket, s3Prefix, exportFormat, exportType, exportTime } = await c.req.json<{
+    s3Bucket: string;
+    s3Prefix?: string;
+    exportFormat?: string;
+    exportType?: string;
+    exportTime?: string;
+  }>();
+  if (!s3Bucket) return c.json({ error: "s3Bucket is required" }, 400);
+
+  const arn = `arn:aws:dynamodb:${getAwsConfig().region}:${getAwsConfig().credentials.accessKeyId}:table/${name}`;
+  const params: any = {
+    TableArn: arn,
+    S3Bucket: s3Bucket,
+    S3Prefix: s3Prefix || "",
+    ExportFormat: exportFormat || "DYNAMODB_JSON",
+  };
+  if (exportType) params.ExportType = exportType;
+  if (exportTime) params.ExportTime = new Date(exportTime);
+
+  const result = await ddb().send(new ExportTableToPointInTimeCommand(params));
+  const desc = result.ExportDescription;
+
+  return c.json({
+    exportArn: desc?.ExportArn,
+    exportStatus: desc?.ExportStatus || "IN_PROGRESS",
+    exportType: desc?.ExportType,
+    startTime: desc?.StartTime?.toISOString() || null,
+    s3Bucket: desc?.S3Bucket,
+    s3Prefix: desc?.S3Prefix,
+    exportManifest: desc?.ExportManifest,
+    created: true,
+  });
+});
+
+router.get("/exports", async (c: Context) => {
+  const exportArn = c.req.query("arn");
+  if (!exportArn) return c.json({ error: "arn query parameter is required" }, 400);
+
+  const result = await ddb().send(new DescribeExportCommand({ ExportArn: exportArn }));
+  const desc = result.ExportDescription;
+
+  return c.json({
+    exportArn: desc?.ExportArn,
+    exportStatus: desc?.ExportStatus,
+    exportType: desc?.ExportType,
+    startTime: desc?.StartTime?.toISOString() || null,
+    endTime: desc?.EndTime?.toISOString() || null,
+    itemCount: desc?.ItemCount,
+    s3Bucket: desc?.S3Bucket,
+    s3Prefix: desc?.S3Prefix,
+    exportManifest: desc?.ExportManifest,
+    tableArn: desc?.TableArn,
+    failureCode: desc?.FailureCode,
+    failureMessage: desc?.FailureMessage,
   });
 });
 

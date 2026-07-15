@@ -29,6 +29,7 @@ import StatCard from "./StatCard";
 import DynamoDBAdvanced from "./DynamoDBAdvanced";
 import DynamoDBStreams from "./DynamoDBStreams";
 import DynamoDBKinesisStreaming from "./DynamoDBKinesisStreaming";
+import DynamoDBExports from "./DynamoDBExports";
 import { formatBytes, formatItemValue } from "../lib/utils";
 
 const FILTER_OPERATORS: SelectProps.Option[] = [
@@ -745,6 +746,11 @@ export default function DynamoDBTableDetail({
             label: "Kinesis Streaming",
             id: "kinesis-streaming",
             content: <DynamoDBKinesisStreaming tableName={tableName} />,
+          },
+          {
+            label: "Exports",
+            id: "exports",
+            content: <DynamoDBExports tableName={tableName} />,
           },
           {
             label: "Advanced",

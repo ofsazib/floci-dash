@@ -24,6 +24,9 @@ vi.mock("@aws-sdk/client-dynamodb", () => ({
   DescribeContinuousBackupsCommand: vi.fn(function(args) { return args; }),
   UpdateContinuousBackupsCommand: vi.fn(function(args) { return args; }),
   ExecuteStatementCommand: vi.fn(function(args) { return args; }),
+  ExportTableToPointInTimeCommand: vi.fn(function(args) { return args; }),
+  ListExportsCommand: vi.fn(function(args) { return args; }),
+  DescribeExportCommand: vi.fn(function(args) { return args; }),
 }));
 
 vi.mock("@aws-sdk/util-dynamodb", () => ({
@@ -355,6 +358,106 @@ describe("DynamoDB Advanced", () => {
       expect(cmd.NextToken).toBe("prev-token");
       const body = await res.json();
       expect(body.nextToken).toBe("next-token");
+    });
+  });
+
+  describe("Exports", () => {
+    it("GET /tables/:name/exports — lists exports", async () => {
+      mockSend.mockResolvedValueOnce({
+        ExportSummaries: [
+          {
+            ExportArn: "arn:aws:dynamodb:us-east-1:000000000000:table/my-table/export/01700000000000-abc123",
+            ExportStatus: "COMPLETED",
+            StartTime: new Date("2025-01-01T00:00:00Z"),
+            EndTime: new Date("2025-01-01T01:00:00Z"),
+            ItemCount: 5000,
+            ExportManifest: "s3://bucket/manifest.json",
+          },
+        ],
+        NextToken: null,
+      });
+      const res = await get("/tables/my-table/exports");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.exports).toHaveLength(1);
+      expect(body.exports[0].exportStatus).toBe("COMPLETED");
+      expect(body.exports[0].exportArn).toBeDefined();
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.TableArn).toContain("my-table");
+    });
+
+    it("GET /tables/:name/exports — empty list when no exports", async () => {
+      mockSend.mockResolvedValueOnce({ ExportSummaries: [] });
+      const res = await get("/tables/my-table/exports");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.exports).toHaveLength(0);
+      expect(body.total).toBe(0);
+    });
+
+    it("POST /tables/:name/exports — creates export", async () => {
+      mockSend.mockResolvedValueOnce({
+        ExportDescription: {
+          ExportArn: "arn:aws:dynamodb:us-east-1:000000000000:table/my-table/export/01700000000000-xyz",
+          ExportStatus: "IN_PROGRESS",
+          StartTime: new Date(),
+          S3Bucket: "my-bucket",
+          S3Prefix: "exports/",
+          ExportManifest: "s3://my-bucket/exports/manifest.json",
+        },
+      });
+      const res = await post("/tables/my-table/exports", {
+        s3Bucket: "my-bucket",
+        s3Prefix: "exports/",
+        exportFormat: "DYNAMODB_JSON",
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.created).toBe(true);
+      expect(body.exportStatus).toBe("IN_PROGRESS");
+      expect(body.s3Bucket).toBe("my-bucket");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.TableArn).toContain("my-table");
+      expect(cmd.S3Bucket).toBe("my-bucket");
+      expect(cmd.ExportFormat).toBe("DYNAMODB_JSON");
+    });
+
+    it("POST /tables/:name/exports — 400 when s3Bucket missing", async () => {
+      const res = await post("/tables/my-table/exports", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("GET /exports — describes export by ARN", async () => {
+      const testArn = "arn:aws:dynamodb:us-east-1:000000000000:table/my-table/export/01700000000000-abc123";
+      mockSend.mockResolvedValueOnce({
+        ExportDescription: {
+          ExportArn: testArn,
+          ExportStatus: "COMPLETED",
+          ExportType: "FULL_EXPORT",
+          StartTime: new Date("2025-01-01T00:00:00Z"),
+          EndTime: new Date("2025-01-01T01:00:00Z"),
+          ItemCount: 1000,
+          S3Bucket: "my-bucket",
+          S3Prefix: "exports/",
+          ExportManifest: "s3://my-bucket/exports/manifest.json",
+          TableArn: "arn:aws:dynamodb:us-east-1:000000000000:table/my-table",
+          FailureCode: null,
+          FailureMessage: null,
+        },
+      });
+      const res = await get(`/exports?arn=${encodeURIComponent(testArn)}`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.exportArn).toBe(testArn);
+      expect(body.exportStatus).toBe("COMPLETED");
+      expect(body.itemCount).toBe(1000);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.ExportArn).toBe(testArn);
+    });
+
+    it("GET /exports — 400 when arn missing", async () => {
+      const res = await get("/exports");
+      expect(res.status).toBe(400);
     });
   });
 });

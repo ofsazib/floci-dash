@@ -239,3 +239,71 @@ export function useDynamoDBPartiQL() {
       }),
   });
 }
+
+// ─── Exports ──────────────────────────────────────────────────────
+
+export interface DynamoDBExport {
+  exportArn: string;
+  exportStatus: string;
+  exportType: string;
+  startTime: string | null;
+  endTime: string | null;
+  itemCount: number;
+  exportManifest: string;
+}
+
+export interface DynamoDBExportList {
+  exports: DynamoDBExport[];
+  total: number;
+  nextToken: string | null;
+}
+
+export function useDynamoDBExports(table: string | null) {
+  return useQuery<DynamoDBExportList>({
+    queryKey: ["aws", "dynamodb", "exports", table],
+    queryFn: () => api(`/aws/dynamodb/tables/${table}/exports`),
+    enabled: !!table,
+    refetchInterval: 15000,
+  });
+}
+
+export function useDynamoDBExportTable(table: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: {
+      s3Bucket: string;
+      s3Prefix?: string;
+      exportFormat?: string;
+    }) =>
+      api(`/aws/dynamodb/tables/${table}/exports`, {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "dynamodb", "exports", table] }),
+  });
+}
+
+export interface DynamoDBExportDetail {
+  exportArn: string;
+  exportStatus: string;
+  exportType: string;
+  startTime: string | null;
+  endTime: string | null;
+  itemCount: number;
+  s3Bucket: string;
+  s3Prefix: string;
+  exportManifest: string;
+  tableArn: string;
+  failureCode: string | null;
+  failureMessage: string | null;
+}
+
+export function useDynamoDBDescribeExport(exportArn: string | null) {
+  return useQuery<DynamoDBExportDetail>({
+    queryKey: ["aws", "dynamodb", "export", exportArn],
+    queryFn: () =>
+      api(`/aws/dynamodb/exports?arn=${encodeURIComponent(exportArn!)}`),
+    enabled: !!exportArn,
+  });
+}
