@@ -14,11 +14,15 @@ import {
   useAthenaWorkGroups,
   useCreateAthenaWorkGroup,
   useDeleteAthenaWorkGroup,
+  useAthenaWorkGroup,
   useAthenaQueryExecutions,
   useAthenaQueryExecution,
+  useAthenaQueryResults,
+  useStopAthenaQuery,
   useAthenaDataCatalogs,
   useAthenaDatabases,
   useAthenaTables,
+  useAthenaTableMetadata,
 } from "./useAthena";
 
 beforeEach(() => mockApi.mockReset());
@@ -91,5 +95,51 @@ describe("useAthena hooks", () => {
   it("useAthenaTables disabled when null", () => {
     const { result } = renderHook(() => useAthenaTables(null), { wrapper: createWrapper() });
     expect(result.current.fetchStatus).toBe("idle");
+  });
+
+  it("useAthenaWorkGroup does not call api when name is null", async () => {
+    const { result } = renderHook(() => useAthenaWorkGroup(null), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.fetchStatus).toBe("idle"));
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("useAthenaWorkGroup calls correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ workGroup: { Name: "test" } });
+    const { result } = renderHook(() => useAthenaWorkGroup("test"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/athena/work-groups/test");
+  });
+
+  it("useAthenaQueryResults does not call api when id is null", async () => {
+    const { result } = renderHook(() => useAthenaQueryResults(null), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.fetchStatus).toBe("idle"));
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("useAthenaQueryResults calls correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ queryExecutionId: "q1", rows: [], headers: [], nextToken: null, totalRows: 0 });
+    const { result } = renderHook(() => useAthenaQueryResults("q1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/athena/query-executions/q1/results");
+  });
+
+  it("useStopAthenaQuery calls POST", async () => {
+    mockApi.mockResolvedValueOnce({ stopped: true });
+    const { result } = renderHook(() => useStopAthenaQuery(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("q1");
+    expect(mockApi).toHaveBeenCalledWith("/aws/athena/query-executions/q1/stop", { method: "POST" });
+  });
+
+  it("useAthenaTableMetadata does not call api when params are null", async () => {
+    const { result } = renderHook(() => useAthenaTableMetadata(null, null), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.fetchStatus).toBe("idle"));
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("useAthenaTableMetadata calls correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ tableMetadata: { Name: "t1" } });
+    const { result } = renderHook(() => useAthenaTableMetadata("mydb", "t1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/athena/databases/mydb/tables/t1");
   });
 });

@@ -6,13 +6,16 @@ import {
   ListWorkGroupsCommand,
   CreateWorkGroupCommand,
   DeleteWorkGroupCommand,
+  GetWorkGroupCommand,
   ListQueryExecutionsCommand,
   GetQueryExecutionCommand,
   StopQueryExecutionCommand,
+  GetQueryResultsCommand,
   ListDataCatalogsCommand,
   GetDataCatalogCommand,
   ListDatabasesCommand,
   ListTableMetadataCommand,
+  GetTableMetadataCommand,
 } from "@aws-sdk/client-athena";
 
 const router = new Hono();
@@ -25,6 +28,13 @@ router.get("/work-groups", async (c: Context) => {
   const result = await client.send(new ListWorkGroupsCommand({}));
   const workGroups = result.WorkGroups || [];
   return c.json({ workGroups, total: workGroups.length });
+});
+
+router.get("/work-groups/:name", async (c: Context) => {
+  const name = c.req.param("name");
+  const client = getClient();
+  const result = await client.send(new GetWorkGroupCommand({ WorkGroup: name }));
+  return c.json({ workGroup: result.WorkGroup });
 });
 
 router.post("/work-groups", async (c: Context) => {
@@ -77,6 +87,29 @@ router.post("/query-executions/:id/stop", async (c: Context) => {
   return c.json({ stopped: true });
 });
 
+router.get("/query-executions/:id/results", async (c: Context) => {
+  const id = c.req.param("id");
+  const maxResults = parseInt(c.req.query("maxResults") || "100");
+  const nextToken = c.req.query("nextToken") || undefined;
+  const client = getClient();
+  const input: any = { QueryExecutionId: id, MaxResults: maxResults };
+  if (nextToken) input.NextToken = nextToken;
+  const result = await client.send(new GetQueryResultsCommand(input));
+  const rows = (result.ResultSet?.Rows || []).map((r: any) =>
+    (r.Data || []).map((d: any) => d.VarCharValue || "")
+  );
+  const headers = result.ResultSet?.ResultSetMetadata?.ColumnInfo?.map((c: any) => ({
+    name: c.Name, type: c.Type, label: c.Label,
+  })) || [];
+  return c.json({
+    queryExecutionId: id,
+    rows,
+    headers,
+    nextToken: result.NextToken || null,
+    totalRows: rows.length,
+  });
+});
+
 // ── Data Catalogs ────────────────────────────────────────
 
 router.get("/data-catalogs", async (c: Context) => {
@@ -113,6 +146,16 @@ router.get("/databases/:dbName/tables", async (c: Context) => {
   );
   const tables = result.TableMetadataList || [];
   return c.json({ tables, total: tables.length });
+});
+
+router.get("/databases/:dbName/tables/:tableName", async (c: Context) => {
+  const dbName = c.req.param("dbName");
+  const tableName = c.req.param("tableName");
+  const client = getClient();
+  const result = await client.send(
+    new GetTableMetadataCommand({ CatalogName: "AwsDataCatalog", DatabaseName: dbName, TableName: tableName })
+  );
+  return c.json({ tableMetadata: result.TableMetadata });
 });
 
 export default router;

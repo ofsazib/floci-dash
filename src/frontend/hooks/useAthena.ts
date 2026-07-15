@@ -26,6 +26,14 @@ export function useAthenaWorkGroups() {
   });
 }
 
+export function useAthenaWorkGroup(name: string | null) {
+  return useQuery<{ workGroup: any }>({
+    queryKey: ["aws", "athena", "work-group", name],
+    queryFn: () => api(`/aws/athena/work-groups/${encodeURIComponent(name!)}`),
+    enabled: !!name,
+  });
+}
+
 export function useCreateAthenaWorkGroup() {
   const qc = useQueryClient();
   return useMutation({
@@ -62,6 +70,34 @@ export function useAthenaQueryExecution(id: string | null) {
   });
 }
 
+export interface QueryResultsData {
+  queryExecutionId: string;
+  rows: string[][];
+  headers: Array<{ name: string; type: string; label: string }>;
+  nextToken: string | null;
+  totalRows: number;
+}
+
+export function useAthenaQueryResults(id: string | null) {
+  return useQuery<QueryResultsData>({
+    queryKey: ["aws", "athena", "query-results", id],
+    queryFn: () => api(`/aws/athena/query-executions/${encodeURIComponent(id!)}/results`),
+    enabled: !!id,
+  });
+}
+
+export function useStopAthenaQuery() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api(`/aws/athena/query-executions/${encodeURIComponent(id)}/stop`, { method: "POST" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["aws", "athena", "query-executions"] });
+      qc.invalidateQueries({ queryKey: ["aws", "athena", "query-execution"] });
+    },
+  });
+}
+
 // ── Data Catalogs ────────────────────────────────────────
 
 export function useAthenaDataCatalogs() {
@@ -87,5 +123,14 @@ export function useAthenaTables(databaseName: string | null) {
     queryKey: ["aws", "athena", "tables", databaseName],
     queryFn: () => api(`/aws/athena/databases/${encodeURIComponent(databaseName!)}/tables`),
     enabled: !!databaseName,
+  });
+}
+
+export function useAthenaTableMetadata(dbName: string | null, tableName: string | null) {
+  return useQuery<{ tableMetadata: any }>({
+    queryKey: ["aws", "athena", "table-metadata", dbName, tableName],
+    queryFn: () =>
+      api(`/aws/athena/databases/${encodeURIComponent(dbName!)}/tables/${encodeURIComponent(tableName!)}`),
+    enabled: !!dbName && !!tableName,
   });
 }

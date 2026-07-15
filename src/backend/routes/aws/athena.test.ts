@@ -15,6 +15,9 @@ vi.mock("@aws-sdk/client-athena", () => ({
   ListQueryExecutionsCommand: createCmd("ListQueryExecutionsCommand"),
   GetQueryExecutionCommand: createCmd("GetQueryExecutionCommand"),
   StopQueryExecutionCommand: createCmd("StopQueryExecutionCommand"),
+  GetQueryResultsCommand: createCmd("GetQueryResultsCommand"),
+  GetWorkGroupCommand: createCmd("GetWorkGroupCommand"),
+  GetTableMetadataCommand: createCmd("GetTableMetadataCommand"),
   ListDataCatalogsCommand: createCmd("ListDataCatalogsCommand"),
   GetDataCatalogCommand: createCmd("GetDataCatalogCommand"),
   ListDatabasesCommand: createCmd("ListDatabasesCommand"),
@@ -121,5 +124,47 @@ describe("Athena Routes", () => {
     const res = await get("/databases/default/tables");
     const body = await res.json();
     expect(body.total).toBe(1);
+  });
+
+  it("GET /query-executions/:id/results — returns parsed rows with headers", async () => {
+    mockSend.mockResolvedValueOnce({
+      ResultSet: {
+        Rows: [
+          { Data: [{ VarCharValue: "col1" }, { VarCharValue: "col2" }] },
+          { Data: [{ VarCharValue: "a" }, { VarCharValue: "b" }] },
+        ],
+        ResultSetMetadata: { ColumnInfo: [{ Name: "c1", Type: "varchar", Label: "c1" }] },
+      },
+    });
+    const res = await get("/query-executions/q-123/results");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.rows).toHaveLength(2);
+    expect(body.headers).toHaveLength(1);
+  });
+
+  it("GET /query-executions/:id/results — empty rows", async () => {
+    mockSend.mockResolvedValueOnce({ ResultSet: { Rows: [] } });
+    const res = await get("/query-executions/q-123/results");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.rows).toEqual([]);
+    expect(body.headers).toEqual([]);
+  });
+
+  it("GET /work-groups/:name — returns work group detail", async () => {
+    mockSend.mockResolvedValueOnce({ WorkGroup: { Name: "test-wg", State: "ENABLED" } });
+    const res = await get("/work-groups/test-wg");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.workGroup.Name).toBe("test-wg");
+  });
+
+  it("GET /databases/:dbName/tables/:tableName — returns table metadata", async () => {
+    mockSend.mockResolvedValueOnce({ TableMetadata: { Name: "my_table", Columns: [{ Name: "id", Type: "int" }] } });
+    const res = await get("/databases/mydb/tables/my_table");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.tableMetadata.Name).toBe("my_table");
   });
 });
