@@ -15,6 +15,7 @@ import {
   ColumnLayout,
   StatusIndicator,
   Badge,
+  Spinner,
 } from "@cloudscape-design/components";
 import ResourceTable from "../../components/ResourceTable";
 import DeleteButton from "../../components/DeleteButton";
@@ -28,11 +29,19 @@ import {
   useStartPipelineExecution,
   useStopPipelineExecution,
   useRetryStageExecution,
+  useRollbackStage,
+  useOverrideStageCondition,
+  useRuleExecutions,
   useWebhooks,
   useCreateWebhook,
   useDeleteWebhook,
+  useRegisterWebhook,
+  useDeregisterWebhook,
   useActionTypes,
   useCreateCustomActionType,
+  useDeleteCustomActionType,
+  usePollForJobs,
+  useJobDetails,
 } from "../../hooks/useCodePipeline";
 
 export function CodePipelineDashboard() {
@@ -42,11 +51,17 @@ export function CodePipelineDashboard() {
   const startExecution = useStartPipelineExecution();
   const stopExecution = useStopPipelineExecution();
   const retryStage = useRetryStageExecution();
+  const rollbackStage = useRollbackStage();
+  const overrideCondition = useOverrideStageCondition();
   const webhooksQuery = useWebhooks();
   const createWebhook = useCreateWebhook();
   const deleteWebhook = useDeleteWebhook();
+  const registerWebhook = useRegisterWebhook();
+  const deregisterWebhook = useDeregisterWebhook();
   const actionTypesQuery = useActionTypes();
   const createActionType = useCreateCustomActionType();
+  const deleteActionType = useDeleteCustomActionType();
+  const pollJobs = usePollForJobs();
 
   const [selectedPipeline, setSelectedPipeline] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -58,9 +73,24 @@ export function CodePipelineDashboard() {
   const [showCreateActionType, setShowCreateActionType] = useState(false);
   const [actionTypeCat, setActionTypeCat] = useState("Build");
   const [actionTypeProv, setActionTypeProv] = useState("");
+  const [showDeleteActionType, setShowDeleteActionType] = useState(false);
+  const [deleteActionTypeTarget, setDeleteActionTypeTarget] = useState<any>(null);
+  const [showRollback, setShowRollback] = useState(false);
+  const [showOverride, setShowOverride] = useState(false);
+  const [rollbackExecId, setRollbackExecId] = useState("");
+  const [overrideExecId, setOverrideExecId] = useState("");
+  const [rollbackStageName, setRollbackStageName] = useState("");
+  const [overrideStageName, setOverrideStageName] = useState("");
+  const [overrideConditionName, setOverrideConditionName] = useState("");
+  const [pollResults, setPollResults] = useState<any[] | null>(null);
+  const [showPollJobs, setShowPollJobs] = useState(false);
+  const [pollCat, setPollCat] = useState("Build");
+  const [pollProv, setPollProv] = useState("");
+  const [showJobDetail, setShowJobDetail] = useState<string | null>(null);
 
   const stateQuery = usePipelineState(selectedPipeline);
   const executionsQuery = usePipelineExecutions(selectedPipeline);
+  const ruleExecutionsQuery = useRuleExecutions(selectedPipeline);
 
   const pipelines = (pipelinesQuery.data?.pipelines || []).map((p: any) => ({
     name: p.name,
@@ -88,6 +118,14 @@ export function CodePipelineDashboard() {
     provider: a.id?.provider || "—",
     category: a.id?.category || "—",
     version: a.id?.version || "—",
+  }));
+
+  const ruleExecutions = (ruleExecutionsQuery.data?.ruleExecutionDetails || []).map((r: any) => ({
+    ruleExecutionId: r.ruleExecutionId || "—",
+    status: r.status || "—",
+    ruleName: r.ruleName || "—",
+    startTime: r.startTime ? new Date(r.startTime).toLocaleString() : "—",
+    lastUpdate: r.lastUpdateTime ? new Date(r.lastUpdateTime).toLocaleString() : "—",
   }));
 
   if (pipelinesQuery.isLoading) return <TableSkeleton />;
@@ -233,12 +271,37 @@ export function CodePipelineDashboard() {
                                   />
                                 )}
                                 {i.status === "Failed" && (
-                                  <Button
-                                    iconName="refresh"
-                                    variant="icon"
-                                    ariaLabel="Retry stage"
-                                    onClick={() => retryStage.mutate({ name: selectedPipeline, executionId: i.id })}
-                                  />
+                                  <SpaceBetween direction="horizontal" size="xs">
+                                    <Button
+                                      iconName="refresh"
+                                      variant="icon"
+                                      ariaLabel="Retry stage"
+                                      onClick={() => retryStage.mutate({ name: selectedPipeline, executionId: i.id })}
+                                    />
+                                    <Button
+                                      iconName="redo"
+                                      variant="icon"
+                                      disabled={!selectedPipeline}
+                                      ariaLabel="Rollback stage"
+                                      onClick={() => {
+                                        setRollbackExecId(i.id);
+                                        setRollbackStageName("");
+                                        setShowRollback(true);
+                                      }}
+                                    />
+                                    <Button
+                                      iconName="check"
+                                      variant="icon"
+                                      disabled={!selectedPipeline}
+                                      ariaLabel="Override condition"
+                                      onClick={() => {
+                                        setOverrideExecId(i.id);
+                                        setOverrideStageName("");
+                                        setOverrideConditionName("");
+                                        setShowOverride(true);
+                                      }}
+                                    />
+                                  </SpaceBetween>
                                 )}
                               </SpaceBetween>
                             ),
@@ -354,6 +417,80 @@ export function CodePipelineDashboard() {
                     <Box>Start a new pipeline execution for <strong>{selectedPipeline}</strong>.</Box>
                   </Modal>
                 )}
+
+                <Modal
+                  visible={showRollback}
+                  onDismiss={() => setShowRollback(false)}
+                  header={`Rollback Stage — ${selectedPipeline}`}
+                  footer={
+                    <Box float="right">
+                      <SpaceBetween direction="horizontal" size="xs">
+                        <Button variant="link" onClick={() => setShowRollback(false)}>Cancel</Button>
+                        <Button
+                          variant="primary"
+                          loading={rollbackStage.isPending}
+                          disabled={!rollbackStageName.trim()}
+                          onClick={() => {
+                            rollbackStage.mutate(
+                              { name: selectedPipeline, executionId: rollbackExecId, stageName: rollbackStageName },
+                              { onSuccess: () => setShowRollback(false) }
+                            );
+                          }}
+                        >
+                          Rollback
+                        </Button>
+                      </SpaceBetween>
+                    </Box>
+                  }
+                >
+                  <Form>
+                    <FormField label="Stage to rollback" description="Enter the stage name to roll back.">
+                      <Input value={rollbackStageName} onChange={({ detail }) => setRollbackStageName(detail.value)} placeholder="Deploy" />
+                    </FormField>
+                  </Form>
+                </Modal>
+
+                <Modal
+                  visible={showOverride}
+                  onDismiss={() => setShowOverride(false)}
+                  header={`Override Stage Condition — ${selectedPipeline}`}
+                  footer={
+                    <Box float="right">
+                      <SpaceBetween direction="horizontal" size="xs">
+                        <Button variant="link" onClick={() => setShowOverride(false)}>Cancel</Button>
+                        <Button
+                          variant="primary"
+                          loading={overrideCondition.isPending}
+                          disabled={!overrideStageName.trim() || !overrideConditionName.trim()}
+                          onClick={() => {
+                            overrideCondition.mutate(
+                              {
+                                name: selectedPipeline,
+                                executionId: overrideExecId,
+                                stageName: overrideStageName,
+                                conditionName: overrideConditionName,
+                              },
+                              { onSuccess: () => setShowOverride(false) }
+                            );
+                          }}
+                        >
+                          Override
+                        </Button>
+                      </SpaceBetween>
+                    </Box>
+                  }
+                >
+                  <Form>
+                    <SpaceBetween size="m">
+                      <FormField label="Stage name">
+                        <Input value={overrideStageName} onChange={({ detail }) => setOverrideStageName(detail.value)} placeholder="Deploy" />
+                      </FormField>
+                      <FormField label="Condition name">
+                        <Input value={overrideConditionName} onChange={({ detail }) => setOverrideConditionName(detail.value)} placeholder="CheckForCondition" />
+                      </FormField>
+                    </SpaceBetween>
+                  </Form>
+                </Modal>
               </SpaceBetween>
             ),
           },
@@ -376,12 +513,31 @@ export function CodePipelineDashboard() {
                       id: "actions",
                       header: "",
                       cell: (i: any) => (
-                        <DeleteButton
-                          itemName={i.name}
-                          resourceType="webhook"
-                          loading={deleteWebhook.isPending && deleteWebhook.variables === i.name}
-                          onDelete={() => deleteWebhook.mutateAsync(i.name)}
-                        />
+                        <SpaceBetween direction="horizontal" size="xs">
+                          <Button
+                            variant="normal"
+                            iconName="upload"
+                            ariaLabel="Register webhook"
+                            loading={registerWebhook.isPending && registerWebhook.variables === i.name}
+                            onClick={() => registerWebhook.mutateAsync(i.name)}
+                          >
+                            Register
+                          </Button>
+                          <Button
+                            variant="normal"
+                            ariaLabel="Deregister webhook"
+                            loading={deregisterWebhook.isPending && deregisterWebhook.variables === i.name}
+                            onClick={() => deregisterWebhook.mutateAsync(i.name)}
+                          >
+                            Deregister
+                          </Button>
+                          <DeleteButton
+                            itemName={i.name}
+                            resourceType="webhook"
+                            loading={deleteWebhook.isPending && deleteWebhook.variables === i.name}
+                            onDelete={() => deleteWebhook.mutateAsync(i.name)}
+                          />
+                        </SpaceBetween>
                       ),
                     },
                   ]}
@@ -444,93 +600,332 @@ export function CodePipelineDashboard() {
                 </Modal>
               </>
             ),
-          },
-          {
-            id: "action-types",
-            label: `Action Types (${actionTypesQuery.data?.total || 0})`,
-            content: (
-              <>
-                <ResourceTable
-                  resourceName="Action Type"
-                  headerTitle="Action Types"
-                  headerCounter={actionTypesQuery.data?.total}
-                  items={actionTypes}
-                  columns={[
-                    { id: "category", header: "Category", cell: (i: any) => i.category },
-                    { id: "owner", header: "Owner", cell: (i: any) => i.owner },
-                    { id: "provider", header: "Provider", cell: (i: any) => i.provider, isRowHeader: true },
-                    { id: "version", header: "Version", cell: (i: any) => i.version },
-                  ]}
-                  loading={actionTypesQuery.isLoading}
-                  emptyMessage="No action types found"
-                  filterEnabled
-                  filterPlaceholder="Find action types by provider"
-                  filterFunction={(i: any, s: string) => i.provider.toLowerCase().includes(s.toLowerCase())}
-                  onCreate={() => setShowCreateActionType(true)}
-                />
-                <Modal
-                  visible={showCreateActionType}
-                  onDismiss={() => setShowCreateActionType(false)}
-                  header="Create custom action type"
-                  footer={
-                    <Box float="right">
-                      <SpaceBetween direction="horizontal" size="xs">
-                        <Button variant="link" onClick={() => setShowCreateActionType(false)}>Cancel</Button>
+          },            {
+          id: "action-types",
+          label: `Action Types (${actionTypesQuery.data?.total || 0})`,
+          content: (
+            <>
+              <ResourceTable
+                resourceName="Action Type"
+                headerTitle="Action Types"
+                headerCounter={actionTypesQuery.data?.total}
+                items={actionTypes}
+                columns={[
+                  { id: "category", header: "Category", cell: (i: any) => i.category },
+                  { id: "owner", header: "Owner", cell: (i: any) => i.owner },
+                  { id: "provider", header: "Provider", cell: (i: any) => i.provider, isRowHeader: true },
+                  { id: "version", header: "Version", cell: (i: any) => i.version },                    {
+                      id: "actions",
+                      header: "",
+                      cell: (i: any) => (
                         <Button
-                          variant="primary"
-                          loading={createActionType.isPending}
-                          disabled={!actionTypeProv.trim()}
+                          variant="normal"
+                          iconName="delete-marker"
+                          ariaLabel={`Delete action type ${i.provider}`}
+                          loading={
+                            deleteActionType.isPending &&
+                            deleteActionType.variables?.provider === i.provider
+                          }
                           onClick={() => {
-                            createActionType.mutate(
-                              {
-                                actionType: {
-                                  category: actionTypeCat,
-                                  provider: actionTypeProv.trim(),
-                                  version: "1",
-                                },
-                              },
-                              { onSuccess: () => { setShowCreateActionType(false); setActionTypeProv(""); } }
-                            );
+                            setDeleteActionTypeTarget(i);
+                            setShowDeleteActionType(true);
                           }}
                         >
-                          Create
+                          Delete
                         </Button>
-                      </SpaceBetween>
-                    </Box>
-                  }
-                >
-                  <Form>
-                    {createActionType.isError && (
-                      <Alert type="error" dismissible>
-                        {(createActionType.error as Error)?.message || "Failed to create action type"}
-                      </Alert>
-                    )}
-                    <SpaceBetween size="m">
-                      <FormField label="Category">
-                        <Select
-                          selectedOption={{ label: actionTypeCat, value: actionTypeCat }}
-                          onChange={({ detail }) => setActionTypeCat(detail.selectedOption.value || "Build")}
-                          options={[
-                            { label: "Source", value: "Source" },
-                            { label: "Build", value: "Build" },
-                            { label: "Test", value: "Test" },
-                            { label: "Deploy", value: "Deploy" },
-                            { label: "Approval", value: "Approval" },
-                            { label: "Invoke", value: "Invoke" },
-                          ]}
-                        />
-                      </FormField>
-                      <FormField label="Provider name">
-                        <Input value={actionTypeProv} onChange={({ detail }) => setActionTypeProv(detail.value)} placeholder="MyCustomProvider" />
-                      </FormField>
+                      ),
+                    },
+                ]}
+                loading={actionTypesQuery.isLoading}
+                emptyMessage="No action types found"
+                filterEnabled
+                filterPlaceholder="Find action types by provider"
+                filterFunction={(i: any, s: string) => i.provider.toLowerCase().includes(s.toLowerCase())}
+                onCreate={() => setShowCreateActionType(true)}
+              />
+              <Modal
+                visible={showCreateActionType}
+                onDismiss={() => setShowCreateActionType(false)}
+                header="Create custom action type"
+                footer={
+                  <Box float="right">
+                    <SpaceBetween direction="horizontal" size="xs">
+                      <Button variant="link" onClick={() => setShowCreateActionType(false)}>Cancel</Button>
+                      <Button
+                        variant="primary"
+                        loading={createActionType.isPending}
+                        disabled={!actionTypeProv.trim()}
+                        onClick={() => {
+                          createActionType.mutate(
+                            {
+                              actionType: {
+                                category: actionTypeCat,
+                                provider: actionTypeProv.trim(),
+                                version: "1",
+                              },
+                            },
+                            { onSuccess: () => { setShowCreateActionType(false); setActionTypeProv(""); } }
+                          );
+                        }}
+                      >
+                        Create
+                      </Button>
                     </SpaceBetween>
-                  </Form>
-                </Modal>
-              </>
-            ),
-          },
-        ]}
-      />
+                  </Box>
+                }
+              >
+                <Form>
+                  {createActionType.isError && (
+                    <Alert type="error" dismissible>
+                      {(createActionType.error as Error)?.message || "Failed to create action type"}
+                    </Alert>
+                  )}
+                  <SpaceBetween size="m">
+                    <FormField label="Category">
+                      <Select
+                        selectedOption={{ label: actionTypeCat, value: actionTypeCat }}
+                        onChange={({ detail }) => setActionTypeCat(detail.selectedOption.value || "Build")}
+                        options={[
+                          { label: "Source", value: "Source" },
+                          { label: "Build", value: "Build" },
+                          { label: "Test", value: "Test" },
+                          { label: "Deploy", value: "Deploy" },
+                          { label: "Approval", value: "Approval" },
+                          { label: "Invoke", value: "Invoke" },
+                        ]}
+                      />
+                    </FormField>
+                    <FormField label="Provider name">
+                      <Input value={actionTypeProv} onChange={({ detail }) => setActionTypeProv(detail.value)} placeholder="MyCustomProvider" />
+                    </FormField>
+                  </SpaceBetween>
+                </Form>
+              </Modal>
+
+              <Modal
+                visible={showDeleteActionType}
+                onDismiss={() => setShowDeleteActionType(false)}
+                header={`Delete action type?`}
+                footer={
+                  <Box float="right">
+                    <SpaceBetween direction="horizontal" size="xs">
+                      <Button variant="link" onClick={() => setShowDeleteActionType(false)}>Cancel</Button>
+                      <Button
+                        variant="primary"
+                        loading={deleteActionType.isPending}
+                        onClick={() => {
+                          if (deleteActionTypeTarget) {
+                            deleteActionType.mutate(
+                              {
+                                owner: deleteActionTypeTarget.owner,
+                                category: deleteActionTypeTarget.category,
+                                provider: deleteActionTypeTarget.provider,
+                                version: deleteActionTypeTarget.version,
+                              },
+                              { onSuccess: () => { setShowDeleteActionType(false); setDeleteActionTypeTarget(null); } }
+                            );
+                          }
+                        }}
+                      >
+                        Delete
+                      </Button>
+                    </SpaceBetween>
+                  </Box>
+                }
+              >
+                <Box>
+                  Are you sure you want to delete the action type <strong>{deleteActionTypeTarget?.provider}</strong>?
+                </Box>
+              </Modal>
+            </>
+          ),
+        },
+        {
+          id: "rules",
+          label: `Rules (${ruleExecutionsQuery.data?.total || 0})`,
+          disabled: !selectedPipeline,
+          content: selectedPipeline ? (
+            <ResourceTable
+              resourceName="Rule Execution"
+              headerTitle={`Rule Executions for ${selectedPipeline}`}
+              headerCounter={ruleExecutionsQuery.data?.total}
+              items={ruleExecutions}
+              columns={[
+                { id: "ruleName", header: "Rule", cell: (i: any) => i.ruleName, isRowHeader: true },
+                {
+                  id: "status",
+                  header: "Status",
+                  cell: (i: any) => (
+                    <StatusIndicator
+                      type={i.status === "Succeeded" ? "success" : i.status === "Failed" ? "error" : "in-progress"}
+                    >
+                      {i.status}
+                    </StatusIndicator>
+                  ),
+                },
+                { id: "executionId", header: "Execution ID", cell: (i: any) => i.ruleExecutionId },
+                { id: "start", header: "Start Time", cell: (i: any) => i.startTime },
+                { id: "update", header: "Last Update", cell: (i: any) => i.lastUpdate },
+              ]}
+              loading={ruleExecutionsQuery.isLoading}
+              emptyMessage="No rule executions for this pipeline"
+              filterEnabled
+              filterPlaceholder="Find rule executions by name"
+              filterFunction={(i: any, s: string) => i.ruleName.toLowerCase().includes(s.toLowerCase())}
+            />
+          ) : (
+            <Alert type="info">Select a pipeline to view rule executions.</Alert>
+          ),
+        },
+        {
+          id: "jobs",
+          label: "Jobs",
+          content: (
+            <>
+              <SpaceBetween size="l">
+                <Box margin={{ bottom: "s" }}>
+                  <Button onClick={() => setShowPollJobs(true)}>Poll for jobs</Button>
+                </Box>
+
+                {pollResults !== null && (
+                  <Box>
+                    <Header variant="h3">Poll Results ({pollResults.length} jobs)</Header>
+                    {pollResults.length === 0 ? (
+                      <Alert type="info">No jobs found. Poll may not have returned any jobs.</Alert>
+                    ) : (
+                      <ResourceTable
+                        resourceName="Job"
+                        items={pollResults.map((j: any) => ({
+                          id: j.id || "—",
+                          accountId: j.accountId || "—",
+                          data: j.data,
+                          nonce: j.nonce,
+                        }))}
+                        columns={[
+                          { id: "id", header: "Job ID", cell: (i: any) => i.id, isRowHeader: true },
+                          { id: "accountId", header: "Account", cell: (i: any) => i.accountId },
+                          {
+                            id: "nonce",
+                            header: "Nonce",
+                            cell: (i: any) => i.nonce || "—",
+                          },
+                          {
+                            id: "actions",
+                            header: "",
+                            cell: (i: any) => (
+                              <Button
+                                variant="normal"
+                                onClick={() => setShowJobDetail(i.id)}
+                              >
+                                Details
+                              </Button>
+                            ),
+                          },
+                        ]}
+                        emptyMessage="No jobs"
+                      />
+                    )}
+                  </Box>
+                )}
+              </SpaceBetween>
+
+              <Modal
+                visible={showPollJobs}
+                onDismiss={() => setShowPollJobs(false)}
+                header="Poll for Jobs"
+                footer={
+                  <Box float="right">
+                    <SpaceBetween direction="horizontal" size="xs">
+                      <Button variant="link" onClick={() => setShowPollJobs(false)}>Cancel</Button>
+                      <Button
+                        variant="primary"
+                        loading={pollJobs.isPending}
+                        disabled={!pollProv.trim()}
+                        onClick={() => {
+                          pollJobs
+                            .mutateAsync({ category: pollCat, provider: pollProv.trim() })
+                            .then((res: any) => {
+                              setPollResults(res.jobs || []);
+                              setShowPollJobs(false);
+                            });
+                        }}
+                      >
+                        Poll
+                      </Button>
+                    </SpaceBetween>
+                  </Box>
+                }
+              >
+                <Form>
+                  <SpaceBetween size="m">
+                    <FormField label="Action category">
+                      <Select
+                        selectedOption={{ label: pollCat, value: pollCat }}
+                        onChange={({ detail }) => setPollCat(detail.selectedOption.value || "Build")}
+                        options={[
+                          { label: "Source", value: "Source" },
+                          { label: "Build", value: "Build" },
+                          { label: "Test", value: "Test" },
+                          { label: "Deploy", value: "Deploy" },
+                        ]}
+                      />
+                    </FormField>
+                    <FormField label="Provider">
+                      <Input value={pollProv} onChange={({ detail }) => setPollProv(detail.value)} placeholder="MyCustomProvider" />
+                    </FormField>
+                  </SpaceBetween>
+                </Form>
+              </Modal>
+
+              <Modal
+                visible={!!showJobDetail}
+                onDismiss={() => setShowJobDetail(null)}
+                header={`Job Detail: ${showJobDetail || ""}`}
+                size="large"
+                footer={
+                  <Box float="right">
+                    <Button onClick={() => setShowJobDetail(null)}>Close</Button>
+                  </Box>
+                }
+              >
+                <JobDetailView jobId={showJobDetail || ""} />
+              </Modal>
+            </>
+          ),
+        },
+      ]}
+    />
+    </SpaceBetween>
+  );
+}
+
+function JobDetailView({ jobId }: { jobId: string }) {
+  const { data, isLoading, error } = useJobDetails(jobId);
+  const details = data?.jobDetails;
+
+  if (isLoading) return <Spinner />;
+  if (error) return <Alert type="error">{(error as Error).message}</Alert>;
+  if (!details) return <Alert type="info">No job details found for {jobId}.</Alert>;
+
+  return (
+    <SpaceBetween size="m">
+      <ColumnLayout columns={2} variant="text-grid">
+        <div>
+          <Box variant="awsui-key-label">Job ID</Box>
+          <Box>{details.id || "—"}</Box>
+        </div>
+        <div>
+          <Box variant="awsui-key-label">Account ID</Box>
+          <Box>{details.accountId || "—"}</Box>
+        </div>
+      </ColumnLayout>
+      {details.data && (
+        <Container header={<Box variant="strong">Job Data</Box>}>
+          <pre style={{ fontSize: 12, whiteSpace: "pre-wrap", maxHeight: 300, overflow: "auto" }}>
+            {JSON.stringify(details.data, null, 2)}
+          </pre>
+        </Container>
+      )}
     </SpaceBetween>
   );
 }

@@ -154,6 +154,36 @@ export function useActionExecutions(name: string | null, executionId?: string | 
   });
 }
 
+// ─── Rollback Stage ────────────────────────────────────
+
+export function useRollbackStage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, executionId, ...body }: any) =>
+      api(`/aws/codepipeline/pipelines/${encodeURIComponent(name)}/executions/${encodeURIComponent(executionId)}/rollback`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: (_data, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "codepipeline", "pipelines", variables.name, "executions"] }),
+  });
+}
+
+// ─── Override Stage Condition ──────────────────────────
+
+export function useOverrideStageCondition() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, executionId, ...body }: any) =>
+      api(`/aws/codepipeline/pipelines/${encodeURIComponent(name)}/executions/${encodeURIComponent(executionId)}/override`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: (_data, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "codepipeline", "pipelines", variables.name, "state"] }),
+  });
+}
+
 // ─── Action Types ──────────────────────────────────────
 
 export function useActionTypes() {
@@ -163,12 +193,74 @@ export function useActionTypes() {
   });
 }
 
+export function useActionType(owner: string | null, category: string | null, provider: string | null, version: string | null) {
+  return useQuery({
+    queryKey: ["aws", "codepipeline", "action-types", owner, category, provider, version],
+    queryFn: () =>
+      api<{ actionType: any }>(
+        `/aws/codepipeline/action-types/${encodeURIComponent(owner!)}/${encodeURIComponent(category!)}/${encodeURIComponent(provider!)}/${encodeURIComponent(version!)}`
+      ),
+    enabled: !!owner && !!category && !!provider && !!version,
+  });
+}
+
 export function useCreateCustomActionType() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: any) =>
       api("/aws/codepipeline/action-types", { method: "POST", body: JSON.stringify(body) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "codepipeline", "action-types"] }),
+  });
+}
+
+export function useUpdateCustomActionType() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ owner, category, provider, version, ...body }: any) =>
+      api(`/aws/codepipeline/action-types/${encodeURIComponent(owner)}/${encodeURIComponent(category)}/${encodeURIComponent(provider)}/${encodeURIComponent(version)}`, {
+        method: "PUT",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "codepipeline", "action-types"] }),
+  });
+}
+
+export function useDeleteCustomActionType() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ owner, category, provider, version }: any) =>
+      api(`/aws/codepipeline/action-types/${encodeURIComponent(owner)}/${encodeURIComponent(category)}/${encodeURIComponent(provider)}/${encodeURIComponent(version)}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "codepipeline", "action-types"] }),
+  });
+}
+
+// ─── Action Revisions ───────────────────────────────────
+
+export function usePutActionRevision() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, ...body }: any) =>
+      api(`/aws/codepipeline/pipelines/${encodeURIComponent(name)}/actions/revision`, {
+        method: "PUT",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: (_data, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "codepipeline", "pipelines", variables.name, "actions"] }),
+  });
+}
+
+// ─── Rule Executions ────────────────────────────────────
+
+export function useRuleExecutions(name: string | null) {
+  return useQuery({
+    queryKey: ["aws", "codepipeline", "pipelines", name, "rules"],
+    queryFn: () =>
+      api<{ ruleExecutionDetails: any[]; total: number }>(
+        `/aws/codepipeline/pipelines/${encodeURIComponent(name || "")}/rules`
+      ),
+    enabled: !!name,
   });
 }
 
@@ -196,5 +288,63 @@ export function useDeleteWebhook() {
     mutationFn: (name: string) =>
       api(`/aws/codepipeline/webhooks/${encodeURIComponent(name)}`, { method: "DELETE" }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "codepipeline", "webhooks"] }),
+  });
+}
+
+export function useRegisterWebhook() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api(`/aws/codepipeline/webhooks/${encodeURIComponent(name)}/register`, { method: "POST", body: JSON.stringify({}) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "codepipeline", "webhooks"] }),
+  });
+}
+
+export function useDeregisterWebhook() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api(`/aws/codepipeline/webhooks/${encodeURIComponent(name)}/deregister`, { method: "POST", body: JSON.stringify({}) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "codepipeline", "webhooks"] }),
+  });
+}
+
+// ─── Jobs ───────────────────────────────────────────────
+
+export function usePollForJobs() {
+  return useMutation({
+    mutationFn: ({ category, provider, maxBatchSize }: any) =>
+      api(`/aws/codepipeline/action-types/${encodeURIComponent(category)}/${encodeURIComponent(provider)}/jobs/poll`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      }),
+  });
+}
+
+export function useAcknowledgeJob() {
+  return useMutation({
+    mutationFn: ({ jobId, nonce }: any) =>
+      api(`/aws/codepipeline/jobs/${encodeURIComponent(jobId)}/acknowledge`, {
+        method: "POST",
+        body: JSON.stringify({ nonce }),
+      }),
+  });
+}
+
+export function useJobDetails(jobId: string | null) {
+  return useQuery({
+    queryKey: ["aws", "codepipeline", "jobs", jobId],
+    queryFn: () => api<{ jobDetails: any }>(`/aws/codepipeline/jobs/${encodeURIComponent(jobId || "")}`),
+    enabled: !!jobId,
+  });
+}
+
+export function usePutJobResult() {
+  return useMutation({
+    mutationFn: ({ jobId, ...body }: any) =>
+      api(`/aws/codepipeline/jobs/${encodeURIComponent(jobId)}/result`, {
+        method: "PUT",
+        body: JSON.stringify(body),
+      }),
   });
 }
