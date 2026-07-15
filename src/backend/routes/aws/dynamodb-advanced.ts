@@ -3,6 +3,7 @@ import type { Context } from "hono";
 import {
   DynamoDBClient,
   UpdateItemCommand,
+  UpdateTableCommand,
   BatchGetItemCommand,
   BatchWriteItemCommand,
   TransactGetItemsCommand,
@@ -27,6 +28,103 @@ const router = new Hono();
 function ddb(): DynamoDBClient {
   return new DynamoDBClient(getAwsConfig());
 }
+
+// ─── UpdateTable ──────────────────────────────────────────────────
+
+router.put("/tables/:name/update", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<{
+    BillingMode?: string;
+    ProvisionedThroughput?: { ReadCapacityUnits: number; WriteCapacityUnits: number };
+    SSESpecification?: { Enabled: boolean; SSEType?: string; KMSMasterKeyId?: string };
+    StreamSpecification?: { StreamEnabled: boolean; StreamViewType?: string };
+    DeletionProtectionEnabled?: boolean;
+    TableClass?: string;
+    AttributeDefinitions?: Array<{ AttributeName: string; AttributeType: string }>;
+    GlobalSecondaryIndexUpdates?: Array<{
+      Create?: {
+        IndexName: string;
+        KeySchema: Array<{ AttributeName: string; KeyType: string }>;
+        Projection?: { ProjectionType?: string; NonKeyAttributes?: string[] };
+        ProvisionedThroughput?: { ReadCapacityUnits: number; WriteCapacityUnits: number };
+      };
+      Delete?: { IndexName: string };
+    }>;
+  }>();
+
+  if (!body || Object.keys(body).length === 0) {
+    return c.json({ error: "At least one update parameter is required" }, 400);
+  }
+
+  if (body.BillingMode === "PAY_PER_REQUEST" && body.ProvisionedThroughput) {
+    return c.json({ error: "ProvisionedThroughput cannot be specified when BillingMode is PAY_PER_REQUEST" }, 400);
+  }
+
+  const params: any = { TableName: name };
+
+  if (body.BillingMode) params.BillingMode = body.BillingMode;
+  if (body.ProvisionedThroughput) {
+    params.ProvisionedThroughput = {
+      ReadCapacityUnits: body.ProvisionedThroughput.ReadCapacityUnits,
+      WriteCapacityUnits: body.ProvisionedThroughput.WriteCapacityUnits,
+    };
+  }
+  if (body.SSESpecification) {
+    const sse: any = { Enabled: body.SSESpecification.Enabled };
+    if (body.SSESpecification.SSEType) sse.SSEType = body.SSESpecification.SSEType;
+    if (body.SSESpecification.KMSMasterKeyId) sse.KMSMasterKeyId = body.SSESpecification.KMSMasterKeyId;
+    params.SSESpecification = sse;
+  }
+  if (body.StreamSpecification) {
+    params.StreamSpecification = {
+      StreamEnabled: body.StreamSpecification.StreamEnabled,
+      StreamViewType: body.StreamSpecification.StreamViewType || "NEW_AND_OLD_IMAGES",
+    };
+  }
+  if (body.DeletionProtectionEnabled !== undefined) {
+    params.DeletionProtectionEnabled = body.DeletionProtectionEnabled;
+  }
+  if (body.TableClass) params.TableClass = body.TableClass;
+  if (body.AttributeDefinitions && body.AttributeDefinitions.length > 0) {
+    params.AttributeDefinitions = body.AttributeDefinitions;
+  }
+  if (body.GlobalSecondaryIndexUpdates && body.GlobalSecondaryIndexUpdates.length > 0) {
+    params.GlobalSecondaryIndexUpdates = body.GlobalSecondaryIndexUpdates.map((update) => {
+      const mapped: any = {};
+      if (update.Create) {
+        mapped.Create = {
+          IndexName: update.Create.IndexName,
+          KeySchema: update.Create.KeySchema,
+          Projection: update.Create.Projection
+            ? {
+                ProjectionType: update.Create.Projection.ProjectionType || "ALL",
+                ...(update.Create.Projection.NonKeyAttributes?.length
+                  ? { NonKeyAttributes: update.Create.Projection.NonKeyAttributes }
+                  : {}),
+              }
+            : { ProjectionType: "ALL" },
+        };
+        if (update.Create.ProvisionedThroughput) {
+          mapped.Create.ProvisionedThroughput = update.Create.ProvisionedThroughput;
+        }
+      }
+      if (update.Delete) mapped.Delete = { IndexName: update.Delete.IndexName };
+      return mapped;
+    });
+  }
+
+  const result = await ddb().send(new UpdateTableCommand(params));
+  const desc = result.TableDescription;
+
+  return c.json({
+    table: name,
+    updated: true,
+    tableStatus: desc?.TableStatus || "UPDATING",
+    billingMode: desc?.BillingModeSummary?.BillingMode || body.BillingMode || null,
+    streamSpecification: desc?.StreamSpecification || null,
+    sseDescription: desc?.SSEDescription || null,
+  });
+});
 
 // ─── UpdateItem ───────────────────────────────────────────────────
 

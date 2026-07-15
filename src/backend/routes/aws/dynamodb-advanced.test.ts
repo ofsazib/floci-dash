@@ -12,6 +12,7 @@ const mockUnmarshall = vi.hoisted(() => vi.fn((v) => v));
 vi.mock("@aws-sdk/client-dynamodb", () => ({
   DynamoDBClient: mockDynamoClient,
   UpdateItemCommand: vi.fn(function(args) { return args; }),
+  UpdateTableCommand: vi.fn(function(args) { return args; }),
   BatchGetItemCommand: vi.fn(function(args) { return args; }),
   BatchWriteItemCommand: vi.fn(function(args) { return args; }),
   TransactGetItemsCommand: vi.fn(function(args) { return args; }),
@@ -73,6 +74,133 @@ beforeEach(() => {
 });
 
 describe("DynamoDB Advanced", () => {
+  describe("UpdateTable", () => {
+    it("PUT /tables/:name/update — updates billing mode to PAY_PER_REQUEST", async () => {
+      mockSend.mockResolvedValueOnce({
+        TableDescription: { TableStatus: "UPDATING", BillingModeSummary: { BillingMode: "PAY_PER_REQUEST" } },
+      });
+      const res = await put("/tables/my-table/update", {
+        BillingMode: "PAY_PER_REQUEST",
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+      expect(body.billingMode).toBe("PAY_PER_REQUEST");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.TableName).toBe("my-table");
+      expect(cmd.BillingMode).toBe("PAY_PER_REQUEST");
+    });
+
+    it("PUT /tables/:name/update — updates provisioned throughput", async () => {
+      mockSend.mockResolvedValueOnce({ TableDescription: { TableStatus: "ACTIVE" } });
+      const res = await put("/tables/my-table/update", {
+        ProvisionedThroughput: { ReadCapacityUnits: 10, WriteCapacityUnits: 5 },
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.ProvisionedThroughput.ReadCapacityUnits).toBe(10);
+      expect(cmd.ProvisionedThroughput.WriteCapacityUnits).toBe(5);
+    });
+
+    it("PUT /tables/:name/update — enables SSE with KMS key", async () => {
+      mockSend.mockResolvedValueOnce({ TableDescription: { TableStatus: "UPDATING" } });
+      const res = await put("/tables/my-table/update", {
+        SSESpecification: { Enabled: true, SSEType: "KMS", KMSMasterKeyId: "arn:aws:kms:..." },
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.SSESpecification.Enabled).toBe(true);
+      expect(cmd.SSESpecification.SSEType).toBe("KMS");
+      expect(cmd.SSESpecification.KMSMasterKeyId).toBe("arn:aws:kms:...");
+    });
+
+    it("PUT /tables/:name/update — enables stream specification", async () => {
+      mockSend.mockResolvedValueOnce({ TableDescription: { TableStatus: "UPDATING" } });
+      const res = await put("/tables/my-table/update", {
+        StreamSpecification: { StreamEnabled: true, StreamViewType: "NEW_IMAGE" },
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.StreamSpecification.StreamEnabled).toBe(true);
+      expect(cmd.StreamSpecification.StreamViewType).toBe("NEW_IMAGE");
+    });
+
+    it("PUT /tables/:name/update — stream spec defaults view type when missing", async () => {
+      mockSend.mockResolvedValueOnce({ TableDescription: { TableStatus: "UPDATING" } });
+      const res = await put("/tables/my-table/update", {
+        StreamSpecification: { StreamEnabled: true },
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.StreamSpecification.StreamViewType).toBe("NEW_AND_OLD_IMAGES");
+    });
+
+    it("PUT /tables/:name/update — enables deletion protection and sets table class", async () => {
+      mockSend.mockResolvedValueOnce({ TableDescription: { TableStatus: "UPDATING" } });
+      const res = await put("/tables/my-table/update", {
+        DeletionProtectionEnabled: true,
+        TableClass: "STANDARD_INFREQUENT_ACCESS",
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.DeletionProtectionEnabled).toBe(true);
+      expect(cmd.TableClass).toBe("STANDARD_INFREQUENT_ACCESS");
+    });
+
+    it("PUT /tables/:name/update — creates and deletes GSIs with attribute defs", async () => {
+      mockSend.mockResolvedValueOnce({ TableDescription: { TableStatus: "UPDATING" } });
+      const res = await put("/tables/my-table/update", {
+        GlobalSecondaryIndexUpdates: [
+          {
+            Create: {
+              IndexName: "new-gsi",
+              KeySchema: [
+                { AttributeName: "gsi_pk", KeyType: "HASH" },
+                { AttributeName: "gsi_sk", KeyType: "RANGE" },
+              ],
+              Projection: { ProjectionType: "ALL" },
+              ProvisionedThroughput: { ReadCapacityUnits: 5, WriteCapacityUnits: 5 },
+            },
+          },
+          { Delete: { IndexName: "old-gsi" } },
+        ],
+        AttributeDefinitions: [
+          { AttributeName: "gsi_pk", AttributeType: "S" },
+          { AttributeName: "gsi_sk", AttributeType: "S" },
+        ],
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.GlobalSecondaryIndexUpdates).toHaveLength(2);
+      expect(cmd.GlobalSecondaryIndexUpdates[0].Create.IndexName).toBe("new-gsi");
+      expect(cmd.GlobalSecondaryIndexUpdates[1].Delete.IndexName).toBe("old-gsi");
+      expect(cmd.AttributeDefinitions).toHaveLength(2);
+    });
+
+    it("PUT /tables/:name/update — 400 when body is empty", async () => {
+      const res = await put("/tables/my-table/update", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("PUT /tables/:name/update — GSI create without projection defaults to ALL", async () => {
+      mockSend.mockResolvedValueOnce({ TableDescription: { TableStatus: "UPDATING" } });
+      const res = await put("/tables/my-table/update", {
+        GlobalSecondaryIndexUpdates: [
+          {
+            Create: {
+              IndexName: "minimal-gsi",
+              KeySchema: [{ AttributeName: "pk", KeyType: "HASH" }],
+            },
+          },
+        ],
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.GlobalSecondaryIndexUpdates[0].Create.Projection.ProjectionType).toBe("ALL");
+      expect(cmd.GlobalSecondaryIndexUpdates[0].Create.ProvisionedThroughput).toBeUndefined();
+    });
+  });
+
   describe("Update Item", () => {
     it("POST /tables/:name/items/update — updates item", async () => {
       mockSend.mockResolvedValueOnce({ Attributes: { key: { S: "val" } } });

@@ -30,6 +30,7 @@ import DynamoDBAdvanced from "./DynamoDBAdvanced";
 import DynamoDBStreams from "./DynamoDBStreams";
 import DynamoDBKinesisStreaming from "./DynamoDBKinesisStreaming";
 import DynamoDBExports from "./DynamoDBExports";
+import DynamoDBUpdateTable from "./DynamoDBUpdateTable";
 import { formatBytes, formatItemValue } from "../lib/utils";
 
 const FILTER_OPERATORS: SelectProps.Option[] = [
@@ -751,6 +752,11 @@ export default function DynamoDBTableDetail({
             label: "Exports",
             id: "exports",
             content: <DynamoDBExports tableName={tableName} />,
+          },
+          {
+            label: "Update Table",
+            id: "update-table",
+            content: <DynamoDBUpdateTable tableName={tableName} tableDetail={detail} />,
           },
           {
             label: "Advanced",

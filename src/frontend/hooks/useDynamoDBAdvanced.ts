@@ -1,6 +1,42 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/client";
 
+// ─── UpdateTable ──────────────────────────────────────────────────
+
+export interface UpdateTableParams {
+  BillingMode?: "PROVISIONED" | "PAY_PER_REQUEST";
+  ProvisionedThroughput?: { ReadCapacityUnits: number; WriteCapacityUnits: number };
+  SSESpecification?: { Enabled: boolean; SSEType?: string; KMSMasterKeyId?: string };
+  StreamSpecification?: { StreamEnabled: boolean; StreamViewType?: string };
+  DeletionProtectionEnabled?: boolean;
+  TableClass?: "STANDARD" | "STANDARD_INFREQUENT_ACCESS";
+  AttributeDefinitions?: Array<{ AttributeName: string; AttributeType: string }>;
+  GlobalSecondaryIndexUpdates?: Array<{
+    Create?: {
+      IndexName: string;
+      KeySchema: Array<{ AttributeName: string; KeyType: string }>;
+      Projection?: { ProjectionType?: string; NonKeyAttributes?: string[] };
+      ProvisionedThroughput?: { ReadCapacityUnits: number; WriteCapacityUnits: number };
+    };
+    Delete?: { IndexName: string };
+  }>;
+}
+
+export function useDynamoDBUpdateTable(table: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: UpdateTableParams) =>
+      api(`/aws/dynamodb/tables/${table}/update`, {
+        method: "PUT",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["aws", "dynamodb", "table", table] });
+      qc.invalidateQueries({ queryKey: ["aws", "dynamodb", "tables"] });
+    },
+  });
+}
+
 // ─── UpdateItem ───────────────────────────────────────────────────
 
 export function useDynamoDBUpdateItem(table: string) {

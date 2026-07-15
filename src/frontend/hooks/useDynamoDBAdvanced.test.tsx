@@ -10,6 +10,7 @@ vi.mock("../lib/client", () => ({
 }));
 
 import {
+  useDynamoDBUpdateTable,
   useDynamoDBExports,
   useDynamoDBExportTable,
   useDynamoDBDescribeExport,
@@ -25,6 +26,66 @@ function createWrapper() {
 beforeEach(() => {
   vi.clearAllMocks();
   mockApi.mockReset();
+});
+
+describe("useDynamoDBUpdateTable", () => {
+  it("calls api with PUT method and table update params body", async () => {
+    mockApi.mockResolvedValueOnce({ updated: true, table: "orders" });
+    const { result } = renderHook(() => useDynamoDBUpdateTable("orders"), {
+      wrapper: createWrapper(),
+    });
+    const params = {
+      BillingMode: "PAY_PER_REQUEST" as const,
+      DeletionProtectionEnabled: true,
+    };
+    await result.current.mutateAsync(params);
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/dynamodb/tables/orders/update",
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify(params),
+      }),
+    );
+  });
+
+  it("sends SSE specification when provided", async () => {
+    mockApi.mockResolvedValueOnce({ updated: true });
+    const { result } = renderHook(() => useDynamoDBUpdateTable("orders"), {
+      wrapper: createWrapper(),
+    });
+    const params = {
+      SSESpecification: { Enabled: true, SSEType: "KMS", KMSMasterKeyId: "arn:aws:kms:..." },
+    };
+    await result.current.mutateAsync(params);
+    const callBody = JSON.parse(mockApi.mock.calls[0][1].body);
+    expect(callBody.SSESpecification.Enabled).toBe(true);
+    expect(callBody.SSESpecification.SSEType).toBe("KMS");
+  });
+
+  it("sends GSI updates when creating and deleting indexes", async () => {
+    mockApi.mockResolvedValueOnce({ updated: true });
+    const { result } = renderHook(() => useDynamoDBUpdateTable("orders"), {
+      wrapper: createWrapper(),
+    });
+    const params = {
+      GlobalSecondaryIndexUpdates: [
+        {
+          Create: {
+            IndexName: "new-gsi",
+            KeySchema: [{ AttributeName: "pk", KeyType: "HASH" }],
+          },
+        },
+        { Delete: { IndexName: "old-gsi" } },
+      ],
+      AttributeDefinitions: [{ AttributeName: "pk", AttributeType: "S" }],
+    };
+    await result.current.mutateAsync(params);
+    const callBody = JSON.parse(mockApi.mock.calls[0][1].body);
+    expect(callBody.GlobalSecondaryIndexUpdates).toHaveLength(2);
+    expect(callBody.GlobalSecondaryIndexUpdates[0].Create.IndexName).toBe("new-gsi");
+    expect(callBody.GlobalSecondaryIndexUpdates[1].Delete.IndexName).toBe("old-gsi");
+    expect(callBody.AttributeDefinitions).toHaveLength(1);
+  });
 });
 
 describe("useDynamoDBExports", () => {
