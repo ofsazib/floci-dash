@@ -32,6 +32,9 @@ vi.mock("../hooks/useS3", () => ({
 vi.mock("../hooks/useS3Config", () => ({
   useS3ObjectTags: (...args: any[]) => mockObjectTags(...args),
   useS3UpdateObjectTags: () => ({ mutate: mockUpdateObjectTags, isPending: false }),
+  useS3ObjectAcl: () => ({ data: { owner: null, grants: [], totalGrants: 0 }, isLoading: false }),
+  useS3PutObjectAcl: () => ({ mutate: vi.fn(), isPending: false }),
+  useS3ObjectAttributes: () => ({ data: { checksum: null }, isLoading: false }),
 }));
 
 vi.mock("../hooks/useSystem", () => ({

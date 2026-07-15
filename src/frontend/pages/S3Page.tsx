@@ -43,6 +43,7 @@ import {
   useS3UpdateObjectTags,
   useS3ObjectAcl,
   useS3PutObjectAcl,
+  useS3ObjectAttributes,
   type S3Tag,
 } from "../hooks/useS3Config";
 import { useS3Select } from "../hooks/useS3Select";
@@ -913,6 +914,9 @@ function S3ObjectViewer({ bucket, objectKey, onBack }: { bucket: string; objectK
       {/* Object ACL */}
       <ObjectAclView bucket={bucket} objectKey={objectKey} />
 
+      {/* Object Checksums */}
+      <ObjectChecksumView bucket={bucket} objectKey={objectKey} />
+
       {/* Preview */}
       <Container header={<Header variant="h3">Preview</Header>}>
         {isImage ? (
@@ -1069,6 +1073,160 @@ function ObjectAclView({ bucket, objectKey }: { bucket: string; objectKey: strin
             </SpaceBetween>
           )}
         </SpaceBetween>
+      )}
+    </Container>
+  );
+}
+
+// ─── Object Checksum View ───────────────────────────────────
+
+const CHECKSUM_ALGORITHMS = [
+  { key: "ChecksumCRC32", label: "CRC32" },
+  { key: "ChecksumCRC32C", label: "CRC32C" },
+  { key: "ChecksumSHA1", label: "SHA-1" },
+  { key: "ChecksumSHA256", label: "SHA-256" },
+  { key: "ChecksumCRC64NVME", label: "CRC64-NVME" },
+] as const;
+
+function ObjectChecksumView({ bucket, objectKey }: { bucket: string; objectKey: string }) {
+  const { data, isLoading } = useS3ObjectAttributes(bucket, objectKey);
+  const { showToast } = useToast();
+  const [verifyAlgo, setVerifyAlgo] = useState("ChecksumSHA256");
+  const [verifyValue, setVerifyValue] = useState("");
+  const [matchResult, setMatchResult] = useState<boolean | null>(null);
+
+  const checksum = data?.checksum;
+  const hasAnyChecksum = checksum && CHECKSUM_ALGORITHMS.some((a) => checksum[a.key]);
+
+  function handleVerify() {
+    if (!checksum || !verifyValue.trim()) {
+      setMatchResult(null);
+      return;
+    }
+    const stored = checksum[verifyAlgo as keyof typeof checksum];
+    if (!stored) {
+      setMatchResult(null);
+      return;
+    }
+    setMatchResult(stored.trim() === verifyValue.trim());
+  }
+
+  return (
+    <Container
+      header={
+        <Header variant="h3">
+          Checksums {checksum?.ChecksumType ? `(${checksum.ChecksumType})` : ""}
+        </Header>
+      }
+    >
+      {isLoading ? (
+        <Spinner />
+      ) : hasAnyChecksum ? (
+        <SpaceBetween size="m">
+          {/* Checksum values */}
+          <Table
+            header={<Header variant="h3">Stored Checksums</Header>}
+            columnDefinitions={[
+              {
+                id: "algorithm",
+                header: "Algorithm",
+                cell: (item: any) => item.label,
+                width: 180,
+              },
+              {
+                id: "value",
+                header: "Value (base64)",
+                cell: (item: any) => (
+                  <code style={{ fontSize: 12, wordBreak: "break-all" }}>
+                    {checksum![item.key] || "—"}
+                  </code>
+                ),
+              },
+              {
+                id: "copy",
+                header: "",
+                width: 60,
+                cell: (item: any) =>
+                  checksum![item.key] ? (
+                    <Button
+                      variant="icon"
+                      iconName="copy"
+                      ariaLabel={`Copy ${item.label}`}
+                      onClick={async () => {
+                        await navigator.clipboard.writeText(checksum![item.key]!);
+                        showToast("info", `${item.label} copied`);
+                      }}
+                    />
+                  ) : null,
+              },
+            ]}
+            items={CHECKSUM_ALGORITHMS.filter(
+              (a) => checksum![a.key]
+            )}
+          />
+
+          {/* Verify checksum */}
+          <Container header={<Header variant="h3">Verify Checksum</Header>}>
+            <SpaceBetween size="s">
+              <Box variant="p" color="text-body-secondary">
+                Paste a checksum value to verify it matches the stored value for this object.
+              </Box>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
+                <FormField label="Algorithm">
+                  <Select
+                    selectedOption={
+                      CHECKSUM_ALGORITHMS
+                        .filter((a) => checksum![a.key])
+                        .map((a) => ({ label: a.label, value: a.key }))
+                        .find((o) => o.value === verifyAlgo) || {
+                        label: "SHA-256",
+                        value: "ChecksumSHA256",
+                      }
+                    }
+                    onChange={({ detail }) => {
+                      setVerifyAlgo((detail.selectedOption as any).value);
+                      setMatchResult(null);
+                    }}
+                    options={CHECKSUM_ALGORITHMS.filter((a) => checksum![a.key]).map(
+                      (a) => ({ label: a.label, value: a.key })
+                    )}
+                  />
+                </FormField>
+                <FormField label="Checksum value (base64)">
+                  <Input
+                    value={verifyValue}
+                    onChange={({ detail }) => {
+                      setVerifyValue(detail.value);
+                      setMatchResult(null);
+                    }}
+                    placeholder="Paste base64 checksum..."
+                  />
+                </FormField>
+                <Button
+                  variant="primary"
+                  disabled={!verifyValue.trim()}
+                  onClick={handleVerify}
+                >
+                  Verify
+                </Button>
+              </div>
+              {matchResult === true && (
+                <StatusIndicator type="success">
+                  Checksum matches! The values are identical.
+                </StatusIndicator>
+              )}
+              {matchResult === false && (
+                <StatusIndicator type="error">
+                  Checksum does NOT match. The values are different.
+                </StatusIndicator>
+              )}
+            </SpaceBetween>
+          </Container>
+        </SpaceBetween>
+      ) : (
+        <Box color="text-body-secondary">
+          No checksum data available for this object.
+        </Box>
       )}
     </Container>
   );
