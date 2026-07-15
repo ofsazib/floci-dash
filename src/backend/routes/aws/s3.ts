@@ -10,6 +10,8 @@ import {
   PutObjectCommand,
   DeleteObjectCommand,
   DeleteObjectsCommand,
+  GetObjectAclCommand,
+  PutObjectAclCommand,
 } from "@aws-sdk/client-s3";
 import { getAwsConfig } from "../../clients/aws";
 import { sanitizeName, sanitizeS3Key, sanitizeBucketName, sanitizeFileName, validateJson } from "../../clients/sanitize";
@@ -96,6 +98,73 @@ router.get("/buckets/:name/objects/*/raw", async (c: Context) => {
       "Cache-Control": "no-cache",
     },
   });
+});
+
+// ─── Object ACL ───────────────────────────────────────────────────
+// Must be defined BEFORE the catch-all /* route.
+// Uses explicit multi-segment patterns: /acl and /raw must be checked
+// via URL path parsing because Hono's /* in the middle only matches
+// one segment.
+
+const CANNED_ACLS = [
+  "private", "public-read", "public-read-write", "authenticated-read",
+  "bucket-owner-read", "bucket-owner-full-control",
+];
+
+// Object ACL GET — intercepts requests ending with /acl
+router.get("/buckets/:name/objects/*", async (c: Context, next) => {
+  const urlPath = new URL(c.req.url).pathname;
+  if (!urlPath.endsWith("/acl")) return next();
+
+  const bucket = c.req.param("name");
+  const key = decodeURIComponent(urlPath.split("/objects/")[1]?.replace(/\/acl$/, "") || "");
+  if (!key) return c.json({ error: "Object key is required" }, 400);
+  const result = await s3().send(new GetObjectAclCommand({ Bucket: bucket, Key: key }));
+  return c.json({
+    bucket,
+    key,
+    owner: result.Owner ? { id: result.Owner.ID, displayName: result.Owner.DisplayName } : null,
+    grants: (result.Grants || []).map((g: any) => ({
+      grantee: g.Grantee ? {
+        type: g.Grantee.Type,
+        id: g.Grantee.ID,
+        displayName: g.Grantee.DisplayName,
+        uri: g.Grantee.URI,
+        emailAddress: g.Grantee.EmailAddress,
+      } : null,
+      permission: g.Permission,
+    })),
+    totalGrants: (result.Grants || []).length,
+  });
+});
+
+// Object ACL PUT — intercepts requests ending with /acl
+router.put("/buckets/:name/objects/*", async (c: Context, next) => {
+  const urlPath = new URL(c.req.url).pathname;
+  if (!urlPath.endsWith("/acl")) return next();
+
+  const bucket = c.req.param("name");
+  const key = decodeURIComponent(urlPath.split("/objects/")[1]?.replace(/\/acl$/, "") || "");
+  if (!key) return c.json({ error: "Object key is required" }, 400);
+  const body = await c.req.json<{ cannedAcl?: string; grants?: any[]; owner?: any }>();
+  if (Object.keys(body).length === 0) {
+    return c.json({ error: "Either cannedAcl or grants is required" }, 400);
+  }
+  if (body.cannedAcl) {
+    const acl = body.cannedAcl.toLowerCase();
+    if (!CANNED_ACLS.includes(acl)) {
+      return c.json({ error: `Invalid canned ACL. Must be one of: ${CANNED_ACLS.join(", ")}` }, 400);
+    }
+    await s3().send(new PutObjectAclCommand({ Bucket: bucket, Key: key, ACL: acl as any }));
+    return c.json({ bucket, key, cannedAcl: acl, updated: true });
+  }
+  if (!body.grants || !Array.isArray(body.grants)) {
+    return c.json({ error: "grants array is required when cannedAcl is not provided" }, 400);
+  }
+  const accessControlPolicy: any = { Grants: body.grants };
+  if (body.owner) accessControlPolicy.Owner = body.owner;
+  await s3().send(new PutObjectAclCommand({ Bucket: bucket, Key: key, AccessControlPolicy: accessControlPolicy }));
+  return c.json({ bucket, key, grants: body.grants.length, updated: true });
 });
 
 // Get object metadata + content (supports keys with slashes)

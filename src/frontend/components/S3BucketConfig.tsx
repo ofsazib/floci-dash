@@ -44,6 +44,8 @@ import {
   useS3UpdatePublicAccessBlock,
   useS3BucketLogging,
   useS3UpdateBucketLogging,
+  useS3BucketAcl,
+  useS3PutBucketAcl,
   type S3Tag,
 } from "../hooks/useS3Config";
 
@@ -84,6 +86,7 @@ export default function S3BucketConfig({ bucket }: Props) {
     { label: "Notifications", id: "notifications" },
     { label: "Public Access", id: "public-access" },
     { label: "Logging", id: "logging" },
+    { label: "ACL", id: "acl" },
   ];
 
   return (
@@ -111,6 +114,7 @@ export default function S3BucketConfig({ bucket }: Props) {
       {activeTab === "notifications" && <BucketNotifications bucket={bucket} />}
       {activeTab === "public-access" && <BucketPublicAccess bucket={bucket} />}
       {activeTab === "logging" && <BucketLogging bucket={bucket} />}
+      {activeTab === "acl" && <BucketAcl bucket={bucket} />}
     </SpaceBetween>
   );
 }
@@ -953,6 +957,105 @@ function BucketLogging({ bucket }: Props) {
             {(updateLogging.error as Error)?.message || "Failed to update logging"}
           </Alert>
         )}
+      </SpaceBetween>
+    </Container>
+  );
+}
+
+const CANNED_ACL_OPTIONS: SelectProps.Option[] = [
+  { label: "private — Owner gets FULL_CONTROL, no one else has access", value: "private" },
+  { label: "public-read — Owner gets FULL_CONTROL, AllUsers get READ", value: "public-read" },
+  { label: "public-read-write — Owner gets FULL_CONTROL, AllUsers get READ+WRITE", value: "public-read-write" },
+  { label: "authenticated-read — Owner gets FULL_CONTROL, authenticated users get READ", value: "authenticated-read" },
+  { label: "bucket-owner-read — Object owner gets FULL_CONTROL, bucket owner gets READ", value: "bucket-owner-read" },
+  { label: "bucket-owner-full-control — Both object owner and bucket owner get FULL_CONTROL", value: "bucket-owner-full-control" },
+];
+
+function BucketAcl({ bucket }: Props) {
+  const { data, isLoading } = useS3BucketAcl(bucket);
+  const updateAcl = useS3PutBucketAcl(bucket);
+  const [selectedAcl, setSelectedAcl] = useState<SelectProps.Option>(CANNED_ACL_OPTIONS[0]);
+
+  if (isLoading) return <Spinner />;
+
+  const granteeLabel = (g: any) => {
+    if (!g) return "Unknown";
+    if (g.uri === "http://acs.amazonaws.com/groups/global/AllUsers") return "Everyone (AllUsers)";
+    if (g.uri === "http://acs.amazonaws.com/groups/global/AuthenticatedUsers") return "Authenticated Users";
+    if (g.uri === "http://acs.amazonaws.com/groups/s3/LogDelivery") return "Log Delivery";
+    if (g.displayName) return g.displayName;
+    if (g.id) return `ID: ${g.id}`;
+    if (g.emailAddress) return g.emailAddress;
+    return g.type || "Unknown";
+  };
+
+  return (
+    <Container header={<Header variant="h3">Bucket ACL (Access Control List)</Header>}>
+      <SpaceBetween size="m">
+        <Box variant="p" color="text-body-secondary">
+          Access Control Lists (ACLs) define who can access your bucket and what permissions they have.
+          Set a canned ACL for common scenarios, or view the full grant list.
+        </Box>
+
+        {/* Owner */}
+        {data?.owner && (
+          <Container header={<Header variant="h3">Owner</Header>}>
+            <Box variant="p">
+              <strong>{data.owner.displayName}</strong> (ID: {data.owner.id})
+            </Box>
+          </Container>
+        )}
+
+        {/* Grants list */}
+        {(data?.grants?.length ?? 0) > 0 && (
+          <Table
+            header={<Header variant="h3" counter={`(${data!.totalGrants})`}>Current Grants</Header>}
+            columnDefinitions={[
+              { id: "grantee", header: "Grantee", cell: (item: any) => granteeLabel(item.grantee) },
+              { id: "type", header: "Type", cell: (item: any) => item.grantee?.type || "—" },
+              {
+                id: "permission",
+                header: "Permission",
+                cell: (item: any) => (
+                  <StatusIndicator type={item.permission === "FULL_CONTROL" ? "success" : "info"}>
+                    {item.permission}
+                  </StatusIndicator>
+                ),
+              },
+            ]}
+            items={data!.grants}
+          />
+        )}
+
+        {/* Set canned ACL */}
+        <Container header={<Header variant="h3">Set Canned ACL</Header>}>
+          <SpaceBetween size="m">
+            <Box variant="p" color="text-body-secondary">
+              Override all grants with a predefined canned ACL. This replaces the entire access control list.
+            </Box>
+            <Form>
+              <FormField label="Canned ACL" description="Choose a canned ACL to apply to this bucket.">
+                <Select
+                  selectedOption={selectedAcl}
+                  onChange={({ detail }) => setSelectedAcl(detail.selectedOption)}
+                  options={CANNED_ACL_OPTIONS}
+                />
+              </FormField>
+              <Button
+                variant="primary"
+                loading={updateAcl.isPending}
+                onClick={() => updateAcl.mutate({ cannedAcl: selectedAcl.value as string })}
+              >
+                Apply ACL
+              </Button>
+            </Form>
+            {updateAcl.isError && (
+              <Alert type="error" dismissible>
+                {(updateAcl.error as Error)?.message || "Failed to update ACL"}
+              </Alert>
+            )}
+          </SpaceBetween>
+        </Container>
       </SpaceBetween>
     </Container>
   );

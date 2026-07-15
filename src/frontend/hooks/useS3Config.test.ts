@@ -42,6 +42,10 @@ import {
   useS3DeleteObjectTags,
   useS3ObjectAttributes,
   useS3HeadBucket,
+  useS3BucketAcl,
+  useS3PutBucketAcl,
+  useS3ObjectAcl,
+  useS3PutObjectAcl,
 } from "./useS3Config";
 
 function createWrapper() {
@@ -628,5 +632,80 @@ describe("useS3HeadBucket", () => {
     const { result } = renderHook(() => useS3HeadBucket(BUCKET), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith(`/aws/s3/buckets/${BUCKET}`);
+  });
+});
+
+// ─── Bucket ACL ───────────────────────────────────────────────────
+
+describe("useS3BucketAcl", () => {
+  it("does not call api when bucket is null", async () => {
+    const { result } = renderHook(() => useS3BucketAcl(null), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.fetchStatus).toBe("idle"));
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api with correct URL when bucket is provided", async () => {
+    mockApi.mockResolvedValueOnce({ bucket: BUCKET, owner: null, grants: [], totalGrants: 0 });
+    const { result } = renderHook(() => useS3BucketAcl(BUCKET), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(`/aws/s3/buckets/${BUCKET}/acl`);
+  });
+});
+
+describe("useS3PutBucketAcl", () => {
+  it("calls api with PUT method and cannedAcl", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useS3PutBucketAcl(BUCKET), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ cannedAcl: "public-read" });
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/s3/buckets/${BUCKET}/acl`,
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ cannedAcl: "public-read" }) }),
+    );
+  });
+
+  it("calls api with PUT method and grants", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useS3PutBucketAcl(BUCKET), { wrapper: createWrapper() });
+    const grants = [{ Grantee: { Type: "Group", URI: "..." }, Permission: "READ" }];
+    await result.current.mutateAsync({ grants });
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/s3/buckets/${BUCKET}/acl`,
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ grants }) }),
+    );
+  });
+});
+
+// ─── Object ACL ───────────────────────────────────────────────────
+
+describe("useS3ObjectAcl", () => {
+  it("does not call api when bucket is null", async () => {
+    const { result } = renderHook(() => useS3ObjectAcl(null, KEY), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.fetchStatus).toBe("idle"));
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("does not call api when key is null", async () => {
+    const { result } = renderHook(() => useS3ObjectAcl(BUCKET, null), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.fetchStatus).toBe("idle"));
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api with correct URL when bucket and key are provided", async () => {
+    mockApi.mockResolvedValueOnce({ bucket: BUCKET, key: KEY, owner: null, grants: [], totalGrants: 0 });
+    const { result } = renderHook(() => useS3ObjectAcl(BUCKET, KEY), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(`/aws/s3/buckets/${BUCKET}/objects/${ENCODED_KEY}/acl`);
+  });
+});
+
+describe("useS3PutObjectAcl", () => {
+  it("calls api with PUT method and cannedAcl", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useS3PutObjectAcl(BUCKET, KEY), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ cannedAcl: "private" });
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/s3/buckets/${BUCKET}/objects/${ENCODED_KEY}/acl`,
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ cannedAcl: "private" }) }),
+    );
   });
 });

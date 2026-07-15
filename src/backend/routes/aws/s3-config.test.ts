@@ -30,6 +30,8 @@ vi.mock("@aws-sdk/client-s3", () => ({
   DeletePublicAccessBlockCommand: vi.fn(function(args) { return args; }),
   GetBucketLoggingCommand: vi.fn(function(args) { return args; }),
   PutBucketLoggingCommand: vi.fn(function(args) { return args; }),
+  GetBucketAclCommand: vi.fn(function(args) { return args; }),
+  PutBucketAclCommand: vi.fn(function(args) { return args; }),
 }));
 
 import router from "./s3-config";
@@ -520,4 +522,64 @@ describe("S3 Config", () => {
       expect(res.status).toBe(400);
     });
   });
+
+  describe("Bucket ACL", () => {
+    it("GET /buckets/:name/acl — returns grants and owner", async () => {
+      mockSend.mockResolvedValueOnce({
+        Owner: { ID: "owner1", DisplayName: "Owner Name" },
+        Grants: [
+          { Grantee: { Type: "CanonicalUser", ID: "owner1", DisplayName: "Owner Name" }, Permission: "FULL_CONTROL" },
+          { Grantee: { Type: "Group", URI: "http://acs.amazonaws.com/groups/global/AllUsers" }, Permission: "READ" },
+        ],
+      });
+      const res = await get("/buckets/my-bucket/acl");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.bucket).toBe("my-bucket");
+      expect(body.owner.displayName).toBe("Owner Name");
+      expect(body.grants).toHaveLength(2);
+      expect(body.grants[0].permission).toBe("FULL_CONTROL");
+      expect(body.totalGrants).toBe(2);
+    });
+
+    it("GET /buckets/:name/acl — handles empty grants", async () => {
+      mockSend.mockResolvedValueOnce({ Grants: [] });
+      const res = await get("/buckets/my-bucket/acl");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.grants).toEqual([]);
+      expect(body.totalGrants).toBe(0);
+    });
+
+    it("PUT /buckets/:name/acl — sets canned ACL", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/buckets/my-bucket/acl", { cannedAcl: "public-read" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+      expect(body.cannedAcl).toBe("public-read");
+    });
+
+    it("PUT /buckets/:name/acl — 400 on invalid canned ACL", async () => {
+      const res = await put("/buckets/my-bucket/acl", { cannedAcl: "invalid-acl" });
+      expect(res.status).toBe(400);
+    });
+
+    it("PUT /buckets/:name/acl — sets grants", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/buckets/my-bucket/acl", {
+        grants: [{ Grantee: { Type: "Group", URI: "http://acs.amazonaws.com/groups/global/AllUsers" }, Permission: "READ" }],
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+      expect(body.grants).toBe(1);
+    });
+
+    it("PUT /buckets/:name/acl — 400 when no cannedAcl or grants", async () => {
+      const res = await put("/buckets/my-bucket/acl", {});
+      expect(res.status).toBe(400);
+    });
+  });
+
 });

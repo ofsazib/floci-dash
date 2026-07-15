@@ -12,6 +12,7 @@ import {
   Form,
   FormField,
   Input,
+  Select,
   TextFilter,
   StatusIndicator,
   Spinner,
@@ -40,6 +41,8 @@ import {
 import {
   useS3ObjectTags,
   useS3UpdateObjectTags,
+  useS3ObjectAcl,
+  useS3PutObjectAcl,
   type S3Tag,
 } from "../hooks/useS3Config";
 import { useS3Select } from "../hooks/useS3Select";
@@ -907,6 +910,9 @@ function S3ObjectViewer({ bucket, objectKey, onBack }: { bucket: string; objectK
         )}
       </Container>
 
+      {/* Object ACL */}
+      <ObjectAclView bucket={bucket} objectKey={objectKey} />
+
       {/* Preview */}
       <Container header={<Header variant="h3">Preview</Header>}>
         {isImage ? (
@@ -945,6 +951,126 @@ function S3ObjectViewer({ bucket, objectKey, onBack }: { bucket: string; objectK
         )}
       </Container>
     </SpaceBetween>
+  );
+}
+
+// ─── Object ACL View ────────────────────────────────────────
+
+const OBJ_CANNED_ACL_OPTIONS = [
+  { label: "private — Owner gets FULL_CONTROL", value: "private" },
+  { label: "public-read — Owner gets FULL_CONTROL, AllUsers get READ", value: "public-read" },
+  { label: "public-read-write — Owner gets FULL_CONTROL, AllUsers get READ+WRITE", value: "public-read-write" },
+  { label: "authenticated-read — Owner gets FULL_CONTROL, authenticated users get READ", value: "authenticated-read" },
+  { label: "bucket-owner-read — Object owner gets FULL_CONTROL, bucket owner gets READ", value: "bucket-owner-read" },
+  { label: "bucket-owner-full-control — Object owner + bucket owner get FULL_CONTROL", value: "bucket-owner-full-control" },
+];
+
+function ObjectAclView({ bucket, objectKey }: { bucket: string; objectKey: string }) {
+  const { data, isLoading } = useS3ObjectAcl(bucket, objectKey);
+  const updateAcl = useS3PutObjectAcl(bucket, objectKey);
+  const { showToast } = useToast();
+  const [showSetAcl, setShowSetAcl] = useState(false);
+  const [selectedAcl, setSelectedAcl] = useState(OBJ_CANNED_ACL_OPTIONS[0].value);
+
+  const granteeLabel = (g: any) => {
+    if (!g) return "Unknown";
+    if (g.uri?.includes("AllUsers")) return "Everyone (AllUsers)";
+    if (g.uri?.includes("AuthenticatedUsers")) return "Authenticated Users";
+    if (g.uri?.includes("LogDelivery")) return "Log Delivery";
+    if (g.displayName) return g.displayName;
+    if (g.id) return `ID: ${g.id}`;
+    if (g.emailAddress) return g.emailAddress;
+    return g.type || "Unknown";
+  };
+
+  return (
+    <Container
+      header={
+        <Header
+          variant="h3"
+          counter={data ? `(${data.totalGrants})` : undefined}
+          actions={
+            <Button variant="normal" onClick={() => setShowSetAcl(!showSetAcl)}>
+              {showSetAcl ? "Cancel" : "Set ACL"}
+            </Button>
+          }
+        >
+          Object ACL
+        </Header>
+      }
+    >
+      {isLoading ? (
+        <Spinner />
+      ) : (
+        <SpaceBetween size="m">
+          {data?.owner && (
+            <Box variant="p">
+              <strong>Owner:</strong> {data.owner.displayName} (ID: {data.owner.id})
+            </Box>
+          )}
+          {(data?.grants?.length ?? 0) > 0 ? (
+            <Table
+              columnDefinitions={[
+                { id: "grantee", header: "Grantee", cell: (item: any) => granteeLabel(item.grantee) },
+                { id: "type", header: "Type", cell: (item: any) => item.grantee?.type || "—" },
+                {
+                  id: "permission",
+                  header: "Permission",
+                  cell: (item: any) => (
+                    <StatusIndicator type={item.permission === "FULL_CONTROL" ? "success" : "info"}>
+                      {item.permission}
+                    </StatusIndicator>
+                  ),
+                },
+              ]}
+              items={data!.grants}
+            />
+          ) : (
+            <Box color="text-body-secondary">No grants configured for this object.</Box>
+          )}
+
+          {showSetAcl && (
+            <SpaceBetween size="s">
+              <Box variant="p" color="text-body-secondary">
+                Override all grants with a canned ACL.
+              </Box>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
+                <FormField label="Canned ACL">
+                  <Select
+                    selectedOption={OBJ_CANNED_ACL_OPTIONS.find((o) => o.value === selectedAcl) || OBJ_CANNED_ACL_OPTIONS[0]}
+                    onChange={({ detail }) => setSelectedAcl((detail.selectedOption as any).value as string)}
+                    options={OBJ_CANNED_ACL_OPTIONS.map((o) => ({ label: o.label, value: o.value }))}
+                  />
+                </FormField>
+                <Button
+                  variant="primary"
+                  loading={updateAcl.isPending}
+                  onClick={() =>
+                    updateAcl.mutate(
+                      { cannedAcl: selectedAcl },
+                      {
+                        onSuccess: () => {
+                          showToast("success", "Object ACL updated");
+                          setShowSetAcl(false);
+                        },
+                        onError: (err) => showToast("error", err.message),
+                      }
+                    )
+                  }
+                >
+                  Apply
+                </Button>
+              </div>
+              {updateAcl.isError && (
+                <Alert type="error" dismissible>
+                  {(updateAcl.error as Error)?.message || "Failed to update ACL"}
+                </Alert>
+              )}
+            </SpaceBetween>
+          )}
+        </SpaceBetween>
+      )}
+    </Container>
   );
 }
 

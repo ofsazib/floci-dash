@@ -26,6 +26,8 @@ vi.mock("@aws-sdk/client-s3", () => ({
   PutObjectCommand: createCmd("PutObjectCommand"),
   DeleteObjectCommand: createCmd("DeleteObjectCommand"),
   DeleteObjectsCommand: createCmd("DeleteObjectsCommand"),
+  GetObjectAclCommand: createCmd("GetObjectAclCommand"),
+  PutObjectAclCommand: createCmd("PutObjectAclCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -431,6 +433,53 @@ describe("S3 Routes", () => {
       expect(body.totalDeleted).toBe(0);
       expect(body.deleted).toEqual([]);
       expect(mockSend).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("Object ACL", () => {
+    it("GET /buckets/:name/objects/*/acl — returns grants and owner", async () => {
+      mockSend.mockResolvedValueOnce({
+        Owner: { ID: "owner1", DisplayName: "Owner Name" },
+        Grants: [
+          { Grantee: { Type: "CanonicalUser", ID: "owner1" }, Permission: "FULL_CONTROL" },
+        ],
+      });
+      const res = await get("/buckets/my-bucket/objects/path/to/file.txt/acl");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.key).toBe("path/to/file.txt");
+      expect(body.grants).toHaveLength(1);
+      expect(body.totalGrants).toBe(1);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetObjectAclCommand");
+    });
+
+    it("GET /buckets/:name/objects/*/acl — 400 when key is empty", async () => {
+      const res = await get("/buckets/my-bucket/objects//acl");
+      expect(res.status).toBe(400);
+    });
+
+    it("PUT /buckets/:name/objects/*/acl — sets canned ACL", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/buckets/my-bucket/objects/file.txt/acl", {
+        cannedAcl: "private",
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+      expect(body.cannedAcl).toBe("private");
+      expect(body.key).toBe("file.txt");
+    });
+
+    it("PUT /buckets/:name/objects/*/acl — 400 on invalid canned ACL", async () => {
+      const res = await put("/buckets/my-bucket/objects/file.txt/acl", {
+        cannedAcl: "invalid",
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it("PUT /buckets/:name/objects/*/acl — 400 when empty body", async () => {
+      const res = await put("/buckets/my-bucket/objects/file.txt/acl", {});
+      expect(res.status).toBe(400);
     });
   });
 });

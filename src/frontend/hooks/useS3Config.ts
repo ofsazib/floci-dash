@@ -448,3 +448,75 @@ export function useS3HeadBucket(bucket: string | null) {
     enabled: !!bucket,
   });
 }
+
+// ─── Bucket ACL ───────────────────────────────────────────────────
+
+export interface S3Grant {
+  grantee: {
+    type?: string;
+    id?: string;
+    displayName?: string;
+    uri?: string;
+    emailAddress?: string;
+  } | null;
+  permission: string;
+}
+
+export interface S3BucketAcl {
+  bucket: string;
+  owner: { id: string; displayName: string } | null;
+  grants: S3Grant[];
+  totalGrants: number;
+}
+
+export function useS3BucketAcl(bucket: string | null) {
+  return useQuery<S3BucketAcl>({
+    queryKey: ["aws", "s3", "acl", bucket],
+    queryFn: () => api(`/aws/s3/buckets/${bucket}/acl`),
+    enabled: !!bucket,
+  });
+}
+
+export function useS3PutBucketAcl(bucket: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (config: { cannedAcl?: string; grants?: any[]; owner?: any }) =>
+      api(`/aws/s3/buckets/${bucket}/acl`, {
+        method: "PUT",
+        body: JSON.stringify(config),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "s3", "acl", bucket] }),
+  });
+}
+
+// ─── Object ACL ───────────────────────────────────────────────────
+
+export interface S3ObjectAcl {
+  bucket: string;
+  key: string;
+  owner: { id: string; displayName: string } | null;
+  grants: S3Grant[];
+  totalGrants: number;
+}
+
+export function useS3ObjectAcl(bucket: string | null, key: string | null) {
+  return useQuery<S3ObjectAcl>({
+    queryKey: ["aws", "s3", "object-acl", bucket, key],
+    queryFn: () => api(`/aws/s3/buckets/${bucket}/objects/${encodeURIComponent(key!)}/acl`),
+    enabled: !!bucket && !!key,
+  });
+}
+
+export function useS3PutObjectAcl(bucket: string, key: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (config: { cannedAcl?: string; grants?: any[]; owner?: any }) =>
+      api(`/aws/s3/buckets/${bucket}/objects/${encodeURIComponent(key)}/acl`, {
+        method: "PUT",
+        body: JSON.stringify(config),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "s3", "object-acl", bucket, key] }),
+  });
+}

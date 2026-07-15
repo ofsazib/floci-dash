@@ -28,6 +28,8 @@ import {
   DeletePublicAccessBlockCommand,
   GetBucketLoggingCommand,
   PutBucketLoggingCommand,
+  GetBucketAclCommand,
+  PutBucketAclCommand,
   ServerSideEncryptionByDefault,
 } from "@aws-sdk/client-s3";
 import { getAwsConfig } from "../../clients/aws";
@@ -387,6 +389,56 @@ router.put("/buckets/:name/logging", async (c: Context) => {
     },
   }));
   return c.json({ bucket: name, targetBucket, targetPrefix: targetPrefix || "", enabled: true, updated: true });
+});
+
+// ─── Bucket ACL ───────────────────────────────────────────────────
+
+router.get("/buckets/:name/acl", async (c: Context) => {
+  const name = c.req.param("name");
+  const result = await s3().send(new GetBucketAclCommand({ Bucket: name }));
+  return c.json({
+    bucket: name,
+    owner: result.Owner ? { id: result.Owner.ID, displayName: result.Owner.DisplayName } : null,
+    grants: (result.Grants || []).map((g: any) => ({
+      grantee: g.Grantee ? {
+        type: g.Grantee.Type,
+        id: g.Grantee.ID,
+        displayName: g.Grantee.DisplayName,
+        uri: g.Grantee.URI,
+        emailAddress: g.Grantee.EmailAddress,
+      } : null,
+      permission: g.Permission,
+    })),
+    totalGrants: (result.Grants || []).length,
+  });
+});
+
+const CANNED_ACLS = [
+  "private", "public-read", "public-read-write", "authenticated-read",
+  "bucket-owner-read", "bucket-owner-full-control",
+];
+
+router.put("/buckets/:name/acl", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<{ cannedAcl?: string; grants?: any[]; owner?: any }>();
+  if (Object.keys(body).length === 0) {
+    return c.json({ error: "Either cannedAcl or grants is required" }, 400);
+  }
+  if (body.cannedAcl) {
+    const acl = body.cannedAcl.toLowerCase();
+    if (!CANNED_ACLS.includes(acl)) {
+      return c.json({ error: `Invalid canned ACL. Must be one of: ${CANNED_ACLS.join(", ")}` }, 400);
+    }
+    await s3().send(new PutBucketAclCommand({ Bucket: name, ACL: acl as any }));
+    return c.json({ bucket: name, cannedAcl: acl, updated: true });
+  }
+  if (!body.grants || !Array.isArray(body.grants)) {
+    return c.json({ error: "grants array is required when cannedAcl is not provided" }, 400);
+  }
+  const accessControlPolicy: any = { Grants: body.grants };
+  if (body.owner) accessControlPolicy.Owner = body.owner;
+  await s3().send(new PutBucketAclCommand({ Bucket: name, AccessControlPolicy: accessControlPolicy }));
+  return c.json({ bucket: name, grants: body.grants.length, updated: true });
 });
 
 export default router;
