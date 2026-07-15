@@ -1654,7 +1654,7 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 | G.16 | **DynamoDB** (Kinesis Streaming) | EnableKinesisStreamingDestination, DisableKinesisStreamingDestination, DescribeKinesisStreamingDestination | Done 2026-07-14 (List/Enable/Disable Kinesis streaming destinations) |
 | G.17 | **DynamoDB** (Exports + UpdateTable) | ExportTableToPointInTime, DescribeExport, ListExports, UpdateTable | Done 2026-07-14 (Exports: S3 modal + detail viewer; UpdateTable: billing/throughput/SSE/streams/GSIs settings tab) |
 | G.18 | **DynamoDB** (PartiQL Transactions) | ExecuteTransaction, BatchExecuteStatement | Done 2026-07-14 (Transaction/Batch sub-tabs in PartiQL editor, atomic multi-statement execution, per-statement results) |
-| G.19 | **S3** (ACLs) | GetObjectAcl, PutObjectAcl, GetBucketAcl, PutBucketAcl | No ACL editor (private, public-read, etc.) |
+| G.19 | **S3** (ACLs) | GetObjectAcl, PutObjectAcl, GetBucketAcl, PutBucketAcl | Done 2026-07-14 (Bucket ACL tab with canned ACL picker + grants view, Object ACL view with Set ACL modal) |
 | G.20 | **CloudTrail** (Lookup + Event Selectors) | LookupEvents, PutEventSelectors | No event lookup/search, no event selector config |
 | G.21 | **Kinesis** (Enhanced Fan-out) | SubscribeToShard | No enhanced fan-out consumer display |
 | G.22 | **CodePipeline** (Advanced) | RollbackStage, OverrideStageCondition, ListRuleExecutions, CreateCustomActionType, UpdateActionType, GetActionType, DeleteCustomActionType, ListActionTypes, PutActionRevision, PollForJobs, AcknowledgeJob, GetJobDetails, PutJobSuccessResult, PutJobFailureResult | No rollback, no action type browser, no job polling (webhooks already implemented) |
