@@ -276,6 +276,50 @@ export function useDynamoDBPartiQL() {
   });
 }
 
+// ─── PartiQL Transaction ─────────────────────────────────────────
+
+export interface PartiQLTransactionResult {
+  responses: Array<{ Item?: Record<string, any> }>;
+  total: number;
+}
+
+export function useDynamoDBPartiQLTransaction() {
+  return useMutation({
+    mutationFn: (statements: Array<{ Statement: string; Parameters?: any[] }>) =>
+      api("/aws/dynamodb/partiql/transaction", {
+        method: "POST",
+        body: JSON.stringify({ statements }),
+      }),
+  });
+}
+
+// ─── PartiQL Batch ───────────────────────────────────────────────
+
+export interface PartiQLBatchResult {
+  responses: Array<{
+    tableName: string | null;
+    item: Record<string, any> | null;
+    error: { Code: string; Message: string } | null;
+  }>;
+  total: number;
+}
+
+export function useDynamoDBPartiQLBatch() {
+  return useMutation({
+    mutationFn: (
+      statements: Array<{
+        Statement: string;
+        Parameters?: any[];
+        ConsistentRead?: boolean;
+      }>
+    ) =>
+      api("/aws/dynamodb/partiql/batch", {
+        method: "POST",
+        body: JSON.stringify({ statements }),
+      }),
+  });
+}
+
 // ─── Exports ──────────────────────────────────────────────────────
 
 export interface DynamoDBExport {

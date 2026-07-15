@@ -11,6 +11,8 @@ vi.mock("../lib/client", () => ({
 
 import {
   useDynamoDBUpdateTable,
+  useDynamoDBPartiQLTransaction,
+  useDynamoDBPartiQLBatch,
   useDynamoDBExports,
   useDynamoDBExportTable,
   useDynamoDBDescribeExport,
@@ -85,6 +87,78 @@ describe("useDynamoDBUpdateTable", () => {
     expect(callBody.GlobalSecondaryIndexUpdates[0].Create.IndexName).toBe("new-gsi");
     expect(callBody.GlobalSecondaryIndexUpdates[1].Delete.IndexName).toBe("old-gsi");
     expect(callBody.AttributeDefinitions).toHaveLength(1);
+  });
+});
+
+describe("useDynamoDBPartiQLTransaction", () => {
+  it("calls api with POST and statements body", async () => {
+    mockApi.mockResolvedValueOnce({ responses: [], total: 0 });
+    const { result } = renderHook(() => useDynamoDBPartiQLTransaction(), {
+      wrapper: createWrapper(),
+    });
+    const statements = [
+      { Statement: "INSERT INTO t VALUE {'pk':'1'}" },
+      { Statement: "UPDATE t SET name='x' WHERE pk='2'" },
+    ];
+    await result.current.mutateAsync(statements);
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/dynamodb/partiql/transaction",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ statements }),
+      }),
+    );
+  });
+
+  it("sends statements with Parameters", async () => {
+    mockApi.mockResolvedValueOnce({ responses: [], total: 0 });
+    const { result } = renderHook(() => useDynamoDBPartiQLTransaction(), {
+      wrapper: createWrapper(),
+    });
+    const statements = [
+      { Statement: "SELECT * FROM t WHERE pk = ?", Parameters: [{ S: "val" }] },
+    ];
+    await result.current.mutateAsync(statements);
+    const callBody = JSON.parse(mockApi.mock.calls[0][1].body);
+    expect(callBody.statements[0].Parameters).toEqual([{ S: "val" }]);
+  });
+});
+
+describe("useDynamoDBPartiQLBatch", () => {
+  it("calls api with POST and statements body", async () => {
+    mockApi.mockResolvedValueOnce({ responses: [], total: 0 });
+    const { result } = renderHook(() => useDynamoDBPartiQLBatch(), {
+      wrapper: createWrapper(),
+    });
+    const statements = [
+      { Statement: "SELECT * FROM t WHERE pk = '1'" },
+      { Statement: "SELECT * FROM t WHERE pk = '2'", ConsistentRead: true },
+    ];
+    await result.current.mutateAsync(statements);
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/dynamodb/partiql/batch",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ statements }),
+      }),
+    );
+  });
+
+  it("handles batch response with errors", async () => {
+    mockApi.mockResolvedValueOnce({
+      responses: [
+        { tableName: "t", item: { pk: "1" }, error: null },
+        { tableName: "t", item: null, error: { Code: "Err", Message: "fail" } },
+      ],
+      total: 2,
+    });
+    const { result } = renderHook(() => useDynamoDBPartiQLBatch(), {
+      wrapper: createWrapper(),
+    });
+    const data = await result.current.mutateAsync([
+      { Statement: "SELECT * FROM t" },
+    ]);
+    expect(data.responses[1].error.Code).toBe("Err");
   });
 });
 

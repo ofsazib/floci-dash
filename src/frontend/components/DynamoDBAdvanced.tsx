@@ -28,6 +28,8 @@ import {
   useDynamoDBContinuousBackups,
   useDynamoDBUpdateContinuousBackups,
   useDynamoDBPartiQL,
+  useDynamoDBPartiQLTransaction,
+  useDynamoDBPartiQLBatch,
   type DynamoDBTag,
 } from "../hooks/useDynamoDBAdvanced";
 import { formatItemValue } from "../lib/utils";
@@ -330,6 +332,37 @@ function TableBackups({ tableName }: { tableName: string }) {
 }
 
 function PartiQLEditor() {
+  const [mode, setMode] = useState("single");
+
+  const subTabs = [
+    { label: "Single Statement", id: "single" },
+    { label: "Transaction", id: "transaction" },
+    { label: "Batch", id: "batch" },
+  ];
+
+  return (
+    <Container header={<Header variant="h3">PartiQL Query Editor</Header>}>
+      <SpaceBetween size="m">
+        <Box variant="p" color="text-body-secondary">
+          Run PartiQL (SQL-compatible) queries against your DynamoDB table.
+          Use Single Statement for individual queries, Transaction for atomic
+          multi-statement operations, and Batch for independent multi-statement
+          reads.
+        </Box>
+        <Tabs
+          activeTabId={mode}
+          onChange={({ detail }) => setMode(detail.activeTabId)}
+          tabs={subTabs}
+        />
+        {mode === "single" && <SingleStatementEditor />}
+        {mode === "transaction" && <TransactionEditor />}
+        {mode === "batch" && <BatchEditor />}
+      </SpaceBetween>
+    </Container>
+  );
+}
+
+function SingleStatementEditor() {
   const [statement, setStatement] = useState("SELECT * FROM table_name LIMIT 10");
   const [consistentRead, setConsistentRead] = useState(false);
   const executeStatement = useDynamoDBPartiQL();
@@ -347,70 +380,260 @@ function PartiQLEditor() {
   }
 
   return (
-    <Container header={<Header variant="h3">PartiQL Query Editor</Header>}>
-      <SpaceBetween size="m">
-        <Box variant="p" color="text-body-secondary">
-          Run PartiQL (SQL-compatible) queries against your DynamoDB table. PartiQL supports SELECT, INSERT, UPDATE, and DELETE statements.
-        </Box>
-        <Form>
-          <FormField label="SQL Statement" description="Enter a PartiQL statement. Use '?' as parameter placeholders.">
-            <Textarea
-              value={statement}
-              onChange={({ detail }) => setStatement(detail.value)}
-              rows={4}
-              placeholder="SELECT * FROM my-table WHERE pk = ?"
-            />
-          </FormField>
-          <FormField label="Consistent read" description="Use strongly consistent reads (slower but up-to-date).">
-            <Toggle
-              checked={consistentRead}
-              onChange={({ detail }: { detail: ToggleProps.ChangeDetail }) => setConsistentRead(detail.checked)}
-            >
-              Consistent read
-            </Toggle>
-          </FormField>
-          <Button
-            variant="primary"
-            loading={executeStatement.isPending}
-            disabled={!statement.trim()}
-            onClick={handleExecute}
+    <SpaceBetween size="m">
+      <Form>
+        <FormField label="SQL Statement" description="Enter a PartiQL statement. Use '?' as parameter placeholders.">
+          <Textarea
+            value={statement}
+            onChange={({ detail }) => setStatement(detail.value)}
+            rows={4}
+            placeholder="SELECT * FROM my-table WHERE pk = ?"
+          />
+        </FormField>
+        <FormField label="Consistent read" description="Use strongly consistent reads (slower but up-to-date).">
+          <Toggle
+            checked={consistentRead}
+            onChange={({ detail }: { detail: ToggleProps.ChangeDetail }) => setConsistentRead(detail.checked)}
           >
-            Run query
-          </Button>
-          {executeStatement.isError && (
-            <Alert type="error" dismissible>
-              {(executeStatement.error as Error)?.message || "Query failed"}
-            </Alert>
-          )}
-        </Form>
-
-        {result && (
-          <Container header={<Header variant="h3" counter={`(${result.count})`}>Results</Header>}>
-            {result.items && result.items.length > 0 ? (
-              <Table
-                columnDefinitions={Object.keys(result.items[0]).map((key) => ({
-                  id: key,
-                  header: key,
-                  cell: (item: any) => (
-                    <span style={{ wordBreak: "break-all", fontSize: 13 }}>
-                      {formatItemValue(item[key])}
-                    </span>
-                  ),
-                }))}
-                items={result.items}
-                variant="full-page"
-              />
-            ) : (
-              <Box color="text-body-secondary">No results found.</Box>
-            )}
-            {result.nextToken && (
-              <Box padding={{ top: "s" }} color="text-body-secondary">
-                More results available (pagination not yet supported).
-              </Box>
-            )}
-          </Container>
+            Consistent read
+          </Toggle>
+        </FormField>
+        <Button
+          variant="primary"
+          loading={executeStatement.isPending}
+          disabled={!statement.trim()}
+          onClick={handleExecute}
+        >
+          Run query
+        </Button>
+        {executeStatement.isError && (
+          <Alert type="error" dismissible>
+            {(executeStatement.error as Error)?.message || "Query failed"}
+          </Alert>
         )}
-      </SpaceBetween>
-    </Container>
+      </Form>
+
+      {result && (
+        <Container header={<Header variant="h3" counter={`(${result.count})`}>Results</Header>}>
+          {result.items && result.items.length > 0 ? (
+            <Table
+              columnDefinitions={Object.keys(result.items[0]).map((key) => ({
+                id: key,
+                header: key,
+                cell: (item: any) => (
+                  <span style={{ wordBreak: "break-all", fontSize: 13 }}>
+                    {formatItemValue(item[key])}
+                  </span>
+                ),
+              }))}
+              items={result.items}
+              variant="full-page"
+            />
+          ) : (
+            <Box color="text-body-secondary">No results found.</Box>
+          )}
+          {result.nextToken && (
+            <Box padding={{ top: "s" }} color="text-body-secondary">
+              More results available (pagination not yet supported).
+            </Box>
+          )}
+        </Container>
+      )}
+    </SpaceBetween>
+  );
+}
+
+function TransactionEditor() {
+  const [transactionStmts, setTransactionStmts] = useState("INSERT INTO my-table VALUE {'pk':'123','name':'demo'}\nUPDATE my-table SET name='updated' WHERE pk='456'");
+  const executeTransaction = useDynamoDBPartiQLTransaction();
+  const [result, setResult] = useState<any>(null);
+
+  function handleExecute() {
+    const lines = transactionStmts.split("\n").filter((l) => l.trim());
+    if (lines.length === 0) return;
+    const statements = lines.map((line) => ({ Statement: line.trim() }));
+    executeTransaction.mutate(statements, {
+      onSuccess: (data) => setResult(data),
+      onError: () => setResult(null),
+    });
+  }
+
+  return (
+    <SpaceBetween size="m">
+      <Box variant="p" color="text-body-secondary">
+        Write one PartiQL statement per line. All statements execute atomically —
+        either all succeed or all fail.
+      </Box>
+      <Form>
+        <FormField
+          label="Transaction statements"
+          description="One statement per line. Supports INSERT, UPDATE, DELETE, and conditional expressions."
+        >
+          <Textarea
+            value={transactionStmts}
+            onChange={({ detail }) => setTransactionStmts(detail.value)}
+            rows={6}
+            placeholder={"INSERT INTO my-table VALUE {'pk':'1','name':'demo'}\nUPDATE my-table SET name='done' WHERE pk='2'"}
+          />
+        </FormField>
+        <Button
+          variant="primary"
+          loading={executeTransaction.isPending}
+          disabled={!transactionStmts.trim()}
+          onClick={handleExecute}
+        >
+          Execute transaction
+        </Button>
+        {executeTransaction.isError && (
+          <Alert type="error" dismissible>
+            {(executeTransaction.error as Error)?.message || "Transaction failed"}
+          </Alert>
+        )}
+      </Form>
+
+      {result && (
+        <Container
+          header={
+            <Header variant="h3" counter={`(${result.total})`}>
+              Transaction result
+            </Header>
+          }
+        >
+          {result.responses && result.responses.length > 0 ? (
+            <SpaceBetween size="s">
+              {result.responses.map((r: any, i: number) => (
+                <div
+                  key={i}
+                  style={{
+                    padding: "8px 14px",
+                    borderRadius: 6,
+                    border: "1px solid var(--color-border-divider-default, #e9ebed)",
+                  }}
+                >
+                  <Box variant="small" color="text-body-secondary">
+                    Statement {i + 1}
+                  </Box>
+                  {r.Item ? (
+                    <Box variant="code" padding={{ top: "xxs" }}>
+                      {JSON.stringify(r.Item, null, 2)}
+                    </Box>
+                  ) : (
+                    <StatusIndicator type="success">Ok</StatusIndicator>
+                  )}
+                </div>
+              ))}
+            </SpaceBetween>
+          ) : (
+            <Box color="text-body-secondary">Transaction committed successfully.</Box>
+          )}
+        </Container>
+      )}
+    </SpaceBetween>
+  );
+}
+
+function BatchEditor() {
+  const [batchStmts, setBatchStmts] = useState("SELECT * FROM my-table WHERE pk = '123'\nSELECT * FROM my-table WHERE pk = '456'");
+  const executeBatch = useDynamoDBPartiQLBatch();
+  const [result, setResult] = useState<any>(null);
+
+  function handleExecute() {
+    const lines = batchStmts.split("\n").filter((l) => l.trim());
+    if (lines.length === 0) return;
+    const statements = lines.map((line) => ({ Statement: line.trim() }));
+    executeBatch.mutate(statements, {
+      onSuccess: (data) => setResult(data),
+      onError: () => setResult(null),
+    });
+  }
+
+  return (
+    <SpaceBetween size="m">
+      <Box variant="p" color="text-body-secondary">
+        Write one PartiQL statement per line. Each statement runs independently
+        with its own result or error. Ideal for batched reads.
+      </Box>
+      <Form>
+        <FormField
+          label="Batch statements"
+          description="One statement per line. Each returns its own result."
+        >
+          <Textarea
+            value={batchStmts}
+            onChange={({ detail }) => setBatchStmts(detail.value)}
+            rows={6}
+            placeholder={"SELECT * FROM my-table WHERE pk = '1'\nSELECT * FROM my-table WHERE pk = '2'"}
+          />
+        </FormField>
+        <Button
+          variant="primary"
+          loading={executeBatch.isPending}
+          disabled={!batchStmts.trim()}
+          onClick={handleExecute}
+        >
+          Execute batch
+        </Button>
+        {executeBatch.isError && (
+          <Alert type="error" dismissible>
+            {(executeBatch.error as Error)?.message || "Batch execution failed"}
+          </Alert>
+        )}
+      </Form>
+
+      {result && (
+        <Container
+          header={
+            <Header variant="h3" counter={`(${result.total})`}>
+              Batch results
+            </Header>
+          }
+        >
+          {result.responses && result.responses.length > 0 && (
+            <Table
+              columnDefinitions={[
+                {
+                  id: "idx",
+                  header: "#",
+                  cell: (item: any) => (
+                    <Box variant="small">{item._idx}</Box>
+                  ),
+                },
+                {
+                  id: "table",
+                  header: "Table",
+                  cell: (r: any) => r.tableName || "—",
+                },
+                {
+                  id: "status",
+                  header: "Status",
+                  cell: (r: any) =>
+                    r.error ? (
+                      <StatusIndicator type="error">
+                        {r.error.Code}: {r.error.Message}
+                      </StatusIndicator>
+                    ) : (
+                      <StatusIndicator type="success">Ok</StatusIndicator>
+                    ),
+                },
+                {
+                  id: "item",
+                  header: "Item",
+                  cell: (r: any) =>
+                    r.item ? (
+                      <Box variant="code" fontSize="body-s">
+                        {JSON.stringify(r.item).slice(0, 120)}
+                        {JSON.stringify(r.item).length > 120 ? "…" : ""}
+                      </Box>
+                    ) : (
+                      <Box color="text-body-secondary">—</Box>
+                    ),
+                },
+              ]}
+              items={result.responses.map((r: any, i: number) => ({ ...r, _idx: i + 1 }))}
+            />
+          )}
+        </Container>
+      )}
+    </SpaceBetween>
   );
 }

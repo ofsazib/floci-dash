@@ -25,6 +25,8 @@ vi.mock("@aws-sdk/client-dynamodb", () => ({
   DescribeContinuousBackupsCommand: vi.fn(function(args) { return args; }),
   UpdateContinuousBackupsCommand: vi.fn(function(args) { return args; }),
   ExecuteStatementCommand: vi.fn(function(args) { return args; }),
+  ExecuteTransactionCommand: vi.fn(function(args) { return args; }),
+  BatchExecuteStatementCommand: vi.fn(function(args) { return args; }),
   ExportTableToPointInTimeCommand: vi.fn(function(args) { return args; }),
   ListExportsCommand: vi.fn(function(args) { return args; }),
   DescribeExportCommand: vi.fn(function(args) { return args; }),
@@ -486,6 +488,97 @@ describe("DynamoDB Advanced", () => {
       expect(cmd.NextToken).toBe("prev-token");
       const body = await res.json();
       expect(body.nextToken).toBe("next-token");
+    });
+  });
+
+  describe("PartiQL Transaction", () => {
+    it("POST /partiql/transaction — executes transaction", async () => {
+      mockSend.mockResolvedValueOnce({
+        Responses: [{ Item: { pk: { S: "123" } } }],
+      });
+      mockUnmarshall.mockReturnValueOnce({ pk: "123" });
+      const res = await post("/partiql/transaction", {
+        statements: [
+          { Statement: "INSERT INTO t VALUE {'pk':'123'}" },
+          { Statement: "UPDATE t SET name='done' WHERE pk='456'" },
+        ],
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.responses).toBeDefined();
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.TransactStatements).toHaveLength(2);
+      expect(cmd.TransactStatements[0].Statement).toBe("INSERT INTO t VALUE {'pk':'123'}");
+    });
+
+    it("POST /partiql/transaction — with parameters", async () => {
+      mockSend.mockResolvedValueOnce({ Responses: [] });
+      const res = await post("/partiql/transaction", {
+        statements: [
+          { Statement: "INSERT INTO t VALUE {'pk':?}", Parameters: [{ S: "val" }] },
+        ],
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.TransactStatements[0].Parameters).toBeDefined();
+    });
+
+    it("POST /partiql/transaction — 400 when statements empty", async () => {
+      const res = await post("/partiql/transaction", { statements: [] });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /partiql/transaction — 400 when statements missing", async () => {
+      const res = await post("/partiql/transaction", {});
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe("PartiQL Batch", () => {
+    it("POST /partiql/batch — executes batch statements", async () => {
+      mockSend.mockResolvedValueOnce({
+        Responses: [
+          { TableName: "my-table", Item: { pk: { S: "123" } } },
+          { TableName: "my-table", Error: { Code: "NotFound", Message: "Item not found" } },
+        ],
+      });
+      mockUnmarshall.mockReturnValueOnce({ pk: "123" });
+      const res = await post("/partiql/batch", {
+        statements: [
+          { Statement: "SELECT * FROM t WHERE pk='123'" },
+          { Statement: "SELECT * FROM t WHERE pk='999'" },
+        ],
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.responses).toHaveLength(2);
+      expect(body.responses[0].item).toBeDefined();
+      expect(body.responses[1].error).toBeDefined();
+      expect(body.responses[1].error.Code).toBe("NotFound");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.Statements).toHaveLength(2);
+    });
+
+    it("POST /partiql/batch — with ConsistentRead", async () => {
+      mockSend.mockResolvedValueOnce({ Responses: [] });
+      const res = await post("/partiql/batch", {
+        statements: [
+          { Statement: "SELECT * FROM t", ConsistentRead: true },
+        ],
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.Statements[0].ConsistentRead).toBe(true);
+    });
+
+    it("POST /partiql/batch — 400 when statements empty", async () => {
+      const res = await post("/partiql/batch", { statements: [] });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /partiql/batch — 400 when statements missing", async () => {
+      const res = await post("/partiql/batch", {});
+      expect(res.status).toBe(400);
     });
   });
 

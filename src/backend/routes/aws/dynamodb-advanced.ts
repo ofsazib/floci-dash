@@ -16,6 +16,8 @@ import {
   DescribeContinuousBackupsCommand,
   UpdateContinuousBackupsCommand,
   ExecuteStatementCommand,
+  ExecuteTransactionCommand,
+  BatchExecuteStatementCommand,
   ExportTableToPointInTimeCommand,
   ListExportsCommand,
   DescribeExportCommand,
@@ -399,6 +401,62 @@ router.post("/partiql/execute", async (c: Context) => {
     count: result.Items?.length || 0,
     nextToken: result.NextToken || null,
   });
+});
+
+// ─── PartiQL ExecuteTransaction ───────────────────────────────────
+
+router.post("/partiql/transaction", async (c: Context) => {
+  const { statements } = await c.req.json<{
+    statements: Array<{ Statement: string; Parameters?: any[] }>;
+  }>();
+  if (!statements || !Array.isArray(statements) || statements.length === 0) {
+    return c.json({ error: "Statements array is required and must not be empty" }, 400);
+  }
+
+  const transactStatements = statements.map((s) => ({
+    Statement: s.Statement,
+    ...(s.Parameters?.length ? { Parameters: s.Parameters.map((p) => marshall(p)) } : {}),
+  }));
+
+  const result = await ddb().send(new ExecuteTransactionCommand({
+    TransactStatements: transactStatements,
+  }));
+
+  const responses = (result.Responses || []).map((r: any) =>
+    r.Item ? { Item: unmarshall(r.Item) } : {}
+  );
+  return c.json({ responses, total: responses.length });
+});
+
+// ─── PartiQL BatchExecuteStatement ────────────────────────────────
+
+router.post("/partiql/batch", async (c: Context) => {
+  const { statements } = await c.req.json<{
+    statements: Array<{ Statement: string; Parameters?: any[]; ConsistentRead?: boolean }>;
+  }>();
+  if (!statements || !Array.isArray(statements) || statements.length === 0) {
+    return c.json({ error: "Statements array is required and must not be empty" }, 400);
+  }
+
+  const batchStatements = statements.map((s) => ({
+    Statement: s.Statement,
+    ...(s.Parameters?.length ? { Parameters: s.Parameters.map((p) => marshall(p)) } : {}),
+    ...(s.ConsistentRead !== undefined ? { ConsistentRead: s.ConsistentRead } : {}),
+  }));
+
+  const result = await ddb().send(new BatchExecuteStatementCommand({
+    Statements: batchStatements,
+  }));
+
+  const responses = (result.Responses || []).map((r: any) => ({
+    tableName: r.TableName || null,
+    item: r.Item ? unmarshall(r.Item) : null,
+    error: r.Error
+      ? { Code: r.Error.Code, Message: r.Error.Message }
+      : null,
+  }));
+
+  return c.json({ responses, total: responses.length });
 });
 
 // ─── Exports ───────────────────────────────────────────────────────
