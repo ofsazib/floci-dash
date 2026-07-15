@@ -1652,7 +1652,7 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 | # | Service | Missing Operations | Impact |
 |---|---------|-------------------|--------|
 | G.16 | **DynamoDB** (Kinesis Streaming) | EnableKinesisStreamingDestination, DisableKinesisStreamingDestination, DescribeKinesisStreamingDestination | Done 2026-07-14 (List/Enable/Disable Kinesis streaming destinations) |
-| G.17 | **DynamoDB** (Exports + UpdateTable) | ExportTableToPointInTime, DescribeExport, ListExports, UpdateTable (modify GSIs, billing mode, SSE, stream spec) | No PITR export UI, no table modification after creation |
+| G.17 | **DynamoDB** (Exports + UpdateTable) | ExportTableToPointInTime, DescribeExport, ListExports Done 2026-07-14, UpdateTable (modify GSIs, billing mode, SSE, stream spec) pending | Exports done 2026-07-14 (List/Create/Describe with S3 modal + detail viewer); UpdateTable still pending |
 | G.18 | **DynamoDB** (PartiQL Transactions) | ExecuteTransaction, BatchExecuteStatement | No PartiQL transaction/batch execution |
 | G.19 | **S3** (ACLs) | GetObjectAcl, PutObjectAcl, GetBucketAcl, PutBucketAcl | No ACL editor (private, public-read, etc.) |
 | G.20 | **CloudTrail** (Lookup + Event Selectors) | LookupEvents, PutEventSelectors | No event lookup/search, no event selector config |
