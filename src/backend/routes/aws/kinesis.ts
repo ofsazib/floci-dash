@@ -171,7 +171,7 @@ router.post("/streams/:name/subscribe-to-shard", async (c: Context) => {
     new SubscribeToShardCommand({
       ConsumerARN: body.consumerARN,
       ShardId: body.shardId,
-      StartingPosition: body.startingPosition || { Type: "TRIM_HORIZON" },
+      StartingPosition: (body.startingPosition || { Type: "TRIM_HORIZON" }) as any,
     })
   );
 
@@ -179,8 +179,9 @@ router.post("/streams/:name/subscribe-to-shard", async (c: Context) => {
   const events: any[] = [];
   if (result.EventStream) {
     for await (const event of result.EventStream) {
-      if (event.Records) {
-        for (const rec of event.Records) {
+      const rec_event = (event as any).SubscribeToShardEvent;
+      if (rec_event?.Records) {
+        for (const rec of rec_event.Records) {
           events.push({
             sequenceNumber: rec.SequenceNumber,
             data: rec.Data ? Buffer.from(rec.Data).toString("base64") : null,

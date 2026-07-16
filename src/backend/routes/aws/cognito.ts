@@ -246,7 +246,7 @@ router.get("/user-pools/:id/clients/:clientId/secrets", async (c: Context) => {
   const clientId = c.req.param("clientId");
   const client = getClient();
   const result = await client.send(new ListUserPoolClientSecretsCommand({ UserPoolId: id, ClientId: clientId }));
-  return c.json({ secrets: result.Secrets || [] });
+  return c.json({ secrets: (result as any).Secrets || [] });
 });
 
 // ── Resource Servers ─────────────────────────────────────
@@ -335,7 +335,7 @@ router.post("/user-pools/:id/custom-attributes", async (c: Context) => {
   if (!body.customAttributes?.length) return c.json({ error: "customAttributes is required" }, 400);
   const client = getClient();
   await client.send(new AddCustomAttributesCommand({
-    UserPoolId: id, CustomAttributes: body.customAttributes,
+    UserPoolId: id, CustomAttributes: body.customAttributes as any,
   }));
   return c.json({ added: true });
 });

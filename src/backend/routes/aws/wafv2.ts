@@ -157,7 +157,7 @@ router.put("/ip-sets/:id", async (c: Context) => {
       Addresses: body.Addresses || [],
     })
   );
-  return c.json({ lockToken: result.LockToken, updated: true });
+  return c.json({ lockToken: (result as any).LockToken, updated: true });
 });
 
 router.post("/ip-sets/delete", async (c: Context) => {
@@ -226,7 +226,7 @@ router.put("/regex-pattern-sets/:id", async (c: Context) => {
       RegularExpressionList: body.RegularExpressionList || [],
     })
   );
-  return c.json({ lockToken: result.LockToken, updated: true });
+  return c.json({ lockToken: (result as any).LockToken, updated: true });
 });
 
 router.post("/regex-pattern-sets/delete", async (c: Context) => {
@@ -298,7 +298,7 @@ router.put("/rule-groups/:id", async (c: Context) => {
       VisibilityConfig: body.VisibilityConfig || { SampledRequestsEnabled: false, CloudWatchMetricsEnabled: false, MetricName: "floci" },
     })
   );
-  return c.json({ lockToken: result.LockToken, updated: true });
+  return c.json({ lockToken: (result as any).LockToken, updated: true });
 });
 
 router.post("/rule-groups/delete", async (c: Context) => {

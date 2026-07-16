@@ -300,7 +300,7 @@ router.put("/pipelines/:name/actions/revision", async (c: Context) => {
     pipelineName,
     actionName: body.actionName,
     actionRevision: body.actionRevision,
-  }));
+  } as any));
   return c.json({ updated: true });
 });
 
@@ -324,8 +324,8 @@ router.get("/action-types/:owner/:category/:provider/:version", async (c: Contex
     return c.json({ error: "owner, category, provider, and version are required" }, 400);
   const client = getClient();
   const result = await client.send(new GetActionTypeCommand({
-    category: { owner, category, provider, version } as any,
-  }));
+    category: { owner, category, provider, version },
+  } as any));
   return c.json({ actionType: result.actionType || null });
 });
 
@@ -372,8 +372,8 @@ router.delete("/action-types/:owner/:category/:provider/:version", async (c: Con
     return c.json({ error: "owner, category, provider, and version are required" }, 400);
   const client = getClient();
   await client.send(new DeleteCustomActionTypeCommand({
-    category: { owner, category, provider, version } as any,
-  }));
+    category: { owner, category, provider, version },
+  } as any));
   return c.json({ deleted: true });
 });
 
@@ -454,7 +454,7 @@ router.post("/action-types/:category/:provider/jobs/poll", async (c: Context) =>
     return c.json({ error: "category and provider are required" }, 400);
   const client = getClient();
   const result = await client.send(new PollForJobsCommand({
-    actionTypeId: { category, owner: "Custom", provider, version: "1" },
+    actionTypeId: { category, owner: "Custom", provider, version: "1" } as any,
     maxBatchSize: Number(c.req.query("maxBatchSize")) || 10,
     queryParam: c.req.query("queryParam") ? JSON.parse(c.req.query("queryParam")!) : undefined,
   }));

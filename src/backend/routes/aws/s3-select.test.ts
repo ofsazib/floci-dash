@@ -13,8 +13,8 @@ vi.mock("../../clients/sanitize", () => ({
 
 import { getFlociEndpoint } from "../../clients/config";
 
-// Import the router after mocks are set up
-const { default: router } = await import("./s3-select");
+// Import the router after mocks are set up (vi.mock is hoisted above imports)
+import router from "./s3-select";
 
 // Use Hono's built-in fetch for testing — more robust than manual route matching
 async function executeRoute(method: string, path: string, body?: any) {

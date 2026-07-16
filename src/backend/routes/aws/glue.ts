@@ -200,8 +200,8 @@ router.post("/registries/:regName/schemas", async (c: Context) => {
     new CreateSchemaCommand({
       RegistryId: { RegistryName: regName },
       SchemaName: body.name,
-      DataFormat: body.dataFormat || "AVRO",
-      Compatibility: body.compatibility || "NONE",
+      DataFormat: (body.dataFormat || "AVRO") as any,
+      Compatibility: (body.compatibility || "NONE") as any,
       Description: body.description,
       SchemaDefinition: body.definition,
     })
@@ -294,7 +294,7 @@ router.post("/databases/:dbName/functions", async (c: Context) => {
         FunctionName: body.name,
         ClassName: body.className,
         OwnerName: body.ownerName || "admin",
-        OwnerType: body.ownerType || "USER",
+        OwnerType: (body.ownerType || "USER") as any,
       },
     })
   );
@@ -345,7 +345,7 @@ router.put("/databases/:dbName/functions/:funcName", async (c: Context) => {
         FunctionName: funcName,
         ClassName: body.className,
         OwnerName: body.ownerName,
-        OwnerType: body.ownerType,
+        OwnerType: body.ownerType as any,
       },
     })
   );
@@ -363,7 +363,7 @@ router.get("/databases/:dbName/tables/:tableName/column-stats", async (c: Contex
       new GetColumnStatisticsForTableCommand({
         DatabaseName: dbName,
         TableName: tableName,
-      })
+      } as any)
     );
     const stats = (result.ColumnStatisticsList || []).map((cs: any) => ({
       columnName: cs.ColumnName,
@@ -423,7 +423,7 @@ router.get("/databases/:dbName/tables/:tableName/partitions/column-stats", async
         DatabaseName: dbName,
         TableName: tableName,
         PartitionValues: partitionValues,
-      })
+      } as any)
     );
     const stats = (result.ColumnStatisticsList || []).map((cs: any) => ({
       columnName: cs.ColumnName,

@@ -159,7 +159,7 @@ router.post("/buckets/:name/select", async (c: Context) => {
       const text = await res.text().catch(() => "");
       return c.json(
         { error: `Floci returned ${res.status}: ${res.statusText}`, detail: text },
-        res.status
+        res.status as any
       );
     }
 

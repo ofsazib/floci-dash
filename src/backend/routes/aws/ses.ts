@@ -275,7 +275,7 @@ router.get("/configuration-sets/:name", async (c: Context) => {
       ],
     })
   );
-  const cs = result.ConfigurationSet;
+  const cs = result.ConfigurationSet as any;
   if (!cs) return c.json({ error: "Configuration set not found" }, 404);
   return c.json({
     name: cs.Name,
@@ -424,7 +424,7 @@ router.put("/configuration-sets/:name/delivery-options", async (c: Context) => {
   await client.send(
     new PutConfigurationSetDeliveryOptionsCommand({
       ConfigurationSetName: name,
-      DeliveryOptions: { TlsPolicy: body.tlsPolicy },
+      DeliveryOptions: { TlsPolicy: body.tlsPolicy as any },
     })
   );
   return c.json({ name, deliveryOptions: { tlsPolicy: body.tlsPolicy }, updated: true });

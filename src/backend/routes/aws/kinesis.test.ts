@@ -233,15 +233,17 @@ describe("Kinesis Routes", () => {
       // Mock an async event stream that yields a SubscribeToShardEvent
       const mockEventStream = (async function* () {
         yield {
-          Records: [
-            {
-              SequenceNumber: "123",
-              Data: Buffer.from("hello"),
-              PartitionKey: "key1",
-              ApproximateArrivalTimestamp: new Date("2026-01-01"),
-              EncryptionType: "KMS",
-            },
-          ],
+          SubscribeToShardEvent: {
+            Records: [
+              {
+                SequenceNumber: "123",
+                Data: Buffer.from("hello"),
+                PartitionKey: "key1",
+                ApproximateArrivalTimestamp: new Date("2026-01-01"),
+                EncryptionType: "KMS",
+              },
+            ],
+          },
         };
       })();
 

@@ -178,7 +178,7 @@ router.put("/trails/:name/event-selectors", async (c: Context) => {
     TrailName: name,
     EventSelectors: body.eventSelectors,
     AdvancedEventSelectors: body.advancedEventSelectors,
-  }));
+  } as any));
   return c.json({
     trailName: name,
     eventSelectors: result.EventSelectors || [],
