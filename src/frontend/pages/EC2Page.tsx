@@ -68,6 +68,18 @@ import {
   useEC2NetworkInterfaces,
   useEC2Amis,
 } from "../hooks/useEC2";
+import {
+  useEC2FlowLogs,
+  useEC2CreateFlowLog,
+  useEC2DeleteFlowLog,
+} from "../hooks/useEC2FlowLogs";
+import {
+  useEC2NetworkAcls,
+  useEC2CreateNetworkAcl,
+  useEC2DeleteNetworkAcl,
+  useEC2CreateNetworkAclEntry,
+  useEC2DeleteNetworkAclEntry,
+} from "../hooks/useEC2NetworkAcls";
 import ResourceTable from "../components/ResourceTable";
 import DeleteButton from "../components/DeleteButton";
 import StatusBadge from "../components/StatusBadge";
@@ -152,6 +164,16 @@ export default function EC2Page() {
       id: "network-interfaces",
       label: "Network Interfaces",
       content: <EC2NetworkInterfaceList />,
+    },
+    {
+      id: "flow-logs",
+      label: "Flow Logs",
+      content: <EC2FlowLogList />,
+    },
+    {
+      id: "network-acls",
+      label: "Network ACLs",
+      content: <EC2NetworkAclList />,
     },
     {
       id: "topology",
@@ -1170,5 +1192,324 @@ function EC2NetworkInterfaceList() {
         filterPlaceholder="Find by ID" filterFunction={(item: any, t: string) => item.id.toLowerCase().includes(t.toLowerCase())}
       />
     </>
+  );
+}
+
+// ─── FLOW LOGS ──────────────────────────────────────────
+
+function EC2FlowLogList() {
+  const { data, isLoading, isError, error } = useEC2FlowLogs();
+  const createFlowLog = useEC2CreateFlowLog();
+  const deleteFlowLog = useEC2DeleteFlowLog();
+  const { data: vpcs } = useEC2Vpcs();
+  const [showCreate, setShowCreate] = useState(false);
+  const [form, setForm] = useState({
+    resourceId: "",
+    resourceType: "VPC",
+    trafficType: "ALL",
+    logDestinationType: "s3",
+    logDestination: "",
+    logFormat: "",
+    maxAggregationInterval: "600",
+  });
+
+  const items = (data?.flowLogs || []).map((fl) => ({
+    flowLogId: fl.flowLogId,
+    resourceId: fl.resourceId,
+    resourceType: fl.resourceType,
+    trafficType: fl.trafficType,
+    logDestinationType: fl.logDestinationType,
+    flowLogStatus: fl.flowLogStatus,
+  }));
+
+  return (
+    <>
+      {isError && <StatusIndicator type="error">{(error as Error)?.message || "Failed to load flow logs"}</StatusIndicator>}
+      <ResourceTable
+        resourceName="Flow Log"
+        headerTitle="Flow Logs"
+        headerCounter={data?.total}
+        items={items}
+        columns={[
+          { id: "flowLogId", header: "Flow Log ID", cell: (item: any) => item.flowLogId, isRowHeader: true },
+          { id: "resourceId", header: "Resource", cell: (item: any) => item.resourceId || "-" },
+          { id: "resourceType", header: "Resource Type", cell: (item: any) => item.resourceType },
+          { id: "trafficType", header: "Traffic", cell: (item: any) => item.trafficType },
+          { id: "logDest", header: "Destination", cell: (item: any) => item.logDestinationType || "-" },
+          { id: "status", header: "Status", cell: (item: any) => <StatusIndicator type={item.flowLogStatus === "ACTIVE" ? "success" : "warning"}>{item.flowLogStatus}</StatusIndicator> },
+          { id: "actions", header: "", cell: (item: any) => (
+            <DeleteButton itemName={item.flowLogId} resourceType="flow log" loading={deleteFlowLog.isPending && deleteFlowLog.variables === item.flowLogId} onDelete={() => deleteFlowLog.mutateAsync(item.flowLogId)} />
+          )},
+        ]}
+        loading={isLoading}
+        emptyMessage="No flow logs found"
+        filterEnabled
+        filterPlaceholder="Find by resource ID"
+        filterFunction={(item: any, t: string) => item.flowLogId.toLowerCase().includes(t.toLowerCase()) || (item.resourceId || "").toLowerCase().includes(t.toLowerCase())}
+        onCreate={() => setShowCreate(true)}
+      />
+
+      <Modal visible={showCreate} onDismiss={() => setShowCreate(false)} header="Create Flow Log" size="medium"
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setShowCreate(false)}>Cancel</Button>
+          <Button variant="primary" loading={createFlowLog.isPending} disabled={!form.resourceId || !form.trafficType} onClick={() => createFlowLog.mutate({
+            resourceId: form.resourceId,
+            resourceType: form.resourceType,
+            trafficType: form.trafficType,
+            logDestinationType: form.logDestinationType || undefined,
+            logDestination: form.logDestination || undefined,
+            logFormat: form.logFormat || undefined,
+            maxAggregationInterval: form.maxAggregationInterval ? parseInt(form.maxAggregationInterval) : undefined,
+          }, { onSuccess: () => setShowCreate(false) })}>Create</Button>
+        </SpaceBetween></Box>}
+      >
+        <Form>
+          {createFlowLog.isError && <Alert type="error" dismissible>{(createFlowLog.error as Error)?.message || "Failed to create flow log"}</Alert>}
+          <SpaceBetween size="m">
+            <FormField label="Resource ID" description="VPC, Subnet, or Network Interface ID">
+              <Select
+                selectedOption={form.resourceId ? { label: form.resourceId, value: form.resourceId } : { label: "Select resource...", value: "" }}
+                onChange={({ detail }) => setForm(p => ({ ...p, resourceId: detail.selectedOption.value || "" }))}
+                options={[{ label: "Select resource...", value: "" }, ...(vpcs?.vpcs || []).map(v => ({ label: `${v.id} (VPC)`, value: v.id }))]}
+                filteringType="auto"
+              />
+            </FormField>
+            <FormField label="Resource type">
+              <Select
+                selectedOption={{ label: form.resourceType, value: form.resourceType }}
+                onChange={({ detail }) => setForm(p => ({ ...p, resourceType: detail.selectedOption.value || "VPC" }))}
+                options={["VPC", "Subnet", "NetworkInterface"].map(t => ({ label: t, value: t }))}
+              />
+            </FormField>
+            <FormField label="Traffic type">
+              <Select
+                selectedOption={{ label: form.trafficType, value: form.trafficType }}
+                onChange={({ detail }) => setForm(p => ({ ...p, trafficType: detail.selectedOption.value || "ALL" }))}
+                options={[{ label: "ALL", value: "ALL" }, { label: "ACCEPT", value: "ACCEPT" }, { label: "REJECT", value: "REJECT" }]}
+              />
+            </FormField>
+            <FormField label="Log destination type (optional)">
+              <Select
+                selectedOption={form.logDestinationType ? { label: form.logDestinationType, value: form.logDestinationType } : { label: "None", value: "" }}
+                onChange={({ detail }) => setForm(p => ({ ...p, logDestinationType: detail.selectedOption.value || "" }))}
+                options={[{ label: "None", value: "" }, { label: "s3", value: "s3" }, { label: "cloud-watch-logs", value: "cloud-watch-logs" }]}
+              />
+            </FormField>
+            {form.logDestinationType && (
+              <FormField label="Log destination ARN" description="S3 bucket ARN or CloudWatch Logs log group ARN">
+                <Input value={form.logDestination} onChange={({ detail }) => setForm(p => ({ ...p, logDestination: detail.value }))} placeholder="arn:aws:s3:::flow-logs-bucket" />
+              </FormField>
+            )}
+            <FormField label="Log format (optional)" description="Default: standard VPC flow log fields">
+              <Input value={form.logFormat} onChange={({ detail }) => setForm(p => ({ ...p, logFormat: detail.value }))} placeholder="${version} ${account-id} ${interface-id} ..." />
+            </FormField>
+            <FormField label="Max aggregation interval (seconds)">
+              <Select
+                selectedOption={{ label: `${form.maxAggregationInterval}s`, value: form.maxAggregationInterval }}
+                onChange={({ detail }) => setForm(p => ({ ...p, maxAggregationInterval: detail.selectedOption.value || "600" }))}
+                options={[{ label: "60s", value: "60" }, { label: "600s (10 min)", value: "600" }]}
+              />
+            </FormField>
+          </SpaceBetween>
+        </Form>
+      </Modal>
+    </>
+  );
+}
+
+
+// ─── NETWORK ACLs ───────────────────────────────────────
+
+function EC2NetworkAclList() {
+  const { data, isLoading, isError, error } = useEC2NetworkAcls();
+  const createAcl = useEC2CreateNetworkAcl();
+  const deleteAcl = useEC2DeleteNetworkAcl();
+  const createEntry = useEC2CreateNetworkAclEntry();
+  const deleteEntry = useEC2DeleteNetworkAclEntry();
+  const { data: vpcs } = useEC2Vpcs();
+  const [showCreate, setShowCreate] = useState(false);
+  const [selectedVpc, setSelectedVpc] = useState("");
+  const [expandedAcl, setExpandedAcl] = useState<string | null>(null);
+  const [showEntryModal, setShowEntryModal] = useState<{ aclId: string; egress: boolean } | null>(null);
+  const [entryForm, setEntryForm] = useState({
+    ruleNumber: "100",
+    protocol: "6",
+    ruleAction: "allow",
+    cidrBlock: "0.0.0.0/0",
+    portRangeFrom: "",
+    portRangeTo: "",
+  });
+
+  const items = (data?.networkAcls || []).map((acl) => ({
+    networkAclId: acl.networkAclId,
+    vpcId: acl.vpcId,
+    isDefault: acl.isDefault,
+    entries: acl.entries?.length || 0,
+    associations: acl.associations?.length || 0,
+  }));
+
+  const expandedAclData = expandedAcl
+    ? (data?.networkAcls || []).find((a) => a.networkAclId === expandedAcl)
+    : null;
+
+  return (
+    <SpaceBetween size="l">
+      {isError && <StatusIndicator type="error">{(error as Error)?.message || "Failed to load network ACLs"}</StatusIndicator>}
+      <ResourceTable
+        resourceName="Network ACL"
+        headerTitle="Network ACLs"
+        headerCounter={data?.total}
+        items={items}
+        columns={[
+          { id: "networkAclId", header: "Network ACL ID", cell: (item: any) => item.networkAclId, isRowHeader: true },
+          { id: "vpcId", header: "VPC", cell: (item: any) => item.vpcId },
+          { id: "isDefault", header: "Default", cell: (item: any) => item.isDefault ? "Yes" : "No" },
+          { id: "entries", header: "Rules", cell: (item: any) => item.entries },
+          { id: "associations", header: "Associations", cell: (item: any) => item.associations },
+          { id: "actions", header: "", cell: (item: any) => (
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="icon" iconName="view-full" ariaLabel={`View rules for ${item.networkAclId}`} onClick={() => setExpandedAcl(expandedAcl === item.networkAclId ? null : item.networkAclId)} />
+              {!item.isDefault && <DeleteButton itemName={item.networkAclId} resourceType="network ACL" loading={deleteAcl.isPending && deleteAcl.variables === item.networkAclId} onDelete={() => deleteAcl.mutateAsync(item.networkAclId)} />}
+            </SpaceBetween>
+          )},
+        ]}
+        loading={isLoading}
+        emptyMessage="No network ACLs found"
+        filterEnabled
+        filterPlaceholder="Find by ACL ID"
+        filterFunction={(item: any, t: string) => item.networkAclId.toLowerCase().includes(t.toLowerCase())}
+        onCreate={() => setShowCreate(true)}
+      />
+
+      {expandedAclData && (
+        <Container header={<Header variant="h3" description={`VPC: ${expandedAclData.vpcId}`}>{expandedAclData.networkAclId} — Rules</Header>}
+          footer={
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="normal" iconName="add-plus" onClick={() => { setShowEntryModal({ aclId: expandedAclData.networkAclId, egress: false }); setEntryForm({ ruleNumber: "100", protocol: "6", ruleAction: "allow", cidrBlock: "0.0.0.0/0", portRangeFrom: "", portRangeTo: "" }); }}>Add Inbound Rule</Button>
+              <Button variant="normal" iconName="add-plus" onClick={() => { setShowEntryModal({ aclId: expandedAclData.networkAclId, egress: true }); setEntryForm({ ruleNumber: "100", protocol: "6", ruleAction: "allow", cidrBlock: "0.0.0.0/0", portRangeFrom: "", portRangeTo: "" }); }}>Add Outbound Rule</Button>
+            </SpaceBetween>
+          }
+        >
+          <SpaceBetween size="l">
+            {["Inbound Rules", "Outbound Rules"].map((label) => {
+              const isEgress = label === "Outbound Rules";
+              const rules = (expandedAclData.entries || []).filter((e) => !!e.egress === isEgress);
+              return (
+                <div key={label}>
+                  <Box variant="h3" padding={{ bottom: "s" }}>{label}</Box>
+                  {rules.length === 0 ? (
+                    <Box color="text-body-secondary">No {label.toLowerCase()} found</Box>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {rules.sort((a, b) => (a.ruleNumber || 0) - (b.ruleNumber || 0)).map((rule) => (
+                        <div key={rule.ruleNumber} style={{ display: "flex", gap: 8, alignItems: "center", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--color-border-divider-default, #e9ebed)", background: "var(--color-background-container-content, #fff)" }}>
+                          <Box variant="small" color="text-body-secondary" padding={{ right: "xs" }}>#{rule.ruleNumber}</Box>
+                          <Box variant="small" fontWeight="bold">{rule.protocol === "-1" ? "All" : rule.protocol.toUpperCase()}</Box>
+                          {rule.portRange && <Box variant="small" color="text-body-secondary">:{rule.portRange.from}{rule.portRange.to !== rule.portRange.from ? `-${rule.portRange.to}` : ""}</Box>}
+                          <Box variant="small" color="text-body-secondary">{rule.cidrBlock}</Box>
+                          <StatusIndicator type={rule.ruleAction === "allow" ? "success" : "error"}>{rule.ruleAction.toUpperCase()}</StatusIndicator>
+                          <Button variant="icon" iconName="remove" ariaLabel={`Delete rule ${rule.ruleNumber}`} onClick={() => deleteEntry.mutate({ aclId: expandedAclData.networkAclId, ruleNumber: rule.ruleNumber, egress: isEgress })} />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            <div>
+              <Box variant="h3" padding={{ bottom: "s" }}>Subnet Associations</Box>
+              {(expandedAclData.associations || []).length === 0 ? (
+                <Box color="text-body-secondary">No subnet associations</Box>
+              ) : (
+                <SpaceBetween size="xs">
+                  {(expandedAclData.associations || []).map((assoc) => (
+                    <div key={assoc.networkAclAssociationId} style={{ display: "flex", gap: 12, alignItems: "center", padding: "6px 12px", borderRadius: 6, border: "1px solid var(--color-border-divider-default, #e9ebed)", background: "var(--color-background-container-content, #fff)" }}>
+                      <Box variant="strong">{assoc.subnetId}</Box>
+                      <Box variant="small" color="text-body-secondary">{assoc.networkAclAssociationId}</Box>
+                    </div>
+                  ))}
+                </SpaceBetween>
+              )}
+            </div>
+          </SpaceBetween>
+        </Container>
+      )}
+
+      <Modal visible={showCreate} onDismiss={() => setShowCreate(false)} header="Create Network ACL" size="medium"
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setShowCreate(false)}>Cancel</Button>
+          <Button variant="primary" loading={createAcl.isPending} disabled={!selectedVpc} onClick={() => createAcl.mutate({ vpcId: selectedVpc }, { onSuccess: () => { setShowCreate(false); setSelectedVpc(""); } })}>Create</Button>
+        </SpaceBetween></Box>}
+      >
+        <FormField label="VPC ID" description="Select the VPC for this network ACL">
+          <Select
+            selectedOption={selectedVpc ? { label: selectedVpc, value: selectedVpc } : { label: "Select a VPC", value: "" }}
+            onChange={({ detail }) => setSelectedVpc(detail.selectedOption.value || "")}
+            options={(vpcs?.vpcs || []).map(v => ({ label: `${v.id} (${v.cidrBlock})`, value: v.id }))}
+          />
+        </FormField>
+      </Modal>
+
+      <Modal visible={showEntryModal !== null} onDismiss={() => setShowEntryModal(null)} header={`Add ${showEntryModal?.egress ? "Outbound" : "Inbound"} Rule`} size="medium"
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setShowEntryModal(null)}>Cancel</Button>
+          <Button variant="primary" loading={createEntry.isPending} disabled={!entryForm.ruleNumber} onClick={() => {
+            if (!showEntryModal) return;
+            createEntry.mutate({
+              aclId: showEntryModal.aclId,
+              ruleNumber: parseInt(entryForm.ruleNumber),
+              protocol: entryForm.protocol,
+              ruleAction: entryForm.ruleAction,
+              egress: showEntryModal.egress,
+              cidrBlock: entryForm.cidrBlock,
+              portRangeFrom: entryForm.portRangeFrom ? parseInt(entryForm.portRangeFrom) : undefined,
+              portRangeTo: entryForm.portRangeTo ? parseInt(entryForm.portRangeTo) : undefined,
+            }, { onSuccess: () => setShowEntryModal(null) });
+          }}>Add Rule</Button>
+        </SpaceBetween></Box>}
+      >
+        <Form>
+          {createEntry.isError && <Alert type="error" dismissible>{(createEntry.error as Error)?.message || "Failed to add rule"}</Alert>}
+          <SpaceBetween size="m">
+            <FormField label="Rule number" description="Unique number for this rule (1-32766)">
+              <Input type="number" value={entryForm.ruleNumber} onChange={({ detail }) => setEntryForm(p => ({ ...p, ruleNumber: detail.value }))} placeholder="100" />
+            </FormField>
+            <FormField label="Protocol" description="Protocol number (-1 for all, 6 for TCP, 17 for UDP, 1 for ICMP)">
+              <Select
+                selectedOption={{
+                  label: entryForm.protocol === "-1" ? "All traffic" : entryForm.protocol === "6" ? "TCP" : entryForm.protocol === "17" ? "UDP" : entryForm.protocol === "1" ? "ICMP" : entryForm.protocol,
+                  value: entryForm.protocol
+                }}
+                onChange={({ detail }) => setEntryForm(p => ({ ...p, protocol: detail.selectedOption.value || "-1" }))}
+                options={[
+                  { label: "All traffic", value: "-1" },
+                  { label: "TCP", value: "6" },
+                  { label: "UDP", value: "17" },
+                  { label: "ICMP", value: "1" },
+                ]}
+              />
+            </FormField>
+            <FormField label="Action">
+              <Select
+                selectedOption={{ label: entryForm.ruleAction === "allow" ? "ALLOW" : "DENY", value: entryForm.ruleAction }}
+                onChange={({ detail }) => setEntryForm(p => ({ ...p, ruleAction: detail.selectedOption.value || "allow" }))}
+                options={[{ label: "ALLOW", value: "allow" }, { label: "DENY", value: "deny" }]}
+              />
+            </FormField>
+            <FormField label="CIDR Block">
+              <Input value={entryForm.cidrBlock} onChange={({ detail }) => setEntryForm(p => ({ ...p, cidrBlock: detail.value }))} placeholder="0.0.0.0/0" />
+            </FormField>
+            <FormField label="Port range (optional)" description="Port or port range for the rule">
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <Input type="number" value={entryForm.portRangeFrom} onChange={({ detail }) => setEntryForm(p => ({ ...p, portRangeFrom: detail.value }))} placeholder="From" />
+                <Box variant="small" color="text-body-secondary">–</Box>
+                <Input type="number" value={entryForm.portRangeTo} onChange={({ detail }) => setEntryForm(p => ({ ...p, portRangeTo: detail.value }))} placeholder="To" />
+              </div>
+            </FormField>
+          </SpaceBetween>
+        </Form>
+      </Modal>
+    </SpaceBetween>
   );
 }
