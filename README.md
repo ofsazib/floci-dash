@@ -258,7 +258,7 @@ src/
       CloudWatchPage.tsx   CloudWatch metrics, alarms, statistics
       IAMPage.tsx          IAM users, roles, policies, groups
       SecretsManagerPage.tsx  Secrets Manager secrets, values, versions
-      CloudFormationPage.tsx  CloudFormation stacks, resources, events, templates
+      CloudFormationPage.tsx  CloudFormation stacks, resources, events, templates, policy
       KMSPage.tsx           KMS keys, aliases, grants, crypto playground
       ServicePage.tsx      Dynamic service pages
       Settings.tsx         Dark mode, refresh interval
@@ -362,7 +362,7 @@ These services have full CRUD operations in both backend and frontend:
 | **CloudWatch** | Metrics (list, put metric data, get statistics with sparkline charts), alarms (list, create with threshold/comparison/statistic, delete, set state OK/ALARM), tags |
 | **IAM** | Users (list, create, delete, detail with groups/policies/access keys, create access keys), roles (list, create, delete, detail with trust policy/attached policies/tags), groups (list, create, delete), policies (list by scope, create, delete, detail with version document viewer), instance profiles (list) |
 | **Secrets Manager** | Secrets (list, create with value, delete, restore, detail with value reveal/version history), put secret value (new versions), random password generator |
-| **CloudFormation** | Stacks (list, create with YAML/JSON template, delete, detail with outputs/parameters/tags), resources (per-stack list with status), events (timeline with status), template viewer, template validator, exports |
+| **CloudFormation** | Stacks (list, create with YAML/JSON template, delete, detail with outputs/parameters/tags), resources (per-stack list with status), events (timeline with status), template viewer, template validator, stack policy editor, change sets, stack sets, exports |
 | **KMS** | Keys (list, create with usage/spec, detail with state/rotation/aliases/grants/tags), key management (enable/disable, schedule/cancel deletion, rotation toggle, update description), crypto playground (encrypt/decrypt), aliases (list, create, delete), data key generation, random bytes |
 | **ECS** | Clusters (list, create, delete, detail with running task/service counts), task definitions (list, describe, deregister), services (list, delete per cluster), tasks (list by status, run, stop), container instances (list, describe) |
 | **SSM** | Parameter Store (list, create with type/description/overwrite, delete, detail with value reveal, version history), tags (list, add, remove) |

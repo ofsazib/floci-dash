@@ -43,6 +43,8 @@ vi.mock("@aws-sdk/client-cloudformation", () => ({
   ListStackInstancesCommand: createCmd("ListStackInstancesCommand"),
   DeleteStackInstancesCommand: createCmd("DeleteStackInstancesCommand"),
   ListStackSetOperationsCommand: createCmd("ListStackSetOperationsCommand"),
+  GetStackPolicyCommand: createCmd("GetStackPolicyCommand"),
+  SetStackPolicyCommand: createCmd("SetStackPolicyCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -139,6 +141,51 @@ describe("CloudFormation Routes", () => {
       mockSend.mockResolvedValueOnce({ Parameters: [] });
       const res = await post("/validate-template", { templateBody: "{}" });
       expect((await res.json()).valid).toBe(true);
+    });
+  });
+
+  describe("Stack Policy", () => {
+    it("GET /stacks/:name/policy — returns policy body", async () => {
+      mockSend.mockResolvedValueOnce({ StackPolicyBody: '{"Statement":[]}' });
+      const res = await get("/stacks/my-stack/policy");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.name).toBe("my-stack");
+      expect(body.policy).toBe('{"Statement":[]}');
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetStackPolicyCommand");
+    });
+
+    it("GET /stacks/:name/policy — null when empty (Floci stub)", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/stacks/my-stack/policy");
+      expect((await res.json()).policy).toBe(null);
+    });
+
+    it("GET /stacks/:name/policy — stringifies non-string body", async () => {
+      mockSend.mockResolvedValueOnce({ StackPolicyBody: { Statement: [] } });
+      const res = await get("/stacks/my-stack/policy");
+      expect((await res.json()).policy).toBe(JSON.stringify({ Statement: [] }, null, 2));
+    });
+
+    it("PUT /stacks/:name/policy — sets policy", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/stacks/my-stack/policy", { policyBody: '{"Statement":[]}' });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("SetStackPolicyCommand");
+    });
+
+    it("PUT /stacks/:name/policy — 400 when policyBody missing", async () => {
+      const res = await put("/stacks/my-stack/policy", {});
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("PUT /stacks/:name/policy — 400 when policyBody invalid JSON", async () => {
+      const res = await put("/stacks/my-stack/policy", { policyBody: "not json" });
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
     });
   });
 

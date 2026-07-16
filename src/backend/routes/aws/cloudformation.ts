@@ -27,6 +27,8 @@ import {
   ListStackInstancesCommand,
   DeleteStackInstancesCommand,
   ListStackSetOperationsCommand,
+  GetStackPolicyCommand,
+  SetStackPolicyCommand,
 } from "@aws-sdk/client-cloudformation";
 import { getAwsConfig } from "../../clients/aws";
 import { sanitizeName, sanitizeText, validateJson } from "../../clients/sanitize";
@@ -220,6 +222,33 @@ router.get("/stacks/:name/template", async (c: Context) => {
       : JSON.stringify(result.TemplateBody, null, 2)
     : null;
   return c.json({ name, template });
+});
+
+// ─── STACK POLICY ────────────────────────────────────────
+
+router.get("/stacks/:name/policy", async (c: Context) => {
+  const name = c.req.param("name");
+  const result = await cfn().send(new GetStackPolicyCommand({ StackName: name }));
+  const policy = result.StackPolicyBody
+    ? typeof result.StackPolicyBody === "string"
+      ? result.StackPolicyBody
+      : JSON.stringify(result.StackPolicyBody, null, 2)
+    : null;
+  return c.json({ name, policy });
+});
+
+router.put("/stacks/:name/policy", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<any>();
+  if (!body.policyBody) return c.json({ error: "policyBody is required" }, 400);
+  const validation = validateJson(body.policyBody);
+  if (!validation.valid) {
+    return c.json({ error: `Invalid policy: ${validation.error}` }, 400);
+  }
+  await cfn().send(
+    new SetStackPolicyCommand({ StackName: name, StackPolicyBody: body.policyBody })
+  );
+  return c.json({ name, updated: true });
 });
 
 router.post("/validate-template", async (c: Context) => {

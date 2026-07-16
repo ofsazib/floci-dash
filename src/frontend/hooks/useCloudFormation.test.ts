@@ -29,6 +29,8 @@ import {
   useDeleteStackSet,
   useCreateStackInstances,
   useDeleteStackInstances,
+  useStackPolicy,
+  useSetStackPolicy,
 } from "./useCloudFormation";
 
 function createWrapper() {
@@ -321,6 +323,43 @@ describe("useStackResource", () => {
     const { result } = renderHook(() => useStackResource("my-stack", null), { wrapper: createWrapper() });
     expect(result.current.isLoading).toBe(false);
     expect(mockApi).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Stack policy ───────────────────────────────────────
+
+describe("useStackPolicy", () => {
+  it("does NOT call api when name is null", () => {
+    renderHook(() => useStackPolicy(null), { wrapper: createWrapper() });
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api with policy URL when name provided", async () => {
+    mockApi.mockResolvedValueOnce({ name: "my-stack", policy: null });
+    const { result } = renderHook(() => useStackPolicy("my-stack"), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/cloudformation/stacks/my-stack/policy"
+    );
+  });
+});
+
+describe("useSetStackPolicy", () => {
+  it("calls api with PUT method and serialized body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useSetStackPolicy(), {
+      wrapper: createWrapper(),
+    });
+    await result.current.mutateAsync({ stackName: "s1", policyBody: "{}" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/cloudformation/stacks/s1/policy",
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({ policyBody: "{}" }),
+      })
+    );
   });
 });
 

@@ -28,6 +28,8 @@ import {
   useStacks,
   useStack,
   useStackTemplate,
+  useStackPolicy,
+  useSetStackPolicy,
   useStackResource,
   useCreateStack,
   useDeleteStack,
@@ -61,6 +63,16 @@ const STATUS_COLORS: Record<string, "green" | "red" | "blue" | "grey"> = {
   UPDATE_ROLLBACK_COMPLETE: "red",
   REVIEW_IN_PROGRESS: "blue",
 };
+
+const DEFAULT_POLICY = JSON.stringify(
+  {
+    Statement: [
+      { Effect: "Allow", Action: "Update:*", Principal: "*", Resource: "*" },
+    ],
+  },
+  null,
+  2
+);
 
 function ResourceDetailContainer({ resource, onClose }: { resource: any; onClose: () => void }) {
   const r = resource;
@@ -260,6 +272,10 @@ Resources:
 function StackDetailModal({ stackName, onClose }: { stackName: string; onClose: () => void }) {
   const stackQuery = useStack(stackName);
   const templateQuery = useStackTemplate(stackName);
+  const policyQuery = useStackPolicy(stackName);
+  const setPolicyMut = useSetStackPolicy();
+  const [policyBody, setPolicyBody] = useState("");
+  const { showToast } = useToast();
   const [selectedResource, setSelectedResource] = useState<string | null>(null);
   const resourceQuery = useStackResource(stackName, selectedResource);
   const [activeTab, setActiveTab] = useState("overview");
@@ -367,6 +383,46 @@ function StackDetailModal({ stackName, onClose }: { stackName: string; onClose: 
         <pre className="fd-code-bg" style={{ fontSize: 12, overflow: "auto", maxHeight: 400, padding: 12, borderRadius: 4 }}>
           {templateQuery.data?.template || "No template"}
         </pre>
+      ),
+    },
+    {
+      id: "policy",
+      label: "Policy",
+      content: (
+        <SpaceBetween size="m">
+          <Alert type="info">
+            Floci accepts a stack policy but does not persist or enforce it, so the
+            fetched policy is always empty. Setting a policy validates and submits it.
+          </Alert>
+          <FormField
+            label="Stack policy (JSON)"
+            description="A policy document controlling update actions on stack resources."
+          >
+            <Textarea
+              value={policyBody}
+              onChange={({ detail }) => setPolicyBody(detail.value)}
+              placeholder={policyQuery.isLoading ? "Loading..." : policyQuery.data?.policy || DEFAULT_POLICY}
+              rows={12}
+            />
+          </FormField>
+          <Box>
+            <Button
+              variant="primary"
+              loading={setPolicyMut.isPending}
+              disabled={!policyBody.trim()}
+              onClick={async () => {
+                try {
+                  await setPolicyMut.mutateAsync({ stackName, policyBody });
+                  showToast("success", "Stack policy set");
+                } catch (e: any) {
+                  showToast("error", e.message);
+                }
+              }}
+            >
+              Set policy
+            </Button>
+          </Box>
+        </SpaceBetween>
       ),
     },
   ];

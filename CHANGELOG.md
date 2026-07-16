@@ -5,6 +5,14 @@ All notable changes to Floci Dash will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **CloudFormation:** Stack policy tab — view (`GetStackPolicy`) and set (`SetStackPolicy`) a stack policy document with JSON validation (G.6). Note: Floci accepts the policy but does not persist or enforce it, so the fetched policy is always empty.
+
+### Fixed
+- **AWS SDK bump:** Resolved TypeScript errors across `kinesis`, `s3-select`, `ses`, `wafv2`, `glue`, `cognito`, `cloudtrail`, and `codepipeline` routes caused by updated SDK type shapes. Corrected the Kinesis `SubscribeToShard` event-stream handling (and its test mock) to match the real `SubscribeToShardEvent` shape.
+
 ## [0.0.99] — 2026-07-07
 
 ### Fixed

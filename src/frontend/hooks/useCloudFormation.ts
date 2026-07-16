@@ -137,6 +137,34 @@ export function useDeleteChangeSet() {
   });
 }
 
+// ─── STACK POLICY ─────────────────────────────────────
+
+export function useStackPolicy(name: string | null) {
+  return useQuery({
+    queryKey: ["aws", "cloudformation", "stacks", name, "policy"],
+    queryFn: () => api<{ name: string; policy: string | null }>(
+      `/aws/cloudformation/stacks/${name}/policy`
+    ),
+    enabled: !!name,
+  });
+}
+
+export function useSetStackPolicy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { stackName: string; policyBody: string }) =>
+      api(`/aws/cloudformation/stacks/${body.stackName}/policy`, {
+        method: "PUT",
+        body: JSON.stringify({ policyBody: body.policyBody }),
+      }),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({
+        queryKey: ["aws", "cloudformation", "stacks", variables.stackName, "policy"],
+      });
+    },
+  });
+}
+
 // ─── STACK SETS ───────────────────────────────────────
 
 export function useStackSets() {
