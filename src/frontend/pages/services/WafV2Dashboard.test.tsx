@@ -19,6 +19,23 @@ vi.mock("../../hooks/useWafV2", () => ({
   useIPSets: (...args: any[]) => mockIPSets(...args),
   useRegexPatternSets: (...args: any[]) => mockRegexSets(...args),
   useRuleGroups: (...args: any[]) => mockRuleGroups(...args),
+  useCreateIPSet: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useUpdateIPSet: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useDeleteIPSet: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn(), variables: null }),
+  useCreateRegexPatternSet: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useDeleteRegexPatternSet: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn(), variables: null }),
+  useCreateRuleGroup: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useDeleteRuleGroup: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn(), variables: null }),
+  useLoggingConfigurations: () => ({ data: { loggingConfigurations: [], total: 0 }, isLoading: false, isError: false, error: null }),
+  usePutLoggingConfiguration: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useDeleteLoggingConfiguration: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useAssociateWebACL: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useDisassociateWebACL: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useGetWebACLForResource: () => ({ data: null, isLoading: false, isError: false, error: null }),
+  useResourcesForWebACL: () => ({ data: null, isLoading: false, isError: false, error: null }),
+  usePermissionPolicy: () => ({ data: null, isLoading: false, isError: false, error: null }),
+  usePutPermissionPolicy: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useDeletePermissionPolicy: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn() }),
 }));
 
 import { WafV2Dashboard } from "./WafV2Dashboard";
@@ -123,7 +140,9 @@ describe("WafV2Dashboard", () => {
     const deleteBtn = screen.getByRole("button", { name: /Delete delete-me/i });
     await user.click(deleteBtn);
     await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
-    await clickButton(user, /^Delete$/i);
+    // The confirm dialog's "Delete" button is the last match (a section
+    // DeleteButton icon also matches /^Delete$/i via a trimmed aria-label).
+    await clickButton(user, /^Delete$/i, { last: true });
     await waitFor(() => {
       expect(mockDeleteWebAcl).toHaveBeenCalledWith(
         expect.objectContaining({ Id: "acl-1", Name: "delete-me" }),

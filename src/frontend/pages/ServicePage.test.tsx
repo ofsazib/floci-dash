@@ -120,6 +120,16 @@ vi.mock("../hooks/useWafV2", () => ({
   useRuleGroups: () => ({ data: { ruleGroups: [], total: 0 }, isLoading: false, isError: false, error: null }),
   useCreateRuleGroup: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
   useDeleteRuleGroup: () => ({ mutateAsync: vi.fn(), isPending: false, variables: null }),
+  useLoggingConfigurations: () => ({ data: { loggingConfigurations: [], total: 0 }, isLoading: false, isError: false, error: null }),
+  usePutLoggingConfiguration: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useDeleteLoggingConfiguration: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useAssociateWebACL: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useDisassociateWebACL: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn() }),
+  usePutPermissionPolicy: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useDeletePermissionPolicy: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useGetWebACLForResource: () => ({ data: null, isLoading: false, isError: false, error: null }),
+  useResourcesForWebACL: () => ({ data: null, isLoading: false, isError: false, error: null }),
+  usePermissionPolicy: () => ({ data: null, isLoading: false, isError: false, error: null }),
 }));
 
 vi.mock("../hooks/useSystem", () => ({ useHealth: () => ({ data: { services: { logs: "available" } } }),

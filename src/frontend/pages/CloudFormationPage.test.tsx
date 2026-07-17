@@ -22,6 +22,9 @@ vi.mock("../hooks/useCloudFormation", () => ({
   useDeleteStack: () => ({ mutateAsync: mockDeleteStack, isPending: false }),
   useValidateTemplate: () => ({ mutateAsync: mockValidateTemplate, isPending: false }),
   useExports: (...args: any[]) => mockExports(...args),
+  useStackResource: () => ({ data: { resource: null }, isLoading: false, isError: false, error: null }),
+  useStackPolicy: () => ({ data: { policy: "" }, isLoading: false, isError: false, error: null }),
+  useSetStackPolicy: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn() }),
 }));
 
 vi.mock("../components/Toast", () => ({

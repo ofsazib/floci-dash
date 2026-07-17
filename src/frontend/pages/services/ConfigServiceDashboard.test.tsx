@@ -37,6 +37,38 @@ vi.mock("../../hooks/useConfigService", () => ({
     isPending: false,
     variables: null,
   }),
+  useConfigRecorderStatuses: () => ({
+    data: { statuses: [], total: 0 },
+    isLoading: false,
+    isError: false,
+    error: null,
+  }),
+  useConformancePackStatuses: () => ({
+    data: { statuses: [], total: 0 },
+    isLoading: false,
+    isError: false,
+    error: null,
+  }),
+  useComplianceByConfigRule: () => ({
+    data: { compliance: [], total: 0 },
+    isLoading: false,
+    isError: false,
+    error: null,
+  }),
+  useConfigRuleEvaluationStatus: () => ({
+    data: { statuses: [], total: 0 },
+    isLoading: false,
+    isError: false,
+    error: null,
+  }),
+  useStartConfigRulesEvaluation: () => ({
+    mutate: vi.fn(),
+    mutateAsync: vi.fn().mockResolvedValue({}),
+    isPending: false,
+    isError: false,
+    error: null,
+    reset: vi.fn(),
+  }),
 }));
 
 import { ConfigServiceDashboard } from "./ConfigServiceDashboard";

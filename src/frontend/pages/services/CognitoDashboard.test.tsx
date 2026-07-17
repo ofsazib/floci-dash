@@ -37,6 +37,22 @@ vi.mock("../../hooks/useCognito", () => ({
   useDeleteCognitoGroup: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useCreateCognitoUserPoolClient: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteCognitoUserPoolClient: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useResourceServers: () => ({
+    data: { resourceServers: [], total: 0 },
+    isLoading: false,
+    isError: false,
+    error: null,
+  }),
+  useMfaConfig: () => ({
+    data: { mfaConfiguration: null },
+    isLoading: false,
+    isError: false,
+    error: null,
+  }),
+  useCreateResourceServer: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
+  useDeleteResourceServer: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
+  useSetMfaConfig: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
+  useAddCustomAttributes: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
 }));
 
 import { CognitoDashboard } from "./CognitoDashboard";

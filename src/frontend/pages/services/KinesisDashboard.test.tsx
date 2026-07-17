@@ -33,6 +33,36 @@ vi.mock("../../hooks/useKinesis", () => ({
     mutateAsync: mockPutRecord,
     isPending: putRecordState.isPending,
   }),
+  useKinesisConsumers: () => ({
+    data: { consumers: [], total: 0 },
+    isLoading: false,
+    isError: false,
+    error: null,
+  }),
+  useRegisterKinesisConsumer: () => ({
+    mutate: vi.fn(),
+    mutateAsync: vi.fn().mockResolvedValue({}),
+    isPending: false,
+    isError: false,
+    error: null,
+    reset: vi.fn(),
+  }),
+  useDeregisterKinesisConsumer: () => ({
+    mutate: vi.fn(),
+    mutateAsync: vi.fn().mockResolvedValue({}),
+    isPending: false,
+    isError: false,
+    error: null,
+    reset: vi.fn(),
+  }),
+  useSubscribeToShard: () => ({
+    mutate: vi.fn(),
+    mutateAsync: vi.fn().mockResolvedValue({}),
+    isPending: false,
+    isError: false,
+    error: null,
+    reset: vi.fn(),
+  }),
 }));
 
 import { KinesisDashboard } from "./KinesisDashboard";

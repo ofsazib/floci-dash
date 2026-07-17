@@ -19,6 +19,15 @@ vi.mock("../../hooks/useAthena", () => ({
     variables: null,
   }),
   useAthenaQueryExecutions: (...args: any[]) => mockQueryExecutions(...args),
+  useCreateAthenaWorkGroup: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useAthenaWorkGroup: () => ({ data: undefined, isLoading: false }),
+  useAthenaQueryExecution: () => ({ data: undefined, isLoading: false }),
+  useAthenaQueryResults: () => ({ data: undefined, isLoading: false }),
+  useStopAthenaQuery: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+  useAthenaDataCatalogs: () => ({ data: { dataCatalogs: [], total: 0 }, isLoading: false }),
+  useAthenaDatabases: () => ({ data: { databases: [], total: 0 }, isLoading: false }),
+  useAthenaTables: () => ({ data: { tables: [], total: 0 }, isLoading: false }),
+  useAthenaTableMetadata: () => ({ data: undefined, isLoading: false }),
 }));
 
 import { AthenaDashboard } from "./AthenaDashboard";

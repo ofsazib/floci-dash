@@ -15,6 +15,9 @@ vi.mock("../../hooks/useStepFunctions", () => ({
   useDeleteStateMachine: () => ({ mutateAsync: mockDeleteSm, isPending: false, variables: null }),
   useStateMachineExecutions: (...args: any[]) => mockExecutions(...args),
   useActivities: (...args: any[]) => mockActivities(...args),
+  useStateMachineVersions: () => ({ data: { versions: [], total: 0 }, isLoading: false, isError: false, error: null }),
+  usePublishStateMachineVersion: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useDeleteStateMachineVersion: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn() }),
 }));
 
 import { StepFunctionsDashboard } from "./StepFunctionsDashboard";
