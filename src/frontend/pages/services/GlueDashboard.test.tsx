@@ -9,16 +9,43 @@ const mockDatabases = vi.fn();
 const mockDeleteDb = vi.fn();
 const mockTables = vi.fn();
 const mockDeleteTable = vi.fn();
+const mockPartitions = vi.fn();
+const mockCreatePartitions = vi.fn();
+const mockDeletePartition = vi.fn();
 
 const deleteDbState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
 const deleteTblState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
 
-vi.mock("../../hooks/useGlue", () => ({
-  useGlueDatabases: (...args: any[]) => mockDatabases(...args),
-  useDeleteGlueDatabase: () => ({ mutateAsync: mockDeleteDb, isPending: deleteDbState.isPending, variables: deleteDbState.variables }),
-  useGlueTables: (...args: any[]) => mockTables(...args),
-  useDeleteGlueTable: (dbName: string) => ({ mutateAsync: mockDeleteTable, isPending: deleteTblState.isPending, variables: deleteTblState.variables }),
-}));
+vi.mock("../../hooks/useGlue", () => {
+  const noopQuery = () => ({ data: undefined, isLoading: false });
+  const noopMutation = () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false });
+  return {
+    useGlueDatabases: (...args: any[]) => mockDatabases(...args),
+    useDeleteGlueDatabase: () => ({ mutateAsync: mockDeleteDb, isPending: deleteDbState.isPending, variables: deleteDbState.variables }),
+    useGlueTables: (...args: any[]) => mockTables(...args),
+    useDeleteGlueTable: (dbName: string) => ({ mutateAsync: mockDeleteTable, isPending: deleteTblState.isPending, variables: deleteTblState.variables }),
+    // Other tabs (rendered only when selected)
+    useGlueRegistries: noopQuery,
+    useCreateGlueRegistry: noopMutation,
+    useDeleteGlueRegistry: noopMutation,
+    useGlueSchemas: noopQuery,
+    useCreateGlueSchema: noopMutation,
+    useDeleteGlueSchema: noopMutation,
+    useGlueSchemaVersions: noopQuery,
+    useRegisterGlueSchemaVersion: noopMutation,
+    useGlueUDFs: noopQuery,
+    useCreateGlueUDF: noopMutation,
+    useUpdateGlueUDF: noopMutation,
+    useDeleteGlueUDF: noopMutation,
+    useGlueColumnStats: noopQuery,
+    useGluePartitionColumnStats: noopQuery,
+    useUpdateGlueColumnStats: noopMutation,
+    useDeleteGlueColumnStats: noopMutation,
+    useGluePartitions: (...args: any[]) => mockPartitions(...args),
+    useCreateGluePartitions: () => ({ mutate: mockCreatePartitions, isPending: false }),
+    useDeleteGluePartition: () => ({ mutate: mockDeletePartition, isPending: false }),
+  };
+});
 
 import { GlueDashboard } from "./GlueDashboard";
 
@@ -30,6 +57,7 @@ beforeEach(() => {
   deleteTblState.variables = null;
   mockDatabases.mockReturnValue({ data: { databases: [], total: 0 }, isLoading: false });
   mockTables.mockReturnValue({ data: { tables: [], total: 0 }, isLoading: false });
+  mockPartitions.mockReturnValue({ data: { partitions: [], total: 0 }, isLoading: false });
 });
 
 describe("GlueDashboard", () => {
@@ -198,5 +226,40 @@ describe("GlueDashboard", () => {
     await waitFor(() => screen.getByText("db-1"));
     await user.click(screen.getByText("db-1"));
     await waitFor(() => expect(screen.getByText("tbl-1")).toBeTruthy());
+  });
+
+  it("lists partitions in the Partitions tab", async () => {
+    mockDatabases.mockReturnValue({ data: { databases: [{ Name: "db-1" }], total: 1 }, isLoading: false });
+    mockTables.mockReturnValue({ data: { tables: [{ Name: "tbl-1" }], total: 1 }, isLoading: false });
+    mockPartitions.mockReturnValue({
+      data: { partitions: [{ values: ["2024", "01"], location: "s3://b/p/", creationTime: null }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Partitions"));
+    await user.click(await screen.findByRole("button", { name: "db-1" }));
+    await user.click(await screen.findByRole("button", { name: "tbl-1" }));
+    await waitFor(() => expect(screen.getByText("2024, 01")).toBeTruthy());
+    expect(screen.getByText("s3://b/p/")).toBeTruthy();
+  });
+
+  it("deletes a partition", async () => {
+    mockDeletePartition.mockImplementation((_vals: string[], opts: any) => opts?.onSuccess?.());
+    mockDatabases.mockReturnValue({ data: { databases: [{ Name: "db-1" }], total: 1 }, isLoading: false });
+    mockTables.mockReturnValue({ data: { tables: [{ Name: "tbl-1" }], total: 1 }, isLoading: false });
+    mockPartitions.mockReturnValue({
+      data: { partitions: [{ values: ["2024"], location: null, creationTime: null }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Partitions"));
+    await user.click(await screen.findByRole("button", { name: "db-1" }));
+    await user.click(await screen.findByRole("button", { name: "tbl-1" }));
+    await user.click(await screen.findByRole("button", { name: /Delete 2024/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i, { last: true });
+    await waitFor(() => expect(mockDeletePartition).toHaveBeenCalledWith(["2024"], expect.anything()));
   });
 });

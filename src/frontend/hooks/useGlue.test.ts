@@ -32,6 +32,10 @@ import {
   useDeleteGlueColumnStats,
   useGluePartitionColumnStats,
   useUpdateGlueUDF,
+  useGluePartitions,
+  useCreateGluePartitions,
+  useUpdateGluePartition,
+  useDeleteGluePartition,
 } from "./useGlue";
 
 beforeEach(() => mockApi.mockReset());
@@ -246,5 +250,44 @@ describe("useGlue hooks", () => {
       method: "PUT",
       body: JSON.stringify({ className: "com.example.New" }),
     });
+  });
+
+  it("useGluePartitions calls correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ partitions: [], total: 0 });
+    const { result } = renderHook(() => useGluePartitions("mydb", "tbl1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/databases/mydb/tables/tbl1/partitions");
+  });
+
+  it("useGluePartitions disabled when db or table null", () => {
+    const { result } = renderHook(() => useGluePartitions("mydb", null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+
+  it("useCreateGluePartitions calls POST", async () => {
+    mockApi.mockResolvedValueOnce({ created: true, errors: [] });
+    const { result } = renderHook(() => useCreateGluePartitions("mydb", "tbl1"), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ partitionInputList: [{ Values: ["2024"] }] });
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/databases/mydb/tables/tbl1/partitions", {
+      method: "POST",
+      body: JSON.stringify({ partitionInputList: [{ Values: ["2024"] }] }),
+    });
+  });
+
+  it("useUpdateGluePartition calls PUT", async () => {
+    mockApi.mockResolvedValueOnce({ updated: true });
+    const { result } = renderHook(() => useUpdateGluePartition("mydb", "tbl1"), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ partitionValueList: ["2024"], partitionInput: { Values: ["2024"] } });
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/databases/mydb/tables/tbl1/partitions", {
+      method: "PUT",
+      body: JSON.stringify({ partitionValueList: ["2024"], partitionInput: { Values: ["2024"] } }),
+    });
+  });
+
+  it("useDeleteGluePartition calls DELETE with encoded values", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useDeleteGluePartition("mydb", "tbl1"), { wrapper: createWrapper() });
+    await result.current.mutateAsync(["2024", "01"]);
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/databases/mydb/tables/tbl1/partitions?values=2024&values=01", { method: "DELETE" });
   });
 });

@@ -38,6 +38,12 @@ vi.mock("@aws-sdk/client-glue", () => ({
   GetColumnStatisticsForPartitionCommand: createCmd("GetColumnStatisticsForPartitionCommand"),
   UpdateColumnStatisticsForPartitionCommand: createCmd("UpdateColumnStatisticsForPartitionCommand"),
   DeleteColumnStatisticsForPartitionCommand: createCmd("DeleteColumnStatisticsForPartitionCommand"),
+  GetPartitionsCommand: createCmd("GetPartitionsCommand"),
+  GetPartitionCommand: createCmd("GetPartitionCommand"),
+  BatchCreatePartitionCommand: createCmd("BatchCreatePartitionCommand"),
+  BatchGetPartitionCommand: createCmd("BatchGetPartitionCommand"),
+  UpdatePartitionCommand: createCmd("UpdatePartitionCommand"),
+  DeletePartitionCommand: createCmd("DeletePartitionCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({ create: (Ctor: any, extra?: any) => new Ctor(extra) }));
@@ -392,5 +398,107 @@ describe("Glue Routes", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.deleted).toBe(true);
+  });
+
+  // Partitions
+  it("GET /databases/:dbName/tables/:tableName/partitions — lists partitions", async () => {
+    mockSend.mockResolvedValueOnce({
+      Partitions: [
+        { Values: ["2024", "01"], DatabaseName: "mydb", TableName: "tbl1", StorageDescriptor: { Location: "s3://b/p/" }, CreationTime: new Date() },
+      ],
+    });
+    const res = await get("/databases/mydb/tables/tbl1/partitions");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.total).toBe(1);
+    expect(body.partitions[0].values).toEqual(["2024", "01"]);
+    expect(body.partitions[0].location).toBe("s3://b/p/");
+  });
+
+  it("GET /databases/:dbName/tables/:tableName/partitions — passes expression", async () => {
+    mockSend.mockResolvedValueOnce({ Partitions: [] });
+    const res = await get("/databases/mydb/tables/tbl1/partitions?expression=year%3D2024");
+    expect(res.status).toBe(200);
+    expect(mockSend).toHaveBeenCalledWith(expect.objectContaining({ Expression: "year=2024" }));
+  });
+
+  it("GET partitions/get — returns a single partition", async () => {
+    mockSend.mockResolvedValueOnce({ Partition: { Values: ["2024"], DatabaseName: "mydb", TableName: "tbl1" } });
+    const res = await get("/databases/mydb/tables/tbl1/partitions/get?values=2024");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.partition.values).toEqual(["2024"]);
+  });
+
+  it("GET partitions/get — 400 without values", async () => {
+    const res = await get("/databases/mydb/tables/tbl1/partitions/get");
+    expect(res.status).toBe(400);
+  });
+
+  it("GET partitions/get — 404 when not found", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/databases/mydb/tables/tbl1/partitions/get?values=2024");
+    expect(res.status).toBe(404);
+  });
+
+  it("POST partitions — batch creates partitions", async () => {
+    mockSend.mockResolvedValueOnce({ Errors: [] });
+    const res = await post("/databases/mydb/tables/tbl1/partitions", {
+      partitionInputList: [{ Values: ["2024", "01"] }],
+    });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.created).toBe(true);
+    expect(body.errors).toEqual([]);
+  });
+
+  it("POST partitions — 400 without partitionInputList", async () => {
+    const res = await post("/databases/mydb/tables/tbl1/partitions", {});
+    expect(res.status).toBe(400);
+  });
+
+  it("POST partitions/batch-get — returns partitions", async () => {
+    mockSend.mockResolvedValueOnce({ Partitions: [{ Values: ["2024"] }], UnprocessedKeys: [] });
+    const res = await post("/databases/mydb/tables/tbl1/partitions/batch-get", {
+      partitionsToGet: [{ Values: ["2024"] }],
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.total).toBe(1);
+  });
+
+  it("PUT partitions — updates a partition", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await router.request("/databases/mydb/tables/tbl1/partitions", {
+      method: "PUT",
+      body: JSON.stringify({ partitionValueList: ["2024"], partitionInput: { Values: ["2024"] } }),
+      headers: { "content-type": "application/json" },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.updated).toBe(true);
+  });
+
+  it("PUT partitions — 400 without partitionValueList", async () => {
+    const res = await router.request("/databases/mydb/tables/tbl1/partitions", {
+      method: "PUT",
+      body: JSON.stringify({ partitionInput: {} }),
+      headers: { "content-type": "application/json" },
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("DELETE partitions — deletes a partition", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await router.request("/databases/mydb/tables/tbl1/partitions?values=2024&values=01", { method: "DELETE" });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.deleted).toBe(true);
+    expect(mockSend).toHaveBeenCalledWith(expect.objectContaining({ PartitionValues: ["2024", "01"] }));
+  });
+
+  it("DELETE partitions — 400 without values", async () => {
+    const res = await router.request("/databases/mydb/tables/tbl1/partitions", { method: "DELETE" });
+    expect(res.status).toBe(400);
   });
 });

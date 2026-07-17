@@ -258,3 +258,55 @@ export function useDeleteGlueColumnStats(databaseName: string, tableName: string
       qc.invalidateQueries({ queryKey: ["aws", "glue", "databases", databaseName, "tables", tableName, "columnStats"] }),
   });
 }
+
+// ─── Partitions ─────────────────────────────────────────
+
+export function useGluePartitions(databaseName: string | null, tableName: string | null) {
+  return useQuery<{ partitions: any[]; total: number }>({
+    queryKey: ["aws", "glue", "databases", databaseName, "tables", tableName, "partitions"],
+    queryFn: () =>
+      api(`/aws/glue/databases/${encodeURIComponent(databaseName!)}/tables/${encodeURIComponent(tableName!)}/partitions`),
+    enabled: !!databaseName && !!tableName,
+  });
+}
+
+export function useCreateGluePartitions(databaseName: string, tableName: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { partitionInputList: any[] }) =>
+      api(`/aws/glue/databases/${encodeURIComponent(databaseName)}/tables/${encodeURIComponent(tableName)}/partitions`, {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "glue", "databases", databaseName, "tables", tableName, "partitions"] }),
+  });
+}
+
+export function useUpdateGluePartition(databaseName: string, tableName: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { partitionValueList: string[]; partitionInput: any }) =>
+      api(`/aws/glue/databases/${encodeURIComponent(databaseName)}/tables/${encodeURIComponent(tableName)}/partitions`, {
+        method: "PUT",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "glue", "databases", databaseName, "tables", tableName, "partitions"] }),
+  });
+}
+
+export function useDeleteGluePartition(databaseName: string, tableName: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (partitionValues: string[]) => {
+      const queryString = partitionValues.map((v) => `values=${encodeURIComponent(v)}`).join("&");
+      return api(
+        `/aws/glue/databases/${encodeURIComponent(databaseName)}/tables/${encodeURIComponent(tableName)}/partitions?${queryString}`,
+        { method: "DELETE" }
+      );
+    },
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "glue", "databases", databaseName, "tables", tableName, "partitions"] }),
+  });
+}

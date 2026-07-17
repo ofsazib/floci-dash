@@ -1719,7 +1719,7 @@ These items were in the initial audit but found to be already implemented upon c
 3. **G.3 — EC2 Network ACLs** — Done 2026-07-13 (7 operations)
 4. **G.5 — CloudFormation Stack Sets** — Major feature gap, Floci has full StackSetService (11 operations)
 5. **G.9-G.10 — WAFv2 Regex Pattern Sets + Logging** — Complete WAFv2 coverage (14 operations)
-6. **G.7-G.8 — Glue Schema Registry + UDFs + Partitions** — Large feature area completely missing (~20 operations)
+6. **G.8 — Glue Partitions** — Done 2026-07-13, added GetPartitions/GetPartition/BatchGetPartition/BatchCreatePartition/UpdatePartition/DeletePartition + Partitions tab (Schema Registry, UDFs, Column Stats already implemented)
 7. **G.15 — Cognito Resource Servers + MFA + Custom Attrs** — Completes Cognito management (~22 operations)
 8. **G.4 — S3 Select** — Unique feature, high demo value, Floci has S3SelectService + S3SelectEvaluator
 9. **G.11-G.12 — SES Notifications + Config Set Event Destinations** — Completes SES management (13 operations)

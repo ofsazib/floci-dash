@@ -307,6 +307,9 @@ import {
   useGluePartitionColumnStats,
   useUpdateGlueColumnStats,
   useDeleteGlueColumnStats,
+  useGluePartitions,
+  useCreateGluePartitions,
+  useDeleteGluePartition,
 } from "../../hooks/useGlue";
 import {
   useFirehoseStreams,
@@ -627,6 +630,7 @@ export function GlueDashboard() {
     },
     { id: "schemaRegistry", label: "Schema Registry", content: <SchemaRegistryTab /> },
     { id: "udfs", label: "UDFs", content: <UDFsTab /> },
+    { id: "partitions", label: "Partitions", content: <PartitionsTab /> },
     { id: "columnStats", label: "Column Stats", content: <ColumnStatsTab /> },
   ];
 
@@ -987,6 +991,131 @@ function UDFsTab() {
 }
 
 // ─── Column Stats Tab ──────────────────────────────────
+
+function PartitionsTab() {
+  const { showToast } = useToast();
+  const { data: dbData } = useGlueDatabases();
+  const databases = dbData?.databases || [];
+  const [selectedDb, setSelectedDb] = useState<string | null>(null);
+  const [selectedTable, setSelectedTable] = useState<string | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newValues, setNewValues] = useState("");
+  const [newLocation, setNewLocation] = useState("");
+
+  const { data: tblData } = useGlueTables(selectedDb);
+  const tables = tblData?.tables || [];
+
+  const partitionsQuery = useGluePartitions(selectedDb, selectedTable);
+  const createPartitions = useCreateGluePartitions(selectedDb || "", selectedTable || "");
+  const deletePartition = useDeleteGluePartition(selectedDb || "", selectedTable || "");
+
+  const partitions = partitionsQuery.data?.partitions || [];
+
+  return (
+    <SpaceBetween size="l">
+      <Container header={<Header variant="h2">Partitions</Header>}>
+        <SpaceBetween size="m">
+          <FormField label="Select a database">
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {databases.map((d: any) => (
+                <Button key={d.Name} variant={selectedDb === d.Name ? "primary" : "normal"} onClick={() => { setSelectedDb(d.Name); setSelectedTable(null); }}>
+                  {d.Name}
+                </Button>
+              ))}
+            </div>
+          </FormField>
+
+          {selectedDb && (
+            <FormField label="Select a table">
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {tables.map((t: any) => (
+                  <Button key={t.Name} variant={selectedTable === t.Name ? "primary" : "normal"} onClick={() => setSelectedTable(t.Name)}>
+                    {t.Name}
+                  </Button>
+                ))}
+              </div>
+            </FormField>
+          )}
+
+          {selectedTable && (
+            <>
+              <Box float="right">
+                <Button variant="primary" onClick={() => setShowCreateModal(true)}>Add Partition</Button>
+              </Box>
+
+              <ResourceTable
+                resourceName="Partition"
+                headerTitle={`Partitions for ${selectedTable}`}
+                headerCounter={partitionsQuery.data?.total}
+                loading={partitionsQuery.isLoading}
+                items={partitions}
+                columns={[
+                  { id: "values", header: "Values", cell: (p: any) => <span style={{ fontFamily: "monospace", fontSize: 12 }}>{(p.values || []).join(", ")}</span>, isRowHeader: true },
+                  { id: "location", header: "Location", cell: (p: any) => <span style={{ fontSize: 12 }}>{p.location || "-"}</span> },
+                  { id: "created", header: "Created", cell: (p: any) => p.creationTime ? new Date(p.creationTime).toLocaleString() : "-" },
+                  {
+                    id: "actions",
+                    header: "",
+                    cell: (p: any) => (
+                      <DeleteButton
+                        itemName={(p.values || []).join(", ")}
+                        resourceType="partition"
+                        loading={deletePartition.isPending}
+                        onDelete={() =>
+                          new Promise<void>((resolve, reject) => {
+                            deletePartition.mutate(p.values || [], {
+                              onSuccess: () => { showToast("success", "Partition deleted"); resolve(); },
+                              onError: (e: any) => { showToast("error", e.message); reject(e); },
+                            });
+                          })
+                        }
+                      />
+                    ),
+                  },
+                ]}
+              />
+            </>
+          )}
+        </SpaceBetween>
+      </Container>
+
+      {showCreateModal && (
+        <Modal visible onDismiss={() => setShowCreateModal(false)} header={`Add Partition to ${selectedTable}`} size="medium" footer={
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button variant="link" onClick={() => setShowCreateModal(false)}>Cancel</Button>
+            <Button variant="primary" loading={createPartitions.isPending} disabled={!newValues.trim()} onClick={() => {
+              const values = newValues.split(/[,\n\s]+/).filter(Boolean);
+              const partitionInput: any = { Values: values };
+              if (newLocation.trim()) partitionInput.StorageDescriptor = { Location: newLocation.trim() };
+              createPartitions.mutate({ partitionInputList: [partitionInput] }, {
+                onSuccess: (res: any) => {
+                  if (res?.errors?.length) {
+                    showToast("error", res.errors[0]?.ErrorDetail?.ErrorMessage || "Partition creation reported errors");
+                  } else {
+                    showToast("success", "Partition created");
+                  }
+                  setShowCreateModal(false);
+                  setNewValues("");
+                  setNewLocation("");
+                },
+                onError: (e: any) => showToast("error", e.message),
+              });
+            }}>Add</Button>
+          </SpaceBetween>
+        }>
+          <SpaceBetween size="m">
+            <FormField label="Partition values (comma-separated)" description="Order must match the table's partition keys. e.g. 2024,01">
+              <Input value={newValues} onChange={({ detail }) => setNewValues(detail.value)} placeholder="2024,01" />
+            </FormField>
+            <FormField label="Location (optional)" description="S3 location for the partition data.">
+              <Input value={newLocation} onChange={({ detail }) => setNewLocation(detail.value)} placeholder="s3://bucket/path/" />
+            </FormField>
+          </SpaceBetween>
+        </Modal>
+      )}
+    </SpaceBetween>
+  );
+}
 
 function ColumnStatsTab() {
   const { showToast } = useToast();

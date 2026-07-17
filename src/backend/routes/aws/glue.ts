@@ -32,6 +32,12 @@ import {
   GetColumnStatisticsForPartitionCommand,
   UpdateColumnStatisticsForPartitionCommand,
   DeleteColumnStatisticsForPartitionCommand,
+  GetPartitionsCommand,
+  GetPartitionCommand,
+  BatchCreatePartitionCommand,
+  BatchGetPartitionCommand,
+  UpdatePartitionCommand,
+  DeletePartitionCommand,
 } from "@aws-sdk/client-glue";
 
 const router = new Hono();
@@ -472,6 +478,120 @@ router.delete("/databases/:dbName/tables/:tableName/partitions/column-stats", as
     })
   );
   return c.json({ column: columnName, deleted: true });
+});
+
+// ── Partitions ──────────────────────────────────────────
+
+function mapPartition(p: any) {
+  return {
+    values: p.Values || [],
+    databaseName: p.DatabaseName,
+    tableName: p.TableName,
+    creationTime: p.CreationTime,
+    lastAccessTime: p.LastAccessTime,
+    location: p.StorageDescriptor?.Location || null,
+    parameters: p.Parameters || {},
+  };
+}
+
+router.get("/databases/:dbName/tables/:tableName/partitions", async (c: Context) => {
+  const dbName = c.req.param("dbName");
+  const tableName = c.req.param("tableName");
+  const expression = c.req.query("expression");
+  const client = getClient();
+  const result = await client.send(
+    new GetPartitionsCommand({
+      DatabaseName: dbName,
+      TableName: tableName,
+      Expression: expression || undefined,
+    })
+  );
+  const partitions = (result.Partitions || []).map(mapPartition);
+  return c.json({ partitions, total: partitions.length });
+});
+
+router.get("/databases/:dbName/tables/:tableName/partitions/get", async (c: Context) => {
+  const dbName = c.req.param("dbName");
+  const tableName = c.req.param("tableName");
+  const partitionValues = c.req.queries("values") || [];
+  if (!partitionValues.length) return c.json({ error: "values query parameter is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new GetPartitionCommand({
+      DatabaseName: dbName,
+      TableName: tableName,
+      PartitionValues: partitionValues,
+    })
+  );
+  if (!result.Partition) return c.json({ error: "Partition not found" }, 404);
+  return c.json({ partition: mapPartition(result.Partition) });
+});
+
+router.post("/databases/:dbName/tables/:tableName/partitions", async (c: Context) => {
+  const dbName = c.req.param("dbName");
+  const tableName = c.req.param("tableName");
+  const body = await c.req.json<{ partitionInputList: any[] }>();
+  if (!body.partitionInputList?.length) return c.json({ error: "partitionInputList is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new BatchCreatePartitionCommand({
+      DatabaseName: dbName,
+      TableName: tableName,
+      PartitionInputList: body.partitionInputList,
+    })
+  );
+  return c.json({ created: true, errors: result.Errors || [] }, 201);
+});
+
+router.post("/databases/:dbName/tables/:tableName/partitions/batch-get", async (c: Context) => {
+  const dbName = c.req.param("dbName");
+  const tableName = c.req.param("tableName");
+  const body = await c.req.json<{ partitionsToGet: { Values: string[] }[] }>();
+  if (!body.partitionsToGet?.length) return c.json({ error: "partitionsToGet is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new BatchGetPartitionCommand({
+      DatabaseName: dbName,
+      TableName: tableName,
+      PartitionsToGet: body.partitionsToGet,
+    })
+  );
+  const partitions = (result.Partitions || []).map(mapPartition);
+  return c.json({ partitions, total: partitions.length, unprocessedKeys: result.UnprocessedKeys || [] });
+});
+
+router.put("/databases/:dbName/tables/:tableName/partitions", async (c: Context) => {
+  const dbName = c.req.param("dbName");
+  const tableName = c.req.param("tableName");
+  const body = await c.req.json<{ partitionValueList: string[]; partitionInput: any }>();
+  if (!body.partitionValueList?.length) return c.json({ error: "partitionValueList is required" }, 400);
+  if (!body.partitionInput) return c.json({ error: "partitionInput is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new UpdatePartitionCommand({
+      DatabaseName: dbName,
+      TableName: tableName,
+      PartitionValueList: body.partitionValueList,
+      PartitionInput: body.partitionInput,
+    })
+  );
+  return c.json({ updated: true });
+});
+
+router.delete("/databases/:dbName/tables/:tableName/partitions", async (c: Context) => {
+  const dbName = c.req.param("dbName");
+  const tableName = c.req.param("tableName");
+  const partitionValues = c.req.queries("values") || [];
+  if (!partitionValues.length) return c.json({ error: "values query parameter is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new DeletePartitionCommand({
+      DatabaseName: dbName,
+      TableName: tableName,
+      PartitionValues: partitionValues,
+    })
+  );
+  return c.json({ deleted: true });
 });
 
 export default router;
