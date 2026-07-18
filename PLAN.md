@@ -1684,6 +1684,69 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 
 ---
 
+### Second-Pass Audit — Additional Gaps (2026-07-14)
+
+Full 66-service diff of Floci-supported operations vs. dashboard UI-reachable operations (backend route + hook + rendered page). These are gaps beyond G.1–G.38.
+
+#### Tier 1 — Backend route already exists, only needs hook + UI (cheap wins)
+
+| # | Service | Missing UI (route exists) | Dashboard Impact |
+|---|---------|---------------------------|------------------|
+| G.39 | **Step Functions** (Execution control) | StartExecution (`POST /state-machines/:arn/executions`), StopExecution (`POST /executions/:arn/stop`) — routes exist, no hook | Cannot run or stop a state machine from the UI at all |
+| G.40 | **Scheduler** (Update) | UpdateSchedule (`PUT /schedules/:name`) — route exists, no hook | Schedules are create/delete-only, not editable |
+| G.41 | **AppConfig** (Environments + Profiles) | CreateEnvironment/DeleteEnvironment, CreateConfigurationProfile/DeleteConfigurationProfile, ListHostedConfigurationVersions — routes exist, no hooks | Environments & profiles are read-only in the page |
+| G.42 | **Config Service** (Delivery + Recorder + Conformance) | PutDeliveryChannel/DescribeDeliveryChannels, PutConfigurationRecorder/Start/Stop, PutConformancePack — routes exist, no hook/UI | Recorders read-only; no delivery channel UI; no conformance pack create |
+| G.43 | **EMR** (Instance fleets/groups + step control) | ListInstanceFleets/ListInstanceGroups/AddInstanceFleet/AddInstanceGroups, CancelSteps, ModifyCluster, DescribeStep — commands imported in `emr.ts`, not surfaced | Cannot view/scale instance groups or cancel steps |
+| G.44 | **Route 53** (Health Checks) | CreateHealthCheck, UpdateHealthCheck, DeleteHealthCheck, GetHealthCheck, GetHealthCheckStatus — `ListHealthChecks` route + `useRoute53HealthChecks` hook exist but page never renders them | Health checks invisible; no create/update/delete |
+| G.45 | **Cloud Map** (Service + instance registration) | CreateService (route exists, backend-only), RegisterInstance, DeregisterInstance, DNS namespace types | Service discovery unusable end-to-end |
+
+#### Tier 2 — High-value features (need backend + frontend)
+
+| # | Service | Missing Operations | Dashboard Impact |
+|---|---------|-------------------|------------------|
+| G.46 | **SSM** (Run Command) | SendCommand, ListCommands, ListCommandInvocations, GetCommandInvocation, CancelCommand | No remote command execution; dashboard is Parameter Store only |
+| G.47 | **Athena** (Run query) | StartQueryExecution | Can view/stop queries but cannot actually run one |
+| G.48 | **IoT** (Thing Groups) | CreateThingGroup, DescribeThingGroup, ListThingGroups, UpdateThingGroup, DeleteThingGroup, AddThingToThingGroup, RemoveThingFromThingGroup | Entire thing-group feature absent |
+| G.49 | **ECS** (Capacity Providers) | CreateCapacityProvider, DeleteCapacityProvider, UpdateCapacityProvider, DescribeCapacityProviders, PutClusterCapacityProviders | Core Fargate/EC2 capacity management absent |
+| G.50 | **EC2** (Spot Instances) | RequestSpotInstances, DescribeSpotInstanceRequests, CancelSpotInstanceRequests | No spot support anywhere |
+| G.51 | **ELBv2** (Listener Rules) | CreateRule, ModifyRule, DeleteRule, DescribeRules, SetRulePriorities | Path/host-based routing rules entirely missing |
+| G.52 | **Auto Scaling** (Policies + Lifecycle Hooks) | PutScalingPolicy, DeletePolicy, PutLifecycleHook, DeleteLifecycleHook, DescribeLifecycleHooks, CompleteLifecycleAction | Scaling policies read-only; lifecycle hooks absent |
+| G.53 | **SES** (Email Templates) | CreateTemplate, UpdateTemplate, DeleteTemplate, GetTemplate, ListTemplates, SendTemplatedEmail, SendBulkTemplatedEmail, TestRenderTemplate | Templated email workflow entirely unexposed |
+| G.54 | **CloudFront** (Functions + Policies) | CreateFunction/UpdateFunction/PublishFunction/DeleteFunction, cache/OAC/response-headers/origin-request policy CRUD | Functions & policies read-only |
+| G.55 | **Backup** (Recovery Points) | ListRecoveryPointsByBackupVault, DescribeRecoveryPoint, DeleteRecoveryPoint | Vaults show no contents |
+| G.56 | **OpenSearch** (Domain management) | UpdateDomainConfig, AddTags/ListTags/RemoveTags, UpgradeDomain, Start/CancelServiceSoftwareUpdate | Domains read-only after creation |
+| G.57 | **IAM** (Policy management) | PutRolePolicy, PutUserPolicy, DeleteRolePolicy, DeleteUserPolicy, AddUserToGroup, RemoveUserFromGroup, AttachGroupPolicy, PutGroupPolicy, SimulatePrincipalPolicy, UpdateAssumeRolePolicy | Inline/group policies read-only; no policy simulator |
+| G.58 | **KMS** (Key policy + signing) | GetKeyPolicy, PutKeyPolicy, Sign, Verify, GenerateMac, VerifyMac, RotateKeyOnDemand | Key policy not viewable/editable; no signing/MAC ops |
+| G.59 | **Secrets Manager** (Resource policy) | GetResourcePolicy, PutResourcePolicy, DeleteResourcePolicy, BatchGetSecretValue, UpdateSecretVersionStage | Cross-account secret sharing unmanaged |
+
+#### Tier 3 — Smaller / rounding-out gaps
+
+| # | Service | Missing Operations | Dashboard Impact |
+|---|---------|-------------------|------------------|
+| G.60 | **CodeBuild** | ReportGroups CRUD + BatchGetReportGroups, RetryBuild, UpdateProject | No report groups; can't retry/edit builds |
+| G.61 | **CodeDeploy** (Stop + Targets) | StopDeployment, ListDeploymentTargets, BatchGetDeploymentTargets | Can't stop in-flight deployments; no per-target detail |
+| G.62 | **Kinesis** (Stream management) | Increase/DecreaseStreamRetentionPeriod, Start/StopStreamEncryption, Enable/DisableEnhancedMonitoring, Merge/SplitShard, UpdateStreamMode, AddTags/RemoveTagsToStream | Day-2 stream operations absent |
+| G.63 | **Lambda** (Policy + ESM write) | AddPermission, RemovePermission, GetPolicy, CreateEventSourceMapping, UpdateEventSourceMapping | Resource policy unmanaged; event source mappings list/delete only |
+| G.64 | **AppSync** (Resolver + Type mutations) | CreateResolver/UpdateResolver/DeleteResolver, CreateType/UpdateType/DeleteType, UpdateDataSource/UpdateFunction/UpdateGraphqlApi | Resolvers & types read-only |
+| G.65 | **EventBridge** (Replay + testing) | StartReplay, CancelReplay, DescribeReplay, UpdateArchive, TestEventPattern, PutPermission/RemovePermission | Replays read-only; no pattern tester |
+| G.66 | **API Gateway v1** (Stages + Deployments) | CreateDeployment, DeleteDeployment, Stages CRUD, ApiKeys, UsagePlans, Authorizers, Methods/Integrations | v1 dashboard is very thin (read-only apis/resources) |
+| G.67 | **Transfer** (Server/User + SSH keys) | UpdateServer, UpdateUser, ImportSshPublicKey, DeleteSshPublicKey | Cannot edit servers/users or manage SFTP keys |
+| G.68 | **Transcribe** (Vocabularies) | CreateVocabulary, GetVocabulary, DeleteVocabulary | Vocabularies list-only |
+| G.69 | **Glue** (Table/DB updates) | UpdateTable, UpdateDatabase, GetTableVersions, BatchDeleteTable | Tables/databases create/delete-only, no edit or version history |
+| G.70 | **Neptune / ElastiCache** (Modify) | ModifyDBCluster, ModifyDBInstance (Neptune); ModifyReplicationGroup, ModifyUser (ElastiCache) | Resources not editable after creation |
+| G.71 | **RDS** (Tagging) | AddTagsToResource, RemoveTagsFromResource, ListTagsForResource | Resource tagging not exposed |
+| G.72 | **ECR** (Tag mutability) | PutImageTagMutability | Value displayed read-only, not editable |
+| G.73 | **SQS** (Message move tasks) | StartMessageMoveTask, ListMessageMoveTasks, CancelMessageMoveTask | DLQ redrive uses manual receive/send loop instead of native task API |
+| G.74 | **Firehose** (Tag write) | TagDeliveryStream, UntagDeliveryStream | Tags read-only |
+| G.75 | **RDS Data** (Batch) | BatchExecuteStatement | No bulk parameterized writes |
+| G.76 | **ACM** (Import + tags) | ImportCertificate, ExportCertificate, AddTagsToCertificate, RemoveTagsFromCertificate | Cannot import external certs; tags read-only |
+| G.77 | **Cognito** (Update + client secret) | UpdateUserPool, UpdateUserPoolClient, UpdateGroup, AdminAddUserToGroup, AddUserPoolClientSecret | Pools/clients/groups create+delete only |
+| G.78 | **STS** (Federation) | AssumeRoleWithSAML, AssumeRoleWithWebIdentity, GetFederationToken, DecodeAuthorizationMessage | Federated assume-role not exposed |
+| G.79 | **EC2** (SG rules + Spot detail) | DescribeSecurityGroupRules, ModifySecurityGroupRules, DescribeInstanceAttribute | Fine-grained SG rule editing absent |
+| G.80 | **CE** (Resource-level cost) | GetCostAndUsageWithResources | Resource-level cost breakdown not wired |
+
+---
+
 ### Already Implemented (Removed from Gap List)
 
 These items were in the initial audit but found to be already implemented upon code verification:
@@ -1704,13 +1767,17 @@ These items were in the initial audit but found to be already implemented upon c
 
 | Metric | Count |
 |--------|-------|
-| Total gap items identified | 38 |
+| Total gap items identified (1st pass) | 38 |
 | P1 (high-value) | 15 |
 | P2 (moderate-value) | 14 |
 | P3 (low-value) | 9 |
 | Already implemented (removed) | 6 feature groups |
 | Services with P1 gaps | 11 unique services |
 | Services with any gaps | 20+ unique services |
+| Second-pass gaps (G.39–G.80) | 42 |
+| — Tier 1 (backend route exists, needs UI) | 7 (G.39–G.45) |
+| — Tier 2 (high-value, backend+frontend) | 14 (G.46–G.59) |
+| — Tier 3 (rounding-out) | 21 (G.60–G.80) |
 
 ### Recommended Implementation Order
 
