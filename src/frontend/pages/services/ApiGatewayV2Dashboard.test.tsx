@@ -25,6 +25,7 @@ const mockIntegrations = vi.fn();
 const mockStages = vi.fn();
 const mockDeployments = vi.fn();
 const mockCreateDeployment = vi.fn();
+const mockWsRoutes = vi.fn();
 
 vi.mock("../../hooks/useApiGatewayV2", () => ({
   useApiGatewayV2Apis: (...args: any[]) => mockApis(...args),
@@ -41,6 +42,7 @@ vi.mock("../../hooks/useApiGatewayV2", () => ({
     mutateAsync: mockCreateDeployment,
     get isPending() { return createDeployState.isPending; },
   }),
+  useApiGatewayV2WebSocketRoutes: (...args: any[]) => mockWsRoutes(...args),
 }));
 
 import { ApiGatewayV2Dashboard } from "./ApiGatewayV2Dashboard";
@@ -56,6 +58,7 @@ beforeEach(() => {
   mockIntegrations.mockReturnValue({ data: { integrations: [], total: 0 } });
   mockStages.mockReturnValue({ data: { stages: [], total: 0 } });
   mockDeployments.mockReturnValue({ data: { deployments: [], total: 0 } });
+  mockWsRoutes.mockReturnValue({ data: { routes: [], total: 0 } });
 });
 
 describe("ApiGatewayV2Dashboard — API list", () => {
@@ -153,10 +156,11 @@ describe("ApiGatewayV2Dashboard — detail tabs", () => {
 
     await user.click(screen.getByText("my-api"));
     await waitFor(() => {
-      expect(screen.getByRole("tab", { name: /Routes/i })).toBeTruthy();
+      expect(screen.getByRole("tab", { name: /^Routes$/i })).toBeTruthy();
       expect(screen.getByRole("tab", { name: /Integrations/i })).toBeTruthy();
       expect(screen.getByRole("tab", { name: /Stages/i })).toBeTruthy();
       expect(screen.getByRole("tab", { name: /Deployments/i })).toBeTruthy();
+      expect(screen.getByRole("tab", { name: /WebSocket Routes/i })).toBeTruthy();
     });
   });
 
@@ -436,5 +440,66 @@ describe("ApiGatewayV2Dashboard — detail tabs", () => {
     const filterInput = screen.getByPlaceholderText("Find deployments");
     await user.type(filterInput, "beta");
     await waitFor(() => expect(screen.queryByText("deploy-alpha")).toBeNull());
+  });
+});
+
+describe("ApiGatewayV2Dashboard — WebSocket Routes tab", () => {
+  it("shows resolved integration for a route", async () => {
+    mockApis.mockReturnValue({
+      data: { apis: [{ ApiId: "api-1", Name: "my-api", ProtocolType: "WEBSOCKET" }], total: 1 },
+      isLoading: false,
+    });
+    mockWsRoutes.mockReturnValue({
+      data: {
+        routes: [
+          {
+            RouteId: "r-1",
+            RouteKey: "$connect",
+            target: "integrations/int-1",
+            integrationId: "int-1",
+            integration: {
+              IntegrationId: "int-1",
+              IntegrationType: "AWS_PROXY",
+              IntegrationUri: "arn:aws:lambda:us-east-1:123:function:connect",
+              IntegrationMethod: "POST",
+            },
+            isWellKnown: true,
+            authorizationType: "NONE",
+          },
+        ],
+        total: 1,
+      },
+    });
+    const user = userEvent.setup();
+    render(<ApiGatewayV2Dashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-api"));
+    await user.click(screen.getByRole("tab", { name: /WebSocket Routes/i }));
+    await waitFor(() => expect(screen.getByText("$connect")).toBeTruthy());
+    expect(screen.getByText("AWS_PROXY")).toBeTruthy();
+    expect(mockWsRoutes).toHaveBeenCalledWith("api-1");
+  });
+
+  it("shows @connections limitation alert", async () => {
+    mockApis.mockReturnValue({
+      data: { apis: [{ ApiId: "api-1", Name: "my-api", ProtocolType: "WEBSOCKET" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ApiGatewayV2Dashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-api"));
+    await user.click(screen.getByRole("tab", { name: /WebSocket Routes/i }));
+    await waitFor(() => expect(screen.getByText(/@connections/i)).toBeTruthy());
+  });
+
+  it("shows empty message when no WebSocket routes", async () => {
+    mockApis.mockReturnValue({
+      data: { apis: [{ ApiId: "api-1", Name: "my-api", ProtocolType: "WEBSOCKET" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ApiGatewayV2Dashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-api"));
+    await user.click(screen.getByRole("tab", { name: /WebSocket Routes/i }));
+    await waitFor(() => expect(screen.getByText(/No WebSocket routes/i)).toBeTruthy());
   });
 });

@@ -219,4 +219,64 @@ router.delete("/apis/:apiId/deployments/:deploymentId", async (c: Context) => {
   return c.json({ deleted: true });
 });
 
+// ── WebSocket (route resolution display) ─────────────────
+// NOTE: Live per-connection management (@connections GetConnection/
+// PostToConnection/DeleteConnection) requires ApiGatewayManagementApi with a
+// live per-API callback endpoint, which is not wired in this codebase. This
+// view focuses on WebSocket API discovery + route -> integration resolution.
+
+router.get("/websocket-apis", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new GetApisCommand({}));
+  const apis = (result.Items || [])
+    .filter((a: any) => a.ProtocolType === "WEBSOCKET")
+    .map((a: any) => ({
+      ApiId: a.ApiId,
+      Name: a.Name,
+      ProtocolType: a.ProtocolType,
+      ApiEndpoint: a.ApiEndpoint,
+      RouteSelectionExpression: a.RouteSelectionExpression,
+      CreatedDate: a.CreatedDate,
+    }));
+  return c.json({ apis, total: apis.length });
+});
+
+router.get("/apis/:apiId/websocket-routes", async (c: Context) => {
+  const apiId = c.req.param("apiId");
+  const client = getClient();
+  const [routesResult, integrationsResult] = await Promise.all([
+    client.send(new GetRoutesCommand({ ApiId: apiId })),
+    client.send(new GetIntegrationsCommand({ ApiId: apiId })),
+  ]);
+  const integrationMap = new Map<string, any>();
+  for (const i of integrationsResult.Items || []) {
+    if (i.IntegrationId) integrationMap.set(i.IntegrationId, i);
+  }
+  const wellKnown = new Set(["$connect", "$disconnect", "$default"]);
+  const routes = (routesResult.Items || []).map((r: any) => {
+    const target = r.Target || null;
+    const match = target ? /^integrations\/(.+)$/.exec(target) : null;
+    const integrationId = match ? match[1] : null;
+    const found = integrationId ? integrationMap.get(integrationId) : undefined;
+    const integration = found
+      ? {
+          IntegrationId: found.IntegrationId,
+          IntegrationType: found.IntegrationType,
+          IntegrationUri: found.IntegrationUri,
+          IntegrationMethod: found.IntegrationMethod,
+        }
+      : null;
+    return {
+      RouteId: r.RouteId,
+      RouteKey: r.RouteKey,
+      target,
+      integrationId,
+      integration,
+      isWellKnown: wellKnown.has(r.RouteKey),
+      authorizationType: r.AuthorizationType,
+    };
+  });
+  return c.json({ routes, total: routes.length });
+});
+
 export default router;

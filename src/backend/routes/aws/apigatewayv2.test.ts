@@ -148,3 +148,89 @@ describe("API Gateway V2 Routes", () => {
     expect(res.status).toBe(201);
   });
 });
+
+describe("API Gateway V2 WebSocket", () => {
+  it("GET /websocket-apis — filters WEBSOCKET only", async () => {
+    mockSend.mockResolvedValueOnce({
+      Items: [
+        { ApiId: "http-1", Name: "http-api", ProtocolType: "HTTP" },
+        { ApiId: "ws-1", Name: "ws-api", ProtocolType: "WEBSOCKET", ApiEndpoint: "wss://x", RouteSelectionExpression: "$request.body.action", CreatedDate: 1705000000 },
+      ],
+    });
+    const res = await get("/websocket-apis");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.total).toBe(1);
+    expect(body.apis[0].ApiId).toBe("ws-1");
+    expect(body.apis[0].ProtocolType).toBe("WEBSOCKET");
+    expect(body.apis[0].RouteSelectionExpression).toBe("$request.body.action");
+  });
+
+  it("GET /websocket-apis — empty list", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/websocket-apis");
+    const body = await res.json();
+    expect(body.total).toBe(0);
+  });
+
+  it("GET /apis/:apiId/websocket-routes — resolves integration by Target", async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Items: [
+          { RouteId: "r-1", RouteKey: "$connect", Target: "integrations/int-1", AuthorizationType: "NONE" },
+        ],
+      })
+      .mockResolvedValueOnce({
+        Items: [
+          { IntegrationId: "int-1", IntegrationType: "AWS_PROXY", IntegrationUri: "arn:lambda:connect", IntegrationMethod: "POST" },
+        ],
+      });
+    const res = await get("/apis/api-1/websocket-routes");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.total).toBe(1);
+    const route = body.routes[0];
+    expect(route.RouteKey).toBe("$connect");
+    expect(route.integrationId).toBe("int-1");
+    expect(route.integration.IntegrationType).toBe("AWS_PROXY");
+    expect(route.integration.IntegrationUri).toBe("arn:lambda:connect");
+    expect(route.isWellKnown).toBe(true);
+    // Assert ApiId is passed to both commands
+    expect(mockSend.mock.calls[0][0].ApiId).toBe("api-1");
+    expect(mockSend.mock.calls[1][0].ApiId).toBe("api-1");
+  });
+
+  it("GET /apis/:apiId/websocket-routes — null integration when target missing or unmatched", async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Items: [
+          { RouteId: "r-1", RouteKey: "customAction" },
+          { RouteId: "r-2", RouteKey: "$default", Target: "integrations/missing" },
+        ],
+      })
+      .mockResolvedValueOnce({
+        Items: [
+          { IntegrationId: "int-1", IntegrationType: "AWS_PROXY" },
+        ],
+      });
+    const res = await get("/apis/api-1/websocket-routes");
+    const body = await res.json();
+    expect(body.total).toBe(2);
+    // no target
+    expect(body.routes[0].target).toBe(null);
+    expect(body.routes[0].integrationId).toBe(null);
+    expect(body.routes[0].integration).toBe(null);
+    expect(body.routes[0].isWellKnown).toBe(false);
+    // unmatched target id
+    expect(body.routes[1].integrationId).toBe("missing");
+    expect(body.routes[1].integration).toBe(null);
+    expect(body.routes[1].isWellKnown).toBe(true);
+  });
+
+  it("GET /apis/:apiId/websocket-routes — empty list", async () => {
+    mockSend.mockResolvedValueOnce({}).mockResolvedValueOnce({});
+    const res = await get("/apis/api-1/websocket-routes");
+    const body = await res.json();
+    expect(body.total).toBe(0);
+  });
+});

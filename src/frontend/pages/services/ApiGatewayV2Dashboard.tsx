@@ -244,6 +244,7 @@ import {
   useApiGatewayV2Stages,
   useApiGatewayV2Deployments,
   useCreateApiGatewayV2Deployment,
+  useApiGatewayV2WebSocketRoutes,
 } from "../../hooks/useApiGatewayV2";
 import {
   useACMCertificates,
@@ -513,6 +514,7 @@ export function ApiGatewayV2Dashboard() {
   const { data: integrationsData } = useApiGatewayV2Integrations(selectedApi);
   const { data: stagesData } = useApiGatewayV2Stages(selectedApi);
   const { data: deploymentsData } = useApiGatewayV2Deployments(selectedApi);
+  const { data: wsRoutesData } = useApiGatewayV2WebSocketRoutes(selectedApi);
   const createDeployment = useCreateApiGatewayV2Deployment(selectedApi || "");
 
   if (isLoading) return <TableSkeleton />;
@@ -636,6 +638,45 @@ export function ApiGatewayV2Dashboard() {
                   filterPlaceholder="Find deployments"
                   filterFunction={(i: any, s: string) => i.id.toLowerCase().includes(s.toLowerCase())}
                 />
+              ),
+            },
+            {
+              id: "websocket-routes",
+              label: "WebSocket Routes",
+              content: (
+                <SpaceBetween size="s">
+                  <Alert type="info" header="WebSocket route resolution">
+                    Each route below is resolved to its backing integration. Live
+                    per-connection management (@connections GetConnection /
+                    PostToConnection / DeleteConnection) requires a live per-API
+                    callback endpoint and is not available here.
+                  </Alert>
+                  <ResourceTable
+                    resourceName="WebSocket Route"
+                    headerTitle={`WebSocket routes in ${selectedApi}`}
+                    headerCounter={wsRoutesData?.total}
+                    items={(wsRoutesData?.routes || []).map((r: any) => ({
+                      id: r.RouteId,
+                      key: r.RouteKey,
+                      wellKnown: r.isWellKnown ? "Yes" : "No",
+                      integrationType: r.integration?.IntegrationType || "-",
+                      integrationUri: r.integration?.IntegrationUri || "-",
+                      auth: r.authorizationType || "NONE",
+                    }))}
+                    loading={false}
+                    emptyMessage="No WebSocket routes"
+                    columns={[
+                      { id: "key", header: "Route Key", cell: (i: any) => i.key, isRowHeader: true },
+                      { id: "wellKnown", header: "Well-known?", cell: (i: any) => i.wellKnown },
+                      { id: "integrationType", header: "Integration Type", cell: (i: any) => i.integrationType },
+                      { id: "integrationUri", header: "Integration URI", cell: (i: any) => i.integrationUri },
+                      { id: "auth", header: "Auth", cell: (i: any) => i.auth },
+                    ]}
+                    filterEnabled
+                    filterPlaceholder="Find WebSocket routes"
+                    filterFunction={(i: any, s: string) => i.key.toLowerCase().includes(s.toLowerCase())}
+                  />
+                </SpaceBetween>
               ),
             },
           ]}

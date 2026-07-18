@@ -43,6 +43,23 @@ export interface ApiGatewayV2Deployment {
   Description?: string;
 }
 
+export interface ApiGatewayV2WebSocketRouteIntegration {
+  IntegrationId: string;
+  IntegrationType?: string;
+  IntegrationUri?: string;
+  IntegrationMethod?: string;
+}
+
+export interface ApiGatewayV2WebSocketRoute {
+  RouteId: string;
+  RouteKey: string;
+  target: string | null;
+  integrationId: string | null;
+  integration: ApiGatewayV2WebSocketRouteIntegration | null;
+  isWellKnown: boolean;
+  authorizationType?: string;
+}
+
 // ── APIs ─────────────────────────────────────────────────
 
 export function useApiGatewayV2Apis() {
@@ -178,5 +195,24 @@ export function useDeleteApiGatewayV2Deployment(apiId: string) {
       ),
     onSuccess: () =>
       qc.invalidateQueries({ queryKey: ["aws", "apigatewayv2", "deployments", apiId] }),
+  });
+}
+
+// ── WebSocket (route resolution display) ─────────────────
+
+export function useApiGatewayV2WebSocketApis() {
+  return useQuery<{ apis: ApiGatewayV2Api[]; total: number }>({
+    queryKey: ["aws", "apigatewayv2", "websocket-apis"],
+    queryFn: () => api("/aws/apigatewayv2/websocket-apis"),
+    refetchInterval: 10000,
+  });
+}
+
+export function useApiGatewayV2WebSocketRoutes(apiId: string | null) {
+  return useQuery<{ routes: ApiGatewayV2WebSocketRoute[]; total: number }>({
+    queryKey: ["aws", "apigatewayv2", "websocket-routes", apiId],
+    queryFn: () =>
+      api(`/aws/apigatewayv2/apis/${encodeURIComponent(apiId!)}/websocket-routes`),
+    enabled: !!apiId,
   });
 }
