@@ -14,13 +14,22 @@ vi.mock("../../components/ConfirmDialog", () => ({
   }),
 }));
 
+vi.mock("../../components/Toast", () => ({
+  useToast: () => ({ showToast: vi.fn() }),
+  ToastProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+
 const mockTrails = vi.fn();
 const mockDeleteTrail = vi.fn();
+const mockLookupEvents = vi.fn();
+const mockEventSelectors = vi.fn();
+const mockPutEventSelectors = vi.fn();
 
 const deleteTrailState = vi.hoisted(() => ({
   isPending: false,
   variables: null as string | null,
 }));
+const lookupState = vi.hoisted(() => ({ isPending: false, isError: false, error: null as Error | null }));
 
 vi.mock("../../hooks/useCloudTrail", () => ({
   useCloudTrailTrails: (...args: any[]) => mockTrails(...args),
@@ -32,6 +41,14 @@ vi.mock("../../hooks/useCloudTrail", () => ({
   }),
   useStartCloudTrailLogging: () => ({ mutate: vi.fn(), isPending: false }),
   useStopCloudTrailLogging: () => ({ mutate: vi.fn(), isPending: false }),
+  useLookupEvents: () => ({
+    mutate: mockLookupEvents,
+    get isPending() { return lookupState.isPending; },
+    get isError() { return lookupState.isError; },
+    get error() { return lookupState.error; },
+  }),
+  useEventSelectors: (...args: any[]) => mockEventSelectors(...args),
+  usePutEventSelectors: () => ({ mutate: mockPutEventSelectors, isPending: false, isError: false, error: null }),
 }));
 
 import { CloudTrailDashboard } from "./CloudTrailDashboard";
@@ -42,11 +59,15 @@ beforeEach(() => {
   vi.clearAllMocks();
   deleteTrailState.isPending = false;
   deleteTrailState.variables = null;
+  lookupState.isPending = false;
+  lookupState.isError = false;
+  lookupState.error = null;
 
   mockTrails.mockReturnValue({
     data: { trails: [], total: 0 },
     isLoading: false,
   });
+  mockEventSelectors.mockReturnValue({ data: undefined, isLoading: false });
 });
 
 // ─── Tests ──────────────────────────────────────────────
@@ -227,5 +248,122 @@ describe("CloudTrailDashboard — data", () => {
     });
     render(<CloudTrailDashboard />, { wrapper: createWrapper() });
     expect(screen.getByText("my-trail")).toBeTruthy();
+  });
+});
+
+describe("CloudTrailDashboard — Lookup Events tab", () => {
+  it("runs a search and renders results", async () => {
+    mockLookupEvents.mockImplementation((_params, opts) => {
+      opts?.onSuccess?.({
+        events: [
+          {
+            eventId: "e-1",
+            eventName: "CreateBucket",
+            eventTime: "2024-01-01T00:00:00Z",
+            eventSource: "s3.amazonaws.com",
+            username: "alice",
+            cloudTrailEvent: JSON.stringify({ eventName: "CreateBucket" }),
+          },
+        ],
+        nextToken: null,
+        total: 1,
+      });
+    });
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /lookup events/i }));
+    await clickButton(user, /search events/i);
+    expect(mockLookupEvents).toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByText("CreateBucket")).toBeTruthy());
+    expect(screen.getByText("alice")).toBeTruthy();
+  });
+
+  it("passes a lookup attribute filter when a value is entered", async () => {
+    mockLookupEvents.mockImplementation((_params, opts) => {
+      opts?.onSuccess?.({ events: [], nextToken: null, total: 0 });
+    });
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /lookup events/i }));
+    await user.type(screen.getByPlaceholderText("Filter value..."), "CreateBucket");
+    await clickButton(user, /search events/i);
+    expect(mockLookupEvents).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lookupAttributes: [{ AttributeKey: "EventId", AttributeValue: "CreateBucket" }],
+      }),
+      expect.anything(),
+    );
+  });
+
+  it("shows an empty message when no events match", async () => {
+    mockLookupEvents.mockImplementation((_params, opts) => {
+      opts?.onSuccess?.({ events: [], nextToken: null, total: 0 });
+    });
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /lookup events/i }));
+    await clickButton(user, /search events/i);
+    await waitFor(() => expect(screen.getByText(/no events found/i)).toBeTruthy());
+  });
+
+  it("shows an error alert when lookup fails", async () => {
+    lookupState.isError = true;
+    lookupState.error = new Error("AccessDenied");
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /lookup events/i }));
+    await waitFor(() => expect(screen.getByText("AccessDenied")).toBeTruthy());
+  });
+});
+
+describe("CloudTrailDashboard — Event Selectors tab", () => {
+  function trailsWithOne() {
+    mockTrails.mockReturnValue({
+      data: {
+        trails: [
+          { Name: "my-trail", TrailARN: "arn:aws:cloudtrail:us-east-1::trail/my-trail", S3BucketName: "b", IsMultiRegionTrail: true, IncludeGlobalServiceEvents: true, HomeRegion: "us-east-1", CreationDate: 1700000000 },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+  }
+
+  it("opens the event selectors tab for a trail and shows current config", async () => {
+    trailsWithOne();
+    mockEventSelectors.mockReturnValue({
+      data: {
+        trailName: "my-trail",
+        eventSelectors: [{ ReadWriteType: "All", IncludeManagementEvents: true }],
+        advancedEventSelectors: [],
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-trail")).toBeTruthy());
+    await clickButton(user, /event selectors/i);
+    await waitFor(() => expect(screen.getByText("Event Selectors for my-trail")).toBeTruthy());
+    expect(mockEventSelectors).toHaveBeenCalledWith("my-trail");
+    expect(screen.getByText(/Current Configuration/i)).toBeTruthy();
+  });
+
+  it("saves event selectors", async () => {
+    trailsWithOne();
+    mockEventSelectors.mockReturnValue({
+      data: { trailName: "my-trail", eventSelectors: [], advancedEventSelectors: [] },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-trail")).toBeTruthy());
+    await clickButton(user, /event selectors/i);
+    await clickButton(user, /save event selectors/i);
+    expect(mockPutEventSelectors).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventSelectors: [expect.objectContaining({ ReadWriteType: "All", IncludeManagementEvents: true })],
+      }),
+      expect.anything(),
+    );
   });
 });
