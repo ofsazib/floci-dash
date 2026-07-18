@@ -20,6 +20,7 @@ import {
   useECRDeleteRepositoryPolicy,
   useECRLifecyclePolicy,
   useECRPutLifecyclePolicy,
+  useECRScanningConfiguration,
 } from "./useECR";
 
 function createWrapper() {
@@ -191,5 +192,28 @@ describe("useECRLifecyclePolicy", () => {
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith("/aws/ecr/repositories/my-repo/lifecycle");
+  });
+});
+
+// ─── SCANNING CONFIGURATION ───────────────────────────────
+
+describe("useECRScanningConfiguration", () => {
+  it("does NOT call api when repoName is null", () => {
+    renderHook(() => useECRScanningConfiguration(null), { wrapper: createWrapper() });
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api when repoName provided", async () => {
+    mockApi.mockResolvedValueOnce({
+      repositoryName: "my-repo",
+      scanningConfiguration: { scanOnPush: true, scanFrequency: "SCAN_ON_PUSH", appliedScanFilters: [] },
+      failure: null,
+    });
+    const { result } = renderHook(() => useECRScanningConfiguration("my-repo"), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ecr/repositories/my-repo/scanning-configuration");
+    expect(result.current.data?.scanningConfiguration?.scanOnPush).toBe(true);
   });
 });

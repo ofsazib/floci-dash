@@ -19,6 +19,19 @@ export interface ECRImage {
   imageScanFindingsSummary: any;
 }
 
+export interface ECRScanningConfiguration {
+  repositoryArn: string | null;
+  scanOnPush: boolean;
+  scanFrequency: string | null;
+  appliedScanFilters: Array<{ filter?: string; filterType?: string }>;
+}
+
+export interface ECRScanningConfigurationResponse {
+  repositoryName: string;
+  scanningConfiguration: ECRScanningConfiguration | null;
+  failure: { repositoryName?: string; failureCode?: string; failureReason?: string } | null;
+}
+
 export function useECRRepositories() {
   return useQuery<{ repositories: ECRRepository[]; total: number }>({
     queryKey: ["aws", "ecr", "repositories"],
@@ -115,5 +128,14 @@ export function useECRPutLifecyclePolicy(repoName: string) {
         body: JSON.stringify({ lifecyclePolicyText }),
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ecr", "lifecycle", repoName] }),
+  });
+}
+
+export function useECRScanningConfiguration(repoName: string | null) {
+  return useQuery<ECRScanningConfigurationResponse>({
+    queryKey: ["aws", "ecr", "scanning-configuration", repoName],
+    queryFn: () =>
+      api(`/aws/ecr/repositories/${encodeURIComponent(repoName!)}/scanning-configuration`),
+    enabled: !!repoName,
   });
 }

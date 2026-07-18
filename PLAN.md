@@ -1674,7 +1674,7 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 |---|---------|-------------------|--------|
 | G.30 | **S3 Control** | listTagsForResource, tagResource, untagResource (S3 Access Points) | No Access Points tag management |
 | G.31 | **EC2** (Prefix Lists + SG Rule Descriptions) | DescribePrefixLists, UpdateSecurityGroupRuleDescriptionsIngress, UpdateSecurityGroupRuleDescriptionsEgress | No prefix list display, no SG rule description editor |
-| G.32 | **ECR** (Scanning Config) | BatchGetRepositoryScanningConfiguration | No scanning config display |
+| G.32 | **ECR** (Scanning Config) | BatchGetRepositoryScanningConfiguration | Done 2026-07-14 (per-repository scan config modal: scan-on-push, frequency, applied filters) |
 | G.33 | **SES** (Verified Emails) | ListVerifiedEmailAddresses, DeleteVerifiedEmailAddress | No verified email list (separate from identities) |
 | G.34 | **Auto Scaling** (Describe Types) | DescribeAutoScalingNotificationTypes, DescribeTerminationPolicyTypes, DescribeAdjustmentTypes, DescribeAccountLimits, DescribeLifecycleHookTypes, DescribeMetricCollectionTypes | No limit/type info display |
 | G.35 | **ELBv2** (Capacity Reservation) | DescribeCapacityReservation | No capacity reservation display |

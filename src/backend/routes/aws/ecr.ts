@@ -18,6 +18,7 @@ import {
   TagResourceCommand,
   UntagResourceCommand,
   ListTagsForResourceCommand,
+  BatchGetRepositoryScanningConfigurationCommand,
 } from "@aws-sdk/client-ecr";
 
 const router = new Hono();
@@ -180,6 +181,33 @@ router.put("/repositories/:name/lifecycle", async (c: Context) => {
   return c.json({
     repositoryName: name,
     lifecyclePolicyText: result.lifecyclePolicyText,
+  });
+});
+
+// ── Scanning Configuration ────────────────────────────────
+
+router.get("/repositories/:name/scanning-configuration", async (c: Context) => {
+  const name = c.req.param("name");
+  if (!name) return c.json({ error: "repository name is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new BatchGetRepositoryScanningConfigurationCommand({ repositoryNames: [name] })
+  );
+  const config = (result.scanningConfigurations || [])[0] || null;
+  const failure = (result.failures || [])[0] || null;
+  return c.json({
+    repositoryName: name,
+    scanningConfiguration: config
+      ? {
+          repositoryArn: config.repositoryArn,
+          scanOnPush: config.scanOnPush ?? false,
+          scanFrequency: config.scanFrequency || null,
+          appliedScanFilters: config.appliedScanFilters || [],
+        }
+      : null,
+    failure: failure
+      ? { repositoryName: failure.repositoryName, failureCode: failure.failureCode, failureReason: failure.failureReason }
+      : null,
   });
 });
 

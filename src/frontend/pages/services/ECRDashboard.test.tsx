@@ -10,6 +10,7 @@ import React from "react";
 const mockRepositories = vi.fn();
 const mockCreateRepo = vi.fn();
 const mockDeleteRepo = vi.fn();
+const mockScanConfig = vi.fn();
 
 vi.mock("../../hooks/useECR", () => ({
   useECRRepositories: (...args: any[]) => mockRepositories(...args),
@@ -22,6 +23,7 @@ vi.mock("../../hooks/useECR", () => ({
     isPending: false,
     variables: null,
   }),
+  useECRScanningConfiguration: (...args: any[]) => mockScanConfig(...args),
 }));
 
 import { ECRDashboard } from "./ECRDashboard";
@@ -32,6 +34,12 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockRepositories.mockReturnValue({
     data: { repositories: [], total: 0 },
+    isLoading: false,
+    isError: false,
+    error: null,
+  });
+  mockScanConfig.mockReturnValue({
+    data: undefined,
     isLoading: false,
     isError: false,
     error: null,
@@ -261,5 +269,92 @@ describe("ECRDashboard — delete repository", () => {
     await waitFor(() => {
       expect(mockDeleteRepo).toHaveBeenCalledWith("my-repo");
     });
+  });
+});
+
+describe("ECRDashboard — scanning configuration", () => {
+  const repoData = {
+    data: {
+      repositories: [
+        {
+          repositoryName: "my-repo",
+          repositoryUri: "123.dkr.ecr.us-east-1.amazonaws.com/my-repo",
+          createdAt: "2024-01-15T00:00:00Z",
+          imageTagMutability: "IMMUTABLE",
+          encryptionConfiguration: {},
+          tags: [],
+        },
+      ],
+      total: 1,
+    },
+    isLoading: false,
+  };
+
+  it("opens scan config modal and shows configuration", async () => {
+    mockRepositories.mockReturnValue(repoData);
+    mockScanConfig.mockReturnValue({
+      data: {
+        repositoryName: "my-repo",
+        scanningConfiguration: {
+          repositoryArn: "arn:aws:ecr:us-east-1:123:repository/my-repo",
+          scanOnPush: true,
+          scanFrequency: "SCAN_ON_PUSH",
+          appliedScanFilters: [{ filter: "*", filterType: "WILDCARD" }],
+        },
+        failure: null,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    const user = userEvent.setup();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-repo")).toBeTruthy());
+
+    await clickButton(user, /Scan config/i);
+    await waitFor(() => expect(screen.getByText(/Scanning configuration/i)).toBeTruthy());
+    expect(screen.getByText("Enabled")).toBeTruthy();
+    expect(screen.getByText("SCAN_ON_PUSH")).toBeTruthy();
+    expect(screen.getByText(/WILDCARD/)).toBeTruthy();
+    expect(mockScanConfig).toHaveBeenCalledWith("my-repo");
+  });
+
+  it("shows empty state when no scan configuration", async () => {
+    mockRepositories.mockReturnValue(repoData);
+    mockScanConfig.mockReturnValue({
+      data: { repositoryName: "my-repo", scanningConfiguration: null, failure: null },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    const user = userEvent.setup();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-repo")).toBeTruthy());
+    await clickButton(user, /Scan config/i);
+    await waitFor(() =>
+      expect(screen.getByText("No scanning configuration for this repository.")).toBeTruthy()
+    );
+  });
+
+  it("surfaces failure from the API", async () => {
+    mockRepositories.mockReturnValue(repoData);
+    mockScanConfig.mockReturnValue({
+      data: {
+        repositoryName: "my-repo",
+        scanningConfiguration: null,
+        failure: { failureCode: "REPOSITORY_NOT_FOUND", failureReason: "Repository not found" },
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    const user = userEvent.setup();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-repo")).toBeTruthy());
+    await clickButton(user, /Scan config/i);
+    await waitFor(() => expect(screen.getByText("Repository not found")).toBeTruthy());
   });
 });

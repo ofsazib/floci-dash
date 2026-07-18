@@ -153,6 +153,7 @@ import {
   useECRImages,
   useECRRepositoryPolicy,
   useECRLifecyclePolicy,
+  useECRScanningConfiguration,
 } from "../../hooks/useECR";
 import {
   useELBLoadBalancers,
@@ -511,6 +512,7 @@ export function ECRDashboard() {
   const deleteRepo = useECRDeleteRepository();
   const [showCreate, setShowCreate] = useState(false);
   const [repoName, setRepoName] = useState("");
+  const [scanConfigRepo, setScanConfigRepo] = useState<string | null>(null);
 
   if (isLoading) return <TableSkeleton />;
 
@@ -541,12 +543,17 @@ export function ECRDashboard() {
             id: "actions",
             header: "",
             cell: (item: any) => (
-              <DeleteButton
-                itemName={item.name}
-                resourceType="repository"
-                loading={deleteRepo.isPending && deleteRepo.variables === item.name}
-                onDelete={() => deleteRepo.mutateAsync(item.name)}
-              />
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button variant="link" onClick={() => setScanConfigRepo(item.name)}>
+                  Scan config
+                </Button>
+                <DeleteButton
+                  itemName={item.name}
+                  resourceType="repository"
+                  loading={deleteRepo.isPending && deleteRepo.variables === item.name}
+                  onDelete={() => deleteRepo.mutateAsync(item.name)}
+                />
+              </SpaceBetween>
             ),
           },
         ]}
@@ -592,7 +599,73 @@ export function ECRDashboard() {
           </FormField>
         </Form>
       </Modal>
+      <ECRScanConfigModal repoName={scanConfigRepo} onDismiss={() => setScanConfigRepo(null)} />
     </>
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  ECR — Repository scanning configuration modal
+// ────────────────────────────────────────────────────────
+
+function ECRScanConfigModal({
+  repoName,
+  onDismiss,
+}: {
+  repoName: string | null;
+  onDismiss: () => void;
+}) {
+  const { data, isLoading, isError, error } = useECRScanningConfiguration(repoName);
+  const config = data?.scanningConfiguration;
+
+  return (
+    <Modal
+      visible={!!repoName}
+      onDismiss={onDismiss}
+      header={`Scanning configuration — ${repoName || ""}`}
+      footer={
+        <Box float="right">
+          <Button variant="primary" onClick={onDismiss}>
+            Close
+          </Button>
+        </Box>
+      }
+    >
+      {isLoading ? (
+        <Spinner />
+      ) : isError ? (
+        <Alert type="error">{(error as Error)?.message || "Failed to load scanning configuration"}</Alert>
+      ) : data?.failure ? (
+        <Alert type="warning" header={data.failure.failureCode || "Unavailable"}>
+          {data.failure.failureReason || "Scanning configuration is not available for this repository."}
+        </Alert>
+      ) : !config ? (
+        <Box color="text-status-inactive">No scanning configuration for this repository.</Box>
+      ) : (
+        <ColumnLayout columns={2} variant="text-grid">
+          <div>
+            <Box variant="awsui-key-label">Scan on push</Box>
+            <StatusIndicator type={config.scanOnPush ? "success" : "stopped"}>
+              {config.scanOnPush ? "Enabled" : "Disabled"}
+            </StatusIndicator>
+          </div>
+          <div>
+            <Box variant="awsui-key-label">Scan frequency</Box>
+            <div>{config.scanFrequency || "—"}</div>
+          </div>
+          <div>
+            <Box variant="awsui-key-label">Applied scan filters</Box>
+            <div>
+              {config.appliedScanFilters.length
+                ? config.appliedScanFilters
+                    .map((f) => `${f.filterType || "?"}: ${f.filter || "*"}`)
+                    .join(", ")
+                : "—"}
+            </div>
+          </div>
+        </ColumnLayout>
+      )}
+    </Modal>
   );
 }
 

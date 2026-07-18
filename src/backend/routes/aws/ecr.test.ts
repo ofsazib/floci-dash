@@ -29,6 +29,7 @@ vi.mock("@aws-sdk/client-ecr", () => ({
   TagResourceCommand: createCmd("TagResourceCommand"),
   UntagResourceCommand: createCmd("UntagResourceCommand"),
   ListTagsForResourceCommand: createCmd("ListTagsForResourceCommand"),
+  BatchGetRepositoryScanningConfigurationCommand: createCmd("BatchGetRepositoryScanningConfigurationCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -351,6 +352,55 @@ describe("ECR Routes", () => {
       const body = await res.json();
       expect(body.updated).toBe(true);
       expect(mockSend.mock.calls[0][0].tagKeys).toEqual(["env"]);
+    });
+  });
+
+  describe("Scanning Configuration", () => {
+    it("GET /repositories/:name/scanning-configuration — returns config", async () => {
+      mockSend.mockResolvedValueOnce({
+        scanningConfigurations: [
+          {
+            repositoryArn: "arn:aws:ecr:us-east-1:123456789:repository/my-repo",
+            repositoryName: "my-repo",
+            scanOnPush: true,
+            scanFrequency: "SCAN_ON_PUSH",
+            appliedScanFilters: [{ filter: "*", filterType: "WILDCARD" }],
+          },
+        ],
+        failures: [],
+      });
+      const res = await get("/repositories/my-repo/scanning-configuration");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.repositoryName).toBe("my-repo");
+      expect(body.scanningConfiguration.scanOnPush).toBe(true);
+      expect(body.scanningConfiguration.scanFrequency).toBe("SCAN_ON_PUSH");
+      expect(body.scanningConfiguration.appliedScanFilters).toHaveLength(1);
+      expect(body.failure).toBeNull();
+      expect(mockSend.mock.calls[0][0].repositoryNames).toEqual(["my-repo"]);
+    });
+
+    it("GET /repositories/:name/scanning-configuration — returns null when absent", async () => {
+      mockSend.mockResolvedValueOnce({ scanningConfigurations: [], failures: [] });
+      const res = await get("/repositories/missing/scanning-configuration");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.scanningConfiguration).toBeNull();
+      expect(body.failure).toBeNull();
+    });
+
+    it("GET /repositories/:name/scanning-configuration — surfaces failures", async () => {
+      mockSend.mockResolvedValueOnce({
+        scanningConfigurations: [],
+        failures: [
+          { repositoryName: "bad-repo", failureCode: "REPOSITORY_NOT_FOUND", failureReason: "Repository not found" },
+        ],
+      });
+      const res = await get("/repositories/bad-repo/scanning-configuration");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.scanningConfiguration).toBeNull();
+      expect(body.failure.failureCode).toBe("REPOSITORY_NOT_FOUND");
     });
   });
 });
