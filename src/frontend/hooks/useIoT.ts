@@ -251,6 +251,69 @@ export function useUpdateShadow() {
   });
 }
 
+export function useNamedShadows(thingName: string | null) {
+  return useQuery({
+    queryKey: ["aws", "iot", "things", thingName, "named-shadows"],
+    queryFn: () => api<{ results: string[]; nextToken?: string }>(`/aws/iot/things/${thingName}/named-shadows`),
+    enabled: !!thingName,
+  });
+}
+
+// ─── MQTT Broker ──────────────────────────────────────
+
+export function useConnection(clientId: string | null) {
+  return useQuery({
+    queryKey: ["aws", "iot", "connections", clientId],
+    queryFn: () => api<{ connection: any }>(`/aws/iot/connections/${encodeURIComponent(clientId || "")}`),
+    enabled: !!clientId,
+    retry: false,
+  });
+}
+
+export function useConnectionSubscriptions(clientId: string | null) {
+  return useQuery({
+    queryKey: ["aws", "iot", "connections", clientId, "subscriptions"],
+    queryFn: () => api<{ subscriptions: any[]; nextToken?: string }>(`/aws/iot/connections/${encodeURIComponent(clientId || "")}/subscriptions`),
+    enabled: !!clientId,
+    retry: false,
+  });
+}
+
+export function useDisconnectClient() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (clientId: string) =>
+      api(`/aws/iot/connections/${encodeURIComponent(clientId)}`, { method: "DELETE" }),
+    onSuccess: (_data, clientId) =>
+      qc.invalidateQueries({ queryKey: ["aws", "iot", "connections", clientId] }),
+  });
+}
+
+export function useSendDirectMessage() {
+  return useMutation({
+    mutationFn: ({ clientId, ...body }: { clientId: string; topic: string; payload?: string }) =>
+      api(`/aws/iot/connections/${encodeURIComponent(clientId)}/messages`, { method: "POST", body: JSON.stringify(body) }),
+  });
+}
+
+export function usePublish() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { topic: string; payload?: string; qos?: number; retain?: boolean }) =>
+      api("/aws/iot/publish", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iot", "retained-messages"] }),
+  });
+}
+
+// ─── Retained Messages ────────────────────────────────
+
+export function useRetainedMessages() {
+  return useQuery({
+    queryKey: ["aws", "iot", "retained-messages"],
+    queryFn: () => api<{ retainedTopics: any[]; nextToken?: string }>("/aws/iot/retained-messages"),
+  });
+}
+
 // ─── Tags ─────────────────────────────────────────────
 
 export function useIoTTags(resourceArn: string | null) {

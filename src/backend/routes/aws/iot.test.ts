@@ -77,6 +77,14 @@ vi.mock("@aws-sdk/client-iot-data-plane", () => ({
   GetThingShadowCommand: createCmd("GetThingShadowCommand"),
   UpdateThingShadowCommand: createCmd("UpdateThingShadowCommand"),
   DeleteThingShadowCommand: createCmd("DeleteThingShadowCommand"),
+  ListNamedShadowsForThingCommand: createCmd("ListNamedShadowsForThingCommand"),
+  GetConnectionCommand: createCmd("GetConnectionCommand"),
+  DeleteConnectionCommand: createCmd("DeleteConnectionCommand"),
+  ListSubscriptionsCommand: createCmd("ListSubscriptionsCommand"),
+  SendDirectMessageCommand: createCmd("SendDirectMessageCommand"),
+  PublishCommand: createCmd("PublishCommand"),
+  ListRetainedMessagesCommand: createCmd("ListRetainedMessagesCommand"),
+  GetRetainedMessageCommand: createCmd("GetRetainedMessageCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -674,6 +682,122 @@ describe("IoT Core Routes", () => {
       const body = await res.json();
       expect(body.deleted).toBe(true);
       expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteThingShadowCommand");
+    });
+
+    it("GET /things/:thingName/shadow — passes named shadow", async () => {
+      mockSend.mockResolvedValueOnce({ payload: null });
+      const res = await get("/things/my-device/shadow?name=config");
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].shadowName).toBe("config");
+    });
+
+    it("GET /things/:thingName/named-shadows — lists named shadows", async () => {
+      mockSend.mockResolvedValueOnce({ results: ["config", "telemetry"], nextToken: "next" });
+      const res = await get("/things/my-device/named-shadows");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.results).toEqual(["config", "telemetry"]);
+      expect(body.nextToken).toBe("next");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("ListNamedShadowsForThingCommand");
+    });
+
+    it("GET /things/:thingName/named-shadows — defaults to empty", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/things/my-device/named-shadows");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.results).toEqual([]);
+    });
+  });
+
+  describe("MQTT Broker", () => {
+    it("GET /connections/:clientId — returns connection info", async () => {
+      mockSend.mockResolvedValueOnce({ clientId: "dev-1", connected: true, sourceIp: "10.0.0.1", sourcePort: 51234 });
+      const res = await get("/connections/dev-1");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.connection.clientId).toBe("dev-1");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetConnectionCommand");
+    });
+
+    it("GET /connections/:clientId/subscriptions — lists subscriptions", async () => {
+      mockSend.mockResolvedValueOnce({ subscriptions: [{ topicFilter: "sensors/#", qos: 0 }], nextToken: "n" });
+      const res = await get("/connections/dev-1/subscriptions");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.subscriptions[0].topicFilter).toBe("sensors/#");
+      expect(body.nextToken).toBe("n");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("ListSubscriptionsCommand");
+    });
+
+    it("GET /connections/:clientId/subscriptions — defaults to empty", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/connections/dev-1/subscriptions");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.subscriptions).toEqual([]);
+    });
+
+    it("DELETE /connections/:clientId — disconnects client", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/connections/dev-1?cleanSession=true");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.disconnected).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteConnectionCommand");
+      expect(mockSend.mock.calls[0][0].cleanSession).toBe(true);
+    });
+
+    it("POST /connections/:clientId/messages — sends direct message", async () => {
+      mockSend.mockResolvedValueOnce({ message: "OK", traceId: "abc" });
+      const res = await post("/connections/dev-1/messages", { topic: "cmd/reboot", payload: "now" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.sent).toBe(true);
+      expect(mockSend.mock.calls[0][0].topic).toBe("cmd/reboot");
+    });
+
+    it("POST /connections/:clientId/messages — requires topic", async () => {
+      const res = await post("/connections/dev-1/messages", { payload: "x" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /publish — publishes to a topic", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/publish", { topic: "sensors/temp", payload: "25", qos: 1, retain: true });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.published).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("PublishCommand");
+      expect(mockSend.mock.calls[0][0].qos).toBe(1);
+    });
+
+    it("POST /publish — requires topic", async () => {
+      const res = await post("/publish", { payload: "x" });
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe("Retained Messages", () => {
+    it("GET /retained-messages — lists retained topics", async () => {
+      mockSend.mockResolvedValueOnce({ retainedTopics: [{ topic: "sensors/temp", payloadSize: 2, qos: 0 }], nextToken: "n" });
+      const res = await get("/retained-messages");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.retainedTopics[0].topic).toBe("sensors/temp");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("ListRetainedMessagesCommand");
+    });
+
+    it("GET /retained-messages/:topic — returns a retained message", async () => {
+      const encoded = new TextEncoder().encode("25.5");
+      mockSend.mockResolvedValueOnce({ topic: "sensors/temp", payload: encoded, qos: 1, lastModifiedTime: 123 });
+      const res = await get("/retained-messages/sensors/temp");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.topic).toBe("sensors/temp");
+      expect(body.payload).toBe("25.5");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetRetainedMessageCommand");
+      expect(mockSend.mock.calls[0][0].topic).toBe("sensors/temp");
     });
   });
 

@@ -40,6 +40,13 @@ import {
   useIoTTags,
   useTagIoTResource,
   useThingJobs,
+  useNamedShadows,
+  useConnection,
+  useConnectionSubscriptions,
+  useDisconnectClient,
+  useSendDirectMessage,
+  usePublish,
+  useRetainedMessages,
 } from "./useIoT";
 
 function createWrapper() {
@@ -626,5 +633,71 @@ describe("useTagIoTResource", () => {
     });
     await result.current.mutateAsync({ resourceArn: "arn:aws:iot:us-east-1::thing/my-device", tags: [{ key: "env", value: "prod" }] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["aws", "iot", "tags", "arn:aws:iot:us-east-1::thing/my-device"] });
+  });
+});
+
+describe("useNamedShadows", () => {
+  it("calls api and is disabled without thingName", async () => {
+    mockApi.mockResolvedValueOnce({ results: ["config"] });
+    const { result } = renderHook(() => useNamedShadows("my-device"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/iot/things/my-device/named-shadows");
+  });
+
+  it("is disabled when thingName is null", () => {
+    const { result } = renderHook(() => useNamedShadows(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+});
+
+describe("MQTT broker hooks", () => {
+  it("useConnection encodes clientId", async () => {
+    mockApi.mockResolvedValueOnce({ connection: { clientId: "dev/1" } });
+    const { result } = renderHook(() => useConnection("dev/1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/iot/connections/dev%2F1");
+  });
+
+  it("useConnectionSubscriptions calls correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ subscriptions: [] });
+    const { result } = renderHook(() => useConnectionSubscriptions("dev-1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/iot/connections/dev-1/subscriptions");
+  });
+
+  it("useDisconnectClient calls DELETE", async () => {
+    mockApi.mockResolvedValueOnce({ disconnected: true });
+    const { result } = renderHook(() => useDisconnectClient(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("dev-1");
+    expect(mockApi).toHaveBeenCalledWith("/aws/iot/connections/dev-1", { method: "DELETE" });
+  });
+
+  it("useSendDirectMessage posts topic and payload", async () => {
+    mockApi.mockResolvedValueOnce({ sent: true });
+    const { result } = renderHook(() => useSendDirectMessage(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ clientId: "dev-1", topic: "cmd/x", payload: "go" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/iot/connections/dev-1/messages", {
+      method: "POST",
+      body: JSON.stringify({ topic: "cmd/x", payload: "go" }),
+    });
+  });
+
+  it("usePublish posts to /publish", async () => {
+    mockApi.mockResolvedValueOnce({ published: true });
+    const { result } = renderHook(() => usePublish(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ topic: "sensors/t", payload: "25", qos: 1, retain: true });
+    expect(mockApi).toHaveBeenCalledWith("/aws/iot/publish", {
+      method: "POST",
+      body: JSON.stringify({ topic: "sensors/t", payload: "25", qos: 1, retain: true }),
+    });
+  });
+});
+
+describe("useRetainedMessages", () => {
+  it("calls correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ retainedTopics: [] });
+    const { result } = renderHook(() => useRetainedMessages(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/iot/retained-messages");
   });
 });

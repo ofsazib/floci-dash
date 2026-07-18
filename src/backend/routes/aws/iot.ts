@@ -55,6 +55,14 @@ import {
   GetThingShadowCommand,
   UpdateThingShadowCommand,
   DeleteThingShadowCommand,
+  ListNamedShadowsForThingCommand,
+  GetConnectionCommand,
+  DeleteConnectionCommand,
+  ListSubscriptionsCommand,
+  SendDirectMessageCommand,
+  PublishCommand,
+  ListRetainedMessagesCommand,
+  GetRetainedMessageCommand,
 } from "@aws-sdk/client-iot-data-plane";
 
 const router = new Hono();
@@ -514,19 +522,22 @@ router.post("/topic-rules/:ruleName/disable", async (c: Context) => {
 
 router.get("/things/:thingName/shadow", async (c: Context) => {
   const thingName = c.req.param("thingName")!;
+  const shadowName = c.req.query("name") || undefined;
   const client = getDataClient();
-  const result = await client.send(new GetThingShadowCommand({ thingName }));
+  const result = await client.send(new GetThingShadowCommand({ thingName, shadowName }));
   const payload = result.payload ? JSON.parse(new TextDecoder().decode(result.payload)) : null;
   return c.json({ shadow: payload });
 });
 
 router.post("/things/:thingName/shadow", async (c: Context) => {
   const thingName = c.req.param("thingName")!;
+  const shadowName = c.req.query("name") || undefined;
   const body = await c.req.json<any>();
   const client = getDataClient();
   const result = await client.send(
     new UpdateThingShadowCommand({
       thingName,
+      shadowName,
       payload: new TextEncoder().encode(JSON.stringify(body.state ? body : { state: body })),
     })
   );
@@ -536,9 +547,111 @@ router.post("/things/:thingName/shadow", async (c: Context) => {
 
 router.delete("/things/:thingName/shadow", async (c: Context) => {
   const thingName = c.req.param("thingName")!;
+  const shadowName = c.req.query("name") || undefined;
   const client = getDataClient();
-  await client.send(new DeleteThingShadowCommand({ thingName }));
+  await client.send(new DeleteThingShadowCommand({ thingName, shadowName }));
   return c.json({ deleted: true });
+});
+
+router.get("/things/:thingName/named-shadows", async (c: Context) => {
+  const thingName = c.req.param("thingName")!;
+  const client = getDataClient();
+  const result = await client.send(
+    new ListNamedShadowsForThingCommand({
+      thingName,
+      nextToken: c.req.query("nextToken") || undefined,
+      pageSize: c.req.query("pageSize") ? Number(c.req.query("pageSize")) : undefined,
+    })
+  );
+  return c.json({ results: result.results || [], nextToken: result.nextToken });
+});
+
+// ─── MQTT Broker (Data Plane) ───────────────────────
+
+router.get("/connections/:clientId", async (c: Context) => {
+  const clientId = c.req.param("clientId")!;
+  const client = getDataClient();
+  const result = await client.send(
+    new GetConnectionCommand({ clientId, includeSocketInformation: true } as any)
+  );
+  return c.json({ connection: result });
+});
+
+router.get("/connections/:clientId/subscriptions", async (c: Context) => {
+  const clientId = c.req.param("clientId")!;
+  const client = getDataClient();
+  const result = await client.send(
+    new ListSubscriptionsCommand({
+      clientId,
+      maxResults: c.req.query("maxResults") ? Number(c.req.query("maxResults")) : undefined,
+      nextToken: c.req.query("nextToken") || undefined,
+    } as any)
+  );
+  return c.json({ subscriptions: result.subscriptions || [], nextToken: result.nextToken });
+});
+
+router.delete("/connections/:clientId", async (c: Context) => {
+  const clientId = c.req.param("clientId")!;
+  const client = getDataClient();
+  await client.send(
+    new DeleteConnectionCommand({
+      clientId,
+      cleanSession: c.req.query("cleanSession") === "true" || undefined,
+      preventWillMessage: c.req.query("preventWillMessage") === "true" || undefined,
+    } as any)
+  );
+  return c.json({ disconnected: true });
+});
+
+router.post("/connections/:clientId/messages", async (c: Context) => {
+  const clientId = c.req.param("clientId")!;
+  const body = await c.req.json<{ topic: string; payload?: string }>();
+  if (!body.topic) return c.json({ error: "topic is required" }, 400);
+  const client = getDataClient();
+  const result = await client.send(
+    new SendDirectMessageCommand({
+      clientId,
+      topic: body.topic,
+      payload: new TextEncoder().encode(body.payload || ""),
+    } as any)
+  );
+  return c.json({ sent: true, ...result });
+});
+
+router.post("/publish", async (c: Context) => {
+  const body = await c.req.json<{ topic: string; payload?: string; qos?: number; retain?: boolean }>();
+  if (!body.topic) return c.json({ error: "topic is required" }, 400);
+  const client = getDataClient();
+  await client.send(
+    new PublishCommand({
+      topic: body.topic,
+      payload: new TextEncoder().encode(body.payload || ""),
+      qos: body.qos ?? undefined,
+      retain: body.retain ?? undefined,
+    })
+  );
+  return c.json({ published: true });
+});
+
+// ─── Retained Messages (Data Plane) ─────────────────
+
+router.get("/retained-messages", async (c: Context) => {
+  const client = getDataClient();
+  const result = await client.send(
+    new ListRetainedMessagesCommand({
+      maxResults: c.req.query("maxResults") ? Number(c.req.query("maxResults")) : undefined,
+      nextToken: c.req.query("nextToken") || undefined,
+    })
+  );
+  return c.json({ retainedTopics: result.retainedTopics || [], nextToken: result.nextToken });
+});
+
+router.get("/retained-messages/:topic{.+}", async (c: Context) => {
+  const topic = c.req.param("topic")!;
+  const client = getDataClient();
+  const result = await client.send(new GetRetainedMessageCommand({ topic }));
+  const payload = result.payload ? new TextDecoder().decode(result.payload) : null;
+  return c.json({ topic: result.topic, payload, qos: result.qos, lastModifiedTime: result.lastModifiedTime });
 });
 
 // ─── Tags ────────────────────────────────────────────

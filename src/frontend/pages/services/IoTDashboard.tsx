@@ -13,6 +13,8 @@ import {
   Modal,
   Alert,
   StatusIndicator,
+  Checkbox,
+  ColumnLayout,
 } from "@cloudscape-design/components";
 import ResourceTable from "../../components/ResourceTable";
 import DeleteButton from "../../components/DeleteButton";
@@ -42,6 +44,11 @@ import {
   useShadow,
   useUpdateShadow,
   useThingJobs,
+  useConnection,
+  useConnectionSubscriptions,
+  useDisconnectClient,
+  usePublish,
+  useRetainedMessages,
 } from "../../hooks/useIoT";
 
 export function IoTDashboard() {
@@ -65,9 +72,14 @@ export function IoTDashboard() {
   const createThingType = useCreateThingType();
   const deleteThingType = useDeleteThingType();
   const updateShadow = useUpdateShadow();
+  const disconnectClient = useDisconnectClient();
+  const publish = usePublish();
+  const retainedQuery = useRetainedMessages();
 
   const [selectedThing, setSelectedThing] = useState<string | null>(null);
   const [selectedPolicy, setSelectedPolicy] = useState<string | null>(null);
+  const [lookupClientId, setLookupClientId] = useState("");
+  const [inspectClientId, setInspectClientId] = useState<string | null>(null);
 
   // Create modals
   const [showCreateThing, setShowCreateThing] = useState(false);
@@ -91,6 +103,14 @@ export function IoTDashboard() {
   const policyVersionsQuery = usePolicyVersions(selectedPolicy);
   const [showShadowModal, setShowShadowModal] = useState(false);
   const [shadowState, setShadowState] = useState("");
+
+  // MQTT broker
+  const connectionQuery = useConnection(inspectClientId);
+  const subscriptionsQuery = useConnectionSubscriptions(inspectClientId);
+  const [showPublish, setShowPublish] = useState(false);
+  const [pubTopic, setPubTopic] = useState("");
+  const [pubPayload, setPubPayload] = useState("");
+  const [pubRetain, setPubRetain] = useState(false);
 
   // Certificate creation result modal
   const [certCreationResult, setCertCreationResult] = useState<any>(null);
@@ -753,6 +773,146 @@ export function IoTDashboard() {
     ),
   };
 
+  const mqttTab = {
+    id: "mqtt",
+    label: "MQTT Broker",
+    content: (
+      <SpaceBetween size="l">
+        <Container header={<Header variant="h2" description="Publish an MQTT message to a topic on the broker.">Publish message</Header>}>
+          <Button iconName="upload" onClick={() => setShowPublish(true)}>Publish to topic</Button>
+        </Container>
+
+        <Container header={<Header variant="h2" description="Look up a connected MQTT client to view its subscriptions or disconnect it.">Client connections</Header>}>
+          <SpaceBetween size="m">
+            <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-end" }}>
+              <div style={{ flex: 1 }}>
+                <FormField label="Client ID">
+                  <Input
+                    value={lookupClientId}
+                    onChange={({ detail }) => setLookupClientId(detail.value)}
+                    placeholder="device-001"
+                  />
+                </FormField>
+              </div>
+              <Button
+                variant="primary"
+                disabled={!lookupClientId.trim()}
+                onClick={() => setInspectClientId(lookupClientId.trim())}
+              >Inspect</Button>
+            </div>
+
+            {inspectClientId && connectionQuery.isError && (
+              <Alert type="warning">Client <strong>{inspectClientId}</strong> is not connected.</Alert>
+            )}
+
+            {inspectClientId && connectionQuery.data?.connection && (
+              <SpaceBetween size="m">
+                <ColumnLayout columns={3} variant="text-grid">
+                  <div>
+                    <Box variant="awsui-key-label">Client ID</Box>
+                    <div>{connectionQuery.data.connection.clientId}</div>
+                  </div>
+                  <div>
+                    <Box variant="awsui-key-label">Status</Box>
+                    <StatusIndicator type={connectionQuery.data.connection.connected ? "success" : "stopped"}>
+                      {connectionQuery.data.connection.connected ? "Connected" : "Disconnected"}
+                    </StatusIndicator>
+                  </div>
+                  <div>
+                    <Box variant="awsui-key-label">Source</Box>
+                    <div>
+                      {connectionQuery.data.connection.sourceIp
+                        ? `${connectionQuery.data.connection.sourceIp}:${connectionQuery.data.connection.sourcePort ?? ""}`
+                        : "—"}
+                    </div>
+                  </div>
+                </ColumnLayout>
+
+                <ResourceTable
+                  resourceName="Subscription"
+                  headerTitle="Subscriptions"
+                  items={subscriptionsQuery.data?.subscriptions || []}
+                  columns={[
+                    { id: "topicFilter", header: "Topic filter", cell: (i: any) => i.topicFilter, isRowHeader: true },
+                    { id: "qos", header: "QoS", cell: (i: any) => i.qos ?? 0 },
+                  ]}
+                  loading={subscriptionsQuery.isLoading}
+                  emptyMessage="No active subscriptions for this client."
+                />
+
+                <Box>
+                  <Button
+                    iconName="close"
+                    loading={disconnectClient.isPending}
+                    onClick={() =>
+                      disconnectClient.mutate(inspectClientId, {
+                        onSuccess: () => setInspectClientId(null),
+                      })
+                    }
+                  >Disconnect client</Button>
+                </Box>
+              </SpaceBetween>
+            )}
+          </SpaceBetween>
+        </Container>
+
+        <ResourceTable
+          resourceName="Retained message"
+          headerTitle="Retained messages"
+          items={retainedQuery.data?.retainedTopics || []}
+          columns={[
+            { id: "topic", header: "Topic", cell: (i: any) => i.topic, isRowHeader: true },
+            { id: "payloadSize", header: "Payload size", cell: (i: any) => (i.payloadSize != null ? `${i.payloadSize} B` : "—") },
+            { id: "qos", header: "QoS", cell: (i: any) => i.qos ?? 0 },
+          ]}
+          loading={retainedQuery.isLoading}
+          emptyMessage="No retained messages. Publish with 'retain' enabled to create one."
+        />
+
+        <Modal
+          visible={showPublish}
+          onDismiss={() => setShowPublish(false)}
+          header="Publish MQTT message"
+          footer={
+            <Box float="right">
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button variant="link" onClick={() => setShowPublish(false)}>Cancel</Button>
+                <Button
+                  variant="primary"
+                  loading={publish.isPending}
+                  disabled={!pubTopic.trim()}
+                  onClick={() => {
+                    publish.mutate(
+                      { topic: pubTopic.trim(), payload: pubPayload, retain: pubRetain },
+                      { onSuccess: () => { setShowPublish(false); setPubTopic(""); setPubPayload(""); setPubRetain(false); } }
+                    );
+                  }}
+                >Publish</Button>
+              </SpaceBetween>
+            </Box>
+          }
+        >
+          <Form>
+            {publish.isError && (
+              <Alert type="error" dismissible>{(publish.error as Error)?.message || "Failed"}</Alert>
+            )}
+            <SpaceBetween size="m">
+              <FormField label="Topic">
+                <Input value={pubTopic} onChange={({ detail }) => setPubTopic(detail.value)} placeholder="sensors/temperature" />
+              </FormField>
+              <FormField label="Payload">
+                <Textarea value={pubPayload} onChange={({ detail }) => setPubPayload(detail.value)} placeholder='{"temp": 25}' />
+              </FormField>
+              <Checkbox checked={pubRetain} onChange={({ detail }) => setPubRetain(detail.checked)}>
+                Retain message
+              </Checkbox>
+            </SpaceBetween>
+          </Form>
+        </Modal>
+      </SpaceBetween>
+    ),
+  };
+
   return (
     <SpaceBetween size="l">
       {endpointQuery.data && (
@@ -761,7 +921,7 @@ export function IoTDashboard() {
         </Alert>
       )}
       <Tabs
-        tabs={[thingsTab, certsTab, policiesTab, rulesTab, thingTypesTab]}
+        tabs={[thingsTab, certsTab, policiesTab, rulesTab, thingTypesTab, mqttTab]}
       />
     </SpaceBetween>
   );

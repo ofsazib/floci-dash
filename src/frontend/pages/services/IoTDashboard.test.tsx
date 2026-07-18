@@ -31,6 +31,11 @@ const mockThingTypes = vi.fn();
 const mockPolicyVersions = vi.fn();
 const mockShadow = vi.fn();
 const mockThingJobs = vi.fn();
+const mockConnection = vi.fn();
+const mockSubscriptions = vi.fn();
+const mockRetained = vi.fn();
+const mockDisconnect = vi.fn();
+const mockPublish = vi.fn();
 
 const mockCreateKeysCert = vi.fn();
 const mockUpdateCertStatus = vi.fn();
@@ -143,6 +148,11 @@ vi.mock("../../hooks/useIoT", () => ({
     isPending: false,
   }),
   useThingJobs: (...args: any[]) => mockThingJobs(...args),
+  useConnection: (...args: any[]) => mockConnection(...args),
+  useConnectionSubscriptions: (...args: any[]) => mockSubscriptions(...args),
+  useDisconnectClient: () => ({ mutate: mockDisconnect, isPending: false }),
+  usePublish: () => ({ mutate: mockPublish, isPending: false, isError: false, error: null }),
+  useRetainedMessages: (...args: any[]) => mockRetained(...args),
 }));
 
 import { IoTDashboard } from "./IoTDashboard";
@@ -222,6 +232,9 @@ beforeEach(() => {
     data: undefined,
     isLoading: false,
   });
+  mockConnection.mockReturnValue({ data: undefined, isLoading: false, isError: false });
+  mockSubscriptions.mockReturnValue({ data: undefined, isLoading: false });
+  mockRetained.mockReturnValue({ data: { retainedTopics: [] }, isLoading: false });
 
   // Set up create cert mock to invoke onSuccess with mock result
   mockCreateKeysCert.mockImplementation((_args, options) => {
@@ -1604,5 +1617,85 @@ describe("IoTDashboard — create loading states", () => {
     render(<IoTDashboard />, { wrapper: createWrapper() });
     await clickButton(user, /create thing/i);
     await waitFor(() => expect(screen.getByText("Create thing")).toBeTruthy());
+  });
+});
+
+describe("IoTDashboard — MQTT Broker tab", () => {
+  it("renders publish and connection lookup UI", async () => {
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /mqtt broker/i }));
+    await waitFor(() => expect(screen.getByText("Publish to topic")).toBeTruthy());
+    expect(screen.getByText("Client connections")).toBeTruthy();
+    expect(screen.getByText("Retained messages")).toBeTruthy();
+  });
+
+  it("inspects a client and shows its subscriptions", async () => {
+    mockConnection.mockReturnValue({
+      data: { connection: { clientId: "device-001", connected: true, sourceIp: "10.0.0.5", sourcePort: 51234 } },
+      isLoading: false,
+      isError: false,
+    });
+    mockSubscriptions.mockReturnValue({
+      data: { subscriptions: [{ topicFilter: "sensors/#", qos: 0 }] },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /mqtt broker/i }));
+    await user.type(screen.getByPlaceholderText("device-001"), "device-001");
+    await clickButton(user, /inspect/i);
+    await waitFor(() => expect(screen.getByText("sensors/#")).toBeTruthy());
+    expect(screen.getByText("Connected")).toBeTruthy();
+  });
+
+  it("shows a warning when the client is not connected", async () => {
+    mockConnection.mockReturnValue({ data: undefined, isLoading: false, isError: true });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /mqtt broker/i }));
+    await user.type(screen.getByPlaceholderText("device-001"), "ghost");
+    await clickButton(user, /inspect/i);
+    await waitFor(() => expect(screen.getByText(/is not connected/i)).toBeTruthy());
+  });
+
+  it("disconnects an inspected client", async () => {
+    mockConnection.mockReturnValue({
+      data: { connection: { clientId: "device-001", connected: true } },
+      isLoading: false,
+      isError: false,
+    });
+    mockSubscriptions.mockReturnValue({ data: { subscriptions: [] }, isLoading: false });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /mqtt broker/i }));
+    await user.type(screen.getByPlaceholderText("device-001"), "device-001");
+    await clickButton(user, /inspect/i);
+    await clickButton(user, /disconnect client/i);
+    expect(mockDisconnect).toHaveBeenCalledWith("device-001", expect.anything());
+  });
+
+  it("publishes a message from the modal", async () => {
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /mqtt broker/i }));
+    await clickButton(user, /publish to topic/i);
+    await user.type(screen.getByPlaceholderText("sensors/temperature"), "sensors/temp");
+    await clickButton(user, /^publish$/i);
+    expect(mockPublish).toHaveBeenCalledWith(
+      expect.objectContaining({ topic: "sensors/temp" }),
+      expect.anything(),
+    );
+  });
+
+  it("lists retained messages", async () => {
+    mockRetained.mockReturnValue({
+      data: { retainedTopics: [{ topic: "sensors/temp", payloadSize: 4, qos: 1 }] },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /mqtt broker/i }));
+    await waitFor(() => expect(screen.getByText("sensors/temp")).toBeTruthy());
   });
 });
