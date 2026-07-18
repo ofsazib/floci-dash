@@ -299,6 +299,8 @@ import {
   useDeleteGlueSchema,
   useGlueSchemaVersions,
   useRegisterGlueSchemaVersion,
+  useGlueSchemaVersion,
+  useSchemaVersionMetadata,
   useGlueUDFs,
   useCreateGlueUDF,
   useUpdateGlueUDF,
@@ -654,6 +656,11 @@ function SchemaRegistryTab() {
   const registerVersion = useRegisterGlueSchemaVersion(selectedRegistry || "", selectedSchema || "");
   const [showRegisterVersion, setShowRegisterVersion] = useState(false);
   const [schemaDef, setSchemaDef] = useState("{}");
+  const [detailVersionNumber, setDetailVersionNumber] = useState<number | null>(null);
+  const versionDetailQuery = useGlueSchemaVersion(selectedRegistry, selectedSchema, detailVersionNumber);
+  const versionDetail = versionDetailQuery.data?.version;
+  const detailVersionId = versionDetail?.versionId || null;
+  const metadataQuery = useSchemaVersionMetadata(detailVersionId);
 
   const registries = registriesQuery.data?.registries || [];
   const schemas = schemasQuery.data?.schemas || [];
@@ -789,11 +796,59 @@ function SchemaRegistryTab() {
               { id: "id", header: "Version ID", cell: (v: any) => <span style={{ fontSize: 11 }}>{v.versionId || "-"}</span> },
               { id: "status", header: "Status", cell: (v: any) => <StatusIndicator type={v.status === "AVAILABLE" ? "success" : "warning"}>{v.status}</StatusIndicator> },
               { id: "created", header: "Created", cell: (v: any) => v.createdTime ? new Date(v.createdTime).toLocaleString() : "-" },
+              {
+                id: "actions",
+                header: "",
+                cell: (v: any) => (
+                  <Button variant="link" onClick={() => setDetailVersionNumber(v.versionNumber)}>
+                    View
+                  </Button>
+                ),
+              },
             ]}
             loading={versionsQuery.isLoading}
             emptyMessage="No versions registered"
           />
         </Container>
+      )}
+
+      {detailVersionNumber != null && (
+        <Modal
+          visible
+          onDismiss={() => setDetailVersionNumber(null)}
+          header={`Schema Version v${detailVersionNumber}`}
+          size="large"
+          footer={
+            <Box float="right">
+              <Button variant="link" onClick={() => setDetailVersionNumber(null)}>Close</Button>
+            </Box>
+          }
+        >
+          {versionDetailQuery.isLoading ? (
+            <Spinner />
+          ) : versionDetail ? (
+            <SpaceBetween size="m">
+              <ColumnLayout columns={2} variant="text-grid">
+                <div><Box variant="awsui-key-label">Version ID</Box>{versionDetail.versionId || "-"}</div>
+                <div><Box variant="awsui-key-label">Status</Box>{versionDetail.status || "-"}</div>
+                <div><Box variant="awsui-key-label">Data format</Box>{versionDetail.dataFormat || "-"}</div>
+                <div><Box variant="awsui-key-label">Version</Box>{`v${versionDetail.versionNumber}`}</div>
+              </ColumnLayout>
+              <FormField label="Definition">
+                <Textarea value={versionDetail.definition || ""} readOnly rows={8} />
+              </FormField>
+              <FormField label="Metadata">
+                <Textarea
+                  value={JSON.stringify(metadataQuery.data?.metadataInfoMap || {}, null, 2)}
+                  readOnly
+                  rows={4}
+                />
+              </FormField>
+            </SpaceBetween>
+          ) : (
+            <Box>No version detail available</Box>
+          )}
+        </Modal>
       )}
 
       {showCreateRegistry && (

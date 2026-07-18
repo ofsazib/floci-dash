@@ -21,6 +21,13 @@ import {
   DeleteSchemaCommand,
   ListSchemaVersionsCommand,
   RegisterSchemaVersionCommand,
+  UpdateRegistryCommand,
+  GetSchemaVersionCommand,
+  GetSchemaVersionsDiffCommand,
+  CheckSchemaVersionValidityCommand,
+  PutSchemaVersionMetadataCommand,
+  RemoveSchemaVersionMetadataCommand,
+  QuerySchemaVersionMetadataCommand,
   GetUserDefinedFunctionsCommand,
   CreateUserDefinedFunctionCommand,
   GetUserDefinedFunctionCommand,
@@ -38,6 +45,7 @@ import {
   BatchGetPartitionCommand,
   UpdatePartitionCommand,
   DeletePartitionCommand,
+  BatchUpdatePartitionCommand,
 } from "@aws-sdk/client-glue";
 
 const router = new Hono();
@@ -167,6 +175,20 @@ router.get("/registries/:name", async (c: Context) => {
   return c.json({ registry: result } as any);
 });
 
+router.put("/registries/:name", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<{ description?: string }>();
+  if (!body.description) return c.json({ error: "description is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new UpdateRegistryCommand({
+      RegistryId: { RegistryName: name },
+      Description: body.description,
+    })
+  );
+  return c.json({ name, updated: true });
+});
+
 router.delete("/registries/:name", async (c: Context) => {
   const name = c.req.param("name");
   const client = getClient();
@@ -266,6 +288,97 @@ router.post("/registries/:regName/schemas/:schemaName/versions", async (c: Conte
     })
   );
   return c.json({ versionId: result.SchemaVersionId, registered: true }, 201);
+});
+
+router.get("/registries/:regName/schemas/:schemaName/versions-diff", async (c: Context) => {
+  const regName = c.req.param("regName");
+  const schemaName = c.req.param("schemaName");
+  const first = c.req.query("first");
+  const second = c.req.query("second");
+  if (!first || !second) return c.json({ error: "first and second query parameters are required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new GetSchemaVersionsDiffCommand({
+      SchemaId: { RegistryName: regName, SchemaName: schemaName },
+      FirstSchemaVersionNumber: { VersionNumber: Number(first) },
+      SecondSchemaVersionNumber: { VersionNumber: Number(second) },
+      SchemaDiffType: "SYNTAX_DIFF",
+    })
+  );
+  return c.json({ diff: result.Diff });
+});
+
+router.get("/registries/:regName/schemas/:schemaName/versions/:versionNumber", async (c: Context) => {
+  const regName = c.req.param("regName");
+  const schemaName = c.req.param("schemaName");
+  const versionNumber = c.req.param("versionNumber");
+  const client = getClient();
+  const result = await client.send(
+    new GetSchemaVersionCommand({
+      SchemaId: { RegistryName: regName, SchemaName: schemaName },
+      SchemaVersionNumber: { VersionNumber: Number(versionNumber) },
+    })
+  );
+  return c.json({
+    version: {
+      versionId: result.SchemaVersionId,
+      versionNumber: result.VersionNumber,
+      status: result.Status,
+      definition: result.SchemaDefinition,
+      dataFormat: result.DataFormat,
+      createdTime: result.CreatedTime,
+    },
+  });
+});
+
+router.post("/schema-version-validity", async (c: Context) => {
+  const body = await c.req.json<{ dataFormat?: string; definition: string }>();
+  if (!body.definition) return c.json({ error: "definition is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new CheckSchemaVersionValidityCommand({
+      DataFormat: (body.dataFormat || "AVRO") as any,
+      SchemaDefinition: body.definition,
+    })
+  );
+  return c.json({ valid: result.Valid, error: result.Error });
+});
+
+router.get("/schema-versions/:versionId/metadata", async (c: Context) => {
+  const versionId = c.req.param("versionId");
+  const client = getClient();
+  const result = await client.send(
+    new QuerySchemaVersionMetadataCommand({ SchemaVersionId: versionId })
+  );
+  return c.json({ metadataInfoMap: result.MetadataInfoMap || {}, schemaVersionId: result.SchemaVersionId });
+});
+
+router.post("/schema-versions/:versionId/metadata", async (c: Context) => {
+  const versionId = c.req.param("versionId");
+  const body = await c.req.json<{ key: string; value: string }>();
+  if (!body.key || !body.value) return c.json({ error: "key and value are required" }, 400);
+  const client = getClient();
+  await client.send(
+    new PutSchemaVersionMetadataCommand({
+      SchemaVersionId: versionId,
+      MetadataKeyValue: { MetadataKey: body.key, MetadataValue: body.value },
+    })
+  );
+  return c.json({ added: true });
+});
+
+router.post("/schema-versions/:versionId/metadata/delete", async (c: Context) => {
+  const versionId = c.req.param("versionId");
+  const body = await c.req.json<{ key: string; value: string }>();
+  if (!body.key || !body.value) return c.json({ error: "key and value are required" }, 400);
+  const client = getClient();
+  await client.send(
+    new RemoveSchemaVersionMetadataCommand({
+      SchemaVersionId: versionId,
+      MetadataKeyValue: { MetadataKey: body.key, MetadataValue: body.value },
+    })
+  );
+  return c.json({ removed: true });
 });
 
 // ── User-Defined Functions ──────────────────────────────
@@ -558,6 +671,22 @@ router.post("/databases/:dbName/tables/:tableName/partitions/batch-get", async (
   );
   const partitions = (result.Partitions || []).map(mapPartition);
   return c.json({ partitions, total: partitions.length, unprocessedKeys: result.UnprocessedKeys || [] });
+});
+
+router.post("/databases/:dbName/tables/:tableName/partitions/batch-update", async (c: Context) => {
+  const dbName = c.req.param("dbName");
+  const tableName = c.req.param("tableName");
+  const body = await c.req.json<{ entries: { PartitionValueList: string[]; PartitionInput: any }[] }>();
+  if (!body.entries?.length) return c.json({ error: "entries is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new BatchUpdatePartitionCommand({
+      DatabaseName: dbName,
+      TableName: tableName,
+      Entries: body.entries,
+    })
+  );
+  return c.json({ updated: true, errors: result.Errors || [] });
 });
 
 router.put("/databases/:dbName/tables/:tableName/partitions", async (c: Context) => {

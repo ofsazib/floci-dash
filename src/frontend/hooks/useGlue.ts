@@ -90,6 +90,18 @@ export function useCreateGlueRegistry() {
   });
 }
 
+export function useUpdateGlueRegistry() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { name: string; description: string }) =>
+      api(`/aws/glue/registries/${encodeURIComponent(params.name)}`, {
+        method: "PUT",
+        body: JSON.stringify({ description: params.description }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "glue", "registries"] }),
+  });
+}
+
 export function useDeleteGlueRegistry() {
   const qc = useQueryClient();
   return useMutation({
@@ -156,6 +168,78 @@ export function useRegisterGlueSchemaVersion(registryName: string, schemaName: s
       qc.invalidateQueries({
         queryKey: ["aws", "glue", "registries", registryName, "schemas", schemaName, "versions"],
       }),
+  });
+}
+
+export function useGlueSchemaVersion(
+  registryName: string | null,
+  schemaName: string | null,
+  versionNumber: number | null
+) {
+  return useQuery<{ version: any }>({
+    queryKey: ["aws", "glue", "registries", registryName, "schemas", schemaName, "versions", versionNumber],
+    queryFn: () =>
+      api(
+        `/aws/glue/registries/${encodeURIComponent(registryName!)}/schemas/${encodeURIComponent(schemaName!)}/versions/${versionNumber}`
+      ),
+    enabled: !!registryName && !!schemaName && versionNumber != null,
+  });
+}
+
+export function useGlueSchemaVersionsDiff(
+  registryName: string | null,
+  schemaName: string | null,
+  first: number | null,
+  second: number | null
+) {
+  return useQuery<{ diff: any }>({
+    queryKey: ["aws", "glue", "registries", registryName, "schemas", schemaName, "versions-diff", first, second],
+    queryFn: () =>
+      api(
+        `/aws/glue/registries/${encodeURIComponent(registryName!)}/schemas/${encodeURIComponent(schemaName!)}/versions-diff?first=${first}&second=${second}`
+      ),
+    enabled: !!registryName && !!schemaName && first != null && second != null,
+  });
+}
+
+export function useCheckSchemaVersionValidity() {
+  return useMutation({
+    mutationFn: (params: { dataFormat?: string; definition: string }) =>
+      api("/aws/glue/schema-version-validity", { method: "POST", body: JSON.stringify(params) }),
+  });
+}
+
+export function useSchemaVersionMetadata(versionId: string | null) {
+  return useQuery<{ metadataInfoMap: Record<string, any>; schemaVersionId?: string }>({
+    queryKey: ["aws", "glue", "schema-versions", versionId, "metadata"],
+    queryFn: () => api(`/aws/glue/schema-versions/${encodeURIComponent(versionId!)}/metadata`),
+    enabled: !!versionId,
+  });
+}
+
+export function usePutSchemaVersionMetadata(versionId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { key: string; value: string }) =>
+      api(`/aws/glue/schema-versions/${encodeURIComponent(versionId)}/metadata`, {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "glue", "schema-versions", versionId, "metadata"] }),
+  });
+}
+
+export function useRemoveSchemaVersionMetadata(versionId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { key: string; value: string }) =>
+      api(`/aws/glue/schema-versions/${encodeURIComponent(versionId)}/metadata/delete`, {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "glue", "schema-versions", versionId, "metadata"] }),
   });
 }
 
@@ -289,6 +373,19 @@ export function useUpdateGluePartition(databaseName: string, tableName: string) 
     mutationFn: (params: { partitionValueList: string[]; partitionInput: any }) =>
       api(`/aws/glue/databases/${encodeURIComponent(databaseName)}/tables/${encodeURIComponent(tableName)}/partitions`, {
         method: "PUT",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "glue", "databases", databaseName, "tables", tableName, "partitions"] }),
+  });
+}
+
+export function useBatchUpdateGluePartitions(databaseName: string, tableName: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { entries: { PartitionValueList: string[]; PartitionInput: any }[] }) =>
+      api(`/aws/glue/databases/${encodeURIComponent(databaseName)}/tables/${encodeURIComponent(tableName)}/partitions/batch-update`, {
+        method: "POST",
         body: JSON.stringify(params),
       }),
     onSuccess: () =>

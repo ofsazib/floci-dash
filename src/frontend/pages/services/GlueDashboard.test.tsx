@@ -33,6 +33,8 @@ vi.mock("../../hooks/useGlue", () => {
     useDeleteGlueSchema: noopMutation,
     useGlueSchemaVersions: noopQuery,
     useRegisterGlueSchemaVersion: noopMutation,
+    useGlueSchemaVersion: noopQuery,
+    useSchemaVersionMetadata: noopQuery,
     useGlueUDFs: noopQuery,
     useCreateGlueUDF: noopMutation,
     useUpdateGlueUDF: noopMutation,

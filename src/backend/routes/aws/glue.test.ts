@@ -27,6 +27,13 @@ vi.mock("@aws-sdk/client-glue", () => ({
   DeleteSchemaCommand: createCmd("DeleteSchemaCommand"),
   ListSchemaVersionsCommand: createCmd("ListSchemaVersionsCommand"),
   RegisterSchemaVersionCommand: createCmd("RegisterSchemaVersionCommand"),
+  UpdateRegistryCommand: createCmd("UpdateRegistryCommand"),
+  GetSchemaVersionCommand: createCmd("GetSchemaVersionCommand"),
+  GetSchemaVersionsDiffCommand: createCmd("GetSchemaVersionsDiffCommand"),
+  CheckSchemaVersionValidityCommand: createCmd("CheckSchemaVersionValidityCommand"),
+  PutSchemaVersionMetadataCommand: createCmd("PutSchemaVersionMetadataCommand"),
+  RemoveSchemaVersionMetadataCommand: createCmd("RemoveSchemaVersionMetadataCommand"),
+  QuerySchemaVersionMetadataCommand: createCmd("QuerySchemaVersionMetadataCommand"),
   GetUserDefinedFunctionsCommand: createCmd("GetUserDefinedFunctionsCommand"),
   CreateUserDefinedFunctionCommand: createCmd("CreateUserDefinedFunctionCommand"),
   GetUserDefinedFunctionCommand: createCmd("GetUserDefinedFunctionCommand"),
@@ -44,6 +51,7 @@ vi.mock("@aws-sdk/client-glue", () => ({
   BatchGetPartitionCommand: createCmd("BatchGetPartitionCommand"),
   UpdatePartitionCommand: createCmd("UpdatePartitionCommand"),
   DeletePartitionCommand: createCmd("DeletePartitionCommand"),
+  BatchUpdatePartitionCommand: createCmd("BatchUpdatePartitionCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({ create: (Ctor: any, extra?: any) => new Ctor(extra) }));
@@ -55,6 +63,9 @@ async function post(p: string, b?: any) {
   return router.request(p, { method: "POST", body: b != null ? JSON.stringify(b) : undefined, headers: b != null ? { "content-type": "application/json" } : undefined });
 }
 async function del(p: string) { return router.request(p, { method: "DELETE" }); }
+async function put(p: string, b?: any) {
+  return router.request(p, { method: "PUT", body: b != null ? JSON.stringify(b) : undefined, headers: b != null ? { "content-type": "application/json" } : undefined });
+}
 
 beforeEach(() => mockSend.mockReset());
 
@@ -262,6 +273,155 @@ describe("Glue Routes", () => {
     expect(res.status).toBe(400);
   });
 
+  // UpdateRegistry
+  it("PUT /registries/:name — updates registry description", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put("/registries/reg-1", { description: "new desc" });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.updated).toBe(true);
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        __cmdName: "UpdateRegistryCommand",
+        RegistryId: { RegistryName: "reg-1" },
+        Description: "new desc",
+      })
+    );
+  });
+
+  it("PUT /registries/:name — 400 if description missing", async () => {
+    const res = await put("/registries/reg-1", {});
+    expect(res.status).toBe(400);
+  });
+
+  // GetSchemaVersion
+  it("GET versions/:versionNumber — gets a specific schema version", async () => {
+    mockSend.mockResolvedValueOnce({
+      SchemaVersionId: "v-id-1",
+      VersionNumber: 2,
+      Status: "AVAILABLE",
+      SchemaDefinition: '{"type":"record"}',
+      DataFormat: "AVRO",
+    });
+    const res = await get("/registries/reg-1/schemas/s-1/versions/2");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.version.versionNumber).toBe(2);
+    expect(body.version.definition).toBe('{"type":"record"}');
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        __cmdName: "GetSchemaVersionCommand",
+        SchemaId: { RegistryName: "reg-1", SchemaName: "s-1" },
+        SchemaVersionNumber: { VersionNumber: 2 },
+      })
+    );
+  });
+
+  // GetSchemaVersionsDiff
+  it("GET versions-diff — returns diff", async () => {
+    mockSend.mockResolvedValueOnce({ Diff: "some-diff" });
+    const res = await get("/registries/reg-1/schemas/s-1/versions-diff?first=1&second=2");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.diff).toBe("some-diff");
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        __cmdName: "GetSchemaVersionsDiffCommand",
+        SchemaId: { RegistryName: "reg-1", SchemaName: "s-1" },
+        FirstSchemaVersionNumber: { VersionNumber: 1 },
+        SecondSchemaVersionNumber: { VersionNumber: 2 },
+        SchemaDiffType: "SYNTAX_DIFF",
+      })
+    );
+  });
+
+  it("GET versions-diff — 400 without first/second", async () => {
+    const res = await get("/registries/reg-1/schemas/s-1/versions-diff?first=1");
+    expect(res.status).toBe(400);
+  });
+
+  // CheckSchemaVersionValidity
+  it("POST /schema-version-validity — returns validity", async () => {
+    mockSend.mockResolvedValueOnce({ Valid: true, Error: undefined });
+    const res = await post("/schema-version-validity", { dataFormat: "AVRO", definition: '{"type":"record"}' });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.valid).toBe(true);
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        __cmdName: "CheckSchemaVersionValidityCommand",
+        DataFormat: "AVRO",
+        SchemaDefinition: '{"type":"record"}',
+      })
+    );
+  });
+
+  it("POST /schema-version-validity — 400 without definition", async () => {
+    const res = await post("/schema-version-validity", {});
+    expect(res.status).toBe(400);
+  });
+
+  // QuerySchemaVersionMetadata
+  it("GET /schema-versions/:versionId/metadata — returns metadata map", async () => {
+    mockSend.mockResolvedValueOnce({ MetadataInfoMap: { owner: { MetadataValue: "team" } }, SchemaVersionId: "v-id-1" });
+    const res = await get("/schema-versions/v-id-1/metadata");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.metadataInfoMap.owner.MetadataValue).toBe("team");
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({ __cmdName: "QuerySchemaVersionMetadataCommand", SchemaVersionId: "v-id-1" })
+    );
+  });
+
+  it("GET /schema-versions/:versionId/metadata — empty map", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/schema-versions/v-id-1/metadata");
+    const body = await res.json();
+    expect(body.metadataInfoMap).toEqual({});
+  });
+
+  // PutSchemaVersionMetadata
+  it("POST /schema-versions/:versionId/metadata — adds metadata", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/schema-versions/v-id-1/metadata", { key: "owner", value: "team" });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.added).toBe(true);
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        __cmdName: "PutSchemaVersionMetadataCommand",
+        SchemaVersionId: "v-id-1",
+        MetadataKeyValue: { MetadataKey: "owner", MetadataValue: "team" },
+      })
+    );
+  });
+
+  it("POST /schema-versions/:versionId/metadata — 400 without key/value", async () => {
+    const res = await post("/schema-versions/v-id-1/metadata", { key: "owner" });
+    expect(res.status).toBe(400);
+  });
+
+  // RemoveSchemaVersionMetadata
+  it("POST /schema-versions/:versionId/metadata/delete — removes metadata", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/schema-versions/v-id-1/metadata/delete", { key: "owner", value: "team" });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.removed).toBe(true);
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        __cmdName: "RemoveSchemaVersionMetadataCommand",
+        SchemaVersionId: "v-id-1",
+        MetadataKeyValue: { MetadataKey: "owner", MetadataValue: "team" },
+      })
+    );
+  });
+
+  it("POST /schema-versions/:versionId/metadata/delete — 400 without key/value", async () => {
+    const res = await post("/schema-versions/v-id-1/metadata/delete", { value: "team" });
+    expect(res.status).toBe(400);
+  });
+
   // UDFs
   it("GET /databases/:dbName/functions — lists UDFs", async () => {
     mockSend.mockResolvedValueOnce({
@@ -465,6 +625,30 @@ describe("Glue Routes", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.total).toBe(1);
+  });
+
+  it("POST partitions/batch-update — batch updates partitions", async () => {
+    mockSend.mockResolvedValueOnce({ Errors: [] });
+    const res = await post("/databases/mydb/tables/tbl1/partitions/batch-update", {
+      entries: [{ PartitionValueList: ["2024"], PartitionInput: { Values: ["2024"] } }],
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.updated).toBe(true);
+    expect(body.errors).toEqual([]);
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        __cmdName: "BatchUpdatePartitionCommand",
+        DatabaseName: "mydb",
+        TableName: "tbl1",
+        Entries: [{ PartitionValueList: ["2024"], PartitionInput: { Values: ["2024"] } }],
+      })
+    );
+  });
+
+  it("POST partitions/batch-update — 400 without entries", async () => {
+    const res = await post("/databases/mydb/tables/tbl1/partitions/batch-update", {});
+    expect(res.status).toBe(400);
   });
 
   it("PUT partitions — updates a partition", async () => {
