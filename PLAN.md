@@ -1630,8 +1630,8 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 | # | Service | Missing Operations | Floci Handler | Dashboard Impact |
 |---|---------|-------------------|---------------|-----------------|
 | G.1 | **DynamoDB Streams** | ListStreams, DescribeStream, GetShardIterator, GetRecords | `DynamoDbStreamsJsonHandler` | Done 2026-07-13 — users can't see item-level changes |
-| G.2 | **EC2 Flow Logs** | CreateFlowLogs, DescribeFlowLogs, DeleteFlowLogs | `Ec2QueryHandler` | No Flow Logs tab in EC2 page |
-| G.3 | **EC2 Network ACLs** | CreateNetworkAcl, DescribeNetworkAcls, DeleteNetworkAcl, CreateNetworkAclEntry, ReplaceNetworkAclEntry, DeleteNetworkAclEntry, ReplaceNetworkAclAssociation | `Ec2QueryHandler` | Done 2026-07-13 | — missing entire network ACL resource type |
+| G.2 | **EC2 Flow Logs** | CreateFlowLogs, DescribeFlowLogs, DeleteFlowLogs | `Ec2QueryHandler` | Done 2026-07-18 — Flow Logs tab in EC2 page |
+| G.3 | **EC2 Network ACLs** | CreateNetworkAcl, DescribeNetworkAcls, DeleteNetworkAcl, CreateNetworkAclEntry, ReplaceNetworkAclEntry, DeleteNetworkAclEntry, ReplaceNetworkAclAssociation | `Ec2QueryHandler` | Done 2026-07-13 — network ACL resource type |
 | G.4 | **S3 Select** | SelectObjectContent (SQL queries on CSV/JSON objects) | `S3SelectService` + `S3Controller` | Done 2026-07-13 | — users can't query object contents with SQL |
 | G.5 | **CloudFormation** (Stack Sets) | CreateStackSet, DescribeStackSet, ListStackSets, UpdateStackSet, DeleteStackSet, CreateStackInstances, ListStackInstances, DescribeStackInstance, DeleteStackInstances, ListStackSetOperations, DescribeStackSetOperation | `CloudFormationQueryHandler` + `StackSetService` | No stack set management — missing entire multi-account/multi-region deployment feature |
 | G.6 | **CloudFormation** (Events + Stack Resources) | DescribeStackEvents, DescribeStackResource, SetStackPolicy, GetStackPolicy | `CloudFormationQueryHandler` | Done 2026-07-16 (Events tab, resource detail, and Policy tab with get/set — Floci accepts policy but does not persist it) |
