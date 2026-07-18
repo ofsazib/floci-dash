@@ -29,6 +29,7 @@ vi.mock("@aws-sdk/client-wafv2", () => ({
   ListRegexPatternSetsCommand: createCmd("ListRegexPatternSetsCommand"),
   CreateRegexPatternSetCommand: createCmd("CreateRegexPatternSetCommand"),
   GetRegexPatternSetCommand: createCmd("GetRegexPatternSetCommand"),
+  UpdateRegexPatternSetCommand: createCmd("UpdateRegexPatternSetCommand"),
   DeleteRegexPatternSetCommand: createCmd("DeleteRegexPatternSetCommand"),
   ListRuleGroupsCommand: createCmd("ListRuleGroupsCommand"),
   CreateRuleGroupCommand: createCmd("CreateRuleGroupCommand"),
@@ -212,6 +213,46 @@ describe("WAFv2 Routes — Regex Pattern Sets", () => {
 
   it("POST /regex-pattern-sets — 400 when Name missing", async () => {
     const res = await post("/regex-pattern-sets", { Scope: "REGIONAL" });
+    expect(res.status).toBe(400);
+  });
+
+  it("GET /regex-pattern-sets/:id — gets one", async () => {
+    mockSend.mockResolvedValueOnce({ RegexPatternSet: { Name: "rx1", Id: "id-1", RegularExpressionList: [{ RegexString: ".*" }] } });
+    const res = await get("/regex-pattern-sets/id-1?name=rx1&scope=REGIONAL");
+    const json = await res.json();
+    expect(json.regexPatternSet.Name).toBe("rx1");
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetRegexPatternSetCommand");
+    expect(mockSend.mock.calls[0][0].Id).toBe("id-1");
+    expect(mockSend.mock.calls[0][0].Name).toBe("rx1");
+    expect(mockSend.mock.calls[0][0].Scope).toBe("REGIONAL");
+  });
+
+  it("GET /regex-pattern-sets/:id — 400 when name missing", async () => {
+    const res = await get("/regex-pattern-sets/id-1");
+    expect(res.status).toBe(400);
+  });
+
+  it("PUT /regex-pattern-sets/:id — updates", async () => {
+    mockSend.mockResolvedValueOnce({ NextLockToken: "lock-2" });
+    const res = await router.request("/regex-pattern-sets/id-1", {
+      method: "PUT",
+      body: JSON.stringify({ Name: "rx1", Scope: "REGIONAL", LockToken: "lock-1", RegularExpressionList: [{ RegexString: ".*foo.*" }] }),
+      headers: { "content-type": "application/json" },
+    });
+    const json = await res.json();
+    expect(json.updated).toBe(true);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("UpdateRegexPatternSetCommand");
+    expect(mockSend.mock.calls[0][0].Id).toBe("id-1");
+    expect(mockSend.mock.calls[0][0].LockToken).toBe("lock-1");
+    expect(mockSend.mock.calls[0][0].RegularExpressionList).toEqual([{ RegexString: ".*foo.*" }]);
+  });
+
+  it("PUT /regex-pattern-sets/:id — 400 when LockToken missing", async () => {
+    const res = await router.request("/regex-pattern-sets/id-1", {
+      method: "PUT",
+      body: JSON.stringify({ Name: "rx1", Scope: "REGIONAL" }),
+      headers: { "content-type": "application/json" },
+    });
     expect(res.status).toBe(400);
   });
 

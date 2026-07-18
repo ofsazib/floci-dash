@@ -411,7 +411,9 @@ import {
   useCreateIPSet,
   useDeleteIPSet,
   useRegexPatternSets,
+  useRegexPatternSet,
   useCreateRegexPatternSet,
+  useUpdateRegexPatternSet,
   useDeleteRegexPatternSet,
   useRuleGroups,
   useCreateRuleGroup,
@@ -524,6 +526,7 @@ export function WafV2Dashboard() {
   const deleteIPSet = useDeleteIPSet();
   const regexSetsQuery = useRegexPatternSets();
   const createRegexSet = useCreateRegexPatternSet();
+  const updateRegexSet = useUpdateRegexPatternSet();
   const deleteRegexSet = useDeleteRegexPatternSet();
   const ruleGroupsQuery = useRuleGroups();
   const createRuleGroup = useCreateRuleGroup();
@@ -532,6 +535,7 @@ export function WafV2Dashboard() {
   const [aclName, setAclName] = useState("");
   const [showCreateIPSet, setShowCreateIPSet] = useState(false);
   const [showCreateRegexSet, setShowCreateRegexSet] = useState(false);
+  const [editRegexSet, setEditRegexSet] = useState<{ id: string; name: string } | null>(null);
   const [showCreateRuleGroup, setShowCreateRuleGroup] = useState(false);
   const { showToast } = useToast();
 
@@ -689,12 +693,15 @@ export function WafV2Dashboard() {
               id: "actions",
               header: "",
               cell: (item: any) => (
-                <DeleteButton
-                  itemName={item.name}
-                  resourceType="regex set"
-                  loading={deleteRegexSet.isPending && deleteRegexSet.variables?.Name === item.name}
-                  onDelete={() => deleteRegexSet.mutateAsync({ Id: item.id, Name: item.name, Scope: "REGIONAL", LockToken: "placeholder" })}
-                />
+                <SpaceBetween direction="horizontal" size="xs">
+                  <Button onClick={() => setEditRegexSet({ id: item.id, name: item.name })}>Edit</Button>
+                  <DeleteButton
+                    itemName={item.name}
+                    resourceType="regex set"
+                    loading={deleteRegexSet.isPending && deleteRegexSet.variables?.Name === item.name}
+                    onDelete={() => deleteRegexSet.mutateAsync({ Id: item.id, Name: item.name, Scope: "REGIONAL", LockToken: "placeholder" })}
+                  />
+                </SpaceBetween>
               ),
             },
           ]}
@@ -910,6 +917,16 @@ export function WafV2Dashboard() {
         />
       )}
 
+      {editRegexSet && (
+        <EditRegexSetModal
+          id={editRegexSet.id}
+          name={editRegexSet.name}
+          onClose={() => setEditRegexSet(null)}
+          onUpdated={() => { setEditRegexSet(null); showToast("success", "Regex pattern set updated"); }}
+          updateRegexSet={updateRegexSet}
+        />
+      )}
+
       {showCreateRuleGroup && (
         <CreateRuleGroupModal
           onClose={() => setShowCreateRuleGroup(false)}
@@ -1040,6 +1057,83 @@ function CreateRegexSetModal({
           <Textarea value={patterns} onChange={({ detail }) => setPatterns(detail.value)} placeholder=".*union.*select.*" rows={3} />
         </FormField>
       </SpaceBetween>
+    </Modal>
+  );
+}
+
+function EditRegexSetModal({
+  id,
+  name,
+  onClose,
+  onUpdated,
+  updateRegexSet,
+}: {
+  id: string;
+  name: string;
+  onClose: () => void;
+  onUpdated: () => void;
+  updateRegexSet: ReturnType<typeof useUpdateRegexPatternSet>;
+}) {
+  const getQuery = useRegexPatternSet(id, name, "REGIONAL");
+  const [description, setDescription] = useState("");
+  const [patterns, setPatterns] = useState("");
+  const [initialized, setInitialized] = useState(false);
+
+  useEffect(() => {
+    if (getQuery.data?.regexPatternSet && !initialized) {
+      const set = getQuery.data.regexPatternSet;
+      setDescription(set.Description || "");
+      setPatterns(
+        (set.RegularExpressionList || [])
+          .map((r: any) => r.RegexString)
+          .filter(Boolean)
+          .join("\n")
+      );
+      setInitialized(true);
+    }
+  }, [getQuery.data, initialized]);
+
+  const lockToken = getQuery.data?.regexPatternSet?.LockToken;
+
+  function handleSave() {
+    if (!lockToken) return;
+    const patternList = patterns
+      .split(/\n/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((s) => ({ RegexString: s }));
+    updateRegexSet.mutate(
+      {
+        Id: id,
+        Name: name,
+        Scope: "REGIONAL",
+        LockToken: lockToken,
+        Description: description.trim() || undefined,
+        RegularExpressionList: patternList,
+      },
+      { onSuccess: onUpdated }
+    );
+  }
+
+  return (
+    <Modal visible onDismiss={onClose} header={`Edit Regex Pattern Set: ${name}`} size="medium" footer={
+      <SpaceBetween direction="horizontal" size="xs">
+        <Button variant="link" onClick={onClose}>Cancel</Button>
+        <Button variant="primary" loading={updateRegexSet.isPending} onClick={handleSave} disabled={!lockToken}>Save</Button>
+      </SpaceBetween>
+    }>
+      {getQuery.isLoading ? (
+        <Spinner />
+      ) : getQuery.isError ? (
+        <Alert type="error">Failed to load regex pattern set.</Alert>
+      ) : (
+        <SpaceBetween size="m">
+          <FormField label="Description (optional)"><Input value={description} onChange={({ detail }) => setDescription(detail.value)} placeholder="SQL injection patterns" /></FormField>
+          <FormField label="Regex patterns" description="One per line">
+            <Textarea value={patterns} onChange={({ detail }) => setPatterns(detail.value)} placeholder=".*union.*select.*" rows={3} />
+          </FormField>
+        </SpaceBetween>
+      )}
     </Modal>
   );
 }

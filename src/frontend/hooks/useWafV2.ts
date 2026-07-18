@@ -113,6 +113,16 @@ export function useCreateRegexPatternSet() {
   });
 }
 
+export function useUpdateRegexPatternSet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { Id: string; Name: string; Scope: string; LockToken: string; RegularExpressionList: any[]; Description?: string }) =>
+      api(`/aws/wafv2/regex-pattern-sets/${encodeURIComponent(body.Id)}`, { method: "PUT", body: JSON.stringify(body) }),
+    onSuccess: (_data, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "wafv2", "regex-pattern-sets", variables.Scope] }),
+  });
+}
+
 export function useDeleteRegexPatternSet() {
   const qc = useQueryClient();
   return useMutation({
