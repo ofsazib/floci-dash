@@ -91,6 +91,13 @@ import {
   useDeleteECSService,
   useStopECSTask,
   useRunECSTask,
+  useECSAccountSettings,
+  usePutECSAccountSetting,
+  useDeleteECSAccountSetting,
+  useECSTaskSets,
+  useCreateECSTaskSet,
+  useSetPrimaryECSTaskSet,
+  useDeleteECSTaskSet,
 } from "../../hooks/useECS";
 import {
   useSSMParameters,
@@ -545,7 +552,7 @@ export function ECSDashboard() {
     return <ECSClusterDetail clusterName={selectedCluster} onBack={() => setSelectedCluster(null)} />;
   }
 
-  return (
+  const clustersTab = (
     <>
       <ResourceTable
         resourceName="Cluster"
@@ -603,6 +610,149 @@ export function ECSDashboard() {
               placeholder="my-cluster"
             />
           </FormField>
+        </Form>
+      </Modal>
+    </>
+  );
+
+  if (isError) {
+    return (
+      <Alert type="error" header="Failed to load ECS clusters">
+        {(error as Error)?.message || "Unknown error"}
+      </Alert>
+    );
+  }
+
+  return (
+    <Tabs
+      tabs={[
+        { label: "Clusters", id: "clusters", content: clustersTab },
+        { label: "Account Settings", id: "account-settings", content: <ECSAccountSettingsTab /> },
+      ]}
+    />
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  ECS Account Settings
+// ────────────────────────────────────────────────────────
+
+const ECS_ACCOUNT_SETTING_NAMES: SelectProps.Option[] = [
+  { label: "containerInsights", value: "containerInsights" },
+  { label: "serviceLongArnFormat", value: "serviceLongArnFormat" },
+  { label: "taskLongArnFormat", value: "taskLongArnFormat" },
+  { label: "containerInstanceLongArnFormat", value: "containerInstanceLongArnFormat" },
+  { label: "awsvpcTrunking", value: "awsvpcTrunking" },
+  { label: "tagResourceAuthorization", value: "tagResourceAuthorization" },
+];
+
+function ECSAccountSettingsTab() {
+  const { showToast } = useToast();
+  const settingsQuery = useECSAccountSettings();
+  const putSetting = usePutECSAccountSetting();
+  const deleteSetting = useDeleteECSAccountSetting();
+
+  const [showEdit, setShowEdit] = useState(false);
+  const [settingName, setSettingName] = useState<SelectProps.Option | null>(ECS_ACCOUNT_SETTING_NAMES[0]);
+  const [settingValue, setSettingValue] = useState<SelectProps.Option | null>({ label: "enabled", value: "enabled" });
+  const [isDefault, setIsDefault] = useState(false);
+
+  const settings = settingsQuery.data?.settings || [];
+
+  const columns = [
+    { id: "name", header: "Name", cell: (item: any) => item.name || "—", isRowHeader: true },
+    { id: "value", header: "Value", cell: (item: any) => <StatusBadge status={item.value || "—"} /> },
+    { id: "principal", header: "Principal", cell: (item: any) => item.principalArn || "account default" },
+    {
+      id: "actions",
+      header: "",
+      cell: (item: any) => (
+        <DeleteButton
+          itemName={item.name}
+          resourceType="account setting"
+          loading={deleteSetting.isPending}
+          onDelete={() =>
+            deleteSetting.mutateAsync(item.name).then(
+              () => showToast("success", `Reset "${item.name}" to default`),
+              (err) => showToast("error", (err as Error)?.message || "Failed to delete setting"),
+            )
+          }
+        />
+      ),
+    },
+  ];
+
+  return (
+    <>
+      <ResourceTable
+        resourceName="Account Setting"
+        headerTitle="Account Settings"
+        headerCounter={settingsQuery.data?.total}
+        items={settings}
+        columns={columns}
+        loading={settingsQuery.isLoading}
+        emptyMessage="No account settings configured."
+        onCreate={() => setShowEdit(true)}
+      />
+
+      <Modal
+        visible={showEdit}
+        onDismiss={() => setShowEdit(false)}
+        header="Put account setting"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowEdit(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                loading={putSetting.isPending}
+                disabled={!settingName?.value || !settingValue?.value}
+                onClick={() => {
+                  putSetting.mutate(
+                    { name: settingName!.value!, value: settingValue!.value!, isDefault },
+                    {
+                      onSuccess: () => {
+                        showToast("success", `Set ${settingName!.value} to ${settingValue!.value}`);
+                        setShowEdit(false);
+                      },
+                      onError: (err) => showToast("error", (err as Error)?.message || "Failed to put setting"),
+                    }
+                  );
+                }}
+              >
+                Save
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          <SpaceBetween size="m">
+            <FormField label="Setting name">
+              <Select
+                selectedOption={settingName}
+                onChange={({ detail }) => setSettingName(detail.selectedOption)}
+                options={ECS_ACCOUNT_SETTING_NAMES}
+              />
+            </FormField>
+            <FormField label="Value">
+              <Select
+                selectedOption={settingValue}
+                onChange={({ detail }) => setSettingValue(detail.selectedOption)}
+                options={[
+                  { label: "enabled", value: "enabled" },
+                  { label: "disabled", value: "disabled" },
+                ]}
+              />
+            </FormField>
+            <FormField label="Scope">
+              <Checkbox checked={isDefault} onChange={({ detail }) => setIsDefault(detail.checked)}>
+                Apply as account default (all IAM users/roles)
+              </Checkbox>
+            </FormField>
+          </SpaceBetween>
         </Form>
       </Modal>
     </>
@@ -879,6 +1029,11 @@ function ECSClusterDetail({ clusterName, onBack }: { clusterName: string; onBack
         />
       ),
     },
+    {
+      label: "Task Sets",
+      id: "task-sets",
+      content: <ECSTaskSetsTab clusterName={clusterName} services={servicesQuery.data?.services || []} />,
+    },
   ];
 
   return (
@@ -892,6 +1047,140 @@ function ECSClusterDetail({ clusterName, onBack }: { clusterName: string; onBack
           </Button>
         }
       />
+    </SpaceBetween>
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  ECS Task Sets (per service, EXTERNAL deployment controller)
+// ────────────────────────────────────────────────────────
+
+function ECSTaskSetsTab({ clusterName, services }: { clusterName: string; services: any[] }) {
+  const { showToast } = useToast();
+  const [selectedService, setSelectedService] = useState<SelectProps.Option | null>(null);
+  const serviceName = selectedService?.value || null;
+
+  const taskSetsQuery = useECSTaskSets(clusterName, serviceName);
+  const createTaskSet = useCreateECSTaskSet();
+  const setPrimary = useSetPrimaryECSTaskSet();
+  const deleteTaskSet = useDeleteECSTaskSet();
+
+  const [showCreate, setShowCreate] = useState(false);
+  const [taskDefinition, setTaskDefinition] = useState("");
+
+  const serviceOptions = services.map((s: any) => ({ label: s.serviceName, value: s.serviceName }));
+  const taskSets = taskSetsQuery.data?.taskSets || [];
+
+  const columns = [
+    { id: "id", header: "Task Set ID", cell: (item: any) => item.id || "—", isRowHeader: true },
+    { id: "status", header: "Status", cell: (item: any) => <StatusBadge status={item.status || "—"} /> },
+    { id: "taskDef", header: "Task Definition", cell: (item: any) => item.taskDefinition?.split("/").pop() || "—" },
+    { id: "running", header: "Running", cell: (item: any) => item.runningCount ?? 0 },
+    { id: "desired", header: "Desired", cell: (item: any) => item.computedDesiredCount ?? 0 },
+    {
+      id: "actions",
+      header: "",
+      cell: (item: any) => (
+        <SpaceBetween direction="horizontal" size="xs">
+          {item.status !== "PRIMARY" && (
+            <Button
+              variant="link"
+              onClick={() =>
+                setPrimary.mutateAsync({ cluster: clusterName, service: serviceName!, primaryTaskSet: item.id }).then(
+                  () => showToast("success", `Task set "${item.id}" set as primary`),
+                  (err) => showToast("error", (err as Error)?.message || "Failed to set primary"),
+                )
+              }
+            >
+              Make primary
+            </Button>
+          )}
+          <DeleteButton
+            itemName={item.id}
+            resourceType="task set"
+            loading={deleteTaskSet.isPending}
+            onDelete={() =>
+              deleteTaskSet.mutateAsync({ cluster: clusterName, service: serviceName!, taskSet: item.id, force: true }).then(
+                () => showToast("success", `Task set "${item.id}" deleted`),
+                (err) => showToast("error", (err as Error)?.message || "Failed to delete task set"),
+              )
+            }
+          />
+        </SpaceBetween>
+      ),
+    },
+  ];
+
+  return (
+    <SpaceBetween size="m">
+      <Container header={<Header variant="h3">Task set service</Header>}>
+        <FormField label="Service" description="Task sets belong to a service using the EXTERNAL deployment controller.">
+          <Select
+            selectedOption={selectedService}
+            onChange={({ detail }) => setSelectedService(detail.selectedOption)}
+            options={serviceOptions}
+            placeholder="Choose a service"
+            empty="No services in this cluster"
+            filteringType="auto"
+          />
+        </FormField>
+      </Container>
+
+      {serviceName && (
+        <ResourceTable
+          resourceName="Task Set"
+          headerTitle={`Task Sets — ${serviceName}`}
+          headerCounter={taskSetsQuery.data?.total}
+          items={taskSets}
+          columns={columns}
+          loading={taskSetsQuery.isLoading}
+          emptyMessage="No task sets for this service."
+          onCreate={() => setShowCreate(true)}
+        />
+      )}
+
+      <Modal
+        visible={showCreate}
+        onDismiss={() => { setShowCreate(false); setTaskDefinition(""); }}
+        header="Create task set"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreate(false)}>Cancel</Button>
+              <Button
+                variant="primary"
+                loading={createTaskSet.isPending}
+                disabled={!taskDefinition.trim() || !serviceName}
+                onClick={() => {
+                  createTaskSet.mutate(
+                    { cluster: clusterName, service: serviceName, taskDefinition: taskDefinition.trim() },
+                    {
+                      onSuccess: () => {
+                        showToast("success", "Task set created");
+                        setShowCreate(false);
+                        setTaskDefinition("");
+                      },
+                      onError: (err) => showToast("error", (err as Error)?.message || "Failed to create task set"),
+                    }
+                  );
+                }}
+              >
+                Create
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          <FormField label="Task definition" description="Family:revision or ARN.">
+            <Input
+              value={taskDefinition}
+              onChange={({ detail }) => setTaskDefinition(detail.value)}
+              placeholder="my-task-def:1"
+            />
+          </FormField>
+        </Form>
+      </Modal>
     </SpaceBetween>
   );
 }

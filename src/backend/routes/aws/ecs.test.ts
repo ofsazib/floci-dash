@@ -42,6 +42,21 @@ vi.mock("@aws-sdk/client-ecs", () => ({
   TagResourceCommand: createCmd("TagResourceCommand"),
   UntagResourceCommand: createCmd("UntagResourceCommand"),
   ListTagsForResourceCommand: createCmd("ListTagsForResourceCommand"),
+  ListAccountSettingsCommand: createCmd("ListAccountSettingsCommand"),
+  PutAccountSettingCommand: createCmd("PutAccountSettingCommand"),
+  PutAccountSettingDefaultCommand: createCmd("PutAccountSettingDefaultCommand"),
+  DeleteAccountSettingCommand: createCmd("DeleteAccountSettingCommand"),
+  ListAttributesCommand: createCmd("ListAttributesCommand"),
+  PutAttributesCommand: createCmd("PutAttributesCommand"),
+  DeleteAttributesCommand: createCmd("DeleteAttributesCommand"),
+  CreateTaskSetCommand: createCmd("CreateTaskSetCommand"),
+  UpdateTaskSetCommand: createCmd("UpdateTaskSetCommand"),
+  DeleteTaskSetCommand: createCmd("DeleteTaskSetCommand"),
+  DescribeTaskSetsCommand: createCmd("DescribeTaskSetsCommand"),
+  UpdateServicePrimaryTaskSetCommand: createCmd("UpdateServicePrimaryTaskSetCommand"),
+  ListServiceDeploymentsCommand: createCmd("ListServiceDeploymentsCommand"),
+  DescribeServiceDeploymentsCommand: createCmd("DescribeServiceDeploymentsCommand"),
+  DescribeServiceRevisionsCommand: createCmd("DescribeServiceRevisionsCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -62,8 +77,12 @@ async function post(path: string, body?: any) {
   });
 }
 
-async function del(path: string) {
-  return router.request(path, { method: "DELETE" });
+async function del(path: string, body?: any) {
+  return router.request(path, {
+    method: "DELETE",
+    body: body != null ? JSON.stringify(body) : undefined,
+    headers: body != null ? { "content-type": "application/json" } : undefined,
+  });
 }
 
 async function put(path: string, body?: any) {
@@ -419,6 +438,254 @@ describe("ECS routes — Tags", () => {
 
   it("DELETE /tags — 400 when no resourceArn", async () => {
     const res = await del("/tags?tagKeys=env");
+    expect(res.status).toBe(400);
+  });
+});
+
+// ── Account Settings ─────────────────────────────────────
+
+describe("ECS routes — Account Settings", () => {
+  it("GET /account-settings — returns settings", async () => {
+    mockSend.mockResolvedValueOnce({
+      settings: [{ name: "containerInsights", value: "enabled" }],
+    });
+    const res = await get("/account-settings");
+    const json = await res.json();
+    expect(json.total).toBe(1);
+    expect(json.settings[0].name).toBe("containerInsights");
+  });
+
+  it("GET /account-settings — returns empty when none", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/account-settings");
+    const json = await res.json();
+    expect(json).toEqual({ settings: [], total: 0 });
+  });
+
+  it("GET /account-settings — passes filters", async () => {
+    mockSend.mockResolvedValueOnce({ settings: [] });
+    await get("/account-settings?name=containerInsights&value=enabled&effectiveSettings=true");
+    const arg = mockSend.mock.calls[0][0];
+    expect(arg.name).toBe("containerInsights");
+    expect(arg.value).toBe("enabled");
+    expect(arg.effectiveSettings).toBe(true);
+  });
+
+  it("PUT /account-settings — puts account setting", async () => {
+    mockSend.mockResolvedValueOnce({ setting: { name: "containerInsights", value: "enabled" } });
+    const res = await put("/account-settings", { name: "containerInsights", value: "enabled" });
+    const json = await res.json();
+    expect(json.setting.value).toBe("enabled");
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("PutAccountSettingCommand");
+  });
+
+  it("PUT /account-settings — uses default command when isDefault", async () => {
+    mockSend.mockResolvedValueOnce({ setting: { name: "containerInsights", value: "enabled" } });
+    await put("/account-settings", { name: "containerInsights", value: "enabled", isDefault: true });
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("PutAccountSettingDefaultCommand");
+  });
+
+  it("PUT /account-settings — 400 when missing fields", async () => {
+    const res = await put("/account-settings", { name: "containerInsights" });
+    expect(res.status).toBe(400);
+  });
+
+  it("DELETE /account-settings — deletes setting", async () => {
+    mockSend.mockResolvedValueOnce({ setting: { name: "containerInsights" } });
+    const res = await del("/account-settings?name=containerInsights");
+    const json = await res.json();
+    expect(json.deleted).toBe(true);
+  });
+
+  it("DELETE /account-settings — 400 when no name", async () => {
+    const res = await del("/account-settings");
+    expect(res.status).toBe(400);
+  });
+});
+
+// ── Attributes ───────────────────────────────────────────
+
+describe("ECS routes — Attributes", () => {
+  it("GET /attributes — returns attributes", async () => {
+    mockSend.mockResolvedValueOnce({
+      attributes: [{ name: "stack", value: "prod", targetId: "arn:ci" }],
+    });
+    const res = await get("/attributes?cluster=c1");
+    const json = await res.json();
+    expect(json.total).toBe(1);
+  });
+
+  it("GET /attributes — defaults targetType to container-instance", async () => {
+    mockSend.mockResolvedValueOnce({ attributes: [] });
+    await get("/attributes?cluster=c1");
+    expect(mockSend.mock.calls[0][0].targetType).toBe("container-instance");
+  });
+
+  it("POST /attributes — puts attributes", async () => {
+    mockSend.mockResolvedValueOnce({
+      attributes: [{ name: "stack", value: "prod" }],
+    });
+    const res = await post("/attributes", {
+      cluster: "c1",
+      attributes: [{ name: "stack", value: "prod", targetId: "arn:ci" }],
+    });
+    const json = await res.json();
+    expect(json.attributes).toHaveLength(1);
+  });
+
+  it("POST /attributes — 400 when no attributes", async () => {
+    const res = await post("/attributes", { cluster: "c1" });
+    expect(res.status).toBe(400);
+  });
+
+  it("DELETE /attributes — deletes attributes", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await del("/attributes", {
+      cluster: "c1",
+      attributes: [{ name: "stack", targetId: "arn:ci" }],
+    });
+    const json = await res.json();
+    expect(json.deleted).toBe(true);
+  });
+
+  it("DELETE /attributes — 400 when no attributes", async () => {
+    const res = await del("/attributes", { cluster: "c1" });
+    expect(res.status).toBe(400);
+  });
+});
+
+// ── Task Sets ────────────────────────────────────────────
+
+describe("ECS routes — Task Sets", () => {
+  it("GET /task-sets — returns task sets", async () => {
+    mockSend.mockResolvedValueOnce({
+      taskSets: [{ id: "ts-1", status: "PRIMARY" }],
+    });
+    const res = await get("/task-sets?cluster=c1&service=svc1");
+    const json = await res.json();
+    expect(json.total).toBe(1);
+  });
+
+  it("GET /task-sets — 400 when missing cluster/service", async () => {
+    const res = await get("/task-sets?cluster=c1");
+    expect(res.status).toBe(400);
+  });
+
+  it("GET /task-sets — passes taskSets filter", async () => {
+    mockSend.mockResolvedValueOnce({ taskSets: [] });
+    await get("/task-sets?cluster=c1&service=svc1&taskSets=ts-1,ts-2");
+    expect(mockSend.mock.calls[0][0].taskSets).toEqual(["ts-1", "ts-2"]);
+  });
+
+  it("POST /task-sets — creates task set", async () => {
+    mockSend.mockResolvedValueOnce({ taskSet: { id: "ts-1" } });
+    const res = await post("/task-sets", {
+      cluster: "c1",
+      service: "svc1",
+      taskDefinition: "td:1",
+    });
+    expect(res.status).toBe(201);
+    const json = await res.json();
+    expect(json.taskSet.id).toBe("ts-1");
+  });
+
+  it("POST /task-sets — 400 when missing required", async () => {
+    const res = await post("/task-sets", { cluster: "c1", service: "svc1" });
+    expect(res.status).toBe(400);
+  });
+
+  it("PUT /task-sets — updates scale", async () => {
+    mockSend.mockResolvedValueOnce({ taskSet: { id: "ts-1" } });
+    const res = await put("/task-sets", {
+      cluster: "c1",
+      service: "svc1",
+      taskSet: "ts-1",
+      scale: { value: 50, unit: "PERCENT" },
+    });
+    const json = await res.json();
+    expect(json.taskSet.id).toBe("ts-1");
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("UpdateTaskSetCommand");
+  });
+
+  it("PUT /task-sets — 400 when missing scale", async () => {
+    const res = await put("/task-sets", { cluster: "c1", service: "svc1", taskSet: "ts-1" });
+    expect(res.status).toBe(400);
+  });
+
+  it("PUT /task-sets/primary — sets primary task set", async () => {
+    mockSend.mockResolvedValueOnce({ taskSet: { id: "ts-2" } });
+    const res = await put("/task-sets/primary", {
+      cluster: "c1",
+      service: "svc1",
+      primaryTaskSet: "ts-2",
+    });
+    const json = await res.json();
+    expect(json.taskSet.id).toBe("ts-2");
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("UpdateServicePrimaryTaskSetCommand");
+  });
+
+  it("PUT /task-sets/primary — 400 when missing primaryTaskSet", async () => {
+    const res = await put("/task-sets/primary", { cluster: "c1", service: "svc1" });
+    expect(res.status).toBe(400);
+  });
+
+  it("DELETE /task-sets — deletes task set", async () => {
+    mockSend.mockResolvedValueOnce({ taskSet: { id: "ts-1" } });
+    const res = await del("/task-sets?cluster=c1&service=svc1&taskSet=ts-1&force=true");
+    const json = await res.json();
+    expect(json.deleted).toBe(true);
+    expect(mockSend.mock.calls[0][0].force).toBe(true);
+  });
+
+  it("DELETE /task-sets — 400 when missing params", async () => {
+    const res = await del("/task-sets?cluster=c1&service=svc1");
+    expect(res.status).toBe(400);
+  });
+});
+
+// ── Service Deployments ──────────────────────────────────
+
+describe("ECS routes — Service Deployments & Revisions", () => {
+  it("GET /service-deployments — returns deployments", async () => {
+    mockSend.mockResolvedValueOnce({
+      serviceDeployments: [{ serviceDeploymentArn: "arn:sd-1", status: "SUCCESSFUL" }],
+    });
+    const res = await get("/service-deployments?service=svc1&cluster=c1");
+    const json = await res.json();
+    expect(json.total).toBe(1);
+  });
+
+  it("GET /service-deployments — 400 when no service", async () => {
+    const res = await get("/service-deployments");
+    expect(res.status).toBe(400);
+  });
+
+  it("GET /service-deployments/detail — returns detail", async () => {
+    mockSend.mockResolvedValueOnce({
+      serviceDeployments: [{ serviceDeploymentArn: "arn:sd-1" }],
+    });
+    const res = await get("/service-deployments/detail?arns=arn:sd-1,arn:sd-2");
+    const json = await res.json();
+    expect(json.serviceDeployments).toHaveLength(1);
+    expect(mockSend.mock.calls[0][0].serviceDeploymentArns).toEqual(["arn:sd-1", "arn:sd-2"]);
+  });
+
+  it("GET /service-deployments/detail — 400 when no arns", async () => {
+    const res = await get("/service-deployments/detail");
+    expect(res.status).toBe(400);
+  });
+
+  it("GET /service-revisions — returns revisions", async () => {
+    mockSend.mockResolvedValueOnce({
+      serviceRevisions: [{ serviceRevisionArn: "arn:sr-1" }],
+    });
+    const res = await get("/service-revisions?arns=arn:sr-1");
+    const json = await res.json();
+    expect(json.serviceRevisions).toHaveLength(1);
+  });
+
+  it("GET /service-revisions — 400 when no arns", async () => {
+    const res = await get("/service-revisions");
     expect(res.status).toBe(400);
   });
 });

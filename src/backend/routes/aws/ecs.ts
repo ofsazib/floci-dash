@@ -27,6 +27,21 @@ import {
   TagResourceCommand,
   UntagResourceCommand,
   ListTagsForResourceCommand,
+  ListAccountSettingsCommand,
+  PutAccountSettingCommand,
+  PutAccountSettingDefaultCommand,
+  DeleteAccountSettingCommand,
+  ListAttributesCommand,
+  PutAttributesCommand,
+  DeleteAttributesCommand,
+  CreateTaskSetCommand,
+  UpdateTaskSetCommand,
+  DeleteTaskSetCommand,
+  DescribeTaskSetsCommand,
+  UpdateServicePrimaryTaskSetCommand,
+  ListServiceDeploymentsCommand,
+  DescribeServiceDeploymentsCommand,
+  DescribeServiceRevisionsCommand,
 } from "@aws-sdk/client-ecs";
 
 const router = new Hono();
@@ -308,6 +323,210 @@ router.delete("/tags", async (c: Context) => {
     new UntagResourceCommand({ resourceArn, tagKeys })
   );
   return c.json({ untagged: true });
+});
+
+// ── Account Settings ─────────────────────────────────────
+
+router.get("/account-settings", async (c: Context) => {
+  const client = getClient();
+  const name = c.req.query("name");
+  const value = c.req.query("value");
+  const effectiveSettings = c.req.query("effectiveSettings");
+  const result = await client.send(
+    new ListAccountSettingsCommand({
+      name: name as any,
+      value,
+      effectiveSettings: effectiveSettings === "true" ? true : undefined,
+    })
+  );
+  return c.json({ settings: result.settings || [], total: result.settings?.length || 0 });
+});
+
+router.put("/account-settings", async (c: Context) => {
+  const body = await c.req.json();
+  if (!body.name || !body.value) {
+    return c.json({ error: "name and value are required" }, 400);
+  }
+  const client = getClient();
+  const result = await client.send(
+    body.isDefault
+      ? new PutAccountSettingDefaultCommand({ name: body.name, value: body.value })
+      : new PutAccountSettingCommand({ name: body.name, value: body.value })
+  );
+  return c.json({ setting: result.setting });
+});
+
+router.delete("/account-settings", async (c: Context) => {
+  const name = c.req.query("name");
+  if (!name) return c.json({ error: "name query parameter required" }, 400);
+  const client = getClient();
+  const result = await client.send(new DeleteAccountSettingCommand({ name: name as any }));
+  return c.json({ setting: result.setting || null, deleted: true });
+});
+
+// ── Attributes ───────────────────────────────────────────
+
+router.get("/attributes", async (c: Context) => {
+  const targetType = c.req.query("targetType") || "container-instance";
+  const cluster = c.req.query("cluster");
+  const attributeName = c.req.query("attributeName");
+  const attributeValue = c.req.query("attributeValue");
+  const client = getClient();
+  const result = await client.send(
+    new ListAttributesCommand({
+      targetType: targetType as any,
+      cluster,
+      attributeName,
+      attributeValue,
+    })
+  );
+  return c.json({ attributes: result.attributes || [], total: result.attributes?.length || 0 });
+});
+
+router.post("/attributes", async (c: Context) => {
+  const body = await c.req.json();
+  if (!body.attributes?.length) {
+    return c.json({ error: "attributes array is required" }, 400);
+  }
+  const client = getClient();
+  const result = await client.send(
+    new PutAttributesCommand({ cluster: body.cluster, attributes: body.attributes })
+  );
+  return c.json({ attributes: result.attributes || [] });
+});
+
+router.delete("/attributes", async (c: Context) => {
+  const body = await c.req.json();
+  if (!body.attributes?.length) {
+    return c.json({ error: "attributes array is required" }, 400);
+  }
+  const client = getClient();
+  await client.send(
+    new DeleteAttributesCommand({ cluster: body.cluster, attributes: body.attributes })
+  );
+  return c.json({ deleted: true });
+});
+
+// ── Task Sets ────────────────────────────────────────────
+
+router.get("/task-sets", async (c: Context) => {
+  const cluster = c.req.query("cluster");
+  const service = c.req.query("service");
+  if (!cluster || !service) {
+    return c.json({ error: "cluster and service query parameters required" }, 400);
+  }
+  const taskSets = c.req.query("taskSets")?.split(",").filter(Boolean);
+  const client = getClient();
+  const result = await client.send(
+    new DescribeTaskSetsCommand({ cluster, service, taskSets })
+  );
+  return c.json({ taskSets: result.taskSets || [], total: result.taskSets?.length || 0 });
+});
+
+router.post("/task-sets", async (c: Context) => {
+  const body = await c.req.json();
+  if (!body.cluster || !body.service || !body.taskDefinition) {
+    return c.json({ error: "cluster, service, and taskDefinition are required" }, 400);
+  }
+  const client = getClient();
+  const result = await client.send(
+    new CreateTaskSetCommand({
+      cluster: body.cluster,
+      service: body.service,
+      taskDefinition: body.taskDefinition,
+      launchType: body.launchType,
+      networkConfiguration: body.networkConfiguration,
+      loadBalancers: body.loadBalancers,
+      serviceRegistries: body.serviceRegistries,
+      scale: body.scale,
+      externalId: body.externalId,
+    })
+  );
+  return c.json({ taskSet: result.taskSet }, 201);
+});
+
+router.put("/task-sets", async (c: Context) => {
+  const body = await c.req.json();
+  if (!body.cluster || !body.service || !body.taskSet || !body.scale) {
+    return c.json({ error: "cluster, service, taskSet, and scale are required" }, 400);
+  }
+  const client = getClient();
+  const result = await client.send(
+    new UpdateTaskSetCommand({
+      cluster: body.cluster,
+      service: body.service,
+      taskSet: body.taskSet,
+      scale: body.scale,
+    })
+  );
+  return c.json({ taskSet: result.taskSet });
+});
+
+router.put("/task-sets/primary", async (c: Context) => {
+  const body = await c.req.json();
+  if (!body.cluster || !body.service || !body.primaryTaskSet) {
+    return c.json({ error: "cluster, service, and primaryTaskSet are required" }, 400);
+  }
+  const client = getClient();
+  const result = await client.send(
+    new UpdateServicePrimaryTaskSetCommand({
+      cluster: body.cluster,
+      service: body.service,
+      primaryTaskSet: body.primaryTaskSet,
+    })
+  );
+  return c.json({ taskSet: result.taskSet });
+});
+
+router.delete("/task-sets", async (c: Context) => {
+  const cluster = c.req.query("cluster");
+  const service = c.req.query("service");
+  const taskSet = c.req.query("taskSet");
+  if (!cluster || !service || !taskSet) {
+    return c.json({ error: "cluster, service, and taskSet query parameters required" }, 400);
+  }
+  const force = c.req.query("force") === "true";
+  const client = getClient();
+  const result = await client.send(
+    new DeleteTaskSetCommand({ cluster, service, taskSet, force })
+  );
+  return c.json({ taskSet: result.taskSet || null, deleted: true });
+});
+
+// ── Service Deployments ──────────────────────────────────
+
+router.get("/service-deployments", async (c: Context) => {
+  const service = c.req.query("service");
+  const cluster = c.req.query("cluster");
+  if (!service) return c.json({ error: "service query parameter required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new ListServiceDeploymentsCommand({ service, cluster })
+  );
+  return c.json({
+    serviceDeployments: result.serviceDeployments || [],
+    total: result.serviceDeployments?.length || 0,
+  });
+});
+
+router.get("/service-deployments/detail", async (c: Context) => {
+  const arns = c.req.query("arns")?.split(",").filter(Boolean);
+  if (!arns?.length) return c.json({ error: "arns query parameter required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new DescribeServiceDeploymentsCommand({ serviceDeploymentArns: arns })
+  );
+  return c.json({ serviceDeployments: result.serviceDeployments || [] });
+});
+
+router.get("/service-revisions", async (c: Context) => {
+  const arns = c.req.query("arns")?.split(",").filter(Boolean);
+  if (!arns?.length) return c.json({ error: "arns query parameter required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new DescribeServiceRevisionsCommand({ serviceRevisionArns: arns })
+  );
+  return c.json({ serviceRevisions: result.serviceRevisions || [] });
 });
 
 export default router;

@@ -18,6 +18,13 @@ const mockCreateService = vi.fn();
 const mockDeleteService = vi.fn();
 const mockStopTask = vi.fn();
 const mockRunTask = vi.fn();
+const mockAccountSettings = vi.fn();
+const mockPutAccountSetting = vi.fn();
+const mockDeleteAccountSetting = vi.fn();
+const mockTaskSets = vi.fn();
+const mockCreateTaskSet = vi.fn();
+const mockSetPrimaryTaskSet = vi.fn();
+const mockDeleteTaskSet = vi.fn();
 
 const createClusterState = vi.hoisted(() => ({
   isError: false,
@@ -84,6 +91,13 @@ vi.mock("../../hooks/useECS", () => ({
   }),
   useECSTaskDefinitions: (...args: any[]) => mockTaskDefs(...args),
   useECSTaskDefinitionFamilies: (...args: any[]) => mockTaskDefFamilies(...args),
+  useECSAccountSettings: (...args: any[]) => mockAccountSettings(...args),
+  usePutECSAccountSetting: () => ({ mutate: mockPutAccountSetting, isPending: false }),
+  useDeleteECSAccountSetting: () => ({ mutateAsync: mockDeleteAccountSetting, isPending: false }),
+  useECSTaskSets: (...args: any[]) => mockTaskSets(...args),
+  useCreateECSTaskSet: () => ({ mutate: mockCreateTaskSet, isPending: false }),
+  useSetPrimaryECSTaskSet: () => ({ mutateAsync: mockSetPrimaryTaskSet, isPending: false }),
+  useDeleteECSTaskSet: () => ({ mutateAsync: mockDeleteTaskSet, isPending: false }),
 }));
 
 import { ECSDashboard } from "./ECSDashboard";
@@ -133,6 +147,17 @@ beforeEach(() => {
     data: { families: [] },
     isLoading: false,
   });
+  mockAccountSettings.mockReturnValue({
+    data: { settings: [], total: 0 },
+    isLoading: false,
+  });
+  mockTaskSets.mockReturnValue({
+    data: { taskSets: [], total: 0 },
+    isLoading: false,
+  });
+  mockDeleteAccountSetting.mockResolvedValue({});
+  mockSetPrimaryTaskSet.mockResolvedValue({});
+  mockDeleteTaskSet.mockResolvedValue({});
 });
 
 // ─── Tests ──────────────────────────────────────────────
@@ -651,5 +676,121 @@ describe("ECSDashboard — cluster detail", () => {
       expect(screen.queryByText("alpha-svc")).toBeTruthy();
       expect(screen.queryByText("beta-svc")).toBeNull();
     });
+  });
+});
+
+// ─── Account Settings ───────────────────────────────────
+
+describe("ECSDashboard — Account Settings", () => {
+  it("shows account settings tab with empty state", async () => {
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /account settings/i }));
+    await waitFor(() => expect(screen.getByText("No account settings configured.")).toBeTruthy());
+  });
+
+  it("renders account settings rows", async () => {
+    mockAccountSettings.mockReturnValue({
+      data: { settings: [{ name: "containerInsights", value: "enabled" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /account settings/i }));
+    await waitFor(() => expect(screen.getAllByText("containerInsights").length).toBeGreaterThan(0));
+  });
+
+  it("opens put setting modal and submits", async () => {
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /account settings/i }));
+    await clickButton(user, /Create Account Setting/i);
+    await waitFor(() => expect(screen.getByText("Put account setting")).toBeTruthy());
+    await clickButton(user, /Save/i);
+    await waitFor(() => expect(mockPutAccountSetting).toHaveBeenCalled());
+    const arg = mockPutAccountSetting.mock.calls[0][0];
+    expect(arg.name).toBe("containerInsights");
+    expect(arg.value).toBe("enabled");
+  });
+
+  it("deletes an account setting", async () => {
+    mockAccountSettings.mockReturnValue({
+      data: { settings: [{ name: "containerInsights", value: "enabled" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /account settings/i }));
+    await waitFor(() => expect(screen.getAllByText("containerInsights").length).toBeGreaterThan(0));
+    await clickButton(user, /Delete/i);
+    // DeleteButton may require confirmation
+    const confirmBtns = screen.queryAllByRole("button", { name: /Delete/i });
+    if (confirmBtns.length > 1) await user.click(confirmBtns[confirmBtns.length - 1]);
+    await waitFor(() => expect(mockDeleteAccountSetting).toHaveBeenCalledWith("containerInsights"));
+  });
+});
+
+// ─── Task Sets ──────────────────────────────────────────
+
+describe("ECSDashboard — Task Sets", () => {
+  beforeEach(() => {
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [{ clusterName: "my-cluster", status: "ACTIVE", clusterArn: "arn:aws:ecs:::cluster/my-cluster" }],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+  });
+
+  async function openTaskSetsTab(user: ReturnType<typeof userEvent.setup>) {
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /task sets/i }));
+  }
+
+  it("shows service selector prompt", async () => {
+    const user = userEvent.setup();
+    await openTaskSetsTab(user);
+    await waitFor(() => expect(screen.getByText("Task set service")).toBeTruthy());
+  });
+
+  it("lists task sets after selecting a service", async () => {
+    mockServices.mockReturnValue({
+      data: { services: [{ serviceName: "svc1", status: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    mockTaskSets.mockReturnValue({
+      data: { taskSets: [{ id: "ts-1", status: "ACTIVE", taskDefinition: "arn:aws:ecs:::task-def/t:1", runningCount: 1, computedDesiredCount: 1 }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    await openTaskSetsTab(user);
+    // select the service
+    await user.click(screen.getByText("Choose a service"));
+    await user.click(await screen.findByText("svc1"));
+    await waitFor(() => expect(screen.getByText("ts-1")).toBeTruthy());
+  });
+
+  it("makes a task set primary", async () => {
+    mockServices.mockReturnValue({
+      data: { services: [{ serviceName: "svc1", status: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    mockTaskSets.mockReturnValue({
+      data: { taskSets: [{ id: "ts-1", status: "ACTIVE", taskDefinition: "t:1", runningCount: 1, computedDesiredCount: 1 }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    await openTaskSetsTab(user);
+    await user.click(screen.getByText("Choose a service"));
+    await user.click(await screen.findByText("svc1"));
+    await waitFor(() => expect(screen.getByText("ts-1")).toBeTruthy());
+    await clickButton(user, /Make primary/i);
+    await waitFor(() => expect(mockSetPrimaryTaskSet).toHaveBeenCalled());
+    expect(mockSetPrimaryTaskSet.mock.calls[0][0].primaryTaskSet).toBe("ts-1");
   });
 });

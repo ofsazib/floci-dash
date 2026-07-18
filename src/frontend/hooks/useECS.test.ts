@@ -30,6 +30,18 @@ import {
   useECSTags,
   useTagECSResource,
   useUntagECSResource,
+  useECSAccountSettings,
+  usePutECSAccountSetting,
+  useDeleteECSAccountSetting,
+  useECSAttributes,
+  usePutECSAttributes,
+  useDeleteECSAttributes,
+  useECSTaskSets,
+  useCreateECSTaskSet,
+  useUpdateECSTaskSet,
+  useSetPrimaryECSTaskSet,
+  useDeleteECSTaskSet,
+  useECSServiceDeployments,
 } from "./useECS";
 
 function createWrapper() {
@@ -326,5 +338,167 @@ describe("useUntagECSResource", () => {
       "/aws/ecs/tags?resourceArn=arn%3A1&tagKeys=env,team",
       expect.objectContaining({ method: "DELETE" })
     );
+  });
+});
+
+// ── Account Settings ─────────────────────────────────────
+
+describe("useECSAccountSettings", () => {
+  it("calls api with base URL", async () => {
+    mockApi.mockResolvedValueOnce({ settings: [], total: 0 });
+    const { result } = renderHook(() => useECSAccountSettings(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ecs/account-settings");
+  });
+
+  it("adds effectiveSettings query when requested", async () => {
+    mockApi.mockResolvedValueOnce({ settings: [], total: 0 });
+    const { result } = renderHook(() => useECSAccountSettings(true), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ecs/account-settings?effectiveSettings=true");
+  });
+});
+
+describe("usePutECSAccountSetting", () => {
+  it("calls api with PUT", async () => {
+    mockApi.mockResolvedValueOnce({ setting: {} });
+    const { result } = renderHook(() => usePutECSAccountSetting(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ name: "containerInsights", value: "enabled" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/ecs/account-settings",
+      expect.objectContaining({ method: "PUT" })
+    );
+  });
+});
+
+describe("useDeleteECSAccountSetting", () => {
+  it("calls api with DELETE and encoded name", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useDeleteECSAccountSetting(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("containerInsights");
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/ecs/account-settings?name=containerInsights",
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
+});
+
+// ── Attributes ───────────────────────────────────────────
+
+describe("useECSAttributes", () => {
+  it("does NOT call api when cluster is null", () => {
+    renderHook(() => useECSAttributes(null), { wrapper: createWrapper() });
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api with cluster and default targetType", async () => {
+    mockApi.mockResolvedValueOnce({ attributes: [], total: 0 });
+    const { result } = renderHook(() => useECSAttributes("c1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ecs/attributes?cluster=c1&targetType=container-instance");
+  });
+});
+
+describe("usePutECSAttributes", () => {
+  it("calls api with POST", async () => {
+    mockApi.mockResolvedValueOnce({ attributes: [] });
+    const { result } = renderHook(() => usePutECSAttributes(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ cluster: "c1", attributes: [] });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/ecs/attributes",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+});
+
+describe("useDeleteECSAttributes", () => {
+  it("calls api with DELETE and body", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useDeleteECSAttributes(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ cluster: "c1", attributes: [{ name: "x", targetId: "t" }] });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/ecs/attributes",
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
+});
+
+// ── Task Sets ────────────────────────────────────────────
+
+describe("useECSTaskSets", () => {
+  it("does NOT call api when cluster/service missing", () => {
+    renderHook(() => useECSTaskSets(null, "svc"), { wrapper: createWrapper() });
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api with cluster and service", async () => {
+    mockApi.mockResolvedValueOnce({ taskSets: [], total: 0 });
+    const { result } = renderHook(() => useECSTaskSets("c1", "svc1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ecs/task-sets?cluster=c1&service=svc1");
+  });
+});
+
+describe("useCreateECSTaskSet", () => {
+  it("calls api with POST", async () => {
+    mockApi.mockResolvedValueOnce({ taskSet: {} });
+    const { result } = renderHook(() => useCreateECSTaskSet(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ cluster: "c1", service: "svc1", taskDefinition: "td:1" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/ecs/task-sets",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+});
+
+describe("useUpdateECSTaskSet", () => {
+  it("calls api with PUT", async () => {
+    mockApi.mockResolvedValueOnce({ taskSet: {} });
+    const { result } = renderHook(() => useUpdateECSTaskSet(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ cluster: "c1", service: "svc1", taskSet: "ts-1", scale: { value: 50, unit: "PERCENT" } });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/ecs/task-sets",
+      expect.objectContaining({ method: "PUT" })
+    );
+  });
+});
+
+describe("useSetPrimaryECSTaskSet", () => {
+  it("calls api with PUT on /primary", async () => {
+    mockApi.mockResolvedValueOnce({ taskSet: {} });
+    const { result } = renderHook(() => useSetPrimaryECSTaskSet(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ cluster: "c1", service: "svc1", primaryTaskSet: "ts-2" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/ecs/task-sets/primary",
+      expect.objectContaining({ method: "PUT" })
+    );
+  });
+});
+
+describe("useDeleteECSTaskSet", () => {
+  it("calls api with DELETE and force flag", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useDeleteECSTaskSet(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ cluster: "c1", service: "svc1", taskSet: "ts-1", force: true });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/ecs/task-sets?cluster=c1&service=svc1&taskSet=ts-1&force=true",
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
+});
+
+// ── Service Deployments ──────────────────────────────────
+
+describe("useECSServiceDeployments", () => {
+  it("does NOT call api when service is null", () => {
+    renderHook(() => useECSServiceDeployments(null, "c1"), { wrapper: createWrapper() });
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api with service and cluster", async () => {
+    mockApi.mockResolvedValueOnce({ serviceDeployments: [], total: 0 });
+    const { result } = renderHook(() => useECSServiceDeployments("svc1", "c1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ecs/service-deployments?service=svc1&cluster=c1");
   });
 });

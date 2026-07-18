@@ -215,3 +215,152 @@ export function useUntagECSResource() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ecs", "tags"] }),
   });
 }
+
+// ─── Account Settings ────────────────────────────────────
+
+export interface ECSAccountSetting {
+  name?: string;
+  value?: string;
+  principalArn?: string;
+}
+
+export function useECSAccountSettings(effectiveSettings = false) {
+  return useQuery({
+    queryKey: ["aws", "ecs", "account-settings", effectiveSettings],
+    queryFn: () => {
+      const qs = effectiveSettings ? "?effectiveSettings=true" : "";
+      return api<{ settings: ECSAccountSetting[]; total: number }>(`/aws/ecs/account-settings${qs}`);
+    },
+  });
+}
+
+export function usePutECSAccountSetting() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string; value: string; isDefault?: boolean }) =>
+      api("/aws/ecs/account-settings", { method: "PUT", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ecs", "account-settings"] }),
+  });
+}
+
+export function useDeleteECSAccountSetting() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api(`/aws/ecs/account-settings?name=${encodeURIComponent(name)}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ecs", "account-settings"] }),
+  });
+}
+
+// ─── Attributes ──────────────────────────────────────────
+
+export interface ECSAttribute {
+  name?: string;
+  value?: string;
+  targetType?: string;
+  targetId?: string;
+}
+
+export function useECSAttributes(cluster: string | null, targetType = "container-instance") {
+  return useQuery({
+    queryKey: ["aws", "ecs", "attributes", cluster, targetType],
+    queryFn: () =>
+      api<{ attributes: ECSAttribute[]; total: number }>(
+        `/aws/ecs/attributes?cluster=${encodeURIComponent(cluster!)}&targetType=${encodeURIComponent(targetType)}`
+      ),
+    enabled: !!cluster,
+  });
+}
+
+export function usePutECSAttributes() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { cluster?: string; attributes: ECSAttribute[] }) =>
+      api("/aws/ecs/attributes", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ecs", "attributes"] }),
+  });
+}
+
+export function useDeleteECSAttributes() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { cluster?: string; attributes: ECSAttribute[] }) =>
+      api("/aws/ecs/attributes", { method: "DELETE", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ecs", "attributes"] }),
+  });
+}
+
+// ─── Task Sets ───────────────────────────────────────────
+
+export interface ECSTaskSet {
+  id?: string;
+  taskSetArn?: string;
+  status?: string;
+  taskDefinition?: string;
+  computedDesiredCount?: number;
+  runningCount?: number;
+  scale?: { value?: number; unit?: string };
+}
+
+export function useECSTaskSets(cluster: string | null, service: string | null) {
+  return useQuery({
+    queryKey: ["aws", "ecs", "task-sets", cluster, service],
+    queryFn: () =>
+      api<{ taskSets: ECSTaskSet[]; total: number }>(
+        `/aws/ecs/task-sets?cluster=${encodeURIComponent(cluster!)}&service=${encodeURIComponent(service!)}`
+      ),
+    enabled: !!cluster && !!service,
+  });
+}
+
+export function useCreateECSTaskSet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: any) =>
+      api("/aws/ecs/task-sets", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ecs", "task-sets"] }),
+  });
+}
+
+export function useUpdateECSTaskSet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { cluster: string; service: string; taskSet: string; scale: { value: number; unit: string } }) =>
+      api("/aws/ecs/task-sets", { method: "PUT", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ecs", "task-sets"] }),
+  });
+}
+
+export function useSetPrimaryECSTaskSet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { cluster: string; service: string; primaryTaskSet: string }) =>
+      api("/aws/ecs/task-sets/primary", { method: "PUT", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ecs", "task-sets"] }),
+  });
+}
+
+export function useDeleteECSTaskSet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ cluster, service, taskSet, force }: { cluster: string; service: string; taskSet: string; force?: boolean }) =>
+      api(
+        `/aws/ecs/task-sets?cluster=${encodeURIComponent(cluster)}&service=${encodeURIComponent(service)}&taskSet=${encodeURIComponent(taskSet)}${force ? "&force=true" : ""}`,
+        { method: "DELETE" }
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ecs", "task-sets"] }),
+  });
+}
+
+// ─── Service Deployments ─────────────────────────────────
+
+export function useECSServiceDeployments(service: string | null, cluster: string | null) {
+  return useQuery({
+    queryKey: ["aws", "ecs", "service-deployments", service, cluster],
+    queryFn: () =>
+      api<{ serviceDeployments: any[]; total: number }>(
+        `/aws/ecs/service-deployments?service=${encodeURIComponent(service!)}${cluster ? `&cluster=${encodeURIComponent(cluster)}` : ""}`
+      ),
+    enabled: !!service,
+  });
+}
