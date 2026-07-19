@@ -71,6 +71,32 @@ export function useExecutionHistory(arn: string | null) {
   });
 }
 
+export function useStartExecution() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ arn, name, input }: { arn: string; name?: string; input?: string }) =>
+      api(`/aws/stepfunctions/state-machines/${encodeURIComponent(arn)}/executions`, {
+        method: "POST",
+        body: JSON.stringify({ name, input }),
+      }),
+    onSuccess: (_data, { arn }) =>
+      qc.invalidateQueries({ queryKey: ["aws", "stepfunctions", "executions", arn] }),
+  });
+}
+
+export function useStopExecution() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ executionArn, cause, error }: { executionArn: string; stateMachineArn?: string; cause?: string; error?: string }) =>
+      api(`/aws/stepfunctions/executions/${encodeURIComponent(executionArn)}/stop`, {
+        method: "POST",
+        body: JSON.stringify({ cause, error }),
+      }),
+    onSuccess: (_data, { stateMachineArn }) =>
+      qc.invalidateQueries({ queryKey: ["aws", "stepfunctions", "executions", stateMachineArn] }),
+  });
+}
+
 // ── Versions ────────────────────────────────────────────
 
 export function usePublishStateMachineVersion() {

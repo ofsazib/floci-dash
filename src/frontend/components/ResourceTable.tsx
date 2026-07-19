@@ -29,6 +29,8 @@ interface Props {
   headerTitle?: string;
   /** Total count for the header counter (defaults to items.length) */
   headerCounter?: number;
+  /** Extra action buttons rendered in the header, before Create/Refresh. */
+  headerActions?: React.ReactNode;
 }
 
 function defaultFilter(item: any, searchText: string): boolean {
@@ -49,6 +51,7 @@ export default function ResourceTable({
   filterFunction,
   headerTitle,
   headerCounter,
+  headerActions,
 }: Props) {
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -78,6 +81,7 @@ export default function ResourceTable({
             counter={`(${headerCounter ?? items.length})`}
             actions={
               <SpaceBetween direction="horizontal" size="xs">
+                {headerActions}
                 {onCreate && <Button variant="primary" onClick={onCreate}>Create {resourceName}</Button>}
                 {onRefresh && <Button onClick={onRefresh}>Refresh</Button>}
               </SpaceBetween>
@@ -87,6 +91,7 @@ export default function ResourceTable({
           </Header>
         ) : (
           <SpaceBetween direction="horizontal" size="xs">
+            {headerActions}
             {onCreate && <Button variant="primary" onClick={onCreate}>Create {resourceName}</Button>}
             {onRefresh && <Button onClick={onRefresh}>Refresh</Button>}
           </SpaceBetween>

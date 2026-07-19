@@ -305,6 +305,8 @@ import {
   useStateMachineVersions,
   usePublishStateMachineVersion,
   useDeleteStateMachineVersion,
+  useStartExecution,
+  useStopExecution,
 } from "../../hooks/useStepFunctions";
 import {
   useOpenSearchDomains,
@@ -518,10 +520,32 @@ export function StepFunctionsDashboard() {
   const { data: versionsData } = useStateMachineVersions(versionSm);
   const publishVersion = usePublishStateMachineVersion();
   const deleteVersion = useDeleteStateMachineVersion();
+  const startExecution = useStartExecution();
+  const stopExecution = useStopExecution();
+  const [startModalOpen, setStartModalOpen] = useState(false);
+  const [startName, setStartName] = useState("");
+  const [startInput, setStartInput] = useState("{}");
+  const [startError, setStartError] = useState<string | null>(null);
 
   if (isLoading) return <TableSkeleton />;
 
   if (selectedSm) {
+    const isRunning = (status?: string) => status === "RUNNING";
+    const submitStart = async () => {
+      setStartError(null);
+      try {
+        await startExecution.mutateAsync({
+          arn: selectedSm,
+          name: startName.trim() || undefined,
+          input: startInput.trim() || undefined,
+        });
+        setStartModalOpen(false);
+        setStartName("");
+        setStartInput("{}");
+      } catch (e: any) {
+        setStartError(e?.message || "Failed to start execution");
+      }
+    };
     return (
       <>
         <Box margin={{ bottom: "s" }}>
@@ -533,8 +557,14 @@ export function StepFunctionsDashboard() {
           resourceName="Execution"
           headerTitle="Executions"
           headerCounter={execData?.total}
+          headerActions={
+            <Button variant="primary" iconName="add-plus" onClick={() => setStartModalOpen(true)}>
+              Start execution
+            </Button>
+          }
           items={(execData?.executions || []).map((e: any) => ({
             name: e.name,
+            executionArn: e.executionArn,
             status: e.status,
             started: e.startDate ? new Date(e.startDate).toLocaleString() : "-",
             stopped: e.stopDate ? new Date(e.stopDate).toLocaleString() : "-",
@@ -546,11 +576,59 @@ export function StepFunctionsDashboard() {
             { id: "status", header: "Status", cell: (i: any) => i.status },
             { id: "started", header: "Started", cell: (i: any) => i.started },
             { id: "stopped", header: "Stopped", cell: (i: any) => i.stopped },
+            {
+              id: "actions",
+              header: "",
+              cell: (i: any) =>
+                isRunning(i.status) ? (
+                  <Button
+                    iconName="close"
+                    loading={stopExecution.isPending && stopExecution.variables?.executionArn === i.executionArn}
+                    onClick={() =>
+                      stopExecution.mutateAsync({
+                        executionArn: i.executionArn,
+                        stateMachineArn: selectedSm,
+                      })
+                    }
+                  >
+                    Stop
+                  </Button>
+                ) : null,
+            },
           ]}
           filterEnabled
           filterPlaceholder="Find executions"
           filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
         />
+        <Modal
+          visible={startModalOpen}
+          onDismiss={() => setStartModalOpen(false)}
+          header="Start execution"
+          footer={
+            <Box float="right">
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button variant="link" onClick={() => setStartModalOpen(false)}>
+                  Cancel
+                </Button>
+                <Button variant="primary" loading={startExecution.isPending} onClick={submitStart}>
+                  Start
+                </Button>
+              </SpaceBetween>
+            </Box>
+          }
+        >
+          <Form>
+            <SpaceBetween size="m">
+              {startError && <Alert type="error">{startError}</Alert>}
+              <FormField label="Name" description="Optional. A unique name for this execution.">
+                <Input value={startName} onChange={(e) => setStartName(e.detail.value)} placeholder="my-execution" />
+              </FormField>
+              <FormField label="Input" description="JSON input passed to the state machine.">
+                <Textarea value={startInput} onChange={(e) => setStartInput(e.detail.value)} rows={6} />
+              </FormField>
+            </SpaceBetween>
+          </Form>
+        </Modal>
       </>
     );
   }

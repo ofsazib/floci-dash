@@ -21,6 +21,8 @@ import {
   usePublishStateMachineVersion,
   useStateMachineVersions,
   useDeleteStateMachineVersion,
+  useStartExecution,
+  useStopExecution,
 } from "./useStepFunctions";
 
 beforeEach(() => mockApi.mockReset());
@@ -126,6 +128,29 @@ describe("useStepFunctions hooks", () => {
     expect(mockApi).toHaveBeenCalledWith(
       `/aws/stepfunctions/state-machines/${encodeURIComponent(ARN)}/versions/${encodeURIComponent(ARN + ":1")}`,
       { method: "DELETE" }
+    );
+  });
+
+  // ── Execution control ─────────────────────────────────
+
+  it("useStartExecution POSTs name + input", async () => {
+    mockApi.mockResolvedValueOnce({ executionArn: ARN + ":exec", startDate: 1 });
+    const { result } = renderHook(() => useStartExecution(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ arn: ARN, name: "run1", input: '{"x":1}' });
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/stepfunctions/state-machines/${encodeURIComponent(ARN)}/executions`,
+      { method: "POST", body: JSON.stringify({ name: "run1", input: '{"x":1}' }) }
+    );
+  });
+
+  it("useStopExecution POSTs to stop endpoint", async () => {
+    const execArn = ARN + ":exec";
+    mockApi.mockResolvedValueOnce({ stopDate: 2 });
+    const { result } = renderHook(() => useStopExecution(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ executionArn: execArn, stateMachineArn: ARN, cause: "manual" });
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/stepfunctions/executions/${encodeURIComponent(execArn)}/stop`,
+      { method: "POST", body: JSON.stringify({ cause: "manual", error: undefined }) }
     );
   });
 });

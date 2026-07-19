@@ -9,6 +9,8 @@ const mockStateMachines = vi.fn();
 const mockDeleteSm = vi.fn();
 const mockExecutions = vi.fn();
 const mockActivities = vi.fn();
+const mockStartExecution = vi.fn().mockResolvedValue({});
+const mockStopExecution = vi.fn().mockResolvedValue({});
 
 vi.mock("../../hooks/useStepFunctions", () => ({
   useStateMachines: (...args: any[]) => mockStateMachines(...args),
@@ -18,6 +20,8 @@ vi.mock("../../hooks/useStepFunctions", () => ({
   useStateMachineVersions: () => ({ data: { versions: [], total: 0 }, isLoading: false, isError: false, error: null }),
   usePublishStateMachineVersion: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn() }),
   useDeleteStateMachineVersion: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useStartExecution: () => ({ mutate: vi.fn(), mutateAsync: mockStartExecution, isPending: false, variables: null, isError: false, error: null, reset: vi.fn() }),
+  useStopExecution: () => ({ mutate: vi.fn(), mutateAsync: mockStopExecution, isPending: false, variables: null, isError: false, error: null, reset: vi.fn() }),
 }));
 
 import { StepFunctionsDashboard } from "./StepFunctionsDashboard";
@@ -175,5 +179,66 @@ describe("StepFunctionsDashboard", () => {
     const filterInput = screen.getByPlaceholderText("Find state machines");
     await user.type(filterInput, "beta");
     await waitFor(() => expect(screen.queryByText("alpha")).toBeNull());
+  });
+
+  // ── Execution controls ────────────────────────────────
+
+  const SM_ARN = "arn:aws:states:us-east-1:123:stateMachine:my-sm";
+
+  async function openExecutions(user: ReturnType<typeof userEvent.setup>) {
+    mockStateMachines.mockReturnValue({
+      data: { stateMachines: [{ stateMachineArn: SM_ARN, name: "my-sm", type: "STANDARD", creationDate: "2024-01-15T00:00:00Z" }], total: 1 },
+      isLoading: false,
+    });
+    render(<StepFunctionsDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-sm")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-sm" }));
+    await waitFor(() => expect(screen.getByText("Executions")).toBeTruthy());
+  }
+
+  it("starts an execution from the modal", async () => {
+    const user = userEvent.setup();
+    await openExecutions(user);
+
+    await user.click(screen.getByRole("button", { name: /Start execution/i }));
+    await waitFor(() => expect(screen.getByText(/JSON input/i)).toBeTruthy());
+    await clickButton(user, /^Start$/i);
+    await waitFor(() =>
+      expect(mockStartExecution).toHaveBeenCalledWith(
+        expect.objectContaining({ arn: SM_ARN, input: "{}" })
+      )
+    );
+  });
+
+  it("stops a running execution", async () => {
+    mockExecutions.mockReturnValue({
+      data: {
+        executions: [{ executionArn: SM_ARN + ":exec", name: "run-1", status: "RUNNING", startDate: 1 }],
+        total: 1,
+      },
+    });
+    const user = userEvent.setup();
+    await openExecutions(user);
+    await waitFor(() => expect(screen.getByText("run-1")).toBeTruthy());
+
+    await user.click(screen.getByRole("button", { name: /Stop/i }));
+    await waitFor(() =>
+      expect(mockStopExecution).toHaveBeenCalledWith(
+        expect.objectContaining({ executionArn: SM_ARN + ":exec", stateMachineArn: SM_ARN })
+      )
+    );
+  });
+
+  it("does not show a Stop button for succeeded executions", async () => {
+    mockExecutions.mockReturnValue({
+      data: {
+        executions: [{ executionArn: SM_ARN + ":exec", name: "done-1", status: "SUCCEEDED", startDate: 1, stopDate: 2 }],
+        total: 1,
+      },
+    });
+    const user = userEvent.setup();
+    await openExecutions(user);
+    await waitFor(() => expect(screen.getByText("done-1")).toBeTruthy());
+    expect(screen.queryByRole("button", { name: /Stop/i })).toBeNull();
   });
 });
