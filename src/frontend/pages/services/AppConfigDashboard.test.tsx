@@ -15,6 +15,10 @@ vi.mock("../../hooks/useAppConfig", () => ({
   useDeleteAppConfigApplication: () => ({ mutateAsync: mockDeleteApp, isPending: false, variables: null }),
   useAppConfigEnvironments: (...args: any[]) => mockEnvs(...args),
   useAppConfigProfiles: (...args: any[]) => mockProfiles(...args),
+  useCreateAppConfigEnvironment: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
+  useDeleteAppConfigEnvironment: () => ({ mutateAsync: vi.fn(), isPending: false, variables: null }),
+  useCreateAppConfigProfile: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
+  useDeleteAppConfigProfile: () => ({ mutateAsync: vi.fn(), isPending: false, variables: null }),
 }));
 
 import { AppConfigDashboard } from "./AppConfigDashboard";

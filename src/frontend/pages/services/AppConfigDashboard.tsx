@@ -270,6 +270,10 @@ import {
   useDeleteAppConfigApplication,
   useAppConfigEnvironments,
   useAppConfigProfiles,
+  useCreateAppConfigEnvironment,
+  useDeleteAppConfigEnvironment,
+  useCreateAppConfigProfile,
+  useDeleteAppConfigProfile,
 } from "../../hooks/useAppConfig";
 import {
   useCloudMapNamespaces,
@@ -509,79 +513,11 @@ export function AppConfigDashboard() {
   const { data, isLoading } = useAppConfigApplications();
   const deleteApp = useDeleteAppConfigApplication();
   const [selectedApp, setSelectedApp] = useState<string | null>(null);
-  const { data: envData } = useAppConfigEnvironments(selectedApp);
-  const { data: profileData } = useAppConfigProfiles(selectedApp);
 
   if (isLoading) return <TableSkeleton />;
 
   if (selectedApp) {
-    return (
-      <>
-        <Box margin={{ bottom: "s" }}>
-          <Button iconName="arrow-left" onClick={() => setSelectedApp(null)}>
-            Back to applications
-          </Button>
-        </Box>
-        <Tabs
-          tabs={[
-            {
-              id: "environments",
-              label: "Environments",
-              content: (
-                <ResourceTable
-                  resourceName="Environment"
-                  headerTitle={`Environments`}
-                  headerCounter={envData?.total}
-                  items={(envData?.environments || []).map((e: any) => ({
-                    id: e.Id,
-                    name: e.Name,
-                    state: e.State || "-",
-                    description: e.Description || "-",
-                  }))}
-                  loading={false}
-                  emptyMessage="No environments"
-                  columns={[
-                    { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
-                    { id: "state", header: "State", cell: (i: any) => i.state },
-                    { id: "description", header: "Description", cell: (i: any) => i.description },
-                  ]}
-                  filterEnabled
-                  filterPlaceholder="Find environments"
-                  filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
-                />
-              ),
-            },
-            {
-              id: "profiles",
-              label: "Configuration Profiles",
-              content: (
-                <ResourceTable
-                  resourceName="Profile"
-                  headerTitle="Configuration Profiles"
-                  headerCounter={profileData?.total}
-                  items={(profileData?.profiles || []).map((p: any) => ({
-                    id: p.Id,
-                    name: p.Name,
-                    type: p.Type || "-",
-                    location: p.LocationUri || "-",
-                  }))}
-                  loading={false}
-                  emptyMessage="No configuration profiles"
-                  columns={[
-                    { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
-                    { id: "type", header: "Type", cell: (i: any) => i.type },
-                    { id: "location", header: "Location", cell: (i: any) => i.location },
-                  ]}
-                  filterEnabled
-                  filterPlaceholder="Find profiles"
-                  filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
-                />
-              ),
-            },
-          ]}
-        />
-      </>
-    );
+    return <AppConfigApplicationDetail appId={selectedApp} onBack={() => setSelectedApp(null)} />;
   }
 
   return (
@@ -626,6 +562,201 @@ export function AppConfigDashboard() {
       filterPlaceholder="Find applications"
       filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
     />
+  );
+}
+
+function AppConfigApplicationDetail({ appId, onBack }: { appId: string; onBack: () => void }) {
+  const { data: envData } = useAppConfigEnvironments(appId);
+  const { data: profileData } = useAppConfigProfiles(appId);
+  const createEnv = useCreateAppConfigEnvironment(appId);
+  const deleteEnv = useDeleteAppConfigEnvironment(appId);
+  const createProfile = useCreateAppConfigProfile(appId);
+  const deleteProfile = useDeleteAppConfigProfile(appId);
+
+  const [showCreateEnv, setShowCreateEnv] = useState(false);
+  const [envForm, setEnvForm] = useState({ name: "", description: "" });
+  const [showCreateProfile, setShowCreateProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState({ name: "", locationUri: "hosted", description: "" });
+
+  return (
+    <>
+      <Box margin={{ bottom: "s" }}>
+        <Button iconName="arrow-left" onClick={onBack}>
+          Back to applications
+        </Button>
+      </Box>
+      <Tabs
+        tabs={[
+          {
+            id: "environments",
+            label: "Environments",
+            content: (
+              <ResourceTable
+                resourceName="Environment"
+                headerTitle={`Environments`}
+                headerCounter={envData?.total}
+                items={(envData?.environments || []).map((e: any) => ({
+                  id: e.Id,
+                  name: e.Name,
+                  state: e.State || "-",
+                  description: e.Description || "-",
+                }))}
+                loading={false}
+                emptyMessage="No environments"
+                onCreate={() => setShowCreateEnv(true)}
+                columns={[
+                  { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+                  { id: "state", header: "State", cell: (i: any) => i.state },
+                  { id: "description", header: "Description", cell: (i: any) => i.description },
+                  {
+                    id: "actions",
+                    header: "",
+                    cell: (i: any) => (
+                      <DeleteButton
+                        itemName={i.name}
+                        resourceType="environment"
+                        loading={deleteEnv.isPending && deleteEnv.variables === i.id}
+                        onDelete={() => deleteEnv.mutateAsync(i.id)}
+                      />
+                    ),
+                  },
+                ]}
+                filterEnabled
+                filterPlaceholder="Find environments"
+                filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+              />
+            ),
+          },
+          {
+            id: "profiles",
+            label: "Configuration Profiles",
+            content: (
+              <ResourceTable
+                resourceName="Profile"
+                headerTitle="Configuration Profiles"
+                headerCounter={profileData?.total}
+                items={(profileData?.profiles || []).map((p: any) => ({
+                  id: p.Id,
+                  name: p.Name,
+                  type: p.Type || "-",
+                  location: p.LocationUri || "-",
+                }))}
+                loading={false}
+                emptyMessage="No configuration profiles"
+                onCreate={() => setShowCreateProfile(true)}
+                columns={[
+                  { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+                  { id: "type", header: "Type", cell: (i: any) => i.type },
+                  { id: "location", header: "Location", cell: (i: any) => i.location },
+                  {
+                    id: "actions",
+                    header: "",
+                    cell: (i: any) => (
+                      <DeleteButton
+                        itemName={i.name}
+                        resourceType="configuration profile"
+                        loading={deleteProfile.isPending && deleteProfile.variables === i.id}
+                        onDelete={() => deleteProfile.mutateAsync(i.id)}
+                      />
+                    ),
+                  },
+                ]}
+                filterEnabled
+                filterPlaceholder="Find profiles"
+                filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+              />
+            ),
+          },
+        ]}
+      />
+
+      <Modal
+        visible={showCreateEnv}
+        onDismiss={() => setShowCreateEnv(false)}
+        header="Create environment"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreateEnv(false)}>Cancel</Button>
+              <Button
+                variant="primary"
+                loading={createEnv.isPending}
+                disabled={!envForm.name.trim()}
+                onClick={() => {
+                  createEnv.mutate(
+                    { name: envForm.name.trim(), description: envForm.description.trim() || undefined },
+                    { onSuccess: () => { setShowCreateEnv(false); setEnvForm({ name: "", description: "" }); } }
+                  );
+                }}
+              >
+                Create
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          {createEnv.isError && (
+            <Alert type="error" dismissible>{(createEnv.error as Error)?.message || "Failed to create environment"}</Alert>
+          )}
+          <SpaceBetween size="m">
+            <FormField label="Environment name">
+              <Input value={envForm.name} onChange={({ detail }) => setEnvForm((p) => ({ ...p, name: detail.value }))} placeholder="production" />
+            </FormField>
+            <FormField label="Description (optional)">
+              <Input value={envForm.description} onChange={({ detail }) => setEnvForm((p) => ({ ...p, description: detail.value }))} />
+            </FormField>
+          </SpaceBetween>
+        </Form>
+      </Modal>
+
+      <Modal
+        visible={showCreateProfile}
+        onDismiss={() => setShowCreateProfile(false)}
+        header="Create configuration profile"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreateProfile(false)}>Cancel</Button>
+              <Button
+                variant="primary"
+                loading={createProfile.isPending}
+                disabled={!profileForm.name.trim()}
+                onClick={() => {
+                  createProfile.mutate(
+                    {
+                      name: profileForm.name.trim(),
+                      locationUri: profileForm.locationUri.trim() || "hosted",
+                      description: profileForm.description.trim() || undefined,
+                    },
+                    { onSuccess: () => { setShowCreateProfile(false); setProfileForm({ name: "", locationUri: "hosted", description: "" }); } }
+                  );
+                }}
+              >
+                Create
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          {createProfile.isError && (
+            <Alert type="error" dismissible>{(createProfile.error as Error)?.message || "Failed to create profile"}</Alert>
+          )}
+          <SpaceBetween size="m">
+            <FormField label="Profile name">
+              <Input value={profileForm.name} onChange={({ detail }) => setProfileForm((p) => ({ ...p, name: detail.value }))} placeholder="my-config" />
+            </FormField>
+            <FormField label="Location URI" description='Use "hosted" for AppConfig-hosted configuration, or an SSM/S3 URI.'>
+              <Input value={profileForm.locationUri} onChange={({ detail }) => setProfileForm((p) => ({ ...p, locationUri: detail.value }))} placeholder="hosted" />
+            </FormField>
+            <FormField label="Description (optional)">
+              <Input value={profileForm.description} onChange={({ detail }) => setProfileForm((p) => ({ ...p, description: detail.value }))} />
+            </FormField>
+          </SpaceBetween>
+        </Form>
+      </Modal>
+    </>
   );
 }
 

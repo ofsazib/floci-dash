@@ -61,6 +61,30 @@ export function useAppConfigEnvironments(applicationId: string | null) {
   });
 }
 
+export function useCreateAppConfigEnvironment(applicationId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { name: string; description?: string }) =>
+      api(`/aws/appconfig/applications/${encodeURIComponent(applicationId)}/environments`, {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "appconfig", "environments", applicationId] }),
+  });
+}
+
+export function useDeleteAppConfigEnvironment(applicationId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (environmentId: string) =>
+      api(
+        `/aws/appconfig/applications/${encodeURIComponent(applicationId)}/environments/${encodeURIComponent(environmentId)}`,
+        { method: "DELETE" }
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "appconfig", "environments", applicationId] }),
+  });
+}
+
 // ── Configuration Profiles ───────────────────────────────
 
 export function useAppConfigProfiles(applicationId: string | null) {
@@ -68,5 +92,29 @@ export function useAppConfigProfiles(applicationId: string | null) {
     queryKey: ["aws", "appconfig", "profiles", applicationId],
     queryFn: () => api(`/aws/appconfig/applications/${encodeURIComponent(applicationId!)}/configuration-profiles`),
     enabled: !!applicationId,
+  });
+}
+
+export function useCreateAppConfigProfile(applicationId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { name: string; locationUri?: string; type?: string; description?: string }) =>
+      api(`/aws/appconfig/applications/${encodeURIComponent(applicationId)}/configuration-profiles`, {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "appconfig", "profiles", applicationId] }),
+  });
+}
+
+export function useDeleteAppConfigProfile(applicationId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (profileId: string) =>
+      api(
+        `/aws/appconfig/applications/${encodeURIComponent(applicationId)}/configuration-profiles/${encodeURIComponent(profileId)}`,
+        { method: "DELETE" }
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "appconfig", "profiles", applicationId] }),
   });
 }
