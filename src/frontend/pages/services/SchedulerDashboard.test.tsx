@@ -73,6 +73,14 @@ vi.mock("../../hooks/useScheduler", () => ({
     get isPending() { return deleteScheduleState.isPending; },
     get variables() { return deleteScheduleState.variables; },
   }),
+  useUpdateSchedule: () => ({
+    mutate: vi.fn(),
+    mutateAsync: vi.fn().mockResolvedValue({}),
+    isPending: false,
+    isError: false,
+    error: null,
+    reset: vi.fn(),
+  }),
 }));
 
 import { SchedulerDashboard } from "./SchedulerDashboard";

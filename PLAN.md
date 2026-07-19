@@ -1693,7 +1693,7 @@ Full 66-service diff of Floci-supported operations vs. dashboard UI-reachable op
 | # | Service | Missing UI (route exists) | Dashboard Impact |
 |---|---------|---------------------------|------------------|
 | G.39 | **Step Functions** (Execution control) | StartExecution (`POST /state-machines/:arn/executions`), StopExecution (`POST /executions/:arn/stop`) — routes exist, no hook | Done 2026-07-14 — Start execution modal (name + JSON input) + per-row Stop for RUNNING executions |
-| G.40 | **Scheduler** (Update) | UpdateSchedule (`PUT /schedules/:name`) — route exists, no hook | Schedules are create/delete-only, not editable |
+| G.40 | **Scheduler** (Update) | UpdateSchedule (`PUT /schedules/:name`) — route exists, no hook | Done 2026-07-14 — useUpdateSchedule hook + per-row Edit modal (expression, state ENABLED/DISABLED, target ARN/role, description) |
 | G.41 | **AppConfig** (Environments + Profiles) | CreateEnvironment/DeleteEnvironment, CreateConfigurationProfile/DeleteConfigurationProfile, ListHostedConfigurationVersions — routes exist, no hooks | Environments & profiles are read-only in the page |
 | G.42 | **Config Service** (Delivery + Recorder + Conformance) | PutDeliveryChannel/DescribeDeliveryChannels, PutConfigurationRecorder/Start/Stop, PutConformancePack — routes exist, no hook/UI | Recorders read-only; no delivery channel UI; no conformance pack create |
 | G.43 | **EMR** (Instance fleets/groups + step control) | ListInstanceFleets/ListInstanceGroups/AddInstanceFleet/AddInstanceGroups, CancelSteps, ModifyCluster, DescribeStep — commands imported in `emr.ts`, not surfaced | Cannot view/scale instance groups or cancel steps |

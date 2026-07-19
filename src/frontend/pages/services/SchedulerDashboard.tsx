@@ -144,6 +144,7 @@ import {
   useDeleteSchedulerGroup,
   useSchedules,
   useCreateSchedule,
+  useUpdateSchedule,
   useDeleteSchedule,
 } from "../../hooks/useScheduler";
 import {
@@ -651,8 +652,17 @@ function SchedulerGroupDetail({
 }) {
   const { data, isLoading } = useSchedules(groupName);
   const createSchedule = useCreateSchedule();
+  const updateSchedule = useUpdateSchedule();
   const deleteSchedule = useDeleteSchedule();
   const [showCreate, setShowCreate] = useState(false);
+  const [editing, setEditing] = useState<any | null>(null);
+  const [editForm, setEditForm] = useState({
+    scheduleExpression: "",
+    description: "",
+    targetArn: "",
+    targetRoleArn: "",
+    state: "ENABLED",
+  });
   const [form, setForm] = useState({
     name: "",
     scheduleExpression: "rate(1 minute)",
@@ -660,6 +670,17 @@ function SchedulerGroupDetail({
     targetArn: "",
     targetRoleArn: "",
   });
+
+  function openEdit(item: any) {
+    setEditForm({
+      scheduleExpression: item.ScheduleExpression || "",
+      description: item.Description || "",
+      targetArn: item.Target?.Arn || "",
+      targetRoleArn: item.Target?.RoleArn || "",
+      state: item.State || "ENABLED",
+    });
+    setEditing(item);
+  }
 
   const schedules = data?.schedules || [];
 
@@ -674,12 +695,15 @@ function SchedulerGroupDetail({
       id: "actions",
       header: "",
       cell: (item: any) => (
-        <DeleteButton
-          itemName={item.Name}
-          resourceType="schedule"
-          loading={deleteSchedule.isPending}
-          onDelete={() => deleteSchedule.mutateAsync({ name: item.Name, group: groupName })}
-        />
+        <SpaceBetween direction="horizontal" size="xs">
+          <Button iconName="edit" variant="inline-icon" ariaLabel={`Edit ${item.Name}`} onClick={() => openEdit(item)} />
+          <DeleteButton
+            itemName={item.Name}
+            resourceType="schedule"
+            loading={deleteSchedule.isPending}
+            onDelete={() => deleteSchedule.mutateAsync({ name: item.Name, group: groupName })}
+          />
+        </SpaceBetween>
       ),
     },
   ];
@@ -801,6 +825,93 @@ function SchedulerGroupDetail({
               <Input
                 value={form.description}
                 onChange={({ detail }) => setForm((p) => ({ ...p, description: detail.value }))}
+              />
+            </FormField>
+          </SpaceBetween>
+        </Form>
+      </Modal>
+
+      <Modal
+        visible={!!editing}
+        onDismiss={() => setEditing(null)}
+        header={editing ? `Edit schedule: ${editing.Name}` : "Edit schedule"}
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setEditing(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                loading={updateSchedule.isPending}
+                disabled={!editForm.scheduleExpression.trim() || !editForm.targetArn.trim()}
+                onClick={() => {
+                  updateSchedule.mutate(
+                    {
+                      name: editing.Name,
+                      group: groupName,
+                      scheduleExpression: editForm.scheduleExpression.trim(),
+                      description: editForm.description.trim() || undefined,
+                      state: editForm.state,
+                      target: {
+                        Arn: editForm.targetArn.trim(),
+                        RoleArn: editForm.targetRoleArn.trim() || undefined,
+                      },
+                    },
+                    { onSuccess: () => setEditing(null) }
+                  );
+                }}
+              >
+                Save changes
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          {updateSchedule.isError && (
+            <Alert type="error" dismissible>
+              {(updateSchedule.error as Error)?.message || "Failed to update schedule"}
+            </Alert>
+          )}
+          <SpaceBetween size="m">
+            <FormField
+              label="Schedule expression"
+              description="rate(1 minute), cron(0 12 * * ? *), or at(2024-01-01T00:00:00)"
+            >
+              <Input
+                value={editForm.scheduleExpression}
+                onChange={({ detail }) => setEditForm((p) => ({ ...p, scheduleExpression: detail.value }))}
+              />
+            </FormField>
+            <FormField label="State">
+              <Select
+                selectedOption={{ label: editForm.state, value: editForm.state }}
+                onChange={({ detail }) =>
+                  setEditForm((p) => ({ ...p, state: detail.selectedOption.value || "ENABLED" }))
+                }
+                options={[
+                  { label: "ENABLED", value: "ENABLED" },
+                  { label: "DISABLED", value: "DISABLED" },
+                ]}
+              />
+            </FormField>
+            <FormField label="Target ARN">
+              <Input
+                value={editForm.targetArn}
+                onChange={({ detail }) => setEditForm((p) => ({ ...p, targetArn: detail.value }))}
+              />
+            </FormField>
+            <FormField label="Role ARN (optional)">
+              <Input
+                value={editForm.targetRoleArn}
+                onChange={({ detail }) => setEditForm((p) => ({ ...p, targetRoleArn: detail.value }))}
+              />
+            </FormField>
+            <FormField label="Description (optional)">
+              <Input
+                value={editForm.description}
+                onChange={({ detail }) => setEditForm((p) => ({ ...p, description: detail.value }))}
               />
             </FormField>
           </SpaceBetween>

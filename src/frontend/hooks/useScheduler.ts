@@ -69,6 +69,21 @@ export function useCreateSchedule() {
   });
 }
 
+export function useUpdateSchedule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, group, ...body }: { name: string; group?: string; [k: string]: any }) => {
+      const qs = `?group=${encodeURIComponent(group || "default")}`;
+      return api(`/aws/scheduler/schedules/${encodeURIComponent(name)}${qs}`, {
+        method: "PUT",
+        body: JSON.stringify(body),
+      });
+    },
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "scheduler", "schedules"] }),
+  });
+}
+
 export function useDeleteSchedule() {
   const qc = useQueryClient();
   return useMutation({

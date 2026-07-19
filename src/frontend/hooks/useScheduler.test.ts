@@ -10,6 +10,7 @@ import {
   useSchedules,
   useSchedule,
   useCreateSchedule,
+  useUpdateSchedule,
   useDeleteSchedule,
 } from "./useScheduler";
 import { api } from "../lib/client";
@@ -119,6 +120,41 @@ describe("useCreateSchedule", () => {
         target: { arn: "arn:aws:lambda:us-east-1:123:function:fn" },
       }),
     });
+  });
+});
+
+describe("useUpdateSchedule", () => {
+  it("updates a schedule via PUT with group query", async () => {
+    mockedApi.mockResolvedValue({ scheduleArn: "arn:aws:scheduler:us-east-1:123:schedule/my-group/s1" });
+    const { result } = renderHook(() => useUpdateSchedule(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({
+      name: "s1",
+      group: "my-group",
+      scheduleExpression: "rate(10 minutes)",
+      state: "DISABLED",
+      target: { Arn: "arn:aws:lambda:us-east-1:123:function:fn" },
+    });
+    expect(mockedApi).toHaveBeenCalledWith(
+      "/aws/scheduler/schedules/s1?group=my-group",
+      {
+        method: "PUT",
+        body: JSON.stringify({
+          scheduleExpression: "rate(10 minutes)",
+          state: "DISABLED",
+          target: { Arn: "arn:aws:lambda:us-east-1:123:function:fn" },
+        }),
+      }
+    );
+  });
+
+  it("defaults to the default group", async () => {
+    mockedApi.mockResolvedValue({ scheduleArn: "arn" });
+    const { result } = renderHook(() => useUpdateSchedule(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ name: "s1", scheduleExpression: "rate(1 minute)" });
+    expect(mockedApi).toHaveBeenCalledWith(
+      "/aws/scheduler/schedules/s1?group=default",
+      expect.objectContaining({ method: "PUT" })
+    );
   });
 });
 
