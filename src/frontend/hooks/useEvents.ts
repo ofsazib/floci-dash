@@ -34,6 +34,19 @@ export interface EventArchive {
   SizeBytes?: number;
   RetentionDays?: number;
   CreationTime?: number;
+  Description?: string;
+  EventPattern?: string;
+}
+
+export interface EventReplay {
+  ReplayName: string;
+  State?: string;
+  EventSourceArn: string;
+  EventStartTime?: string;
+  EventEndTime?: string;
+  ReplayStartTime?: string;
+  ReplayEndTime?: string;
+  Description?: string;
 }
 
 export function useEventBuses() {
@@ -41,6 +54,37 @@ export function useEventBuses() {
     queryKey: ["aws", "events", "buses"],
     queryFn: () => api("/aws/events/buses"),
     refetchInterval: 15000,
+  });
+}
+
+export function useDescribeEventBus(name: string | null) {
+  return useQuery<{ eventBus: EventBus }>({
+    queryKey: ["aws", "events", "buses", "describe", name],
+    queryFn: () => api(`/aws/events/buses/describe?name=${encodeURIComponent(name!)}`),
+    enabled: !!name,
+  });
+}
+
+export function usePutEventBusPermission() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: {
+      eventBusName: string;
+      statementId: string;
+      action: string;
+      principal: string;
+      condition?: any;
+    }) => api("/aws/events/buses/permissions", { method: "POST", body: JSON.stringify(params) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "events", "buses", "describe"] }),
+  });
+}
+
+export function useRemoveEventBusPermission() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { eventBusName: string; statementId?: string }) =>
+      api(`/aws/events/buses/permissions?name=${encodeURIComponent(params.eventBusName)}${params.statementId ? `&statementId=${encodeURIComponent(params.statementId)}` : ""}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "events", "buses", "describe"] }),
   });
 }
 
@@ -70,10 +114,65 @@ export function useEventArchives() {
 }
 
 export function useEventReplays() {
-  return useQuery<{ replays: Array<{ ReplayName: string; State: string; EventSourceArn: string }> }>({
+  return useQuery<{ replays: EventReplay[] }>({
     queryKey: ["aws", "events", "replays"],
     queryFn: () => api("/aws/events/replays"),
     refetchInterval: 10000,
+  });
+}
+
+export function useDescribeEventArchive(name: string | null) {
+  return useQuery<{ archive: EventArchive }>({
+    queryKey: ["aws", "events", "archives", "describe", name],
+    queryFn: () => api(`/aws/events/archives/describe?name=${encodeURIComponent(name!)}`),
+    enabled: !!name,
+  });
+}
+
+export function useUpdateEventArchive() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: {
+      archiveName: string;
+      description?: string;
+      eventPattern?: string;
+      retentionDays?: number;
+    }) => api("/aws/events/archives", { method: "PUT", body: JSON.stringify(params) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["aws", "events", "archives"] });
+      qc.invalidateQueries({ queryKey: ["aws", "events", "archives", "describe"] });
+    },
+  });
+}
+
+export function useStartEventReplay() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: {
+      replayName: string;
+      eventSourceArn: string;
+      eventStartTime: string;
+      eventEndTime?: string;
+      description?: string;
+      destination?: { Arn: string; FilterArns?: string[] };
+    }) => api("/aws/events/replays", { method: "POST", body: JSON.stringify(params) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "events", "replays"] }),
+  });
+}
+
+export function useDescribeEventReplay(name: string | null) {
+  return useQuery<{ replay: EventReplay }>({
+    queryKey: ["aws", "events", "replays", "describe", name],
+    queryFn: () => api(`/aws/events/replays/describe?name=${encodeURIComponent(name!)}`),
+    enabled: !!name,
+  });
+}
+
+export function useCancelEventReplay() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) => api(`/aws/events/replays?name=${encodeURIComponent(name)}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "events", "replays"] }),
   });
 }
 

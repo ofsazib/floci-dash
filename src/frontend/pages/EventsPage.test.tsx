@@ -10,12 +10,18 @@ const mockEventBuses = vi.fn();
 const mockEventRules = vi.fn();
 const mockEventTargets = vi.fn();
 const mockEventArchives = vi.fn();
+const mockEventReplays = vi.fn();
 const mockPutRuleMutate = vi.fn();
 const mockDeleteRuleMutate = vi.fn();
 const mockCreateBusMutate = vi.fn();
 const mockDeleteBusMutate = vi.fn();
 const mockCreateArchiveMutate = vi.fn();
 const mockDeleteArchiveMutate = vi.fn();
+const mockUpdateArchiveMutate = vi.fn();
+const mockStartReplayMutate = vi.fn();
+const mockCancelReplayMutate = vi.fn();
+const mockPutPermissionMutate = vi.fn();
+const mockRemovePermissionMutate = vi.fn();
 const mockPutEventsMutate = vi.fn();
 const mockToggleEnableMutate = vi.fn();
 const mockToggleDisableMutate = vi.fn();
@@ -27,6 +33,7 @@ vi.mock("../hooks/useEvents", () => ({
   useEventRules: (...args: any[]) => mockEventRules(...args),
   useEventTargets: (...args: any[]) => mockEventTargets(...args),
   useEventArchives: (...args: any[]) => mockEventArchives(...args),
+  useEventReplays: (...args: any[]) => mockEventReplays(...args),
   useCreateEventBus: () => ({ mutate: mockCreateBusMutate, isPending: false }),
   useDeleteEventBus: () => ({ mutate: mockDeleteBusMutate, isPending: false }),
   usePutEventRule: () => ({ mutate: mockPutRuleMutate, isPending: false }),
@@ -37,6 +44,13 @@ vi.mock("../hooks/useEvents", () => ({
   useRemoveEventTarget: () => ({ mutate: mockRemoveTargetMutate, isPending: false }),
   useCreateEventArchive: () => ({ mutate: mockCreateArchiveMutate, isPending: false }),
   useDeleteEventArchive: () => ({ mutate: mockDeleteArchiveMutate, isPending: false }),
+  useDescribeEventArchive: () => ({ data: undefined, isLoading: false }),
+  useUpdateEventArchive: () => ({ mutate: mockUpdateArchiveMutate, isPending: false }),
+  useStartEventReplay: () => ({ mutate: mockStartReplayMutate, isPending: false }),
+  useCancelEventReplay: () => ({ mutate: mockCancelReplayMutate, isPending: false }),
+  useDescribeEventBus: () => ({ data: undefined, isLoading: false }),
+  usePutEventBusPermission: () => ({ mutate: mockPutPermissionMutate, isPending: false }),
+  useRemoveEventBusPermission: () => ({ mutate: mockRemovePermissionMutate, isPending: false }),
 }));
 
 vi.mock("../components/Toast", () => ({
@@ -74,6 +88,7 @@ describe("EventsPage", () => {
     });
     mockEventTargets.mockReturnValue({ data: { targets: [] }, isLoading: false });
     mockEventArchives.mockReturnValue({ data: { archives: [] }, isLoading: false });
+    mockEventReplays.mockReturnValue({ data: { replays: [] }, isLoading: false });
   });
 
   // ─── Rules Tab ──────────────────────────────────────────
@@ -413,6 +428,106 @@ describe("EventsPage", () => {
     await user.click(screen.getByText("Archives"));
     await waitFor(() => {
       expect(screen.getAllByText("Archives").length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  // ─── Permissions ────────────────────────────────────────
+
+  it("shows bus permissions panel when bus name is clicked", async () => {
+    const user = userEvent.setup();
+    render(<EventsPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByText("Event Buses"));
+    await user.click(screen.getByText("default"));
+    await waitFor(() => {
+      expect(screen.getByText(/Permissions for:/)).toBeTruthy();
+    });
+  });
+
+  it("adds a permission from the bus permissions panel", async () => {
+    const user = userEvent.setup();
+    render(<EventsPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByText("Event Buses"));
+    await user.click(screen.getByText("default"));
+    await waitFor(() => {
+      expect(screen.getByText(/Permissions for:/)).toBeTruthy();
+    });
+    await clickButton(user, /Add permission/i);
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("my-permission")).toBeTruthy();
+    });
+    const inputs = screen.getAllByRole("textbox");
+    await user.type(inputs[0], "stmt-1");
+    await user.type(inputs[1], "123456789012");
+    await clickButton(user, /Add/i, { last: true });
+    expect(mockPutPermissionMutate).toHaveBeenCalled();
+  });
+
+  // ─── Replays Tab ────────────────────────────────────────
+
+  it("shows empty replays state", async () => {
+    const user = userEvent.setup();
+    mockEventReplays.mockReturnValue({ data: { replays: [] }, isLoading: false });
+    render(<EventsPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByText("Replays"));
+    expect(screen.getByText("No replays")).toBeTruthy();
+  });
+
+  it("renders replay list with data", async () => {
+    const user = userEvent.setup();
+    mockEventReplays.mockReturnValue({
+      data: {
+        replays: [
+          {
+            ReplayName: "my-replay",
+            EventSourceArn: "arn:aws:events:us-east-1:000000000000:archive/my-archive",
+            State: "RUNNING",
+            EventStartTime: "2026-01-01T00:00:00Z",
+          },
+        ],
+      },
+      isLoading: false,
+    });
+    render(<EventsPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByText("Replays"));
+    expect(screen.getByText("my-replay")).toBeTruthy();
+    expect(screen.getByText("RUNNING")).toBeTruthy();
+  });
+
+  it("starts a new replay", async () => {
+    const user = userEvent.setup();
+    render(<EventsPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByText("Replays"));
+    await clickButton(user, /Start replay/i);
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("my-replay")).toBeTruthy();
+    });
+    const inputs = screen.getAllByRole("textbox");
+    await user.type(inputs[0], "test-replay");
+    await user.type(inputs[1], "arn:aws:events:us-east-1:000000000000:archive/my-archive");
+    await user.type(inputs[2], "2026-01-01T00:00:00Z");
+    await clickButton(user, /Start/i, { last: true });
+    expect(mockStartReplayMutate).toHaveBeenCalled();
+  });
+
+  it("cancels a replay", async () => {
+    const user = userEvent.setup();
+    mockEventReplays.mockReturnValue({
+      data: {
+        replays: [
+          {
+            ReplayName: "my-replay",
+            EventSourceArn: "arn:aws:events:us-east-1:000000000000:archive/my-archive",
+            State: "RUNNING",
+          },
+        ],
+      },
+      isLoading: false,
+    });
+    render(<EventsPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByText("Replays"));
+    await clickButton(user, /Cancel replay/i);
+    await waitFor(() => {
+      expect(mockCancelReplayMutate).toHaveBeenCalled();
     });
   });
 });

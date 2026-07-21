@@ -25,6 +25,14 @@ import {
   usePutEvents,
   useCreateEventArchive,
   useDeleteEventArchive,
+  useDescribeEventArchive,
+  useUpdateEventArchive,
+  useStartEventReplay,
+  useDescribeEventReplay,
+  useCancelEventReplay,
+  useDescribeEventBus,
+  usePutEventBusPermission,
+  useRemoveEventBusPermission,
 } from "./useEvents";
 
 function createWrapper() {
@@ -380,6 +388,154 @@ describe("useDeleteEventArchive", () => {
     await result.current.mutateAsync("arc-1");
     expect(mockApi).toHaveBeenCalledWith(
       "/aws/events/archives?name=arc-1",
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
+});
+
+describe("useDescribeEventArchive", () => {
+  it("does NOT call api when name is null", () => {
+    renderHook(() => useDescribeEventArchive(null), { wrapper: createWrapper() });
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api with name in query when provided", async () => {
+    mockApi.mockResolvedValueOnce({ archive: { ArchiveName: "arc-1" } });
+    const { result } = renderHook(() => useDescribeEventArchive("arc-1"), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/events/archives/describe?name=arc-1");
+  });
+});
+
+describe("useUpdateEventArchive", () => {
+  it("calls api with PUT method and serialized body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useUpdateEventArchive(), {
+      wrapper: createWrapper(),
+    });
+    await result.current.mutateAsync({
+      archiveName: "arc-1",
+      retentionDays: 14,
+    });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/events/archives",
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({ archiveName: "arc-1", retentionDays: 14 }),
+      })
+    );
+  });
+});
+
+describe("useStartEventReplay", () => {
+  it("calls api with POST method and serialized body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useStartEventReplay(), {
+      wrapper: createWrapper(),
+    });
+    await result.current.mutateAsync({
+      replayName: "replay-1",
+      eventSourceArn: "arn:aws:events:us-east-1:1:archive/arc-1",
+      eventStartTime: "2026-01-01T00:00:00Z",
+    });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/events/replays",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          replayName: "replay-1",
+          eventSourceArn: "arn:aws:events:us-east-1:1:archive/arc-1",
+          eventStartTime: "2026-01-01T00:00:00Z",
+        }),
+      })
+    );
+  });
+});
+
+describe("useDescribeEventReplay", () => {
+  it("does NOT call api when name is null", () => {
+    renderHook(() => useDescribeEventReplay(null), { wrapper: createWrapper() });
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api with name in query when provided", async () => {
+    mockApi.mockResolvedValueOnce({ replay: { ReplayName: "replay-1" } });
+    const { result } = renderHook(() => useDescribeEventReplay("replay-1"), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/events/replays/describe?name=replay-1");
+  });
+});
+
+describe("useCancelEventReplay", () => {
+  it("calls api with DELETE method and name in query", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useCancelEventReplay(), {
+      wrapper: createWrapper(),
+    });
+    await result.current.mutateAsync("replay-1");
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/events/replays?name=replay-1",
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
+});
+
+describe("useDescribeEventBus", () => {
+  it("does NOT call api when name is null", () => {
+    renderHook(() => useDescribeEventBus(null), { wrapper: createWrapper() });
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api with name in query when provided", async () => {
+    mockApi.mockResolvedValueOnce({ eventBus: { Name: "custom" } });
+    const { result } = renderHook(() => useDescribeEventBus("custom"), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/events/buses/describe?name=custom");
+  });
+});
+
+describe("usePutEventBusPermission", () => {
+  it("calls api with POST method and serialized body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => usePutEventBusPermission(), {
+      wrapper: createWrapper(),
+    });
+    await result.current.mutateAsync({
+      eventBusName: "custom",
+      statementId: "stmt-1",
+      action: "events:PutEvents",
+      principal: "123456789012",
+    });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/events/buses/permissions",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          eventBusName: "custom",
+          statementId: "stmt-1",
+          action: "events:PutEvents",
+          principal: "123456789012",
+        }),
+      })
+    );
+  });
+});
+
+describe("useRemoveEventBusPermission", () => {
+  it("calls api with DELETE method and statementId in query", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useRemoveEventBusPermission(), {
+      wrapper: createWrapper(),
+    });
+    await result.current.mutateAsync({ eventBusName: "custom", statementId: "stmt-1" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/events/buses/permissions?name=custom&statementId=stmt-1",
       expect.objectContaining({ method: "DELETE" })
     );
   });

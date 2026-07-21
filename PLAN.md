@@ -1615,6 +1615,50 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 > **Method:** Compared every `case` statement in Floci's Java handlers against the dashboard's backend route files. Each item was verified by searching for the corresponding AWS command in both Floci handlers and dashboard routes.
 > **Result:** All 66 Floci services have basic CRUD in the dashboard. However, many services have significant Floci-supported operations NOT yet exposed. Several items from the initial audit (G.5 old, G.10 old, G.12 old partial, G.18 old, G.27 old) were found to be already implemented and have been removed.
 
+### Latest Gap Analysis — Service Depth & Priority Order
+
+*Service coverage is now complete — all 66 Floci services have basic dashboard support (backend route, frontend hook, dashboard component, serviceRegistry entry). The focus is now entirely on depth.*
+
+#### Service Depth Tiers
+
+| Tier | Count | Description |
+|------|-------|-------------|
+| **Rich** | ~12 | Full CRUD + service-specific features + detail views (e.g., S3, DynamoDB, IAM, Lambda, EC2, API Gateway) |
+| **Good** | ~15 | CRUD + some extras (invoke, config, versions) (e.g., KMS, Secrets Manager, Step Functions, CloudFormation) |
+| **Basic** | ~38 | List + Create + Delete + minimal detail; missing deeper operations |
+
+#### Notable Feature Gaps by Service
+
+| Service | Missing Features | Floci Ops Missed |
+|---------|-----------------|------------------|
+| **EventBridge (Events)** | Archives (create/describe/delete/update) ✅ Done 2026-07-20, Replays (start/describe/cancel) ✅ Done 2026-07-20, Permissions management (PutPermission/RemovePermission) ✅ Done 2026-07-20, TestEventPattern | 8+ operations |
+| **Cognito** | AdminRespondToAuthChallenge, AdminUserGlobalSignOut, AddCustomAttributes, GetUserPoolMfaConfig, DescribeResourceServer, ListUserPoolClientSecrets, admin auth flow testers, Resource Server CRUD | 10+ operations |
+| **Kinesis** | SubscribeToShard, DisableEnhancedMonitoring, Start/StopStreamEncryption, DecreaseStreamRetentionPeriod, stream mode/consumers | 8+ operations |
+| **Lambda** | UpdateAlias, UpdateEventSourceMapping, GetPolicy, AddPermission, RemovePermission, GetLayerVersion, resource-based policy management | 5+ operations |
+| **SQS** | CancelMessageMoveTask, ListMessageMoveTasks (DLQ move task management), ChangeMessageVisibility batch | 3+ operations |
+| **RDS** | DBParameterGroup edit, ModifyDBCluster, DBClusterParameterGroups, DBSubnetGroups | 5+ operations |
+| **EC2** | IamInstanceProfileAssociations, ModifySecurityGroupRules, DescribeAddressesAttribute, DescribeVpcEndpointServices | 5+ operations |
+| **CloudFront** | Distribution tags, Origin Request Policies, Response Headers Policies, monitoring/subscriptions | 4+ operations |
+| **SNS** | ConfirmSubscription, SetEndpointAttributes, SetPlatformApplicationAttributes, SetSubscriptionAttributes | 5+ operations |
+| **CloudWatch Metrics** | GetMetricWidgetImage, ListDashboards, PutDashboard, DeleteDashboards | 4+ operations |
+| **CloudWatch Logs** | PutRetentionPolicy, DeleteRetentionPolicy, TagLogGroup | 3+ operations |
+| **SES** | SendBulkTemplatedEmail (v1), SendBulkEmail (v2) | 2+ operations |
+| **MSK** | Configuration management, broker operations | 2+ operations |
+| **EMR** | Cluster detail with tags + step management | 2+ operations |
+
+#### Recommended Priority Order for Deepening
+
+1. **EventBridge** — Archives + Replays are major missing features
+2. **Cognito** — Auth flow testers, Resource Servers, MFA config
+3. **Kinesis** — Encryption toggle, enhanced monitoring, stream mode editor
+4. **Lambda** — Resource-based policy management (AddPermission)
+5. **SQS** — Message move task management (list/cancel)
+6. **RDS** — Parameter groups edit UI, cluster parameter groups
+7. **EC2** — Instance profiles, security group rules description
+8. **CloudFront** — Origin/response header policies, monitoring
+9. **MSK** — Configuration management, broker operations
+10. **EMR** — Cluster detail with tags + step management
+
 ### Priority Tiers
 
 | Tier | Meaning |
@@ -1780,6 +1824,21 @@ These items were in the initial audit but found to be already implemented upon c
 | — Tier 3 (rounding-out) | 21 (G.60–G.80) |
 
 ### Recommended Implementation Order
+
+> **Updated priority order based on the latest service-depth gap analysis.** The focus has shifted from "missing service scaffolding" (now complete) to "deepening" the services that currently only have basic CRUD.
+
+1. **EventBridge** — Archives + Replays are major missing features (8+ operations).
+2. **Cognito** — Auth flow testers, Resource Servers, MFA config (~10+ operations).
+3. **Kinesis** — Encryption toggle, enhanced monitoring, stream mode editor (8+ operations).
+4. **Lambda** — Resource-based policy management: AddPermission, RemovePermission, GetPolicy, UpdateAlias, UpdateEventSourceMapping, GetLayerVersion (5+ operations).
+5. **SQS** — Message move task management: ListMessageMoveTasks, CancelMessageMoveTask, ChangeMessageVisibility batch (3+ operations).
+6. **RDS** — Parameter groups edit UI, ModifyDBCluster, DBClusterParameterGroups, DBSubnetGroups (5+ operations).
+7. **EC2** — IamInstanceProfileAssociations, ModifySecurityGroupRules, DescribeAddressesAttribute, DescribeVpcEndpointServices (5+ operations).
+8. **CloudFront** — Distribution tags, Origin Request Policies, Response Headers Policies, monitoring/subscriptions (4+ operations).
+9. **MSK** — Configuration management, broker operations (2+ operations).
+10. **EMR** — Cluster detail with tags + step management (2+ operations).
+
+#### Historical G.1–G.15 Order (retained for reference)
 
 1. **G.1 — DynamoDB Streams** — Done 2026-07-13, Floci has 4 dedicated Streams operations
 2. **G.2 — EC2 Flow Logs** — Done 2026-07-13 (3 operations)

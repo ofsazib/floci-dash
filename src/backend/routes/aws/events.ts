@@ -22,6 +22,12 @@ import {
   DeleteArchiveCommand,
   DescribeArchiveCommand,
   ListReplaysCommand,
+  StartReplayCommand,
+  DescribeReplayCommand,
+  CancelReplayCommand,
+  UpdateArchiveCommand,
+  PutPermissionCommand,
+  RemovePermissionCommand,
   TagResourceCommand,
   UntagResourceCommand,
   ListTagsForResourceCommand,
@@ -35,6 +41,47 @@ router.get("/buses", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new ListEventBusesCommand({}));
   return c.json({ eventBuses: result.EventBuses || [] });
+});
+
+router.get("/buses/describe", async (c: Context) => {
+  const name = c.req.query("name");
+  if (!name) return c.json({ error: "name query parameter required" }, 400);
+  const client = getClient();
+  const result = await client.send(new DescribeEventBusCommand({ Name: name }));
+  return c.json({ eventBus: result });
+});
+
+router.post("/buses/permissions", async (c: Context) => {
+  const body = await c.req.json();
+  if (!body.eventBusName || !body.statementId || !body.action || !body.principal) {
+    return c.json({ error: "eventBusName, statementId, action, and principal are required" }, 400);
+  }
+  const client = getClient();
+  await client.send(
+    new PutPermissionCommand({
+      EventBusName: sanitizeName(body.eventBusName || "", 256),
+      StatementId: sanitizeName(body.statementId || "", 256),
+      Action: sanitizeName(body.action || "", 256),
+      Principal: sanitizeName(body.principal || "", 256),
+      Condition: body.condition,
+    })
+  );
+  return c.json({ granted: true }, 201);
+});
+
+router.delete("/buses/permissions", async (c: Context) => {
+  const name = c.req.query("name");
+  const statementId = c.req.query("statementId");
+  if (!name) return c.json({ error: "name query parameter required" }, 400);
+  const client = getClient();
+  await client.send(
+    new RemovePermissionCommand({
+      EventBusName: name,
+      StatementId: statementId || undefined,
+      RemoveAllPermissions: statementId ? undefined : true,
+    })
+  );
+  return c.json({ removed: true });
 });
 
 router.post("/buses", async (c: Context) => {
@@ -195,6 +242,64 @@ router.get("/replays", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new ListReplaysCommand({}));
   return c.json({ replays: result.Replays || [] });
+});
+
+router.get("/archives/describe", async (c: Context) => {
+  const name = c.req.query("name");
+  if (!name) return c.json({ error: "name query parameter required" }, 400);
+  const client = getClient();
+  const result = await client.send(new DescribeArchiveCommand({ ArchiveName: name }));
+  return c.json({ archive: result });
+});
+
+router.put("/archives", async (c: Context) => {
+  const body = await c.req.json();
+  if (!body.archiveName) return c.json({ error: "archiveName is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new UpdateArchiveCommand({
+      ArchiveName: sanitizeName(body.archiveName || "", 256),
+      Description: body.description != null ? sanitizeText(body.description || "", 1024) : undefined,
+      EventPattern: body.eventPattern,
+      RetentionDays: body.retentionDays,
+    })
+  );
+  return c.json({ archiveArn: result.ArchiveArn, state: result.State });
+});
+
+router.post("/replays", async (c: Context) => {
+  const body = await c.req.json();
+  if (!body.replayName || !body.eventSourceArn || !body.eventStartTime) {
+    return c.json({ error: "replayName, eventSourceArn, and eventStartTime are required" }, 400);
+  }
+  const client = getClient();
+  const result = await client.send(
+    new StartReplayCommand({
+      ReplayName: sanitizeName(body.replayName || "", 256),
+      EventSourceArn: sanitizeName(body.eventSourceArn || "", 2048),
+      Description: body.description != null ? sanitizeText(body.description || "", 1024) : undefined,
+      EventStartTime: new Date(body.eventStartTime),
+      EventEndTime: body.eventEndTime ? new Date(body.eventEndTime) : undefined,
+      Destination: body.destination,
+    })
+  );
+  return c.json({ replayArn: result.ReplayArn, state: result.State }, 201);
+});
+
+router.get("/replays/describe", async (c: Context) => {
+  const name = c.req.query("name");
+  if (!name) return c.json({ error: "name query parameter required" }, 400);
+  const client = getClient();
+  const result = await client.send(new DescribeReplayCommand({ ReplayName: name }));
+  return c.json({ replay: result });
+});
+
+router.delete("/replays", async (c: Context) => {
+  const name = c.req.query("name");
+  if (!name) return c.json({ error: "name query parameter required" }, 400);
+  const client = getClient();
+  await client.send(new CancelReplayCommand({ ReplayName: name }));
+  return c.json({ cancelled: true });
 });
 
 export default router;
