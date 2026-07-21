@@ -380,7 +380,7 @@ These services have full CRUD operations in both backend and frontend:
 | **Kinesis** | Streams (list with summaries, describe, create, delete), shards (list per stream), consumers (list per stream), records (put single, put batch, get via shard iterator), tags (list per stream) |
 | **Neptune** | Clusters (list, describe, create, delete), instances (list, describe, create with cluster attachment, delete) |
 | **EventBridge Pipes** | Pipes (list, describe, create, update, delete, start, stop with state management) |
-| **Cognito** | User pools (list, describe, create, delete), users (list, admin create, delete, enable, disable, set password), groups (list, create, delete), app clients (list, describe, create, delete) |
+| **Cognito** | User pools (list, describe, create, delete), users (list, admin create, delete, enable, disable, set password, confirm sign-up, delete attributes, global sign-out), groups (list, create, delete), app clients (list, describe, create, delete), resource servers (list, create, describe, update, delete), MFA config, custom attributes, auth flow tester (InitiateAuth, AdminInitiateAuth, ConfirmSignUp) |
 | **API Gateway V2** | APIs (list, get, create, delete), routes (list, create, delete), integrations (list, create, delete), stages (list, create, delete), deployments (list, create, delete) with drill-down per API |
 | **ACM** | Certificates (list, describe with validation details, request, delete, get PEM), tags (list per certificate) |
 | **CloudTrail** | Trails (list, create, update, delete), start/stop logging, get trail status |

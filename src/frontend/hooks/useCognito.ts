@@ -326,3 +326,47 @@ export function useListUsersInGroup(userPoolId: string | null, groupName: string
     enabled: !!userPoolId && !!groupName,
   });
 }
+
+// ─── Auth Flow Tester ─────────────────────────────────────
+
+export interface AuthFlowResult {
+  ChallengeName?: string;
+  Session?: string;
+  AuthenticationResult?: {
+    AccessToken?: string;
+    IdToken?: string;
+    RefreshToken?: string;
+    TokenType?: string;
+    ExpiresIn?: number;
+  };
+}
+
+export function useInitiateAuth(userPoolId: string) {
+  return useMutation<{ result: AuthFlowResult }, Error, { clientId: string; authFlow: string; authParameters?: Record<string, string> }>({
+    mutationFn: (params) =>
+      api(`/aws/cognito/user-pools/${encodeURIComponent(userPoolId)}/auth/initiate`, {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+  });
+}
+
+export function useAdminInitiateAuth(userPoolId: string) {
+  return useMutation<{ result: AuthFlowResult }, Error, { clientId: string; authFlow: string; authParameters?: Record<string, string> }>({
+    mutationFn: (params) =>
+      api(`/aws/cognito/user-pools/${encodeURIComponent(userPoolId)}/auth/admin-initiate`, {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+  });
+}
+
+export function useConfirmSignUp(userPoolId: string) {
+  return useMutation<{ confirmed: boolean }, Error, { clientId: string; username: string; confirmationCode: string; secretHash?: string }>({
+    mutationFn: (params) =>
+      api(`/aws/cognito/user-pools/${encodeURIComponent(userPoolId)}/auth/confirm-sign-up`, {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+  });
+}

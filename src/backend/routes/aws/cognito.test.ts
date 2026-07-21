@@ -45,6 +45,9 @@ vi.mock("@aws-sdk/client-cognito-identity-provider", () => ({
   AdminListGroupsForUserCommand: createCmd("AdminListGroupsForUserCommand"),
   ListUsersInGroupCommand: createCmd("ListUsersInGroupCommand"),
   ListUserPoolClientSecretsCommand: createCmd("ListUserPoolClientSecretsCommand"),
+  InitiateAuthCommand: createCmd("InitiateAuthCommand"),
+  AdminInitiateAuthCommand: createCmd("AdminInitiateAuthCommand"),
+  ConfirmSignUpCommand: createCmd("ConfirmSignUpCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -434,6 +437,59 @@ describe("Cognito Routes", () => {
       const res = await get("/user-pools/us-east-1_abc/groups/admins/users");
       const body = await res.json();
       expect(body.total).toBe(0);
+    });
+  });
+
+  describe("Auth Flow Tester", () => {
+    it("POST /user-pools/:id/auth/initiate — initiates auth", async () => {
+      mockSend.mockResolvedValueOnce({ AuthenticationResult: { AccessToken: "token" } });
+      const res = await post("/user-pools/us-east-1_abc/auth/initiate", {
+        clientId: "client-1",
+        authFlow: "USER_PASSWORD_AUTH",
+        authParameters: { USERNAME: "user1", PASSWORD: "pass" },
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.result.AuthenticationResult.AccessToken).toBe("token");
+    });
+
+    it("POST /user-pools/:id/auth/initiate — 400 if clientId missing", async () => {
+      const res = await post("/user-pools/us-east-1_abc/auth/initiate", { authFlow: "USER_PASSWORD_AUTH" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /user-pools/:id/auth/admin-initiate — admin initiates auth", async () => {
+      mockSend.mockResolvedValueOnce({ AuthenticationResult: { AccessToken: "token" } });
+      const res = await post("/user-pools/us-east-1_abc/auth/admin-initiate", {
+        clientId: "client-1",
+        authFlow: "ADMIN_NO_SRP_AUTH",
+        authParameters: { USERNAME: "user1", PASSWORD: "pass" },
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.result.AuthenticationResult.AccessToken).toBe("token");
+    });
+
+    it("POST /user-pools/:id/auth/admin-initiate — 400 if authFlow missing", async () => {
+      const res = await post("/user-pools/us-east-1_abc/auth/admin-initiate", { clientId: "client-1" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /user-pools/:id/auth/confirm-sign-up — confirms sign up", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/user-pools/us-east-1_abc/auth/confirm-sign-up", {
+        clientId: "client-1",
+        username: "user1",
+        confirmationCode: "123456",
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.confirmed).toBe(true);
+    });
+
+    it("POST /user-pools/:id/auth/confirm-sign-up — 400 if confirmationCode missing", async () => {
+      const res = await post("/user-pools/us-east-1_abc/auth/confirm-sign-up", { clientId: "client-1", username: "user1" });
+      expect(res.status).toBe(400);
     });
   });
 });

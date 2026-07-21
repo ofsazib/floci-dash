@@ -34,6 +34,9 @@ import {
   AdminListGroupsForUserCommand,
   ListUsersInGroupCommand,
   ListUserPoolClientSecretsCommand,
+  InitiateAuthCommand,
+  AdminInitiateAuthCommand,
+  ConfirmSignUpCommand,
 } from "@aws-sdk/client-cognito-identity-provider";
 
 const router = new Hono();
@@ -386,6 +389,64 @@ router.get("/user-pools/:id/groups/:groupName/users", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new ListUsersInGroupCommand({ UserPoolId: id, GroupName: groupName }));
   return c.json({ users: result.Users || [], total: result.Users?.length || 0 });
+});
+
+// ── Auth Flow Tester ─────────────────────────────────────
+
+router.post("/user-pools/:id/auth/initiate", async (c: Context) => {
+  const id = c.req.param("id");
+  const body = await c.req.json<{
+    clientId: string;
+    authFlow: string;
+    authParameters?: Record<string, string>;
+  }>();
+  if (!body.clientId || !body.authFlow) return c.json({ error: "clientId and authFlow are required" }, 400);
+  const client = getClient();
+  const result = await client.send(new InitiateAuthCommand({
+    ClientId: body.clientId,
+    AuthFlow: body.authFlow as any,
+    AuthParameters: body.authParameters,
+  }));
+  return c.json({ result }, 200);
+});
+
+router.post("/user-pools/:id/auth/admin-initiate", async (c: Context) => {
+  const id = c.req.param("id");
+  const body = await c.req.json<{
+    clientId: string;
+    authFlow: string;
+    authParameters?: Record<string, string>;
+  }>();
+  if (!body.clientId || !body.authFlow) return c.json({ error: "clientId and authFlow are required" }, 400);
+  const client = getClient();
+  const result = await client.send(new AdminInitiateAuthCommand({
+    UserPoolId: id,
+    ClientId: body.clientId,
+    AuthFlow: body.authFlow as any,
+    AuthParameters: body.authParameters,
+  }));
+  return c.json({ result }, 200);
+});
+
+router.post("/user-pools/:id/auth/confirm-sign-up", async (c: Context) => {
+  const id = c.req.param("id");
+  const body = await c.req.json<{
+    clientId: string;
+    username: string;
+    confirmationCode: string;
+    secretHash?: string;
+  }>();
+  if (!body.clientId || !body.username || !body.confirmationCode) {
+    return c.json({ error: "clientId, username, and confirmationCode are required" }, 400);
+  }
+  const client = getClient();
+  await client.send(new ConfirmSignUpCommand({
+    ClientId: body.clientId,
+    Username: body.username,
+    ConfirmationCode: body.confirmationCode,
+    SecretHash: body.secretHash,
+  }));
+  return c.json({ confirmed: true });
 });
 
 export default router;

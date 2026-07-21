@@ -240,6 +240,9 @@ import {
   useMfaConfig,
   useSetMfaConfig,
   useAddCustomAttributes,
+  useInitiateAuth,
+  useAdminInitiateAuth,
+  useConfirmSignUp,
 } from "../../hooks/useCognito";
 import {
   useApiGatewayV2Apis,
@@ -536,6 +539,19 @@ export function CognitoDashboard() {
   const [customAttrName, setCustomAttrName] = useState("");
   const [customAttrType, setCustomAttrType] = useState("string");
 
+  // Auth Flow Tester state
+  const [authFlowClientId, setAuthFlowClientId] = useState("");
+  const [authFlowType, setAuthFlowType] = useState("USER_PASSWORD_AUTH");
+  const [authFlowUsername, setAuthFlowUsername] = useState("");
+  const [authFlowPassword, setAuthFlowPassword] = useState("");
+  const [authFlowConfirmationCode, setAuthFlowConfirmationCode] = useState("");
+  const [authFlowResult, setAuthFlowResult] = useState<any>(null);
+  const [activeAuthFlowType, setActiveAuthFlowType] = useState<"initiate" | "admin-initiate" | "confirm-sign-up">("initiate");
+
+  const initiateAuth = useInitiateAuth(selectedPool!);
+  const adminInitiateAuth = useAdminInitiateAuth(selectedPool!);
+  const confirmSignUp = useConfirmSignUp(selectedPool!);
+
   if (isLoading) return <TableSkeleton />;
 
   if (selectedPool) {
@@ -634,6 +650,129 @@ export function CognitoDashboard() {
                     (i.name || "").toLowerCase().includes(s.toLowerCase())
                   }
                 />
+              ),
+            },
+            {
+              id: "auth-flows",
+              label: "Auth Flows",
+              content: (
+                <SpaceBetween size="l">
+                  <Container header={<Header variant="h3">Authentication Flow Tester</Header>}>
+                    <SpaceBetween size="s">
+                      <FormField label="Flow Operation">
+                        <Select
+                          selectedOption={{ label: activeAuthFlowType, value: activeAuthFlowType }}
+                          onChange={({ detail }) => setActiveAuthFlowType(detail.selectedOption.value as any)}
+                          options={[
+                            { label: "Initiate Auth", value: "initiate" },
+                            { label: "Admin Initiate Auth", value: "admin-initiate" },
+                            { label: "Confirm Sign Up", value: "confirm-sign-up" },
+                          ]}
+                          selectedAriaLabel="Selected flow type"
+                        />
+                      </FormField>
+                      {activeAuthFlowType !== "confirm-sign-up" && (
+                        <FormField label="Auth Flow">
+                          <Select
+                            selectedOption={{ label: authFlowType, value: authFlowType }}
+                            onChange={({ detail }) => setAuthFlowType(detail.selectedOption.value!)}
+                            options={[
+                              { label: "USER_PASSWORD_AUTH", value: "USER_PASSWORD_AUTH" },
+                              { label: "USER_SRP_AUTH", value: "USER_SRP_AUTH" },
+                              { label: "CUSTOM_AUTH", value: "CUSTOM_AUTH" },
+                              { label: "REFRESH_TOKEN_AUTH", value: "REFRESH_TOKEN_AUTH" },
+                            ]}
+                            selectedAriaLabel="Selected auth flow"
+                          />
+                        </FormField>
+                      )}
+                      <FormField label="Client ID" description="App client ID for the selected user pool">
+                        <Input
+                          value={authFlowClientId}
+                          onChange={({ detail }) => setAuthFlowClientId(detail.value)}
+                          placeholder="Client ID"
+                        />
+                      </FormField>
+                      <FormField label="Username">
+                        <Input
+                          value={authFlowUsername}
+                          onChange={({ detail }) => setAuthFlowUsername(detail.value)}
+                          placeholder="Username"
+                        />
+                      </FormField>
+                      {activeAuthFlowType !== "confirm-sign-up" && (
+                        <FormField label="Password">
+                          <Input
+                            type="password"
+                            value={authFlowPassword}
+                            onChange={({ detail }) => setAuthFlowPassword(detail.value)}
+                            placeholder="Password"
+                          />
+                        </FormField>
+                      )}
+                      {activeAuthFlowType === "confirm-sign-up" && (
+                        <FormField label="Confirmation Code">
+                          <Input
+                            value={authFlowConfirmationCode}
+                            onChange={({ detail }) => setAuthFlowConfirmationCode(detail.value)}
+                            placeholder="123456"
+                          />
+                        </FormField>
+                      )}
+                      <Button
+                        variant="primary"
+                        loading={initiateAuth.isPending || adminInitiateAuth.isPending || confirmSignUp.isPending}
+                        disabled={!authFlowClientId || !authFlowUsername || (activeAuthFlowType !== "confirm-sign-up" ? !authFlowPassword : !authFlowConfirmationCode)}
+                        onClick={async () => {
+                          setAuthFlowResult(null);
+                          try {
+                            let result: any;
+                            if (activeAuthFlowType === "initiate") {
+                              result = await initiateAuth.mutateAsync({
+                                clientId: authFlowClientId,
+                                authFlow: authFlowType,
+                                authParameters: {
+                                  USERNAME: authFlowUsername,
+                                  PASSWORD: authFlowPassword,
+                                },
+                              });
+                            } else if (activeAuthFlowType === "admin-initiate") {
+                              result = await adminInitiateAuth.mutateAsync({
+                                clientId: authFlowClientId,
+                                authFlow: authFlowType,
+                                authParameters: {
+                                  USERNAME: authFlowUsername,
+                                  PASSWORD: authFlowPassword,
+                                },
+                              });
+                            } else {
+                              result = await confirmSignUp.mutateAsync({
+                                clientId: authFlowClientId,
+                                username: authFlowUsername,
+                                confirmationCode: authFlowConfirmationCode,
+                              });
+                            }
+                            setAuthFlowResult(result);
+                          } catch (err: any) {
+                            setAuthFlowResult({ error: err?.message || "Auth flow failed" });
+                          }
+                        }}
+                      >
+                        Run Flow
+                      </Button>
+
+                      {authFlowResult && (
+                        <Box padding="s">
+                          <code>
+                            <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
+                              {JSON.stringify(authFlowResult, null, 2)}
+                            </pre>
+                          </code>
+                        </Box>
+                      )}
+                    </SpaceBetween>
+                  </Container>
+                </SpaceBetween>
               ),
             },
             {

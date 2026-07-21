@@ -44,6 +44,9 @@ import {
   useAdminConfirmSignUp,
   useAdminListGroupsForUser,
   useListUsersInGroup,
+  useInitiateAuth,
+  useAdminInitiateAuth,
+  useConfirmSignUp,
 } from "./useCognito";
 
 beforeEach(() => mockApi.mockReset());
@@ -335,5 +338,37 @@ describe("useCognito hooks", () => {
   it("useListUsersInGroup disabled when params null", () => {
     const { result } = renderHook(() => useListUsersInGroup(null, null), { wrapper: createWrapper() });
     expect(result.current.fetchStatus).toBe("idle");
+  });
+
+  // ─── AUTH FLOW TESTER ──────────────────────────────
+
+  it("useInitiateAuth calls POST", async () => {
+    mockApi.mockResolvedValueOnce({ result: { AuthenticationResult: { AccessToken: "token" } } });
+    const { result } = renderHook(() => useInitiateAuth(POOL_ID), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ clientId: "client-1", authFlow: "USER_PASSWORD_AUTH", authParameters: { USERNAME: "user1", PASSWORD: "pass" } });
+    expect(mockApi).toHaveBeenCalledWith(`/aws/cognito/user-pools/${POOL_ID}/auth/initiate`, {
+      method: "POST",
+      body: JSON.stringify({ clientId: "client-1", authFlow: "USER_PASSWORD_AUTH", authParameters: { USERNAME: "user1", PASSWORD: "pass" } }),
+    });
+  });
+
+  it("useAdminInitiateAuth calls POST", async () => {
+    mockApi.mockResolvedValueOnce({ result: { AuthenticationResult: { AccessToken: "token" } } });
+    const { result } = renderHook(() => useAdminInitiateAuth(POOL_ID), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ clientId: "client-1", authFlow: "ADMIN_NO_SRP_AUTH", authParameters: { USERNAME: "user1", PASSWORD: "pass" } });
+    expect(mockApi).toHaveBeenCalledWith(`/aws/cognito/user-pools/${POOL_ID}/auth/admin-initiate`, {
+      method: "POST",
+      body: JSON.stringify({ clientId: "client-1", authFlow: "ADMIN_NO_SRP_AUTH", authParameters: { USERNAME: "user1", PASSWORD: "pass" } }),
+    });
+  });
+
+  it("useConfirmSignUp calls POST", async () => {
+    mockApi.mockResolvedValueOnce({ confirmed: true });
+    const { result } = renderHook(() => useConfirmSignUp(POOL_ID), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ clientId: "client-1", username: "user1", confirmationCode: "123456" });
+    expect(mockApi).toHaveBeenCalledWith(`/aws/cognito/user-pools/${POOL_ID}/auth/confirm-sign-up`, {
+      method: "POST",
+      body: JSON.stringify({ clientId: "client-1", username: "user1", confirmationCode: "123456" }),
+    });
   });
 });
