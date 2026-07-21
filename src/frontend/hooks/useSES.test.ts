@@ -30,7 +30,8 @@ import {
   useUpdateEventDestination,
   useDeleteEventDestination,
   useSetConfigSendingEnabled,
-  useSetTrackingOptions,
+  useCreateTrackingOptions,
+  useUpdateTrackingOptions,
   useDeleteTrackingOptions,
   useSetReputationMetrics,
   useSetDeliveryOptions,
@@ -406,10 +407,22 @@ describe("useSetConfigSendingEnabled", () => {
   });
 });
 
-describe("useSetTrackingOptions", () => {
+describe("useCreateTrackingOptions", () => {
+  it("calls api with POST method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useCreateTrackingOptions(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ configSetName: "cs1", customRedirectDomain: "click.example.com" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/email/configuration-sets/cs1/tracking-options",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+});
+
+describe("useUpdateTrackingOptions", () => {
   it("calls api with PUT method", async () => {
     mockApi.mockResolvedValueOnce({});
-    const { result } = renderHook(() => useSetTrackingOptions(), { wrapper: createWrapper() });
+    const { result } = renderHook(() => useUpdateTrackingOptions(), { wrapper: createWrapper() });
     await result.current.mutateAsync({ configSetName: "cs1", customRedirectDomain: "click.example.com" });
     expect(mockApi).toHaveBeenCalledWith(
       "/aws/email/configuration-sets/cs1/tracking-options",

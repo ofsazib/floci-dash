@@ -515,13 +515,27 @@ describe("SES Routes", () => {
       expect(res.status).toBe(400);
     });
 
-    it("PUT tracking-options — sets domain", async () => {
+    it("POST tracking-options — creates domain", async () => {
       mockSend.mockResolvedValueOnce({});
-      const res = await put("/configuration-sets/my-cs/tracking-options", { customRedirectDomain: "click.example.com" });
+      const res = await post("/configuration-sets/my-cs/tracking-options", { customRedirectDomain: "click.example.com" });
       const body = await res.json();
       expect(body.created).toBe(true);
       expect(mockSend.mock.calls[0][0].__cmdName).toBe("CreateConfigurationSetTrackingOptionsCommand");
       expect(mockSend.mock.calls[0][0].TrackingOptions.CustomRedirectDomain).toBe("click.example.com");
+    });
+
+    it("POST tracking-options — 400 when missing domain", async () => {
+      const res = await post("/configuration-sets/my-cs/tracking-options", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("PUT tracking-options — updates domain", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/configuration-sets/my-cs/tracking-options", { customRedirectDomain: "updated.example.com" });
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("UpdateConfigurationSetTrackingOptionsCommand");
+      expect(mockSend.mock.calls[0][0].TrackingOptions.CustomRedirectDomain).toBe("updated.example.com");
     });
 
     it("PUT tracking-options — 400 when missing domain", async () => {

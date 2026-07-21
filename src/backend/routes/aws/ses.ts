@@ -376,7 +376,7 @@ router.put("/configuration-sets/:name/sending-enabled", async (c: Context) => {
 
 // ── Tracking Options ───────────────────────────────────────
 
-router.put("/configuration-sets/:name/tracking-options", async (c: Context) => {
+router.post("/configuration-sets/:name/tracking-options", async (c: Context) => {
   const name = decodeURIComponent(c.req.param("name") || "");
   const body = await c.req.json<{ customRedirectDomain: string }>();
   if (!body.customRedirectDomain) return c.json({ error: "customRedirectDomain is required" }, 400);
@@ -388,6 +388,20 @@ router.put("/configuration-sets/:name/tracking-options", async (c: Context) => {
     })
   );
   return c.json({ name, trackingOptions: { customRedirectDomain: body.customRedirectDomain }, created: true });
+});
+
+router.put("/configuration-sets/:name/tracking-options", async (c: Context) => {
+  const name = decodeURIComponent(c.req.param("name") || "");
+  const body = await c.req.json<{ customRedirectDomain: string }>();
+  if (!body.customRedirectDomain) return c.json({ error: "customRedirectDomain is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new UpdateConfigurationSetTrackingOptionsCommand({
+      ConfigurationSetName: name,
+      TrackingOptions: { CustomRedirectDomain: body.customRedirectDomain },
+    })
+  );
+  return c.json({ name, trackingOptions: { customRedirectDomain: body.customRedirectDomain }, updated: true });
 });
 
 router.delete("/configuration-sets/:name/tracking-options", async (c: Context) => {

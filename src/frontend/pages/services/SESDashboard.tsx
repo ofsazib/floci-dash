@@ -186,7 +186,8 @@ import {
   useUpdateEventDestination,
   useDeleteEventDestination,
   useSetConfigSendingEnabled,
-  useSetTrackingOptions,
+  useCreateTrackingOptions,
+  useUpdateTrackingOptions,
   useDeleteTrackingOptions,
   useSetReputationMetrics,
   useSetDeliveryOptions,
@@ -565,7 +566,8 @@ export function SESDashboard() {
   const updateEventDest = useUpdateEventDestination();
   const deleteEventDest = useDeleteEventDestination();
   const setSendingEnabled = useSetConfigSendingEnabled();
-  const setTrackingOpts = useSetTrackingOptions();
+  const createTrackingOpts = useCreateTrackingOptions();
+  const updateTrackingOpts = useUpdateTrackingOptions();
   const deleteTrackingOpts = useDeleteTrackingOptions();
   const setRepMetrics = useSetReputationMetrics();
   const setDeliveryOpts = useSetDeliveryOptions();
@@ -1322,14 +1324,16 @@ export function SESDashboard() {
                 variant="primary"
                 onClick={() => {
                   if (selectedConfigSet && trackingDomain.trim()) {
-                    setTrackingOpts.mutate(
-                      { configSetName: selectedConfigSet, customRedirectDomain: trackingDomain.trim() },
-                      { onSuccess: () => setShowTrackingOpts(false) }
-                    );
+                    const opts = { configSetName: selectedConfigSet, customRedirectDomain: trackingDomain.trim() };
+                    if (configSetDetail.data?.trackingOptions) {
+                      updateTrackingOpts.mutate(opts, { onSuccess: () => setShowTrackingOpts(false) });
+                    } else {
+                      createTrackingOpts.mutate(opts, { onSuccess: () => setShowTrackingOpts(false) });
+                    }
                   }
                 }}
                 disabled={!trackingDomain.trim()}
-                loading={setTrackingOpts.isPending}
+                loading={createTrackingOpts.isPending || updateTrackingOpts.isPending}
               >
                 Save
               </Button>

@@ -372,7 +372,7 @@ These services have full CRUD operations in both backend and frontend:
 | **EventBridge Scheduler** | Schedule groups (list, create, delete with schedule count), schedules (list, create with expression/target/role, delete) |
 | **ECR** | Repositories (list, create, delete), images (list with details, batch delete), repository policy (get/set/delete), lifecycle policy (get/set) |
 | **ELB** | Load balancers (list, create, delete, attributes), target groups (list, create, delete), listeners (list, create, delete), target health, register/deregister targets |
-| **SES** | Email identities (list with verification/DKIM/mail-from status, verify email, verify domain, delete), send email (to/cc/bcc with HTML/text), verified emails list |
+| **SES** | Email identities (list with verification/DKIM/mail-from status, verify email, verify domain, delete, notification topics, feedback forwarding, headers in notifications), send email (to/cc/bcc with HTML/text), verified emails list, configuration sets (list/create/delete, event destinations, sending enabled, tracking options, reputation metrics, delivery options) |
 | **STS** | Caller identity (account, user ID, ARN), assume role (with session name/duration/policy, returns temporary credentials), get session token (with MFA/duration) |
 | **EKS** | Clusters (list, create, delete, describe with status/version/endpoint), node groups (list, create, delete, describe with scaling config/instance types/subnets) |
 | **Auto Scaling** | Auto Scaling Groups (list, create, update, delete, set desired capacity), launch configurations (list), scaling policies (list per ASG), scaling activities (list per ASG) |

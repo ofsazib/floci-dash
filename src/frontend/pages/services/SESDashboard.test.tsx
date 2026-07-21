@@ -159,7 +159,15 @@ vi.mock("../../hooks/useSES", () => ({
     error: null,
     reset: vi.fn(),
   }),
-  useSetTrackingOptions: () => ({
+  useCreateTrackingOptions: () => ({
+    mutate: vi.fn(),
+    mutateAsync: vi.fn().mockResolvedValue({}),
+    isPending: false,
+    isError: false,
+    error: null,
+    reset: vi.fn(),
+  }),
+  useUpdateTrackingOptions: () => ({
     mutate: vi.fn(),
     mutateAsync: vi.fn().mockResolvedValue({}),
     isPending: false,

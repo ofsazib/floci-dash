@@ -282,7 +282,20 @@ export function useSetConfigSendingEnabled() {
 
 // ─── Tracking Options ───────────────────────────────────
 
-export function useSetTrackingOptions() {
+export function useCreateTrackingOptions() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { configSetName: string; customRedirectDomain: string }) =>
+      api(`/aws/email/configuration-sets/${encodeURIComponent(body.configSetName)}/tracking-options`, {
+        method: "POST",
+        body: JSON.stringify({ customRedirectDomain: body.customRedirectDomain }),
+      }),
+    onSuccess: (_data, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "ses", "configuration-sets", variables.configSetName] }),
+  });
+}
+
+export function useUpdateTrackingOptions() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: { configSetName: string; customRedirectDomain: string }) =>
