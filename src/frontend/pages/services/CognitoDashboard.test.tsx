@@ -56,6 +56,15 @@ vi.mock("../../hooks/useCognito", () => ({
   useInitiateAuth: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
   useAdminInitiateAuth: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
   useConfirmSignUp: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
+  useAdminRespondToAuthChallenge: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
+  useForgotPassword: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
+  useConfirmForgotPassword: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
+  useGetUser: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
+  useUpdateUserAttributes: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
+  useDeleteUserAttributes: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
+  useUserPoolClientSecrets: () => ({ data: { secrets: [] }, isLoading: false }),
+  useAddUserPoolClientSecret: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
+  useDeleteUserPoolClientSecret: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
 }));
 
 import { CognitoDashboard } from "./CognitoDashboard";

@@ -243,6 +243,15 @@ import {
   useInitiateAuth,
   useAdminInitiateAuth,
   useConfirmSignUp,
+  useAdminRespondToAuthChallenge,
+  useForgotPassword,
+  useConfirmForgotPassword,
+  useGetUser,
+  useUpdateUserAttributes,
+  useDeleteUserAttributes,
+  useAddUserPoolClientSecret,
+  useDeleteUserPoolClientSecret,
+  useUserPoolClientSecrets,
 } from "../../hooks/useCognito";
 import {
   useApiGatewayV2Apis,
@@ -546,11 +555,41 @@ export function CognitoDashboard() {
   const [authFlowPassword, setAuthFlowPassword] = useState("");
   const [authFlowConfirmationCode, setAuthFlowConfirmationCode] = useState("");
   const [authFlowResult, setAuthFlowResult] = useState<any>(null);
-  const [activeAuthFlowType, setActiveAuthFlowType] = useState<"initiate" | "admin-initiate" | "confirm-sign-up">("initiate");
+  const [activeAuthFlowType, setActiveAuthFlowType] = useState<
+    | "initiate"
+    | "admin-initiate"
+    | "confirm-sign-up"
+    | "admin-respond-challenge"
+    | "forgot-password"
+    | "confirm-forgot-password"
+    | "get-user"
+    | "update-user-attributes"
+    | "delete-user-attributes"
+  >("initiate");
+  const [authFlowAccessToken, setAuthFlowAccessToken] = useState("");
+  const [authFlowSession, setAuthFlowSession] = useState("");
+  const [authFlowChallengeName, setAuthFlowChallengeName] = useState("NEW_PASSWORD_REQUIRED");
+  const [authFlowChallengeResponses, setAuthFlowChallengeResponses] = useState("");
+  const [authFlowUserAttributes, setAuthFlowUserAttributes] = useState("");
+  const [authFlowSecretHash, setAuthFlowSecretHash] = useState("");
+  const [secretsClientId, setSecretsClientId] = useState<string | null>(null);
+  const [newClientSecret, setNewClientSecret] = useState("");
 
   const initiateAuth = useInitiateAuth(selectedPool!);
   const adminInitiateAuth = useAdminInitiateAuth(selectedPool!);
   const confirmSignUp = useConfirmSignUp(selectedPool!);
+  const adminRespondChallenge = useAdminRespondToAuthChallenge(selectedPool!);
+  const forgotPassword = useForgotPassword(selectedPool!);
+  const confirmForgotPassword = useConfirmForgotPassword(selectedPool!);
+  const getUser = useGetUser(selectedPool!);
+  const updateUserAttributes = useUpdateUserAttributes(selectedPool!);
+  const deleteUserAttributes = useDeleteUserAttributes(selectedPool!);
+  const addClientSecret = useAddUserPoolClientSecret(selectedPool!);
+  const deleteClientSecret = useDeleteUserPoolClientSecret(selectedPool!);
+  const { data: clientSecretsData, isLoading: clientSecretsLoading } = useUserPoolClientSecrets(
+    selectedPool,
+    secretsClientId
+  );
 
   if (isLoading) return <TableSkeleton />;
 
@@ -643,6 +682,21 @@ export function CognitoDashboard() {
                     { id: "id", header: "Client ID", cell: (i: any) => i.id, isRowHeader: true },
                     { id: "name", header: "Name", cell: (i: any) => i.name },
                     { id: "created", header: "Created", cell: (i: any) => i.created },
+                    {
+                      id: "actions",
+                      header: "Actions",
+                      cell: (i: any) => (
+                        <Button
+                          variant="link"
+                          onClick={() => {
+                            setSecretsClientId(i.id);
+                            setNewClientSecret("");
+                          }}
+                        >
+                          Manage Secrets
+                        </Button>
+                      ),
+                    },
                   ]}
                   filterEnabled
                   filterPlaceholder="Find clients"
@@ -667,11 +721,17 @@ export function CognitoDashboard() {
                             { label: "Initiate Auth", value: "initiate" },
                             { label: "Admin Initiate Auth", value: "admin-initiate" },
                             { label: "Confirm Sign Up", value: "confirm-sign-up" },
+                            { label: "Admin Respond to Challenge", value: "admin-respond-challenge" },
+                            { label: "Forgot Password", value: "forgot-password" },
+                            { label: "Confirm Forgot Password", value: "confirm-forgot-password" },
+                            { label: "Get User", value: "get-user" },
+                            { label: "Update User Attributes", value: "update-user-attributes" },
+                            { label: "Delete User Attributes", value: "delete-user-attributes" },
                           ]}
                           selectedAriaLabel="Selected flow type"
                         />
                       </FormField>
-                      {activeAuthFlowType !== "confirm-sign-up" && (
+                      {activeAuthFlowType === "initiate" || activeAuthFlowType === "admin-initiate" ? (
                         <FormField label="Auth Flow">
                           <Select
                             selectedOption={{ label: authFlowType, value: authFlowType }}
@@ -685,22 +745,32 @@ export function CognitoDashboard() {
                             selectedAriaLabel="Selected auth flow"
                           />
                         </FormField>
+                      ) : null}
+                      {activeAuthFlowType !== "get-user" &&
+                        activeAuthFlowType !== "update-user-attributes" &&
+                        activeAuthFlowType !== "delete-user-attributes" && (
+                        <FormField label="Client ID" description="App client ID for the selected user pool">
+                          <Input
+                            value={authFlowClientId}
+                            onChange={({ detail }) => setAuthFlowClientId(detail.value)}
+                            placeholder="Client ID"
+                          />
+                        </FormField>
                       )}
-                      <FormField label="Client ID" description="App client ID for the selected user pool">
-                        <Input
-                          value={authFlowClientId}
-                          onChange={({ detail }) => setAuthFlowClientId(detail.value)}
-                          placeholder="Client ID"
-                        />
-                      </FormField>
-                      <FormField label="Username">
-                        <Input
-                          value={authFlowUsername}
-                          onChange={({ detail }) => setAuthFlowUsername(detail.value)}
-                          placeholder="Username"
-                        />
-                      </FormField>
-                      {activeAuthFlowType !== "confirm-sign-up" && (
+                      {activeAuthFlowType !== "get-user" &&
+                        activeAuthFlowType !== "update-user-attributes" &&
+                        activeAuthFlowType !== "delete-user-attributes" && (
+                        <FormField label="Username">
+                          <Input
+                            value={authFlowUsername}
+                            onChange={({ detail }) => setAuthFlowUsername(detail.value)}
+                            placeholder="Username"
+                          />
+                        </FormField>
+                      )}
+                      {(activeAuthFlowType === "initiate" ||
+                        activeAuthFlowType === "admin-initiate" ||
+                        activeAuthFlowType === "confirm-forgot-password") && (
                         <FormField label="Password">
                           <Input
                             type="password"
@@ -710,7 +780,8 @@ export function CognitoDashboard() {
                           />
                         </FormField>
                       )}
-                      {activeAuthFlowType === "confirm-sign-up" && (
+                      {(activeAuthFlowType === "confirm-sign-up" ||
+                        activeAuthFlowType === "confirm-forgot-password") && (
                         <FormField label="Confirmation Code">
                           <Input
                             value={authFlowConfirmationCode}
@@ -719,10 +790,113 @@ export function CognitoDashboard() {
                           />
                         </FormField>
                       )}
+                      {activeAuthFlowType === "admin-respond-challenge" && (
+                        <>
+                          <FormField label="Challenge Name">
+                            <Select
+                              selectedOption={{ label: authFlowChallengeName, value: authFlowChallengeName }}
+                              onChange={({ detail }) => setAuthFlowChallengeName(detail.selectedOption.value!)}
+                              options={[
+                                { label: "NEW_PASSWORD_REQUIRED", value: "NEW_PASSWORD_REQUIRED" },
+                                { label: "SMS_MFA", value: "SMS_MFA" },
+                                { label: "SOFTWARE_TOKEN_MFA", value: "SOFTWARE_TOKEN_MFA" },
+                                { label: "SELECT_MFA_TYPE", value: "SELECT_MFA_TYPE" },
+                                { label: "CUSTOM_CHALLENGE", value: "CUSTOM_CHALLENGE" },
+                              ]}
+                              selectedAriaLabel="Selected challenge name"
+                            />
+                          </FormField>
+                          <FormField label="Session">
+                            <Input
+                              value={authFlowSession}
+                              onChange={({ detail }) => setAuthFlowSession(detail.value)}
+                              placeholder="Session string from previous challenge"
+                            />
+                          </FormField>
+                          <FormField label="Challenge Responses (JSON)">
+                            <Textarea
+                              value={authFlowChallengeResponses}
+                              onChange={({ detail }) => setAuthFlowChallengeResponses(detail.value)}
+                              placeholder='{"NEW_PASSWORD": "Password123!"}'
+                            />
+                          </FormField>
+                        </>
+                      )}
+                      {(activeAuthFlowType === "get-user" ||
+                        activeAuthFlowType === "update-user-attributes" ||
+                        activeAuthFlowType === "delete-user-attributes") && (
+                        <FormField label="Access Token">
+                          <Input
+                            value={authFlowAccessToken}
+                            onChange={({ detail }) => setAuthFlowAccessToken(detail.value)}
+                            placeholder="Access token from successful authentication"
+                          />
+                        </FormField>
+                      )}
+                      {activeAuthFlowType === "update-user-attributes" && (
+                        <FormField label="User Attributes (JSON)">
+                          <Textarea
+                            value={authFlowUserAttributes}
+                            onChange={({ detail }) => setAuthFlowUserAttributes(detail.value)}
+                            placeholder='[{"Name": "email", "Value": "user@example.com"}]'
+                          />
+                        </FormField>
+                      )}
+                      {activeAuthFlowType === "delete-user-attributes" && (
+                        <FormField label="Attribute Names (comma-separated)">
+                          <Input
+                            value={authFlowUserAttributes}
+                            onChange={({ detail }) => setAuthFlowUserAttributes(detail.value)}
+                            placeholder="email, phone_number"
+                          />
+                        </FormField>
+                      )}
+                      {(activeAuthFlowType === "confirm-sign-up" ||
+                        activeAuthFlowType === "forgot-password" ||
+                        activeAuthFlowType === "confirm-forgot-password") && (
+                        <FormField label="Secret Hash (optional)">
+                          <Input
+                            value={authFlowSecretHash}
+                            onChange={({ detail }) => setAuthFlowSecretHash(detail.value)}
+                            placeholder="Secret hash for client with secret"
+                          />
+                        </FormField>
+                      )}
                       <Button
                         variant="primary"
-                        loading={initiateAuth.isPending || adminInitiateAuth.isPending || confirmSignUp.isPending}
-                        disabled={!authFlowClientId || !authFlowUsername || (activeAuthFlowType !== "confirm-sign-up" ? !authFlowPassword : !authFlowConfirmationCode)}
+                        loading={
+                          initiateAuth.isPending ||
+                          adminInitiateAuth.isPending ||
+                          confirmSignUp.isPending ||
+                          adminRespondChallenge.isPending ||
+                          forgotPassword.isPending ||
+                          confirmForgotPassword.isPending ||
+                          getUser.isPending ||
+                          updateUserAttributes.isPending ||
+                          deleteUserAttributes.isPending
+                        }
+                        disabled={(function () {
+                          switch (activeAuthFlowType) {
+                            case "initiate":
+                            case "admin-initiate":
+                              return !authFlowClientId || !authFlowUsername || !authFlowPassword;
+                            case "confirm-sign-up":
+                              return !authFlowClientId || !authFlowUsername || !authFlowConfirmationCode;
+                            case "admin-respond-challenge":
+                              return !authFlowClientId || !authFlowChallengeName;
+                            case "forgot-password":
+                              return !authFlowClientId || !authFlowUsername;
+                            case "confirm-forgot-password":
+                              return !authFlowClientId || !authFlowUsername || !authFlowConfirmationCode || !authFlowPassword;
+                            case "get-user":
+                            case "delete-user-attributes":
+                              return !authFlowAccessToken;
+                            case "update-user-attributes":
+                              return !authFlowAccessToken || !authFlowUserAttributes;
+                            default:
+                              return true;
+                          }
+                        })()}
                         onClick={async () => {
                           setAuthFlowResult(null);
                           try {
@@ -731,25 +905,61 @@ export function CognitoDashboard() {
                               result = await initiateAuth.mutateAsync({
                                 clientId: authFlowClientId,
                                 authFlow: authFlowType,
-                                authParameters: {
-                                  USERNAME: authFlowUsername,
-                                  PASSWORD: authFlowPassword,
-                                },
+                                authParameters: { USERNAME: authFlowUsername, PASSWORD: authFlowPassword },
                               });
                             } else if (activeAuthFlowType === "admin-initiate") {
                               result = await adminInitiateAuth.mutateAsync({
                                 clientId: authFlowClientId,
                                 authFlow: authFlowType,
-                                authParameters: {
-                                  USERNAME: authFlowUsername,
-                                  PASSWORD: authFlowPassword,
-                                },
+                                authParameters: { USERNAME: authFlowUsername, PASSWORD: authFlowPassword },
                               });
-                            } else {
+                            } else if (activeAuthFlowType === "confirm-sign-up") {
                               result = await confirmSignUp.mutateAsync({
                                 clientId: authFlowClientId,
                                 username: authFlowUsername,
                                 confirmationCode: authFlowConfirmationCode,
+                                secretHash: authFlowSecretHash || undefined,
+                              });
+                            } else if (activeAuthFlowType === "admin-respond-challenge") {
+                              const challengeResponses = authFlowChallengeResponses.trim()
+                                ? JSON.parse(authFlowChallengeResponses)
+                                : undefined;
+                              result = await adminRespondChallenge.mutateAsync({
+                                clientId: authFlowClientId,
+                                challengeName: authFlowChallengeName,
+                                challengeResponses,
+                                session: authFlowSession || undefined,
+                              });
+                            } else if (activeAuthFlowType === "forgot-password") {
+                              result = await forgotPassword.mutateAsync({
+                                clientId: authFlowClientId,
+                                username: authFlowUsername,
+                                secretHash: authFlowSecretHash || undefined,
+                              });
+                            } else if (activeAuthFlowType === "confirm-forgot-password") {
+                              result = await confirmForgotPassword.mutateAsync({
+                                clientId: authFlowClientId,
+                                username: authFlowUsername,
+                                confirmationCode: authFlowConfirmationCode,
+                                password: authFlowPassword,
+                                secretHash: authFlowSecretHash || undefined,
+                              });
+                            } else if (activeAuthFlowType === "get-user") {
+                              result = await getUser.mutateAsync({ accessToken: authFlowAccessToken });
+                            } else if (activeAuthFlowType === "update-user-attributes") {
+                              const userAttributes = JSON.parse(authFlowUserAttributes);
+                              result = await updateUserAttributes.mutateAsync({
+                                accessToken: authFlowAccessToken,
+                                userAttributes,
+                              });
+                            } else if (activeAuthFlowType === "delete-user-attributes") {
+                              const userAttributeNames = authFlowUserAttributes
+                                .split(/[,\n]+/)
+                                .map((s: string) => s.trim())
+                                .filter(Boolean);
+                              result = await deleteUserAttributes.mutateAsync({
+                                accessToken: authFlowAccessToken,
+                                userAttributeNames,
                               });
                             }
                             setAuthFlowResult(result);
@@ -989,6 +1199,72 @@ export function CognitoDashboard() {
               </FormField>
             </SpaceBetween>
           </Form>
+        </Modal>
+
+        {/* Client Secrets Modal */}
+        <Modal
+          visible={!!secretsClientId}
+          onDismiss={() => setSecretsClientId(null)}
+          header={`Client Secrets for ${secretsClientId || ""}`}
+        >
+          <SpaceBetween size="s">
+            {clientSecretsLoading ? (
+              <Spinner />
+            ) : !clientSecretsData?.secrets?.length ? (
+              <Box padding="m" textAlign="center" color="text-status-inactive">
+                No client secrets
+              </Box>
+            ) : (
+              <SpaceBetween size="xs">
+                {clientSecretsData.secrets.map((secret: any) => (
+                  <Box key={secret.ClientSecretId || secret.ClientSecretIdentifier || secret.SecretId} padding="s">
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div>
+                        <Box variant="small">{secret.ClientSecretId || secret.ClientSecretIdentifier || secret.SecretId}</Box>
+                        <Box variant="small" color="text-body-secondary">
+                          Created: {secret.CreationDate ? new Date(secret.CreationDate * 1000).toLocaleDateString() : "-"}
+                        </Box>
+                      </div>
+                      <DeleteButton
+                        itemName={secret.ClientSecretId || secret.ClientSecretIdentifier || secret.SecretId}
+                        resourceType="client secret"
+                        loading={deleteClientSecret.isPending}
+                        onDelete={() =>
+                          deleteClientSecret.mutateAsync({
+                            clientId: secretsClientId!,
+                            secretId: secret.ClientSecretId || secret.ClientSecretIdentifier || secret.SecretId,
+                          })
+                        }
+                      />
+                    </div>
+                  </Box>
+                ))}
+              </SpaceBetween>
+            )}
+            <FormField label="New Secret Value (optional)">
+              <Input
+                type="password"
+                value={newClientSecret}
+                onChange={({ detail }) => setNewClientSecret(detail.value)}
+                placeholder="Leave blank to let Cognito generate a secret"
+              />
+            </FormField>
+            <Button
+              variant="primary"
+              iconName="add-plus"
+              loading={addClientSecret.isPending}
+              disabled={!secretsClientId}
+              onClick={async () => {
+                await addClientSecret.mutateAsync({
+                  clientId: secretsClientId!,
+                  clientSecret: newClientSecret || undefined,
+                });
+                setNewClientSecret("");
+              }}
+            >
+              Add Secret
+            </Button>
+          </SpaceBetween>
         </Modal>
       </>
     );

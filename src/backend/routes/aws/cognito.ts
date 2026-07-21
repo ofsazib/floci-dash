@@ -34,9 +34,17 @@ import {
   AdminListGroupsForUserCommand,
   ListUsersInGroupCommand,
   ListUserPoolClientSecretsCommand,
+  AddUserPoolClientSecretCommand,
+  DeleteUserPoolClientSecretCommand,
   InitiateAuthCommand,
   AdminInitiateAuthCommand,
   ConfirmSignUpCommand,
+  AdminRespondToAuthChallengeCommand,
+  ForgotPasswordCommand,
+  ConfirmForgotPasswordCommand,
+  GetUserCommand,
+  UpdateUserAttributesCommand,
+  DeleteUserAttributesCommand,
 } from "@aws-sdk/client-cognito-identity-provider";
 
 const router = new Hono();
@@ -249,7 +257,33 @@ router.get("/user-pools/:id/clients/:clientId/secrets", async (c: Context) => {
   const clientId = c.req.param("clientId");
   const client = getClient();
   const result = await client.send(new ListUserPoolClientSecretsCommand({ UserPoolId: id, ClientId: clientId }));
-  return c.json({ secrets: (result as any).Secrets || [] });
+  return c.json({ secrets: result.ClientSecrets || [] });
+});
+
+router.post("/user-pools/:id/clients/:clientId/secrets", async (c: Context) => {
+  const id = c.req.param("id");
+  const clientId = c.req.param("clientId");
+  const body = await c.req.json<{ clientSecret?: string }>();
+  const client = getClient();
+  const result = await client.send(new AddUserPoolClientSecretCommand({
+    UserPoolId: id,
+    ClientId: clientId,
+    ClientSecret: body.clientSecret,
+  }));
+  return c.json({ secret: result.ClientSecretDescriptor }, 201);
+});
+
+router.delete("/user-pools/:id/clients/:clientId/secrets/:secretId", async (c: Context) => {
+  const id = c.req.param("id");
+  const clientId = c.req.param("clientId");
+  const secretId = c.req.param("secretId");
+  const client = getClient();
+  await client.send(new DeleteUserPoolClientSecretCommand({
+    UserPoolId: id,
+    ClientId: clientId,
+    ClientSecretId: secretId,
+  }));
+  return c.json({ deleted: true });
 });
 
 // ── Resource Servers ─────────────────────────────────────
@@ -447,6 +481,100 @@ router.post("/user-pools/:id/auth/confirm-sign-up", async (c: Context) => {
     SecretHash: body.secretHash,
   }));
   return c.json({ confirmed: true });
+});
+
+router.post("/user-pools/:id/auth/admin-respond-challenge", async (c: Context) => {
+  const id = c.req.param("id");
+  const body = await c.req.json<{
+    clientId: string;
+    challengeName: string;
+    challengeResponses?: Record<string, string>;
+    session?: string;
+  }>();
+  if (!body.clientId || !body.challengeName) {
+    return c.json({ error: "clientId and challengeName are required" }, 400);
+  }
+  const client = getClient();
+  const result = await client.send(new AdminRespondToAuthChallengeCommand({
+    UserPoolId: id,
+    ClientId: body.clientId,
+    ChallengeName: body.challengeName as any,
+    ChallengeResponses: body.challengeResponses,
+    Session: body.session,
+  }));
+  return c.json({ result });
+});
+
+router.post("/user-pools/:id/auth/forgot-password", async (c: Context) => {
+  const id = c.req.param("id");
+  const body = await c.req.json<{ clientId: string; username: string; secretHash?: string }>();
+  if (!body.clientId || !body.username) {
+    return c.json({ error: "clientId and username are required" }, 400);
+  }
+  const client = getClient();
+  const result = await client.send(new ForgotPasswordCommand({
+    ClientId: body.clientId,
+    Username: body.username,
+    SecretHash: body.secretHash,
+  }));
+  return c.json({ result });
+});
+
+router.post("/user-pools/:id/auth/confirm-forgot-password", async (c: Context) => {
+  const id = c.req.param("id");
+  const body = await c.req.json<{
+    clientId: string;
+    username: string;
+    confirmationCode: string;
+    password: string;
+    secretHash?: string;
+  }>();
+  if (!body.clientId || !body.username || !body.confirmationCode || !body.password) {
+    return c.json({ error: "clientId, username, confirmationCode, and password are required" }, 400);
+  }
+  const client = getClient();
+  const result = await client.send(new ConfirmForgotPasswordCommand({
+    ClientId: body.clientId,
+    Username: body.username,
+    ConfirmationCode: body.confirmationCode,
+    Password: body.password,
+    SecretHash: body.secretHash,
+  }));
+  return c.json({ result });
+});
+
+router.post("/user-pools/:id/auth/get-user", async (c: Context) => {
+  const body = await c.req.json<{ accessToken: string }>();
+  if (!body.accessToken) return c.json({ error: "accessToken is required" }, 400);
+  const client = getClient();
+  const result = await client.send(new GetUserCommand({ AccessToken: body.accessToken }));
+  return c.json({ result });
+});
+
+router.post("/user-pools/:id/auth/update-user-attributes", async (c: Context) => {
+  const body = await c.req.json<{ accessToken: string; userAttributes: { Name: string; Value: string }[] }>();
+  if (!body.accessToken || !body.userAttributes?.length) {
+    return c.json({ error: "accessToken and userAttributes are required" }, 400);
+  }
+  const client = getClient();
+  const result = await client.send(new UpdateUserAttributesCommand({
+    AccessToken: body.accessToken,
+    UserAttributes: body.userAttributes as any,
+  }));
+  return c.json({ result });
+});
+
+router.post("/user-pools/:id/auth/delete-user-attributes", async (c: Context) => {
+  const body = await c.req.json<{ accessToken: string; userAttributeNames: string[] }>();
+  if (!body.accessToken || !body.userAttributeNames?.length) {
+    return c.json({ error: "accessToken and userAttributeNames are required" }, 400);
+  }
+  const client = getClient();
+  const result = await client.send(new DeleteUserAttributesCommand({
+    AccessToken: body.accessToken,
+    UserAttributeNames: body.userAttributeNames,
+  }));
+  return c.json({ result });
 });
 
 export default router;

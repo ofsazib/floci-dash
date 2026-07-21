@@ -45,9 +45,17 @@ vi.mock("@aws-sdk/client-cognito-identity-provider", () => ({
   AdminListGroupsForUserCommand: createCmd("AdminListGroupsForUserCommand"),
   ListUsersInGroupCommand: createCmd("ListUsersInGroupCommand"),
   ListUserPoolClientSecretsCommand: createCmd("ListUserPoolClientSecretsCommand"),
+  AddUserPoolClientSecretCommand: createCmd("AddUserPoolClientSecretCommand"),
+  DeleteUserPoolClientSecretCommand: createCmd("DeleteUserPoolClientSecretCommand"),
   InitiateAuthCommand: createCmd("InitiateAuthCommand"),
   AdminInitiateAuthCommand: createCmd("AdminInitiateAuthCommand"),
   ConfirmSignUpCommand: createCmd("ConfirmSignUpCommand"),
+  AdminRespondToAuthChallengeCommand: createCmd("AdminRespondToAuthChallengeCommand"),
+  ForgotPasswordCommand: createCmd("ForgotPasswordCommand"),
+  ConfirmForgotPasswordCommand: createCmd("ConfirmForgotPasswordCommand"),
+  GetUserCommand: createCmd("GetUserCommand"),
+  UpdateUserAttributesCommand: createCmd("UpdateUserAttributesCommand"),
+  DeleteUserAttributesCommand: createCmd("DeleteUserAttributesCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -490,6 +498,132 @@ describe("Cognito Routes", () => {
     it("POST /user-pools/:id/auth/confirm-sign-up — 400 if confirmationCode missing", async () => {
       const res = await post("/user-pools/us-east-1_abc/auth/confirm-sign-up", { clientId: "client-1", username: "user1" });
       expect(res.status).toBe(400);
+    });
+
+    it("POST /user-pools/:id/auth/admin-respond-challenge — responds to challenge", async () => {
+      mockSend.mockResolvedValueOnce({ AuthenticationResult: { AccessToken: "token" } });
+      const res = await post("/user-pools/us-east-1_abc/auth/admin-respond-challenge", {
+        clientId: "client-1",
+        challengeName: "NEW_PASSWORD_REQUIRED",
+        challengeResponses: { USERNAME: "user1", NEW_PASSWORD: "Pass123!" },
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.result.AuthenticationResult.AccessToken).toBe("token");
+    });
+
+    it("POST /user-pools/:id/auth/admin-respond-challenge — 400 if challengeName missing", async () => {
+      const res = await post("/user-pools/us-east-1_abc/auth/admin-respond-challenge", { clientId: "client-1" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /user-pools/:id/auth/forgot-password — starts forgot password", async () => {
+      mockSend.mockResolvedValueOnce({ CodeDeliveryDetails: { Destination: "user@example.com" } });
+      const res = await post("/user-pools/us-east-1_abc/auth/forgot-password", {
+        clientId: "client-1",
+        username: "user1",
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.result.CodeDeliveryDetails.Destination).toBe("user@example.com");
+    });
+
+    it("POST /user-pools/:id/auth/forgot-password — 400 if username missing", async () => {
+      const res = await post("/user-pools/us-east-1_abc/auth/forgot-password", { clientId: "client-1" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /user-pools/:id/auth/confirm-forgot-password — confirms forgot password", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/user-pools/us-east-1_abc/auth/confirm-forgot-password", {
+        clientId: "client-1",
+        username: "user1",
+        confirmationCode: "123456",
+        password: "NewPass123!",
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.result).toBeDefined();
+    });
+
+    it("POST /user-pools/:id/auth/confirm-forgot-password — 400 if password missing", async () => {
+      const res = await post("/user-pools/us-east-1_abc/auth/confirm-forgot-password", {
+        clientId: "client-1",
+        username: "user1",
+        confirmationCode: "123456",
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /user-pools/:id/auth/get-user — gets user", async () => {
+      mockSend.mockResolvedValueOnce({ Username: "user1" });
+      const res = await post("/user-pools/us-east-1_abc/auth/get-user", { accessToken: "access-token" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.result.Username).toBe("user1");
+    });
+
+    it("POST /user-pools/:id/auth/get-user — 400 if accessToken missing", async () => {
+      const res = await post("/user-pools/us-east-1_abc/auth/get-user", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /user-pools/:id/auth/update-user-attributes — updates attributes", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/user-pools/us-east-1_abc/auth/update-user-attributes", {
+        accessToken: "access-token",
+        userAttributes: [{ Name: "email", Value: "user@example.com" }],
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.result).toBeDefined();
+    });
+
+    it("POST /user-pools/:id/auth/update-user-attributes — 400 if userAttributes missing", async () => {
+      const res = await post("/user-pools/us-east-1_abc/auth/update-user-attributes", { accessToken: "access-token" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /user-pools/:id/auth/delete-user-attributes — deletes attributes", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/user-pools/us-east-1_abc/auth/delete-user-attributes", {
+        accessToken: "access-token",
+        userAttributeNames: ["email"],
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.result).toBeDefined();
+    });
+
+    it("POST /user-pools/:id/auth/delete-user-attributes — 400 if userAttributeNames missing", async () => {
+      const res = await post("/user-pools/us-east-1_abc/auth/delete-user-attributes", { accessToken: "access-token" });
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe("Client Secrets", () => {
+    it("GET /user-pools/:id/clients/:clientId/secrets — lists secrets", async () => {
+      mockSend.mockResolvedValueOnce({ ClientSecrets: [{ ClientSecretId: "secret-1" }] });
+      const res = await get("/user-pools/us-east-1_abc/clients/client-1/secrets");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.secrets).toHaveLength(1);
+    });
+
+    it("POST /user-pools/:id/clients/:clientId/secrets — creates a secret", async () => {
+      mockSend.mockResolvedValueOnce({ ClientSecret: { ClientSecretId: "secret-1" } });
+      const res = await post("/user-pools/us-east-1_abc/clients/client-1/secrets", { clientSecret: "mysecret" });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.secret.ClientSecretId).toBe("secret-1");
+    });
+
+    it("DELETE /user-pools/:id/clients/:clientId/secrets/:secretId — deletes a secret", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/user-pools/us-east-1_abc/clients/client-1/secrets/secret-1");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deleted).toBe(true);
     });
   });
 });

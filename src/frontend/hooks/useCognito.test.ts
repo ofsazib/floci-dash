@@ -47,6 +47,15 @@ import {
   useInitiateAuth,
   useAdminInitiateAuth,
   useConfirmSignUp,
+  useAdminRespondToAuthChallenge,
+  useForgotPassword,
+  useConfirmForgotPassword,
+  useGetUser,
+  useUpdateUserAttributes,
+  useDeleteUserAttributes,
+  useUserPoolClientSecrets,
+  useAddUserPoolClientSecret,
+  useDeleteUserPoolClientSecret,
 } from "./useCognito";
 
 beforeEach(() => mockApi.mockReset());
@@ -370,5 +379,121 @@ describe("useCognito hooks", () => {
       method: "POST",
       body: JSON.stringify({ clientId: "client-1", username: "user1", confirmationCode: "123456" }),
     });
+  });
+
+  it("useAdminRespondToAuthChallenge calls POST", async () => {
+    mockApi.mockResolvedValueOnce({ result: { ChallengeName: "NEW_PASSWORD_REQUIRED" } });
+    const { result } = renderHook(() => useAdminRespondToAuthChallenge(POOL_ID), { wrapper: createWrapper() });
+    await result.current.mutateAsync({
+      clientId: "client-1",
+      challengeName: "NEW_PASSWORD_REQUIRED",
+      challengeResponses: { USERNAME: "user1", NEW_PASSWORD: "Pass123!" },
+    });
+    expect(mockApi).toHaveBeenCalledWith(`/aws/cognito/user-pools/${POOL_ID}/auth/admin-respond-challenge`, {
+      method: "POST",
+      body: JSON.stringify({
+        clientId: "client-1",
+        challengeName: "NEW_PASSWORD_REQUIRED",
+        challengeResponses: { USERNAME: "user1", NEW_PASSWORD: "Pass123!" },
+      }),
+    });
+  });
+
+  it("useForgotPassword calls POST", async () => {
+    mockApi.mockResolvedValueOnce({ result: {} });
+    const { result } = renderHook(() => useForgotPassword(POOL_ID), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ clientId: "client-1", username: "user1" });
+    expect(mockApi).toHaveBeenCalledWith(`/aws/cognito/user-pools/${POOL_ID}/auth/forgot-password`, {
+      method: "POST",
+      body: JSON.stringify({ clientId: "client-1", username: "user1" }),
+    });
+  });
+
+  it("useConfirmForgotPassword calls POST", async () => {
+    mockApi.mockResolvedValueOnce({ result: {} });
+    const { result } = renderHook(() => useConfirmForgotPassword(POOL_ID), { wrapper: createWrapper() });
+    await result.current.mutateAsync({
+      clientId: "client-1",
+      username: "user1",
+      confirmationCode: "123456",
+      password: "NewPass123!",
+    });
+    expect(mockApi).toHaveBeenCalledWith(`/aws/cognito/user-pools/${POOL_ID}/auth/confirm-forgot-password`, {
+      method: "POST",
+      body: JSON.stringify({
+        clientId: "client-1",
+        username: "user1",
+        confirmationCode: "123456",
+        password: "NewPass123!",
+      }),
+    });
+  });
+
+  it("useGetUser calls POST", async () => {
+    mockApi.mockResolvedValueOnce({ result: { Username: "user1" } });
+    const { result } = renderHook(() => useGetUser(POOL_ID), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ accessToken: "access-token" });
+    expect(mockApi).toHaveBeenCalledWith(`/aws/cognito/user-pools/${POOL_ID}/auth/get-user`, {
+      method: "POST",
+      body: JSON.stringify({ accessToken: "access-token" }),
+    });
+  });
+
+  it("useUpdateUserAttributes calls POST", async () => {
+    mockApi.mockResolvedValueOnce({ result: {} });
+    const { result } = renderHook(() => useUpdateUserAttributes(POOL_ID), { wrapper: createWrapper() });
+    await result.current.mutateAsync({
+      accessToken: "access-token",
+      userAttributes: [{ Name: "email", Value: "user@example.com" }],
+    });
+    expect(mockApi).toHaveBeenCalledWith(`/aws/cognito/user-pools/${POOL_ID}/auth/update-user-attributes`, {
+      method: "POST",
+      body: JSON.stringify({
+        accessToken: "access-token",
+        userAttributes: [{ Name: "email", Value: "user@example.com" }],
+      }),
+    });
+  });
+
+  it("useDeleteUserAttributes calls POST", async () => {
+    mockApi.mockResolvedValueOnce({ result: {} });
+    const { result } = renderHook(() => useDeleteUserAttributes(POOL_ID), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ accessToken: "access-token", userAttributeNames: ["email"] });
+    expect(mockApi).toHaveBeenCalledWith(`/aws/cognito/user-pools/${POOL_ID}/auth/delete-user-attributes`, {
+      method: "POST",
+      body: JSON.stringify({ accessToken: "access-token", userAttributeNames: ["email"] }),
+    });
+  });
+
+  it("useUserPoolClientSecrets calls correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ secrets: [] });
+    const { result } = renderHook(() => useUserPoolClientSecrets(POOL_ID, "client-1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(`/aws/cognito/user-pools/${POOL_ID}/clients/client-1/secrets`);
+  });
+
+  it("useUserPoolClientSecrets disabled when params null", () => {
+    const { result } = renderHook(() => useUserPoolClientSecrets(null, null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+
+  it("useAddUserPoolClientSecret calls POST", async () => {
+    mockApi.mockResolvedValueOnce({ secret: { ClientSecretId: "secret-1" } });
+    const { result } = renderHook(() => useAddUserPoolClientSecret(POOL_ID), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ clientId: "client-1", clientSecret: "mysecret" });
+    expect(mockApi).toHaveBeenCalledWith(`/aws/cognito/user-pools/${POOL_ID}/clients/client-1/secrets`, {
+      method: "POST",
+      body: JSON.stringify({ clientSecret: "mysecret" }),
+    });
+  });
+
+  it("useDeleteUserPoolClientSecret calls DELETE", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useDeleteUserPoolClientSecret(POOL_ID), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ clientId: "client-1", secretId: "secret-1" });
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/cognito/user-pools/${POOL_ID}/clients/client-1/secrets/secret-1`,
+      { method: "DELETE" }
+    );
   });
 });

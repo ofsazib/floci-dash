@@ -327,6 +327,16 @@ export function useListUsersInGroup(userPoolId: string | null, groupName: string
   });
 }
 
+// ─── Client Secrets ──────────────────────────────────────
+
+export function useUserPoolClientSecrets(userPoolId: string | null, clientId: string | null) {
+  return useQuery<{ secrets: any[] }>({
+    queryKey: ["aws", "cognito", "client-secrets", userPoolId, clientId],
+    queryFn: () => api(`/aws/cognito/user-pools/${encodeURIComponent(userPoolId!)}/clients/${encodeURIComponent(clientId!)}/secrets`),
+    enabled: !!userPoolId && !!clientId,
+  });
+}
+
 // ─── Auth Flow Tester ─────────────────────────────────────
 
 export interface AuthFlowResult {
@@ -368,5 +378,88 @@ export function useConfirmSignUp(userPoolId: string) {
         method: "POST",
         body: JSON.stringify(params),
       }),
+  });
+}
+
+export function useAdminRespondToAuthChallenge(userPoolId: string) {
+  return useMutation<{ result: AuthFlowResult }, Error, { clientId: string; challengeName: string; challengeResponses?: Record<string, string>; session?: string }>({
+    mutationFn: (params) =>
+      api(`/aws/cognito/user-pools/${encodeURIComponent(userPoolId)}/auth/admin-respond-challenge`, {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+  });
+}
+
+export function useForgotPassword(userPoolId: string) {
+  return useMutation<{ result: any }, Error, { clientId: string; username: string; secretHash?: string }>({
+    mutationFn: (params) =>
+      api(`/aws/cognito/user-pools/${encodeURIComponent(userPoolId)}/auth/forgot-password`, {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+  });
+}
+
+export function useConfirmForgotPassword(userPoolId: string) {
+  return useMutation<{ result: any }, Error, { clientId: string; username: string; confirmationCode: string; password: string; secretHash?: string }>({
+    mutationFn: (params) =>
+      api(`/aws/cognito/user-pools/${encodeURIComponent(userPoolId)}/auth/confirm-forgot-password`, {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+  });
+}
+
+export function useGetUser(userPoolId: string) {
+  return useMutation<{ result: any }, Error, { accessToken: string }>({
+    mutationFn: (params) =>
+      api(`/aws/cognito/user-pools/${encodeURIComponent(userPoolId)}/auth/get-user`, {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+  });
+}
+
+export function useUpdateUserAttributes(userPoolId: string) {
+  return useMutation<{ result: any }, Error, { accessToken: string; userAttributes: { Name: string; Value: string }[] }>({
+    mutationFn: (params) =>
+      api(`/aws/cognito/user-pools/${encodeURIComponent(userPoolId)}/auth/update-user-attributes`, {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+  });
+}
+
+export function useDeleteUserAttributes(userPoolId: string) {
+  return useMutation<{ result: any }, Error, { accessToken: string; userAttributeNames: string[] }>({
+    mutationFn: (params) =>
+      api(`/aws/cognito/user-pools/${encodeURIComponent(userPoolId)}/auth/delete-user-attributes`, {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+  });
+}
+
+export function useAddUserPoolClientSecret(userPoolId: string) {
+  const qc = useQueryClient();
+  return useMutation<{ secret: any }, Error, { clientId: string; clientSecret?: string }>({
+    mutationFn: (params) =>
+      api(`/aws/cognito/user-pools/${encodeURIComponent(userPoolId)}/clients/${encodeURIComponent(params.clientId)}/secrets`, {
+        method: "POST",
+        body: JSON.stringify({ clientSecret: params.clientSecret }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cognito", "client-secrets", userPoolId] }),
+  });
+}
+
+export function useDeleteUserPoolClientSecret(userPoolId: string) {
+  const qc = useQueryClient();
+  return useMutation<{ deleted: boolean }, Error, { clientId: string; secretId: string }>({
+    mutationFn: (params) =>
+      api(`/aws/cognito/user-pools/${encodeURIComponent(userPoolId)}/clients/${encodeURIComponent(params.clientId)}/secrets/${encodeURIComponent(params.secretId)}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cognito", "client-secrets", userPoolId] }),
   });
 }
