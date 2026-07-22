@@ -21,6 +21,12 @@ import {
   AttachLoadBalancersCommand,
   DetachLoadBalancersCommand,
   DescribeLoadBalancersCommand,
+  DescribeAutoScalingNotificationTypesCommand,
+  DescribeTerminationPolicyTypesCommand,
+  DescribeAdjustmentTypesCommand,
+  DescribeAccountLimitsCommand,
+  DescribeLifecycleHookTypesCommand,
+  DescribeMetricCollectionTypesCommand,
 } from "@aws-sdk/client-auto-scaling";
 
 const router = new Hono();
@@ -324,6 +330,54 @@ router.post("/groups/:name/load-balancers/detach", async (c: Context) => {
     })
   );
   return c.json({ detached: true });
+});
+
+// ── Describe Types ─────────────────────────────────────
+
+router.get("/notification-types", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new DescribeAutoScalingNotificationTypesCommand({}));
+  return c.json({ notificationTypes: result.AutoScalingNotificationTypes || [] });
+});
+
+router.get("/termination-policy-types", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new DescribeTerminationPolicyTypesCommand({}));
+  return c.json({ terminationPolicyTypes: result.TerminationPolicyTypes || [] });
+});
+
+router.get("/adjustment-types", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new DescribeAdjustmentTypesCommand({}));
+  const types = (result.AdjustmentTypes || []).map((t) => t.AdjustmentType);
+  return c.json({ adjustmentTypes: types });
+});
+
+router.get("/account-limits", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new DescribeAccountLimitsCommand({}));
+  return c.json({
+    maxNumberOfAutoScalingGroups: result.MaxNumberOfAutoScalingGroups,
+    maxNumberOfLaunchConfigurations: result.MaxNumberOfLaunchConfigurations,
+    numberOfAutoScalingGroups: result.NumberOfAutoScalingGroups,
+    numberOfLaunchConfigurations: result.NumberOfLaunchConfigurations,
+  });
+});
+
+router.get("/lifecycle-hook-types", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new DescribeLifecycleHookTypesCommand({}));
+  return c.json({ lifecycleHookTypes: result.LifecycleHookTypes || [] });
+});
+
+router.get("/metric-collection-types", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new DescribeMetricCollectionTypesCommand({}));
+  const metrics = ((result.Metrics || []) as any[]).map((m: any) => ({
+    metric: m.Metric,
+    granularities: (m.Granularities || []).map((g: any) => g.Granularity),
+  }));
+  return c.json({ metricCollectionTypes: metrics });
 });
 
 export default router;

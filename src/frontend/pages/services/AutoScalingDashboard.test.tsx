@@ -20,6 +20,12 @@ const mockGroupsHook = vi.fn();
 const mockLCsHook = vi.fn();
 const mockCreateGroup = vi.fn();
 const mockDeleteGroup = vi.fn();
+const mockNotificationTypes = vi.fn();
+const mockTerminationPolicyTypes = vi.fn();
+const mockAdjustmentTypes = vi.fn();
+const mockAccountLimits = vi.fn();
+const mockLifecycleHookTypes = vi.fn();
+const mockMetricCollectionTypes = vi.fn();
 
 const deleteGroupState = vi.hoisted(() => ({
   isPending: false,
@@ -131,6 +137,12 @@ vi.mock("../../hooks/useAutoScaling", () => ({
     error: null,
     reset: vi.fn(),
   }),
+  useASGNotificationTypes: (...args: any[]) => mockNotificationTypes(...args),
+  useASGTerminationPolicyTypes: (...args: any[]) => mockTerminationPolicyTypes(...args),
+  useASGAdjustmentTypes: (...args: any[]) => mockAdjustmentTypes(...args),
+  useASGAccountLimits: (...args: any[]) => mockAccountLimits(...args),
+  useASGLifecycleHookTypes: (...args: any[]) => mockLifecycleHookTypes(...args),
+  useASGMetricCollectionTypes: (...args: any[]) => mockMetricCollectionTypes(...args),
 }));
 
 import { AutoScalingDashboard } from "./AutoScalingDashboard";
@@ -148,6 +160,49 @@ beforeEach(() => {
   mockLCsHook.mockReturnValue({
     data: { launchConfigurations: [] as any[], total: 0 },
     isLoading: false,
+  });
+
+  // Describe types defaults
+  mockNotificationTypes.mockReturnValue({
+    data: { notificationTypes: ["autoscaling:EC2_INSTANCE_LAUNCH"] },
+    isLoading: false,
+    isError: false,
+    error: null,
+  });
+  mockTerminationPolicyTypes.mockReturnValue({
+    data: { terminationPolicyTypes: ["Default", "OldestInstance"] },
+    isLoading: false,
+    isError: false,
+    error: null,
+  });
+  mockAdjustmentTypes.mockReturnValue({
+    data: { adjustmentTypes: ["ChangeInCapacity", "ExactCapacity"] },
+    isLoading: false,
+    isError: false,
+    error: null,
+  });
+  mockAccountLimits.mockReturnValue({
+    data: {
+      maxNumberOfAutoScalingGroups: 200,
+      maxNumberOfLaunchConfigurations: 200,
+      numberOfAutoScalingGroups: 5,
+      numberOfLaunchConfigurations: 3,
+    },
+    isLoading: false,
+    isError: false,
+    error: null,
+  });
+  mockLifecycleHookTypes.mockReturnValue({
+    data: { lifecycleHookTypes: ["autoscaling:EC2_INSTANCE_LAUNCHING"] },
+    isLoading: false,
+    isError: false,
+    error: null,
+  });
+  mockMetricCollectionTypes.mockReturnValue({
+    data: { metricCollectionTypes: [{ metric: "GroupMinSize", granularities: ["1Minute"] }] },
+    isLoading: false,
+    isError: false,
+    error: null,
   });
 });
 
@@ -322,6 +377,102 @@ describe("AutoScalingDashboard — launch configurations", () => {
     await user.click(screen.getByRole("tab", { name: /Launch Configurations/i }));
     await waitFor(() => {
       expect(screen.getByText("minimal-lc")).toBeTruthy();
+    });
+  });
+});
+
+describe("AutoScalingDashboard — describe types", () => {
+  it("shows account limits on Advanced tab", async () => {
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Describe Types & Account Limits")).toBeTruthy();
+      expect(screen.getByText(/Max ASGs: 200/)).toBeTruthy();
+      expect(screen.getByText(/Current ASGs: 5/)).toBeTruthy();
+    });
+  });
+
+  it("shows notification types", async () => {
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => {
+      const matches = screen.getAllByText(/autoscaling:EC2_INSTANCE_LAUNCH/);
+      expect(matches.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it("shows termination policy types", async () => {
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Default/)).toBeTruthy();
+      expect(screen.getByText(/OldestInstance/)).toBeTruthy();
+    });
+  });
+
+  it("shows adjustment types", async () => {
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/ChangeInCapacity/)).toBeTruthy();
+      expect(screen.getByText(/ExactCapacity/)).toBeTruthy();
+    });
+  });
+
+  it("shows lifecycle hook types", async () => {
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/autoscaling:EC2_INSTANCE_LAUNCHING/)).toBeTruthy();
+    });
+  });
+
+  it("shows metric collection types", async () => {
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/GroupMinSize/)).toBeTruthy();
+      expect(screen.getByText(/1Minute/)).toBeTruthy();
+    });
+  });
+
+  it("shows spinner when account limits loading", async () => {
+    mockAccountLimits.mockReturnValue({ data: undefined, isLoading: true });
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => {
+      // Spinner renders — check that the section heading is present
+      expect(screen.getByText("Describe Types & Account Limits")).toBeTruthy();
+    });
+  });
+
+  it("shows 'failed to load' when account limits error", async () => {
+    mockAccountLimits.mockReturnValue({ data: undefined, isLoading: false });
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Failed to load account limits/)).toBeTruthy();
+    });
+  });
+
+  it("shows empty message when no metric collection types", async () => {
+    mockMetricCollectionTypes.mockReturnValue({
+      data: { metricCollectionTypes: [] },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/No metric collection types found/)).toBeTruthy();
     });
   });
 });

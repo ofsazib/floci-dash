@@ -38,6 +38,12 @@ import {
   useASGLoadBalancers,
   useAttachLoadBalancers,
   useDetachLoadBalancers,
+  useASGNotificationTypes,
+  useASGTerminationPolicyTypes,
+  useASGAdjustmentTypes,
+  useASGAccountLimits,
+  useASGLifecycleHookTypes,
+  useASGMetricCollectionTypes,
 } from "./useAutoScaling";
 
 beforeEach(() => {
@@ -288,6 +294,62 @@ describe("useAutoScaling hooks", () => {
         "/aws/autoscaling/groups/asg-1/load-balancers/detach",
         expect.objectContaining({ method: "POST" })
       );
+    });
+  });
+
+  // ─── Describe Types ────────────────────────────────────
+
+  describe("useASGNotificationTypes", () => {
+    it("calls correct URL", async () => {
+      mockApi.mockResolvedValueOnce({ notificationTypes: [] });
+      const { result } = renderHook(() => useASGNotificationTypes(), { wrapper: createWrapper() });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockApi).toHaveBeenCalledWith("/aws/autoscaling/notification-types");
+    });
+  });
+
+  describe("useASGTerminationPolicyTypes", () => {
+    it("calls correct URL", async () => {
+      mockApi.mockResolvedValueOnce({ terminationPolicyTypes: [] });
+      const { result } = renderHook(() => useASGTerminationPolicyTypes(), { wrapper: createWrapper() });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockApi).toHaveBeenCalledWith("/aws/autoscaling/termination-policy-types");
+    });
+  });
+
+  describe("useASGAdjustmentTypes", () => {
+    it("calls correct URL", async () => {
+      mockApi.mockResolvedValueOnce({ adjustmentTypes: [] });
+      const { result } = renderHook(() => useASGAdjustmentTypes(), { wrapper: createWrapper() });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockApi).toHaveBeenCalledWith("/aws/autoscaling/adjustment-types");
+    });
+  });
+
+  describe("useASGAccountLimits", () => {
+    it("calls correct URL", async () => {
+      mockApi.mockResolvedValueOnce({});
+      const { result } = renderHook(() => useASGAccountLimits(), { wrapper: createWrapper() });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockApi).toHaveBeenCalledWith("/aws/autoscaling/account-limits");
+    });
+  });
+
+  describe("useASGLifecycleHookTypes", () => {
+    it("calls correct URL", async () => {
+      mockApi.mockResolvedValueOnce({ lifecycleHookTypes: [] });
+      const { result } = renderHook(() => useASGLifecycleHookTypes(), { wrapper: createWrapper() });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockApi).toHaveBeenCalledWith("/aws/autoscaling/lifecycle-hook-types");
+    });
+  });
+
+  describe("useASGMetricCollectionTypes", () => {
+    it("calls correct URL", async () => {
+      mockApi.mockResolvedValueOnce({ metricCollectionTypes: [] });
+      const { result } = renderHook(() => useASGMetricCollectionTypes(), { wrapper: createWrapper() });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockApi).toHaveBeenCalledWith("/aws/autoscaling/metric-collection-types");
     });
   });
 });

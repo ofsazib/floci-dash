@@ -253,6 +253,55 @@ export function useDetachLBTargetGroups() {
   });
 }
 
+// ─── Describe Types ─────────────────────────────────────
+
+export function useASGNotificationTypes() {
+  return useQuery<{ notificationTypes: string[] }>({
+    queryKey: ["aws", "autoscaling", "notification-types"],
+    queryFn: () => api("/aws/autoscaling/notification-types"),
+  });
+}
+
+export function useASGTerminationPolicyTypes() {
+  return useQuery<{ terminationPolicyTypes: string[] }>({
+    queryKey: ["aws", "autoscaling", "termination-policy-types"],
+    queryFn: () => api("/aws/autoscaling/termination-policy-types"),
+  });
+}
+
+export function useASGAdjustmentTypes() {
+  return useQuery<{ adjustmentTypes: string[] }>({
+    queryKey: ["aws", "autoscaling", "adjustment-types"],
+    queryFn: () => api("/aws/autoscaling/adjustment-types"),
+  });
+}
+
+export function useASGAccountLimits() {
+  return useQuery<{
+    maxNumberOfAutoScalingGroups?: number;
+    maxNumberOfLaunchConfigurations?: number;
+    numberOfAutoScalingGroups?: number;
+    numberOfLaunchConfigurations?: number;
+  }>({
+    queryKey: ["aws", "autoscaling", "account-limits"],
+    queryFn: () => api("/aws/autoscaling/account-limits"),
+  });
+}
+
+export function useASGLifecycleHookTypes() {
+  return useQuery<{ lifecycleHookTypes: string[] }>({
+    queryKey: ["aws", "autoscaling", "lifecycle-hook-types"],
+    queryFn: () => api("/aws/autoscaling/lifecycle-hook-types"),
+  });
+}
+
+export function useASGMetricCollectionTypes() {
+  return useQuery<{ metricCollectionTypes: { metric: string; granularities: string[] }[] }>({
+    queryKey: ["aws", "autoscaling", "metric-collection-types"],
+    queryFn: () => api("/aws/autoscaling/metric-collection-types"),
+  });
+}
+
 // ─── Classic Load Balancers ──────────────────────────────
 
 export function useASGLoadBalancers(groupName: string | null) {

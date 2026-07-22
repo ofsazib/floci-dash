@@ -201,6 +201,12 @@ import {
   useASGLoadBalancers,
   useAttachLoadBalancers,
   useDetachLoadBalancers,
+  useASGNotificationTypes,
+  useASGTerminationPolicyTypes,
+  useASGAdjustmentTypes,
+  useASGAccountLimits,
+  useASGLifecycleHookTypes,
+  useASGMetricCollectionTypes,
 } from "../../hooks/useAutoScaling";
 import {
   useCloudFrontDistributions,
@@ -549,6 +555,14 @@ export function AutoScalingDashboard() {
   const [showAttachTGs, setShowAttachTGs] = useState(false);
   const [showAttachLBs, setShowAttachLBs] = useState(false);
 
+  // ── Describe Types ──
+  const notificationTypes = useASGNotificationTypes();
+  const terminationPolicyTypes = useASGTerminationPolicyTypes();
+  const adjustmentTypes = useASGAdjustmentTypes();
+  const accountLimits = useASGAccountLimits();
+  const lifecycleHookTypes = useASGLifecycleHookTypes();
+  const metricCollectionTypes = useASGMetricCollectionTypes();
+
   if (isLoading) return <TableSkeleton />;
 
   return (
@@ -743,6 +757,71 @@ export function AutoScalingDashboard() {
                   </Container>
                 </SpaceBetween>
               )}
+
+              {/* Describe Types */}
+              <Container header={<Header variant="h2">Describe Types & Account Limits</Header>}>
+                <SpaceBetween size="m">
+                  {/* Account Limits */}
+                  <Box variant="h3">Account Limits</Box>
+                  {accountLimits.isLoading ? (
+                    <Spinner />
+                  ) : accountLimits.data ? (
+                    <SpaceBetween size="xs">
+                      <Box variant="small">Max ASGs: {accountLimits.data.maxNumberOfAutoScalingGroups ?? "-"}</Box>
+                      <Box variant="small">Max Launch Configs: {accountLimits.data.maxNumberOfLaunchConfigurations ?? "-"}</Box>
+                      <Box variant="small">Current ASGs: {accountLimits.data.numberOfAutoScalingGroups ?? "-"}</Box>
+                      <Box variant="small">Current Launch Configs: {accountLimits.data.numberOfLaunchConfigurations ?? "-"}</Box>
+                    </SpaceBetween>
+                  ) : (
+                    <Box variant="small" color="text-status-inactive">Failed to load account limits.</Box>
+                  )}
+
+                  <Box variant="h3">Notification Types</Box>
+                  {notificationTypes.isLoading ? (
+                    <Spinner />
+                  ) : (
+                    <Box variant="small">{(notificationTypes.data?.notificationTypes || []).join(", ") || "No notification types found."}</Box>
+                  )}
+
+                  <Box variant="h3">Termination Policy Types</Box>
+                  {terminationPolicyTypes.isLoading ? (
+                    <Spinner />
+                  ) : (
+                    <Box variant="small">{(terminationPolicyTypes.data?.terminationPolicyTypes || []).join(", ") || "No termination policy types found."}</Box>
+                  )}
+
+                  <Box variant="h3">Adjustment Types</Box>
+                  {adjustmentTypes.isLoading ? (
+                    <Spinner />
+                  ) : (
+                    <Box variant="small">{(adjustmentTypes.data?.adjustmentTypes || []).join(", ") || "No adjustment types found."}</Box>
+                  )}
+
+                  <Box variant="h3">Lifecycle Hook Types</Box>
+                  {lifecycleHookTypes.isLoading ? (
+                    <Spinner />
+                  ) : (
+                    <Box variant="small">{(lifecycleHookTypes.data?.lifecycleHookTypes || []).join(", ") || "No lifecycle hook types found."}</Box>
+                  )}
+
+                  <Box variant="h3">Metric Collection Types</Box>
+                  {metricCollectionTypes.isLoading ? (
+                    <Spinner />
+                  ) : (
+                    <SpaceBetween size="xs">
+                      {(metricCollectionTypes.data?.metricCollectionTypes || []).length > 0 ? (
+                        (metricCollectionTypes.data?.metricCollectionTypes || []).map((m: any) => (
+                          <Box key={m.metric} variant="small">
+                            {m.metric} ({m.granularities?.join(", ") || "No granularities"})
+                          </Box>
+                        ))
+                      ) : (
+                        <Box variant="small" color="text-status-inactive">No metric collection types found.</Box>
+                      )}
+                    </SpaceBetween>
+                  )}
+                </SpaceBetween>
+              </Container>
 
               {/* Modals */}
               {showStartRefresh && (

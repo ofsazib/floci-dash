@@ -32,6 +32,12 @@ vi.mock("@aws-sdk/client-auto-scaling", () => ({
   AttachLoadBalancersCommand: createCmd("AttachLoadBalancersCommand"),
   DetachLoadBalancersCommand: createCmd("DetachLoadBalancersCommand"),
   DescribeLoadBalancersCommand: createCmd("DescribeLoadBalancersCommand"),
+  DescribeAutoScalingNotificationTypesCommand: createCmd("DescribeAutoScalingNotificationTypesCommand"),
+  DescribeTerminationPolicyTypesCommand: createCmd("DescribeTerminationPolicyTypesCommand"),
+  DescribeAdjustmentTypesCommand: createCmd("DescribeAdjustmentTypesCommand"),
+  DescribeAccountLimitsCommand: createCmd("DescribeAccountLimitsCommand"),
+  DescribeLifecycleHookTypesCommand: createCmd("DescribeLifecycleHookTypesCommand"),
+  DescribeMetricCollectionTypesCommand: createCmd("DescribeMetricCollectionTypesCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -328,6 +334,113 @@ describe("Auto Scaling Routes", () => {
       const res = await post("/groups/asg-1/load-balancers/detach", { loadBalancerNames: ["my-clb"] });
       const body = await res.json();
       expect(body.detached).toBe(true);
+    });
+  });
+
+  describe("Describe Types", () => {
+    it("GET /notification-types — returns list", async () => {
+      mockSend.mockResolvedValueOnce({
+        AutoScalingNotificationTypes: ["autoscaling:EC2_INSTANCE_LAUNCH", "autoscaling:EC2_INSTANCE_TERMINATE"],
+      });
+      const res = await get("/notification-types");
+      const body = await res.json();
+      expect(body.notificationTypes).toContain("autoscaling:EC2_INSTANCE_LAUNCH");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DescribeAutoScalingNotificationTypesCommand");
+    });
+
+    it("GET /notification-types — returns empty array", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/notification-types");
+      const body = await res.json();
+      expect(body.notificationTypes).toEqual([]);
+    });
+
+    it("GET /termination-policy-types — returns list", async () => {
+      mockSend.mockResolvedValueOnce({
+        TerminationPolicyTypes: ["OldestInstance", "NewestInstance", "Default"],
+      });
+      const res = await get("/termination-policy-types");
+      const body = await res.json();
+      expect(body.terminationPolicyTypes).toHaveLength(3);
+      expect(body.terminationPolicyTypes).toContain("Default");
+    });
+
+    it("GET /termination-policy-types — returns empty", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/termination-policy-types");
+      const body = await res.json();
+      expect(body.terminationPolicyTypes).toEqual([]);
+    });
+
+    it("GET /adjustment-types — returns list", async () => {
+      mockSend.mockResolvedValueOnce({
+        AdjustmentTypes: [
+          { AdjustmentType: "ChangeInCapacity" },
+          { AdjustmentType: "ExactCapacity" },
+        ],
+      });
+      const res = await get("/adjustment-types");
+      const body = await res.json();
+      expect(body.adjustmentTypes).toContain("ChangeInCapacity");
+    });
+
+    it("GET /adjustment-types — returns empty", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/adjustment-types");
+      const body = await res.json();
+      expect(body.adjustmentTypes).toEqual([]);
+    });
+
+    it("GET /account-limits — returns limits", async () => {
+      mockSend.mockResolvedValueOnce({
+        MaxNumberOfAutoScalingGroups: 200,
+        MaxNumberOfLaunchConfigurations: 200,
+        NumberOfAutoScalingGroups: 5,
+        NumberOfLaunchConfigurations: 3,
+      });
+      const res = await get("/account-limits");
+      const body = await res.json();
+      expect(body.maxNumberOfAutoScalingGroups).toBe(200);
+      expect(body.numberOfLaunchConfigurations).toBe(3);
+    });
+
+    it("GET /lifecycle-hook-types — returns list", async () => {
+      mockSend.mockResolvedValueOnce({
+        LifecycleHookTypes: ["autoscaling:EC2_INSTANCE_LAUNCHING", "autoscaling:EC2_INSTANCE_TERMINATING"],
+      });
+      const res = await get("/lifecycle-hook-types");
+      const body = await res.json();
+      expect(body.lifecycleHookTypes).toHaveLength(2);
+    });
+
+    it("GET /lifecycle-hook-types — returns empty", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/lifecycle-hook-types");
+      const body = await res.json();
+      expect(body.lifecycleHookTypes).toEqual([]);
+    });
+
+    it("GET /metric-collection-types — returns list", async () => {
+      mockSend.mockResolvedValueOnce({
+        Metrics: [
+          {
+            Metric: "GroupMinSize",
+            Granularities: [{ Granularity: "1Minute" }],
+          },
+        ],
+      });
+      const res = await get("/metric-collection-types");
+      const body = await res.json();
+      expect(body.metricCollectionTypes).toHaveLength(1);
+      expect(body.metricCollectionTypes[0].metric).toBe("GroupMinSize");
+      expect(body.metricCollectionTypes[0].granularities).toContain("1Minute");
+    });
+
+    it("GET /metric-collection-types — returns empty", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/metric-collection-types");
+      const body = await res.json();
+      expect(body.metricCollectionTypes).toEqual([]);
     });
   });
 });
