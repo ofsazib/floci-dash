@@ -165,6 +165,45 @@ vi.mock("../../hooks/useELB", () => ({
     isError: false,
     error: null,
   }),
+  useELBListenerRules: (...args: any[]) => ({
+    data: { rules: [], total: 0 },
+    isLoading: false,
+    isError: false,
+    error: null,
+  }),
+  useELBCreateRule: () => ({
+    mutate: vi.fn(),
+    mutateAsync: vi.fn().mockResolvedValue({}),
+    isPending: false,
+    isError: false,
+    error: null,
+    reset: vi.fn(),
+  }),
+  useELBModifyRule: () => ({
+    mutate: vi.fn(),
+    mutateAsync: vi.fn().mockResolvedValue({}),
+    isPending: false,
+    isError: false,
+    error: null,
+    reset: vi.fn(),
+  }),
+  useELBDeleteRule: () => ({
+    mutate: vi.fn(),
+    mutateAsync: vi.fn().mockResolvedValue({}),
+    isPending: false,
+    variables: null,
+    isError: false,
+    error: null,
+    reset: vi.fn(),
+  }),
+  useELBSetRulePriorities: () => ({
+    mutate: vi.fn(),
+    mutateAsync: vi.fn().mockResolvedValue({}),
+    isPending: false,
+    isError: false,
+    error: null,
+    reset: vi.fn(),
+  }),
 }));
 
 import { ELBDashboard } from "./ELBDashboard";

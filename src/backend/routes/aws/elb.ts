@@ -18,6 +18,11 @@ import {
   DeleteListenerCommand,
   DescribeListenerAttributesCommand,
   ModifyListenerAttributesCommand,
+  DescribeRulesCommand,
+  CreateRuleCommand,
+  DeleteRuleCommand,
+  ModifyRuleCommand,
+  SetRulePrioritiesCommand,
   RegisterTargetsCommand,
   DeregisterTargetsCommand,
   DescribeTargetHealthCommand,
@@ -277,6 +282,83 @@ router.get("/listeners/:arn/attributes", async (c: Context) => {
     attrs[attr.Key!] = attr.Value!;
   }
   return c.json({ listenerArn: arn, attributes: attrs });
+});
+
+// ── Listener Rules ───────────────────────────────────────
+
+router.get("/listeners/:arn/rules", async (c: Context) => {
+  const arn = decodeURIComponent(c.req.param("arn") || "");
+  const client = getClient();
+  const result = await client.send(new DescribeRulesCommand({ ListenerArn: arn }));
+  const rules = (result.Rules || []).map((r) => ({
+    ruleArn: r.RuleArn,
+    ruleName: r.Conditions?.map((c) => c.Field).join(", ") || "default",
+    priority: r.Priority,
+    isDefault: r.IsDefault,
+    conditions: r.Conditions,
+    actions: r.Actions,
+  }));
+  return c.json({ rules, total: rules.length });
+});
+
+router.post("/listeners/:arn/rules", async (c: Context) => {
+  const arn = decodeURIComponent(c.req.param("arn") || "");
+  const body = await c.req.json<{
+    priority: number;
+    conditions: any[];
+    actions: any[];
+  }>();
+  if (body.priority == null || !body.conditions?.length || !body.actions?.length) {
+    return c.json({ error: "priority, conditions, and actions are required" }, 400);
+  }
+  const client = getClient();
+  const result = await client.send(
+    new CreateRuleCommand({
+      ListenerArn: arn,
+      Priority: body.priority,
+      Conditions: body.conditions,
+      Actions: body.actions,
+    })
+  );
+  return c.json({ rule: result.Rules?.[0] }, 201);
+});
+
+router.put("/rules/set-priorities", async (c: Context) => {
+  const body = await c.req.json<{ rulePriorities: Array<{ ruleArn: string; priority: number }> }>();
+  if (!body.rulePriorities?.length) {
+    return c.json({ error: "rulePriorities is required" }, 400);
+  }
+  const client = getClient();
+  const result = await client.send(
+    new SetRulePrioritiesCommand({
+      RulePriorities: body.rulePriorities.map((rp) => ({ RuleArn: rp.ruleArn, Priority: rp.priority })),
+    })
+  );
+  return c.json({ rules: result.Rules || [] });
+});
+
+router.put("/rules/:arn", async (c: Context) => {
+  const arn = decodeURIComponent(c.req.param("arn") || "");
+  const body = await c.req.json<{ conditions?: any[]; actions?: any[] }>();
+  if (!body.conditions?.length && !body.actions?.length) {
+    return c.json({ error: "conditions or actions are required" }, 400);
+  }
+  const client = getClient();
+  const result = await client.send(
+    new ModifyRuleCommand({
+      RuleArn: arn,
+      Conditions: body.conditions,
+      Actions: body.actions,
+    })
+  );
+  return c.json({ rule: result.Rules?.[0], updated: true });
+});
+
+router.delete("/rules/:arn", async (c: Context) => {
+  const arn = decodeURIComponent(c.req.param("arn") || "");
+  const client = getClient();
+  await client.send(new DeleteRuleCommand({ RuleArn: arn }));
+  return c.json({ ruleArn: arn, deleted: true });
 });
 
 // ── Target Registration ───────────────────────────────────

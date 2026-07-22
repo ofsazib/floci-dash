@@ -176,6 +176,11 @@ import {
   useELBTargetGroupAttributes,
   useELBModifyTargetGroupAttributes,
   useELBAccountLimits,
+  useELBListenerRules,
+  useELBCreateRule,
+  useELBModifyRule,
+  useELBDeleteRule,
+  useELBSetRulePriorities,
 } from "../../hooks/useELB";
 import {
   useSESIdentities,
@@ -557,6 +562,21 @@ export function ELBDashboard() {
   const modifyTgAttrs = useELBModifyTargetGroupAttributes();
   const accountLimits = useELBAccountLimits();
   const selectedLBListeners = useELBListeners(selectedLBArn);
+  const listenerRules = useELBListenerRules(selectedListenerArn);
+  const createRule = useELBCreateRule();
+  const modifyRule = useELBModifyRule();
+  const deleteRule = useELBDeleteRule();
+  const setRulePriorities = useELBSetRulePriorities();
+
+  // ── Listener Rules State ──
+  const [showCreateRuleModal, setShowCreateRuleModal] = useState(false);
+  const [showSetPriorityModal, setShowSetPriorityModal] = useState(false);
+  const [editingRuleArn, setEditingRuleArn] = useState<string | null>(null);
+  const [rulePriority, setRulePriority] = useState("");
+  const [ruleConditions, setRuleConditions] = useState("");
+  const [ruleActions, setRuleActions] = useState("");
+  const [ruleFormError, setRuleFormError] = useState<string | null>(null);
+  const [priorityInputs, setPriorityInputs] = useState<Record<string, string>>({});
 
   const PROTOCOL_OPTIONS: SelectProps.Option[] = [
     { label: "HTTP", value: "HTTP" },
@@ -923,6 +943,57 @@ export function ELBDashboard() {
                           </Box>
                         </Box>
                       )}
+
+                      {/* Listener Rules */}
+                      {selectedListenerArn && (
+                        <Box>
+                          <Header
+                            variant="h3"
+                            actions={
+                              <Button onClick={() => { setEditingRuleArn(null); setRulePriority(""); setRuleConditions(""); setRuleActions(""); setShowCreateRuleModal(true); }}>
+                                Create rule
+                              </Button>
+                            }
+                          >
+                            Listener Rules
+                          </Header>
+                          {listenerRules.isLoading ? (
+                            <Spinner />
+                          ) : (listenerRules.data?.rules || []).length === 0 ? (
+                            <Box variant="small" color="text-status-inactive">No rules found.</Box>
+                          ) : (
+                            <SpaceBetween size="s">
+                              {(listenerRules.data?.rules || []).map((rule: any) => (
+                                <Box key={rule.ruleArn}>
+                                  <Box variant="small">
+                                    Priority: {rule.priority} — {rule.isDefault ? "Default" : rule.ruleName}
+                                  </Box>
+                                  <SpaceBetween direction="horizontal" size="xs">
+                                    <Button variant="link" onClick={() => {
+                                      setEditingRuleArn(rule.ruleArn);
+                                      setRulePriority(String(rule.priority));
+                                      setRuleConditions(JSON.stringify(rule.conditions || [], null, 2));
+                                      setRuleActions(JSON.stringify(rule.actions || [], null, 2));
+                                      setShowCreateRuleModal(true);
+                                    }}>
+                                      Edit
+                                    </Button>
+                                    <DeleteButton
+                                      itemName={rule.ruleArn}
+                                      resourceType="rule"
+                                      onDelete={() => deleteRule.mutateAsync(rule.ruleArn)}
+                                      loading={deleteRule.isPending && deleteRule.variables === rule.ruleArn}
+                                    />
+                                  </SpaceBetween>
+                                </Box>
+                              ))}
+                              <Button variant="normal" onClick={() => setShowSetPriorityModal(true)}>
+                                Set rule priorities
+                              </Button>
+                            </SpaceBetween>
+                          )}
+                        </Box>
+                      )}
                     </SpaceBetween>
                   )}
                 </SpaceBetween>
@@ -997,6 +1068,99 @@ export function ELBDashboard() {
                   <FormField label="Certificate ARN">
                     <Input value={certArn} onChange={({ detail }) => setCertArn(detail.value)} placeholder="arn:aws:acm:..." />
                   </FormField>
+                </Modal>
+              )}
+
+              {/* Create / Edit Rule Modal */}
+              {showCreateRuleModal && (
+                <Modal
+                  visible
+                  onDismiss={() => setShowCreateRuleModal(false)}
+                  header={editingRuleArn ? "Edit Rule" : "Create Rule"}
+                  size="large"
+                  footer={
+                    <SpaceBetween direction="horizontal" size="xs">
+                      <Button variant="link" onClick={() => setShowCreateRuleModal(false)}>Cancel</Button>
+                      <Button variant="primary" loading={createRule.isPending || modifyRule.isPending} onClick={() => {
+                        if (!selectedListenerArn || !rulePriority.trim()) return;
+                        setRuleFormError(null);
+                        const priority = parseInt(rulePriority, 10);
+                        if (Number.isNaN(priority) || priority < 1) {
+                          setRuleFormError("Priority must be a positive integer");
+                          return;
+                        }
+                        let conditions: any[] = [];
+                        let actions: any[] = [];
+                        try {
+                          conditions = JSON.parse(ruleConditions || "[]");
+                          actions = JSON.parse(ruleActions || "[]");
+                        } catch {
+                          setRuleFormError("Invalid JSON in conditions or actions");
+                          return;
+                        }
+                        if (editingRuleArn) {
+                          modifyRule.mutate({ ruleArn: editingRuleArn, conditions, actions }, { onSuccess: () => { setShowCreateRuleModal(false); setEditingRuleArn(null); setRuleFormError(null); } });
+                        } else {
+                          createRule.mutate({ listenerArn: selectedListenerArn, priority, conditions, actions }, { onSuccess: () => { setShowCreateRuleModal(false); setRulePriority(""); setRuleConditions(""); setRuleActions(""); setRuleFormError(null); } });
+                        }
+                      }} disabled={!rulePriority.trim()}>
+                        {editingRuleArn ? "Save" : "Create"}
+                      </Button>
+                    </SpaceBetween>
+                  }
+                >
+                  <SpaceBetween size="m">
+                    {ruleFormError && <Alert type="error">{ruleFormError}</Alert>}
+                    <FormField label="Priority">
+                      <Input value={rulePriority} onChange={({ detail }) => setRulePriority(detail.value)} inputMode="numeric" placeholder="100" />
+                    </FormField>
+                    <FormField label="Conditions (JSON array)">
+                      <Textarea value={ruleConditions} onChange={({ detail }) => setRuleConditions(detail.value)} placeholder='[{&quot;Field&quot;:&quot;host-header&quot;,&quot;Values&quot;:[&quot;example.com&quot;]}]' rows={4} />
+                    </FormField>
+                    <FormField label="Actions (JSON array)">
+                      <Textarea value={ruleActions} onChange={({ detail }) => setRuleActions(detail.value)} placeholder='[{&quot;Type&quot;:&quot;forward&quot;,&quot;TargetGroupArn&quot;:&quot;arn:aws:elasticloadbalancing:...&quot;}]' rows={4} />
+                    </FormField>
+                  </SpaceBetween>
+                </Modal>
+              )}
+
+              {/* Set Rule Priorities Modal */}
+              {showSetPriorityModal && listenerRules.data && (
+                <Modal
+                  visible
+                  onDismiss={() => setShowSetPriorityModal(false)}
+                  header="Set Rule Priorities"
+                  size="medium"
+                  footer={
+                    <SpaceBetween direction="horizontal" size="xs">
+                      <Button variant="link" onClick={() => setShowSetPriorityModal(false)}>Cancel</Button>
+                      <Button variant="primary" loading={setRulePriorities.isPending} onClick={() => {
+                        const rulePriorities = (listenerRules.data?.rules || []).map((rule: any) => ({
+                          ruleArn: rule.ruleArn,
+                          priority: parseInt(priorityInputs[rule.ruleArn] ?? String(rule.priority), 10),
+                        }));
+                        setRulePriorities.mutate({ rulePriorities }, { onSuccess: () => { setShowSetPriorityModal(false); setPriorityInputs({}); } });
+                      }}>Save</Button>
+                    </SpaceBetween>
+                  }
+                >
+                  <SpaceBetween size="s">
+                    {(listenerRules.data?.rules || []).filter((rule: any) => !rule.isDefault).length === 0 ? (
+                      <Box variant="small" color="text-status-inactive">No non-default rules to reorder.</Box>
+                    ) : (
+                      (listenerRules.data?.rules || [])
+                        .filter((rule: any) => !rule.isDefault)
+                        .map((rule: any) => (
+                          <FormField key={rule.ruleArn} label={`Priority for ${rule.ruleName}`}>
+                            <Input
+                              value={priorityInputs[rule.ruleArn] ?? String(rule.priority)}
+                              onChange={({ detail }) => setPriorityInputs((prev) => ({ ...prev, [rule.ruleArn]: detail.value }))}
+                              inputMode="numeric"
+                            />
+                          </FormField>
+                        ))
+                    )}
+                  </SpaceBetween>
                 </Modal>
               )}
             </SpaceBetween>

@@ -33,6 +33,11 @@ vi.mock("@aws-sdk/client-elastic-load-balancing-v2", () => ({
   DeleteListenerCommand: createCmd("DeleteListenerCommand"),
   DescribeListenerAttributesCommand: createCmd("DescribeListenerAttributesCommand"),
   ModifyListenerAttributesCommand: createCmd("ModifyListenerAttributesCommand"),
+  DescribeRulesCommand: createCmd("DescribeRulesCommand"),
+  CreateRuleCommand: createCmd("CreateRuleCommand"),
+  DeleteRuleCommand: createCmd("DeleteRuleCommand"),
+  ModifyRuleCommand: createCmd("ModifyRuleCommand"),
+  SetRulePrioritiesCommand: createCmd("SetRulePrioritiesCommand"),
   RegisterTargetsCommand: createCmd("RegisterTargetsCommand"),
   DeregisterTargetsCommand: createCmd("DeregisterTargetsCommand"),
   DescribeTargetHealthCommand: createCmd("DescribeTargetHealthCommand"),
@@ -483,6 +488,84 @@ describe("ELB Routes", () => {
       const res = await put("/listeners/arn:l1/attributes", { attributes: { "routing.http2.enabled": "true" } });
       expect(res.status).toBe(200);
       expect(mockSend.mock.calls[0][0].__cmdName).toBe("ModifyListenerAttributesCommand");
+    });
+  });
+
+  describe("Listener Rules", () => {
+    it("GET — returns rules", async () => {
+      mockSend.mockResolvedValueOnce({
+        Rules: [
+          {
+            RuleArn: "arn:aws:elasticloadbalancing:us-east-1:123:listener-rule/my-rule",
+            Priority: "100",
+            IsDefault: false,
+            Conditions: [{ Field: "host-header", Values: ["example.com"] }],
+            Actions: [{ Type: "forward", TargetGroupArn: "arn:tg1" }],
+          },
+        ],
+      });
+      const res = await get("/listeners/arn:l1/rules");
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(body.rules[0].ruleName).toBe("host-header");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DescribeRulesCommand");
+    });
+
+    it("POST — creates rule", async () => {
+      mockSend.mockResolvedValueOnce({ Rules: [{ RuleArn: "arn:rule1" }] });
+      const res = await post("/listeners/arn:l1/rules", {
+        priority: 100,
+        conditions: [{ Field: "host-header", Values: ["example.com"] }],
+        actions: [{ Type: "forward", TargetGroupArn: "arn:tg1" }],
+      });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.rule.RuleArn).toBe("arn:rule1");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("CreateRuleCommand");
+    });
+
+    it("POST — 400 when missing fields", async () => {
+      const res = await post("/listeners/arn:l1/rules", { priority: 100 });
+      expect(res.status).toBe(400);
+    });
+
+    it("PUT /rules/:arn — modifies rule", async () => {
+      mockSend.mockResolvedValueOnce({ Rules: [{ RuleArn: "arn:rule1" }] });
+      const res = await put("/rules/arn:rule1", {
+        conditions: [{ Field: "path-pattern", Values: ["/api/*"] }],
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("ModifyRuleCommand");
+    });
+
+    it("PUT /rules/:arn — 400 when empty", async () => {
+      const res = await put("/rules/arn:rule1", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE /rules/:arn — deletes rule", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/rules/arn:rule1");
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteRuleCommand");
+    });
+
+    it("PUT /rules/set-priorities — sets priorities", async () => {
+      mockSend.mockResolvedValueOnce({ Rules: [] });
+      const res = await put("/rules/set-priorities", {
+        rulePriorities: [{ ruleArn: "arn:rule1", priority: 10 }, { ruleArn: "arn:rule2", priority: 20 }],
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("SetRulePrioritiesCommand");
+      expect(mockSend.mock.calls[0][0].RulePriorities).toEqual([
+        { RuleArn: "arn:rule1", Priority: 10 },
+        { RuleArn: "arn:rule2", Priority: 20 },
+      ]);
+    });
+
+    it("PUT /rules/set-priorities — 400 when empty", async () => {
+      const res = await put("/rules/set-priorities", { rulePriorities: [] });
+      expect(res.status).toBe(400);
     });
   });
 

@@ -35,6 +35,11 @@ import {
   useELBTargetGroupAttributes,
   useELBModifyTargetGroupAttributes,
   useELBAccountLimits,
+  useELBListenerRules,
+  useELBCreateRule,
+  useELBModifyRule,
+  useELBDeleteRule,
+  useELBSetRulePriorities,
 } from "./useELB";
 
 const LB_ARN = "arn:aws:elasticloadbalancing:us-east-1:123:loadbalancer/my-lb";
@@ -393,5 +398,82 @@ describe("useELBAccountLimits", () => {
     const { result } = renderHook(() => useELBAccountLimits(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith("/aws/elasticloadbalancing/account-limits");
+  });
+});
+
+// ─── LISTENER RULES ───────────────────────────────────────
+
+const LISTENER_ARN = "arn:aws:elasticloadbalancing:us-east-1:123:listener/app/my-alb/abc/def";
+const ENC_LISTENER = encodeURIComponent(LISTENER_ARN);
+const RULE_ARN = "arn:aws:elasticloadbalancing:us-east-1:123:listener-rule/my-rule";
+
+describe("useELBListenerRules", () => {
+  it("does NOT call api when listenerArn is null", () => {
+    renderHook(() => useELBListenerRules(null), { wrapper: createWrapper() });
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api when provided", async () => {
+    mockApi.mockResolvedValueOnce({ rules: [], total: 0 });
+    const { result } = renderHook(() => useELBListenerRules(LISTENER_ARN), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(`/aws/elasticloadbalancing/listeners/${ENC_LISTENER}/rules`);
+  });
+});
+
+describe("useELBCreateRule", () => {
+  it("calls api with POST method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useELBCreateRule(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({
+      listenerArn: LISTENER_ARN,
+      priority: 100,
+      conditions: [{ Field: "host-header", Values: ["example.com"] }],
+      actions: [{ Type: "forward", TargetGroupArn: "arn:tg1" }],
+    });
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/elasticloadbalancing/listeners/${ENC_LISTENER}/rules`,
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+});
+
+describe("useELBModifyRule", () => {
+  it("calls api with PUT method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useELBModifyRule(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({
+      ruleArn: RULE_ARN,
+      conditions: [{ Field: "host-header", Values: ["example.com"] }],
+      actions: [{ Type: "forward", TargetGroupArn: "arn:tg1" }],
+    });
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/elasticloadbalancing/rules/${encodeURIComponent(RULE_ARN)}`,
+      expect.objectContaining({ method: "PUT" })
+    );
+  });
+});
+
+describe("useELBDeleteRule", () => {
+  it("calls api with DELETE method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useELBDeleteRule(), { wrapper: createWrapper() });
+    await result.current.mutateAsync(RULE_ARN);
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/elasticloadbalancing/rules/${encodeURIComponent(RULE_ARN)}`,
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
+});
+
+describe("useELBSetRulePriorities", () => {
+  it("calls api with PUT method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useELBSetRulePriorities(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ rulePriorities: [{ ruleArn: RULE_ARN, priority: 10 }] });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/elasticloadbalancing/rules/set-priorities",
+      expect.objectContaining({ method: "PUT" })
+    );
   });
 });

@@ -288,6 +288,76 @@ export function useELBModifyTargetGroupAttributes() {
   });
 }
 
+// ─── Listener Rules ─────────────────────────────────────
+
+export interface ELBListenerRule {
+  ruleArn: string;
+  ruleName: string;
+  priority: string;
+  isDefault: boolean;
+  conditions: any[];
+  actions: any[];
+}
+
+export function useELBListenerRules(listenerArn: string | null) {
+  return useQuery<{ rules: ELBListenerRule[]; total: number }>({
+    queryKey: ["aws", "elb", "listener-rules", listenerArn],
+    queryFn: () => api(`/aws/elasticloadbalancing/listeners/${encodeURIComponent(listenerArn!)}/rules`),
+    enabled: !!listenerArn,
+  });
+}
+
+export function useELBCreateRule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { listenerArn: string; priority: number; conditions: any[]; actions: any[] }) =>
+      api(`/aws/elasticloadbalancing/listeners/${encodeURIComponent(body.listenerArn)}/rules`, {
+        method: "POST",
+        body: JSON.stringify({
+          priority: body.priority,
+          conditions: body.conditions,
+          actions: body.actions,
+        }),
+      }),
+    onSuccess: (_data, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "elb", "listener-rules", variables.listenerArn] }),
+  });
+}
+
+export function useELBModifyRule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { ruleArn: string; conditions?: any[]; actions?: any[] }) =>
+      api(`/aws/elasticloadbalancing/rules/${encodeURIComponent(body.ruleArn)}`, {
+        method: "PUT",
+        body: JSON.stringify({ conditions: body.conditions, actions: body.actions }),
+      }),
+    onSuccess: (_data, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "elb", "listener-rules"] }),
+  });
+}
+
+export function useELBDeleteRule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ruleArn: string) =>
+      api(`/aws/elasticloadbalancing/rules/${encodeURIComponent(ruleArn)}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "elb", "listener-rules"] }),
+  });
+}
+
+export function useELBSetRulePriorities() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { rulePriorities: Array<{ ruleArn: string; priority: number }> }) =>
+      api("/aws/elasticloadbalancing/rules/set-priorities", {
+        method: "PUT",
+        body: JSON.stringify({ rulePriorities: body.rulePriorities }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "elb", "listener-rules"] }),
+  });
+}
+
 // ─── Account Limits ─────────────────────────────────────
 
 export function useELBAccountLimits() {
