@@ -611,7 +611,7 @@ describe("Cognito Routes", () => {
     });
 
     it("POST /user-pools/:id/clients/:clientId/secrets — creates a secret", async () => {
-      mockSend.mockResolvedValueOnce({ ClientSecret: { ClientSecretId: "secret-1" } });
+      mockSend.mockResolvedValueOnce({ ClientSecretDescriptor: { ClientSecretId: "secret-1" } });
       const res = await post("/user-pools/us-east-1_abc/clients/client-1/secrets", { clientSecret: "mysecret" });
       expect(res.status).toBe(201);
       const body = await res.json();
