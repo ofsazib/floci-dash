@@ -157,6 +157,102 @@ export function useScalingPolicies(groupName: string | null) {
   });
 }
 
+export function useCreateScalingPolicy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: {
+      name: string;
+      policyName: string;
+      policyType?: string;
+      adjustmentType?: string;
+      scalingAdjustment?: number;
+      cooldown?: number;
+      targetTrackingConfig?: any;
+      stepAdjustments?: any[];
+    }) =>
+      api(`/aws/autoscaling/groups/${encodeURIComponent(params.name)}/policies`, {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: (_data, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "autoscaling", "policies", variables.name] }),
+  });
+}
+
+export function useDeleteScalingPolicy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { name: string; policyName: string }) =>
+      api(`/aws/autoscaling/groups/${encodeURIComponent(params.name)}/policies/${encodeURIComponent(params.policyName)}`, {
+        method: "DELETE",
+      }),
+    onSuccess: (_data, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "autoscaling", "policies", variables.name] }),
+  });
+}
+
+// ── Lifecycle Hooks ─────────────────────────────────────
+
+export function useLifecycleHooks(groupName: string | null) {
+  return useQuery<{ lifecycleHooks: any[]; total: number }>({
+    queryKey: ["aws", "autoscaling", "lifecycle-hooks", groupName],
+    queryFn: () => api(`/aws/autoscaling/groups/${encodeURIComponent(groupName!)}/lifecycle-hooks`),
+    enabled: !!groupName,
+  });
+}
+
+export function usePutLifecycleHook() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: {
+      name: string;
+      lifecycleHookName: string;
+      lifecycleTransition: string;
+      notificationTargetARN?: string;
+      roleARN?: string;
+      heartbeatTimeout?: number;
+      defaultResult?: string;
+    }) =>
+      api(`/aws/autoscaling/groups/${encodeURIComponent(params.name)}/lifecycle-hooks`, {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: (_data, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "autoscaling", "lifecycle-hooks", variables.name] }),
+  });
+}
+
+export function useDeleteLifecycleHook() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { name: string; lifecycleHookName: string }) =>
+      api(`/aws/autoscaling/groups/${encodeURIComponent(params.name)}/lifecycle-hooks/${encodeURIComponent(params.lifecycleHookName)}`, {
+        method: "DELETE",
+      }),
+    onSuccess: (_data, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "autoscaling", "lifecycle-hooks", variables.name] }),
+  });
+}
+
+export function useCompleteLifecycleAction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: {
+      name: string;
+      lifecycleHookName: string;
+      lifecycleActionResult: string;
+      instanceId?: string;
+      lifecycleActionToken?: string;
+    }) =>
+      api(`/aws/autoscaling/groups/${encodeURIComponent(params.name)}/lifecycle-hooks/complete`, {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: (_data, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "autoscaling", "lifecycle-hooks", variables.name] }),
+  });
+}
+
 // ── Scaling Activities ───────────────────────────────────
 
 export function useScalingActivities(groupName: string | null) {

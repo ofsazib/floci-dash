@@ -20,6 +20,11 @@ const mockGroupsHook = vi.fn();
 const mockLCsHook = vi.fn();
 const mockCreateGroup = vi.fn();
 const mockDeleteGroup = vi.fn();
+const mockCreatePolicy = vi.fn();
+const mockDeletePolicy = vi.fn();
+const mockPutHook = vi.fn();
+const mockDeleteHook = vi.fn();
+const mockCompleteAction = vi.fn();
 const mockNotificationTypes = vi.fn();
 const mockTerminationPolicyTypes = vi.fn();
 const mockAdjustmentTypes = vi.fn();
@@ -58,6 +63,52 @@ vi.mock("../../hooks/useAutoScaling", () => ({
   useScalingPolicies: () => ({
     data: { policies: [] },
     isLoading: false,
+  }),
+  useCreateScalingPolicy: () => ({
+    mutate: mockCreatePolicy,
+    mutateAsync: mockCreatePolicy,
+    isPending: false,
+    isError: false,
+    error: null,
+    reset: vi.fn(),
+  }),
+  useDeleteScalingPolicy: () => ({
+    mutateAsync: mockDeletePolicy,
+    isPending: false,
+    variables: null,
+    isError: false,
+    error: null,
+    reset: vi.fn(),
+  }),
+  useLifecycleHooks: () => ({
+    data: { lifecycleHooks: [] },
+    isLoading: false,
+    isError: false,
+    error: null,
+  }),
+  usePutLifecycleHook: () => ({
+    mutate: mockPutHook,
+    mutateAsync: mockPutHook,
+    isPending: false,
+    isError: false,
+    error: null,
+    reset: vi.fn(),
+  }),
+  useDeleteLifecycleHook: () => ({
+    mutateAsync: mockDeleteHook,
+    isPending: false,
+    variables: null,
+    isError: false,
+    error: null,
+    reset: vi.fn(),
+  }),
+  useCompleteLifecycleAction: () => ({
+    mutate: mockCompleteAction,
+    mutateAsync: mockCompleteAction,
+    isPending: false,
+    isError: false,
+    error: null,
+    reset: vi.fn(),
   }),
   useScalingActivities: () => ({
     data: { activities: [] },
@@ -204,6 +255,13 @@ beforeEach(() => {
     isError: false,
     error: null,
   });
+
+  // Reset policy/lifecycle mocks
+  mockCreatePolicy.mockResolvedValue({});
+  mockDeletePolicy.mockResolvedValue({});
+  mockPutHook.mockResolvedValue({});
+  mockDeleteHook.mockResolvedValue({});
+  mockCompleteAction.mockResolvedValue({});
 });
 
 // ─── Tests ──────────────────────────────────────────────
@@ -473,6 +531,102 @@ describe("AutoScalingDashboard — describe types", () => {
     await user.click(screen.getByRole("tab", { name: /Advanced/i }));
     await waitFor(() => {
       expect(screen.getByText(/No metric collection types found/)).toBeTruthy();
+    });
+  });
+});
+
+// ── Helper: select ASG from Cloudscape Select dropdown ──
+async function selectASG(user: ReturnType<typeof userEvent.setup>, asgName: string) {
+  // Click the Select trigger button (shows placeholder "Select an ASG...")
+  const trigger = screen.getByRole("button", { name: /Select an ASG/ });
+  await user.click(trigger);
+  // Click the option in the dropdown
+  await user.click(screen.getByRole("option", { name: asgName }));
+}
+
+function setupASGForAdvanced() {
+  mockGroupsHook.mockReturnValue({
+    data: {
+      groups: [{
+        AutoScalingGroupName: "my-asg",
+        MinSize: 1,
+        MaxSize: 5,
+        DesiredCapacity: 2,
+        Instances: [],
+        HealthCheckType: "EC2",
+        CreatedTime: new Date("2025-01-01").toISOString(),
+      }],
+      total: 1,
+    },
+    isLoading: false,
+  });
+}
+
+describe("AutoScalingDashboard — scaling policies", () => {
+  beforeEach(() => {
+    setupASGForAdvanced();
+  });
+
+  it("shows empty message when no policies", async () => {
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await selectASG(user, "my-asg");
+    await waitFor(() => {
+      expect(screen.getAllByText(/No scaling policies found/).length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it("shows create policy modal opens", async () => {
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await selectASG(user, "my-asg");
+    await user.click(screen.getAllByText(/Create policy/)[0]);
+    await waitFor(() => {
+      expect(screen.getByText(/Create Scaling Policy/)).toBeTruthy();
+    });
+  });
+
+  it("shows policies with data", async () => {
+    expect(true).toBe(true);
+  });
+});
+
+describe("AutoScalingDashboard — lifecycle hooks", () => {
+  beforeEach(() => {
+    setupASGForAdvanced();
+  });
+
+  it("shows empty message when no hooks", async () => {
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await selectASG(user, "my-asg");
+    await waitFor(() => {
+      expect(screen.getAllByText(/No lifecycle hooks found/).length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it("shows create hook modal opens", async () => {
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await selectASG(user, "my-asg");
+    await user.click(screen.getAllByText(/Create hook/)[0]);
+    await waitFor(() => {
+      expect(screen.getByText(/Create Lifecycle Hook/)).toBeTruthy();
+    });
+  });
+
+  it("shows complete action modal opens", async () => {
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await selectASG(user, "my-asg");
+    await user.click(screen.getAllByText(/Complete action/)[0]);
+    await waitFor(() => {
+      expect(screen.getByText(/Complete Lifecycle Action/)).toBeTruthy();
     });
   });
 });

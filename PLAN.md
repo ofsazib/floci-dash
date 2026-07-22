@@ -1754,7 +1754,7 @@ Full 66-service diff of Floci-supported operations vs. dashboard UI-reachable op
 | G.49 | **ECS** (Capacity Providers) | CreateCapacityProvider, DeleteCapacityProvider, UpdateCapacityProvider, DescribeCapacityProviders, PutClusterCapacityProviders | Core Fargate/EC2 capacity management absent |
 | G.50 | **EC2** (Spot Instances) | RequestSpotInstances, DescribeSpotInstanceRequests, CancelSpotInstanceRequests | No spot support anywhere |
 | G.51 | **ELBv2** (Listener Rules) | CreateRule, ModifyRule, DeleteRule, DescribeRules, SetRulePriorities | Path/host-based routing rules entirely missing |
-| G.52 | **Auto Scaling** (Policies + Lifecycle Hooks) | PutScalingPolicy, DeletePolicy, PutLifecycleHook, DeleteLifecycleHook, DescribeLifecycleHooks, CompleteLifecycleAction | Scaling policies read-only; lifecycle hooks absent |
+| G.52 | **Auto Scaling** (Policies + Lifecycle Hooks) | PutScalingPolicy, DeletePolicy, PutLifecycleHook, DeleteLifecycleHook, DescribeLifecycleHooks, CompleteLifecycleAction | Done 2026-07-22 — scaling policies create/delete, lifecycle hooks CRUD with create/list/delete/complete action modals in Advanced tab |
 | G.53 | **SES** (Email Templates) | CreateTemplate, UpdateTemplate, DeleteTemplate, GetTemplate, ListTemplates, SendTemplatedEmail, SendBulkTemplatedEmail, TestRenderTemplate | Templated email workflow entirely unexposed |
 | G.54 | **CloudFront** (Functions + Policies) | CreateFunction/UpdateFunction/PublishFunction/DeleteFunction, cache/OAC/response-headers/origin-request policy CRUD | Functions & policies read-only |
 | G.55 | **Backup** (Recovery Points) | ListRecoveryPointsByBackupVault, DescribeRecoveryPoint, DeleteRecoveryPoint | Vaults show no contents |

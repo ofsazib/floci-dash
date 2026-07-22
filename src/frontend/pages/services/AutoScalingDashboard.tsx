@@ -191,6 +191,9 @@ import {
   useCreateAutoScalingGroup,
   useDeleteAutoScalingGroup,
   useLaunchConfigurations,
+  useScalingPolicies,
+  useCreateScalingPolicy,
+  useDeleteScalingPolicy,
   useStartInstanceRefresh,
   useInstanceRefreshes,
   useCreateOrUpdateTags,
@@ -207,6 +210,10 @@ import {
   useASGAccountLimits,
   useASGLifecycleHookTypes,
   useASGMetricCollectionTypes,
+  useLifecycleHooks,
+  usePutLifecycleHook,
+  useDeleteLifecycleHook,
+  useCompleteLifecycleAction,
 } from "../../hooks/useAutoScaling";
 import {
   useCloudFrontDistributions,
@@ -555,6 +562,72 @@ export function AutoScalingDashboard() {
   const [showAttachTGs, setShowAttachTGs] = useState(false);
   const [showAttachLBs, setShowAttachLBs] = useState(false);
 
+  // ── Scaling Policy State ──
+  const scalingPolicies = useScalingPolicies(selectedASG);
+  const createPolicy = useCreateScalingPolicy();
+  const deletePolicy = useDeleteScalingPolicy();
+  const [showCreatePolicy, setShowCreatePolicy] = useState(false);
+  const [policyName, setPolicyName] = useState("");
+  const [policyType, setPolicyType] = useState("SimpleScaling");
+  const [adjustmentType, setAdjustmentType] = useState("ChangeInCapacity");
+  const [scalingAdjustment, setScalingAdjustment] = useState("1");
+  const [policyCooldown, setPolicyCooldown] = useState("300");
+
+  // ── Lifecycle Hook State ──
+  const lifecycleHooks = useLifecycleHooks(selectedASG);
+  const putHook = usePutLifecycleHook();
+  const deleteHook = useDeleteLifecycleHook();
+  const completeAction = useCompleteLifecycleAction();
+  const [showCreateHook, setShowCreateHook] = useState(false);
+  const [hookName, setHookName] = useState("");
+  const [hookTransition, setHookTransition] = useState("autoscaling:EC2_INSTANCE_LAUNCHING");
+  const [hookResult, setHookResult] = useState("ABANDON");
+  const [hookTargetARN, setHookTargetARN] = useState("");
+  const [hookRoleARN, setHookRoleARN] = useState("");
+  const [showCompleteAction, setShowCompleteAction] = useState(false);
+  const [completeHookName, setCompleteHookName] = useState("");
+  const [completeActionResult, setCompleteActionResult] = useState("CONTINUE");
+
+  // ── Handlers for inline JSX bypass (esbuild JSX parser limitation) ──
+  const handleOpenCreatePolicy = () => {
+    setShowCreatePolicy(true);
+    setPolicyName("");
+    setPolicyType("SimpleScaling");
+    setAdjustmentType("ChangeInCapacity");
+    setScalingAdjustment("1");
+    setPolicyCooldown("300");
+  };
+  const handleOpenCompleteAction = () => {
+    setShowCompleteAction(true);
+    setCompleteHookName("");
+    setCompleteActionResult("CONTINUE");
+  };
+  const handleOpenCreateHook = () => {
+    setShowCreateHook(true);
+    setHookName("");
+    setHookTransition("autoscaling:EC2_INSTANCE_LAUNCHING");
+    setHookResult("ABANDON");
+    setHookTargetARN("");
+    setHookRoleARN("");
+  };
+
+  // ── Header Variables ──
+  const scalingPolicyHeader = (
+    <Header variant="h2" actions={<Button onClick={handleOpenCreatePolicy}>Create policy</Button>}>
+      Scaling Policies
+    </Header>
+  );
+  const lifecycleHooksHeader = (
+    <Header variant="h2" actions={
+      <SpaceBetween direction="horizontal" size="xs">
+        <Button onClick={handleOpenCompleteAction}>Complete action</Button>
+        <Button onClick={handleOpenCreateHook}>Create hook</Button>
+      </SpaceBetween>
+    }>
+      Lifecycle Hooks
+    </Header>
+  );
+
   // ── Describe Types ──
   const notificationTypes = useASGNotificationTypes();
   const terminationPolicyTypes = useASGTerminationPolicyTypes();
@@ -755,6 +828,52 @@ export function AutoScalingDashboard() {
                       <Box variant="small" color="text-status-inactive">No classic load balancers attached.</Box>
                     )}
                   </Container>
+
+                  {/* Scaling Policies */}
+                  <Container header={scalingPolicyHeader}>
+                    {scalingPolicies.isLoading ? (
+                      <Spinner />
+                    ) : (scalingPolicies.data?.policies || []).length > 0 ? (
+                      <SpaceBetween size="xs">
+                        {(scalingPolicies.data?.policies || []).map((p: any) => (
+                          <Box key={p.PolicyName}>
+                            <Box variant="small">{p.PolicyName} ({p.PolicyType}) — {p.AdjustmentType || "N/A"}: {p.ScalingAdjustment ?? "-"}</Box>
+                            <DeleteButton
+                              itemName={p.PolicyName}
+                              resourceType="scaling policy"
+                              onDelete={() => deletePolicy.mutateAsync({ name: selectedASG, policyName: p.PolicyName })}
+                              loading={deletePolicy.isPending}
+                            />
+                          </Box>
+                        ))}
+                      </SpaceBetween>
+                    ) : (
+                      <Box variant="small" color="text-status-inactive">No scaling policies found.</Box>
+                    )}
+                  </Container>
+
+                  {/* Lifecycle Hooks */}
+                  <Container header={lifecycleHooksHeader}>
+                    {lifecycleHooks.isLoading ? (
+                      <Spinner />
+                    ) : (lifecycleHooks.data?.lifecycleHooks || []).length > 0 ? (
+                      <SpaceBetween size="xs">
+                        {(lifecycleHooks.data?.lifecycleHooks || []).map((h: any) => (
+                          <Box key={h.LifecycleHookName}>
+                            <Box variant="small">{h.LifecycleHookName} — {h.LifecycleTransition} (default: {h.DefaultResult})</Box>
+                            <DeleteButton
+                              itemName={h.LifecycleHookName}
+                              resourceType="lifecycle hook"
+                              onDelete={() => deleteHook.mutateAsync({ name: selectedASG, lifecycleHookName: h.LifecycleHookName })}
+                              loading={deleteHook.isPending}
+                            />
+                          </Box>
+                        ))}
+                      </SpaceBetween>
+                    ) : (
+                      <Box variant="small" color="text-status-inactive">No lifecycle hooks found.</Box>
+                    )}
+                  </Container>
                 </SpaceBetween>
               )}
 
@@ -882,6 +1001,124 @@ export function AutoScalingDashboard() {
                 }>
                   <FormField label="Load Balancer Names" description="Comma or newline separated">
                     <Textarea value={lbNamesList} onChange={({ detail }) => setLbNamesList(detail.value)} placeholder="my-classic-lb" rows={3} />
+                  </FormField>
+                </Modal>
+              )}
+
+              {/* Create Scaling Policy Modal */}
+              {showCreatePolicy && (
+                <Modal visible onDismiss={() => setShowCreatePolicy(false)} header="Create Scaling Policy" size="medium" footer={
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <Button variant="link" onClick={() => setShowCreatePolicy(false)}>Cancel</Button>
+                    <Button variant="primary" loading={createPolicy.isPending} onClick={() => {
+                      if (selectedASG && policyName.trim()) {
+                        createPolicy.mutate({
+                          name: selectedASG,
+                          policyName: policyName.trim(),
+                          policyType,
+                          adjustmentType,
+                          scalingAdjustment: Number(scalingAdjustment) || 1,
+                          cooldown: Number(policyCooldown) || 300,
+                        }, { onSuccess: () => { setShowCreatePolicy(false); setPolicyName(""); } });
+                      }
+                    }} disabled={!policyName.trim()}>Create</Button>
+                  </SpaceBetween>
+                }>
+                  <FormField label="Policy Name"><Input value={policyName} onChange={({ detail }) => setPolicyName(detail.value)} placeholder="scale-up" /></FormField>
+                  <FormField label="Policy Type">
+                    <Select
+                      selectedOption={policyType === "SimpleScaling" ? { label: "Simple Scaling", value: "SimpleScaling" } : { label: "Step Scaling", value: "StepScaling" }}
+                      onChange={({ detail }) => setPolicyType(detail.selectedOption?.value || "SimpleScaling")}
+                      options={[{ label: "Simple Scaling", value: "SimpleScaling" }, { label: "Step Scaling", value: "StepScaling" }]}
+                    />
+                  </FormField>
+                  <FormField label="Adjustment Type">
+                    <Select
+                      selectedOption={{ label: adjustmentType, value: adjustmentType }}
+                      onChange={({ detail }) => setAdjustmentType(detail.selectedOption?.value || "ChangeInCapacity")}
+                      options={[
+                        { label: "ChangeInCapacity", value: "ChangeInCapacity" },
+                        { label: "ExactCapacity", value: "ExactCapacity" },
+                        { label: "PercentChangeInCapacity", value: "PercentChangeInCapacity" },
+                      ]}
+                    />
+                  </FormField>
+                  <FormField label="Scaling Adjustment"><Input value={scalingAdjustment} onChange={({ detail }) => setScalingAdjustment(detail.value)} type="number" placeholder="1" /></FormField>
+                  <FormField label="Cooldown (seconds)"><Input value={policyCooldown} onChange={({ detail }) => setPolicyCooldown(detail.value)} type="number" placeholder="300" /></FormField>
+                </Modal>
+              )}
+
+              {/* Create Lifecycle Hook Modal */}
+              {showCreateHook && (
+                <Modal visible onDismiss={() => setShowCreateHook(false)} header="Create Lifecycle Hook" size="medium" footer={
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <Button variant="link" onClick={() => setShowCreateHook(false)}>Cancel</Button>
+                    <Button variant="primary" loading={putHook.isPending} onClick={() => {
+                      if (selectedASG && hookName.trim() && hookTransition.trim()) {
+                        putHook.mutate({
+                          name: selectedASG,
+                          lifecycleHookName: hookName.trim(),
+                          lifecycleTransition: hookTransition,
+                          notificationTargetARN: hookTargetARN.trim() || undefined,
+                          roleARN: hookRoleARN.trim() || undefined,
+                          defaultResult: hookResult,
+                        }, { onSuccess: () => { setShowCreateHook(false); setHookName(""); } });
+                      }
+                    }} disabled={!hookName.trim()}>Create</Button>
+                  </SpaceBetween>
+                }>
+                  <FormField label="Hook Name"><Input value={hookName} onChange={({ detail }) => setHookName(detail.value)} placeholder="my-hook" /></FormField>
+                  <FormField label="Lifecycle Transition">
+                    <Select
+                      selectedOption={{ label: hookTransition, value: hookTransition }}
+                      onChange={({ detail }) => setHookTransition(detail.selectedOption?.value || "autoscaling:EC2_INSTANCE_LAUNCHING")}
+                      options={[
+                        { label: "autoscaling:EC2_INSTANCE_LAUNCHING", value: "autoscaling:EC2_INSTANCE_LAUNCHING" },
+                        { label: "autoscaling:EC2_INSTANCE_TERMINATING", value: "autoscaling:EC2_INSTANCE_TERMINATING" },
+                      ]}
+                    />
+                  </FormField>
+                  <FormField label="Default Result">
+                    <Select
+                      selectedOption={{ label: hookResult, value: hookResult }}
+                      onChange={({ detail }) => setHookResult(detail.selectedOption?.value || "ABANDON")}
+                      options={[
+                        { label: "ABANDON", value: "ABANDON" },
+                        { label: "CONTINUE", value: "CONTINUE" },
+                      ]}
+                    />
+                  </FormField>
+                  <FormField label="Notification Target ARN (optional)"><Input value={hookTargetARN} onChange={({ detail }) => setHookTargetARN(detail.value)} placeholder="arn:aws:sns:..." /></FormField>
+                  <FormField label="Role ARN (optional)"><Input value={hookRoleARN} onChange={({ detail }) => setHookRoleARN(detail.value)} placeholder="arn:aws:iam:..." /></FormField>
+                </Modal>
+              )}
+
+              {/* Complete Lifecycle Action Modal */}
+              {showCompleteAction && (
+                <Modal visible onDismiss={() => setShowCompleteAction(false)} header="Complete Lifecycle Action" size="small" footer={
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <Button variant="link" onClick={() => setShowCompleteAction(false)}>Cancel</Button>
+                    <Button variant="primary" loading={completeAction.isPending} onClick={() => {
+                      if (selectedASG && completeHookName.trim()) {
+                        completeAction.mutate({
+                          name: selectedASG,
+                          lifecycleHookName: completeHookName.trim(),
+                          lifecycleActionResult: completeActionResult,
+                        }, { onSuccess: () => { setShowCompleteAction(false); setCompleteHookName(""); } });
+                      }
+                    }} disabled={!completeHookName.trim()}>Complete</Button>
+                  </SpaceBetween>
+                }>
+                  <FormField label="Lifecycle Hook Name"><Input value={completeHookName} onChange={({ detail }) => setCompleteHookName(detail.value)} placeholder="my-hook" /></FormField>
+                  <FormField label="Action Result">
+                    <Select
+                      selectedOption={{ label: completeActionResult, value: completeActionResult }}
+                      onChange={({ detail }) => setCompleteActionResult(detail.selectedOption?.value || "CONTINUE")}
+                      options={[
+                        { label: "CONTINUE", value: "CONTINUE" },
+                        { label: "ABANDON", value: "ABANDON" },
+                      ]}
+                    />
                   </FormField>
                 </Modal>
               )}

@@ -44,6 +44,12 @@ import {
   useASGAccountLimits,
   useASGLifecycleHookTypes,
   useASGMetricCollectionTypes,
+  useCreateScalingPolicy,
+  useDeleteScalingPolicy,
+  useLifecycleHooks,
+  usePutLifecycleHook,
+  useDeleteLifecycleHook,
+  useCompleteLifecycleAction,
 } from "./useAutoScaling";
 
 beforeEach(() => {
@@ -350,6 +356,88 @@ describe("useAutoScaling hooks", () => {
       const { result } = renderHook(() => useASGMetricCollectionTypes(), { wrapper: createWrapper() });
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(mockApi).toHaveBeenCalledWith("/aws/autoscaling/metric-collection-types");
+    });
+  });
+
+  // ─── Policies ──────────────────────────────────────────
+
+  describe("useCreateScalingPolicy", () => {
+    it("calls api with POST method", async () => {
+      mockApi.mockResolvedValueOnce({});
+      const { result } = renderHook(() => useCreateScalingPolicy(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ name: "asg-1", policyName: "scale-up", policyType: "SimpleScaling" });
+      expect(mockApi).toHaveBeenCalledWith(
+        "/aws/autoscaling/groups/asg-1/policies",
+        expect.objectContaining({ method: "POST" })
+      );
+    });
+  });
+
+  describe("useDeleteScalingPolicy", () => {
+    it("calls api with DELETE method", async () => {
+      mockApi.mockResolvedValueOnce({});
+      const { result } = renderHook(() => useDeleteScalingPolicy(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ name: "asg-1", policyName: "scale-up" });
+      expect(mockApi).toHaveBeenCalledWith(
+        "/aws/autoscaling/groups/asg-1/policies/scale-up",
+        expect.objectContaining({ method: "DELETE" })
+      );
+    });
+  });
+
+  // ─── Lifecycle Hooks ───────────────────────────────────
+
+  describe("useLifecycleHooks", () => {
+    it("does NOT call api when null", () => {
+      renderHook(() => useLifecycleHooks(null), { wrapper: createWrapper() });
+      expect(mockApi).not.toHaveBeenCalled();
+    });
+
+    it("calls api when provided", async () => {
+      mockApi.mockResolvedValueOnce({ lifecycleHooks: [], total: 0 });
+      const { result } = renderHook(() => useLifecycleHooks("asg-1"), { wrapper: createWrapper() });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockApi).toHaveBeenCalledWith("/aws/autoscaling/groups/asg-1/lifecycle-hooks");
+    });
+  });
+
+  describe("usePutLifecycleHook", () => {
+    it("calls api with POST method", async () => {
+      mockApi.mockResolvedValueOnce({});
+      const { result } = renderHook(() => usePutLifecycleHook(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ name: "asg-1", lifecycleHookName: "my-hook", lifecycleTransition: "autoscaling:EC2_INSTANCE_LAUNCHING" });
+      expect(mockApi).toHaveBeenCalledWith(
+        "/aws/autoscaling/groups/asg-1/lifecycle-hooks",
+        expect.objectContaining({ method: "POST" })
+      );
+    });
+  });
+
+  describe("useDeleteLifecycleHook", () => {
+    it("calls api with DELETE method", async () => {
+      mockApi.mockResolvedValueOnce({});
+      const { result } = renderHook(() => useDeleteLifecycleHook(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ name: "asg-1", lifecycleHookName: "my-hook" });
+      expect(mockApi).toHaveBeenCalledWith(
+        "/aws/autoscaling/groups/asg-1/lifecycle-hooks/my-hook",
+        expect.objectContaining({ method: "DELETE" })
+      );
+    });
+  });
+
+  describe("useCompleteLifecycleAction", () => {
+    it("calls api with POST method", async () => {
+      mockApi.mockResolvedValueOnce({});
+      const { result } = renderHook(() => useCompleteLifecycleAction(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({
+        name: "asg-1",
+        lifecycleHookName: "my-hook",
+        lifecycleActionResult: "CONTINUE",
+      });
+      expect(mockApi).toHaveBeenCalledWith(
+        "/aws/autoscaling/groups/asg-1/lifecycle-hooks/complete",
+        expect.objectContaining({ method: "POST" })
+      );
     });
   });
 });

@@ -27,6 +27,12 @@ import {
   DescribeAccountLimitsCommand,
   DescribeLifecycleHookTypesCommand,
   DescribeMetricCollectionTypesCommand,
+  PutScalingPolicyCommand,
+  DeletePolicyCommand,
+  PutLifecycleHookCommand,
+  DeleteLifecycleHookCommand,
+  DescribeLifecycleHooksCommand,
+  CompleteLifecycleActionCommand,
 } from "@aws-sdk/client-auto-scaling";
 
 const router = new Hono();
@@ -157,6 +163,53 @@ router.get("/groups/:name/policies", async (c: Context) => {
   return c.json({ policies, total: policies.length });
 });
 
+router.post("/groups/:name/policies", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<{
+    policyName: string;
+    policyType?: string;
+    adjustmentType?: string;
+    scalingAdjustment?: number;
+    cooldown?: number;
+    minAdjustmentMagnitude?: number;
+    estimatedInstanceWarmup?: number;
+    metricAggregationType?: string;
+    targetTrackingConfig?: any;
+    stepAdjustments?: any[];
+  }>();
+  if (!body.policyName) return c.json({ error: "policyName is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new PutScalingPolicyCommand({
+      AutoScalingGroupName: name,
+      PolicyName: body.policyName,
+      PolicyType: body.policyType || "SimpleScaling",
+      AdjustmentType: body.adjustmentType,
+      ScalingAdjustment: body.scalingAdjustment,
+      Cooldown: body.cooldown,
+      MinAdjustmentMagnitude: body.minAdjustmentMagnitude,
+      EstimatedInstanceWarmup: body.estimatedInstanceWarmup,
+      MetricAggregationType: body.metricAggregationType,
+      TargetTrackingConfiguration: body.targetTrackingConfig,
+      StepAdjustments: body.stepAdjustments,
+    })
+  );
+  return c.json({ policyARN: result.PolicyARN, created: true }, 201);
+});
+
+router.delete("/groups/:name/policies/:policyName", async (c: Context) => {
+  const name = c.req.param("name");
+  const policyName = decodeURIComponent(c.req.param("policyName") || "");
+  const client = getClient();
+  await client.send(
+    new DeletePolicyCommand({
+      AutoScalingGroupName: name,
+      PolicyName: policyName,
+    })
+  );
+  return c.json({ deleted: true });
+});
+
 // ── Scaling Activities ───────────────────────────────────
 
 router.get("/groups/:name/activities", async (c: Context) => {
@@ -167,6 +220,83 @@ router.get("/groups/:name/activities", async (c: Context) => {
   );
   const activities = result.Activities || [];
   return c.json({ activities, total: activities.length });
+});
+
+// ── Lifecycle Hooks ─────────────────────────────────────
+
+router.get("/groups/:name/lifecycle-hooks", async (c: Context) => {
+  const name = c.req.param("name");
+  const client = getClient();
+  const result = await client.send(
+    new DescribeLifecycleHooksCommand({ AutoScalingGroupName: name })
+  );
+  const hooks = result.LifecycleHooks || [];
+  return c.json({ lifecycleHooks: hooks, total: hooks.length });
+});
+
+router.post("/groups/:name/lifecycle-hooks", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<{
+    lifecycleHookName: string;
+    lifecycleTransition: string;
+    notificationTargetARN?: string;
+    roleARN?: string;
+    heartbeatTimeout?: number;
+    defaultResult?: string;
+    notificationMetadata?: string;
+  }>();
+  if (!body.lifecycleHookName) return c.json({ error: "lifecycleHookName is required" }, 400);
+  if (!body.lifecycleTransition) return c.json({ error: "lifecycleTransition is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new PutLifecycleHookCommand({
+      AutoScalingGroupName: name,
+      LifecycleHookName: body.lifecycleHookName,
+      LifecycleTransition: body.lifecycleTransition,
+      NotificationTargetARN: body.notificationTargetARN,
+      RoleARN: body.roleARN,
+      HeartbeatTimeout: body.heartbeatTimeout,
+      DefaultResult: body.defaultResult,
+      NotificationMetadata: body.notificationMetadata,
+    })
+  );
+  return c.json({ created: true }, 201);
+});
+
+router.delete("/groups/:name/lifecycle-hooks/:hookName", async (c: Context) => {
+  const name = c.req.param("name");
+  const hookName = decodeURIComponent(c.req.param("hookName") || "");
+  const client = getClient();
+  await client.send(
+    new DeleteLifecycleHookCommand({
+      AutoScalingGroupName: name,
+      LifecycleHookName: hookName,
+    })
+  );
+  return c.json({ deleted: true });
+});
+
+router.post("/groups/:name/lifecycle-hooks/complete", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<{
+    lifecycleHookName: string;
+    lifecycleActionResult: string;
+    instanceId?: string;
+    lifecycleActionToken?: string;
+  }>();
+  if (!body.lifecycleHookName) return c.json({ error: "lifecycleHookName is required" }, 400);
+  if (!body.lifecycleActionResult) return c.json({ error: "lifecycleActionResult is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new CompleteLifecycleActionCommand({
+      AutoScalingGroupName: name,
+      LifecycleHookName: body.lifecycleHookName,
+      LifecycleActionResult: body.lifecycleActionResult,
+      InstanceId: body.instanceId,
+      LifecycleActionToken: body.lifecycleActionToken,
+    })
+  );
+  return c.json({ completed: true });
 });
 
 // ── Instance Refresh ─────────────────────────────────────

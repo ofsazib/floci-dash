@@ -32,6 +32,12 @@ vi.mock("@aws-sdk/client-auto-scaling", () => ({
   AttachLoadBalancersCommand: createCmd("AttachLoadBalancersCommand"),
   DetachLoadBalancersCommand: createCmd("DetachLoadBalancersCommand"),
   DescribeLoadBalancersCommand: createCmd("DescribeLoadBalancersCommand"),
+  PutScalingPolicyCommand: createCmd("PutScalingPolicyCommand"),
+  DeletePolicyCommand: createCmd("DeletePolicyCommand"),
+  PutLifecycleHookCommand: createCmd("PutLifecycleHookCommand"),
+  DeleteLifecycleHookCommand: createCmd("DeleteLifecycleHookCommand"),
+  DescribeLifecycleHooksCommand: createCmd("DescribeLifecycleHooksCommand"),
+  CompleteLifecycleActionCommand: createCmd("CompleteLifecycleActionCommand"),
   DescribeAutoScalingNotificationTypesCommand: createCmd("DescribeAutoScalingNotificationTypesCommand"),
   DescribeTerminationPolicyTypesCommand: createCmd("DescribeTerminationPolicyTypesCommand"),
   DescribeAdjustmentTypesCommand: createCmd("DescribeAdjustmentTypesCommand"),
@@ -209,6 +215,30 @@ describe("Auto Scaling Routes", () => {
       const body = await res.json();
       expect(body.total).toBe(0);
     });
+
+    it("POST /groups/:name/policies — creates policy (201)", async () => {
+      mockSend.mockResolvedValueOnce({ PolicyARN: "arn:aws:autoscaling:policy/scale-up" });
+      const res = await post("/groups/asg-1/policies", { policyName: "scale-up", policyType: "SimpleScaling", adjustmentType: "ChangeInCapacity", scalingAdjustment: 1 });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.created).toBe(true);
+      expect(body.policyARN).toBe("arn:aws:autoscaling:policy/scale-up");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("PutScalingPolicyCommand");
+    });
+
+    it("POST /groups/:name/policies — 400 when policyName missing", async () => {
+      const res = await post("/groups/asg-1/policies", { adjustmentType: "ChangeInCapacity" });
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE /groups/:name/policies/:policyName — deletes policy", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/groups/asg-1/policies/scale-up");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deleted).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeletePolicyCommand");
+    });
   });
 
   describe("Scaling Activities", () => {
@@ -236,6 +266,84 @@ describe("Auto Scaling Routes", () => {
       const res = await get("/groups/asg-1/activities");
       const body = await res.json();
       expect(body.total).toBe(0);
+    });
+  });
+
+  describe("Lifecycle Hooks", () => {
+    it("GET /groups/:name/lifecycle-hooks — lists hooks", async () => {
+      mockSend.mockResolvedValueOnce({
+        LifecycleHooks: [
+          { LifecycleHookName: "my-hook", LifecycleTransition: "autoscaling:EC2_INSTANCE_LAUNCHING" },
+        ],
+      });
+      const res = await get("/groups/asg-1/lifecycle-hooks");
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(body.lifecycleHooks[0].LifecycleHookName).toBe("my-hook");
+    });
+
+    it("GET /groups/:name/lifecycle-hooks — returns empty", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/groups/asg-1/lifecycle-hooks");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+    });
+
+    it("POST /groups/:name/lifecycle-hooks — creates hook (201)", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/groups/asg-1/lifecycle-hooks", {
+        lifecycleHookName: "my-hook",
+        lifecycleTransition: "autoscaling:EC2_INSTANCE_LAUNCHING",
+      });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.created).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("PutLifecycleHookCommand");
+    });
+
+    it("POST /groups/:name/lifecycle-hooks — 400 when lifecycleHookName missing", async () => {
+      const res = await post("/groups/asg-1/lifecycle-hooks", { lifecycleTransition: "autoscaling:EC2_INSTANCE_LAUNCHING" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /groups/:name/lifecycle-hooks — 400 when lifecycleTransition missing", async () => {
+      const res = await post("/groups/asg-1/lifecycle-hooks", { lifecycleHookName: "my-hook" });
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE /groups/:name/lifecycle-hooks/:hookName — deletes hook", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/groups/asg-1/lifecycle-hooks/my-hook");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deleted).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteLifecycleHookCommand");
+    });
+
+    it("POST /groups/:name/lifecycle-hooks/complete — completes action", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/groups/asg-1/lifecycle-hooks/complete", {
+        lifecycleHookName: "my-hook",
+        lifecycleActionResult: "CONTINUE",
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.completed).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("CompleteLifecycleActionCommand");
+    });
+
+    it("POST /groups/:name/lifecycle-hooks/complete — 400 when lifecycleHookName missing", async () => {
+      const res = await post("/groups/asg-1/lifecycle-hooks/complete", {
+        lifecycleActionResult: "CONTINUE",
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /groups/:name/lifecycle-hooks/complete — 400 when lifecycleActionResult missing", async () => {
+      const res = await post("/groups/asg-1/lifecycle-hooks/complete", {
+        lifecycleHookName: "my-hook",
+      });
+      expect(res.status).toBe(400);
     });
   });
 
