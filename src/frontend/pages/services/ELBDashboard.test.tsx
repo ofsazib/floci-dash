@@ -36,6 +36,27 @@ const deleteTGState = vi.hoisted(() => ({
   variables: null as string | null,
 }));
 
+const mockLBListeners = vi.fn();
+const mockListenerRules = vi.fn();
+const mockCreateRule = vi.fn();
+const mockModifyRule = vi.fn();
+const mockDeleteRule = vi.fn();
+const mockSetRulePriorities = vi.fn();
+
+const createRuleState = vi.hoisted(() => ({
+  isPending: false,
+}));
+const modifyRuleState = vi.hoisted(() => ({
+  isPending: false,
+}));
+const deleteRuleState = vi.hoisted(() => ({
+  isPending: false,
+  variables: null as string | null,
+}));
+const setRulePrioritiesState = vi.hoisted(() => ({
+  isPending: false,
+}));
+
 vi.mock("../../hooks/useELB", () => ({
   useELBLoadBalancers: (...args: any[]) => mockLoadBalancers(...args),
   useELBCreateLoadBalancer: () => ({
@@ -57,12 +78,7 @@ vi.mock("../../hooks/useELB", () => ({
     isPending: deleteTGState.isPending,
     variables: deleteTGState.variables,
   }),
-  useELBListeners: (...args: any[]) => ({
-    data: { listeners: [], total: 0 },
-    isLoading: false,
-    isError: false,
-    error: null,
-  }),
+  useELBListeners: (...args: any[]) => mockLBListeners(...args),
   useELBCreateListener: () => ({
     mutate: vi.fn(),
     mutateAsync: vi.fn().mockResolvedValue({}),
@@ -165,41 +181,36 @@ vi.mock("../../hooks/useELB", () => ({
     isError: false,
     error: null,
   }),
-  useELBListenerRules: (...args: any[]) => ({
-    data: { rules: [], total: 0 },
-    isLoading: false,
-    isError: false,
-    error: null,
-  }),
+  useELBListenerRules: (...args: any[]) => mockListenerRules(...args),
   useELBCreateRule: () => ({
-    mutate: vi.fn(),
-    mutateAsync: vi.fn().mockResolvedValue({}),
-    isPending: false,
+    mutate: mockCreateRule,
+    mutateAsync: mockCreateRule,
+    isPending: createRuleState.isPending,
     isError: false,
     error: null,
     reset: vi.fn(),
   }),
   useELBModifyRule: () => ({
-    mutate: vi.fn(),
-    mutateAsync: vi.fn().mockResolvedValue({}),
-    isPending: false,
+    mutate: mockModifyRule,
+    mutateAsync: mockModifyRule,
+    isPending: modifyRuleState.isPending,
     isError: false,
     error: null,
     reset: vi.fn(),
   }),
   useELBDeleteRule: () => ({
-    mutate: vi.fn(),
-    mutateAsync: vi.fn().mockResolvedValue({}),
-    isPending: false,
-    variables: null,
+    mutate: mockDeleteRule,
+    mutateAsync: mockDeleteRule,
+    isPending: deleteRuleState.isPending,
+    variables: deleteRuleState.variables,
     isError: false,
     error: null,
     reset: vi.fn(),
   }),
   useELBSetRulePriorities: () => ({
-    mutate: vi.fn(),
-    mutateAsync: vi.fn().mockResolvedValue({}),
-    isPending: false,
+    mutate: mockSetRulePriorities,
+    mutateAsync: mockSetRulePriorities,
+    isPending: setRulePrioritiesState.isPending,
     isError: false,
     error: null,
     reset: vi.fn(),
@@ -218,6 +229,11 @@ beforeEach(() => {
   createTGState.isPending = false;
   deleteTGState.isPending = false;
   deleteTGState.variables = null;
+  createRuleState.isPending = false;
+  modifyRuleState.isPending = false;
+  deleteRuleState.isPending = false;
+  deleteRuleState.variables = null;
+  setRulePrioritiesState.isPending = false;
 
   mockLoadBalancers.mockReturnValue({
     data: { loadBalancers: [], total: 0 },
@@ -231,6 +247,26 @@ beforeEach(() => {
     isError: false,
     error: null,
   });
+  mockLBListeners.mockReturnValue({
+    data: { listeners: [], total: 0 },
+    isLoading: false,
+    isError: false,
+    error: null,
+  });
+  mockListenerRules.mockReturnValue({
+    data: { rules: [], total: 0 },
+    isLoading: false,
+    isError: false,
+    error: null,
+  });
+  mockCreateRule.mockReset();
+  mockCreateRule.mockResolvedValue({});
+  mockModifyRule.mockReset();
+  mockModifyRule.mockResolvedValue({});
+  mockDeleteRule.mockReset();
+  mockDeleteRule.mockResolvedValue({});
+  mockSetRulePriorities.mockReset();
+  mockSetRulePriorities.mockResolvedValue({});
 });
 
 // ─── Tests ──────────────────────────────────────────────
@@ -487,6 +523,453 @@ describe("ELBDashboard — target groups tab", () => {
       expect(mockCreateTG).toHaveBeenCalledWith(
         expect.objectContaining({ name: "test-tg" }),
       );
+    });
+  });
+});
+
+// ─── Listener Rules Tests ────────────────────────────────
+
+describe("ELBDashboard — listener rules", () => {
+  const LB_ARN = "arn:aws:elasticloadbalancing:us-east-1:123:loadbalancer/app/my-alb/abc";
+  const LISTENER_ARN = "arn:aws:elasticloadbalancing:us-east-1:123:listener/app/my-alb/abc/def";
+  const RULE_ARN = "arn:aws:elasticloadbalancing:us-east-1:123:listener-rule/my-rule";
+
+  function setupLBAndListener(user: ReturnType<typeof userEvent.setup>) {
+    mockLoadBalancers.mockReturnValue({
+      data: {
+        loadBalancers: [
+          {
+            loadBalancerName: "my-alb",
+            loadBalancerArn: LB_ARN,
+            type: "application",
+            scheme: "internet-facing",
+            state: { Code: "active" },
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockLBListeners.mockReturnValue({
+      data: {
+        listeners: [{ listenerArn: LISTENER_ARN, protocol: "HTTP", port: 80 }],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+  }
+
+  async function navigateToAdvancedAndSelectLB(user: ReturnType<typeof userEvent.setup>) {
+    render(<ELBDashboard />, { wrapper: createWrapper() });
+
+    // Switch to Advanced tab
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Select a load balancer...")).toBeTruthy();
+    });
+
+    // Click the Select to open dropdown, then click the option
+    // Note: Cloudscape renders option text in both a visible span and a screenreader div,
+    // so we use getAllByText and click the first (visible) one.
+    const selectTrigger = screen.getByText("Select a load balancer...");
+    await user.click(selectTrigger);
+    const lbOptions = screen.getAllByText(`my-alb (${LB_ARN})`);
+    await user.click(lbOptions[0]);
+
+    // Wait for listeners to appear
+    await waitFor(() => {
+      expect(screen.getByText("HTTP:80")).toBeTruthy();
+    });
+  }
+
+  it("shows empty rules state when no rules exist", async () => {
+    const user = userEvent.setup();
+    setupLBAndListener(user);
+    mockListenerRules.mockReturnValue({
+      data: { rules: [], total: 0 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    await navigateToAdvancedAndSelectLB(user);
+
+    // Click Certificates to set selectedListenerArn
+    await user.click(screen.getByText("Certificates"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Listener Rules")).toBeTruthy();
+      expect(screen.getByText("No rules found.")).toBeTruthy();
+    });
+  });
+
+  it("shows loading state when rules are loading", async () => {
+    const user = userEvent.setup();
+    setupLBAndListener(user);
+    mockListenerRules.mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+      error: null,
+    });
+
+    await navigateToAdvancedAndSelectLB(user);
+    await user.click(screen.getByText("Certificates"));
+
+    await waitFor(() => {
+      // The Listener Rules section should be visible with a loading indicator
+      expect(screen.getByText("Listener Rules")).toBeTruthy();
+    });
+  });
+
+  it("renders rules list with edit and delete buttons", async () => {
+    const user = userEvent.setup();
+    setupLBAndListener(user);
+    mockListenerRules.mockReturnValue({
+      data: {
+        rules: [
+          {
+            ruleArn: RULE_ARN,
+            ruleName: "host-header",
+            priority: "100",
+            isDefault: false,
+            conditions: [{ Field: "host-header", Values: ["example.com"] }],
+            actions: [{ Type: "forward", TargetGroupArn: "arn:tg1" }],
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    await navigateToAdvancedAndSelectLB(user);
+
+    await waitFor(() => {
+      expect(screen.getByText("HTTP:80")).toBeTruthy();
+    });
+
+    // Click Attributes button (simpler text to match) to set selectedListenerArn
+    const attrsBtns = screen.getAllByText("Attributes");
+    await user.click(attrsBtns[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText("Listener Rules")).toBeTruthy();
+    });
+
+    // The rule name is displayed as part of "Priority: 100 — host-header"
+    expect(screen.getByText(/Priority: 100/)).toBeTruthy();
+
+    // Edit buttons should be present (multiple in the page: SGs, subnets, rule)
+    expect(screen.getAllByRole("button", { name: /Edit/i }).length).toBeGreaterThan(0);
+
+    // Set rule priorities button should be present
+    expect(screen.getByRole("button", { name: /Set rule priorities/i })).toBeTruthy();
+  });
+
+  it("opens create rule modal and submits with valid data", async () => {
+    const user = userEvent.setup();
+    setupLBAndListener(user);
+
+    await navigateToAdvancedAndSelectLB(user);
+
+    await waitFor(() => {
+      expect(screen.getByText("HTTP:80")).toBeTruthy();
+    });
+
+    // Click Attributes to set selectedListenerArn
+    const attrsBtns = screen.getAllByText("Attributes");
+    await user.click(attrsBtns[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText("Listener Rules")).toBeTruthy();
+    });
+
+    // Click Create rule button
+    await clickButton(user, /Create rule/i);
+
+    await waitFor(() => {
+      expect(screen.getByText("Create Rule")).toBeTruthy();
+    });
+
+    // Fill in the form - use paste() for JSON to avoid keyboard parsing issues
+    const priorityInput = screen.getByPlaceholderText("100");
+    await user.type(priorityInput, "200");
+
+    const conditionTextarea = screen.getByPlaceholderText(/Field.*host-header/);
+    await user.click(conditionTextarea);
+    await user.paste('[{"Field":"host-header","Values":["test.com"]}]');
+
+    const actionTextarea = screen.getByPlaceholderText(/Type.*forward/);
+    await user.click(actionTextarea);
+    await user.paste('[{"Type":"forward","TargetGroupArn":"arn:tg2"}]');
+
+    // Click Create button (last one in the modal)
+    await clickButton(user, /Create/i, { last: true });
+
+    await waitFor(() => {
+      expect(mockCreateRule).toHaveBeenCalled();
+    });
+  });
+
+  it("shows validation error for invalid JSON in conditions", async () => {
+    const user = userEvent.setup();
+    setupLBAndListener(user);
+
+    await navigateToAdvancedAndSelectLB(user);
+
+    await waitFor(() => {
+      expect(screen.getByText("HTTP:80")).toBeTruthy();
+    });
+
+    const attrsBtns = screen.getAllByText("Attributes");
+    await user.click(attrsBtns[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText("Listener Rules")).toBeTruthy();
+    });
+
+    await clickButton(user, /Create rule/i);
+
+    await waitFor(() => {
+      expect(screen.getByText("Create Rule")).toBeTruthy();
+    });
+
+    // Enter a valid priority but invalid JSON
+    const priorityInput = screen.getByPlaceholderText("100");
+    await user.type(priorityInput, "200");
+
+    const conditionTextarea = screen.getByPlaceholderText(/Field.*host-header/);
+    await user.type(conditionTextarea, "not-valid-json");
+
+    // Attempt to submit
+    await clickButton(user, /Create/i, { last: true });
+
+    await waitFor(() => {
+      expect(screen.getByText("Invalid JSON in conditions or actions")).toBeTruthy();
+    });
+  });
+
+  it("shows validation error for non-positive priority", async () => {
+    const user = userEvent.setup();
+    setupLBAndListener(user);
+
+    await navigateToAdvancedAndSelectLB(user);
+
+    await waitFor(() => {
+      expect(screen.getByText("HTTP:80")).toBeTruthy();
+    });
+
+    const attrsBtns = screen.getAllByText("Attributes");
+    await user.click(attrsBtns[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText("Listener Rules")).toBeTruthy();
+    });
+
+    await clickButton(user, /Create rule/i);
+
+    await waitFor(() => {
+      expect(screen.getByText("Create Rule")).toBeTruthy();
+    });
+
+    // Enter invalid priority
+    const priorityInput = screen.getByPlaceholderText("100");
+    await user.type(priorityInput, "0");
+
+    await clickButton(user, /Create/i, { last: true });
+
+    await waitFor(() => {
+      expect(screen.getByText("Priority must be a positive integer")).toBeTruthy();
+    });
+  });
+
+  it("opens edit rule modal with pre-filled data", async () => {
+    const user = userEvent.setup();
+    setupLBAndListener(user);
+    mockListenerRules.mockReturnValue({
+      data: {
+        rules: [
+          {
+            ruleArn: RULE_ARN,
+            ruleName: "host-header",
+            priority: "100",
+            isDefault: false,
+            conditions: [{ Field: "host-header", Values: ["example.com"] }],
+            actions: [{ Type: "forward", TargetGroupArn: "arn:tg1" }],
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    await navigateToAdvancedAndSelectLB(user);
+
+    await waitFor(() => {
+      expect(screen.getByText("HTTP:80")).toBeTruthy();
+    });
+
+    const attrsBtns = screen.getAllByText("Attributes");
+    await user.click(attrsBtns[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Priority: 100/)).toBeTruthy();
+    });
+
+    // Click the last Edit button (rule's link variant, after SGs and subnets)
+    await clickButton(user, /Edit/i, { last: true });
+
+    await waitFor(() => {
+      expect(screen.getByText("Edit Rule")).toBeTruthy();
+    });
+
+    // Verify priority is pre-filled
+    const priorityInput = screen.getByPlaceholderText("100");
+    expect(priorityInput).toHaveValue("100");
+  });
+
+  it("calls deleteRule when delete is clicked", async () => {
+    const user = userEvent.setup();
+    setupLBAndListener(user);
+    mockListenerRules.mockReturnValue({
+      data: {
+        rules: [
+          {
+            ruleArn: RULE_ARN,
+            ruleName: "host-header",
+            priority: "100",
+            isDefault: false,
+            conditions: [],
+            actions: [],
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    await navigateToAdvancedAndSelectLB(user);
+
+    await waitFor(() => {
+      expect(screen.getByText("HTTP:80")).toBeTruthy();
+    });
+
+    const attrsBtns = screen.getAllByText("Attributes");
+    await user.click(attrsBtns[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Priority: 100/)).toBeTruthy();
+    });
+
+    // Click Delete button
+    await clickButton(user, new RegExp(`Delete ${RULE_ARN}`));
+
+    await waitFor(() => {
+      expect(mockDeleteRule).toHaveBeenCalledWith(RULE_ARN);
+    });
+  });
+
+  it("opens set rule priorities modal and submits", async () => {
+    const user = userEvent.setup();
+    setupLBAndListener(user);
+    mockListenerRules.mockReturnValue({
+      data: {
+        rules: [
+          {
+            ruleArn: RULE_ARN,
+            ruleName: "host-header",
+            priority: "100",
+            isDefault: false,
+            conditions: [],
+            actions: [],
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    await navigateToAdvancedAndSelectLB(user);
+
+    await waitFor(() => {
+      expect(screen.getByText("HTTP:80")).toBeTruthy();
+    });
+
+    const attrsBtns = screen.getAllByText("Attributes");
+    await user.click(attrsBtns[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Priority: 100/)).toBeTruthy();
+    });
+
+    // Click Set rule priorities
+    await clickButton(user, /Set rule priorities/i);
+
+    await waitFor(() => {
+      expect(screen.getByText("Set Rule Priorities")).toBeTruthy();
+    });
+
+    // Change priority value
+    const priorityInput = screen.getByDisplayValue("100");
+    await user.clear(priorityInput);
+    await user.type(priorityInput, "50");
+
+    // Click Save
+    await clickButton(user, /Save/i);
+
+    await waitFor(() => {
+      expect(mockSetRulePriorities).toHaveBeenCalled();
+    });
+  });
+
+  it("shows info message when no non-default rules to reorder", async () => {
+    const user = userEvent.setup();
+    setupLBAndListener(user);
+    mockListenerRules.mockReturnValue({
+      data: {
+        rules: [
+          {
+            ruleArn: RULE_ARN,
+            ruleName: "default-rule",
+            priority: "default",
+            isDefault: true,
+            conditions: [],
+            actions: [],
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    await navigateToAdvancedAndSelectLB(user);
+
+    await waitFor(() => {
+      expect(screen.getByText("HTTP:80")).toBeTruthy();
+    });
+
+    const attrsBtns = screen.getAllByText("Attributes");
+    await user.click(attrsBtns[0]);
+
+    await clickButton(user, /Set rule priorities/i);
+
+    await waitFor(() => {
+      expect(screen.getByText("No non-default rules to reorder.")).toBeTruthy();
     });
   });
 });
