@@ -12,6 +12,16 @@ const deletePoolState = vi.hoisted(() => ({
   variables: null as string | null,
 }));
 
+const advancedStates = vi.hoisted(() => ({
+  createResourceServer: { isPending: false },
+  deleteResourceServer: { isPending: false, variables: null as string | null },
+  setMfaConfig: { isPending: false },
+  addCustomAttributes: { isPending: false },
+  initiateAuth: { isPending: false },
+  addClientSecret: { isPending: false },
+  deleteClientSecret: { isPending: false },
+}));
+
 // ─── Mock hooks ─────────────────────────────────────────
 
 const mockPools = vi.fn();
@@ -19,6 +29,16 @@ const mockDeletePool = vi.fn();
 const mockUsers = vi.fn();
 const mockGroups = vi.fn();
 const mockClients = vi.fn();
+const mockResourceServers = vi.fn();
+const mockMfaConfig = vi.fn();
+const mockCreateResourceServer = vi.fn();
+const mockDeleteResourceServer = vi.fn();
+const mockSetMfaConfig = vi.fn();
+const mockAddCustomAttributes = vi.fn();
+const mockInitiateAuth = vi.fn();
+const mockAddClientSecret = vi.fn();
+const mockDeleteClientSecret = vi.fn();
+const mockClientSecrets = vi.fn();
 
 vi.mock("../../hooks/useCognito", () => ({
   useCognitoUserPools: (...args: any[]) => mockPools(...args),
@@ -37,23 +57,44 @@ vi.mock("../../hooks/useCognito", () => ({
   useDeleteCognitoGroup: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useCreateCognitoUserPoolClient: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteCognitoUserPoolClient: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useResourceServers: () => ({
-    data: { resourceServers: [], total: 0 },
+  useResourceServers: (...args: any[]) => ({
+    data: mockResourceServers(args[0]) || { resourceServers: [], total: 0 },
     isLoading: false,
     isError: false,
     error: null,
   }),
-  useMfaConfig: () => ({
-    data: { mfaConfiguration: null },
+  useMfaConfig: (...args: any[]) => ({
+    data: mockMfaConfig(args[0]) || { mfaConfiguration: null },
     isLoading: false,
     isError: false,
     error: null,
   }),
-  useCreateResourceServer: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
-  useDeleteResourceServer: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
-  useSetMfaConfig: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
-  useAddCustomAttributes: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
-  useInitiateAuth: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
+  useCreateResourceServer: () => ({
+    mutate: mockCreateResourceServer,
+    mutateAsync: mockCreateResourceServer,
+    get isPending() { return advancedStates.createResourceServer.isPending; },
+  }),
+  useDeleteResourceServer: () => ({
+    mutate: mockDeleteResourceServer,
+    mutateAsync: mockDeleteResourceServer,
+    get isPending() { return advancedStates.deleteResourceServer.isPending; },
+    get variables() { return advancedStates.deleteResourceServer.variables; },
+  }),
+  useSetMfaConfig: () => ({
+    mutate: mockSetMfaConfig,
+    mutateAsync: mockSetMfaConfig,
+    get isPending() { return advancedStates.setMfaConfig.isPending; },
+  }),
+  useAddCustomAttributes: () => ({
+    mutate: mockAddCustomAttributes,
+    mutateAsync: mockAddCustomAttributes,
+    get isPending() { return advancedStates.addCustomAttributes.isPending; },
+  }),
+  useInitiateAuth: () => ({
+    mutate: mockInitiateAuth,
+    mutateAsync: mockInitiateAuth,
+    get isPending() { return advancedStates.initiateAuth.isPending; },
+  }),
   useAdminInitiateAuth: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
   useConfirmSignUp: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
   useAdminRespondToAuthChallenge: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
@@ -62,9 +103,20 @@ vi.mock("../../hooks/useCognito", () => ({
   useGetUser: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
   useUpdateUserAttributes: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
   useDeleteUserAttributes: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
-  useUserPoolClientSecrets: () => ({ data: { secrets: [] }, isLoading: false }),
-  useAddUserPoolClientSecret: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
-  useDeleteUserPoolClientSecret: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
+  useUserPoolClientSecrets: (...args: any[]) => ({
+    data: mockClientSecrets(args[0], args[1]) || { secrets: [] },
+    isLoading: false,
+  }),
+  useAddUserPoolClientSecret: () => ({
+    mutate: mockAddClientSecret,
+    mutateAsync: mockAddClientSecret,
+    get isPending() { return advancedStates.addClientSecret.isPending; },
+  }),
+  useDeleteUserPoolClientSecret: () => ({
+    mutate: mockDeleteClientSecret,
+    mutateAsync: mockDeleteClientSecret,
+    get isPending() { return advancedStates.deleteClientSecret.isPending; },
+  }),
 }));
 
 import { CognitoDashboard } from "./CognitoDashboard";
@@ -80,6 +132,18 @@ beforeEach(() => {
   mockUsers.mockReturnValue({ data: { users: [], total: 0 } });
   mockGroups.mockReturnValue({ data: { groups: [], total: 0 } });
   mockClients.mockReturnValue({ data: { clients: [], total: 0 } });
+  mockResourceServers.mockReturnValue(null);
+  mockMfaConfig.mockReturnValue(null);
+  mockClientSecrets.mockReturnValue(null);
+  mockCreateResourceServer.mockReset();
+  mockDeleteResourceServer.mockReset();
+  mockSetMfaConfig.mockReset();
+  mockAddCustomAttributes.mockReset();
+  mockInitiateAuth.mockReset();
+  mockAddClientSecret.mockReset();
+  mockDeleteClientSecret.mockReset();
+  mockInitiateAuth.mockResolvedValue({});
+  Object.values(advancedStates).forEach((s: any) => { s.isPending = false; s.variables = null; });
 });
 
 // ─── Tests ──────────────────────────────────────────────
@@ -484,5 +548,176 @@ describe("CognitoDashboard — app clients tab", () => {
     await user.click(screen.getByText("pool"));
     await user.click(screen.getByRole("tab", { name: /App Clients/i }));
     await waitFor(() => expect(screen.getByText("named")).toBeTruthy());
+  });
+});
+
+describe("CognitoDashboard — advanced tab", () => {
+  async function navToAdvanced() {
+    mockPools.mockReturnValue({
+      data: { userPools: [{ Id: "p1", Name: "pool", Status: "Enabled" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CognitoDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("pool"));
+    await user.click(screen.getByText("pool"));
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => expect(screen.getByText("Resource Servers")).toBeTruthy());
+    return { user };
+  }
+
+  it("shows Resource Servers empty state", async () => {
+    mockPools.mockReturnValue({
+      data: { userPools: [{ Id: "p1", Name: "pool", Status: "Enabled" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CognitoDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("pool"));
+    await user.click(screen.getByText("pool"));
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => expect(screen.getByText(/No resource servers found/i)).toBeTruthy());
+  });
+
+  it("renders Resource Servers from hook data", async () => {
+    mockResourceServers.mockReturnValue({
+      resourceServers: [{ Identifier: "https://api.example.com", Name: "My API", Scopes: [{ ScopeName: "read" }] }],
+      total: 1,
+    });
+    const { user } = await navToAdvanced();
+    await waitFor(() => expect(screen.getByText("My API")).toBeTruthy(), { timeout: 2000 });
+    // Reset for other tests in this suite
+    mockResourceServers.mockReturnValue(null);
+  });
+
+  it("opens Create Resource Server modal and submits", async () => {
+    mockResourceServers.mockReturnValueOnce({
+      resourceServers: [{ Identifier: "https://api.example.com", Name: "My API", Scopes: [{ ScopeName: "read" }] }],
+      total: 1,
+    });
+    const { user } = await navToAdvanced();
+    await user.click(screen.getByRole("button", { name: /Create Resource Server/i }));
+    await waitFor(() => expect(screen.getAllByText("Create Resource Server").length).toBeGreaterThanOrEqual(1));
+
+    const inputs = screen.getAllByRole("textbox");
+    await user.type(inputs[0], "https://api.new.com");
+    await user.type(inputs[1], "New API");
+    await user.click(screen.getByRole("button", { name: /^Create$/i }));
+    await waitFor(() => {
+      expect(mockCreateResourceServer).toHaveBeenCalled();
+    });
+  });
+
+  it("shows MFA Configuration with status indicator", async () => {
+    mockMfaConfig.mockReturnValueOnce({ mfaConfiguration: "OPTIONAL" });
+    const { user } = await navToAdvanced();
+    await waitFor(() => expect(screen.getByText("MFA Configuration")).toBeTruthy());
+  });
+
+  it("updates MFA config via button is disabled without selection", async () => {
+    const { user } = await navToAdvanced();
+    const updateBtn = screen.getByRole("button", { name: /Update MFA/i });
+    expect(updateBtn).toBeDisabled();
+  });
+
+  it("shows Custom Attributes section", async () => {
+    await navToAdvanced();
+    expect(screen.getByText("Custom Attributes")).toBeTruthy();
+  });
+
+  it("opens Add Custom Attributes modal and submits", async () => {
+    const { user } = await navToAdvanced();
+    await user.click(screen.getByRole("button", { name: /Add Custom Attribute/i }));
+    await waitFor(() => expect(screen.getAllByText("Add Custom Attributes").length).toBeGreaterThanOrEqual(1));
+
+    // Type in the attribute name input via its placeholder
+    const attrInput = screen.getByPlaceholderText(/custom:/);
+    await user.click(attrInput);
+    await user.paste("custom:team");
+
+    const addBtn = screen.getByRole("button", { name: /^Add$/i });
+    await user.click(addBtn);
+    await waitFor(() => {
+      expect(mockAddCustomAttributes).toHaveBeenCalled();
+    }, { timeout: 2000 });
+  });
+});
+
+describe("CognitoDashboard — auth flows tab", () => {
+  async function navToAuthFlows() {
+    mockPools.mockReturnValue({
+      data: { userPools: [{ Id: "p1", Name: "pool", Status: "Enabled" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CognitoDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("pool"));
+    await user.click(screen.getByText("pool"));
+    await user.click(screen.getByRole("tab", { name: /Auth Flows/i }));
+    await waitFor(() => expect(screen.getByText("Authentication Flow Tester")).toBeTruthy());
+    return { user };
+  }
+
+  it("shows the Auth Flows container", async () => {
+    await navToAuthFlows();
+    expect(screen.getByText("Authentication Flow Tester")).toBeTruthy();
+  });
+
+  it("runs Initiate Auth flow", async () => {
+    const { user } = await navToAuthFlows();
+    const clientIdInput = screen.getByPlaceholderText("Client ID");
+    const usernameInput = screen.getByPlaceholderText("Username");
+    const passwordInput = screen.getByPlaceholderText("Password");
+
+    await user.type(clientIdInput, "client-1");
+    await user.type(usernameInput, "user1");
+    await user.type(passwordInput, "pass");
+
+    await user.click(screen.getByRole("button", { name: /Run Flow/i }));
+    await waitFor(() => {
+      expect(mockInitiateAuth).toHaveBeenCalled();
+    });
+  });
+});
+
+describe("CognitoDashboard — client secrets", () => {
+  async function openClientSecretsModal() {
+    mockPools.mockReturnValue({
+      data: { userPools: [{ Id: "p1", Name: "pool", Status: "Enabled" }], total: 1 },
+      isLoading: false,
+    });
+    mockClients.mockReturnValue({
+      data: {
+        clients: [{ ClientId: "client-1", ClientName: "myapp" }],
+        total: 1,
+      },
+    });
+    mockClientSecrets.mockReturnValue({
+      secrets: [{ ClientSecretId: "secret-1", CreationDate: 1705000000 }],
+    });
+    const user = userEvent.setup();
+    render(<CognitoDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("pool"));
+    await user.click(screen.getByText("pool"));
+    await user.click(screen.getByRole("tab", { name: /App Clients/i }));
+    await waitFor(() => expect(screen.getByText("myapp")).toBeTruthy());
+
+    await user.click(screen.getByRole("button", { name: /Manage Secrets/i }));
+    await waitFor(() => expect(screen.getByText(/Client Secrets for client-1/i)).toBeTruthy());
+    return { user };
+  }
+
+  it("opens Manage Secrets modal and shows secrets", async () => {
+    await openClientSecretsModal();
+    expect(screen.getByText("secret-1")).toBeTruthy();
+  });
+
+  it("adds a client secret via modal", async () => {
+    const { user } = await openClientSecretsModal();
+
+    await user.click(screen.getByRole("button", { name: /Add Secret/i }));
+    await waitFor(() => {
+      expect(mockAddClientSecret).toHaveBeenCalled();
+    });
   });
 });
