@@ -66,6 +66,7 @@ const mockCreateJQ = vi.fn();
 const mockDeleteJQ = vi.fn();
 const mockRegisterJD = vi.fn();
 const mockDeregisterJD = vi.fn();
+const mockSubmitJob = vi.fn();
 
 vi.mock("../../hooks/useBatch", () => ({
   useBatchComputeEnvironments: (...args: any[]) => mockComputeEnvs(...args),
@@ -105,7 +106,7 @@ vi.mock("../../hooks/useBatch", () => ({
     get variables() { return deregisterJDState.variables; },
   }),
   useSubmitBatchJob: () => ({
-    mutate: vi.fn(),
+    mutate: mockSubmitJob,
     mutateAsync: vi.fn().mockResolvedValue({}),
     get isPending() { return submitJobState.isPending; },
     get isError() { return submitJobState.isError; },
@@ -525,5 +526,34 @@ describe("BatchDashboard — submit job", () => {
     submitJobState.isPending = true;
     render(<BatchDashboard />, { wrapper: createWrapper() });
     expect(screen.getByRole("button", { name: /Submit Job/i })).toBeTruthy();
+  });
+
+  it("fills all fields and submits a job", async () => {
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /Submit Job/i }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Job name/)).toBeTruthy();
+    });
+
+    const nameInput = screen.getByLabelText(/Job name/);
+    await user.type(nameInput, "test-job");
+
+    const queueInput = screen.getByLabelText(/Job queue ARN/);
+    await user.type(queueInput, "arn:aws:batch:us-east-1:123:job-queue/my-queue");
+
+    const defInput = screen.getByLabelText(/Job definition ARN/);
+    await user.type(defInput, "arn:aws:batch:us-east-1:123:job-definition/my-jd:1");
+
+    const submitBtns = screen.getAllByRole("button", { name: /^Submit$/i });
+    await user.click(submitBtns[submitBtns.length - 1]);
+
+    await waitFor(() => {
+      expect(mockSubmitJob).toHaveBeenCalledWith(
+        expect.objectContaining({ jobName: "test-job" }),
+        expect.any(Object),
+      );
+    });
   });
 });
