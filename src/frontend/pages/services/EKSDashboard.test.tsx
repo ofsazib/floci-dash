@@ -531,4 +531,67 @@ describe("EKSDashboard — cluster list", () => {
       expect(mockDeleteCluster).toHaveBeenCalledWith("my-cluster");
     });
   });
+
+  it("creates a nodegroup modal shows disabled Create button when fields are empty", async () => {
+    const setShow = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <NodegroupsPanel
+        {...ngPanelProps({
+          showCreateNodegroup: true,
+          setShowCreateNodegroup: setShow,
+        })}
+      />,
+      { wrapper: createWrapper() },
+    );
+
+    expect(screen.getByText("Create node group")).toBeTruthy();
+
+    // Verify all 3 form fields render
+    expect(screen.getByPlaceholderText("my-nodegroup")).toBeTruthy();
+    expect(screen.getByPlaceholderText("arn:aws:iam::123456789012:role/eks-node-role")).toBeTruthy();
+    expect(screen.getByPlaceholderText("subnet-12345678, subnet-87654321")).toBeTruthy();
+
+    // Verify Create button is disabled when fields are empty
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/ });
+    expect(createBtns[createBtns.length - 1]).toBeDisabled();
+
+    // Close via Cancel
+    const cancelBtns = screen.getAllByRole("button", { name: /Cancel/i });
+    await user.click(cancelBtns[cancelBtns.length - 1]);
+    expect(setShow).toHaveBeenCalledWith(false);
+  });
+
+  it("deletes a nodegroup from the drill-down view", async () => {
+    const deleteMutate = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <NodegroupsPanel
+        {...ngPanelProps({
+          nodegroupsData: {
+            nodegroups: [
+              {
+                nodegroupName: "delete-ng",
+                status: "ACTIVE",
+              },
+            ],
+            total: 1,
+          },
+          deleteNodegroup: { mutateAsync: deleteMutate, isPending: false, variables: null },
+        })}
+      />,
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("delete-ng")).toBeTruthy();
+    });
+
+    const deleteBtn = screen.getByRole("button", { name: /Delete delete-ng/i });
+    await user.click(deleteBtn);
+
+    await waitFor(() => {
+      expect(deleteMutate).toHaveBeenCalledWith("delete-ng");
+    });
+  });
 });

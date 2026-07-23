@@ -20,8 +20,8 @@ vi.mock("../hooks/useCloudWatch", () => ({
   useMetricStatistics: (...args: any[]) => mockMetricStatistics(...args),
   useCloudWatchAlarms: (...args: any[]) => mockCloudWatchAlarms(...args),
   useCreateAlarm: () => ({ mutateAsync: mockCreateAlarmMutate, isPending: false }),
-  useDeleteAlarm: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useSetAlarmState: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useDeleteAlarm: () => ({ mutateAsync: mockDeleteAlarm, isPending: false }),
+  useSetAlarmState: () => ({ mutateAsync: mockSetAlarmState, isPending: false }),
 }));
 
 vi.mock("../components/Toast", () => ({
@@ -230,5 +230,69 @@ describe("CloudWatchPage", () => {
     });
     render(<CloudWatchPage />, { wrapper: pageWrapper() });
     expect(screen.queryByText(/Set OK/i)).toBeNull();
+  });
+
+  // ─── Set OK & Delete Tests ───────────────────────────────
+
+  it("calls setAlarmState when Set OK is clicked", async () => {
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    await waitFor(() => {
+      expect(screen.getAllByText("high-cpu").length).toBeGreaterThan(0);
+    });
+    const setOkBtn = screen.getByRole("button", { name: /Set OK/i });
+    await user.click(setOkBtn);
+    await waitFor(() => {
+      expect(mockSetAlarmState).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "high-cpu", state: "OK" }),
+      );
+    });
+  });
+
+  it("calls deleteAlarm when delete is clicked", async () => {
+    mockDeleteAlarm.mockResolvedValueOnce({});
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    await waitFor(() => {
+      expect(screen.getAllByText("high-cpu").length).toBeGreaterThan(0);
+    });
+    const deleteBtn = screen.getByRole("button", { name: /Delete high-cpu/i });
+    await user.click(deleteBtn);
+    await waitFor(() => {
+      expect(mockDeleteAlarm).toHaveBeenCalledWith("high-cpu");
+    });
+  });
+
+  // ─── Metric Statistics Test ──────────────────────────────
+
+  it("calls metricStatistics with params when metrics tab renders", () => {
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    // The metricStatistics hook is called with default empty params on mount
+    expect(mockMetricStatistics).toHaveBeenCalled();
+  });
+
+  // ─── Create Alarm Full Form ──────────────────────────────
+
+  it("creates alarm with specific fields filled via placeholder queries", async () => {
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /Create alarm/i);
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("AWS/EC2")).toBeTruthy();
+    });
+    // Use placeholder queries to find specific inputs
+    const nsInput = screen.getByPlaceholderText("AWS/EC2");
+    const metricNameInput = screen.getByPlaceholderText("CPUUtilization");
+    await user.type(nsInput, "AWS/Lambda");
+    await user.type(metricNameInput, "Errors");
+    await clickButton(user, /Create/i, { last: true });
+    await waitFor(() => {
+      expect(mockCreateAlarmMutate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          namespace: "AWS/Lambda",
+          metricName: "Errors",
+        }),
+      );
+    });
   });
 });

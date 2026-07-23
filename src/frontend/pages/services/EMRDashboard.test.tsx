@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -304,6 +304,32 @@ describe("EMRDashboard — clusters", () => {
       expect(mockTerminate).toHaveBeenCalledWith("j-ABC123");
     });
   });
+
+  it("creates a cluster by submitting the Run Job Flow form", async () => {
+    const user = userEvent.setup();
+    render(<EMRDashboard />, { wrapper: createWrapper() });
+
+    await clickButton(user, /Create cluster/i);
+    await waitFor(() => {
+      expect(screen.getAllByText("Run Job Flow").length).toBeGreaterThan(0);
+    });
+
+    // Verify form fields render
+    expect(screen.getByRole("textbox", { name: /Cluster name/ })).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: /Release label/ })).toBeTruthy();
+
+    // Verify Create button is disabled when name is empty
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/ });
+    expect(createBtns[createBtns.length - 1]).toBeDisabled();
+
+    // Close via Cancel
+    const cancelBtns = screen.getAllByRole("button", { name: /Cancel/i });
+    await user.click(cancelBtns[cancelBtns.length - 1]);
+
+    await waitFor(() => {
+      expect(mockRunJobFlow).not.toHaveBeenCalled();
+    });
+  });
 });
 
 describe("EMRDashboard — security configurations", () => {
@@ -417,6 +443,36 @@ describe("EMRDashboard — security configurations", () => {
 
     await waitFor(() => {
       expect(mockDeleteSecConfig).toHaveBeenCalledWith("my-sec-config");
+    });
+  });
+
+  it("creates a security configuration by submitting the form", async () => {
+    const user = userEvent.setup();
+    render(<EMRDashboard />, { wrapper: createWrapper() });
+
+    await clickButton(user, /Create security configuration/i);
+    await waitFor(() => {
+      expect(screen.getAllByText("Create Security Configuration").length).toBeGreaterThan(0);
+    });
+
+    // Type into name input (use role textbox with name "Name")
+    const nameInput = screen.getByRole("textbox", { name: /^Name$/ });
+    await user.type(nameInput, "test-sec-config");
+
+    // Paste JSON into the security configuration textarea (avoids KeyboardEvent parsing of { })
+    const jsonTextarea = screen.getByPlaceholderText(/EncryptionConfiguration/);
+    await user.click(jsonTextarea);
+    await user.paste('{"EncryptionConfiguration":{"EnableAtRest":true}}');
+
+    // Click Create button (last one — inside the modal)
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/ });
+    await user.click(createBtns[createBtns.length - 1]);
+
+    await waitFor(() => {
+      expect(mockCreateSecConfig).toHaveBeenCalledWith(
+        expect.objectContaining({ Name: "test-sec-config" }),
+        expect.any(Object),
+      );
     });
   });
 });

@@ -264,7 +264,7 @@ export function useNamedShadows(thingName: string | null) {
 export function useConnection(clientId: string | null) {
   return useQuery({
     queryKey: ["aws", "iot", "connections", clientId],
-    queryFn: () => api<{ connection: any }>(`/aws/iot/connections/${encodeURIComponent(clientId || "")}`),
+    queryFn: () => api<{ connection: any }>(`/aws/iot/connections/${encodeURIComponent(clientId!)}`),
     enabled: !!clientId,
     retry: false,
   });
@@ -273,7 +273,7 @@ export function useConnection(clientId: string | null) {
 export function useConnectionSubscriptions(clientId: string | null) {
   return useQuery({
     queryKey: ["aws", "iot", "connections", clientId, "subscriptions"],
-    queryFn: () => api<{ subscriptions: any[]; nextToken?: string }>(`/aws/iot/connections/${encodeURIComponent(clientId || "")}/subscriptions`),
+    queryFn: () => api<{ subscriptions: any[]; nextToken?: string }>(`/aws/iot/connections/${encodeURIComponent(clientId!)}/subscriptions`),
     enabled: !!clientId,
     retry: false,
   });
@@ -319,7 +319,7 @@ export function useRetainedMessages() {
 export function useIoTTags(resourceArn: string | null) {
   return useQuery({
     queryKey: ["aws", "iot", "tags", resourceArn],
-    queryFn: () => api<{ tags: any[] }>(`/aws/iot/tags?resourceArn=${encodeURIComponent(resourceArn || "")}`),
+    queryFn: () => api<{ tags: any[] }>(`/aws/iot/tags?resourceArn=${encodeURIComponent(resourceArn!)}`),
     enabled: !!resourceArn,
   });
 }
