@@ -60,6 +60,10 @@ vi.mock("@aws-sdk/client-iam", () => ({
   DeleteInstanceProfileCommand: createCmd("DeleteInstanceProfileCommand"),
   AddRoleToInstanceProfileCommand: createCmd("AddRoleToInstanceProfileCommand"),
   RemoveRoleFromInstanceProfileCommand: createCmd("RemoveRoleFromInstanceProfileCommand"),
+  PutUserPermissionsBoundaryCommand: createCmd("PutUserPermissionsBoundaryCommand"),
+  DeleteUserPermissionsBoundaryCommand: createCmd("DeleteUserPermissionsBoundaryCommand"),
+  PutRolePermissionsBoundaryCommand: createCmd("PutRolePermissionsBoundaryCommand"),
+  DeleteRolePermissionsBoundaryCommand: createCmd("DeleteRolePermissionsBoundaryCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -289,6 +293,25 @@ describe("IAM Routes", () => {
       expect(mockSend.mock.calls[0][0].RoleName).toBe("lambda-role");
     });
 
+    it("POST /roles — validates trust policy document", async () => {
+      const res = await post("/roles", { name: "bad-role", assumeRolePolicyDocument: "not-json" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /roles — with description and maxSessionDuration", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/roles", {
+        name: "custom-role",
+        description: "Custom role",
+        maxSessionDuration: 43200,
+        path: "/custom/",
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].Description).toBe("Custom role");
+      expect(mockSend.mock.calls[0][0].MaxSessionDuration).toBe(43200);
+      expect(mockSend.mock.calls[0][0].Path).toBe("/custom/");
+    });
+
     it("DELETE /roles/:name — deletes a role", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await del("/roles/lambda-role");
@@ -386,6 +409,39 @@ describe("IAM Routes", () => {
       const res = await post("/policies", { name: "my-policy" });
       expect(res.status).toBe(200);
       expect((await res.json()).created).toBe(true);
+      // Default document should be used
+      expect(mockSend.mock.calls[0][0].PolicyDocument).toContain("Allow");
+    });
+
+    it("POST /policies — validates document JSON", async () => {
+      const res = await post("/policies", { name: "bad-policy", document: "not-json" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /policies — with description and path", async () => {
+      mockSend.mockResolvedValueOnce({
+        Policy: { PolicyName: "desc-policy", Arn: "arn:aws:iam::...:policy/desc" },
+      });
+      const res = await post("/policies", {
+        name: "desc-policy",
+        description: "My policy",
+        path: "/app/",
+        document: JSON.stringify({ Version: "2012-10-17", Statement: [{ Effect: "Allow", Action: "s3:GetObject", Resource: "*" }] }),
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].Description).toBe("My policy");
+      expect(mockSend.mock.calls[0][0].Path).toBe("/app/");
+    });
+
+    it("GET /policies — uses custom scope", async () => {
+      mockSend.mockResolvedValueOnce({
+        Policies: [{ PolicyName: "AWSAdmin", Arn: "arn:aws:iam::aws:policy/AdministratorAccess" }],
+      });
+      const res = await get("/policies?scope=AWS");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(mockSend.mock.calls[0][0].Scope).toBe("AWS");
     });
 
     it("GET /policies/detail — returns policy + versions", async () => {
@@ -466,6 +522,59 @@ describe("IAM Routes", () => {
     it("DELETE /policies — 400 when arn missing", async () => {
       const res = await del("/policies");
       expect(res.status).toBe(400);
+    });
+  });
+
+  describe("Permission Boundaries", () => {
+    it("PUT /users/:name/permissions-boundary — sets boundary", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/users/admin/permissions-boundary", {
+        permissionsBoundary: "arn:aws:iam::000000000000:policy/boundary",
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.set).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("PutUserPermissionsBoundaryCommand");
+      expect(mockSend.mock.calls[0][0].PermissionsBoundary).toBe("arn:aws:iam::000000000000:policy/boundary");
+    });
+
+    it("PUT /users/:name/permissions-boundary — 400 when ARN missing", async () => {
+      const res = await put("/users/admin/permissions-boundary", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE /users/:name/permissions-boundary — deletes boundary", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/users/admin/permissions-boundary");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deleted).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteUserPermissionsBoundaryCommand");
+    });
+
+    it("PUT /roles/:name/permissions-boundary — sets boundary", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/roles/my-role/permissions-boundary", {
+        permissionsBoundary: "arn:aws:iam::000000000000:policy/role-boundary",
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.set).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("PutRolePermissionsBoundaryCommand");
+    });
+
+    it("PUT /roles/:name/permissions-boundary — 400 when ARN missing", async () => {
+      const res = await put("/roles/my-role/permissions-boundary", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE /roles/:name/permissions-boundary — deletes boundary", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/roles/my-role/permissions-boundary");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deleted).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteRolePermissionsBoundaryCommand");
     });
   });
 

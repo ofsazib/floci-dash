@@ -161,6 +161,16 @@ describe("CodePipeline Routes", () => {
       expect(res.status).toBe(400);
     });
 
+    it("POST /pipelines — creates pipeline with tags", async () => {
+      mockSend.mockResolvedValueOnce({ pipeline: { name: "tagged-pipe", version: 1 } });
+      const res = await post("/pipelines", {
+        pipeline: { name: "tagged-pipe", roleArn: "arn:aws:iam::123:role/dummy", artifactStore: { type: "S3", location: "bucket" }, stages: [] },
+        tags: [{ key: "env", value: "prod" }],
+      });
+      expect(res.status).toBe(201);
+      expect(mockSend.mock.calls[0][0].tags).toEqual([{ key: "env", value: "prod" }]);
+    });
+
     it("DELETE /pipelines/:name — deletes a pipeline", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await del("/pipelines/my-pipeline");
@@ -202,6 +212,29 @@ describe("CodePipeline Routes", () => {
       expect(body.pipelineExecutionId).toBe("exec-2");
     });
 
+    it("POST /pipelines/:name/executions — starts with source revisions and variables", async () => {
+      mockSend.mockResolvedValueOnce({ pipelineExecutionId: "exec-3" });
+      const res = await post("/pipelines/my-pipeline/executions", {
+        sourceRevisions: [{ actionName: "Source", revisionId: "rev-1" }],
+        variables: [{ name: "var1", value: "val1" }],
+      });
+      expect(res.status).toBe(201);
+      expect(mockSend.mock.calls[0][0].sourceRevisions).toHaveLength(1);
+      expect(mockSend.mock.calls[0][0].variables).toHaveLength(1);
+    });
+
+    it("POST /pipelines/:name/executions — rejects empty pipeline name", async () => {
+      const res = await post("/pipelines//executions", {});
+      // Hono route won't match empty segment, expect 404
+      expect(res.status).toBe(404);
+    });
+
+    it("POST /pipelines/:name/executions/:id/stop — rejects missing executionId", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/pipelines//executions//stop", {});
+      expect(res.status).toBe(404);
+    });
+
     it("POST /pipelines/:name/executions/:id/stop — stops execution", async () => {
       mockSend.mockResolvedValueOnce({ pipelineExecutionId: "exec-1" });
       const res = await post("/pipelines/my-pipeline/executions/exec-1/stop", { abandon: false, reason: "test" });
@@ -217,6 +250,21 @@ describe("CodePipeline Routes", () => {
     it("POST /pipelines/:name/executions/:id/retry — rejects missing stageName", async () => {
       const res = await post("/pipelines/my-pipeline/executions/exec-1/retry", { retryMode: "FAILED_ACTIONS" });
       expect(res.status).toBe(400);
+    });
+
+    it("POST /pipelines/:name/executions/:id/retry — uses default retryMode", async () => {
+      mockSend.mockResolvedValueOnce({ pipelineExecutionId: "exec-1" });
+      const res = await post("/pipelines/my-pipeline/executions/exec-1/retry", { stageName: "Deploy" });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].retryMode).toBe("FAILED_ACTIONS");
+    });
+
+    it("POST /pipelines/:name/executions/:id/stop — with abandon and reason", async () => {
+      mockSend.mockResolvedValueOnce({ pipelineExecutionId: "exec-1" });
+      const res = await post("/pipelines/my-pipeline/executions/exec-1/stop", { abandon: true, reason: "Manual stop" });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].abandon).toBe(true);
+      expect(mockSend.mock.calls[0][0].reason).toBe("Manual stop");
     });
   });
 
@@ -318,6 +366,18 @@ describe("CodePipeline Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.overridden).toBe(true);
+      expect(mockSend.mock.calls[0][0].conditionType).toBe("SUCCESS");
+    });
+
+    it("POST /pipelines/:name/executions/:id/override — with custom conditionType", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/pipelines/my-pipeline/executions/exec-1/override", {
+        stageName: "Deploy",
+        conditionName: "Check",
+        conditionType: "FAILURE",
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].conditionType).toBe("FAILURE");
     });
 
     it("POST /pipelines/:name/executions/:id/override — rejects missing stageName", async () => {
@@ -388,6 +448,65 @@ describe("CodePipeline Routes", () => {
       const res = await put("/jobs/job-123/result", {});
       expect(res.status).toBe(400);
     });
+
+    it("PUT /jobs/:jobId/result — accepts success result", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/jobs/job-123/result", {
+        status: "Success",
+        currentRevision: { revisionId: "rev-1", revisionChangeId: "change-1" },
+        continuationToken: "token-abc",
+        executionDetails: { summary: "Job completed" },
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.result).toBe("success");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("PutJobSuccessResultCommand");
+    });
+
+    it("POST /jobs/:jobId/acknowledge — acknowledges a job", async () => {
+      mockSend.mockResolvedValueOnce({ status: "Created" });
+      const res = await post("/jobs/job-123/acknowledge", { nonce: "nonce-1" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.status).toBe("Created");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("AcknowledgeJobCommand");
+    });
+
+    it("POST /jobs/:jobId/acknowledge — 400 when jobId missing", async () => {
+      const res = await post("/jobs//acknowledge", {});
+      expect(res.status).toBe(404);
+    });
+
+    it("GET /jobs/:jobId — gets job details", async () => {
+      mockSend.mockResolvedValueOnce({
+        jobDetails: { id: "job-123", accountId: "123" },
+      });
+      const res = await get("/jobs/job-123");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.jobDetails.id).toBe("job-123");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetJobDetailsCommand");
+    });
+
+    it("GET /jobs/:jobId — 400 when jobId missing", async () => {
+      const res = await get("/jobs/");
+      expect(res.status).toBe(404);
+    });
+
+    it("POST /action-types/:cat/:provider/jobs/poll — polls for jobs", async () => {
+      mockSend.mockResolvedValueOnce({ jobs: [{ id: "job-1" }] });
+      const res = await post("/action-types/Test/MyProvider/jobs/poll");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("PollForJobsCommand");
+      expect(mockSend.mock.calls[0][0].actionTypeId.owner).toBe("Custom");
+    });
+
+    it("POST /action-types/:cat/:provider/jobs/poll — 400 when category/provider missing", async () => {
+      const res = await post("/action-types//jobs/poll");
+      expect(res.status).toBe(404);
+    });
   });
 
   describe("Action Types", () => {
@@ -417,6 +536,32 @@ describe("CodePipeline Routes", () => {
         actionType: { category: "Build", provider: "MyProvider", version: "1" },
       });
       expect(res.status).toBe(201);
+    });
+
+    it("POST /action-types — uses defaults for version and artifact details", async () => {
+      mockSend.mockResolvedValueOnce({ actionType: {} });
+      const res = await post("/action-types", {
+        actionType: { category: "Build", provider: "MyProvider" },
+      });
+      expect(res.status).toBe(201);
+      expect(mockSend.mock.calls[0][0].version).toBe("1");
+      expect(mockSend.mock.calls[0][0].inputArtifactDetails).toEqual({ minimumCount: 0, maximumCount: 5 });
+      expect(mockSend.mock.calls[0][0].outputArtifactDetails).toEqual({ minimumCount: 0, maximumCount: 5 });
+    });
+
+    it("GET /action-types/:owner/:cat/:prov/:ver — 400 when params missing", async () => {
+      const res = await get("/action-types///1");
+      expect(res.status).toBe(404);
+    });
+
+    it("PUT /action-types/:owner/:cat/:prov/:ver — 400 when params missing", async () => {
+      const res = await put("/action-types///1", { actionType: {} });
+      expect(res.status).toBe(404);
+    });
+
+    it("DELETE /action-types/:owner/:cat/:prov/:ver — 400 when params missing", async () => {
+      const res = await del("/action-types///1");
+      expect(res.status).toBe(404);
     });
 
     it("POST /action-types — requires actionType", async () => {
@@ -487,6 +632,21 @@ describe("CodePipeline Routes", () => {
       const body = await res.json();
       expect(body.registered).toBe(true);
       expect(mockSend.mock.calls[0][0].__cmdName).toBe("RegisterWebhookWithThirdPartyCommand");
+    });
+
+    it("DELETE /webhooks/:name — 400 when name missing", async () => {
+      const res = await del("/webhooks/");
+      expect(res.status).toBe(404);
+    });
+
+    it("POST /webhooks/:name/register — 400 when name missing", async () => {
+      const res = await post("/webhooks//register");
+      expect(res.status).toBe(404);
+    });
+
+    it("POST /webhooks/:name/deregister — 400 when name missing", async () => {
+      const res = await post("/webhooks//deregister");
+      expect(res.status).toBe(404);
     });
 
     it("POST /webhooks/:name/deregister — deregisters webhook", async () => {
