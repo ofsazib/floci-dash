@@ -92,6 +92,28 @@ describe("POST /api/aws/appsync/apis", () => {
     expect(body.api.name).toBe("new-api");
   });
 
+  it("creates API with logConfig, tags, xrayEnabled, and additionalAuthProviders", async () => {
+    mockSend.mockResolvedValue({ graphqlApi: { apiId: "adv123", name: "advanced-api" } });
+    const res = await app.request("/api/aws/appsync/apis", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "advanced-api",
+        authenticationType: "AMAZON_COGNITO_USER_POOLS",
+        logConfig: { cloudWatchLogsRoleArn: "arn:aws:iam::123:role/logs", fieldLogLevel: "ALL" },
+        tags: { env: "prod" },
+        xrayEnabled: true,
+        additionalAuthenticationProviders: [{ authenticationType: "API_KEY" }],
+      }),
+    });
+    expect(res.status).toBe(201);
+    expect(mockSend.mock.calls[0][0].authenticationType).toBe("AMAZON_COGNITO_USER_POOLS");
+    expect(mockSend.mock.calls[0][0].logConfig.cloudWatchLogsRoleArn).toBe("arn:aws:iam::123:role/logs");
+    expect(mockSend.mock.calls[0][0].tags.env).toBe("prod");
+    expect(mockSend.mock.calls[0][0].xrayEnabled).toBe(true);
+    expect(mockSend.mock.calls[0][0].additionalAuthenticationProviders).toHaveLength(1);
+  });
+
   it("returns 400 if name is missing", async () => {
     const res = await app.request("/api/aws/appsync/apis", {
       method: "POST",
@@ -213,6 +235,26 @@ describe("POST /api/aws/appsync/apis/:apiId/data-sources", () => {
     expect(body.dataSource.name).toBe("ds1");
   });
 
+  it("creates a data source with explicit type and advanced config", async () => {
+    mockSend.mockResolvedValue({ dataSource: { name: "ds2", type: "AWS_LAMBDA" } });
+    const res = await app.request("/api/aws/appsync/apis/abc123/data-sources", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "ds2",
+        type: "AWS_LAMBDA",
+        description: "Lambda data source",
+        serviceRoleArn: "arn:aws:iam::123:role/appsync",
+        dynamodbConfig: { tableName: "MyTable", awsRegion: "us-east-1" },
+      }),
+    });
+    expect(res.status).toBe(201);
+    expect(mockSend.mock.calls[0][0].type).toBe("AWS_LAMBDA");
+    expect(mockSend.mock.calls[0][0].description).toBe("Lambda data source");
+    expect(mockSend.mock.calls[0][0].serviceRoleArn).toBe("arn:aws:iam::123:role/appsync");
+    expect(mockSend.mock.calls[0][0].dynamodbConfig.tableName).toBe("MyTable");
+  });
+
   it("returns 400 if name is missing", async () => {
     const res = await app.request("/api/aws/appsync/apis/abc123/data-sources", {
       method: "POST",
@@ -296,6 +338,32 @@ describe("POST /api/aws/appsync/apis/:apiId/functions", () => {
     expect(body.function.name).toBe("my-fn");
   });
 
+  it("creates a function with explicit version and all fields", async () => {
+    mockSend.mockResolvedValue({
+      functionConfiguration: { functionId: "fn2", name: "full-fn" },
+    });
+    const res = await app.request("/api/aws/appsync/apis/abc123/functions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "full-fn",
+        dataSourceName: "ds1",
+        description: "My full function",
+        code: "export function handler() { return {}; }",
+        requestMappingTemplate: '{"version":"2018-05-29"}',
+        responseMappingTemplate: '$util.toJson($ctx.result)',
+        functionVersion: "2018-05-29",
+      }),
+    });
+    expect(res.status).toBe(201);
+    expect(mockSend.mock.calls[0][0].functionVersion).toBe("2018-05-29");
+    expect(mockSend.mock.calls[0][0].dataSourceName).toBe("ds1");
+    expect(mockSend.mock.calls[0][0].description).toBe("My full function");
+    expect(mockSend.mock.calls[0][0].code).toContain("export function handler");
+    expect(mockSend.mock.calls[0][0].requestMappingTemplate).toContain("2018-05-29");
+    expect(mockSend.mock.calls[0][0].responseMappingTemplate).toContain("$util.toJson");
+  });
+
   it("returns 400 if name is missing", async () => {
     const res = await app.request("/api/aws/appsync/apis/abc123/functions", {
       method: "POST",
@@ -366,6 +434,20 @@ describe("POST /api/aws/appsync/apis/:apiId/api-keys", () => {
     const body = await res.json();
     expect(body.apiKey).toBe("key2");
     expect(body.id).toBe("key2");
+  });
+
+  it("creates API key with expires and handles null apiKey", async () => {
+    mockSend.mockResolvedValue({ apiKey: null });
+    const res = await app.request("/api/aws/appsync/apis/abc123/api-keys", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ description: "Expiring key", expires: 1735689600 }),
+    });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.apiKey).toBeNull();
+    expect(body.id).toBeUndefined();
+    expect(mockSend.mock.calls[0][0].expires).toBe(1735689600);
   });
 });
 

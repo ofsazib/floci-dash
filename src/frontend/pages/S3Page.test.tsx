@@ -16,25 +16,43 @@ const mockObjectTags = vi.fn();
 const mockUpdateObjectTags = vi.fn();
 const mockSearchParams = vi.fn();
 
+let mockCreateBucketIsError = false;
+let mockCreateBucketError: Error | null = null;
+let mockUploadMutateAsync = vi.fn();
+let mockUploadIsError = false;
+let mockUploadError: Error | null = null;
+let mockBatchDeleteMutate = vi.fn();
+let mockBatchDeleteIsPending = false;
+let mockObjectAclData: any = { owner: null, grants: [], totalGrants: 0 };
+let mockObjectAclIsLoading = false;
+let mockObjectAttributesData: any = { checksum: null };
+let mockPutObjectAclMutate = vi.fn();
+let mockPutObjectAclIsPending = false;
+let mockDeleteObjectMutate = vi.fn();
+let mockCreateFolderMutate = vi.fn();
+let mockDeleteFolderMutate = vi.fn();
+let mockConfirmDialog = vi.fn(() => Promise.resolve(true));
+
+
 vi.mock("../hooks/useS3", () => ({
   useS3Buckets: (...args: any[]) => mockBuckets(...args),
   useS3Objects: (...args: any[]) => mockObjects(...args),
   useS3ObjectDetail: (...args: any[]) => mockObjectDetail(...args),
-  useS3CreateBucket: () => ({ mutate: mockCreateBucketMutate, isPending: false, isError: false, error: null }),
+  useS3CreateBucket: () => ({ mutate: mockCreateBucketMutate, isPending: false, isError: mockCreateBucketIsError, error: mockCreateBucketError }),
   useS3DeleteBucket: () => ({ mutate: mockDeleteBucket, isPending: false, variables: null }),
-  useS3UploadFiles: () => ({ mutateAsync: vi.fn(), isPending: false, isError: false, error: null }),
-  useS3DeleteObject: () => ({ mutate: vi.fn(), isPending: false, variables: null }),
-  useS3CreateFolder: () => ({ mutate: vi.fn(), isPending: false }),
-  useS3BatchDeleteObjects: () => ({ mutate: vi.fn(), isPending: false }),
-  useS3DeleteFolder: () => ({ mutate: vi.fn(), isPending: false, variables: null }),
+  useS3UploadFiles: () => ({ mutateAsync: mockUploadMutateAsync, isPending: false, isError: mockUploadIsError, error: mockUploadError }),
+  useS3DeleteObject: () => ({ mutate: mockDeleteObjectMutate, isPending: false, variables: null }),
+  useS3CreateFolder: () => ({ mutate: mockCreateFolderMutate, isPending: false }),
+  useS3BatchDeleteObjects: () => ({ mutate: mockBatchDeleteMutate, isPending: mockBatchDeleteIsPending }),
+  useS3DeleteFolder: () => ({ mutate: mockDeleteFolderMutate, isPending: false, variables: null }),
 }));
 
 vi.mock("../hooks/useS3Config", () => ({
   useS3ObjectTags: (...args: any[]) => mockObjectTags(...args),
   useS3UpdateObjectTags: () => ({ mutate: mockUpdateObjectTags, isPending: false }),
-  useS3ObjectAcl: () => ({ data: { owner: null, grants: [], totalGrants: 0 }, isLoading: false }),
-  useS3PutObjectAcl: () => ({ mutate: vi.fn(), isPending: false }),
-  useS3ObjectAttributes: () => ({ data: { checksum: null }, isLoading: false }),
+  useS3ObjectAcl: () => ({ data: mockObjectAclData, isLoading: mockObjectAclIsLoading }),
+  useS3PutObjectAcl: () => ({ mutate: mockPutObjectAclMutate, isPending: mockPutObjectAclIsPending }),
+  useS3ObjectAttributes: () => ({ data: mockObjectAttributesData, isLoading: false }),
 }));
 
 vi.mock("../hooks/useSystem", () => ({
@@ -47,7 +65,7 @@ vi.mock("../components/Toast", () => ({
 }));
 
 vi.mock("../components/ConfirmDialog", () => ({
-  useConfirmDialog: () => ({ confirm: vi.fn(() => Promise.resolve(true)), dialog: null }),
+  useConfirmDialog: () => ({ confirm: mockConfirmDialog, dialog: null }),
 }));
 
 vi.mock("react-router-dom", () => ({
@@ -70,6 +88,22 @@ describe("S3Page", () => {
     });
     mockObjectDetail.mockReturnValue({ data: undefined, isLoading: false });
     mockObjectTags.mockReturnValue({ data: { tags: [], total: 0 } });
+    mockCreateBucketIsError = false;
+    mockCreateBucketError = null;
+    mockUploadMutateAsync = vi.fn();
+    mockUploadIsError = false;
+    mockUploadError = null;
+    mockBatchDeleteMutate = vi.fn();
+    mockBatchDeleteIsPending = false;
+    mockObjectAclData = { owner: null, grants: [], totalGrants: 0 };
+    mockObjectAclIsLoading = false;
+    mockObjectAttributesData = { checksum: null };
+    mockPutObjectAclMutate = vi.fn();
+    mockPutObjectAclIsPending = false;
+    mockDeleteObjectMutate = vi.fn();
+    mockCreateFolderMutate = vi.fn();
+    mockDeleteFolderMutate = vi.fn();
+    mockConfirmDialog = vi.fn(() => Promise.resolve(true));
   });
 
   afterEach(() => {
@@ -415,4 +449,207 @@ describe("S3Page", () => {
       expect(screen.queryByText("beta.log")).toBeNull();
     });
   });
+
+  // ─── Upload Modal Open ──────────────────────────────────
+
+  it("opens upload modal and shows upload prefix input", async () => {
+    const user = userEvent.setup();
+    mockSearchParams.mockReturnValue([new URLSearchParams("?bucket=my-bucket"), vi.fn()]);
+    mockObjects.mockReturnValue({ data: { objects: [], total: 0 }, isLoading: false });
+
+    render(<S3Page />, { wrapper: createWrapper() });
+    await clickButton(user, /upload/i);
+    await waitFor(() => {
+      expect(screen.getAllByPlaceholderText("folder/subfolder/").length).toBeGreaterThan(0);
+    });
+  });
+
+  // ─── Bucket Search "No matches" ─────────────────────────
+
+  it("shows 'No matches' when bucket search has no results", async () => {
+    const user = userEvent.setup();
+    mockBuckets.mockReturnValue({
+      data: { buckets: [{ name: "my-bucket" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<S3Page />, { wrapper: createWrapper() });
+    const filterInput = screen.getByPlaceholderText("Find buckets by name");
+    await user.type(filterInput, "nonexistent");
+    await waitFor(() => {
+      expect(screen.getByText(/No matches/)).toBeTruthy();
+    });
+  });
+
+  // ─── Object Viewer: Text Preview States ──────────────
+
+  it("renders text preview content", async () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("?bucket=my-bucket&object=readme.txt"), vi.fn()]);
+    mockObjectDetail.mockReturnValue({
+      data: { size: 500, contentType: "text/plain", lastModified: "2024-01-01T00:00:00Z", etag: "abc123" },
+      isLoading: false, isError: false, error: null,
+    });
+    mockObjectTags.mockReturnValue({ data: { tags: [], total: 0 } });
+
+    const mockFetch = vi.fn().mockResolvedValue({ text: () => Promise.resolve("Hello world") });
+    vi.stubGlobal("fetch", mockFetch);
+
+    render(<S3Page />, { wrapper: createWrapper() });
+    await waitFor(() => {
+      expect(screen.getByText("Hello world")).toBeTruthy();
+    });
+    vi.unstubAllGlobals();
+  });
+
+  it("renders text preview error state", async () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("?bucket=my-bucket&object=readme.txt"), vi.fn()]);
+    mockObjectDetail.mockReturnValue({
+      data: { size: 500, contentType: "text/plain", lastModified: "2024-01-01T00:00:00Z", etag: "abc123" },
+      isLoading: false, isError: false, error: null,
+    });
+    mockObjectTags.mockReturnValue({ data: { tags: [], total: 0 } });
+
+    const mockFetch = vi.fn().mockRejectedValue(new Error("Fetch failed"));
+    vi.stubGlobal("fetch", mockFetch);
+
+    render(<S3Page />, { wrapper: createWrapper() });
+    await waitFor(() => {
+      expect(screen.getByText(/Failed to load text content/i)).toBeTruthy();
+    });
+    vi.unstubAllGlobals();
+  });
+
+  // ─── Object Viewer: ACL with grants ──────────────────
+
+  it("renders ACL with grants and owner", () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("?bucket=my-bucket&object=file.bin"), vi.fn()]);
+    mockObjectDetail.mockReturnValue({
+      data: { size: 100, contentType: "application/octet-stream", lastModified: "2024-01-01T00:00:00Z", etag: "abc123" },
+      isLoading: false, isError: false, error: null,
+    });
+    mockObjectTags.mockReturnValue({ data: { tags: [], total: 0 } });
+    mockObjectAclData = {
+      owner: { displayName: "admin", id: "123" },
+      grants: [{ grantee: { displayName: "user1" }, permission: "FULL_CONTROL" }],
+      totalGrants: 1,
+    };
+
+    render(<S3Page />, { wrapper: createWrapper() });
+    expect(screen.getByText(/admin/)).toBeTruthy();
+    expect(screen.getByText(/FULL_CONTROL/)).toBeTruthy();
+  });
+
+  it("no grants message when ACL has no grants", () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("?bucket=my-bucket&object=file.bin"), vi.fn()]);
+    mockObjectDetail.mockReturnValue({
+      data: { size: 100, contentType: "application/octet-stream", lastModified: "2024-01-01T00:00:00Z", etag: "abc123" },
+      isLoading: false, isError: false, error: null,
+    });
+    mockObjectTags.mockReturnValue({ data: { tags: [], total: 0 } });
+    mockObjectAclData = { owner: null, grants: [], totalGrants: 0 };
+
+    render(<S3Page />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No grants configured for this object/i)).toBeTruthy();
+  });
+
+  // ─── Object Viewer: Checksum View ────────────────────
+
+  it("renders checksum view with data", () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("?bucket=my-bucket&object=file.bin"), vi.fn()]);
+    mockObjectDetail.mockReturnValue({
+      data: { size: 100, contentType: "application/octet-stream", lastModified: "2024-01-01T00:00:00Z", etag: "abc123" },
+      isLoading: false, isError: false, error: null,
+    });
+    mockObjectTags.mockReturnValue({ data: { tags: [], total: 0 } });
+    mockObjectAttributesData = {
+      checksum: {
+        ChecksumSHA256: "abc123base64==",
+        ChecksumType: "SHA256",
+      },
+    };
+
+    const { container } = render(<S3Page />, { wrapper: createWrapper() });
+    // SHA-256 appears as algorithm label and in verify selector; use getAllByText
+    const shaMatches = screen.getAllByText(/SHA-256/);
+    expect(shaMatches.length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/abc123base64==/)).toBeTruthy();
+    // The header shows "Checksums (SHA256)" when ChecksumType is present
+    expect(screen.getByText(/Checksums.*SHA256/)).toBeTruthy();
+  });
+
+  it("renders no checksum message when no checksum data", () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("?bucket=my-bucket&object=file.bin"), vi.fn()]);
+    mockObjectDetail.mockReturnValue({
+      data: { size: 100, contentType: "application/octet-stream", lastModified: "2024-01-01T00:00:00Z", etag: "abc123" },
+      isLoading: false, isError: false, error: null,
+    });
+    mockObjectTags.mockReturnValue({ data: { tags: [], total: 0 } });
+    mockObjectAttributesData = { checksum: null };
+
+    render(<S3Page />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No checksum data available for this object/i)).toBeTruthy();
+  });
+
+  it("shows checksum mismatch on verify with different value", async () => {
+    const user = userEvent.setup();
+    mockSearchParams.mockReturnValue([new URLSearchParams("?bucket=my-bucket&object=file.bin"), vi.fn()]);
+    mockObjectDetail.mockReturnValue({
+      data: { size: 100, contentType: "application/octet-stream", lastModified: "2024-01-01T00:00:00Z", etag: "abc123" },
+      isLoading: false, isError: false, error: null,
+    });
+    mockObjectTags.mockReturnValue({ data: { tags: [], total: 0 } });
+    mockObjectAttributesData = {
+      checksum: {
+        ChecksumSHA256: "abc123==",
+        ChecksumType: "SHA256",
+      },
+    };
+
+    render(<S3Page />, { wrapper: createWrapper() });
+    // Type a non-matching value into the checksum verify input
+    const verifyInputs = screen.getAllByPlaceholderText(/Paste base64/i);
+    if (verifyInputs.length > 0) {
+      await user.type(verifyInputs[0], "differentvalue==");
+    }
+    // Click Verify button
+    await clickButton(user, /verify/i);
+    await waitFor(() => {
+      expect(screen.getByText(/Checksum does NOT match/i)).toBeTruthy();
+    });
+  });
+
+  // ─── Object Browser: Folders ─────────────────────────
+
+  it("renders folders in object browser", () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("?bucket=my-bucket"), vi.fn()]);
+    mockObjects.mockReturnValue({
+      data: {
+        objects: [],
+        folders: [{ prefix: "images/", name: "images" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+
+    const { container } = render(<S3Page />, { wrapper: createWrapper() });
+    // Look for folder icon or button containing images/
+    const folderBtns = screen.getAllByRole("button").filter(b => b.textContent?.includes("images/"));
+    expect(folderBtns.length).toBeGreaterThan(0);
+  });
+
+  // ─── Object Browser: Batch Delete ────────────────────
+
+
+  // ─── S3BucketList: Delete Bucket ───────────────────────
+
+  it("calls deleteBucket when delete is confirmed", async () => {
+    const user = userEvent.setup();
+    mockConfirmDialog = vi.fn(() => Promise.resolve(true));
+    render(<S3Page />, { wrapper: createWrapper() });
+    const deleteBtn = screen.getByRole("button", { name: /delete my-bucket/i });
+    await user.click(deleteBtn);
+    await waitFor(() => {
+      expect(mockDeleteBucket).toHaveBeenCalledWith("my-bucket", expect.any(Object));
+    });
+  });
+
 });

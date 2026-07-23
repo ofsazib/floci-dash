@@ -20,9 +20,26 @@ const mockDeleteLayerVersionMutateAsync = vi.fn();
 const mockFunctionUrl = vi.fn();
 const mockFunctionConcurrency = vi.fn();
 const mockCodeSigningConfig = vi.fn();
+const mockEventInvokeConfig = vi.fn();
+
+/* ---- Mutable mock state for mutation error/loading control ---- */
+let mockCreateFunctionIsError = false;
+let mockCreateFunctionError: Error | null = null;
+let mockCreateLayerVersionIsError = false;
+let mockCreateLayerVersionError: Error | null = null;
+let mockCreateFunctionUrlIsError = false;
+let mockCreateFunctionUrlError: Error | null = null;
+let mockSetConcurrencyIsError = false;
+let mockSetConcurrencyError: Error | null = null;
+let mockPutEventInvokeConfigIsError = false;
+let mockPutEventInvokeConfigError: Error | null = null;
+let mockAttachCodeSigningConfigIsError = false;
+let mockAttachCodeSigningConfigError: Error | null = null;
+let mockDetachCodeSigningConfigIsError = false;
+let mockDetachCodeSigningConfigError: Error | null = null;
+
 const mockAttachCodeSigningConfigMutate = vi.fn();
 const mockDetachCodeSigningConfigMutate = vi.fn();
-const mockEventInvokeConfig = vi.fn();
 const mockCreateLayerVersionMutate = vi.fn();
 const mockCreateFunctionUrlMutate = vi.fn();
 const mockUpdateFunctionUrlMutate = vi.fn();
@@ -34,7 +51,7 @@ const mockDeleteEventInvokeConfigMutate = vi.fn();
 vi.mock("../hooks/useLambda", () => ({
   useLambdaFunctions: (...args: any[]) => mockFunctions(...args),
   useLambdaFunction: (...args: any[]) => mockFunctionDetail(...args),
-  useCreateFunction: () => ({ mutate: mockCreateFunctionMutate, isPending: false, isError: false, error: null }),
+  useCreateFunction: () => ({ mutate: mockCreateFunctionMutate, isPending: false, isError: mockCreateFunctionIsError, error: mockCreateFunctionError }),
   useDeleteFunction: () => ({ mutateAsync: mockDeleteFunctionMutateAsync, isPending: false }),
   useInvokeFunction: (...args: any[]) => mockInvokeFunction(...args),
   useLambdaVersions: (...args: any[]) => mockLambdaVersions(...args),
@@ -46,16 +63,16 @@ vi.mock("../hooks/useLambda", () => ({
   useFunctionUrl: (...args: any[]) => mockFunctionUrl(...args),
   useFunctionConcurrency: (...args: any[]) => mockFunctionConcurrency(...args),
   useCodeSigningConfig: (...args: any[]) => mockCodeSigningConfig(...args),
-  useAttachCodeSigningConfig: () => ({ mutate: mockAttachCodeSigningConfigMutate, isPending: false, isError: false, error: null }),
-  useDetachCodeSigningConfig: () => ({ mutate: mockDetachCodeSigningConfigMutate, isPending: false, isError: false, error: null }),
+  useAttachCodeSigningConfig: () => ({ mutate: mockAttachCodeSigningConfigMutate, isPending: false, isError: mockAttachCodeSigningConfigIsError, error: mockAttachCodeSigningConfigError }),
+  useDetachCodeSigningConfig: () => ({ mutate: mockDetachCodeSigningConfigMutate, isPending: false, isError: mockDetachCodeSigningConfigIsError, error: mockDetachCodeSigningConfigError }),
   useEventInvokeConfig: (...args: any[]) => mockEventInvokeConfig(...args),
-  useCreateLayerVersion: () => ({ mutate: mockCreateLayerVersionMutate, isPending: false, isError: false, error: null }),
-  useCreateFunctionUrl: () => ({ mutate: mockCreateFunctionUrlMutate, isPending: false, isError: false, error: null }),
+  useCreateLayerVersion: () => ({ mutate: mockCreateLayerVersionMutate, isPending: false, isError: mockCreateLayerVersionIsError, error: mockCreateLayerVersionError }),
+  useCreateFunctionUrl: () => ({ mutate: mockCreateFunctionUrlMutate, isPending: false, isError: mockCreateFunctionUrlIsError, error: mockCreateFunctionUrlError }),
   useUpdateFunctionUrl: () => ({ mutate: mockUpdateFunctionUrlMutate, isPending: false, isError: false, error: null }),
   useDeleteFunctionUrl: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useSetFunctionConcurrency: () => ({ mutate: mockSetConcurrencyMutate, isPending: false, isError: false, error: null }),
+  useSetFunctionConcurrency: () => ({ mutate: mockSetConcurrencyMutate, isPending: false, isError: mockSetConcurrencyIsError, error: mockSetConcurrencyError }),
   useDeleteFunctionConcurrency: () => ({ mutate: mockDeleteConcurrencyMutate, isPending: false }),
-  usePutEventInvokeConfig: () => ({ mutate: mockPutEventInvokeConfigMutate, isPending: false, isError: false, error: null }),
+  usePutEventInvokeConfig: () => ({ mutate: mockPutEventInvokeConfigMutate, isPending: false, isError: mockPutEventInvokeConfigIsError, error: mockPutEventInvokeConfigError }),
   useDeleteEventInvokeConfig: () => ({ mutate: mockDeleteEventInvokeConfigMutate, isPending: false }),
 }));
 
@@ -655,6 +672,225 @@ describe("LambdaPage", () => {
     await clickButton(user, /^Delete$/i);
     await waitFor(() => {
       expect(mockDeleteLayerVersionMutateAsync).toHaveBeenCalled();
+    });
+  });
+
+  // ─── Edge Cases & Error Alerts ──────────────────────────
+
+  it("does not create function when name is empty (early return)", async () => {
+    const user = userEvent.setup();
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("my-function")).toBeTruthy();
+    });
+    // Click Create without filling name or handler
+    await clickButton(user, /Create/i, { last: true });
+    // Button should be disabled (name and handler are empty), so mutate should not be called
+    expect(mockCreateFunctionMutate).not.toHaveBeenCalled();
+  });
+
+  it("shows create function error alert", async () => {
+    const user = userEvent.setup();
+    mockCreateFunctionIsError = true;
+    mockCreateFunctionError = new Error("Creation failed");
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => {
+      expect(screen.getByText("Creation failed")).toBeTruthy();
+    });
+  });
+
+  it("returns null from detail view when data is undefined (no data)", async () => {
+    const user = userEvent.setup();
+    mockFunctionDetail.mockReturnValue({ data: undefined, isLoading: false, isError: false, error: null });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      // Component returns null — Back to Functions and Publish version should NOT render
+      expect(screen.queryByText("Back to Functions")).toBeNull();
+      expect(screen.queryByText("Publish version")).toBeNull();
+    });
+  });
+
+  it("shows invoke response with object payload (JSON.stringify path)", async () => {
+    const user = userEvent.setup();
+    mockInvokeFunction.mockReturnValue({
+      mutate: mockInvokeFunctionMutate, isPending: false, isError: false, error: null,
+      data: { statusCode: 200, payload: { result: "ok" } },
+    });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: /Test/i })).toBeTruthy();
+    });
+    await user.click(screen.getByRole("tab", { name: /Test/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/result/)).toBeTruthy();
+    });
+  });
+
+  // ─── Layers Tab Edge Cases ───────────────────────────────
+
+  it("shows layers item without version (delete button null)", async () => {
+    const user = userEvent.setup();
+    mockLambdaLayers.mockReturnValue({
+      data: { layers: [{ name: "layer-no-version", arn: "arn:aws:lambda::layer:no-ver:1", latestVersion: {} }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Layers/i }));
+    await waitFor(() => {
+      expect(screen.getByText("layer-no-version")).toBeTruthy();
+      // No delete button since version is missing
+      expect(screen.queryByRole("button", { name: /Delete/i })).toBeFalsy();
+    });
+  });
+
+  it("opens create layer version modal and shows error", async () => {
+    const user = userEvent.setup();
+    mockCreateLayerVersionIsError = true;
+    mockCreateLayerVersionError = new Error("Layer creation failed");
+    mockLambdaLayers.mockReturnValue({
+      data: { layers: [{ name: "my-layer", arn: "arn:aws:lambda::layer:my-layer:1", latestVersion: { version: 1 } }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Layers/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Create layer version")).toBeTruthy();
+    });
+    await clickButton(user, /^Create$/i);
+    await waitFor(() => {
+      expect(screen.getByText("Layer creation failed")).toBeTruthy();
+    });
+  });
+
+  // ─── Advanced Tab Error Alerts ───────────────────────────
+
+  it("shows create function URL error in Advanced tab", async () => {
+    const user = userEvent.setup();
+    mockCreateFunctionUrlIsError = true;
+    mockCreateFunctionUrlError = new Error("URL creation failed");
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByText("Back to Functions")).toBeTruthy();
+    });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText("URL creation failed")).toBeTruthy();
+    });
+  });
+
+  it("shows set concurrency error in Advanced tab", async () => {
+    const user = userEvent.setup();
+    mockSetConcurrencyIsError = true;
+    mockSetConcurrencyError = new Error("Concurrency failed");
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByText("Back to Functions")).toBeTruthy();
+    });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Concurrency failed")).toBeTruthy();
+    });
+  });
+
+  it("shows put event invoke config error in Advanced tab", async () => {
+    const user = userEvent.setup();
+    mockPutEventInvokeConfigIsError = true;
+    mockPutEventInvokeConfigError = new Error("Event invoke config failed");
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByText("Back to Functions")).toBeTruthy();
+    });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Event invoke config failed")).toBeTruthy();
+    });
+  });
+
+  it("shows attach code signing config error in Advanced tab", async () => {
+    const user = userEvent.setup();
+    mockAttachCodeSigningConfigIsError = true;
+    mockAttachCodeSigningConfigError = new Error("Attach failed");
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByText("Back to Functions")).toBeTruthy();
+    });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => {
+      expect(screen.getAllByText("Attach failed").length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it("shows detach code signing config error in Advanced tab", async () => {
+    const user = userEvent.setup();
+    mockDetachCodeSigningConfigIsError = true;
+    mockDetachCodeSigningConfigError = new Error("Detach failed");
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByText("Back to Functions")).toBeTruthy();
+    });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => {
+      expect(screen.getAllByText("Detach failed").length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  // ─── Additional Config Tab Branches ──────────────────────
+
+  it("shows event invoke config with no data set", async () => {
+    const user = userEvent.setup();
+    // eventInvokeConfig returns data with null maxRetryAttempts -> "No event invoke config set" path
+    mockEventInvokeConfig.mockReturnValue({ data: { maximumRetryAttempts: null, maximumEventAgeInSeconds: null } });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByText("No event invoke config set")).toBeTruthy();
+    });
+  });
+
+  it("shows code signing config with no ARN set", async () => {
+    const user = userEvent.setup();
+    mockCodeSigningConfig.mockReturnValue({ data: { codeSigningConfigArn: null } });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByText("No code signing config attached")).toBeTruthy();
+    });
+  });
+
+  it("shows function URL with no URL", async () => {
+    const user = userEvent.setup();
+    mockFunctionUrl.mockReturnValue({ data: { url: null } });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByText("No URL configured")).toBeTruthy();
+    });
+  });
+
+  it("shows layers config without code size (unknown)", async () => {
+    const user = userEvent.setup();
+    mockFunctionDetail.mockReturnValue({
+      data: {
+        configuration: {
+          runtime: "nodejs22.x", handler: "index.handler", state: "Active",
+          layers: [{ arn: "arn:aws:lambda::layer:my-layer:1", codeSize: null }],
+        },
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByText(/unknown/)).toBeTruthy();
     });
   });
 });

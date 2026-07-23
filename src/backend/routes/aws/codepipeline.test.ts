@@ -178,6 +178,15 @@ describe("CodePipeline Routes", () => {
       const body = await res.json();
       expect(body.deleted).toBe(true);
     });
+
+    it("GET /pipelines/:name — handles null pipeline and metadata", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/pipelines/nonexistent");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.pipeline).toBeNull();
+      expect(body.metadata).toBeNull();
+    });
   });
 
   describe("Executions", () => {
@@ -192,6 +201,26 @@ describe("CodePipeline Routes", () => {
       const body = await res.json();
       expect(body.total).toBe(1);
       expect(body.executions[0].pipelineExecutionId).toBe("exec-1");
+    });
+
+    it("GET /pipelines/:name/executions — returns empty list", async () => {
+      mockSend.mockResolvedValueOnce({ pipelineExecutionSummaries: undefined });
+      const res = await get("/pipelines/my-pipeline/executions");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.executions).toEqual([]);
+    });
+
+    it("GET /pipelines/:name/executions — with nextToken", async () => {
+      mockSend.mockResolvedValueOnce({
+        pipelineExecutionSummaries: [{ pipelineExecutionId: "exec-1" }],
+        nextToken: "token-abc",
+      });
+      const res = await get("/pipelines/my-pipeline/executions?nextToken=token-abc");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.nextToken).toBe("token-abc");
+      expect(mockSend.mock.calls[0][0].nextToken).toBe("token-abc");
     });
 
     it("GET /pipelines/:name/executions/:executionId — returns execution detail", async () => {
@@ -324,6 +353,13 @@ describe("CodePipeline Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.total).toBe(1);
+    });
+
+    it("GET /pipelines/:name/actions — with executionId filter", async () => {
+      mockSend.mockResolvedValueOnce({ actionExecutionDetails: [] });
+      const res = await get("/pipelines/my-pipeline/actions?executionId=exec-1");
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].filter.pipelineExecutionId).toBe("exec-1");
     });
   });
 
@@ -503,6 +539,14 @@ describe("CodePipeline Routes", () => {
       expect(mockSend.mock.calls[0][0].actionTypeId.owner).toBe("Custom");
     });
 
+    it("POST /action-types/:cat/:provider/jobs/poll — with maxBatchSize and queryParam", async () => {
+      mockSend.mockResolvedValueOnce({ jobs: [] });
+      const res = await post("/action-types/Test/MyProvider/jobs/poll?maxBatchSize=5&queryParam=%7B%22key%22%3A%22val%22%7D");
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].maxBatchSize).toBe(5);
+      expect(mockSend.mock.calls[0][0].queryParam).toEqual({ key: "val" });
+    });
+
     it("POST /action-types/:cat/:provider/jobs/poll — 400 when category/provider missing", async () => {
       const res = await post("/action-types//jobs/poll");
       expect(res.status).toBe(404);
@@ -518,6 +562,14 @@ describe("CodePipeline Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.total).toBe(1);
+    });
+
+    it("GET /action-types — with owner and region filters", async () => {
+      mockSend.mockResolvedValueOnce({ actionTypes: [] });
+      const res = await get("/action-types?owner=AWS&region=us-east-1");
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].actionOwnerFilter).toBe("AWS");
+      expect(mockSend.mock.calls[0][0].regionFilter).toBe("us-east-1");
     });
 
     it("GET /action-types/:owner/:cat/:prov/:ver — gets action type", async () => {
@@ -610,6 +662,16 @@ describe("CodePipeline Routes", () => {
         },
       });
       expect(res.status).toBe(201);
+    });
+
+    it("POST /webhooks — creates webhook with tags", async () => {
+      mockSend.mockResolvedValueOnce({ webhook: { definition: { name: "tagged-hook" } } });
+      const res = await post("/webhooks", {
+        webhook: { name: "tagged-hook", targetPipeline: "p", targetAction: "S", filters: [], authentication: "GITHUB_HMAC", authenticationConfiguration: { SecretToken: "t" } },
+        tags: [{ key: "env", value: "prod" }],
+      });
+      expect(res.status).toBe(201);
+      expect(mockSend.mock.calls[0][0].tags).toEqual([{ key: "env", value: "prod" }]);
     });
 
     it("POST /webhooks — requires webhook definition", async () => {

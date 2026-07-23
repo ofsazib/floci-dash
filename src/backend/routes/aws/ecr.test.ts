@@ -211,6 +211,38 @@ describe("ECR Routes", () => {
       expect(body.images).toEqual([]);
     });
 
+    it("GET /repositories/:name/images — handles null imageDetails, tags, and pushedAt", async () => {
+      mockSend
+        .mockResolvedValueOnce({ imageIds: [{ imageDigest: "sha256:nulled" }] })
+        .mockResolvedValueOnce({
+          imageDetails: [
+            {
+              imageDigest: "sha256:nulled",
+              imageTags: undefined,
+              imageSizeInBytes: 2048,
+              imagePushedAt: null,
+              imageScanStatus: null,
+              imageScanFindingsSummary: null,
+            },
+          ],
+        });
+      const res = await get("/repositories/my-repo/images");
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(body.images[0].imageTags).toEqual([]);
+      expect(body.images[0].imagePushedAt).toBeNull();
+    });
+
+    it("GET /repositories/:name/images — handles imageDetails undefined", async () => {
+      mockSend
+        .mockResolvedValueOnce({ imageIds: [{ imageDigest: "sha256:no-details" }] })
+        .mockResolvedValueOnce({ imageDetails: undefined });
+      const res = await get("/repositories/my-repo/images");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.images).toEqual([]);
+    });
+
     it("DELETE /repositories/:name/images — batch deletes", async () => {
       mockSend.mockResolvedValueOnce({
         imageIds: [{ imageDigest: "sha256:abc123" }],
@@ -434,9 +466,56 @@ describe("ECR Routes", () => {
       expect(body.failure.failureCode).toBe("REPOSITORY_NOT_FOUND");
     });
 
-    it("GET /repositories//scanning-configuration — 400 when name missing", async () => {
+    it("GET /repositories//scanning-configuration — 404 when name missing", async () => {
       const res = await get("/repositories//scanning-configuration");
       expect(res.status).toBe(404);
+    });
+
+    it("GET /repositories/:name/scanning-configuration — handles null scanOnPush and frequency", async () => {
+      mockSend.mockResolvedValueOnce({
+        scanningConfigurations: [
+          {
+            repositoryArn: "arn:aws:ecr:us-east-1:123:repo/no-scan",
+            repositoryName: "no-scan",
+            scanOnPush: null,
+            scanFrequency: null,
+            appliedScanFilters: undefined,
+          },
+        ],
+        failures: [],
+      });
+      const res = await get("/repositories/no-scan/scanning-configuration");
+      const body = await res.json();
+      expect(body.scanningConfiguration.scanOnPush).toBe(false);
+      expect(body.scanningConfiguration.scanFrequency).toBeNull();
+      expect(body.scanningConfiguration.appliedScanFilters).toEqual([]);
+    });
+  });
+
+  describe("Tags — edge cases", () => {
+    it("GET /repositories/:name/tags — returns empty when no tags", async () => {
+      mockSend.mockResolvedValueOnce({ tags: undefined });
+      const res = await get("/repositories/my-repo/tags");
+      const body = await res.json();
+      expect(body.tags).toEqual([]);
+    });
+
+    it("POST /repositories/:name/tags — handles empty tags", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/repositories/my-repo/tags", { tags: {} });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].tags).toEqual([]);
+    });
+
+    it("DELETE /repositories/:name/tags — handles empty tagKeys", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await router.request("/repositories/my-repo/tags", {
+        method: "DELETE",
+        body: JSON.stringify({ tagKeys: [] }),
+        headers: { "content-type": "application/json" },
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].tagKeys).toEqual([]);
     });
   });
 });
