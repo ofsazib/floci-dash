@@ -121,6 +121,25 @@ describe("Secrets Manager Routes", () => {
       expect(cmd.Tags[0].Key).toBe("env");
     });
 
+    it("POST /secrets — creates with secretBinary and description and kmsKeyId", async () => {
+      mockSend.mockResolvedValueOnce({
+        ARN: "arn:aws:secretsmanager:...:secret:binary-secret",
+        Name: "binary-secret",
+        VersionId: "v1",
+      });
+      const res = await post("/secrets", {
+        name: "binary-secret",
+        secretBinary: "binary-data",
+        description: "Binary secret",
+        kmsKeyId: "arn:aws:kms:...:key/123",
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.SecretBinary).toBe("binary-data");
+      expect(cmd.Description).toBe("Binary secret");
+      expect(cmd.KmsKeyId).toBe("arn:aws:kms:...:key/123");
+    });
+
     it("POST /secrets — 400 when name is empty", async () => {
       const res = await post("/secrets", { name: "", secretString: "password" });
       expect(res.status).toBe(400);
@@ -168,6 +187,35 @@ describe("Secrets Manager Routes", () => {
       expect(body.secretString).toBe("my-password");
     });
 
+    it("GET /secrets/:id/value — returns secretBinary as base64", async () => {
+      mockSend.mockResolvedValueOnce({
+        Name: "my-secret",
+        ARN: "arn:aws:secretsmanager:...",
+        VersionId: "v1",
+        SecretBinary: Buffer.from("binary-secret-value"),
+        VersionStages: ["AWSCURRENT"],
+        CreatedDate: new Date("2025-01-01"),
+      });
+      const res = await get("/secrets/my-secret/value");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.secretBinary).toBe(Buffer.from("binary-secret-value").toString("base64"));
+    });
+
+    it("GET /secrets/:id/value — null secretBinary when absent", async () => {
+      mockSend.mockResolvedValueOnce({
+        Name: "my-secret",
+        ARN: "arn:aws:secretsmanager:...",
+        VersionId: "v1",
+        SecretString: "text-only",
+        VersionStages: ["AWSCURRENT"],
+        CreatedDate: new Date("2025-01-01"),
+      });
+      const res = await get("/secrets/my-secret/value");
+      const body = await res.json();
+      expect(body.secretBinary).toBeNull();
+    });
+
     it("GET /secrets/:id/value — supports versionId query param", async () => {
       mockSend.mockResolvedValueOnce({
         Name: "my-secret",
@@ -202,6 +250,19 @@ describe("Secrets Manager Routes", () => {
       expect(cmd.Description).toBe("Updated description");
     });
 
+    it("PUT /secrets/:id — updates with kmsKeyId", async () => {
+      mockSend.mockResolvedValueOnce({
+        ARN: "arn:aws:secretsmanager:...",
+        Name: "my-secret",
+        VersionId: "v3",
+      });
+      const res = await put("/secrets/my-secret", {
+        kmsKeyId: "arn:aws:kms:...:key/456",
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].KmsKeyId).toBe("arn:aws:kms:...:key/456");
+    });
+
     it("POST /secrets/:id/value — puts secret value", async () => {
       mockSend.mockResolvedValueOnce({
         ARN: "arn:aws:secretsmanager:...",
@@ -214,6 +275,19 @@ describe("Secrets Manager Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.put).toBe(true);
+    });
+
+    it("POST /secrets/:id/value — with secretBinary", async () => {
+      mockSend.mockResolvedValueOnce({
+        ARN: "arn:aws:secretsmanager:...",
+        Name: "my-secret",
+        VersionId: "v3",
+      });
+      const res = await post("/secrets/my-secret/value", {
+        secretBinary: "binary-value",
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].SecretBinary).toBe("binary-value");
     });
 
     it("DELETE /secrets/:id — deletes a secret", async () => {
@@ -278,6 +352,18 @@ describe("Secrets Manager Routes", () => {
       expect(cmd.RotationRules).toBeUndefined();
     });
 
+    it("POST /secrets/:id/rotate — with rotateImmediately default (true when undefined)", async () => {
+      mockSend.mockResolvedValueOnce({
+        ARN: "arn:aws:secretsmanager:...",
+        Name: "my-secret",
+      });
+      const res = await post("/secrets/my-secret/rotate", {
+        rotationLambdaARN: "arn:aws:lambda:...:function:rotator",
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].RotateImmediately).toBe(true);
+    });
+
     it("POST /secrets/:id/tags — tags a secret", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await post("/secrets/my-secret/tags", {
@@ -317,6 +403,30 @@ describe("Secrets Manager Routes", () => {
       const res = await post("/random-password", {});
       expect(res.status).toBe(200);
       expect(mockSend.mock.calls[0][0].PasswordLength).toBe(32);
+    });
+
+    it("POST /random-password — with all exclusion options and requireEachIncludedType: false", async () => {
+      mockSend.mockResolvedValueOnce({ RandomPassword: "custom-pass" });
+      const res = await post("/random-password", {
+        passwordLength: 20,
+        excludeCharacters: "!@#",
+        excludeLowercase: true,
+        excludeUppercase: false,
+        excludeNumbers: true,
+        excludePunctuation: true,
+        includeSpace: false,
+        requireEachIncludedType: false,
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.PasswordLength).toBe(20);
+      expect(cmd.ExcludeCharacters).toBe("!@#");
+      expect(cmd.ExcludeLowercase).toBe(true);
+      expect(cmd.ExcludeUppercase).toBe(false);
+      expect(cmd.ExcludeNumbers).toBe(true);
+      expect(cmd.ExcludePunctuation).toBe(true);
+      expect(cmd.IncludeSpace).toBe(false);
+      expect(cmd.RequireEachIncludedType).toBe(false);
     });
   });
 });
