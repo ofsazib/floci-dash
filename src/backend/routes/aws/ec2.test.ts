@@ -220,6 +220,17 @@ describe("EC2 Routes", () => {
       expect(callArgs.InstanceType).toBe("t3.micro");
     });
 
+    it("POST /instances — encodes userData as base64", async () => {
+      mockSend.mockResolvedValueOnce({ Instances: [{ InstanceId: "i-ud" }] });
+      const res = await post("/instances", {
+        imageId: "ami-001",
+        userData: "#!/bin/bash\necho hello",
+      });
+      expect(res.status).toBe(200);
+      const callArgs = mockSend.mock.calls[0][0];
+      expect(callArgs.UserData).toBe(Buffer.from("#!/bin/bash\necho hello").toString("base64"));
+    });
+
     it("GET /instances/:id — returns instance detail", async () => {
       mockSend.mockResolvedValueOnce({
         Reservations: [
@@ -335,6 +346,20 @@ describe("EC2 Routes", () => {
       expect(mockSend.mock.calls[1][0].Attribute).toBe("sourceDestCheck");
       expect(mockSend.mock.calls[1][0].Value).toBe("false");
     });
+
+    it("PATCH /instances/:id — modifies ebsOptimized and disableApiTermination", async () => {
+      mockSend.mockResolvedValue({});
+      const res = await patch("/instances/i-001", {
+        ebsOptimized: true,
+        disableApiTermination: true,
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend).toHaveBeenCalledTimes(2);
+      expect(mockSend.mock.calls[0][0].Attribute).toBe("ebsOptimized");
+      expect(mockSend.mock.calls[0][0].Value).toBe("true");
+      expect(mockSend.mock.calls[1][0].Attribute).toBe("disableApiTermination");
+      expect(mockSend.mock.calls[1][0].Value).toBe("true");
+    });
   });
 
   // ── VPCs ──────────────────────────────────────────
@@ -368,6 +393,14 @@ describe("EC2 Routes", () => {
       const body = await res.json();
       expect(body.created).toBe(true);
       expect(body.id).toBe("vpc-new");
+      expect(mockSend.mock.calls[0][0].CidrBlock).toBe("10.0.0.0/16");
+      expect(mockSend.mock.calls[0][0].InstanceTenancy).toBe("default");
+    });
+
+    it("POST /vpcs — uses defaults when fields omitted", async () => {
+      mockSend.mockResolvedValueOnce({ Vpc: { VpcId: "vpc-default" } });
+      const res = await post("/vpcs", {});
+      expect(res.status).toBe(200);
       expect(mockSend.mock.calls[0][0].CidrBlock).toBe("10.0.0.0/16");
       expect(mockSend.mock.calls[0][0].InstanceTenancy).toBe("default");
     });
@@ -554,6 +587,25 @@ describe("EC2 Routes", () => {
     it("POST /security-groups — 400 when name missing", async () => {
       const res = await post("/security-groups", {});
       expect(res.status).toBe(400);
+    });
+
+    it("POST /security-groups/:id/rules/ingress — uses defaults when fields omitted", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/security-groups/sg-001/rules/ingress", { cidrIp: "0.0.0.0/0" });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].IpPermissions[0].IpProtocol).toBe("tcp");
+      expect(mockSend.mock.calls[0][0].IpPermissions[0].FromPort).toBe(22);
+      expect(mockSend.mock.calls[0][0].IpPermissions[0].ToPort).toBe(22);
+    });
+
+    it("POST /security-groups/:id/rules/ingress — uses sourceSecurityGroupId when provided", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/security-groups/sg-001/rules/ingress", {
+        sourceSecurityGroupId: "sg-other",
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].IpPermissions[0].UserIdGroupPairs[0].GroupId).toBe("sg-other");
+      expect(mockSend.mock.calls[0][0].IpPermissions[0].IpRanges).toBeUndefined();
     });
 
     it("DELETE /security-groups/:id — deletes group", async () => {

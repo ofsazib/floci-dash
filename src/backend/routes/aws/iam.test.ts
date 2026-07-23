@@ -152,6 +152,11 @@ describe("IAM Routes", () => {
       expect(mockSend.mock.calls[0][0].UserName).toBe("new-user");
     });
 
+    it("POST /users — 400 when name is missing", async () => {
+      const res = await post("/users", {});
+      expect(res.status).toBe(400);
+    });
+
     it("DELETE /users/:name — deletes a user", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await del("/users/admin");
@@ -340,6 +345,14 @@ describe("IAM Routes", () => {
       const res = await post("/groups", { name: "developers" });
       expect(res.status).toBe(200);
       expect((await res.json()).created).toBe(true);
+    });
+
+    it("DELETE /groups/:name — deletes a group", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/groups/developers");
+      expect(res.status).toBe(200);
+      expect((await res.json()).deleted).toBe(true);
+      expect(mockSend.mock.calls[0][0].GroupName).toBe("developers");
     });
   });
 
