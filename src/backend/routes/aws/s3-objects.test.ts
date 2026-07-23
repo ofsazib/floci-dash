@@ -113,6 +113,15 @@ describe("S3 Objects", () => {
       expect(body.deleted).toBe(true);
     });
 
+    it("GET /buckets/:name/objects/*/tags — returns empty tags when TagSet is undefined", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/buckets/my-bucket/objects/mykey/tags");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.tags).toEqual([]);
+      expect(body.total).toBe(0);
+    });
+
   });
 
   describe("Object Attributes", () => {
@@ -137,6 +146,18 @@ describe("S3 Objects", () => {
       const body = await res.json();
       expect(body.etag).toBe('"def456"');
       expect(body.key).toBe("nested/key");
+    });
+
+    it("GET /buckets/:name/objects/*/attributes — handles missing optional fields", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/buckets/my-bucket/objects/mykey/attributes");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.etag).toBeUndefined();
+      expect(body.checksum).toBeUndefined();
+      expect(body.objectParts).toBeUndefined();
+      expect(body.storageClass).toBeUndefined();
+      expect(body.objectSize).toBeUndefined();
     });
   });
 
@@ -165,6 +186,14 @@ describe("S3 Objects", () => {
       expect(body.accessDenied).toBe(true);
     });
 
+    it("HEAD /buckets/:name — propagates non-404/403 errors (throws 500)", async () => {
+      const internalErr = new Error("Internal error");
+      (internalErr as any).$metadata = { httpStatusCode: 500 };
+      mockSend.mockRejectedValueOnce(internalErr);
+      const res = await head("/buckets/my-bucket/head");
+      expect(res.status).toBe(500);
+    });
+
     it("HEAD /buckets/:name/objects/* — returns metadata when object exists", async () => {
       mockSend.mockResolvedValueOnce({
         ContentLength: 512,
@@ -188,6 +217,30 @@ describe("S3 Objects", () => {
       expect(res.status).toBe(404);
       const body = await res.json();
       expect(body.exists).toBe(false);
+    });
+
+    it("HEAD /buckets/:name/objects/* — propagates non-404 errors (throws 500)", async () => {
+      const internalErr = new Error("Internal error");
+      (internalErr as any).$metadata = { httpStatusCode: 500 };
+      mockSend.mockRejectedValueOnce(internalErr);
+      const res = await head("/buckets/my-bucket/objects/mykey/head");
+      expect(res.status).toBe(500);
+    });
+
+    it("HEAD /buckets/:name/objects/* — handles null LastModified and undefined Metadata", async () => {
+      mockSend.mockResolvedValueOnce({
+        ContentLength: 100,
+        ContentType: "application/json",
+        LastModified: null,
+        ETag: undefined,
+        Metadata: undefined,
+      });
+      const res = await head("/buckets/my-bucket/objects/mykey/head");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.lastModified).toBeUndefined();
+      expect(body.etag).toBeUndefined();
+      expect(body.metadata).toEqual({});
     });
 
   });
