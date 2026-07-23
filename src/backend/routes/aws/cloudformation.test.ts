@@ -114,6 +114,30 @@ describe("CloudFormation Routes", () => {
       expect(mockSend.mock.calls[0][0].__cmdName).toBe("CreateStackCommand");
     });
 
+    it("POST /stacks — creates with templateUrl instead of templateBody", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/stacks", { name: "from-url", templateUrl: "https://example.com/template.yaml" });
+      expect((await res.json()).created).toBe(true);
+    });
+
+    it("POST /stacks — 400 when name is missing", async () => {
+      const res = await post("/stacks", { templateBody: "{}" });
+      expect(res.status).toBe(400);
+    });
+
+    it("PUT /stacks/:name — updates a stack", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/stacks/my-stack", { templateBody: '{"Resources":{}}' });
+      expect((await res.json()).updated).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("UpdateStackCommand");
+    });
+
+    it("PUT /stacks/:name — 400 when templateBody is invalid JSON", async () => {
+      const res = await put("/stacks/my-stack", { templateBody: "not json" });
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
     it("DELETE /stacks/:name — deletes a stack", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await del("/stacks/my-stack");
@@ -128,6 +152,15 @@ describe("CloudFormation Routes", () => {
       const res = await get("/stacks/my-stack");
       expect((await res.json()).stack.name).toBe("my-stack");
     });
+
+    it("GET /stacks/:name — returns null stack when stack not found", async () => {
+      mockSend
+        .mockResolvedValueOnce({ Stacks: [] })
+        .mockResolvedValueOnce({ StackResourceSummaries: [] })
+        .mockResolvedValueOnce({ StackEvents: [] });
+      const res = await get("/stacks/missing");
+      expect((await res.json()).stack).toBeNull();
+    });
   });
 
   describe("Template", () => {
@@ -135,6 +168,20 @@ describe("CloudFormation Routes", () => {
       mockSend.mockResolvedValueOnce({ TemplateBody: "{}" });
       const res = await get("/stacks/my-stack/template");
       expect((await res.json()).template).toBe("{}");
+    });
+
+    it("GET /stacks/:name/template — stringifies object template body", async () => {
+      mockSend.mockResolvedValueOnce({ TemplateBody: { Resources: {} } });
+      const res = await get("/stacks/my-stack/template");
+      const body = await res.json();
+      expect(typeof body.template).toBe("string");
+      expect(JSON.parse(body.template)).toEqual({ Resources: {} });
+    });
+
+    it("GET /stacks/:name/template — null when template body is empty", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/stacks/my-stack/template");
+      expect((await res.json()).template).toBeNull();
     });
 
     it("POST /validate-template — validates", async () => {
@@ -202,6 +249,12 @@ describe("CloudFormation Routes", () => {
       expect((await res.json()).created).toBe(true);
     });
 
+    it("POST /change-sets — 400 when templateBody is invalid JSON", async () => {
+      const res = await post("/change-sets", { stackName: "s", changeSetName: "cs", templateBody: "not json" });
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
     it("POST /change-sets/execute — executes", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await post("/change-sets/execute", { stackName: "s", changeSetName: "cs" });
@@ -264,6 +317,19 @@ describe("CloudFormation Routes", () => {
       expect((await post("/stacksets", { templateBody: "{}" })).status).toBe(400);
     });
 
+    it("POST /stacksets — 400 when templateBody is invalid JSON", async () => {
+      const res = await post("/stacksets", { name: "my-ss", templateBody: "not json" });
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("POST /stacksets — uses default permission model", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/stacksets", { name: "my-ss", templateBody: "{}" });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].PermissionModel).toBe("SELF_MANAGED");
+    });
+
     it("GET /stacksets/:name — returns stack set with instances and operations", async () => {
       mockSend
         .mockResolvedValueOnce({ StackSet: { StackSetName: "my-ss", Status: "ACTIVE" } })
@@ -300,6 +366,15 @@ describe("CloudFormation Routes", () => {
         accounts: ["123"], regions: ["us-east-1"],
       });
       expect((await res.json()).instancesDeleted).toBe(true);
+    });
+
+    it("DELETE /stacksets/:name/instances — defaults retainStacks to false", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/stacksets/my-ss/instances", {
+        accounts: ["123"], regions: ["us-east-1"],
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].RetainStacks).toBe(false);
     });
   });
 

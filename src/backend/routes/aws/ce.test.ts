@@ -216,6 +216,18 @@ describe("CE Routes", () => {
       expect(body.utilizationsByTime).toEqual([]);
       expect(body.total).toBe(0);
     });
+
+    it("returns 400 when timePeriod is missing", async () => {
+      const res = await post("/reservation-utilization", { granularity: "DAILY" });
+      expect(res.status).toBe(400);
+    });
+
+    it("returns 400 when granularity is missing", async () => {
+      const res = await post("/reservation-utilization", {
+        timePeriod: { start: "2025-01-01", end: "2025-02-01" },
+      });
+      expect(res.status).toBe(400);
+    });
   });
 
   describe("POST /savings-plans-coverage", () => {
@@ -242,6 +254,18 @@ describe("CE Routes", () => {
       expect(body.savingsPlansCoverages).toEqual([]);
       expect(body.total).toBe(0);
     });
+
+    it("returns 400 when timePeriod is missing", async () => {
+      const res = await post("/savings-plans-coverage", { granularity: "DAILY" });
+      expect(res.status).toBe(400);
+    });
+
+    it("returns 400 when granularity is missing", async () => {
+      const res = await post("/savings-plans-coverage", {
+        timePeriod: { start: "2025-01-01", end: "2025-02-01" },
+      });
+      expect(res.status).toBe(400);
+    });
   });
 
   describe("POST /savings-plans-utilization", () => {
@@ -267,6 +291,18 @@ describe("CE Routes", () => {
       const body = await res.json();
       expect(body.savingsPlansUtilizationsByTime).toEqual([]);
       expect(body.total).toBe(0);
+    });
+
+    it("returns 400 when timePeriod is missing", async () => {
+      const res = await post("/savings-plans-utilization", { granularity: "DAILY" });
+      expect(res.status).toBe(400);
+    });
+
+    it("returns 400 when granularity is missing", async () => {
+      const res = await post("/savings-plans-utilization", {
+        timePeriod: { start: "2025-01-01", end: "2025-02-01" },
+      });
+      expect(res.status).toBe(400);
     });
   });
 

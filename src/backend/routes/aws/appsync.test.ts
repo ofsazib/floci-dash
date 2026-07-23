@@ -100,6 +100,17 @@ describe("POST /api/aws/appsync/apis", () => {
     });
     expect(res.status).toBe(400);
   });
+
+  it("creates API with default authentication type", async () => {
+    mockSend.mockResolvedValue({ graphqlApi: { apiId: "def456", name: "default-auth" } });
+    const res = await app.request("/api/aws/appsync/apis", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "default-auth" }),
+    });
+    expect(res.status).toBe(201);
+    expect(mockSend.mock.calls[0][0].authenticationType).toBe("API_KEY");
+  });
 });
 
 describe("DELETE /api/aws/appsync/apis/:apiId", () => {
@@ -113,6 +124,25 @@ describe("DELETE /api/aws/appsync/apis/:apiId", () => {
 });
 
 // ─── Schema ──────────────────────────────────────────────
+
+describe("GET /api/aws/appsync/apis/:apiId/schema", () => {
+  it("returns introspection schema", async () => {
+    const schemaText = "type Query { hello: String }";
+    mockSend.mockResolvedValue({ schema: new TextEncoder().encode(schemaText) });
+    const res = await app.request("/api/aws/appsync/apis/abc123/schema");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.schema).toBe(schemaText);
+  });
+
+  it("returns empty string when schema is not present", async () => {
+    mockSend.mockResolvedValue({});
+    const res = await app.request("/api/aws/appsync/apis/abc123/schema");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.schema).toBe("");
+  });
+});
 
 describe("GET /api/aws/appsync/apis/:apiId/schema/status", () => {
   it("returns schema creation status", async () => {
@@ -273,6 +303,19 @@ describe("POST /api/aws/appsync/apis/:apiId/functions", () => {
       body: JSON.stringify({ dataSourceName: "ds1" }),
     });
     expect(res.status).toBe(400);
+  });
+
+  it("creates a function with default function version", async () => {
+    mockSend.mockResolvedValue({
+      functionConfiguration: { functionId: "fn2", name: "default-ver" },
+    });
+    const res = await app.request("/api/aws/appsync/apis/abc123/functions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "default-ver" }),
+    });
+    expect(res.status).toBe(201);
+    expect(mockSend.mock.calls[0][0].functionVersion).toBe("2018-05-29");
   });
 });
 
