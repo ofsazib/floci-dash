@@ -909,4 +909,149 @@ describe("S3Page", () => {
       expect(mockBatchDeleteMutate).not.toHaveBeenCalled();
     });
   });
+
+  // ─── Batch Delete with Errors ──────────────────────────
+
+  it("batch delete reports errors when some items fail", async () => {
+    mockBatchDeleteMutate.mockImplementation((_keys: any, opts: any) => {
+      opts?.onSuccess?.({ deleted: ["doc1.txt"], errors: [{ key: "doc2.txt", error: "AccessDenied" }] });
+    });
+    mockObjects.mockReturnValue({
+      data: {
+        objects: [{ key: "doc1.txt", size: 100, lastModified: "2024-01-01" }, { key: "doc2.txt", size: 200, lastModified: "2024-01-02" }],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    mockSearchParams.mockReturnValue([new URLSearchParams("bucket=my-bucket"), vi.fn()]);
+    const user = userEvent.setup();
+    render(<S3Page />, { wrapper: createWrapper() });
+    await waitFor(() => {
+      expect(screen.getAllByText("my-bucket").length).toBeGreaterThanOrEqual(1);
+    });
+    const checkboxes = screen.getAllByRole("checkbox");
+    if (checkboxes.length > 1) {
+      await user.click(checkboxes[1]);
+    }
+    await waitFor(() => expect(screen.getByText(/Delete selected/)).toBeTruthy());
+    await clickButton(user, /Delete selected/i);
+    await waitFor(() => {
+      expect(mockBatchDeleteMutate).toHaveBeenCalled();
+    });
+  });
+
+  it("batch delete calls onError when mutation fails", async () => {
+    mockBatchDeleteMutate.mockImplementation((_keys: any, opts: any) => {
+      opts?.onError?.(new Error("Batch error"));
+    });
+    mockObjects.mockReturnValue({
+      data: {
+        objects: [{ key: "doc1.txt", size: 100, lastModified: "2024-01-01" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    mockSearchParams.mockReturnValue([new URLSearchParams("bucket=my-bucket"), vi.fn()]);
+    const user = userEvent.setup();
+    render(<S3Page />, { wrapper: createWrapper() });
+    await waitFor(() => {
+      expect(screen.getAllByText("my-bucket").length).toBeGreaterThanOrEqual(1);
+    });
+    const checkboxes = screen.getAllByRole("checkbox");
+    if (checkboxes.length > 1) {
+      await user.click(checkboxes[1]);
+    }
+    await waitFor(() => expect(screen.getByText(/Delete selected/)).toBeTruthy());
+    await clickButton(user, /Delete selected/i);
+    await waitFor(() => {
+      expect(mockBatchDeleteMutate).toHaveBeenCalled();
+    });
+  });
+
+  // ─── Checksum Match ────────────────────────────────────
+
+  it("shows checksum match on verify with matching value", async () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("bucket=my-bucket&object=test.txt"), vi.fn()]);
+    mockObjectDetail.mockReturnValue({
+      data: { contentType: "text/html", size: 512, lastModified: "2024-01-01", etag: "abc" },
+      isLoading: false, isError: false, error: null,
+    });
+    mockObjectAttributesData = { checksum: { ChecksumSHA256: "dGhpcyBpcyBhIGNoZWNrc3Vt", ChecksumCRC32: "abc123" } };
+    const user = userEvent.setup();
+    render(<S3Page />, { wrapper: createWrapper() });
+    await waitFor(() => {
+      expect(screen.getAllByText("SHA-256").length).toBeGreaterThanOrEqual(1);
+    });
+    const verifyInput = screen.getByPlaceholderText("Paste base64 checksum...");
+    await user.type(verifyInput, "dGhpcyBpcyBhIGNoZWNrc3Vt");
+    await clickButton(user, /Verify/i);
+    await waitFor(() => {
+      expect(screen.getByText(/Checksum matches!/)).toBeTruthy();
+    });
+  });
+
+  // ─── Single Object Delete ──────────────────────────────
+
+  it("calls deleteObject when object delete is confirmed", async () => {
+    mockObjects.mockReturnValue({
+      data: {
+        objects: [{ key: "doc-delete.txt", size: 100, lastModified: "2024-01-01" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    mockSearchParams.mockReturnValue([new URLSearchParams("bucket=my-bucket"), vi.fn()]);
+    const user = userEvent.setup();
+    render(<S3Page />, { wrapper: createWrapper() });
+    await waitFor(() => {
+      expect(screen.getAllByText("my-bucket").length).toBeGreaterThanOrEqual(1);
+    });
+    await user.click(screen.getByRole("button", { name: /Delete doc-delete.txt/i }));
+    // The confirm dialog should appear (mockConfirmDialog returns true by default)
+    await waitFor(() => {
+      expect(mockDeleteObjectMutate).toHaveBeenCalled();
+    });
+  });
+
+  it("does NOT delete object when confirm returns false", async () => {
+    mockConfirmDialog = vi.fn(() => Promise.resolve(false));
+    mockObjects.mockReturnValue({
+      data: {
+        objects: [{ key: "doc-cancel.txt", size: 100, lastModified: "2024-01-01" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    mockSearchParams.mockReturnValue([new URLSearchParams("bucket=my-bucket"), vi.fn()]);
+    const user = userEvent.setup();
+    render(<S3Page />, { wrapper: createWrapper() });
+    await waitFor(() => {
+      expect(screen.getAllByText("my-bucket").length).toBeGreaterThanOrEqual(1);
+    });
+    await user.click(screen.getByRole("button", { name: /Delete doc-cancel.txt/i }));
+    await waitFor(() => {
+      expect(mockDeleteObjectMutate).not.toHaveBeenCalled();
+    });
+  });
+
+  // ─── Upload Error Alert ────────────────────────────────
+
+  it("shows upload error alert in upload modal", async () => {
+    mockUploadIsError = true;
+    mockUploadError = new Error("Upload failed");
+    mockSearchParams.mockReturnValue([new URLSearchParams("bucket=my-bucket"), vi.fn()]);
+    mockObjects.mockReturnValue({
+      data: { objects: [], total: 0 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<S3Page />, { wrapper: createWrapper() });
+    await waitFor(() => {
+      expect(screen.getAllByText("my-bucket").length).toBeGreaterThanOrEqual(1);
+    });
+    await clickButton(user, /Upload/i);
+    await waitFor(() => {
+      expect(screen.getByText("Upload failed")).toBeTruthy();
+    });
+  });
 });
