@@ -67,6 +67,8 @@ const deleteSGState = vi.hoisted(() => ({
   variables: null as string | null,
 }));
 
+const mockApi = vi.hoisted(() => vi.fn());
+
 // ─── Mock hooks ─────────────────────────────────────────
 
 const mockInstances = vi.fn();
@@ -87,6 +89,8 @@ const mockDeleteClusterParamGroup = vi.fn();
 const mockSubnetGroups = vi.fn();
 const mockCreateSubnetGroup = vi.fn();
 const mockDeleteSubnetGroup = vi.fn();
+
+vi.mock("../../lib/client", () => ({ api: (...args: any[]) => mockApi(...args) }));
 
 vi.mock("../../hooks/useRDS", () => ({
   useRDSDBInstances: (...args: any[]) => mockInstances(...args),
@@ -194,6 +198,8 @@ beforeEach(() => {
   createSGState.error = null;
   deleteSGState.isPending = false;
   deleteSGState.variables = null;
+
+  mockApi.mockReset();
 
   mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
   mockClusters.mockReturnValue({ data: { clusters: [], total: 0 }, isLoading: false, isError: false, error: null });
@@ -987,5 +993,263 @@ describe("RDSDashboard — DB subnet groups", () => {
     await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
     await clickButton(user, /^Delete$/i);
     await waitFor(() => expect(mockDeleteSubnetGroup).toHaveBeenCalledWith("del-sg"));
+  });
+});
+
+describe("RDSDashboard — parameter group drill-down", () => {
+  it("drills down to parameter group parameters and shows data", async () => {
+    mockParamGroups.mockReturnValue({
+      data: { parameterGroups: [{ name: "my-pg", family: "postgres16", description: "Custom params" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockApi.mockResolvedValueOnce({
+      parameters: [
+        { name: "max_connections", value: "100", applyType: "static", source: "user", isModifiable: false },
+        { name: "timezone", value: "UTC", applyType: "dynamic", source: "engine-default", isModifiable: true },
+      ],
+      total: 2,
+    });
+
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    const tabs = screen.getAllByRole("tab");
+    await user.click(tabs[2]);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "my-pg" })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-pg" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Parameters")).toBeTruthy();
+      expect(screen.getByText(/Parameter group: my-pg/i)).toBeTruthy();
+    });
+    expect(screen.getByText("max_connections")).toBeTruthy();
+    expect(screen.getByText("100")).toBeTruthy();
+    expect(screen.getByText("timezone")).toBeTruthy();
+    expect(screen.getByText("UTC")).toBeTruthy();
+    expect(screen.getByText("static")).toBeTruthy();
+    expect(screen.getByText("dynamic")).toBeTruthy();
+    expect(screen.getByText("user")).toBeTruthy();
+    expect(screen.getByText("engine-default")).toBeTruthy();
+    expect(screen.getByText("No")).toBeTruthy();
+    expect(screen.getByText("Yes")).toBeTruthy();
+  });
+
+  it("shows (not set) for parameter values that are null", async () => {
+    mockParamGroups.mockReturnValue({
+      data: { parameterGroups: [{ name: "my-pg", family: "postgres16", description: "Custom params" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockApi.mockResolvedValueOnce({
+      parameters: [
+        { name: "null_param", value: null, applyType: "static", source: "engine-default", isModifiable: false },
+      ],
+      total: 1,
+    });
+
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    const tabs = screen.getAllByRole("tab");
+    await user.click(tabs[2]);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "my-pg" })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-pg" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("(not set)")).toBeTruthy();
+    });
+  });
+
+  it("shows parameters loading state", async () => {
+    mockParamGroups.mockReturnValue({
+      data: { parameterGroups: [{ name: "my-pg", family: "postgres16", description: "Custom params" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockApi.mockReturnValue(new Promise(() => {}));
+
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    const tabs = screen.getAllByRole("tab");
+    await user.click(tabs[2]);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "my-pg" })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-pg" }));
+
+    // Should still render Parameters header and Back button when loading
+    await waitFor(() => {
+      expect(screen.getByText("Parameters")).toBeTruthy();
+      expect(screen.getByText(/Back to Parameter Groups/i)).toBeTruthy();
+    });
+  });
+
+  it("shows parameters error state", async () => {
+    mockParamGroups.mockReturnValue({
+      data: { parameterGroups: [{ name: "my-pg", family: "postgres16", description: "Custom params" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockApi.mockRejectedValueOnce(new Error("Failed to load parameters"));
+
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    const tabs = screen.getAllByRole("tab");
+    await user.click(tabs[2]);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "my-pg" })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-pg" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Failed to load parameters")).toBeTruthy();
+    });
+  });
+
+  it("opens edit parameter modal for modifiable parameters", async () => {
+    mockParamGroups.mockReturnValue({
+      data: { parameterGroups: [{ name: "my-pg", family: "postgres16", description: "Custom params" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockApi.mockResolvedValueOnce({
+      parameters: [
+        { name: "timezone", value: "UTC", applyType: "dynamic", source: "engine-default", isModifiable: true },
+      ],
+      total: 1,
+    });
+
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    const tabs = screen.getAllByRole("tab");
+    await user.click(tabs[2]);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "my-pg" })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-pg" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("timezone")).toBeTruthy();
+    });
+
+    const editBtn = screen.getByRole("button", { name: /Edit timezone/i });
+    await user.click(editBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Edit parameter: timezone/i)).toBeTruthy();
+    });
+    expect(screen.getByDisplayValue("UTC")).toBeTruthy();
+    // Modal should have Save and Cancel buttons
+    expect(screen.getByRole("button", { name: /Save/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Cancel/i })).toBeTruthy();
+  });
+
+  it("goes back from parameter drill-down to list", async () => {
+    mockParamGroups.mockReturnValue({
+      data: { parameterGroups: [{ name: "my-pg", family: "postgres16", description: "Custom params" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockApi.mockResolvedValueOnce({
+      parameters: [{ name: "max_connections", value: "100", applyType: "static", source: "user", isModifiable: false }],
+      total: 1,
+    });
+
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    const tabs = screen.getAllByRole("tab");
+    await user.click(tabs[2]);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "my-pg" })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-pg" }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Parameter group: my-pg/i)).toBeTruthy();
+    });
+
+    await user.click(screen.getByText(/Back to Parameter Groups/i));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "my-pg" })).toBeTruthy();
+    });
+  });
+});
+
+describe("RDSDashboard — cluster parameter group drill-down", () => {
+  it("drills down to cluster parameter group parameters", async () => {
+    mockClusterParamGroups.mockReturnValue({
+      data: {
+        clusterParameterGroups: [{ name: "my-cpg", family: "aurora-postgresql16", description: "Cluster params" }],
+        total: 1,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    mockApi.mockResolvedValueOnce({
+      parameters: [
+        { name: "shared_buffers", value: "256MB", applyType: "static", source: "user", isModifiable: false },
+      ],
+      total: 1,
+    });
+
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Cluster Parameter Groups/i }));
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "my-cpg" })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-cpg" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Parameters")).toBeTruthy();
+      expect(screen.getByText(/Cluster Parameter group: my-cpg/i)).toBeTruthy();
+      expect(screen.getByText("shared_buffers")).toBeTruthy();
+      expect(screen.getByText("256MB")).toBeTruthy();
+      expect(screen.getByText(/Back to Cluster Parameter Groups/i)).toBeTruthy();
+    });
+  });
+
+  it("shows cluster parameter group drill-down loading state", async () => {
+    mockClusterParamGroups.mockReturnValue({
+      data: {
+        clusterParameterGroups: [{ name: "my-cpg", family: "aurora-postgresql16", description: "Cluster params" }],
+        total: 1,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    mockApi.mockReturnValue(new Promise(() => {}));
+
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Cluster Parameter Groups/i }));
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "my-cpg" })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-cpg" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Parameters")).toBeTruthy();
+      expect(screen.getByText(/Back to Cluster Parameter Groups/i)).toBeTruthy();
+    });
+  });
+
+  it("goes back from cluster parameter drill-down to list", async () => {
+    mockClusterParamGroups.mockReturnValue({
+      data: {
+        clusterParameterGroups: [{ name: "my-cpg", family: "aurora-postgresql16", description: "Cluster params" }],
+        total: 1,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    mockApi.mockResolvedValueOnce({
+      parameters: [{ name: "shared_buffers", value: "256MB", applyType: "static", source: "user", isModifiable: false }],
+      total: 1,
+    });
+
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Cluster Parameter Groups/i }));
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "my-cpg" })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-cpg" }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Cluster Parameter group: my-cpg/i)).toBeTruthy();
+    });
+
+    await user.click(screen.getByText(/Back to Cluster Parameter Groups/i));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "my-cpg" })).toBeTruthy();
+    });
   });
 });
