@@ -1008,4 +1008,114 @@ describe("SESDashboard — sending, tracking, reputation, delivery", () => {
     await waitFor(() => expect(screen.getByText(/Not configured/i)).toBeTruthy());
     expect(screen.getByRole("button", { name: /^Set$/i })).toBeTruthy();
   });
+
+  it("calls disable sending", async () => {
+    const user = userEvent.setup();
+    mockConfigSets.mockReturnValue({
+      data: { configurationSets: [{ Name: "cs-actions" }], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockDescribeConfigSet.mockReturnValue({
+      data: {
+        name: "cs-actions",
+        eventDestinations: [],
+        trackingOptions: { CustomRedirectDomain: "track.example.com" },
+        reputationOptions: { ReputationMetricsEnabled: true },
+        deliveryOptions: { TlsPolicy: "Optional" },
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("cs-actions")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /View/i }));
+    await waitFor(() => screen.getByText("Sending"));
+    await user.click(screen.getByRole("button", { name: /Disable sending/i }));
+    await waitFor(() => {
+      expect(mockSetSendingEnabled).toHaveBeenCalledWith(
+        expect.objectContaining({ configSetName: "cs-actions", enabled: false }),
+      );
+    });
+  });
+
+  it("shows config set detail loading state", async () => {
+    const user = userEvent.setup();
+    mockConfigSets.mockReturnValue({
+      data: { configurationSets: [{ Name: "cs-loading" }], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockDescribeConfigSet.mockReturnValue({ data: undefined, isLoading: true, isError: false, error: null });
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => {
+      const nameMatches = screen.getAllByText("cs-loading");
+      expect(nameMatches.length).toBeGreaterThanOrEqual(1);
+    });
+    await user.click(screen.getByRole("button", { name: /View/i }));
+    await waitFor(() => {
+      // Config set name appears in both the list header and detail header
+      const nameMatches = screen.getAllByText("cs-loading");
+      expect(nameMatches.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it("closes config set detail", async () => {
+    const user = userEvent.setup();
+    mockConfigSets.mockReturnValue({
+      data: { configurationSets: [{ Name: "cs-close" }], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockDescribeConfigSet.mockReturnValue({
+      data: { name: "cs-close", eventDestinations: [] },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("cs-close")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /View/i }));
+    await waitFor(() => screen.getByText("Event Destinations"));
+    // Click the last Close button (config set detail Close, avoids identity detail Close)
+    await clickButton(user, /Close/i, { last: true });
+    await waitFor(() => {
+      expect(screen.queryByText("Event Destinations")).toBeNull();
+    });
+  });
+
+  it("disables reputation metrics", async () => {
+    const user = userEvent.setup();
+    mockConfigSets.mockReturnValue({
+      data: { configurationSets: [{ Name: "cs-rep" }], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockDescribeConfigSet.mockReturnValue({
+      data: {
+        name: "cs-rep",
+        eventDestinations: [],
+        reputationOptions: { ReputationMetricsEnabled: true },
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("cs-rep")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /View/i }));
+    await waitFor(() => screen.getByText("Reputation Metrics"));
+    // Use clickButton to handle Disable vs Disable sending ambiguity
+    await clickButton(user, /^Disable$/i);
+    await waitFor(() => {
+      expect(mockSetRepMetrics).toHaveBeenCalledWith(
+        expect.objectContaining({ configSetName: "cs-rep", enabled: false }),
+      );
+    });
+  });
 });

@@ -33,6 +33,7 @@ import {
   usePutKinesisRecords,
   useKinesisRecords,
   useKinesisTags,
+  useDescribeKinesisConsumer,
 } from "./useKinesis";
 
 beforeEach(() => {
@@ -256,6 +257,36 @@ describe("useKinesis hooks", () => {
           }),
         }
       );
+    });
+  });
+
+  describe("useDescribeKinesisConsumer", () => {
+    it("calls correct URL when both streamName and consumerName provided", async () => {
+      mockApi.mockResolvedValueOnce({ consumer: { ConsumerName: "my-consumer" } });
+      const { result } = renderHook(
+        () => useDescribeKinesisConsumer("stream-1", "my-consumer"),
+        { wrapper: createWrapper() }
+      );
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockApi).toHaveBeenCalledWith(
+        "/aws/kinesis/streams/stream-1/consumers/my-consumer"
+      );
+    });
+
+    it("disabled when streamName is null", () => {
+      const { result } = renderHook(
+        () => useDescribeKinesisConsumer(null, "my-consumer"),
+        { wrapper: createWrapper() }
+      );
+      expect(result.current.fetchStatus).toBe("idle");
+    });
+
+    it("disabled when consumerName is null", () => {
+      const { result } = renderHook(
+        () => useDescribeKinesisConsumer("stream-1", null),
+        { wrapper: createWrapper() }
+      );
+      expect(result.current.fetchStatus).toBe("idle");
     });
   });
 });
