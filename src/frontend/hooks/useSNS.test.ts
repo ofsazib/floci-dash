@@ -314,4 +314,8 @@ describe("extractTopicName", () => {
   it("returns the input when there are no colons", () => {
     expect(extractTopicName("plain")).toBe("plain");
   });
+
+  it("returns the original ARN when last segment is empty", () => {
+    expect(extractTopicName("arn:aws:sns:us-east-1:123:")).toBe("arn:aws:sns:us-east-1:123:");
+  });
 });

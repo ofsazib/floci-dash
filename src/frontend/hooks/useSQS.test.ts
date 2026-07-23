@@ -286,4 +286,8 @@ describe("extractQueueName", () => {
   it("returns the input when there are no slashes", () => {
     expect(extractQueueName("plain")).toBe("plain");
   });
+
+  it("returns the original URL when last segment is empty", () => {
+    expect(extractQueueName("http://localhost:4566/000000000000/")).toBe("http://localhost:4566/000000000000/");
+  });
 });

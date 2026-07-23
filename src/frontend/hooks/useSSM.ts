@@ -16,7 +16,7 @@ export function useSSMParameter(name: string | null) {
   return useQuery({
     queryKey: ["aws", "ssm", "parameters", name],
     queryFn: () =>
-      api<{ parameter: any }>(`/aws/ssm/parameters/${encodeURIComponent(name || "")}`),
+      api<{ parameter: any }>(`/aws/ssm/parameters/${encodeURIComponent(name!)}`),
     enabled: !!name,
   });
 }
@@ -48,7 +48,7 @@ export function useSSMParameterHistory(name: string | null) {
     queryKey: ["aws", "ssm", "parameters", name, "history"],
     queryFn: () =>
       api<{ history: any[]; total: number }>(
-        `/aws/ssm/parameters/${encodeURIComponent(name || "")}/history`
+        `/aws/ssm/parameters/${encodeURIComponent(name!)}/history`
       ),
     enabled: !!name,
   });

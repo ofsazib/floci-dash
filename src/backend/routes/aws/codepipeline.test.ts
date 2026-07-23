@@ -229,6 +229,14 @@ describe("CodePipeline Routes", () => {
       expect(body.disabled).toBe(true);
     });
 
+    it("POST /pipelines/:name/transitions/:stageName/disable — uses default reason when not provided", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/pipelines/my-pipeline/transitions/Deploy/disable", {});
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DisableStageTransitionCommand");
+      expect(mockSend.mock.calls[0][0].reason).toBe("Disabled from dashboard");
+    });
+
     it("POST /pipelines/:name/transitions/:stageName/enable — enables transition", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await post("/pipelines/my-pipeline/transitions/Deploy/enable");
@@ -278,6 +286,20 @@ describe("CodePipeline Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.pipelineExecutionId).toBe("exec-2");
+    });
+
+    it("POST /pipelines/:name/executions/:id/rollback — includes sourceRevision when provided", async () => {
+      mockSend.mockResolvedValueOnce({ pipelineExecutionId: "exec-3" });
+      const res = await post("/pipelines/my-pipeline/executions/exec-1/rollback", {
+        stageName: "Deploy",
+        sourceRevision: { revisionId: "rev-1", revisionUrl: "https://example.com" },
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.pipelineExecutionId).toBe("exec-3");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("RollbackStageCommand");
+      expect(mockSend.mock.calls[0][0].sourceRevision).toBeDefined();
+      expect(mockSend.mock.calls[0][0].sourceRevision.revisionId).toBe("rev-1");
     });
 
     it("POST /pipelines/:name/executions/:id/rollback — rejects missing stageName", async () => {
@@ -345,6 +367,26 @@ describe("CodePipeline Routes", () => {
       const res = await get("/pipelines/my-pipeline/rules");
       const body = await res.json();
       expect(body.total).toBe(0);
+    });
+  });
+
+  describe("Jobs", () => {
+    it("PUT /jobs/:jobId/result — accepts failure result", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/jobs/job-123/result", {
+        status: "Failure",
+        failureType: "ConfigurationError",
+        message: "Invalid config",
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.result).toBe("failure");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("PutJobFailureResultCommand");
+    });
+
+    it("PUT /jobs/:jobId/result — requires status", async () => {
+      const res = await put("/jobs/job-123/result", {});
+      expect(res.status).toBe(400);
     });
   });
 
@@ -436,6 +478,24 @@ describe("CodePipeline Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.deleted).toBe(true);
+    });
+
+    it("POST /webhooks/:name/register — registers webhook with third party", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/webhooks/my-hook/register");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.registered).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("RegisterWebhookWithThirdPartyCommand");
+    });
+
+    it("POST /webhooks/:name/deregister — deregisters webhook", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/webhooks/my-hook/deregister");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deregistered).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeregisterWebhookWithThirdPartyCommand");
     });
   });
 

@@ -3,16 +3,17 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-// Stub every child so App's route wiring renders without pulling in heavy
-// Cloudscape pages or network calls. App.tsx itself (the Routes/Route tree) is
-// what we're covering here.
+// Trackable mocks for Toast showToast and error reporter callback
+const toastMocks = { showToast: vi.fn() };
+let capturedReporter: ((message: string, context?: string) => void) | null = null;
+
 vi.mock("./components/AppLayoutShell", () => ({
   default: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 vi.mock("./components/Toast", () => ({
   ToastProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useToast: () => ({
-    showToast: () => {},
+    showToast: toastMocks.showToast,
     toasts: [],
   }),
 }));
@@ -33,7 +34,9 @@ vi.mock("./pages/CloudFormationPage", () => ({ default: () => <div>cfn-page</div
 vi.mock("./pages/KMSPage", () => ({ default: () => <div>kms-page</div> }));
 vi.mock("./pages/Settings", () => ({ default: () => <div>settings-page</div> }));
 vi.mock("./lib/globalErrorHandler", () => ({
-  setGlobalErrorReporter: vi.fn(),
+  setGlobalErrorReporter: vi.fn((fn: any) => {
+    capturedReporter = fn;
+  }),
   clearGlobalErrorReporter: vi.fn(),
 }));
 
@@ -44,6 +47,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   // Reset hash so each test starts at the root
   window.location.hash = "";
+  capturedReporter = null;
 });
 
 afterEach(() => {
@@ -151,5 +155,59 @@ describe("App — ToastProviderWithErrorReporter", () => {
     const { unmount } = render(<App />);
     unmount();
     expect(clearGlobalErrorReporter).toHaveBeenCalled();
+  });
+
+  it("shows toast with just message when reporter fires without context", async () => {
+    render(<App />);
+    await waitFor(() => {
+      expect(capturedReporter).not.toBeNull();
+    });
+    capturedReporter!("Something went wrong");
+    expect(toastMocks.showToast).toHaveBeenCalledWith("error", "Something went wrong");
+  });
+
+  it("shows toast with context prefix when reporter fires with context", async () => {
+    render(<App />);
+    await waitFor(() => {
+      expect(capturedReporter).not.toBeNull();
+    });
+    capturedReporter!("Error message", "API");
+    expect(toastMocks.showToast).toHaveBeenCalledWith("error", "[API] Error message");
+  });
+});
+
+// ─── Additional missing routes ──────────────────────────────
+
+describe("App — additional route navigation", () => {
+  it("navigates to /services/events route", async () => {
+    window.location.hash = "#/services/events";
+    render(<App />);
+    await waitFor(() => {
+      expect(screen.getByText("events-page")).toBeTruthy();
+    });
+  });
+
+  it("navigates to /services/secretsmanager route", async () => {
+    window.location.hash = "#/services/secretsmanager";
+    render(<App />);
+    await waitFor(() => {
+      expect(screen.getByText("secrets-page")).toBeTruthy();
+    });
+  });
+
+  it("navigates to /services/cloudformation route", async () => {
+    window.location.hash = "#/services/cloudformation";
+    render(<App />);
+    await waitFor(() => {
+      expect(screen.getByText("cfn-page")).toBeTruthy();
+    });
+  });
+
+  it("navigates to /services/monitoring route (alias to CloudWatch)", async () => {
+    window.location.hash = "#/services/monitoring";
+    render(<App />);
+    await waitFor(() => {
+      expect(screen.getByText("cw-page")).toBeTruthy();
+    });
   });
 });
