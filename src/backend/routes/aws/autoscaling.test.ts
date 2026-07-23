@@ -123,6 +123,21 @@ describe("Auto Scaling Routes", () => {
       expect(mockSend).toHaveBeenCalledTimes(1);
     });
 
+    it("POST /groups — creates group with tags (covers tags?.map and ?? branches)", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/groups", {
+        autoScalingGroupName: "asg-with-tags",
+        minSize: 1,
+        maxSize: 3,
+        tags: [{ key: "env", value: "prod" }, { key: "owner", value: "devops", propagateAtLaunch: false }],
+      });
+      expect(res.status).toBe(201);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.Tags).toHaveLength(2);
+      expect(cmd.Tags[0]).toMatchObject({ Key: "env", Value: "prod", PropagateAtLaunch: true });
+      expect(cmd.Tags[1]).toMatchObject({ Key: "owner", Value: "devops", PropagateAtLaunch: false });
+    });
+
     it("POST /groups — 400 if name missing", async () => {
       const res = await post("/groups", { minSize: 1, maxSize: 5 });
       expect(res.status).toBe(400);
@@ -146,12 +161,22 @@ describe("Auto Scaling Routes", () => {
       expect(body.updated).toBe(true);
     });
 
-    it("DELETE /groups/:name — deletes group", async () => {
+    it("DELETE /groups/:name — deletes group (force=false default)", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await del("/groups/asg-1");
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.deleted).toBe(true);
+      expect(mockSend.mock.calls[0][0].ForceDelete).toBe(false);
+    });
+
+    it("DELETE /groups/:name — deletes group with force=true", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/groups/asg-1?force=true");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deleted).toBe(true);
+      expect(mockSend.mock.calls[0][0].ForceDelete).toBe(true);
     });
 
     it("PUT /groups/:name/desired-capacity — sets desired capacity", async () => {
@@ -348,13 +373,22 @@ describe("Auto Scaling Routes", () => {
   });
 
   describe("Instance Refresh", () => {
-    it("POST /groups/:name/instance-refresh — starts refresh", async () => {
+    it("POST /groups/:name/instance-refresh — starts refresh with preferences", async () => {
       mockSend.mockResolvedValueOnce({ InstanceRefreshId: "ir-1" });
-      const res = await post("/groups/asg-1/instance-refresh", { minHealthyPercentage: 90 });
+      const res = await post("/groups/asg-1/instance-refresh", { minHealthyPercentage: 90, instanceWarmup: 60 });
       expect(res.status).toBe(201);
       const body = await res.json();
       expect(body.instanceRefreshId).toBe("ir-1");
       expect(mockSend.mock.calls[0][0].__cmdName).toBe("StartInstanceRefreshCommand");
+      expect(mockSend.mock.calls[0][0].Preferences.MinHealthyPercentage).toBe(90);
+      expect(mockSend.mock.calls[0][0].Preferences.InstanceWarmup).toBe(60);
+    });
+
+    it("POST /groups/:name/instance-refresh — starts refresh without preferences", async () => {
+      mockSend.mockResolvedValueOnce({ InstanceRefreshId: "ir-2" });
+      const res = await post("/groups/asg-1/instance-refresh", {});
+      expect(res.status).toBe(201);
+      expect(mockSend.mock.calls[0][0].Preferences).toBeUndefined();
     });
 
     it("GET /groups/:name/instance-refreshes — lists refreshes", async () => {
@@ -414,11 +448,21 @@ describe("Auto Scaling Routes", () => {
       expect(mockSend.mock.calls[0][0].__cmdName).toBe("AttachLoadBalancerTargetGroupsCommand");
     });
 
+    it("POST /groups/:name/lb-target-groups — 400 when targetGroupARNs missing", async () => {
+      const res = await post("/groups/asg-1/lb-target-groups", {});
+      expect(res.status).toBe(400);
+    });
+
     it("POST /groups/:name/lb-target-groups/detach — detaches", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await post("/groups/asg-1/lb-target-groups/detach", { targetGroupARNs: ["arn:tg1"] });
       const body = await res.json();
       expect(body.detached).toBe(true);
+    });
+
+    it("POST /groups/:name/lb-target-groups/detach — 400 when targetGroupARNs missing", async () => {
+      const res = await post("/groups/asg-1/lb-target-groups/detach", {});
+      expect(res.status).toBe(400);
     });
   });
 
@@ -437,11 +481,21 @@ describe("Auto Scaling Routes", () => {
       expect(body.attached).toBe(true);
     });
 
+    it("POST /groups/:name/load-balancers — 400 when loadBalancerNames missing", async () => {
+      const res = await post("/groups/asg-1/load-balancers", {});
+      expect(res.status).toBe(400);
+    });
+
     it("POST /groups/:name/load-balancers/detach — detaches", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await post("/groups/asg-1/load-balancers/detach", { loadBalancerNames: ["my-clb"] });
       const body = await res.json();
       expect(body.detached).toBe(true);
+    });
+
+    it("POST /groups/:name/load-balancers/detach — 400 when loadBalancerNames missing", async () => {
+      const res = await post("/groups/asg-1/load-balancers/detach", {});
+      expect(res.status).toBe(400);
     });
   });
 
