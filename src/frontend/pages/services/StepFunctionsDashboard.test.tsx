@@ -11,15 +11,18 @@ const mockExecutions = vi.fn();
 const mockActivities = vi.fn();
 const mockStartExecution = vi.fn().mockResolvedValue({});
 const mockStopExecution = vi.fn().mockResolvedValue({});
+const mockVersions = vi.fn();
+const mockPublishVersion = vi.fn();
+const mockDeleteVersion = vi.fn();
 
 vi.mock("../../hooks/useStepFunctions", () => ({
   useStateMachines: (...args: any[]) => mockStateMachines(...args),
   useDeleteStateMachine: () => ({ mutateAsync: mockDeleteSm, isPending: false, variables: null }),
   useStateMachineExecutions: (...args: any[]) => mockExecutions(...args),
   useActivities: (...args: any[]) => mockActivities(...args),
-  useStateMachineVersions: () => ({ data: { versions: [], total: 0 }, isLoading: false, isError: false, error: null }),
-  usePublishStateMachineVersion: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn() }),
-  useDeleteStateMachineVersion: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useStateMachineVersions: (...args: any[]) => mockVersions(...args),
+  usePublishStateMachineVersion: () => ({ mutate: mockPublishVersion, mutateAsync: mockPublishVersion, isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useDeleteStateMachineVersion: () => ({ mutate: mockDeleteVersion, mutateAsync: mockDeleteVersion, isPending: false, isError: false, error: null, reset: vi.fn() }),
   useStartExecution: () => ({ mutate: vi.fn(), mutateAsync: mockStartExecution, isPending: false, variables: null, isError: false, error: null, reset: vi.fn() }),
   useStopExecution: () => ({ mutate: vi.fn(), mutateAsync: mockStopExecution, isPending: false, variables: null, isError: false, error: null, reset: vi.fn() }),
 }));
@@ -31,7 +34,17 @@ beforeEach(() => {
   mockStateMachines.mockReturnValue({ data: { stateMachines: [], total: 0 }, isLoading: false });
   mockExecutions.mockReturnValue({ data: { executions: [], total: 0 } });
   mockActivities.mockReturnValue({ data: { activities: [], total: 0 } });
+  mockVersions.mockReturnValue({ data: { versions: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockPublishVersion.mockResolvedValue({});
+  mockDeleteVersion.mockResolvedValue({});
 });
+
+// ── Helper: select state machine from Cloudscape Select dropdown ──
+async function selectVersionSM(user: ReturnType<typeof userEvent.setup>, smName: string) {
+  const trigger = screen.getByRole("button", { name: /Choose a state machine/ });
+  await user.click(trigger);
+  await user.click(screen.getByRole("option", { name: smName }));
+}
 
 describe("StepFunctionsDashboard", () => {
   it("shows loading skeleton", () => {
@@ -181,7 +194,7 @@ describe("StepFunctionsDashboard", () => {
     await waitFor(() => expect(screen.queryByText("alpha")).toBeNull());
   });
 
-  // ── Execution controls ────────────────────────────────
+// ── Execution controls ────────────────────────────────
 
   const SM_ARN = "arn:aws:states:us-east-1:123:stateMachine:my-sm";
 
@@ -240,5 +253,86 @@ describe("StepFunctionsDashboard", () => {
     await openExecutions(user);
     await waitFor(() => expect(screen.getByText("done-1")).toBeTruthy());
     expect(screen.queryByRole("button", { name: /Stop/i })).toBeNull();
+  });
+});
+
+describe("StepFunctionsDashboard — versions tab", () => {
+  const SM_ARN = "arn:aws:states:us-east-1:123:stateMachine:my-sm";
+
+  function setupStateMachines() {
+    mockStateMachines.mockReturnValue({
+      data: {
+        stateMachines: [{ stateMachineArn: SM_ARN, name: "my-sm", type: "STANDARD", creationDate: "2024-01-15T00:00:00Z" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+  }
+
+  it("shows empty message on versions tab (no SM selected)", async () => {
+    const user = userEvent.setup();
+    render(<StepFunctionsDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Versions/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Select a state machine to view versions/i)).toBeTruthy();
+    });
+  });
+
+  it("shows publish button disabled when no SM selected", async () => {
+    const user = userEvent.setup();
+    render(<StepFunctionsDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Versions/i }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Publish Version/i })).toBeTruthy();
+    });
+    const publishBtn = screen.getByRole("button", { name: /Publish Version/i });
+    expect(publishBtn.getAttribute("disabled")).not.toBeNull();
+  });
+
+  it("shows empty versions message when SM selected but no versions", async () => {
+    setupStateMachines();
+    const user = userEvent.setup();
+    render(<StepFunctionsDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Versions/i }));
+    await waitFor(() => {
+      expect(screen.getByText("State Machine Versions")).toBeTruthy();
+    });
+    // Select a state machine via Cloudscape Select dropdown
+    await selectVersionSM(user, "my-sm");
+    await waitFor(() => {
+      expect(screen.getByText(/No versions published yet/i)).toBeTruthy();
+    });
+  });
+
+  it("shows versions with data and deletes one", async () => {
+    setupStateMachines();
+    mockVersions.mockReturnValue({
+      data: {
+        versions: [{ stateMachineVersionArn: SM_ARN + ":1" }],
+        total: 1,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<StepFunctionsDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Versions/i }));
+    await waitFor(() => {
+      expect(screen.getByText("State Machine Versions")).toBeTruthy();
+    });
+    // Select a state machine via Cloudscape Select dropdown
+    await selectVersionSM(user, "my-sm");
+    await waitFor(() => {
+      expect(screen.getByText(SM_ARN + ":1")).toBeTruthy();
+      expect(screen.getByText("1")).toBeTruthy();
+    });
+    const deleteBtn = screen.getByRole("button", { name: /Delete 1/i });
+    await user.click(deleteBtn);
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() => {
+      expect(mockDeleteVersion).toHaveBeenCalledWith(
+        expect.objectContaining({ arn: SM_ARN, versionArn: SM_ARN + ":1" })
+      );
+    });
   });
 });
