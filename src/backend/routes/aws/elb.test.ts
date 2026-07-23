@@ -149,6 +149,22 @@ describe("ELB Routes", () => {
       expect(body.loadBalancer.LoadBalancerName).toBe("new-alb");
     });
 
+    it("POST /load-balancers — creates with tags and defaults", async () => {
+      mockSend.mockResolvedValueOnce({
+        LoadBalancers: [{ LoadBalancerName: "tagged-lb" }],
+      });
+      const res = await post("/load-balancers", {
+        name: "tagged-lb",
+        subnets: ["subnet-123"],
+        tags: { Environment: "prod", Team: "infra" },
+      });
+      expect(res.status).toBe(201);
+      expect(mockSend.mock.calls[0][0].Tags).toHaveLength(2);
+      expect(mockSend.mock.calls[0][0].Scheme).toBe("internet-facing");
+      expect(mockSend.mock.calls[0][0].Type).toBe("application");
+      expect(mockSend.mock.calls[0][0].IpAddressType).toBe("ipv4");
+    });
+
     it("POST /load-balancers — 400 when name or subnets missing", async () => {
       const res1 = await post("/load-balancers", {});
       expect(res1.status).toBe(400);

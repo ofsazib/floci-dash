@@ -481,5 +481,57 @@ describe("S3 Routes", () => {
       const res = await put("/buckets/my-bucket/objects/file.txt/acl", {});
       expect(res.status).toBe(400);
     });
+
+    it("PUT /buckets/:name/objects/*/acl — sets ACL via grants array with owner", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/buckets/my-bucket/objects/file.txt/acl", {
+        grants: [{ Grantee: { Type: "CanonicalUser", ID: "owner1" }, Permission: "FULL_CONTROL" }],
+        owner: { ID: "owner1", DisplayName: "Owner" },
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+      expect(body.grants).toBe(1);
+      expect(mockSend.mock.calls[0][0].AccessControlPolicy.Grants).toHaveLength(1);
+      expect(mockSend.mock.calls[0][0].AccessControlPolicy.Owner.ID).toBe("owner1");
+    });
+
+    it("PUT /buckets/:name/objects/*/acl — 400 when grants missing with no cannedAcl", async () => {
+      const res = await put("/buckets/my-bucket/objects/file.txt/acl", { foo: "bar" });
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe("Batch Delete with Folders", () => {
+    beforeEach(() => { mockSend.mockReset(); });
+
+    it("POST batch-delete — expands folder prefix and deletes regular + folder keys", async () => {
+      mockSend.mockResolvedValueOnce({
+        Contents: [{ Key: "folder/file1.txt" }, { Key: "folder/file2.txt" }],
+        IsTruncated: false,
+      });
+      mockSend.mockResolvedValueOnce({
+        Deleted: [{ Key: "regular.txt" }, { Key: "folder/file1.txt" }, { Key: "folder/file2.txt" }],
+        Errors: [],
+      });
+      const res = await post("/buckets/my-bucket/objects/batch-delete", {
+        keys: ["regular.txt", "folder/"],
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.totalDeleted).toBe(3);
+      expect(body.deleted).toContain("regular.txt");
+      expect(body.deleted).toContain("folder/file1.txt");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("ListObjectsV2Command");
+      expect(mockSend.mock.calls[0][0].Prefix).toBe("folder/");
+      expect(mockSend.mock.calls[1][0].__cmdName).toBe("DeleteObjectsCommand");
+    });
+
+    it("POST batch-delete — returns empty result when all keys sanitized away", async () => {
+      const res = await post("/buckets/my-bucket/objects/batch-delete", {
+        keys: [""],
+      });
+      expect(res.status).toBe(400);
+    });
   });
 });
