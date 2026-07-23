@@ -23,4 +23,15 @@ describe("TextractDashboard", () => {
     const { container } = render(<TextractDashboard />, { wrapper: createWrapper() });
     expect(container.querySelector('[class*="alert"]')).toBeTruthy();
   });
+
+  it("renders AnalyzeDocument API reference", () => {
+    render(<TextractDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/AnalyzeDocument/i)).toBeTruthy();
+    expect(screen.getByText(/extract text and data from documents/i)).toBeTruthy();
+  });
+
+  it("renders sync and async operation reference", () => {
+    render(<TextractDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/sync and async operations/i)).toBeTruthy();
+  });
 });

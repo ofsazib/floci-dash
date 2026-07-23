@@ -46,7 +46,7 @@ describe("FirehoseDashboard — rendering", () => {
     expect(screen.getByText("No delivery streams")).toBeTruthy();
   });
 
-  it("renders stream data", () => {
+  it("renders stream data with destination details", () => {
     mockFirehoseStreams.mockReturnValue({
       data: {
         streams: [
@@ -72,6 +72,27 @@ describe("FirehoseDashboard — rendering", () => {
     render(<FirehoseDashboard />, { wrapper: createWrapper() });
     expect(screen.getByText("my-stream")).toBeTruthy();
     expect(screen.getByText("ACTIVE")).toBeTruthy();
+    expect(screen.getByText("arn:aws:s3:::my-bucket")).toBeTruthy();
+    expect(screen.getByText("logs/")).toBeTruthy();
+  });
+
+  it("shows dash for missing destinations and created date", () => {
+    mockFirehoseStreams.mockReturnValue({
+      data: {
+        streams: [
+          {
+            DeliveryStreamName: "minimal-stream",
+            DeliveryStreamARN: "arn:1",
+            DeliveryStreamStatus: "CREATING",
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<FirehoseDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("minimal-stream")).toBeTruthy();
+    expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(2);
   });
 });
 
@@ -113,5 +134,51 @@ describe("FirehoseDashboard — delete", () => {
     });
     render(<FirehoseDashboard />, { wrapper: createWrapper() });
     expect(screen.getByText("my-stream")).toBeTruthy();
+  });
+});
+
+describe("FirehoseDashboard — filtering", () => {
+  it("filters streams by name", async () => {
+    mockFirehoseStreams.mockReturnValue({
+      data: {
+        streams: [
+          { DeliveryStreamName: "alpha-stream", DeliveryStreamStatus: "ACTIVE" },
+          { DeliveryStreamName: "beta-stream", DeliveryStreamStatus: "ACTIVE" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<FirehoseDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("alpha-stream")).toBeTruthy());
+    expect(screen.getByText("beta-stream")).toBeTruthy();
+
+    const filterInput = screen.getByPlaceholderText("Find streams by name");
+    await user.type(filterInput, "alpha");
+    await waitFor(() => {
+      expect(screen.queryByText("beta-stream")).toBeNull();
+    });
+  });
+
+  it("filters out all streams when no match", async () => {
+    mockFirehoseStreams.mockReturnValue({
+      data: {
+        streams: [
+          { DeliveryStreamName: "visible-stream", DeliveryStreamStatus: "ACTIVE" },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<FirehoseDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("visible-stream")).toBeTruthy());
+
+    const filterInput = screen.getByPlaceholderText("Find streams by name");
+    await user.type(filterInput, "nonexistent");
+    await waitFor(() => {
+      expect(screen.queryByText("visible-stream")).toBeNull();
+    });
   });
 });
