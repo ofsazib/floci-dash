@@ -510,6 +510,7 @@ export function CloudFrontDashboard() {
   const { data: cachePolicies } = useCloudFrontCachePolicies();
   const { data: functions } = useCloudFrontFunctions();
   const [selectedDist, setSelectedDist] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState("distributions");
   const { data: invData } = useCloudFrontInvalidations(selectedDist);
   const createInvalidation = useCreateCloudFrontInvalidation(selectedDist || "");
   const [showInvalidation, setShowInvalidation] = useState(false);
@@ -519,7 +520,8 @@ export function CloudFrontDashboard() {
 
   return (
     <Tabs
-      activeTabId={selectedDist ? "invalidations" : "distributions"}
+      activeTabId={activeTab}
+      onChange={({ detail }) => setActiveTab(detail.activeTabId)}
       tabs={[
         {
           id: "distributions",
@@ -544,7 +546,10 @@ export function CloudFrontDashboard() {
                   id: "id",
                   header: "ID",
                   cell: (i: any) => (
-                    <Button variant="link" onClick={() => setSelectedDist(i.id)}>
+                    <Button variant="link" onClick={() => {
+                      setSelectedDist(i.id);
+                      setActiveTab("invalidations");
+                    }}>
                       {i.id}
                     </Button>
                   ),
@@ -568,7 +573,10 @@ export function CloudFrontDashboard() {
             <>
               {selectedDist && (
                 <Box margin={{ bottom: "s" }}>
-                  <Button iconName="arrow-left" onClick={() => setSelectedDist(null)}>
+                  <Button iconName="arrow-left" onClick={() => {
+                    setSelectedDist(null);
+                    setActiveTab("distributions");
+                  }}>
                     Back to distributions
                   </Button>
                 </Box>

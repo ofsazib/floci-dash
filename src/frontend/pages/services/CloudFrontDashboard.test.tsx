@@ -321,3 +321,167 @@ describe("CloudFrontDashboard — invalidations tab", () => {
     });
   });
 });
+
+describe("CloudFrontDashboard — cache policies", () => {
+  it("shows empty message for cache policies tab", async () => {
+    const user = userEvent.setup();
+    render(<CloudFrontDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Cache Policies/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/No cache policies/i)).toBeTruthy();
+    });
+  });
+
+  it("renders cache policies with data", async () => {
+    mockCachePolicies.mockReturnValue({
+      data: {
+        cachePolicies: [
+          {
+            CachePolicy: { Id: "cp-1", CachePolicyConfig: { Name: "ManagedPolicy", Comment: "Default" } },
+            Type: "managed",
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CloudFrontDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Cache Policies/i }));
+    await waitFor(() => {
+      expect(screen.getByText("cp-1")).toBeTruthy();
+      expect(screen.getByText("ManagedPolicy")).toBeTruthy();
+      expect(screen.getByText("managed")).toBeTruthy();
+      expect(screen.getByText("Default")).toBeTruthy();
+    });
+  });
+
+  it("shows dash for missing cache policy comment", async () => {
+    mockCachePolicies.mockReturnValue({
+      data: {
+        cachePolicies: [
+          {
+            CachePolicy: { Id: "cp-2", CachePolicyConfig: { Name: "MinimalPolicy" } },
+            Type: "custom",
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CloudFrontDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Cache Policies/i }));
+    await waitFor(() => {
+      expect(screen.getByText("cp-2")).toBeTruthy();
+      expect(screen.getByText("MinimalPolicy")).toBeTruthy();
+      expect(screen.getByText("-")).toBeTruthy();
+    });
+  });
+
+  it("filters cache policies by name", async () => {
+    mockCachePolicies.mockReturnValue({
+      data: {
+        cachePolicies: [
+          {
+            CachePolicy: { Id: "cp-a", CachePolicyConfig: { Name: "PolicyAlpha" } },
+            Type: "managed",
+          },
+          {
+            CachePolicy: { Id: "cp-b", CachePolicyConfig: { Name: "PolicyBeta" } },
+            Type: "custom",
+          },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CloudFrontDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Cache Policies/i }));
+    await waitFor(() => expect(screen.getByText("cp-a")).toBeTruthy());
+
+    const filterInput = screen.getByPlaceholderText("Find policies");
+    await user.type(filterInput, "Beta");
+    await waitFor(() => expect(screen.queryByText("cp-a")).toBeNull());
+  });
+});
+
+describe("CloudFrontDashboard — functions", () => {
+  it("shows empty message for functions tab", async () => {
+    const user = userEvent.setup();
+    render(<CloudFrontDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /functions/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/No CloudFront functions/i)).toBeTruthy();
+    });
+  });
+
+  it("renders functions with data", async () => {
+    mockFunctions.mockReturnValue({
+      data: {
+        functions: [
+          {
+            Name: "my-function",
+            FunctionARN: "arn:aws:cloudfront::123:function/my-function",
+            FunctionMetadata: { Stage: "LIVE", CreatedTime: "2024-01-15T00:00:00Z" },
+            FunctionConfig: { Runtime: "cloudfront-js-2.0" },
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CloudFrontDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /functions/i }));
+    await waitFor(() => {
+      expect(screen.getByText("my-function")).toBeTruthy();
+      expect(screen.getByText("LIVE")).toBeTruthy();
+      expect(screen.getByText("cloudfront-js-2.0")).toBeTruthy();
+    });
+  });
+
+  it("shows dashes for missing function fields", async () => {
+    mockFunctions.mockReturnValue({
+      data: {
+        functions: [
+          {
+            Name: "minimal-fn",
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CloudFrontDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /functions/i }));
+    await waitFor(() => {
+      expect(screen.getByText("minimal-fn")).toBeTruthy();
+      const dashes = screen.getAllByText("-");
+      expect(dashes.length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  it("filters functions by name", async () => {
+    mockFunctions.mockReturnValue({
+      data: {
+        functions: [
+          { Name: "fn-alpha", FunctionARN: "arn:1", FunctionMetadata: { Stage: "LIVE" }, FunctionConfig: { Runtime: "js-2.0" } },
+          { Name: "fn-beta", FunctionARN: "arn:2", FunctionMetadata: { Stage: "DEVELOPMENT" }, FunctionConfig: { Runtime: "js-2.0" } },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CloudFrontDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /functions/i }));
+    await waitFor(() => expect(screen.getByText("fn-alpha")).toBeTruthy());
+
+    const filterInput = screen.getByPlaceholderText("Find functions");
+    await user.type(filterInput, "beta");
+    await waitFor(() => expect(screen.queryByText("fn-alpha")).toBeNull());
+  });
+});
