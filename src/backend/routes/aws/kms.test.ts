@@ -107,6 +107,17 @@ describe("KMS Routes", () => {
       expect(body.total).toBe(0);
     });
 
+    it("GET /keys — falls back to basic key info when DescribeKey fails", async () => {
+      mockSend
+        .mockResolvedValueOnce({ Keys: [{ KeyId: "key-bad", KeyArn: "arn:aws:kms:...:key/key-bad" }] })
+        .mockRejectedValueOnce(new Error("Access denied"));
+      const res = await get("/keys");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(body.keys[0].keyId).toBe("key-bad");
+    });
+
     it("GET /keys/:id — returns key detail with tags, aliases, grants, rotation", async () => {
       mockSend
         .mockResolvedValueOnce({ KeyMetadata: { KeyId: "1234-abcd", Description: "My key", Enabled: true, KeyState: "Enabled", KeyUsage: "ENCRYPT_DECRYPT", KeySpec: "SYMMETRIC_DEFAULT", CustomerMasterKeySpec: "SYMMETRIC_DEFAULT", Origin: "AWS_KMS", CreationDate: new Date("2025-01-01") } })
@@ -123,6 +134,19 @@ describe("KMS Routes", () => {
       expect(body.aliases[0].name).toBe("alias/my-key");
       expect(body.grants).toHaveLength(1);
       expect(body.rotationEnabled).toBe(true);
+    });
+
+    it("GET /keys/:id — handles rotation status failure (falls back to false)", async () => {
+      mockSend
+        .mockResolvedValueOnce({ KeyMetadata: { KeyId: "key-rot-fail", KeyState: "Enabled", Origin: "AWS_KMS" } })
+        .mockResolvedValueOnce({ Tags: [] })
+        .mockResolvedValueOnce({ Aliases: [] })
+        .mockResolvedValueOnce({ Grants: [] })
+        .mockRejectedValueOnce(new Error("KMS error"));
+      const res = await get("/keys/key-rot-fail");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.rotationEnabled).toBe(false);
     });
 
     it("GET /keys/:id — returns automaticRotationEnabled as boolean", async () => {
@@ -157,12 +181,40 @@ describe("KMS Routes", () => {
       expect(mockSend.mock.calls[0][0].__cmdName).toBe("CreateKeyCommand");
     });
 
+    it("POST /keys — creates a key with custom keyUsage, keySpec, origin, multiRegion, and tags", async () => {
+      mockSend.mockResolvedValueOnce({ KeyMetadata: { KeyId: "custom-key", Arn: "arn:..." } });
+      const res = await post("/keys", {
+        description: "Custom key",
+        keyUsage: "SIGN_VERIFY",
+        keySpec: "RSA_4096",
+        origin: "EXTERNAL",
+        multiRegion: true,
+        tags: [{ key: "env", value: "prod" }],
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.KeyUsage).toBe("SIGN_VERIFY");
+      expect(cmd.KeySpec).toBe("RSA_4096");
+      expect(cmd.CustomerMasterKeySpec).toBe("RSA_4096");
+      expect(cmd.Origin).toBe("EXTERNAL");
+      expect(cmd.MultiRegion).toBe(true);
+      expect(cmd.Tags).toHaveLength(1);
+      expect(cmd.Tags[0].TagKey).toBe("env");
+    });
+
     it("POST /keys/:id/schedule-deletion — schedules key deletion", async () => {
       mockSend.mockResolvedValueOnce({ DeletionDate: new Date("2025-02-01") });
       const res = await post("/keys/1234-abcd/schedule-deletion", { pendingWindowInDays: 7 });
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.scheduled).toBe(true);
+      expect(mockSend.mock.calls[0][0].PendingWindowInDays).toBe(7);
+    });
+
+    it("POST /keys/:id/schedule-deletion — uses default pendingWindowInDays", async () => {
+      mockSend.mockResolvedValueOnce({ DeletionDate: new Date("2025-02-01") });
+      const res = await post("/keys/1234-abcd/schedule-deletion", {});
+      expect(res.status).toBe(200);
       expect(mockSend.mock.calls[0][0].PendingWindowInDays).toBe(7);
     });
 
@@ -227,6 +279,19 @@ describe("KMS Routes", () => {
       expect(body.keyId).toBe("1234-abcd");
       expect(body.keySpec).toBe("RSA_2048");
     });
+
+    it("GET /keys/:id/public-key — returns null publicKey when absent", async () => {
+      mockSend.mockResolvedValueOnce({
+        KeyId: "no-pubkey",
+        PublicKey: undefined,
+        KeySpec: "SYMMETRIC_DEFAULT",
+        KeyUsage: "ENCRYPT_DECRYPT",
+      });
+      const res = await get("/keys/no-pubkey/public-key");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.publicKey).toBeNull();
+    });
   });
 
   describe("Encrypt / Decrypt", () => {
@@ -267,12 +332,30 @@ describe("KMS Routes", () => {
       expect(body.ciphertextBlob).toBeTruthy();
     });
 
+    it("POST /keys/:id/data-key — uses default keySpec and returns null fields when absent", async () => {
+      mockSend.mockResolvedValueOnce({ KeyId: "key-123" });
+      const res = await post("/keys/1234-abcd/data-key", {});
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(mockSend.mock.calls[0][0].KeySpec).toBe("AES_256");
+      expect(body.plaintext).toBeNull();
+      expect(body.ciphertextBlob).toBeNull();
+    });
+
     it("POST /random — generates random bytes", async () => {
       mockSend.mockResolvedValueOnce({ Plaintext: new Uint8Array([1, 2, 3, 4]) });
       const res = await post("/random", { numberOfBytes: 4 });
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.plaintext).toBeTruthy();
+    });
+
+    it("POST /random — returns null plaintext when absent", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/random", { numberOfBytes: 4 });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.plaintext).toBeNull();
     });
   });
 
@@ -354,6 +437,13 @@ describe("KMS Routes", () => {
       const body = await res.json();
       expect(body.untagged).toBe(true);
       expect(mockSend.mock.calls[0][0].TagKeys).toEqual(["env", "project"]);
+    });
+
+    it("DELETE /keys/:id/tags — handles empty keys", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/keys/1234-abcd/tags");
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].TagKeys).toEqual([]);
     });
   });
 
