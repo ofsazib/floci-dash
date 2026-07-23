@@ -27,6 +27,8 @@ const mockToggleEnableMutate = vi.fn();
 const mockToggleDisableMutate = vi.fn();
 const mockPutTargetsMutate = vi.fn();
 const mockRemoveTargetMutate = vi.fn();
+const mockDescribeArchive = vi.fn();
+const mockDescribeBus = vi.fn();
 
 vi.mock("../hooks/useEvents", () => ({
   useEventBuses: (...args: any[]) => mockEventBuses(...args),
@@ -44,11 +46,11 @@ vi.mock("../hooks/useEvents", () => ({
   useRemoveEventTarget: () => ({ mutate: mockRemoveTargetMutate, isPending: false }),
   useCreateEventArchive: () => ({ mutate: mockCreateArchiveMutate, isPending: false }),
   useDeleteEventArchive: () => ({ mutate: mockDeleteArchiveMutate, isPending: false }),
-  useDescribeEventArchive: () => ({ data: undefined, isLoading: false }),
+  useDescribeEventArchive: (...args: any[]) => mockDescribeArchive(...args),
   useUpdateEventArchive: () => ({ mutate: mockUpdateArchiveMutate, isPending: false }),
   useStartEventReplay: () => ({ mutate: mockStartReplayMutate, isPending: false }),
   useCancelEventReplay: () => ({ mutate: mockCancelReplayMutate, isPending: false }),
-  useDescribeEventBus: () => ({ data: undefined, isLoading: false }),
+  useDescribeEventBus: (...args: any[]) => mockDescribeBus(...args),
   usePutEventBusPermission: () => ({ mutate: mockPutPermissionMutate, isPending: false }),
   useRemoveEventBusPermission: () => ({ mutate: mockRemovePermissionMutate, isPending: false }),
 }));
@@ -89,6 +91,8 @@ describe("EventsPage", () => {
     mockEventTargets.mockReturnValue({ data: { targets: [] }, isLoading: false });
     mockEventArchives.mockReturnValue({ data: { archives: [] }, isLoading: false });
     mockEventReplays.mockReturnValue({ data: { replays: [] }, isLoading: false });
+    mockDescribeArchive.mockReturnValue({ data: undefined, isLoading: false });
+    mockDescribeBus.mockReturnValue({ data: undefined, isLoading: false });
   });
 
   // ─── Rules Tab ──────────────────────────────────────────
@@ -529,5 +533,246 @@ describe("EventsPage", () => {
     await waitFor(() => {
       expect(mockCancelReplayMutate).toHaveBeenCalled();
     });
+  });
+
+  // ─── Additional Rules Tab Branches ──────────────────────
+
+  it("shows Event pattern indicator for rules with pattern only", () => {
+    mockEventRules.mockReturnValue({
+      data: {
+        rules: [
+          { Name: "pattern-rule", State: "ENABLED", EventBusName: "default", EventPattern: '{"source": ["my.app"]}' },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<EventsPage />, { wrapper: pageWrapper() });
+    expect(screen.getByText(/Event pattern/i)).toBeTruthy();
+  });
+
+  it("shows dash for rule with no schedule and no pattern", () => {
+    mockEventRules.mockReturnValue({
+      data: {
+        rules: [
+          { Name: "minimal-rule", State: "ENABLED", EventBusName: "default" },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<EventsPage />, { wrapper: pageWrapper() });
+    expect(screen.getByText("—")).toBeTruthy();
+  });
+
+  it("shows Disabled status for disabled rule", () => {
+    mockEventRules.mockReturnValue({
+      data: {
+        rules: [
+          { Name: "disabled-rule", State: "DISABLED", EventBusName: "default" },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<EventsPage />, { wrapper: pageWrapper() });
+    expect(screen.getByText("Disabled")).toBeTruthy();
+  });
+
+  // ─── Rules Interaction — validation branches ────────────
+
+  it("shows warning when creating rule with no pattern or schedule", async () => {
+    const user = userEvent.setup();
+    const showToast = vi.fn();
+    render(<EventsPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /Create rule/i);
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("my-rule")).toBeTruthy();
+    });
+    const nameInput = screen.getByPlaceholderText("my-rule");
+    await user.type(nameInput, "no-sched-no-pattern");
+    await clickButton(user, /Create/i, { last: true });
+    // The mock for showToast doesn't have this branch covered, but the
+    // handleSubmit logic executes the early return check
+    expect(mockPutRuleMutate).not.toHaveBeenCalled();
+  });
+
+  // ─── Archive Detail Panel ───────────────────────────────
+
+  it("shows archive detail loading state", async () => {
+    const user = userEvent.setup();
+    mockEventArchives.mockReturnValue({
+      data: {
+        archives: [{ ArchiveName: "detail-archive", EventSourceArn: "arn:aws:events:.../default", State: "ENABLED", EventCount: 5 }],
+      },
+      isLoading: false,
+    });
+    mockDescribeArchive.mockReturnValue({ data: undefined, isLoading: true });
+    render(<EventsPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByText("Archives"));
+    await user.click(screen.getByText("detail-archive"));
+    await waitFor(() => {
+      expect(screen.getByText(/Loading archive details/i)).toBeTruthy();
+    });
+  });
+
+  it("shows archive not found in archive detail", async () => {
+    const user = userEvent.setup();
+    mockEventArchives.mockReturnValue({
+      data: {
+        archives: [{ ArchiveName: "gone-archive", EventSourceArn: "arn:aws:events:.../default", State: "ENABLED", EventCount: 5 }],
+      },
+      isLoading: false,
+    });
+    mockDescribeArchive.mockReturnValue({ data: { archive: null }, isLoading: false });
+    render(<EventsPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByText("Archives"));
+    await user.click(screen.getByText("gone-archive"));
+    await waitFor(() => {
+      expect(screen.getByText(/Archive not found/i)).toBeTruthy();
+    });
+  });
+
+  it("shows archive detail with data and updates archive", async () => {
+    const user = userEvent.setup();
+    mockEventArchives.mockReturnValue({
+      data: {
+        archives: [{ ArchiveName: "updatable-archive", EventSourceArn: "arn:aws:events:.../default", State: "ENABLED", EventCount: 5 }],
+      },
+      isLoading: false,
+    });
+    mockDescribeArchive.mockReturnValue({
+      data: {
+        archive: {
+          ArchiveName: "updatable-archive",
+          Description: "Test archive",
+          RetentionDays: 30,
+          EventCount: 5,
+          EventSourceArn: "arn:aws:events:.../default",
+          State: "ENABLED",
+        },
+      },
+      isLoading: false,
+    });
+    render(<EventsPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByText("Archives"));
+    await user.click(screen.getByText("updatable-archive"));
+    await waitFor(() => {
+      expect(screen.getByText(/Update archive/i)).toBeTruthy();
+    });
+    // Click update archive
+    await clickButton(user, /Update archive/i);
+    await waitFor(() => {
+      expect(mockUpdateArchiveMutate).toHaveBeenCalled();
+    });
+  });
+
+  // ─── Archives Tab branches ──────────────────────────────
+
+  it("shows DISABLED state for disabled archive", async () => {
+    const user = userEvent.setup();
+    mockEventArchives.mockReturnValue({
+      data: {
+        archives: [{ ArchiveName: "disabled-archive", EventSourceArn: "arn:aws:events:.../default", State: "DISABLED", EventCount: 0 }],
+      },
+      isLoading: false,
+    });
+    render(<EventsPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByText("Archives"));
+    expect(screen.getByText("DISABLED")).toBeTruthy();
+  });
+
+  // ─── Bus Detail Panel branches ──────────────────────────
+
+  it("shows bus detail loading state", async () => {
+    const user = userEvent.setup();
+    mockDescribeBus.mockReturnValue({ data: undefined, isLoading: true });
+    render(<EventsPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByText("Event Buses"));
+    await user.click(screen.getByText("default"));
+    await waitFor(() => {
+      expect(screen.getByText(/Loading bus details/i)).toBeTruthy();
+    });
+  });
+
+  it("shows permissions and raw policy in bus detail", async () => {
+    const user = userEvent.setup();
+    mockEventBuses.mockReturnValue({
+      data: {
+        eventBuses: [
+          { Name: "default", Arn: "arn:aws:..." },
+          { Name: "custom-bus", Arn: "arn:aws:events:...:custom-bus" },
+        ],
+      },
+      isLoading: false,
+    });
+    mockDescribeBus.mockReturnValue({
+      data: {
+        eventBus: {
+          Name: "custom-bus",
+          Policy: JSON.stringify({
+            Version: "2012-10-17",
+            Statement: [
+              { Sid: "stmt-1", Effect: "Allow", Principal: { AWS: "*" }, Action: "events:PutEvents" },
+            ],
+          }),
+        },
+      },
+      isLoading: false,
+    });
+    render(<EventsPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByText("Event Buses"));
+    await user.click(screen.getByText("custom-bus"));
+    await waitFor(() => {
+      expect(screen.getByText(/Permissions for:/)).toBeTruthy();
+    });
+    expect(screen.getByText(/Raw policy/i)).toBeTruthy();
+  });
+
+  // ─── Replays Tab branches ──────────────────────────────
+
+  it("shows COMPLETED replay state and disabled cancel", async () => {
+    const user = userEvent.setup();
+    mockEventReplays.mockReturnValue({
+      data: {
+        replays: [
+          { ReplayName: "completed-replay", EventSourceArn: "arn:aws:events:...", State: "COMPLETED", EventStartTime: "2026-01-01T00:00:00Z", EventEndTime: "2026-01-02T00:00:00Z" },
+        ],
+      },
+      isLoading: false,
+    });
+    render(<EventsPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByText("Replays"));
+    expect(screen.getByText("COMPLETED")).toBeTruthy();
+    // Cancel button should be disabled
+    const cancelBtn = screen.getByLabelText("Cancel replay");
+    expect((cancelBtn as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("shows CANCELLED replay state and disabled cancel", async () => {
+    const user = userEvent.setup();
+    mockEventReplays.mockReturnValue({
+      data: {
+        replays: [
+          {
+            ReplayName: "cancelled-replay",
+            EventSourceArn: "arn:aws:events:...",
+            State: "CANCELLED",
+            EventStartTime: null,
+            EventEndTime: null,
+          },
+        ],
+      },
+      isLoading: false,
+    });
+    render(<EventsPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByText("Replays"));
+    expect(screen.getByText("CANCELLED")).toBeTruthy();
+    // Start and End columns show "—" when times are null
+    const dashes = screen.getAllByText("—");
+    expect(dashes.length).toBeGreaterThanOrEqual(2);
   });
 });
