@@ -103,6 +103,14 @@ describe("Transfer Family Routes", () => {
       expect(mockSend.mock.calls[0][0].__cmdName).toBe("CreateServerCommand");
     });
 
+    it("POST /servers — uses defaults when fields omitted", async () => {
+      mockSend.mockResolvedValueOnce({ ServerId: "s-default" });
+      const res = await post("/servers", {});
+      expect(res.status).toBe(201);
+      expect(mockSend.mock.calls[0][0].Domain).toBe("S3");
+      expect(mockSend.mock.calls[0][0].IdentityProviderType).toBe("SERVICE_MANAGED");
+    });
+
     it("GET /servers/:serverId — describes a server", async () => {
       mockSend.mockResolvedValueOnce({
         Server: { ServerId: "s-1234abcd", State: "ONLINE" },
@@ -251,6 +259,42 @@ describe("Transfer Family Routes", () => {
 
     it("GET /tags — 400 when no resourceArn", async () => {
       const res = await get("/tags");
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /tags — adds tags to resource", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/tags", {
+        resourceArn: "arn:aws:transfer:us-east-1::server/s-1234abcd",
+        tags: [{ key: "env", value: "prod" }],
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.tagged).toBe(true);
+      expect(mockSend.mock.calls[0][0].Arn).toContain("s-1234abcd");
+      expect(mockSend.mock.calls[0][0].Tags).toHaveLength(1);
+    });
+
+    it("POST /tags — handles empty tags list", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/tags", {
+        resourceArn: "arn:aws:transfer:us-east-1::server/s-1234abcd",
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].Tags).toEqual([]);
+    });
+
+    it("DELETE /tags — removes tags from resource", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/tags?resourceArn=arn:aws:transfer:us-east-1::server/s-1234abcd&tagKeys=env,team");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.untagged).toBe(true);
+      expect(mockSend.mock.calls[0][0].TagKeys).toEqual(["env", "team"]);
+    });
+
+    it("DELETE /tags — 400 when no resourceArn", async () => {
+      const res = await del("/tags");
       expect(res.status).toBe(400);
     });
   });
