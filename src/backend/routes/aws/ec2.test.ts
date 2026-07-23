@@ -220,6 +220,19 @@ describe("EC2 Routes", () => {
       expect(callArgs.InstanceType).toBe("t3.micro");
     });
 
+    it("POST /instances — with securityGroupIds and subnetId", async () => {
+      mockSend.mockResolvedValueOnce({ Instances: [{ InstanceId: "i-vpc" }] });
+      const res = await post("/instances", {
+        imageId: "ami-001",
+        securityGroupIds: ["sg-001"],
+        subnetId: "subnet-001",
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.SecurityGroupIds).toEqual(["sg-001"]);
+      expect(cmd.SubnetId).toBe("subnet-001");
+    });
+
     it("POST /instances — encodes userData as base64", async () => {
       mockSend.mockResolvedValueOnce({ Instances: [{ InstanceId: "i-ud" }] });
       const res = await post("/instances", {
@@ -289,6 +302,13 @@ describe("EC2 Routes", () => {
       expect(mockSend.mock.calls[0][0].InstanceIds).toEqual(["i-001"]);
     });
 
+    it("POST /instances/:id/start — catches error (already running)", async () => {
+      mockSend.mockRejectedValueOnce(new Error("Already running"));
+      const res = await post("/instances/i-001/start");
+      expect(res.status).toBe(200);
+      expect((await res.json()).started).toBe(true);
+    });
+
     it("POST /instances/:id/stop — stops instance", async () => {
       mockSend.mockResolvedValueOnce({ StoppingInstances: [] });
       const res = await post("/instances/i-001/stop");
@@ -298,6 +318,13 @@ describe("EC2 Routes", () => {
       expect(mockSend.mock.calls[0][0].InstanceIds).toEqual(["i-001"]);
     });
 
+    it("POST /instances/:id/stop — catches error (already stopped)", async () => {
+      mockSend.mockRejectedValueOnce(new Error("Already stopped"));
+      const res = await post("/instances/i-001/stop");
+      expect(res.status).toBe(200);
+      expect((await res.json()).stopped).toBe(true);
+    });
+
     it("POST /instances/:id/reboot — reboots instance", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await post("/instances/i-001/reboot");
@@ -305,6 +332,13 @@ describe("EC2 Routes", () => {
       const body = await res.json();
       expect(body.rebooting).toBe(true);
       expect(mockSend.mock.calls[0][0].InstanceIds).toEqual(["i-001"]);
+    });
+
+    it("POST /instances/:id/reboot — catches error (not supported)", async () => {
+      mockSend.mockRejectedValueOnce(new Error("Not supported"));
+      const res = await post("/instances/i-001/reboot");
+      expect(res.status).toBe(200);
+      expect((await res.json()).rebooting).toBe(true);
     });
 
     it("GET /instances/:id/status — returns status info", async () => {
@@ -528,6 +562,13 @@ describe("EC2 Routes", () => {
       expect(mockSend.mock.calls[0][0].CidrBlock).toBe("10.0.2.0/24");
     });
 
+    it("POST /subnets — uses default cidrBlock when omitted", async () => {
+      mockSend.mockResolvedValueOnce({ Subnet: { SubnetId: "subnet-default" } });
+      const res = await post("/subnets", { vpcId: "vpc-001" });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].CidrBlock).toBe("10.0.1.0/24");
+    });
+
     it("POST /subnets — 400 when VpcId missing", async () => {
       const res = await post("/subnets", { cidrBlock: "10.0.0.0/24" });
       expect(res.status).toBe(400);
@@ -695,6 +736,13 @@ describe("EC2 Routes", () => {
       expect(body.created).toBe(true);
       expect(body.keyMaterial).toContain("PRIVATE KEY");
       expect(mockSend.mock.calls[0][0].KeyName).toBe("new-key");
+      expect(mockSend.mock.calls[0][0].KeyType).toBe("rsa");
+    });
+
+    it("POST /key-pairs — uses default keyType", async () => {
+      mockSend.mockResolvedValueOnce({ KeyName: "default-key", KeyFingerprint: "00:11:22" });
+      const res = await post("/key-pairs", { keyName: "default-key" });
+      expect(res.status).toBe(200);
       expect(mockSend.mock.calls[0][0].KeyType).toBe("rsa");
     });
 
@@ -1016,6 +1064,13 @@ describe("EC2 Routes", () => {
       expect(mockSend.mock.calls[0][0].Domain).toBe("vpc");
     });
 
+    it("POST /elastic-ips — allocates address with custom domain", async () => {
+      mockSend.mockResolvedValueOnce({ AllocationId: "eipalloc-custom", PublicIp: "54.0.0.3", Domain: "standard" });
+      const res = await post("/elastic-ips", { domain: "standard" });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].Domain).toBe("standard");
+    });
+
     it("DELETE /elastic-ips/:allocationId — releases address", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await del("/elastic-ips/eipalloc-001");
@@ -1238,6 +1293,32 @@ describe("EC2 Routes", () => {
       expect(mockSend.mock.calls[0][0].AvailabilityZone).toBe("us-east-1a");
       expect(mockSend.mock.calls[0][0].Size).toBe(20);
       expect(mockSend.mock.calls[0][0].VolumeType).toBe("gp3");
+    });
+
+    it("POST /volumes — uses default size and volumeType when omitted", async () => {
+      mockSend.mockResolvedValueOnce({ VolumeId: "vol-default" });
+      const res = await post("/volumes", { availabilityZone: "us-east-1a" });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.Size).toBe(8);
+      expect(cmd.VolumeType).toBe("gp2");
+    });
+
+    it("POST /volumes — creates volume with iops, encrypted, snapshotId", async () => {
+      mockSend.mockResolvedValueOnce({ VolumeId: "vol-adv" });
+      const res = await post("/volumes", {
+        availabilityZone: "us-east-1a",
+        size: 50,
+        volumeType: "io1",
+        iops: 1000,
+        encrypted: true,
+        snapshotId: "snap-001",
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.Iops).toBe(1000);
+      expect(cmd.Encrypted).toBe(true);
+      expect(cmd.SnapshotId).toBe("snap-001");
     });
 
     it("POST /volumes — 400 when AZ missing", async () => {

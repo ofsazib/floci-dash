@@ -128,6 +128,25 @@ describe("ELB Routes", () => {
       expect(body.loadBalancers[0].type).toBe("application");
     });
 
+    it("GET /load-balancers — handles null createdTime and no AZs", async () => {
+      mockSend.mockResolvedValueOnce({
+        LoadBalancers: [
+          {
+            LoadBalancerArn: "arn:lb-no-date",
+            LoadBalancerName: "no-date-lb",
+            DNSName: "no-date-lb.elb.amazonaws.com",
+            Scheme: "internal",
+            State: { Code: "provisioning" },
+            Type: "application",
+          },
+        ],
+      });
+      const res = await get("/load-balancers");
+      const body = await res.json();
+      expect(body.loadBalancers[0].createdTime).toBeNull();
+      expect(body.loadBalancers[0].availabilityZones).toEqual([]);
+    });
+
     it("GET /load-balancers — passes arns and names query params", async () => {
       mockSend.mockResolvedValueOnce({ LoadBalancers: [] });
       await get("/load-balancers?arns=arn:lb1,arn:lb2&names=lb1,lb2");
@@ -170,6 +189,24 @@ describe("ELB Routes", () => {
       expect(res1.status).toBe(400);
       const res2 = await post("/load-balancers", { name: "test", subnets: [] });
       expect(res2.status).toBe(400);
+    });
+
+    it("POST /load-balancers — creates with explicit scheme, type, and ipAddressType", async () => {
+      mockSend.mockResolvedValueOnce({
+        LoadBalancers: [{ LoadBalancerName: "explicit-lb" }],
+      });
+      const res = await post("/load-balancers", {
+        name: "explicit-lb",
+        subnets: ["subnet-123"],
+        scheme: "internal",
+        type: "network",
+        ipAddressType: "dualstack",
+      });
+      expect(res.status).toBe(201);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.Scheme).toBe("internal");
+      expect(cmd.Type).toBe("network");
+      expect(cmd.IpAddressType).toBe("dualstack");
     });
 
     it("DELETE /load-balancers/:arn — deletes load balancer", async () => {
@@ -245,6 +282,21 @@ describe("ELB Routes", () => {
       expect(res.status).toBe(201);
       const body = await res.json();
       expect(body.targetGroup.TargetGroupName).toBe("my-tg");
+    });
+
+    it("POST /target-groups — creates with targetType override", async () => {
+      mockSend.mockResolvedValueOnce({
+        TargetGroups: [{ TargetGroupName: "ip-tg" }],
+      });
+      const res = await post("/target-groups", {
+        name: "ip-tg",
+        protocol: "HTTP",
+        port: 80,
+        vpcId: "vpc-123",
+        targetType: "ip",
+      });
+      expect(res.status).toBe(201);
+      expect(mockSend.mock.calls[0][0].TargetType).toBe("ip");
     });
 
     it("POST /target-groups — 400 when required fields missing", async () => {
@@ -335,6 +387,20 @@ describe("ELB Routes", () => {
       expect(body.listener.ListenerArn).toBe("arn:listener1");
     });
 
+    it("POST /load-balancers/:arn/listeners — creates listener with certificates", async () => {
+      mockSend.mockResolvedValueOnce({
+        Listeners: [{ ListenerArn: "arn:listener2" }],
+      });
+      const res = await post("/load-balancers/arn:lb1/listeners", {
+        protocol: "HTTPS",
+        port: 443,
+        defaultActions: [{ Type: "forward", TargetGroupArn: "arn:tg1" }],
+        certificates: [{ CertificateArn: "arn:acm:cert1" }],
+      });
+      expect(res.status).toBe(201);
+      expect(mockSend.mock.calls[0][0].Certificates).toHaveLength(1);
+    });
+
     it("POST /load-balancers/:arn/listeners — 400 when required fields missing", async () => {
       const res = await post("/load-balancers/arn:lb1/listeners", {
         protocol: "HTTP",
@@ -370,6 +436,16 @@ describe("ELB Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.registered).toBe(true);
+      expect(mockSend.mock.calls[0][0].Targets[0].Port).toBe(80);
+    });
+
+    it("POST /target-groups/:arn/register — registers targets without port", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/target-groups/arn:tg1/register", {
+        targets: [{ id: "i-456" }],
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].Targets[0].Port).toBeUndefined();
     });
 
     it("POST /target-groups/:arn/register — 400 when targets missing", async () => {
@@ -398,6 +474,16 @@ describe("ELB Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.updated).toBe(true);
+    });
+
+    it("POST /tags — handles empty tags", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/tags", {
+        resourceArns: ["arn:lb1"],
+        tags: {},
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].Tags).toEqual([]);
     });
 
     it("DELETE /tags — removes tags", async () => {
@@ -433,6 +519,11 @@ describe("ELB Routes", () => {
       const res = await put("/load-balancers/arn:lb1/subnets", { subnets: ["subnet-1", "subnet-2"] });
       expect(mockSend.mock.calls[0][0].__cmdName).toBe("SetSubnetsCommand");
       expect(mockSend.mock.calls[0][0].Subnets).toEqual(["subnet-1", "subnet-2"]);
+    });
+
+    it("PUT /load-balancers/:arn/subnets — 400 when empty", async () => {
+      const res = await put("/load-balancers/arn:lb1/subnets", { subnets: [] });
+      expect(res.status).toBe(400);
     });
 
     it("PUT /load-balancers/:arn/ip-address-type — sets IP type", async () => {
@@ -496,6 +587,11 @@ describe("ELB Routes", () => {
       expect(body.removed).toBe(true);
       expect(mockSend.mock.calls[0][0].__cmdName).toBe("RemoveListenerCertificatesCommand");
     });
+
+    it("POST /remove — 400 when certificateArn missing", async () => {
+      const res = await post("/listeners/arn:l1/certificates/remove", {});
+      expect(res.status).toBe(400);
+    });
   });
 
   describe("Listener Attributes", () => {
@@ -504,6 +600,11 @@ describe("ELB Routes", () => {
       const res = await put("/listeners/arn:l1/attributes", { attributes: { "routing.http2.enabled": "true" } });
       expect(res.status).toBe(200);
       expect(mockSend.mock.calls[0][0].__cmdName).toBe("ModifyListenerAttributesCommand");
+    });
+
+    it("PUT — 400 when attributes empty", async () => {
+      const res = await put("/listeners/arn:l1/attributes", { attributes: {} });
+      expect(res.status).toBe(400);
     });
   });
 
@@ -525,6 +626,23 @@ describe("ELB Routes", () => {
       expect(body.total).toBe(1);
       expect(body.rules[0].ruleName).toBe("host-header");
       expect(mockSend.mock.calls[0][0].__cmdName).toBe("DescribeRulesCommand");
+    });
+
+    it("GET — rule name falls back to 'default' when no conditions", async () => {
+      mockSend.mockResolvedValueOnce({
+        Rules: [
+          {
+            RuleArn: "arn:default-rule",
+            Priority: "default",
+            IsDefault: true,
+            Conditions: undefined,
+            Actions: [{ Type: "forward", TargetGroupArn: "arn:tg1" }],
+          },
+        ],
+      });
+      const res = await get("/listeners/arn:l1/rules");
+      const body = await res.json();
+      expect(body.rules[0].ruleName).toBe("default");
     });
 
     it("POST — creates rule", async () => {
@@ -592,6 +710,11 @@ describe("ELB Routes", () => {
       expect(res.status).toBe(200);
       expect(mockSend.mock.calls[0][0].__cmdName).toBe("ModifyTargetGroupAttributesCommand");
     });
+
+    it("PUT — 400 when attributes empty", async () => {
+      const res = await put("/target-groups/arn:tg1/attributes", { attributes: {} });
+      expect(res.status).toBe(400);
+    });
   });
 
   describe("Account Limits", () => {
@@ -601,6 +724,13 @@ describe("ELB Routes", () => {
       const body = await res.json();
       expect(body.limits).toHaveLength(1);
       expect(mockSend.mock.calls[0][0].__cmdName).toBe("DescribeAccountLimitsCommand");
+    });
+
+    it("GET — returns empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/account-limits");
+      const body = await res.json();
+      expect(body.total).toBe(0);
     });
   });
 });
