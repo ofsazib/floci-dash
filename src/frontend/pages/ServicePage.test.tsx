@@ -116,6 +116,7 @@ vi.mock("../hooks/useWafV2", () => ({
   useDeleteIPSet: () => ({ mutateAsync: vi.fn(), isPending: false, variables: null }),
   useRegexPatternSets: () => ({ data: { regexPatternSets: [], total: 0 }, isLoading: false, isError: false, error: null }),
   useCreateRegexPatternSet: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
+  useUpdateRegexPatternSet: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn() }),
   useDeleteRegexPatternSet: () => ({ mutateAsync: vi.fn(), isPending: false, variables: null }),
   useRuleGroups: () => ({ data: { ruleGroups: [], total: 0 }, isLoading: false, isError: false, error: null }),
   useCreateRuleGroup: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
