@@ -249,6 +249,16 @@ describe("CloudFormation Routes", () => {
       expect((await res.json()).created).toBe(true);
     });
 
+    it("POST /change-sets — with explicit changeSetType", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/change-sets", {
+        stackName: "s", changeSetName: "cs", templateBody: "{}",
+        changeSetType: "UPDATE",
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].ChangeSetType).toBe("UPDATE");
+    });
+
     it("POST /change-sets — 400 when templateBody is invalid JSON", async () => {
       const res = await post("/change-sets", { stackName: "s", changeSetName: "cs", templateBody: "not json" });
       expect(res.status).toBe(400);
@@ -280,6 +290,70 @@ describe("CloudFormation Routes", () => {
       mockSend.mockRejectedValueOnce(err);
       const res = await get("/stacks/s/change-sets/x");
       expect(res.status).toBe(404);
+    });
+
+    it("GET /stacks/:name/change-sets/:csName — with changes and details", async () => {
+      mockSend.mockResolvedValueOnce({
+        ChangeSetName: "my-cs",
+        ExecutionStatus: "AVAILABLE",
+        Parameters: [{ ParameterKey: "Env", ParameterValue: "prod", UsePreviousValue: false }],
+        Changes: [
+          {
+            Type: "Resource",
+            ResourceChange: {
+              Action: "Add",
+              LogicalResourceId: "MyBucket",
+              PhysicalResourceId: "",
+              ResourceType: "AWS::S3::Bucket",
+              Replacement: "False",
+              Scope: ["Properties"],
+              Details: [
+                {
+                  Target: {
+                    Attribute: "BucketName",
+                    Name: "BucketName",
+                    RequiresRecreation: "Never",
+                  },
+                  Evaluation: "Static",
+                  ChangeSource: "ResourceReference",
+                },
+              ],
+            },
+          },
+        ],
+      });
+      const res = await get("/stacks/s/change-sets/my-cs");
+      const body = await res.json();
+      expect(body.changeSet.changes).toHaveLength(1);
+      expect(body.changeSet.changes[0].type).toBe("Resource");
+      expect(body.changeSet.changes[0].resourceChange.action).toBe("Add");
+      expect(body.changeSet.changes[0].resourceChange.details[0].target.attribute).toBe("BucketName");
+      expect(body.changeSet.changes[0].resourceChange.details[0].evaluation).toBe("Static");
+    });
+
+    it("GET /stacks/:name/change-sets/:csName — with null ResourceChange and null Target", async () => {
+      mockSend.mockResolvedValueOnce({
+        ChangeSetName: "my-cs",
+        ExecutionStatus: "AVAILABLE",
+        Parameters: [],
+        Changes: [
+          { Type: "Resource", ResourceChange: null },
+          { Type: "Resource", ResourceChange: { Action: "Modify", LogicalResourceId: "X", Details: [{ Target: null, Evaluation: "Dynamic" }] } },
+        ],
+      });
+      const res = await get("/stacks/s/change-sets/my-cs");
+      const body = await res.json();
+      expect(body.changeSet.changes).toHaveLength(2);
+      expect(body.changeSet.changes[0].resourceChange).toBeNull();
+      expect(body.changeSet.changes[1].resourceChange.details[0].target).toBeNull();
+    });
+
+    it("GET /stacks/:name/change-sets/:csName — throws non-ChangeSetNotFoundException", async () => {
+      const err = new Error("Access denied");
+      err.name = "AccessDeniedException";
+      mockSend.mockRejectedValueOnce(err);
+      const res = await get("/stacks/s/change-sets/x");
+      expect(res.status).toBe(500);
     });
 
     it("DELETE /change-sets — 400 when params missing", async () => {
@@ -396,6 +470,28 @@ describe("CloudFormation Routes", () => {
       expect(body.resource.logicalId).toBe("MyBucket");
       expect(body.resource.resourceType).toBe("AWS::S3::Bucket");
       expect(body.resource.driftInformation.stackResourceDriftStatus).toBe("IN_SYNC");
+    });
+
+    it("GET /stacks/:name/resources/:logicalId — with ModuleInfo and null DriftInformation", async () => {
+      mockSend.mockResolvedValueOnce({
+        StackResourceDetail: {
+          LogicalResourceId: "MyFunction",
+          PhysicalResourceId: "my-function",
+          ResourceType: "AWS::Lambda::Function",
+          ResourceStatus: "CREATE_COMPLETE",
+          LastUpdatedTimestamp: new Date("2025-01-01"),
+          DriftInformation: null,
+          ModuleInfo: {
+            TypeHierarchy: "AWS::Serverless::Function",
+            LogicalIdHierarchy: "MyStack",
+          },
+        },
+      });
+      const res = await get("/stacks/my-stack/resources/MyFunction");
+      const body = await res.json();
+      expect(body.resource.driftInformation).toBeNull();
+      expect(body.resource.moduleInfo.typeHierarchy).toBe("AWS::Serverless::Function");
+      expect(body.resource.moduleInfo.logicalIdHierarchy).toBe("MyStack");
     });
 
     it("GET /stacks/:name/resources/:logicalId — 404 when not found", async () => {
