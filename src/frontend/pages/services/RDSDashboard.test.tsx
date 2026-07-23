@@ -451,6 +451,22 @@ describe("RDSDashboard — DB instances", () => {
     await user.click(screen.getByText(/Back to DB Instances/i));
     await waitFor(() => expect(screen.getByText("my-db")).toBeTruthy());
   });
+
+  it("creates a DB instance from the create modal", async () => {
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-database")).toBeTruthy());
+    const input = screen.getByPlaceholderText("my-database");
+    await user.type(input, "created-db");
+    await clickButton(user, /^Create instance$/i);
+    await waitFor(() => {
+      expect(mockCreateInstance).toHaveBeenCalledWith(
+        expect.objectContaining({ dbInstanceIdentifier: "created-db" }),
+        expect.any(Object),
+      );
+    });
+  });
 });
 
 describe("RDSDashboard — DB clusters", () => {
@@ -669,6 +685,24 @@ describe("RDSDashboard — DB clusters", () => {
     await waitFor(() => expect(screen.getByText(/DB Clusters/)).toBeTruthy());
     await user.click(screen.getByRole("tab", { name: /^DB Clusters$/i }));
     await waitFor(() => expect(screen.getByRole("button", { name: "my-cluster" })).toBeTruthy());
+  });
+
+  it("creates a DB cluster from the create modal", async () => {
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /DB Clusters/i }));
+    await waitFor(() => expect(screen.getByText(/No DB clusters found/i)).toBeTruthy());
+    await clickButton(user, /Create DB Cluster/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-cluster")).toBeTruthy());
+    const input = screen.getByPlaceholderText("my-cluster");
+    await user.type(input, "created-cluster");
+    await clickButton(user, /^Create cluster$/i);
+    await waitFor(() => {
+      expect(mockCreateCluster).toHaveBeenCalledWith(
+        expect.objectContaining({ dbClusterIdentifier: "created-cluster" }),
+        expect.any(Object),
+      );
+    });
   });
 });
 
@@ -994,6 +1028,26 @@ describe("RDSDashboard — DB subnet groups", () => {
     await clickButton(user, /^Delete$/i);
     await waitFor(() => expect(mockDeleteSubnetGroup).toHaveBeenCalledWith("del-sg"));
   });
+
+  it("creates a subnet group from the create modal", async () => {
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /DB Subnet Groups/i }));
+    await waitFor(() => expect(screen.getByText(/No DB subnet groups found/i)).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-subnet-group")).toBeTruthy());
+    const nameInput = screen.getByPlaceholderText("my-subnet-group");
+    await user.type(nameInput, "new-sg");
+    const subnetInput = screen.getByPlaceholderText("subnet-abc123, subnet-def456");
+    await user.type(subnetInput, "subnet-xyz");
+    await clickButton(user, /^Create subnet group$/i);
+    await waitFor(() => {
+      expect(mockCreateSubnetGroup).toHaveBeenCalledWith(
+        expect.objectContaining({ dbSubnetGroupName: "new-sg" }),
+        expect.any(Object),
+      );
+    });
+  });
 });
 
 describe("RDSDashboard — parameter group drill-down", () => {
@@ -1164,6 +1218,34 @@ describe("RDSDashboard — parameter group drill-down", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "my-pg" })).toBeTruthy();
     });
+  });
+
+  it("filters parameters by name in the drill-down view", async () => {
+    mockParamGroups.mockReturnValue({
+      data: { parameterGroups: [{ name: "my-pg", family: "postgres16", description: "Custom params" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockApi.mockResolvedValueOnce({
+      parameters: [
+        { name: "max_connections", value: "100", applyType: "static", source: "user", isModifiable: false },
+        { name: "timezone", value: "UTC", applyType: "dynamic", source: "engine-default", isModifiable: true },
+      ],
+      total: 2,
+    });
+
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    const tabs = screen.getAllByRole("tab");
+    await user.click(tabs[2]);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "my-pg" })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-pg" }));
+
+    await waitFor(() => expect(screen.getByText("max_connections")).toBeTruthy());
+
+    const filterInput = screen.getByPlaceholderText("Find parameters by name");
+    await user.type(filterInput, "timezone");
+    await waitFor(() => expect(screen.queryByText("max_connections")).toBeNull());
   });
 });
 
