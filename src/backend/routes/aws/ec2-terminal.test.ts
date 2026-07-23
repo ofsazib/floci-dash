@@ -500,4 +500,245 @@ describe("EC2 Terminal WebSocket", () => {
       expect(ws.send).toHaveBeenCalled();
     });
   });
+
+  it("handles string WebSocket messages (not Buffer)", async () => {
+    const server = createMockHttpServer();
+    setupTerminalWebSocket(server);
+
+    const createRes = createMockRes(JSON.stringify({ Id: "exec-123" }));
+    const createReq = createMockReq();
+    _nodeMock.mockHttpRequest.mockImplementation((_opts: any, cb: (res: any) => void) => {
+      cb(createRes);
+      return createReq;
+    });
+
+    const mockSocket = createMockSocket();
+    _nodeMock.mockNetConnect.mockImplementation((_path: string, cb?: () => void) => {
+      if (cb) setTimeout(cb, 0);
+      return mockSocket;
+    });
+
+    const ws = createMockWs();
+    const req = { url: validUrl, headers: { host: "localhost" } };
+    _wsMock.state.connectionHandler!(ws, req);
+
+    createRes._emit();
+
+    await vi.waitFor(() => {
+      expect(mockSocket.write).toHaveBeenCalled();
+    });
+
+    mockSocket._emitData(Buffer.from("HTTP/1.1 200 OK\r\n\r\n"));
+
+    await vi.waitFor(() => {
+      expect(ws.send).toHaveBeenCalled();
+    });
+
+    // Send a string message (tests Buffer.from(data) branch for string type)
+    mockSocket.write.mockClear();
+    ws._handlers.message?.("echo hello");
+    expect(mockSocket.write).toHaveBeenCalled();
+    const writtenData = mockSocket.write.mock.calls[0][0];
+    expect(Buffer.isBuffer(writtenData)).toBe(true);
+    expect(writtenData.toString()).toBe("echo hello");
+  });
+
+  it("handles resize JSON missing cols/rows — falls through to terminal input", async () => {
+    const server = createMockHttpServer();
+    setupTerminalWebSocket(server);
+
+    const createRes = createMockRes(JSON.stringify({ Id: "exec-123" }));
+    const createReq = createMockReq();
+    _nodeMock.mockHttpRequest.mockImplementation((_opts: any, cb: (res: any) => void) => {
+      cb(createRes);
+      return createReq;
+    });
+
+    const mockSocket = createMockSocket();
+    _nodeMock.mockNetConnect.mockImplementation((_path: string, cb?: () => void) => {
+      if (cb) setTimeout(cb, 0);
+      return mockSocket;
+    });
+
+    const ws = createMockWs();
+    const req = { url: validUrl, headers: { host: "localhost" } };
+    _wsMock.state.connectionHandler!(ws, req);
+
+    createRes._emit();
+
+    await vi.waitFor(() => {
+      expect(mockSocket.write).toHaveBeenCalled();
+    });
+
+    mockSocket._emitData(Buffer.from("HTTP/1.1 200 OK\r\n\r\n"));
+
+    await vi.waitFor(() => {
+      expect(ws.send).toHaveBeenCalled();
+    });
+
+    // Send resize JSON but missing cols/rows — should fall through to write
+    mockSocket.write.mockClear();
+    ws._handlers.message?.(Buffer.from(JSON.stringify({ type: "resize" })));
+    expect(mockSocket.write).toHaveBeenCalled();
+  });
+
+  it("handles write/kill/resize when already closed", async () => {
+    const server = createMockHttpServer();
+    setupTerminalWebSocket(server);
+
+    const createRes = createMockRes(JSON.stringify({ Id: "exec-123" }));
+    const createReq = createMockReq();
+    _nodeMock.mockHttpRequest.mockImplementation((_opts: any, cb: (res: any) => void) => {
+      cb(createRes);
+      return createReq;
+    });
+
+    const mockSocket = createMockSocket();
+    _nodeMock.mockNetConnect.mockImplementation((_path: string, cb?: () => void) => {
+      if (cb) setTimeout(cb, 0);
+      return mockSocket;
+    });
+
+    const ws = createMockWs();
+    const req = { url: validUrl, headers: { host: "localhost" } };
+    _wsMock.state.connectionHandler!(ws, req);
+
+    createRes._emit();
+
+    await vi.waitFor(() => {
+      expect(mockSocket.write).toHaveBeenCalled();
+    });
+
+    mockSocket._emitData(Buffer.from("HTTP/1.1 200 OK\r\n\r\n"));
+
+    await vi.waitFor(() => {
+      expect(ws.send).toHaveBeenCalled();
+    });
+
+    // Trigger close first
+    ws._trigger("close");
+    expect(mockSocket.destroy).toHaveBeenCalled();
+
+    // Now try write/kill/resize — should no-op (closed branch)
+    mockSocket.write.mockClear();
+    mockSocket.destroy.mockClear();
+    ws._handlers.message?.(Buffer.from("test"));
+    expect(mockSocket.write).not.toHaveBeenCalled();
+
+    // Kill again — should no-op
+    ws._trigger("close");
+    expect(mockSocket.destroy).not.toHaveBeenCalled();
+  });
+
+  it("handles dockerExecTty promise rejection catch path", async () => {
+    const server = createMockHttpServer();
+    setupTerminalWebSocket(server);
+
+    // Return empty JSON so execId is null → exec creation succeeds but net.connect fails
+    const createRes = createMockRes(JSON.stringify({ Id: "exec-123" }));
+    const createReq = createMockReq();
+    _nodeMock.mockHttpRequest.mockImplementation((_opts: any, cb: (res: any) => void) => {
+      cb(createRes);
+      return createReq;
+    });
+
+    // net.connect immediately throws — triggers promise rejection
+    const connectError = new Error("Cannot connect to docker");
+    _nodeMock.mockNetConnect.mockImplementation(() => {
+      throw connectError;
+    });
+
+    const ws = createMockWs();
+    const req = { url: validUrl, headers: { host: "localhost" } };
+    _wsMock.state.connectionHandler!(ws, req);
+
+    createRes._emit();
+
+    await vi.waitFor(() => {
+      expect(ws.send).toHaveBeenCalled();
+      const errCalls = ws.send.mock.calls.filter((c: string[]) => c[0].includes("Error"));
+      expect(errCalls.length).toBeGreaterThan(0);
+    });
+  });
+
+  it("handles header parsing across multiple chunks before \\r\\n\\r\\n", async () => {
+    const server = createMockHttpServer();
+    setupTerminalWebSocket(server);
+
+    const createRes = createMockRes(JSON.stringify({ Id: "exec-123" }));
+    const createReq = createMockReq();
+    _nodeMock.mockHttpRequest.mockImplementation((_opts: any, cb: (res: any) => void) => {
+      cb(createRes);
+      return createReq;
+    });
+
+    const mockSocket = createMockSocket();
+    _nodeMock.mockNetConnect.mockImplementation((_path: string, cb?: () => void) => {
+      if (cb) setTimeout(cb, 0);
+      return mockSocket;
+    });
+
+    const ws = createMockWs();
+    const req = { url: validUrl, headers: { host: "localhost" } };
+    _wsMock.state.connectionHandler!(ws, req);
+
+    createRes._emit();
+
+    await vi.waitFor(() => {
+      expect(mockSocket.write).toHaveBeenCalled();
+    });
+
+    // Send partial header (no \r\n\r\n yet) — should buffer without emitting output
+    mockSocket._emitData(Buffer.from("HTTP/1.1 200 OK\r\n"));
+    // At this point headersParsed is still false, no output should have been sent
+
+    // Send the rest of the headers
+    mockSocket._emitData(Buffer.from("Content-Length: 5\r\n\r\nhello"));
+
+    await vi.waitFor(() => {
+      expect(ws.send).toHaveBeenCalled();
+    });
+  });
+
+  it("handles ws.readyState not OPEN during docker output", async () => {
+    const server = createMockHttpServer();
+    setupTerminalWebSocket(server);
+
+    const createRes = createMockRes(JSON.stringify({ Id: "exec-123" }));
+    const createReq = createMockReq();
+    _nodeMock.mockHttpRequest.mockImplementation((_opts: any, cb: (res: any) => void) => {
+      cb(createRes);
+      return createReq;
+    });
+
+    const mockSocket = createMockSocket();
+    _nodeMock.mockNetConnect.mockImplementation((_path: string, cb?: () => void) => {
+      if (cb) setTimeout(cb, 0);
+      return mockSocket;
+    });
+
+    const ws = createMockWs();
+    const req = { url: validUrl, headers: { host: "localhost" } };
+    _wsMock.state.connectionHandler!(ws, req);
+
+    createRes._emit();
+
+    await vi.waitFor(() => {
+      expect(mockSocket.write).toHaveBeenCalled();
+    });
+
+    mockSocket._emitData(Buffer.from("HTTP/1.1 200 OK\r\n\r\n"));
+
+    await vi.waitFor(() => {
+      expect(ws.send).toHaveBeenCalled();
+    });
+
+    // Force readyState to not be OPEN
+    ws.readyState = 2; // CLOSING
+    ws.send.mockClear();
+    mockSocket._emitData(Buffer.from("should be discarded"));
+    // Wait a tick to ensure the callback ran
+    await vi.waitFor(() => Promise.resolve());
+    expect(ws.send).not.toHaveBeenCalled();
+  });
 });
