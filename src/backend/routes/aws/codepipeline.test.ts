@@ -764,4 +764,63 @@ describe("CodePipeline Routes", () => {
       expect(res.status).toBe(400);
     });
   });
+
+  describe("Update Pipeline", () => {
+    it("PUT /pipelines/:name — updates a pipeline", async () => {
+      mockSend.mockResolvedValueOnce({ pipeline: { name: "my-pipeline", version: 2 } });
+      const res = await put("/pipelines/my-pipeline", {
+        pipeline: { name: "my-pipeline", roleArn: "arn:aws:iam::123:role/updated", artifactStore: { type: "S3", location: "bucket" }, stages: [] },
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.pipeline.name).toBe("my-pipeline");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("UpdatePipelineCommand");
+    });
+
+    it("PUT /pipelines/:name — requires pipeline declaration", async () => {
+      const res = await put("/pipelines/my-pipeline", {});
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe("Rollback Stage Edge Cases", () => {
+    it("POST /pipelines/:name/executions/:id/rollback — without sourceRevision", async () => {
+      mockSend.mockResolvedValueOnce({ pipelineExecutionId: "exec-rollback" });
+      const res = await post("/pipelines/my-pipeline/executions/exec-1/rollback", { stageName: "Deploy" });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("RollbackStageCommand");
+      expect(mockSend.mock.calls[0][0].sourceRevision).toBeUndefined();
+    });
+  });
+
+  describe("Stop Execution Edge Cases", () => {
+    it("POST /pipelines/:name/executions/:id/stop — without abandon or reason (uses defaults)", async () => {
+      mockSend.mockResolvedValueOnce({ pipelineExecutionId: "exec-stop" });
+      const res = await post("/pipelines/my-pipeline/executions/exec-1/stop", {});
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("StopPipelineExecutionCommand");
+      expect(mockSend.mock.calls[0][0].abandon).toBeUndefined();
+      expect(mockSend.mock.calls[0][0].reason).toBeUndefined();
+    });
+  });
+
+  describe("Job Details Edge Cases", () => {
+    it("GET /jobs/:jobId — returns null when no details", async () => {
+      mockSend.mockResolvedValueOnce({ jobDetails: undefined });
+      const res = await get("/jobs/job-null");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.jobDetails).toBeNull();
+    });
+  });
+
+  describe("PollForJobs Edge Cases", () => {
+    it("POST /action-types/:cat/:provider/jobs/poll — without queryParam (undefined)", async () => {
+      mockSend.mockResolvedValueOnce({ jobs: [] });
+      const res = await post("/action-types/Test/MyProvider/jobs/poll");
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].queryParam).toBeUndefined();
+    });
+  });
+
 });

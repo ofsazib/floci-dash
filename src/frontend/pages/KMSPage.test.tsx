@@ -19,6 +19,8 @@ const mockCreateAlias = vi.fn();
 const mockDeleteAlias = vi.fn();
 const mockEncrypt = vi.fn();
 const mockDecrypt = vi.fn();
+let mockEncryptMutateAsync = vi.fn().mockResolvedValue({ ciphertextBlob: "ZW5jcnlwdGVk" });
+let mockDecryptMutateAsync = vi.fn().mockResolvedValue({ plaintext: "cGxhaW50ZXh0" });
 
 vi.mock("../hooks/useKMS", () => ({
   useKMSKeys: (...args: any[]) => mockKeys(...args),
@@ -32,12 +34,14 @@ vi.mock("../hooks/useKMS", () => ({
   useKMSAliases: (...args: any[]) => mockAliases(...args),
   useCreateAlias: () => ({ mutate: mockCreateAlias, isPending: false }),
   useDeleteAlias: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useEncrypt: () => ({ mutate: mockEncrypt, mutateAsync: vi.fn(), isPending: false, data: null }),
-  useDecrypt: () => ({ mutate: mockDecrypt, mutateAsync: vi.fn(), isPending: false, data: null }),
+  useEncrypt: () => ({ mutate: mockEncrypt, mutateAsync: mockEncryptMutateAsync, isPending: false, data: null }),
+  useDecrypt: () => ({ mutate: mockDecrypt, mutateAsync: mockDecryptMutateAsync, isPending: false, data: null }),
 }));
 
+let mockShowToast = vi.fn();
+
 vi.mock("../components/Toast", () => ({
-  useToast: () => ({ showToast: vi.fn() }),
+  useToast: () => ({ showToast: mockShowToast }),
   ToastProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
@@ -64,6 +68,9 @@ function pageWrapper() {
 describe("KMSPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockEncryptMutateAsync = vi.fn().mockResolvedValue({ ciphertextBlob: "ZW5jcnlwdGVk" });
+    mockDecryptMutateAsync = vi.fn().mockResolvedValue({ plaintext: "cGxhaW50ZXh0" });
+    mockShowToast = vi.fn();
     mockKeys.mockReturnValue({
       data: { keys: [{ keyId: "1234-abcd", arn: "arn:aws:kms:us-east-1::key/1234-abcd", keyManager: "CUSTOMER", keyState: "Enabled", description: "My key", keySpec: "SYMMETRIC_DEFAULT" }], total: 1 },
       isLoading: false, isError: false, error: null,
@@ -332,6 +339,186 @@ describe("KMSPage", () => {
     await waitFor(() => {
       // Both the button and modal header say "Create alias" — use getAllByText
       expect(screen.getAllByText("Create alias").length).toBeGreaterThan(0);
+    });
+  });
+
+  it("shows PendingDeletion badge in key table", () => {
+    mockKeys.mockReturnValue({
+      data: { keys: [{ keyId: "1234-abcd", keyManager: "CUSTOMER", keyState: "PendingDeletion", description: "My key", keySpec: "SYMMETRIC_DEFAULT" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    expect(screen.getByText("PendingDeletion")).toBeTruthy();
+  });
+
+  it("shows AWS-managed badge in key table", () => {
+    mockKeys.mockReturnValue({
+      data: { keys: [{ keyId: "aws-mdk", keyManager: "AWS", keyState: "Enabled", description: "AWS managed", keySpec: "SYMMETRIC_DEFAULT" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    expect(screen.getByText("AWS")).toBeTruthy();
+  });
+
+  it("shows loading state in key detail modal", async () => {
+    const user = userEvent.setup();
+    mockKeyDetail.mockReturnValue({
+      data: undefined,
+      isLoading: true, isError: false, error: null,
+    });
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => {
+      expect(screen.getByText("Loading...")).toBeTruthy();
+    });
+  });
+
+  it("shows key not found when key is null", async () => {
+    const user = userEvent.setup();
+    mockKeyDetail.mockReturnValue({
+      data: { key: null as any },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => {
+      expect(screen.getByText("Key not found")).toBeTruthy();
+    });
+  });
+
+  it("shows key detail with creation and deletion dates", async () => {
+    const user = userEvent.setup();
+    mockKeyDetail.mockReturnValue({
+      data: {
+        key: { keyId: "1234-abcd", arn: "arn:aws:kms:key/1234-abcd", keyState: "Enabled", keyUsage: "ENCRYPT_DECRYPT", keySpec: "SYMMETRIC_DEFAULT", origin: "AWS_KMS", keyManager: "CUSTOMER", creationDate: "2025-01-15T10:00:00Z", deletionDate: "2026-01-15T10:00:00Z", multiRegion: false, description: "With dates" },
+        tags: {},
+        aliases: [],
+        grants: [],
+        rotationEnabled: false,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => {
+      expect(screen.getByText(/KMS Key:/i)).toBeTruthy();
+    });
+    expect(screen.getByText(/Deletion date/i)).toBeTruthy();
+  });
+
+  it("shows description placeholder when no description", async () => {
+    const user = userEvent.setup();
+    mockKeyDetail.mockReturnValue({
+      data: { key: { keyId: "1234-abcd", keyState: "Enabled", description: "", keyUsage: "ENCRYPT_DECRYPT" }, tags: {}, aliases: [], grants: [], rotationEnabled: false },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => {
+      expect(screen.getByText(/KMS Key:/i)).toBeTruthy();
+    });
+    // "No description" is rendered as a span with class fd-text-muted
+    expect(screen.getByText(/No description/i)).toBeTruthy();
+  });
+
+  it("shows rotation enabled badge in overview", async () => {
+    const user = userEvent.setup();
+    mockKeyDetail.mockReturnValue({
+      data: { key: { keyId: "1234-abcd", keyState: "Enabled", description: "My key" }, tags: {}, aliases: [], grants: [], rotationEnabled: true },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => {
+      expect(screen.getByText(/KMS Key:/i)).toBeTruthy();
+    });
+    expect(screen.getAllByText(/Rotation/i).length).toBeGreaterThan(0);
+  });
+
+  it("shows grey state badge for non-Enabled key in overview", async () => {
+    const user = userEvent.setup();
+    mockKeyDetail.mockReturnValue({
+      data: { key: { keyId: "1234-abcd", keyState: "Disabled", description: "My key" }, tags: {}, aliases: [], grants: [], rotationEnabled: false },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => {
+      expect(screen.getByText(/KMS Key:/i)).toBeTruthy();
+    });
+    // The overview shows State badge — it exists and is not the "key not found" path
+    expect(screen.getByText("Disabled")).toBeTruthy();
+  });
+
+  it("encrypt button is disabled when key is not Enabled", async () => {
+    const user = userEvent.setup();
+    mockKeyDetail.mockReturnValue({
+      data: { key: { keyId: "1234-abcd", keyState: "Disabled", description: "My key" }, tags: {}, aliases: [], grants: [], rotationEnabled: false },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => {
+      expect(screen.getByText(/KMS Key:/i)).toBeTruthy();
+    });
+    await user.click(screen.getByRole("tab", { name: /Encrypt \/ Decrypt/i }));
+    await waitFor(() => {
+      const encryptBtn = screen.getByRole("button", { name: /Encrypt$/i });
+      expect((encryptBtn as HTMLButtonElement).disabled).toBe(true);
+    });
+  });
+
+  it("encrypt success shows ciphertext result in detail modal", async () => {
+    const user = userEvent.setup();
+    mockKeyDetail.mockReturnValue({
+      data: { key: { keyId: "1234-abcd", keyState: "Enabled", description: "My key" }, tags: {}, aliases: [], grants: [], rotationEnabled: false },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => {
+      expect(screen.getByText(/KMS Key:/i)).toBeTruthy();
+    });
+    await user.click(screen.getByRole("tab", { name: /Encrypt \/ Decrypt/i }));
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("SGVsbG8gV29ybGQ=")).toBeTruthy();
+    });
+    // Type plaintext and encrypt
+    const textarea = screen.getByPlaceholderText("SGVsbG8gV29ybGQ=");
+    await user.type(textarea, "SGVsbG8=");
+    await user.click(screen.getByRole("button", { name: /^Encrypt$/i }));
+    const dialog = screen.getByRole("dialog");
+    const getInModal = within(dialog);
+    await waitFor(() => {
+      expect(getInModal.getAllByText(/Ciphertext/i).length).toBeGreaterThan(0);
+      expect(getInModal.getAllByText("ZW5jcnlwdGVk").length).toBeGreaterThan(0);
+    });
+  });
+
+  it("decrypt success shows plaintext result in detail modal", async () => {
+    const user = userEvent.setup();
+    mockKeyDetail.mockReturnValue({
+      data: { key: { keyId: "1234-abcd", keyState: "Enabled", description: "My key" }, tags: {}, aliases: [], grants: [], rotationEnabled: false },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => {
+      expect(screen.getByText(/KMS Key:/i)).toBeTruthy();
+    });
+    await user.click(screen.getByRole("tab", { name: /Encrypt \/ Decrypt/i }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Decrypt$/i })).toBeTruthy();
+    });
+    // Type ciphertext and decrypt
+    const decryptTextarea = screen.getAllByRole("textbox")[1];
+    await user.type(decryptTextarea, "ZW5jcnlwdGVk");
+    await user.click(screen.getByRole("button", { name: /^Decrypt$/i }));
+    const dialog = screen.getByRole("dialog");
+    const getInModal = within(dialog);
+    await waitFor(() => {
+      expect(getInModal.getAllByText(/Plaintext/i).length).toBeGreaterThan(0);
+      expect(getInModal.getByText("cGxhaW50ZXh0")).toBeTruthy();
     });
   });
 });
