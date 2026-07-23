@@ -62,6 +62,13 @@ describe("AppConfig Routes", () => {
     expect(res.status).toBe(201);
   });
 
+  it("POST /applications — creates app with description", async () => {
+    mockSend.mockResolvedValueOnce({ Id: "new-desc" });
+    const res = await post("/applications", { name: "myapp", description: "My app" });
+    expect(res.status).toBe(201);
+    expect(mockSend.mock.calls[0][0].Description).toBe("My app");
+  });
+
   it("POST /applications — 400 if name missing", async () => {
     const res = await post("/applications", {});
     expect(res.status).toBe(400);
@@ -82,10 +89,29 @@ describe("AppConfig Routes", () => {
     expect(body.total).toBe(1);
   });
 
+  it("GET /applications/:id/environments — empty list", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/applications/app-1/environments");
+    const body = await res.json();
+    expect(body.total).toBe(0);
+  });
+
   it("POST /applications/:id/environments — creates env (201)", async () => {
     mockSend.mockResolvedValueOnce({ Id: "env-1" });
     const res = await post("/applications/app-1/environments", { name: "dev" });
     expect(res.status).toBe(201);
+  });
+
+  it("POST /applications/:id/environments — creates env with description", async () => {
+    mockSend.mockResolvedValueOnce({ Id: "env-2" });
+    const res = await post("/applications/app-1/environments", { name: "prod", description: "Production env" });
+    expect(res.status).toBe(201);
+    expect(mockSend.mock.calls[0][0].Description).toBe("Production env");
+  });
+
+  it("POST /applications/:id/environments — 400 when name missing", async () => {
+    const res = await post("/applications/app-1/environments", {});
+    expect(res.status).toBe(400);
   });
 
   it("DELETE /applications/:appId/environments/:envId — deletes env", async () => {
@@ -103,10 +129,37 @@ describe("AppConfig Routes", () => {
     expect(body.total).toBe(1);
   });
 
+  it("GET /applications/:id/configuration-profiles — empty list", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/applications/app-1/configuration-profiles");
+    const body = await res.json();
+    expect(body.total).toBe(0);
+  });
+
   it("POST /applications/:id/configuration-profiles — creates profile (201)", async () => {
     mockSend.mockResolvedValueOnce({ Id: "prof-1" });
     const res = await post("/applications/app-1/configuration-profiles", { name: "config" });
     expect(res.status).toBe(201);
+  });
+
+  it("POST /applications/:id/configuration-profiles — with locationUri (truthy), type, and description", async () => {
+    mockSend.mockResolvedValueOnce({ Id: "prof-2" });
+    const res = await post("/applications/app-1/configuration-profiles", {
+      name: "config-ext",
+      locationUri: "https://example.com/config",
+      type: "AWS::AppConfig::FeatureFlag",
+      description: "External config",
+    });
+    expect(res.status).toBe(201);
+    const cmd = mockSend.mock.calls[0][0];
+    expect(cmd.LocationUri).toBe("https://example.com/config");
+    expect(cmd.Type).toBe("AWS::AppConfig::FeatureFlag");
+    expect(cmd.Description).toBe("External config");
+  });
+
+  it("POST /applications/:id/configuration-profiles — 400 when name missing", async () => {
+    const res = await post("/applications/app-1/configuration-profiles", {});
+    expect(res.status).toBe(400);
   });
 
   it("DELETE /applications/:appId/configuration-profiles/:profileId — deletes profile", async () => {
@@ -120,5 +173,12 @@ describe("AppConfig Routes", () => {
     const res = await get("/applications/app-1/configuration-profiles/prof-1/versions");
     const body = await res.json();
     expect(body.total).toBe(1);
+  });
+
+  it("GET /applications/:appId/configuration-profiles/:profileId/versions — empty list", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/applications/app-1/configuration-profiles/prof-1/versions");
+    const body = await res.json();
+    expect(body.total).toBe(0);
   });
 });

@@ -144,6 +144,22 @@ describe("ECR Routes", () => {
       expect(mockSend.mock.calls[0][0].repositoryNames).toEqual(["my-repo", "other-repo"]);
     });
 
+    it("GET /repositories — handles null createdAt", async () => {
+      mockSend.mockResolvedValueOnce({
+        repositories: [
+          {
+            repositoryName: "no-date-repo",
+            repositoryUri: "123456789.dkr.ecr.us-east-1.amazonaws.com/no-date-repo",
+            createdAt: null,
+            imageTagMutability: "MUTABLE",
+          },
+        ],
+      });
+      const res = await get("/repositories");
+      const body = await res.json();
+      expect(body.repositories[0].createdAt).toBeNull();
+    });
+
     it("POST /repositories — creates a repo with tags (201)", async () => {
       mockSend.mockResolvedValueOnce({
         repository: { repositoryName: "tagged-repo" },
@@ -265,6 +281,14 @@ describe("ECR Routes", () => {
       expect(body.error).toContain("policyText");
     });
 
+    it("GET /repositories/:name/policy — throws non-RepositoryPolicyNotFoundException", async () => {
+      const err = new Error("Access denied");
+      err.name = "AccessDeniedException";
+      mockSend.mockRejectedValueOnce(err);
+      const res = await get("/repositories/my-repo/policy");
+      expect(res.status).toBe(500);
+    });
+
     it("DELETE /repositories/:name/policy — deletes policy", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await del("/repositories/my-repo/policy");
@@ -316,6 +340,13 @@ describe("ECR Routes", () => {
       expect(body.error).toContain("lifecyclePolicyText");
     });
 
+    it("GET /repositories/:name/lifecycle — throws non-LifecyclePolicyNotFoundException", async () => {
+      const err = new Error("Service error");
+      err.name = "ServiceError";
+      mockSend.mockRejectedValueOnce(err);
+      const res = await get("/repositories/my-repo/lifecycle");
+      expect(res.status).toBe(500);
+    });
   });
 
   describe("Tags", () => {
@@ -401,6 +432,11 @@ describe("ECR Routes", () => {
       const body = await res.json();
       expect(body.scanningConfiguration).toBeNull();
       expect(body.failure.failureCode).toBe("REPOSITORY_NOT_FOUND");
+    });
+
+    it("GET /repositories//scanning-configuration — 400 when name missing", async () => {
+      const res = await get("/repositories//scanning-configuration");
+      expect(res.status).toBe(404);
     });
   });
 });
