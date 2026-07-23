@@ -357,4 +357,113 @@ describe("ECRDashboard — scanning configuration", () => {
     await clickButton(user, /Scan config/i);
     await waitFor(() => expect(screen.getByText("Repository not found")).toBeTruthy());
   });
+
+  it("shows loading spinner in scan config modal", async () => {
+    mockRepositories.mockReturnValue(repoData);
+    mockScanConfig.mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+      error: null,
+    });
+
+    const user = userEvent.setup();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-repo")).toBeTruthy());
+    await clickButton(user, /Scan config/i);
+    await waitFor(() => expect(screen.getByText(/Scanning configuration — my-repo/i)).toBeTruthy());
+  });
+
+  it("shows error alert when scan config fails to load", async () => {
+    mockRepositories.mockReturnValue(repoData);
+    mockScanConfig.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new Error("Failed to fetch scanning config"),
+    });
+
+    const user = userEvent.setup();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-repo")).toBeTruthy());
+    await clickButton(user, /Scan config/i);
+    await waitFor(() => expect(screen.getByText("Failed to fetch scanning config")).toBeTruthy());
+  });
+
+  it("shows failure with fallback messages", async () => {
+    mockRepositories.mockReturnValue(repoData);
+    mockScanConfig.mockReturnValue({
+      data: {
+        repositoryName: "my-repo",
+        scanningConfiguration: null,
+        failure: { failureCode: null, failureReason: null },
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    const user = userEvent.setup();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-repo")).toBeTruthy());
+    await clickButton(user, /Scan config/i);
+    await waitFor(() => expect(screen.getByText("Unavailable")).toBeTruthy());
+    expect(screen.getByText(/Scanning configuration is not available/i)).toBeTruthy();
+  });
+
+  it("shows disabled scan on push and no frequency fallback", async () => {
+    mockRepositories.mockReturnValue(repoData);
+    mockScanConfig.mockReturnValue({
+      data: {
+        repositoryName: "my-repo",
+        scanningConfiguration: {
+          repositoryArn: "arn:aws:ecr:us-east-1:123:repository/my-repo",
+          scanOnPush: false,
+          scanFrequency: null,
+          appliedScanFilters: [],
+        },
+        failure: null,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    const user = userEvent.setup();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-repo")).toBeTruthy());
+    await clickButton(user, /Scan config/i);
+    await waitFor(() => expect(screen.getByText(/Scanning configuration/i)).toBeTruthy());
+    expect(screen.getByText("Disabled")).toBeTruthy();
+    // scrollFrequency null → "—" fallback; empty filters → "—" fallback
+    const dashes = screen.getAllByText("—");
+    expect(dashes.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("shows applied scan filters with missing filterType and filter", async () => {
+    mockRepositories.mockReturnValue(repoData);
+    mockScanConfig.mockReturnValue({
+      data: {
+        repositoryName: "my-repo",
+        scanningConfiguration: {
+          repositoryArn: "arn:aws:ecr:us-east-1:123:repository/my-repo",
+          scanOnPush: false,
+          scanFrequency: "MANUAL",
+          appliedScanFilters: [{ filterType: null, filter: null }],
+        },
+        failure: null,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    const user = userEvent.setup();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-repo")).toBeTruthy());
+    await clickButton(user, /Scan config/i);
+    await waitFor(() => expect(screen.getByText(/Scanning configuration/i)).toBeTruthy());
+    // filterType null → "?" fallback, filter null → "*" fallback
+    expect(screen.getByText(/\?: \*/)).toBeTruthy();
+  });
 });
