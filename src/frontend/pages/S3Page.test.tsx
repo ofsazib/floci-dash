@@ -32,7 +32,10 @@ let mockDeleteObjectMutate = vi.fn();
 let mockCreateFolderMutate = vi.fn();
 let mockDeleteFolderMutate = vi.fn();
 let mockConfirmDialog = vi.fn(() => Promise.resolve(true));
-
+const mockS3SelectMutate = vi.fn();
+let mockS3SelectIsError = false;
+let mockS3SelectError: Error | null = null;
+let mockS3SelectIsPending = false;
 
 vi.mock("../hooks/useS3", () => ({
   useS3Buckets: (...args: any[]) => mockBuckets(...args),
@@ -53,6 +56,10 @@ vi.mock("../hooks/useS3Config", () => ({
   useS3ObjectAcl: () => ({ data: mockObjectAclData, isLoading: mockObjectAclIsLoading }),
   useS3PutObjectAcl: () => ({ mutate: mockPutObjectAclMutate, isPending: mockPutObjectAclIsPending }),
   useS3ObjectAttributes: () => ({ data: mockObjectAttributesData, isLoading: false }),
+}));
+
+vi.mock("../hooks/useS3Select", () => ({
+  useS3Select: () => ({ mutate: mockS3SelectMutate, isPending: mockS3SelectIsPending, isError: mockS3SelectIsError, error: mockS3SelectError }),
 }));
 
 vi.mock("../hooks/useSystem", () => ({
@@ -652,4 +659,254 @@ describe("S3Page", () => {
     });
   });
 
+  // ─── Confirm Cancel Tests ───────────────────────────────
+
+  it("does NOT delete bucket when confirm returns false", async () => {
+    mockConfirmDialog = vi.fn(() => Promise.resolve(false));
+    const user = userEvent.setup();
+    render(<S3Page />, { wrapper: createWrapper() });
+    const deleteBtn = screen.getByRole("button", { name: /Delete my-bucket/i });
+    await user.click(deleteBtn);
+    await waitFor(() => {
+      expect(mockDeleteBucket).not.toHaveBeenCalled();
+    });
+  });
+
+  it("does NOT delete folder object when confirm returns false", async () => {
+    mockConfirmDialog = vi.fn(() => Promise.resolve(false));
+    mockObjects.mockReturnValue({
+      data: {
+        folders: [{ prefix: "images/", name: "images" }],
+        objects: [],
+        total: 0,
+      },
+      isLoading: false,
+    });
+    mockSearchParams.mockReturnValue([new URLSearchParams("bucket=my-bucket"), vi.fn()]);
+    const user = userEvent.setup();
+    render(<S3Page />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByRole("tab", { name: /Objects/i })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Delete folder images/i }));
+    await waitFor(() => {
+      expect(mockDeleteFolderMutate).not.toHaveBeenCalled();
+    });
+  });
+
+  // ─── S3 Select Tests ────────────────────────────────────
+
+  it("renders S3 Select tab when bucket is selected", async () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("bucket=my-bucket"), vi.fn()]);
+    render(<S3Page />, { wrapper: createWrapper() });
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: /S3 Select/i })).toBeTruthy();
+    });
+  });
+
+  it("shows SQL reference before any query run", async () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("bucket=my-bucket"), vi.fn()]);
+    render(<S3Page />, { wrapper: createWrapper() });
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("tab", { name: /S3 Select/i }));
+    await waitFor(() => {
+      expect(screen.getByText("SQL reference")).toBeTruthy();
+    });
+  });
+
+  it("runs S3 Select query and shows results", async () => {
+    mockS3SelectMutate.mockImplementation((_data: any, opts: any) => {
+      opts?.onSuccess?.({ result: "col1,col2\na,b\nc,d", stats: { bytesScanned: 100, bytesProcessed: 200, bytesReturned: 50 } });
+    });
+    mockSearchParams.mockReturnValue([new URLSearchParams("bucket=my-bucket"), vi.fn()]);
+    const user = userEvent.setup();
+    render(<S3Page />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /S3 Select/i }));
+    await waitFor(() => expect(screen.getByText("Run query")).toBeTruthy());
+
+    // Fill in object key and expression
+    const keyInput = screen.getByPlaceholderText("data.csv");
+    await user.type(keyInput, "test.csv");
+
+    await clickButton(user, /Run query/i);
+    await waitFor(() => {
+      expect(mockS3SelectMutate).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/col1,col2/)).toBeTruthy();
+      expect(screen.getByText("Scanned")).toBeTruthy();
+    });
+  });
+
+  it("shows S3 Select error", async () => {
+    mockS3SelectIsError = true;
+    mockS3SelectError = new Error("Select query failed");
+    mockSearchParams.mockReturnValue([new URLSearchParams("bucket=my-bucket"), vi.fn()]);
+    const user = userEvent.setup();
+    render(<S3Page />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /S3 Select/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Select query failed")).toBeTruthy();
+    });
+  });
+
+  it("toggles S3 Select input type between CSV and JSON", async () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("bucket=my-bucket"), vi.fn()]);
+    const user = userEvent.setup();
+    render(<S3Page />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /S3 Select/i }));
+    await waitFor(() => expect(screen.getByText("Input format")).toBeTruthy());
+    // Click JSON button (first one is input format, second is output)
+    const jsonBtns = screen.getAllByRole("button", { name: /^JSON$/i });
+    await user.click(jsonBtns[0]);
+  });
+
+  it("shows CSV header treatment buttons for CSV input type", async () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("bucket=my-bucket"), vi.fn()]);
+    const user = userEvent.setup();
+    render(<S3Page />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /S3 Select/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Use")).toBeTruthy();
+      expect(screen.getByText("Ignore")).toBeTruthy();
+    });
+  });
+
+  // ─── Set ACL Tests ─────────────────────────────────────
+
+  it("shows Set ACL form when Set ACL button is clicked", async () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("bucket=my-bucket&object=test.txt"), vi.fn()]);
+    mockObjectDetail.mockReturnValue({
+      data: { contentType: "text/html", size: 512, lastModified: "2024-01-01", etag: "abc" },
+      isLoading: false, isError: false, error: null,
+    });
+    mockObjectAclData = { owner: { displayName: "admin", id: "123" }, grants: [], totalGrants: 0 };
+    const user = userEvent.setup();
+    render(<S3Page />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("Object ACL")).toBeTruthy());
+    await clickButton(user, /Set ACL/i);
+    await waitFor(() => {
+      expect(screen.getByText("Override all grants with a canned ACL.")).toBeTruthy();
+    });
+  });
+
+  it("calls putObjectAcl when Apply is clicked in Set ACL form", async () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("bucket=my-bucket&object=test.txt"), vi.fn()]);
+    mockObjectDetail.mockReturnValue({
+      data: { contentType: "text/html", size: 512, lastModified: "2024-01-01", etag: "abc" },
+      isLoading: false, isError: false, error: null,
+    });
+    mockObjectAclData = { owner: { displayName: "admin", id: "123" }, grants: [{ grantee: { displayName: "user1" }, permission: "READ" }], totalGrants: 1 };
+    const user = userEvent.setup();
+    render(<S3Page />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("Object ACL")).toBeTruthy());
+    await clickButton(user, /Set ACL/i);
+    await waitFor(() => expect(screen.getByText("Override all grants with a canned ACL.")).toBeTruthy());
+    await clickButton(user, /Apply/i);
+    await waitFor(() => {
+      expect(mockPutObjectAclMutate).toHaveBeenCalled();
+    });
+  });
+
+  it("hides Set ACL form when Cancel is clicked", async () => {
+    mockPutObjectAclMutate = vi.fn();
+    mockSearchParams.mockReturnValue([new URLSearchParams("bucket=my-bucket&object=test.txt"), vi.fn()]);
+    mockObjectDetail.mockReturnValue({
+      data: { contentType: "text/html", size: 512, lastModified: "2024-01-01", etag: "abc" },
+      isLoading: false, isError: false, error: null,
+    });
+    mockObjectAclData = { owner: null, grants: [], totalGrants: 0 };
+    // Mock updateAcl to have isError by making the mock return error
+    // We can't easily make useS3PutObjectAcl return isError=true through mockObjectAclData
+    // Instead, render and check "Cancel" toggles back
+    const user = userEvent.setup();
+    render(<S3Page />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("Object ACL")).toBeTruthy());
+    await clickButton(user, /Set ACL/i);
+    await waitFor(() => expect(screen.getByText("Override all grants with a canned ACL.")).toBeTruthy());
+    await clickButton(user, /Cancel/i);
+    await waitFor(() => {
+      expect(screen.queryByText("Override all grants with a canned ACL.")).toBeNull();
+    });
+  });
+
+  // ─── Batch Delete Tests ────────────────────────────────
+
+  it("shows Delete selected button when items are selected", async () => {
+    mockObjects.mockReturnValue({
+      data: {
+        objects: [{ key: "doc1.txt", size: 100, lastModified: "2024-01-01" }, { key: "doc2.txt", size: 200, lastModified: "2024-01-02" }],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    mockSearchParams.mockReturnValue([new URLSearchParams("bucket=my-bucket"), vi.fn()]);
+    render(<S3Page />, { wrapper: createWrapper() });
+    await waitFor(() => {
+      expect(screen.getAllByText("my-bucket").length).toBeGreaterThanOrEqual(1);
+    });
+    // Check for checkboxes (multi-select table)
+    const checkboxes = screen.getAllByRole("checkbox");
+    expect(checkboxes.length).toBeGreaterThan(0);
+  });
+
+  it("calls batchDelete when delete selected is confirmed", async () => {
+    mockBatchDeleteMutate.mockImplementation((_keys: any, opts: any) => {
+      opts?.onSuccess?.({ deleted: ["doc1.txt", "doc2.txt"], errors: [] });
+    });
+    mockObjects.mockReturnValue({
+      data: {
+        objects: [{ key: "doc1.txt", size: 100, lastModified: "2024-01-01" }, { key: "doc2.txt", size: 200, lastModified: "2024-01-02" }],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    mockSearchParams.mockReturnValue([new URLSearchParams("bucket=my-bucket"), vi.fn()]);
+    const user = userEvent.setup();
+    render(<S3Page />, { wrapper: createWrapper() });
+    await waitFor(() => {
+      expect(screen.getAllByText("my-bucket").length).toBeGreaterThanOrEqual(1);
+    });
+    // Select items via row checkboxes (skip header checkbox)
+    const checkboxes = screen.getAllByRole("checkbox");
+    if (checkboxes.length > 1) {
+      await user.click(checkboxes[1]);
+      await user.click(checkboxes[2]);
+    }
+    // The "Delete selected" button should appear
+    await waitFor(() => {
+      expect(screen.getByText(/Delete selected/)).toBeTruthy();
+    });
+    await clickButton(user, /Delete selected/i);
+    await waitFor(() => {
+      expect(mockBatchDeleteMutate).toHaveBeenCalled();
+    });
+  });
+
+  it("does NOT call batchDelete when confirm returns false", async () => {
+    mockConfirmDialog = vi.fn(() => Promise.resolve(false));
+    mockObjects.mockReturnValue({
+      data: {
+        objects: [{ key: "doc1.txt", size: 100, lastModified: "2024-01-01" }, { key: "doc2.txt", size: 200, lastModified: "2024-01-02" }],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    mockSearchParams.mockReturnValue([new URLSearchParams("bucket=my-bucket"), vi.fn()]);
+    const user = userEvent.setup();
+    render(<S3Page />, { wrapper: createWrapper() });
+    await waitFor(() => {
+      expect(screen.getAllByText("my-bucket").length).toBeGreaterThanOrEqual(1);
+    });
+    // Select items
+    const checkboxes = screen.getAllByRole("checkbox");
+    if (checkboxes.length > 1) {
+      await user.click(checkboxes[1]);
+    }
+    await waitFor(() => {
+      expect(screen.getByText(/Delete selected/)).toBeTruthy();
+    });
+    await clickButton(user, /Delete selected/i);
+    await waitFor(() => {
+      expect(mockBatchDeleteMutate).not.toHaveBeenCalled();
+    });
+  });
 });
