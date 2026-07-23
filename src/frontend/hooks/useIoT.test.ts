@@ -658,11 +658,21 @@ describe("MQTT broker hooks", () => {
     expect(mockApi).toHaveBeenCalledWith("/aws/iot/connections/dev%2F1");
   });
 
+  it("useConnection is disabled when clientId is null", () => {
+    const { result } = renderHook(() => useConnection(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+
   it("useConnectionSubscriptions calls correct URL", async () => {
     mockApi.mockResolvedValueOnce({ subscriptions: [] });
     const { result } = renderHook(() => useConnectionSubscriptions("dev-1"), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith("/aws/iot/connections/dev-1/subscriptions");
+  });
+
+  it("useConnectionSubscriptions is disabled when clientId is null", () => {
+    const { result } = renderHook(() => useConnectionSubscriptions(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
   });
 
   it("useDisconnectClient calls DELETE", async () => {
