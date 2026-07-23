@@ -56,6 +56,17 @@ const deleteCPGState = vi.hoisted(() => ({
   variables: null as string | null,
 }));
 
+const createSGState = vi.hoisted(() => ({
+  isPending: false,
+  isError: false,
+  error: null as Error | null,
+}));
+
+const deleteSGState = vi.hoisted(() => ({
+  isPending: false,
+  variables: null as string | null,
+}));
+
 // ─── Mock hooks ─────────────────────────────────────────
 
 const mockInstances = vi.fn();
@@ -73,6 +84,9 @@ const mockDeleteParamGroup = vi.fn();
 const mockClusterParamGroups = vi.fn();
 const mockCreateClusterParamGroup = vi.fn();
 const mockDeleteClusterParamGroup = vi.fn();
+const mockSubnetGroups = vi.fn();
+const mockCreateSubnetGroup = vi.fn();
+const mockDeleteSubnetGroup = vi.fn();
 
 vi.mock("../../hooks/useRDS", () => ({
   useRDSDBInstances: (...args: any[]) => mockInstances(...args),
@@ -131,6 +145,20 @@ vi.mock("../../hooks/useRDS", () => ({
     get variables() { return deleteCPGState.variables; },
   }),
   useRDSModifyParameterGroupParameters: () => ({ mutate: vi.fn(), isPending: false }),
+  useRDSModifyClusterParameterGroupParameters: () => ({ mutate: vi.fn(), isPending: false }),
+  useDBSubnetGroups: (...args: any[]) => mockSubnetGroups(...args),
+  useCreateDBSubnetGroup: () => ({
+    mutate: mockCreateSubnetGroup,
+    mutateAsync: vi.fn().mockResolvedValue({}),
+    get isPending() { return createSGState.isPending; },
+    get isError() { return createSGState.isError; },
+    get error() { return createSGState.error; },
+  }),
+  useDeleteDBSubnetGroup: () => ({
+    mutateAsync: mockDeleteSubnetGroup,
+    get isPending() { return deleteSGState.isPending; },
+    get variables() { return deleteSGState.variables; },
+  }),
 }));
 
 import { RDSDashboard } from "./RDSDashboard";
@@ -161,11 +189,17 @@ beforeEach(() => {
   createCPGState.error = null;
   deleteCPGState.isPending = false;
   deleteCPGState.variables = null;
+  createSGState.isPending = false;
+  createSGState.isError = false;
+  createSGState.error = null;
+  deleteSGState.isPending = false;
+  deleteSGState.variables = null;
 
   mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
   mockClusters.mockReturnValue({ data: { clusters: [], total: 0 }, isLoading: false, isError: false, error: null });
   mockParamGroups.mockReturnValue({ data: { parameterGroups: [], total: 0 }, isLoading: false, isError: false, error: null });
   mockClusterParamGroups.mockReturnValue({ data: { clusterParameterGroups: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockSubnetGroups.mockReturnValue({ data: { subnetGroups: [], total: 0 }, isLoading: false, isError: false, error: null });
   mockInstanceDetail.mockReturnValue({ data: undefined, isLoading: false, isError: false, error: null });
   mockClusterDetail.mockReturnValue({ data: undefined, isLoading: false, isError: false, error: null });
 });
@@ -794,5 +828,164 @@ describe("RDSDashboard — cluster parameter groups", () => {
     render(<RDSDashboard />, { wrapper: createWrapper() });
     await user.click(screen.getByRole("tab", { name: /Cluster Parameter Groups/i }));
     await waitFor(() => expect(screen.getByText("CPG load failed")).toBeTruthy());
+  });
+});
+
+describe("RDSDashboard — DB subnet groups", () => {
+  it("shows empty message for subnet groups tab", async () => {
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /DB Subnet Groups/i }));
+    await waitFor(() => expect(screen.getByText(/No DB subnet groups found/i)).toBeTruthy());
+  });
+
+  it("renders subnet groups with data", async () => {
+    mockSubnetGroups.mockReturnValue({
+      data: {
+        subnetGroups: [
+          { name: "my-sg", description: "My subnet group", vpcId: "vpc-1234", status: "Complete", subnets: [{ subnetId: "subnet-abc" }, { subnetId: "subnet-def" }] },
+        ],
+        total: 1,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /DB Subnet Groups/i }));
+    await waitFor(() => {
+      expect(screen.getByText("my-sg")).toBeTruthy();
+      expect(screen.getByText("My subnet group")).toBeTruthy();
+      expect(screen.getByText("vpc-1234")).toBeTruthy();
+      expect(screen.getByText("Complete")).toBeTruthy();
+      expect(screen.getByText("2")).toBeTruthy();
+    });
+  });
+
+  it("shows dashes for missing subnet group fields", async () => {
+    mockSubnetGroups.mockReturnValue({
+      data: { subnetGroups: [{ name: "minimal-sg", subnets: [] }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /DB Subnet Groups/i }));
+    await waitFor(() => {
+      expect(screen.getByText("minimal-sg")).toBeTruthy();
+      expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(2);
+      expect(screen.getByText("0")).toBeTruthy();
+    });
+  });
+
+  it("shows status indicator for in-progress subnet groups", async () => {
+    mockSubnetGroups.mockReturnValue({
+      data: {
+        subnetGroups: [
+          { name: "pending-sg", description: "Pending", vpcId: "vpc-5678", status: "Creating", subnets: [{ subnetId: "subnet-xyz" }] },
+        ],
+        total: 1,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /DB Subnet Groups/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Creating")).toBeTruthy();
+    });
+  });
+
+  it("filters subnet groups by name", async () => {
+    mockSubnetGroups.mockReturnValue({
+      data: {
+        subnetGroups: [
+          { name: "sg-alpha", description: "Alpha", vpcId: "vpc-1", status: "Complete", subnets: [] },
+          { name: "sg-beta", description: "Beta", vpcId: "vpc-2", status: "Complete", subnets: [] },
+        ],
+        total: 2,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /DB Subnet Groups/i }));
+    await waitFor(() => expect(screen.getByText("sg-alpha")).toBeTruthy());
+
+    const filterInput = screen.getByPlaceholderText("Find subnet groups by name");
+    await user.type(filterInput, "beta");
+    await waitFor(() => expect(screen.queryByText("sg-alpha")).toBeNull());
+  });
+
+  it("shows subnet groups loading state", () => {
+    mockSubnetGroups.mockReturnValue({ data: undefined, isLoading: true, isError: false, error: null });
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByRole("tab", { name: /DB Subnet Groups/i })).toBeTruthy();
+  });
+
+  it("shows subnet groups error state", async () => {
+    mockSubnetGroups.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: new Error("SG load failed") });
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /DB Subnet Groups/i }));
+    await waitFor(() => expect(screen.getByText("SG load failed")).toBeTruthy());
+  });
+
+  it("opens create subnet group modal and shows form fields", async () => {
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /DB Subnet Groups/i }));
+    await clickButton(user, /Create/i);
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("my-subnet-group")).toBeTruthy();
+    });
+    expect(screen.getByPlaceholderText("My subnet group")).toBeTruthy();
+    expect(screen.getByPlaceholderText("subnet-abc123, subnet-def456")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Cancel/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Create subnet group/i })).toBeTruthy();
+  });
+
+  it("shows create subnet group error alert", async () => {
+    createSGState.isError = true;
+    createSGState.error = new Error("Name exists");
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /DB Subnet Groups/i }));
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Name exists")).toBeTruthy());
+  });
+
+  it("shows delete subnet group loading state", async () => {
+    deleteSGState.isPending = true;
+    deleteSGState.variables = "my-sg";
+    mockSubnetGroups.mockReturnValue({
+      data: {
+        subnetGroups: [{ name: "my-sg", description: "My SG", vpcId: "vpc-1", status: "Complete", subnets: [] }],
+        total: 1,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /DB Subnet Groups/i }));
+    await waitFor(() => expect(screen.getByText("my-sg")).toBeTruthy());
+  });
+
+  it("deletes a subnet group", async () => {
+    mockSubnetGroups.mockReturnValue({
+      data: {
+        subnetGroups: [{ name: "del-sg", description: "To delete", vpcId: "vpc-1", status: "Complete", subnets: [] }],
+        total: 1,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /DB Subnet Groups/i }));
+    await waitFor(() => screen.getByText("del-sg"));
+
+    const deleteBtn = screen.getByRole("button", { name: /Delete del-sg/i });
+    await user.click(deleteBtn);
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() => expect(mockDeleteSubnetGroup).toHaveBeenCalledWith("del-sg"));
   });
 });
