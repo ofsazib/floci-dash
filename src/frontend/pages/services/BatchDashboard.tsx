@@ -608,6 +608,10 @@ export function BatchDashboard() {
         onCreate={() => setShowCreateJD(true)}
       />
 
+      <Button variant="normal" onClick={() => setShowSubmitJob(true)}>
+        Submit Job
+      </Button>
+
       <Modal visible={showCreateCE} onDismiss={() => setShowCreateCE(false)} header="Create Compute Environment"
         footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
           <Button variant="link" onClick={() => setShowCreateCE(false)}>Cancel</Button>

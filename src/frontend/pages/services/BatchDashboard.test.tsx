@@ -49,6 +49,12 @@ const deregisterJDState = vi.hoisted(() => ({
   variables: null as string | null,
 }));
 
+const submitJobState = vi.hoisted(() => ({
+  isPending: false,
+  isError: false,
+  error: null as Error | null,
+}));
+
 // ─── Mock hooks ─────────────────────────────────────────
 
 const mockComputeEnvs = vi.fn();
@@ -100,9 +106,10 @@ vi.mock("../../hooks/useBatch", () => ({
   }),
   useSubmitBatchJob: () => ({
     mutate: vi.fn(),
-    isPending: false,
-    isError: false,
-    error: null,
+    mutateAsync: vi.fn().mockResolvedValue({}),
+    get isPending() { return submitJobState.isPending; },
+    get isError() { return submitJobState.isError; },
+    get error() { return submitJobState.error; },
   }),
 }));
 
@@ -127,6 +134,9 @@ beforeEach(() => {
   registerJDState.error = null;
   deregisterJDState.isPending = false;
   deregisterJDState.variables = null;
+  submitJobState.isPending = false;
+  submitJobState.isError = false;
+  submitJobState.error = null;
 
   mockComputeEnvs.mockReturnValue({
     data: { computeEnvironments: [] },
@@ -463,5 +473,57 @@ describe("BatchDashboard — job definitions", () => {
     });
     render(<BatchDashboard />, { wrapper: createWrapper() });
     expect(screen.getByText("my-jd")).toBeTruthy();
+  });
+});
+
+describe("BatchDashboard — submit job", () => {
+  it("shows Submit Job button", () => {
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByRole("button", { name: /Submit Job/i })).toBeTruthy();
+  });
+
+  it("opens Submit Job modal and shows form fields", async () => {
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /Submit Job/i }));
+    await waitFor(() => {
+      expect(screen.getAllByText("Submit Job").length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByLabelText(/Job name/)).toBeTruthy();
+      expect(screen.getByLabelText(/Job queue ARN/)).toBeTruthy();
+      expect(screen.getByLabelText(/Job definition ARN/)).toBeTruthy();
+    });
+    expect(screen.getByRole("button", { name: /Submit$/i })).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: /Cancel/i }).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("shows submit button disabled until all fields are filled", async () => {
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /Submit Job/i }));
+    await waitFor(() => {
+      expect(screen.getAllByText("Submit Job").length).toBeGreaterThanOrEqual(1);
+    });
+    const nameInput = screen.getByLabelText(/Job name/);
+    await user.type(nameInput, "my-job");
+    // Submit button should be disabled until all 3 fields are filled
+    const submitBtn = screen.getByRole("button", { name: /^Submit$/i });
+    expect(submitBtn.getAttribute("disabled")).not.toBeNull();
+  });
+
+  it("shows submit job error alert", async () => {
+    submitJobState.isError = true;
+    submitJobState.error = new Error("Job submission failed");
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /Submit Job/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Job submission failed")).toBeTruthy();
+    });
+  });
+
+  it("shows submit job loading state", () => {
+    submitJobState.isPending = true;
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByRole("button", { name: /Submit Job/i })).toBeTruthy();
   });
 });
