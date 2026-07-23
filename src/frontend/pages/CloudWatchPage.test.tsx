@@ -258,6 +258,11 @@ describe("CloudWatchPage", () => {
     });
     const deleteBtn = screen.getByRole("button", { name: /Delete high-cpu/i });
     await user.click(deleteBtn);
+    // Confirm the delete dialog
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /^Delete$/ })).toBeTruthy();
+    });
+    await user.click(screen.getByRole("button", { name: /^Delete$/ }));
     await waitFor(() => {
       expect(mockDeleteAlarm).toHaveBeenCalledWith("high-cpu");
     });
@@ -265,10 +270,15 @@ describe("CloudWatchPage", () => {
 
   // ─── Metric Statistics Test ──────────────────────────────
 
-  it("calls metricStatistics with params when metrics tab renders", () => {
+  it("calls metricStatistics with params when metrics tab renders", async () => {
+    const user = userEvent.setup();
     render(<CloudWatchPage />, { wrapper: pageWrapper() });
-    // The metricStatistics hook is called with default empty params on mount
-    expect(mockMetricStatistics).toHaveBeenCalled();
+    // Switch to Metrics tab (MetricsTab is lazily rendered)
+    const tabs = screen.getAllByText("Metrics");
+    await user.click(tabs[tabs.length - 1]);
+    await waitFor(() => {
+      expect(mockMetricStatistics).toHaveBeenCalled();
+    });
   });
 
   // ─── Create Alarm Full Form ──────────────────────────────
