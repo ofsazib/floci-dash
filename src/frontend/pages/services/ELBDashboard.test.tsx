@@ -57,6 +57,19 @@ const setRulePrioritiesState = vi.hoisted(() => ({
   isPending: false,
 }));
 
+const sslPoliciesState = vi.hoisted(() => ({
+  data: { sslPolicies: [] as any[], total: 0 },
+  isLoading: false,
+}));
+const accountLimitsState = vi.hoisted(() => ({
+  data: { limits: [] as any[], total: 0 },
+  isLoading: false,
+}));
+
+const mockSetSgs = vi.fn();
+const mockSetSubnets = vi.fn();
+const mockSetIpAddrType = vi.fn();
+
 vi.mock("../../hooks/useELB", () => ({
   useELBLoadBalancers: (...args: any[]) => mockLoadBalancers(...args),
   useELBCreateLoadBalancer: () => ({
@@ -96,32 +109,32 @@ vi.mock("../../hooks/useELB", () => ({
     reset: vi.fn(),
   }),
   useELBSetSecurityGroups: () => ({
-    mutate: vi.fn(),
-    mutateAsync: vi.fn().mockResolvedValue({}),
+    mutate: mockSetSgs,
+    mutateAsync: mockSetSgs,
     isPending: false,
     isError: false,
     error: null,
     reset: vi.fn(),
   }),
   useELBSetSubnets: () => ({
-    mutate: vi.fn(),
-    mutateAsync: vi.fn().mockResolvedValue({}),
+    mutate: mockSetSubnets,
+    mutateAsync: mockSetSubnets,
     isPending: false,
     isError: false,
     error: null,
     reset: vi.fn(),
   }),
   useELBSetIpAddressType: () => ({
-    mutate: vi.fn(),
-    mutateAsync: vi.fn().mockResolvedValue({}),
+    mutate: mockSetIpAddrType,
+    mutateAsync: mockSetIpAddrType,
     isPending: false,
     isError: false,
     error: null,
     reset: vi.fn(),
   }),
   useELBSSLPolicies: () => ({
-    data: { sslPolicies: [], total: 0 },
-    isLoading: false,
+    data: sslPoliciesState.data,
+    isLoading: sslPoliciesState.isLoading,
     isError: false,
     error: null,
   }),
@@ -176,8 +189,8 @@ vi.mock("../../hooks/useELB", () => ({
     reset: vi.fn(),
   }),
   useELBAccountLimits: () => ({
-    data: { limits: [], total: 0 },
-    isLoading: false,
+    data: accountLimitsState.data,
+    isLoading: accountLimitsState.isLoading,
     isError: false,
     error: null,
   }),
@@ -234,6 +247,16 @@ beforeEach(() => {
   deleteRuleState.isPending = false;
   deleteRuleState.variables = null;
   setRulePrioritiesState.isPending = false;
+  sslPoliciesState.data = { sslPolicies: [], total: 0 };
+  sslPoliciesState.isLoading = false;
+  accountLimitsState.data = { limits: [], total: 0 };
+  accountLimitsState.isLoading = false;
+  mockSetSgs.mockReset();
+  mockSetSgs.mockResolvedValue({});
+  mockSetSubnets.mockReset();
+  mockSetSubnets.mockResolvedValue({});
+  mockSetIpAddrType.mockReset();
+  mockSetIpAddrType.mockResolvedValue({});
 
   mockLoadBalancers.mockReturnValue({
     data: { loadBalancers: [], total: 0 },
@@ -970,6 +993,211 @@ describe("ELBDashboard — listener rules", () => {
 
     await waitFor(() => {
       expect(screen.getByText("No non-default rules to reorder.")).toBeTruthy();
+    });
+  });
+});
+
+// ─── Advanced Settings Tests ─────────────────────────────
+
+describe("ELBDashboard — advanced settings", () => {
+  const LB_ARN_ADV = "arn:aws:elasticloadbalancing:us-east-1:123:loadbalancer/app/my-alb-adv/xyz";
+
+  async function navigateToAdvancedTab(user: ReturnType<typeof userEvent.setup>) {
+    mockLoadBalancers.mockReturnValue({
+      data: {
+        loadBalancers: [
+          {
+            loadBalancerName: "my-alb-adv",
+            loadBalancerArn: LB_ARN_ADV,
+            type: "application",
+            scheme: "internet-facing",
+            state: { Code: "active" },
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    render(<ELBDashboard />, { wrapper: createWrapper() });
+
+    // Switch to Advanced tab
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Select a load balancer...")).toBeTruthy();
+    });
+
+    // Click the Select to open dropdown, then click the option
+    const selectTrigger = screen.getByText("Select a load balancer...");
+    await user.click(selectTrigger);
+    const lbOptions = screen.getAllByText(`my-alb-adv (${LB_ARN_ADV})`);
+    await user.click(lbOptions[0]);
+
+    // Wait for advanced settings to appear (Security Groups header)
+    await waitFor(() => {
+      expect(screen.getByText("Security Groups")).toBeTruthy();
+    });
+  }
+
+  // ── SSL Policies ──
+
+  it("renders SSL policies with data", async () => {
+    sslPoliciesState.data = {
+      sslPolicies: [
+        { name: "ELBSecurityPolicy-2016-08", sslProtocols: ["TLSv1.2"], ciphers: [{ Name: "AES256-GCM-SHA384" }] },
+        { name: "ELBSecurityPolicy-FS-2018-06", sslProtocols: ["TLSv1.2"], ciphers: [{ Name: "ECDHE-AES128-GCM-SHA256" }] },
+      ],
+      total: 2,
+    };
+
+    const user = userEvent.setup();
+    render(<ELBDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("ELBSecurityPolicy-2016-08")).toBeTruthy();
+      expect(screen.getByText("ELBSecurityPolicy-FS-2018-06")).toBeTruthy();
+    });
+  });
+
+  it("shows SSL policies empty state", async () => {
+    sslPoliciesState.data = { sslPolicies: [], total: 0 };
+
+    const user = userEvent.setup();
+    render(<ELBDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("No SSL policies found")).toBeTruthy();
+    });
+  });
+
+  // ── Account Limits ──
+
+  it("renders account limits with data", async () => {
+    accountLimitsState.data = {
+      limits: [
+        { name: "application-load-balancers", max: "50" },
+        { name: "target-groups", max: "100" },
+      ],
+      total: 2,
+    };
+
+    const user = userEvent.setup();
+    render(<ELBDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("application-load-balancers")).toBeTruthy();
+      expect(screen.getByText("target-groups")).toBeTruthy();
+      expect(screen.getByText("50")).toBeTruthy();
+    });
+  });
+
+  it("shows account limits empty state", async () => {
+    accountLimitsState.data = { limits: [], total: 0 };
+
+    const user = userEvent.setup();
+    render(<ELBDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("No limits found")).toBeTruthy();
+    });
+  });
+
+  // ── Security Groups ──
+
+  it("opens security groups modal and submits", async () => {
+    const user = userEvent.setup();
+    await navigateToAdvancedTab(user);
+
+    // Click Set security groups link
+    await clickButton(user, /Set security groups/i);
+
+    await waitFor(() => {
+      expect(screen.getByText("Set Security Groups")).toBeTruthy();
+    });
+
+    // Type SG IDs into the textarea
+    const sgTextarea = screen.getByPlaceholderText("sg-12345678");
+    await user.type(sgTextarea, "sg-111,sg-222");
+
+    // Click Save
+    await clickButton(user, /Save/i);
+
+    await waitFor(() => {
+      expect(mockSetSgs).toHaveBeenCalledWith(
+        expect.objectContaining({
+          arn: LB_ARN_ADV,
+          securityGroups: expect.arrayContaining(["sg-111", "sg-222"]),
+        }),
+        expect.any(Object),
+      );
+    });
+  });
+
+  // ── Subnets ──
+
+  it("opens subnets modal and submits", async () => {
+    const user = userEvent.setup();
+    await navigateToAdvancedTab(user);
+
+    // Click Set subnets link
+    await clickButton(user, /Set subnets/i);
+
+    await waitFor(() => {
+      expect(screen.getByText("Set Subnets")).toBeTruthy();
+    });
+
+    // Type subnet IDs into the textarea
+    const subnetTextarea = screen.getByPlaceholderText("subnet-12345678");
+    await user.type(subnetTextarea, "subnet-a,subnet-b");
+
+    // Click Save
+    await clickButton(user, /Save/i);
+
+    await waitFor(() => {
+      expect(mockSetSubnets).toHaveBeenCalledWith(
+        expect.objectContaining({
+          arn: LB_ARN_ADV,
+          subnets: expect.arrayContaining(["subnet-a", "subnet-b"]),
+        }),
+        expect.any(Object),
+      );
+    });
+  });
+
+  // ── IP Address Type ──
+
+  it("calls Set IPv4", async () => {
+    const user = userEvent.setup();
+    await navigateToAdvancedTab(user);
+
+    await clickButton(user, /Set IPv4/i);
+
+    await waitFor(() => {
+      expect(mockSetIpAddrType).toHaveBeenCalledWith({
+        arn: LB_ARN_ADV,
+        ipAddressType: "ipv4",
+      });
+    });
+  });
+
+  it("calls Set Dualstack", async () => {
+    const user = userEvent.setup();
+    await navigateToAdvancedTab(user);
+
+    await clickButton(user, /Set Dualstack/i);
+
+    await waitFor(() => {
+      expect(mockSetIpAddrType).toHaveBeenCalledWith({
+        arn: LB_ARN_ADV,
+        ipAddressType: "dualstack",
+      });
     });
   });
 });
