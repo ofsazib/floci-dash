@@ -11,6 +11,20 @@ const mockDeleteWebAcl = vi.fn();
 const mockIPSets = vi.fn();
 const mockRegexSets = vi.fn();
 const mockRuleGroups = vi.fn();
+const mockCreateIPSetMutate = vi.fn();
+const mockCreateRegexSetMutate = vi.fn();
+const mockUpdateRegexSetMutate = vi.fn();
+const mockCreateRuleGroupMutate = vi.fn();
+const mockPutLoggingMutate = vi.fn();
+const mockDeleteLoggingMutateAsync = vi.fn();
+const mockAssociateMutate = vi.fn();
+const mockDisassociateMutate = vi.fn();
+const mockPutPermissionMutate = vi.fn();
+const mockDeletePermissionMutateAsync = vi.fn();
+const mockLoggingConfigs = vi.fn();
+const mockWebAclForResource = vi.fn();
+const mockResourcesForWebAcl = vi.fn();
+const mockPermissionPolicy = vi.fn();
 
 vi.mock("../../hooks/useWafV2", () => ({
   useWebACLs: (...args: any[]) => mockWebAcls(...args),
@@ -19,25 +33,25 @@ vi.mock("../../hooks/useWafV2", () => ({
   useIPSets: (...args: any[]) => mockIPSets(...args),
   useRegexPatternSets: (...args: any[]) => mockRegexSets(...args),
   useRuleGroups: (...args: any[]) => mockRuleGroups(...args),
-  useCreateIPSet: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn() }),
-  useUpdateIPSet: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn() }),
-  useDeleteIPSet: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn(), variables: null }),
+  useCreateIPSet: () => ({ mutate: mockCreateIPSetMutate, isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useUpdateIPSet: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useDeleteIPSet: () => ({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, variables: null }),
   useRegexPatternSet: () => ({ data: null, isLoading: false, isError: false, error: null }),
-  useCreateRegexPatternSet: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn() }),
-  useUpdateRegexPatternSet: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn() }),
-  useDeleteRegexPatternSet: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn(), variables: null }),
-  useCreateRuleGroup: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn() }),
-  useDeleteRuleGroup: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn(), variables: null }),
-  useLoggingConfigurations: () => ({ data: { loggingConfigurations: [], total: 0 }, isLoading: false, isError: false, error: null }),
-  usePutLoggingConfiguration: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn() }),
-  useDeleteLoggingConfiguration: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn() }),
-  useAssociateWebACL: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn() }),
-  useDisassociateWebACL: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn() }),
-  useGetWebACLForResource: () => ({ data: null, isLoading: false, isError: false, error: null }),
-  useResourcesForWebACL: () => ({ data: null, isLoading: false, isError: false, error: null }),
-  usePermissionPolicy: () => ({ data: null, isLoading: false, isError: false, error: null }),
-  usePutPermissionPolicy: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn() }),
-  useDeletePermissionPolicy: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useCreateRegexPatternSet: () => ({ mutate: mockCreateRegexSetMutate, isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useUpdateRegexPatternSet: () => ({ mutate: mockUpdateRegexSetMutate, isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useDeleteRegexPatternSet: () => ({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, variables: null }),
+  useCreateRuleGroup: () => ({ mutate: mockCreateRuleGroupMutate, isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useDeleteRuleGroup: () => ({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, variables: null }),
+  useLoggingConfigurations: (...args: any[]) => mockLoggingConfigs(...args),
+  usePutLoggingConfiguration: () => ({ mutate: mockPutLoggingMutate, isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useDeleteLoggingConfiguration: () => ({ mutateAsync: mockDeleteLoggingMutateAsync, isPending: false, variables: null }),
+  useAssociateWebACL: () => ({ mutate: mockAssociateMutate, isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useDisassociateWebACL: () => ({ mutate: mockDisassociateMutate, isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useGetWebACLForResource: (...args: any[]) => mockWebAclForResource(...args),
+  useResourcesForWebACL: (...args: any[]) => mockResourcesForWebAcl(...args),
+  usePermissionPolicy: (...args: any[]) => mockPermissionPolicy(...args),
+  usePutPermissionPolicy: () => ({ mutate: mockPutPermissionMutate, isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useDeletePermissionPolicy: () => ({ mutateAsync: mockDeletePermissionMutateAsync, isPending: false, variables: null }),
 }));
 
 import { WafV2Dashboard } from "./WafV2Dashboard";
@@ -48,6 +62,248 @@ beforeEach(() => {
   mockIPSets.mockReturnValue({ data: { ipSets: [], total: 0 }, isLoading: false });
   mockRegexSets.mockReturnValue({ data: { regexPatternSets: [], total: 0 }, isLoading: false });
   mockRuleGroups.mockReturnValue({ data: { ruleGroups: [], total: 0 }, isLoading: false });
+  mockLoggingConfigs.mockReturnValue({ data: { loggingConfigurations: [], total: 0 }, isLoading: false });
+  mockWebAclForResource.mockReturnValue({ data: null, isLoading: false });
+  mockResourcesForWebAcl.mockReturnValue({ data: null, isLoading: false });
+  mockPermissionPolicy.mockReturnValue({ data: null, isLoading: false });
+});
+
+describe("WafV2Dashboard — create modals", () => {
+  it("opens Create IP Set modal and cancels", async () => {
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create IP set/i);
+    await waitFor(() => expect(screen.getByText("Create IP Set")).toBeTruthy());
+    const cancelBtns = screen.getAllByRole("button", { name: /Cancel/i });
+    await user.click(cancelBtns[cancelBtns.length - 1]);
+    expect(mockCreateIPSetMutate).not.toHaveBeenCalled();
+  });
+
+  it("opens Create Regex Pattern Set modal and cancels", async () => {
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create regex set/i);
+    await waitFor(() => expect(screen.getByText("Create Regex Pattern Set")).toBeTruthy());
+    const cancelBtns = screen.getAllByRole("button", { name: /Cancel/i });
+    await user.click(cancelBtns[cancelBtns.length - 1]);
+    expect(mockCreateRegexSetMutate).not.toHaveBeenCalled();
+  });
+
+  it("opens Create Rule Group modal and cancels", async () => {
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create rule group/i);
+    await waitFor(() => expect(screen.getByText("Create Rule Group")).toBeTruthy());
+    const cancelBtns = screen.getAllByRole("button", { name: /Cancel/i });
+    await user.click(cancelBtns[cancelBtns.length - 1]);
+    expect(mockCreateRuleGroupMutate).not.toHaveBeenCalled();
+  });
+
+  it("opens Configure Logging modal and cancels", async () => {
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Configure logging/i);
+    await waitFor(() => expect(screen.getByText("Configure Logging")).toBeTruthy());
+    const cancelBtns = screen.getAllByRole("button", { name: /Cancel/i });
+    await user.click(cancelBtns[cancelBtns.length - 1]);
+    expect(mockPutLoggingMutate).not.toHaveBeenCalled();
+  });
+
+  it("opens Associate Web ACL modal and cancels", async () => {
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    const assocBtns = screen.getAllByRole("button", { name: /Associate Web ACL/i });
+    await user.click(assocBtns[0]);
+    await waitFor(() => expect(screen.getByText(/Web ACL ARN/)).toBeTruthy());
+    const cancelBtns = screen.getAllByRole("button", { name: /Cancel/i });
+    await user.click(cancelBtns[cancelBtns.length - 1]);
+    expect(mockAssociateMutate).not.toHaveBeenCalled();
+  });
+
+  it("opens Disassociate Web ACL modal and cancels", async () => {
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    const disassocBtns = screen.getAllByRole("button", { name: /Disassociate Web ACL/i });
+    await user.click(disassocBtns[0]);
+    await waitFor(() => expect(screen.getByRole("button", { name: /^Disassociate$/ })).toBeTruthy());
+    const cancelBtns = screen.getAllByRole("button", { name: /Cancel/i });
+    await user.click(cancelBtns[cancelBtns.length - 1]);
+    expect(mockDisassociateMutate).not.toHaveBeenCalled();
+  });
+
+  it("opens Put Permission Policy modal and cancels", async () => {
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Put policy/i);
+    await waitFor(() => expect(screen.getByText("Put Permission Policy")).toBeTruthy());
+    const cancelBtns = screen.getAllByRole("button", { name: /Cancel/i });
+    await user.click(cancelBtns[cancelBtns.length - 1]);
+    expect(mockPutPermissionMutate).not.toHaveBeenCalled();
+  });
+});
+
+describe("WafV2Dashboard — Logging Configuration", () => {
+  it("renders logging configs with data", () => {
+    mockLoggingConfigs.mockReturnValue({
+      data: {
+        loggingConfigurations: [{ ResourceArn: "arn:aws:wafv2:...webacl/test", LogDestinationConfigs: ["arn:aws:logs:..."], ManagedByFirewallManager: true }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("arn:aws:wafv2:...webacl/test")).toBeTruthy();
+    expect(screen.getByText("Yes")).toBeTruthy();
+  });
+
+  it("shows No for FMS Managed when false", () => {
+    mockLoggingConfigs.mockReturnValue({
+      data: {
+        loggingConfigurations: [{ ResourceArn: "arn:...", LogDestinationConfigs: [], ManagedByFirewallManager: false }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("No")).toBeTruthy();
+  });
+
+  it("shows em-dash for empty log destinations", () => {
+    mockLoggingConfigs.mockReturnValue({
+      data: {
+        loggingConfigurations: [{ ResourceArn: "arn:...", LogDestinationConfigs: [], ManagedByFirewallManager: false }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("\u2014")).toBeTruthy();
+  });
+});
+
+describe("WafV2Dashboard — Associations", () => {
+  it("shows association lookup inputs", () => {
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    expect(screen.getByPlaceholderText(/arn:aws:elasticloadbalancing/)).toBeTruthy();
+    const webAclInputs = screen.getAllByPlaceholderText(/arn:aws:wafv2.*webacl/);
+    expect(webAclInputs.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("Look up is disabled when resource ARN is empty", () => {
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    const lookupBtns = screen.getAllByRole("button", { name: /Look up/i });
+    expect(lookupBtns[0]).toBeDisabled();
+  });
+
+  it("Load policy is disabled when ARN is empty", () => {
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    expect(screen.getByRole("button", { name: /Load policy/i })).toBeDisabled();
+  });
+
+  it("shows associated Web ACL result", async () => {
+    mockWebAclForResource.mockReturnValue({
+      data: { webAcl: { Name: "associated-acl", ARN: "arn:aws:wafv2:...webacl/acl" } },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    const resourceInput = screen.getByPlaceholderText(/arn:aws:elasticloadbalancing/);
+    await user.type(resourceInput, "arn:aws:elasticloadbalancing:us-east-1:123:loadbalancer/my-lb");
+    const lookupBtns = screen.getAllByRole("button", { name: /Look up/i });
+    await user.click(lookupBtns[0]);
+    await waitFor(() => expect(screen.getByText(/associated-acl/)).toBeTruthy());
+  });
+
+  it("shows no Web ACL result when none associated", async () => {
+    mockWebAclForResource.mockReturnValue({
+      data: { webAcl: null },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    const resourceInput = screen.getByPlaceholderText(/arn:aws:elasticloadbalancing/);
+    await user.type(resourceInput, "arn:aws:elasticloadbalancing:us-east-1:123:loadbalancer/other");
+    const lookupBtns = screen.getAllByRole("button", { name: /Look up/i });
+    await user.click(lookupBtns[0]);
+    await waitFor(() => expect(screen.getByText(/No Web ACL associated/)).toBeTruthy());
+  });
+
+  it("shows resources for a Web ACL", async () => {
+    mockResourcesForWebAcl.mockReturnValue({
+      data: { resourceArns: ["arn:aws:elasticloadbalancing:...:lb-1", "arn:aws:apigateway:...:api-1"] },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    const webAclInputs = screen.getAllByPlaceholderText(/arn:aws:wafv2.*webacl/);
+    await user.type(webAclInputs[0], "arn:aws:wafv2:us-east-1:123:webacl/my-acl");
+    const lookupBtns = screen.getAllByRole("button", { name: /Look up/i });
+    await user.click(lookupBtns[1]);
+    await waitFor(() => expect(screen.getByText(/lb-1/)).toBeTruthy());
+  });
+
+  it("shows no resources when Web ACL has none", async () => {
+    mockResourcesForWebAcl.mockReturnValue({
+      data: { resourceArns: [] },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    const webAclInputs = screen.getAllByPlaceholderText(/arn:aws:wafv2.*webacl/);
+    await user.type(webAclInputs[0], "arn:aws:wafv2:us-east-1:123:webacl/empty-acl");
+    const lookupBtns = screen.getAllByRole("button", { name: /Look up/i });
+    await user.click(lookupBtns[1]);
+    await waitFor(() => expect(screen.getByText(/No resources associated/)).toBeTruthy());
+  });
+});
+
+describe("WafV2Dashboard — Permission Policy", () => {
+  it("shows policy when loaded", async () => {
+    mockPermissionPolicy.mockReturnValue({
+      data: { policy: '{"Version": "2012-10-17", "Statement": []}' },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    const permInput = screen.getAllByPlaceholderText(/arn:aws:wafv2.*webacl/)[1];
+    await user.type(permInput, "arn:aws:wafv2:us-east-1:123:webacl/my-acl");
+    await clickButton(user, /Load policy/i);
+    await waitFor(() => expect(screen.getByText(/"Version"/)).toBeTruthy());
+  });
+
+  it("shows no policy message", async () => {
+    mockPermissionPolicy.mockReturnValue({
+      data: { policy: null },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    const permInput = screen.getAllByPlaceholderText(/arn:aws:wafv2.*webacl/)[1];
+    await user.type(permInput, "arn:aws:wafv2:us-east-1:123:webacl/no-policy");
+    await clickButton(user, /Load policy/i);
+    await waitFor(() => expect(screen.getByText(/No permission policy set/)).toBeTruthy());
+  });
+});
+
+describe("WafV2Dashboard — fallbacks", () => {
+  it("shows em-dash for missing description in web ACL", () => {
+    mockWebAcls.mockReturnValue({
+      data: { webAcls: [{ Name: "no-desc", Id: "acl-1" }], total: 1 },
+      isLoading: false,
+    });
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    const dashes = screen.getAllByText("\u2014");
+    expect(dashes.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("shows em-dash for missing ARN in web ACL", () => {
+    mockWebAcls.mockReturnValue({
+      data: { webAcls: [{ Name: "no-arn", Id: "acl-1", Description: "Has desc" }], total: 1 },
+      isLoading: false,
+    });
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("no-arn")).toBeTruthy();
+  });
 });
 
 describe("WafV2Dashboard", () => {
