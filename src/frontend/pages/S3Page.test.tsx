@@ -28,6 +28,8 @@ let mockObjectAclIsLoading = false;
 let mockObjectAttributesData: any = { checksum: null };
 let mockPutObjectAclMutate = vi.fn();
 let mockPutObjectAclIsPending = false;
+let mockPutObjectAclIsError = false;
+let mockPutObjectAclError: Error | null = null;
 let mockDeleteObjectMutate = vi.fn();
 let mockCreateFolderMutate = vi.fn();
 let mockDeleteFolderMutate = vi.fn();
@@ -54,7 +56,7 @@ vi.mock("../hooks/useS3Config", () => ({
   useS3ObjectTags: (...args: any[]) => mockObjectTags(...args),
   useS3UpdateObjectTags: () => ({ mutate: mockUpdateObjectTags, isPending: false }),
   useS3ObjectAcl: () => ({ data: mockObjectAclData, isLoading: mockObjectAclIsLoading }),
-  useS3PutObjectAcl: () => ({ mutate: mockPutObjectAclMutate, isPending: mockPutObjectAclIsPending }),
+  useS3PutObjectAcl: () => ({ mutate: mockPutObjectAclMutate, isPending: mockPutObjectAclIsPending, isError: mockPutObjectAclIsError, error: mockPutObjectAclError }),
   useS3ObjectAttributes: () => ({ data: mockObjectAttributesData, isLoading: false }),
 }));
 
@@ -107,6 +109,8 @@ describe("S3Page", () => {
     mockObjectAttributesData = { checksum: null };
     mockPutObjectAclMutate = vi.fn();
     mockPutObjectAclIsPending = false;
+    mockPutObjectAclIsError = false;
+    mockPutObjectAclError = null;
     mockDeleteObjectMutate = vi.fn();
     mockCreateFolderMutate = vi.fn();
     mockDeleteFolderMutate = vi.fn();
@@ -1052,6 +1056,165 @@ describe("S3Page", () => {
     await clickButton(user, /Upload/i);
     await waitFor(() => {
       expect(screen.getByText("Upload failed")).toBeTruthy();
+    });
+  });
+
+  // ─── ACL Loading State ──────────────────────────────────
+
+  it("shows spinner when ACL is loading", () => {
+    mockObjectAclIsLoading = true;
+    mockSearchParams.mockReturnValue([new URLSearchParams("?bucket=my-bucket&object=file.txt"), vi.fn()]);
+    mockObjectDetail.mockReturnValue({
+      data: { size: 100, contentType: "text/plain", lastModified: "2024-01-01T00:00:00Z", etag: "abc" },
+      isLoading: false, isError: false, error: null,
+    });
+    mockObjectTags.mockReturnValue({ data: { tags: [], total: 0 } });
+
+    const { container } = render(<S3Page />, { wrapper: createWrapper() });
+    // Object ACL container has a header and a Spinner
+    expect(screen.getByText("Object ACL")).toBeTruthy();
+    // Spinner svg should be present inside ACL section
+    expect(container.querySelectorAll("svg").length).toBeGreaterThan(0);
+  });
+
+  // ─── ACL Grantee Labels ─────────────────────────────────
+
+  it("renders AllUsers grantee label", () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("?bucket=my-bucket&object=file.txt"), vi.fn()]);
+    mockObjectDetail.mockReturnValue({
+      data: { size: 100, contentType: "text/plain", lastModified: "2024-01-01T00:00:00Z", etag: "abc" },
+      isLoading: false, isError: false, error: null,
+    });
+    mockObjectTags.mockReturnValue({ data: { tags: [], total: 0 } });
+    mockObjectAclData = {
+      owner: null,
+      grants: [{ grantee: { uri: "http://acs.amazonaws.com/groups/global/AllUsers" }, permission: "READ", type: "Group" }],
+      totalGrants: 1,
+    };
+
+    render(<S3Page />, { wrapper: createWrapper() });
+    expect(screen.getByText("Everyone (AllUsers)")).toBeTruthy();
+  });
+
+  it("renders AuthenticatedUsers grantee label", () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("?bucket=my-bucket&object=file.txt"), vi.fn()]);
+    mockObjectDetail.mockReturnValue({
+      data: { size: 100, contentType: "text/plain", lastModified: "2024-01-01T00:00:00Z", etag: "abc" },
+      isLoading: false, isError: false, error: null,
+    });
+    mockObjectTags.mockReturnValue({ data: { tags: [], total: 0 } });
+    mockObjectAclData = {
+      owner: null,
+      grants: [{ grantee: { uri: "http://acs.amazonaws.com/groups/global/AuthenticatedUsers" }, permission: "READ_ACP", type: "Group" }],
+      totalGrants: 1,
+    };
+
+    render(<S3Page />, { wrapper: createWrapper() });
+    expect(screen.getByText("Authenticated Users")).toBeTruthy();
+  });
+
+  it("renders fallback Unknown for null grantee", () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("?bucket=my-bucket&object=file.txt"), vi.fn()]);
+    mockObjectDetail.mockReturnValue({
+      data: { size: 100, contentType: "text/plain", lastModified: "2024-01-01T00:00:00Z", etag: "abc" },
+      isLoading: false, isError: false, error: null,
+    });
+    mockObjectTags.mockReturnValue({ data: { tags: [], total: 0 } });
+    mockObjectAclData = {
+      owner: null,
+      grants: [{ grantee: null, permission: "FULL_CONTROL" }],
+      totalGrants: 1,
+    };
+
+    render(<S3Page />, { wrapper: createWrapper() });
+    expect(screen.getAllByText("Unknown").length).toBeGreaterThanOrEqual(1);
+  });
+
+  // ─── ACL Update Error ───────────────────────────────────
+
+  it("shows error alert when ACL update fails", async () => {
+    mockPutObjectAclIsError = true;
+    mockPutObjectAclError = new Error("ACL update failed");
+    mockSearchParams.mockReturnValue([new URLSearchParams("?bucket=my-bucket&object=file.txt"), vi.fn()]);
+    mockObjectDetail.mockReturnValue({
+      data: { size: 100, contentType: "text/plain", lastModified: "2024-01-01T00:00:00Z", etag: "abc" },
+      isLoading: false, isError: false, error: null,
+    });
+    mockObjectTags.mockReturnValue({ data: { tags: [], total: 0 } });
+    mockObjectAclData = {
+      owner: null,
+      grants: [],
+      totalGrants: 0,
+    };
+
+    const user = userEvent.setup();
+    render(<S3Page />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("Object ACL")).toBeTruthy());
+    await clickButton(user, /Set ACL/i);
+    await waitFor(() => {
+      expect(screen.getByText("ACL update failed")).toBeTruthy();
+    });
+  });
+
+  // ─── Checksum Copy Button ───────────────────────────────
+
+  it("renders checksum copy button when checksum data is present", () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("?bucket=my-bucket&object=file.bin"), vi.fn()]);
+    mockObjectDetail.mockReturnValue({
+      data: { size: 100, contentType: "application/octet-stream", lastModified: "2024-01-01T00:00:00Z", etag: "abc" },
+      isLoading: false, isError: false, error: null,
+    });
+    mockObjectTags.mockReturnValue({ data: { tags: [], total: 0 } });
+    mockObjectAttributesData = {
+      checksum: {
+        ChecksumSHA256: "abc123base64==",
+        ChecksumType: "SHA256",
+      },
+    };
+
+    render(<S3Page />, { wrapper: createWrapper() });
+    expect(screen.getAllByText("SHA-256").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/abc123base64==/)).toBeTruthy();
+    // Copy button should be rendered
+    expect(screen.getByRole("button", { name: /Copy SHA-256/i })).toBeTruthy();
+  });
+
+  // ─── S3 Select Loading ──────────────────────────────────
+
+  it("shows loading spinner while S3 Select query is running", async () => {
+    mockS3SelectIsPending = true;
+    mockSearchParams.mockReturnValue([new URLSearchParams("bucket=my-bucket"), vi.fn()]);
+    const user = userEvent.setup();
+    render(<S3Page />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /S3 Select/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Running query\.\.\./)).toBeTruthy();
+    });
+  });
+
+  // ─── S3 Select Empty Result ─────────────────────────────
+
+  it("shows empty folder view when navigating into an empty folder", async () => {
+    mockObjects
+      .mockReturnValueOnce({
+        data: { folders: [{ prefix: "images/", name: "images" }], objects: [], total: 0 },
+        isLoading: false,
+      })
+      .mockReturnValueOnce({
+        data: { folders: [], objects: [], total: 0 },
+        isLoading: false,
+      });
+    mockSearchParams.mockReturnValue([new URLSearchParams("bucket=my-bucket"), vi.fn()]);
+    const user = userEvent.setup();
+    render(<S3Page />, { wrapper: createWrapper() });
+    await waitFor(() => {
+      expect(screen.getAllByText("my-bucket").length).toBeGreaterThanOrEqual(1);
+    });
+    // Click the folder link button to navigate into it
+    const folderBtn = screen.getByRole("button", { name: /images\//i });
+    await user.click(folderBtn);
+    await waitFor(() => {
+      expect(screen.getByText("Empty folder")).toBeTruthy();
     });
   });
 });
