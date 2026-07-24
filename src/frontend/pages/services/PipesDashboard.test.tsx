@@ -187,6 +187,40 @@ describe("PipesDashboard", () => {
     expect(screen.getByText("Start")).toBeTruthy();
   });
 
+  it("starts a stopped pipe", async () => {
+    mockPipes.mockReturnValue({
+      data: { pipes: [{ Name: "stopped-pipe", Source: "aws:lambda", Target: "arn", DesiredState: "STOPPED", CurrentState: "STOPPED", CreationTime: 1705000000 }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<PipesDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("stopped-pipe")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Start/i }));
+    await waitFor(() => expect(mockStartPipe).toHaveBeenCalledWith("stopped-pipe"));
+  });
+
+  it("stops a running pipe", async () => {
+    mockPipes.mockReturnValue({
+      data: { pipes: [{ Name: "running-pipe", Source: "aws:lambda", Target: "arn", DesiredState: "RUNNING", CurrentState: "RUNNING", CreationTime: 1705000000 }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<PipesDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("running-pipe")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Stop/i }));
+    await waitFor(() => expect(mockStopPipe).toHaveBeenCalledWith("running-pipe"));
+  });
+
+  it("shows Start button when desired state is missing", () => {
+    mockPipes.mockReturnValue({
+      data: { pipes: [{ Name: "unknown-pipe", Source: "aws:lambda", Target: "arn", CurrentState: "UNKNOWN", CreationTime: 1705000000 }], total: 1 },
+      isLoading: false,
+    });
+    render(<PipesDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("Start")).toBeTruthy();
+    expect(screen.queryByText("Stop")).toBeNull();
+  });
+
   it("filters pipes by name", async () => {
     mockPipes.mockReturnValue({
       data: {
