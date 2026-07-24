@@ -13,9 +13,17 @@ const mockDeleteStream = vi.fn();
 const mockShards = vi.fn();
 const mockPutRecord = vi.fn();
 
+const mockConsumers = vi.fn();
+const mockRegisterConsumer = vi.fn();
+const mockDeregisterConsumer = vi.fn();
+const mockSubscribeToShard = vi.fn();
+
 const createStreamState = vi.hoisted(() => ({ isPending: false }));
 const deleteStreamState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
 const putRecordState = vi.hoisted(() => ({ isPending: false }));
+const registerConsumerState = vi.hoisted(() => ({ isPending: false }));
+const deregisterConsumerState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
+const subscribeState = vi.hoisted(() => ({ isPending: false, isError: false, error: null as Error | null }));
 
 vi.mock("../../hooks/useKinesis", () => ({
   useKinesisStreams: (...args: any[]) => mockStreams(...args),
@@ -33,35 +41,21 @@ vi.mock("../../hooks/useKinesis", () => ({
     mutateAsync: mockPutRecord,
     isPending: putRecordState.isPending,
   }),
-  useKinesisConsumers: () => ({
-    data: { consumers: [], total: 0 },
-    isLoading: false,
-    isError: false,
-    error: null,
-  }),
+  useKinesisConsumers: (...args: any[]) => mockConsumers(...args),
   useRegisterKinesisConsumer: () => ({
-    mutate: vi.fn(),
-    mutateAsync: vi.fn().mockResolvedValue({}),
-    isPending: false,
-    isError: false,
-    error: null,
-    reset: vi.fn(),
+    mutateAsync: mockRegisterConsumer,
+    isPending: registerConsumerState.isPending,
   }),
   useDeregisterKinesisConsumer: () => ({
-    mutate: vi.fn(),
-    mutateAsync: vi.fn().mockResolvedValue({}),
-    isPending: false,
-    isError: false,
-    error: null,
-    reset: vi.fn(),
+    mutateAsync: mockDeregisterConsumer,
+    isPending: deregisterConsumerState.isPending,
+    variables: deregisterConsumerState.variables,
   }),
   useSubscribeToShard: () => ({
-    mutate: vi.fn(),
-    mutateAsync: vi.fn().mockResolvedValue({}),
-    isPending: false,
-    isError: false,
-    error: null,
-    reset: vi.fn(),
+    mutateAsync: mockSubscribeToShard,
+    isPending: subscribeState.isPending,
+    isError: subscribeState.isError,
+    error: subscribeState.error,
   }),
 }));
 
@@ -87,6 +81,16 @@ beforeEach(() => {
   });
   mockCreateStream.mockResolvedValue({});
   mockPutRecord.mockResolvedValue({});
+  mockConsumers.mockReturnValue({ data: { consumers: [], total: 0 }, isLoading: false });
+  registerConsumerState.isPending = false;
+  deregisterConsumerState.isPending = false;
+  deregisterConsumerState.variables = null;
+  subscribeState.isPending = false;
+  subscribeState.isError = false;
+  subscribeState.error = null;
+  mockRegisterConsumer.mockResolvedValue({});
+  mockDeregisterConsumer.mockResolvedValue({});
+  mockSubscribeToShard.mockResolvedValue({ events: [] });
 });
 
 // ─── Tests ──────────────────────────────────────────────
@@ -548,6 +552,22 @@ describe("KinesisDashboard — stream detail", () => {
     });
   });
 
+  it("shows dash for missing shard parent", async () => {
+    mockStreams.mockReturnValue({
+      data: { streams: [{ StreamName: "my-stream", StreamStatus: "ACTIVE", OpenShardCount: 1, RetentionPeriodHours: 24 }], total: 1 },
+      isLoading: false,
+    });
+    mockShards.mockReturnValue({
+      data: { shards: [{ ShardId: "shard-1" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<KinesisDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-stream"));
+    await waitFor(() => expect(screen.getByText("shard-1")).toBeTruthy());
+    expect(screen.getByText("-")).toBeTruthy();
+  });
+
   it("opens put record modal and submits", async () => {
     mockStreams.mockReturnValue({
       data: {
@@ -596,6 +616,135 @@ describe("KinesisDashboard — stream detail", () => {
       expect(mockPutRecord).toHaveBeenCalledWith(
         expect.objectContaining({ data: "test-data", partitionKey: "key-1" }),
       );
+    });
+  });
+});
+
+describe("KinesisDashboard — consumers", () => {
+  function setupStreamAndNavigate() {
+    mockStreams.mockReturnValue({
+      data: {
+        streams: [{ StreamName: "my-stream", StreamStatus: "ACTIVE", OpenShardCount: 1, RetentionPeriodHours: 24 }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    mockShards.mockReturnValue({ data: { shards: [], total: 0 }, isLoading: false });
+  }
+
+  it("shows empty consumers message", async () => {
+    setupStreamAndNavigate();
+    const user = userEvent.setup();
+    render(<KinesisDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-stream"));
+    await waitFor(() => expect(screen.getByText(/Shards: my-stream/)).toBeTruthy());
+    await clickButton(user, /View consumers/i);
+    await waitFor(() => expect(screen.getByText(/No consumers registered/)).toBeTruthy());
+  });
+
+  it("renders consumers with data", async () => {
+    setupStreamAndNavigate();
+    mockConsumers.mockReturnValue({
+      data: {
+        consumers: [{ ConsumerName: "my-consumer", ConsumerARN: "arn:...consumer/my-consumer", ConsumerStatus: "ACTIVE", ConsumerCreationTimestamp: "2024-06-01T00:00:00Z" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<KinesisDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-stream"));
+    await waitFor(() => expect(screen.getByText(/Shards: my-stream/)).toBeTruthy());
+    await clickButton(user, /View consumers/i);
+    await waitFor(() => expect(screen.getByText("my-consumer")).toBeTruthy());
+  });
+
+  it("opens register consumer modal and cancels", async () => {
+    setupStreamAndNavigate();
+    const user = userEvent.setup();
+    render(<KinesisDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-stream"));
+    await waitFor(() => expect(screen.getByText(/Shards: my-stream/)).toBeTruthy());
+    await clickButton(user, /View consumers/i);
+    await waitFor(() => expect(screen.getByText(/Register consumer/i)).toBeTruthy());
+    await clickButton(user, /Register consumer/i);
+    await waitFor(() => expect(screen.getByText("Register Stream Consumer")).toBeTruthy());
+    const cancelBtns = screen.getAllByRole("button", { name: /Cancel/i });
+    await user.click(cancelBtns[cancelBtns.length - 1]);
+    expect(mockRegisterConsumer).not.toHaveBeenCalled();
+  });
+
+  it("registers a consumer", async () => {
+    setupStreamAndNavigate();
+    const user = userEvent.setup();
+    render(<KinesisDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-stream"));
+    await waitFor(() => expect(screen.getByText(/Shards: my-stream/)).toBeTruthy());
+    await clickButton(user, /View consumers/i);
+    await waitFor(() => expect(screen.getByText(/Register consumer/i)).toBeTruthy());
+    await clickButton(user, /Register consumer/i);
+    await waitFor(() => expect(screen.getByText("Register Stream Consumer")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-consumer"), "test-consumer");
+    await clickButton(user, /^Register$/i);
+    await waitFor(() => expect(mockRegisterConsumer).toHaveBeenCalledWith("test-consumer"));
+  });
+
+  it("deregisters a consumer", async () => {
+    setupStreamAndNavigate();
+    mockConsumers.mockReturnValue({
+      data: {
+        consumers: [{ ConsumerName: "old-consumer", ConsumerARN: "arn:...", ConsumerStatus: "ACTIVE" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<KinesisDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-stream"));
+    await waitFor(() => expect(screen.getByText(/Shards: my-stream/)).toBeTruthy());
+    await clickButton(user, /View consumers/i);
+    await waitFor(() => expect(screen.getByText("old-consumer")).toBeTruthy());
+    const deleteBtn = screen.getByRole("button", { name: /Delete old-consumer/i });
+    await user.click(deleteBtn);
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() => expect(mockDeregisterConsumer).toHaveBeenCalledWith("old-consumer"));
+  });
+
+  it("shows pending status for non-ACTIVE consumer", async () => {
+    setupStreamAndNavigate();
+    mockConsumers.mockReturnValue({
+      data: {
+        consumers: [{ ConsumerName: "creating", ConsumerARN: "arn:...", ConsumerStatus: "CREATING" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<KinesisDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-stream"));
+    await waitFor(() => expect(screen.getByText(/Shards: my-stream/)).toBeTruthy());
+    await clickButton(user, /View consumers/i);
+    await waitFor(() => expect(screen.getByText("CREATING")).toBeTruthy());
+  });
+
+  it("shows consumer dash for missing created date", async () => {
+    setupStreamAndNavigate();
+    mockConsumers.mockReturnValue({
+      data: {
+        consumers: [{ ConsumerName: "no-date", ConsumerARN: "arn:...", ConsumerStatus: "ACTIVE" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<KinesisDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-stream"));
+    await waitFor(() => expect(screen.getByText(/Shards: my-stream/)).toBeTruthy());
+    await clickButton(user, /View consumers/i);
+    await waitFor(() => {
+      expect(screen.getByText("no-date")).toBeTruthy();
+      expect(screen.getByText("-")).toBeTruthy();
     });
   });
 });
