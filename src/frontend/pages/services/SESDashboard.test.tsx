@@ -78,6 +78,9 @@ const mockSetDeliveryOpts = vi.fn();
 const mockNotifAttrs = vi.fn();
 const mockSetNotifTopic = vi.fn();
 const mockSetMailFrom = vi.fn();
+let mockSetFeedbackForwarding = vi.fn();
+let mockSetDkimEnabled = vi.fn();
+let mockSetHeadersInNotifications = vi.fn();
 
 vi.mock("../../hooks/useSES", () => ({
   useSESIdentities: (...args: any[]) => mockIdentities(...args),
@@ -109,7 +112,7 @@ vi.mock("../../hooks/useSES", () => ({
     reset: vi.fn(),
   }),
   useSESSetFeedbackForwarding: () => ({
-    mutate: vi.fn(),
+    mutate: mockSetFeedbackForwarding,
     mutateAsync: vi.fn().mockResolvedValue({}),
     isPending: false,
     isError: false,
@@ -117,7 +120,7 @@ vi.mock("../../hooks/useSES", () => ({
     reset: vi.fn(),
   }),
   useSESSetHeadersInNotifications: () => ({
-    mutate: vi.fn(),
+    mutate: mockSetHeadersInNotifications,
     mutateAsync: vi.fn().mockResolvedValue({}),
     isPending: false,
     isError: false,
@@ -125,7 +128,7 @@ vi.mock("../../hooks/useSES", () => ({
     reset: vi.fn(),
   }),
   useSESSetDkimEnabled: () => ({
-    mutate: vi.fn(),
+    mutate: mockSetDkimEnabled,
     mutateAsync: vi.fn().mockResolvedValue({}),
     isPending: false,
     isError: false,
@@ -278,6 +281,9 @@ beforeEach(() => {
     isError: false,
     error: null,
   });
+  mockSetFeedbackForwarding = vi.fn();
+  mockSetDkimEnabled = vi.fn();
+  mockSetHeadersInNotifications = vi.fn();
 });
 
 // ─── Tests ──────────────────────────────────────────────
@@ -1039,6 +1045,162 @@ describe("SESDashboard — sending, tracking, reputation, delivery", () => {
         expect.objectContaining({ configSetName: "cs-actions", enabled: false }),
       );
     });
+  });
+
+  it("shows identity detail error state when notification attrs fail to load", async () => {
+    const user = userEvent.setup();
+    mockIdentities.mockReturnValue({
+      data: {
+        identities: [
+          { identity: "notif-err@example.com", verificationStatus: "Success", dkimEnabled: false, mailFromDomain: null },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockNotifAttrs.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("notif-err@example.com")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Notifications/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Failed to load notification attributes/i)).toBeTruthy();
+    });
+  });
+
+  it("toggles feedback forwarding", async () => {
+    const user = userEvent.setup();
+    mockIdentities.mockReturnValue({
+      data: {
+        identities: [
+          { identity: "ff@example.com", verificationStatus: "Success", dkimEnabled: false, mailFromDomain: null },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockNotifAttrs.mockReturnValue({
+      data: { forwardingEnabled: true },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("ff@example.com")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Notifications/i }));
+    await waitFor(() => screen.getByText("Feedback Forwarding"));
+    // Click the Disable button (forwardingEnabled is true)
+    await user.click(screen.getByRole("button", { name: /Disable/i }));
+    await waitFor(() => {
+      expect(mockSetFeedbackForwarding).toHaveBeenCalled();
+    });
+  });
+
+  it("toggles DKIM signing", async () => {
+    const user = userEvent.setup();
+    mockIdentities.mockReturnValue({
+      data: {
+        identities: [
+          { identity: "dkim@example.com", verificationStatus: "Success", dkimEnabled: false, mailFromDomain: null },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    // Set forwardingEnabled: true so feedback forwarding shows "Disable" not "Enable"
+    mockNotifAttrs.mockReturnValue({
+      data: { forwardingEnabled: true },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("dkim@example.com")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Notifications/i }));
+    await waitFor(() => screen.getByText("DKIM Signing"));
+    // Click the Enable button (dkimEnabled is false, only one Enable on page)
+    await user.click(screen.getByRole("button", { name: /^Enable$/i }));
+    await waitFor(() => {
+      expect(mockSetDkimEnabled).toHaveBeenCalled();
+    });
+  });
+
+  it("toggles headers in notifications", async () => {
+    const user = userEvent.setup();
+    mockIdentities.mockReturnValue({
+      data: {
+        identities: [
+          { identity: "headers@example.com", verificationStatus: "Success", dkimEnabled: false, mailFromDomain: null },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockNotifAttrs.mockReturnValue({
+      data: {
+        forwardingEnabled: false,
+        headersInBounceNotifications: false,
+        headersInComplaintNotifications: true,
+        headersInDeliveryNotifications: false,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("headers@example.com")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Notifications/i }));
+    await waitFor(() => screen.getByText("Headers in Notifications"));
+    // Click the Include button for Bounce (headersInBounceNotifications is false)
+    const includeBtns = screen.getAllByRole("button", { name: /^Include$/i });
+    await user.click(includeBtns[0]);
+    await waitFor(() => {
+      expect(mockSetHeadersInNotifications).toHaveBeenCalled();
+    });
+  });
+
+
+
+  it("opens delivery options modal and shows Save button", async () => {
+    const user = userEvent.setup();
+    mockConfigSets.mockReturnValue({
+      data: { configurationSets: [{ Name: "cs-delivery" }], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockDescribeConfigSet.mockReturnValue({
+      data: {
+        name: "cs-delivery",
+        eventDestinations: [],
+        trackingOptions: { CustomRedirectDomain: "track.example.com" },
+        reputationOptions: { ReputationMetricsEnabled: false },
+        deliveryOptions: { TlsPolicy: "Require" },
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("cs-delivery")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /View/i }));
+    await waitFor(() => screen.getByText("Delivery Options"));
+    // Edit buttons: [0] = Tracking Options, [1] = Delivery Options
+    const editBtns = screen.getAllByRole("button", { name: /Edit/i });
+    await user.click(editBtns[1]);
+    await waitFor(() => expect(screen.getByText("Set Delivery Options")).toBeTruthy());
   });
 
   it("shows config set detail loading state", async () => {
