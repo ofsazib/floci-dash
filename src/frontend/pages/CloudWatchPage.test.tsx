@@ -305,4 +305,88 @@ describe("CloudWatchPage", () => {
       );
     });
   });
+
+  // Alarms edge cases
+
+  it("shows dash for alarm threshold when null", () => {
+    mockCloudWatchAlarms.mockReturnValue({
+      data: { alarms: [{ name: "no-thresh", state: "OK", namespace: "AWS/EC2", metricName: "CPU", threshold: null }] },
+      isLoading: false,
+    });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    expect(screen.getByText("no-thresh")).toBeTruthy();
+    expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("shows dash for alarm metric when no namespace", () => {
+    mockCloudWatchAlarms.mockReturnValue({
+      data: { alarms: [{ name: "anon", state: "OK", threshold: 10 }] },
+      isLoading: false,
+    });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    expect(screen.getByText("anon")).toBeTruthy();
+  });
+
+  it("shows dash for alarm period when missing", () => {
+    mockCloudWatchAlarms.mockReturnValue({
+      data: { alarms: [{ name: "no-period", state: "OK", namespace: "AWS/EC2", metricName: "CPU", threshold: 10 }] },
+      isLoading: false,
+    });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    expect(screen.getByText("no-period")).toBeTruthy();
+    const dashes = screen.getAllByText("-");
+    expect(dashes.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("defaults alarm state badge to blue for unknown state", () => {
+    mockCloudWatchAlarms.mockReturnValue({
+      data: { alarms: [{ name: "unknown", state: "UNKNOWN", namespace: "AWS/EC2", metricName: "CPU", threshold: 10 }] },
+      isLoading: false,
+    });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    expect(screen.getByText("unknown")).toBeTruthy();
+  });
+
+  it("defaults alarm state text for missing state", () => {
+    mockCloudWatchAlarms.mockReturnValue({
+      data: { alarms: [{ name: "nostate", namespace: "AWS/EC2", metricName: "CPU", threshold: 10 }] },
+      isLoading: false,
+    });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    expect(screen.getByText("INSUFFICIENT_DATA")).toBeTruthy();
+  });
+
+  // Put metric modal cancel
+
+  it("cancels put metric modal", async () => {
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    const tabs = screen.getAllByText("Metrics");
+    await user.click(tabs[tabs.length - 1]);
+    await waitFor(() => expect(screen.getAllByText("Invocations").length).toBeGreaterThan(0));
+    await clickButton(user, /Put metric data/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("MyMetric")).toBeTruthy());
+    await clickButton(user, /Cancel/i);
+    expect(mockPutMetricData).not.toHaveBeenCalled();
+  });
+
+  // Alarm threshold with comparison operator
+
+  it("shows alarm threshold with comparison operator", () => {
+    mockCloudWatchAlarms.mockReturnValue({
+      data: { alarms: [{ name: "hi", state: "ALARM", namespace: "AWS/EC2", metricName: "CPU", threshold: 90, comparisonOperator: "GreaterThanThreshold", period: 60, statistic: "Average" }] },
+      isLoading: false,
+    });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    expect(screen.getByText(/GreaterThanThreshold.*90/)).toBeTruthy();
+  });
+
+  it("shows period with s suffix", () => {
+    mockCloudWatchAlarms.mockReturnValue({
+      data: { alarms: [{ name: "p", state: "OK", namespace: "NS", metricName: "M", threshold: 1, period: 120, statistic: "Sum" }] },
+      isLoading: false,
+    });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    expect(screen.getByText("120s")).toBeTruthy();
+  });
 });

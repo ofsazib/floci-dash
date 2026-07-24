@@ -502,4 +502,88 @@ describe("ApiGatewayV2Dashboard — WebSocket Routes tab", () => {
     await user.click(screen.getByRole("tab", { name: /WebSocket Routes/i }));
     await waitFor(() => expect(screen.getByText(/No WebSocket routes/i)).toBeTruthy());
   });
+
+  it("shows dash for WS route missing integration", async () => {
+    mockApis.mockReturnValue({
+      data: { apis: [{ ApiId: "api-1", Name: "my-api", ProtocolType: "WEBSOCKET" }], total: 1 },
+      isLoading: false,
+    });
+    mockWsRoutes.mockReturnValue({
+      data: {
+        routes: [{ RouteId: "r-1", RouteKey: "$default", isWellKnown: false }],
+        total: 1,
+      },
+    });
+    const user = userEvent.setup();
+    render(<ApiGatewayV2Dashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-api"));
+    await user.click(screen.getByRole("tab", { name: /WebSocket Routes/i }));
+    await waitFor(() => {
+      const dashes = screen.getAllByText("-");
+      expect(dashes.length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  it("shows No for WS route not well-known", async () => {
+    mockApis.mockReturnValue({
+      data: { apis: [{ ApiId: "api-1", Name: "my-api", ProtocolType: "WEBSOCKET" }], total: 1 },
+      isLoading: false,
+    });
+    mockWsRoutes.mockReturnValue({
+      data: {
+        routes: [{ RouteId: "r-1", RouteKey: "sendmessage", isWellKnown: false, authorizationType: "CUSTOM" }],
+        total: 1,
+      },
+    });
+    const user = userEvent.setup();
+    render(<ApiGatewayV2Dashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-api"));
+    await user.click(screen.getByRole("tab", { name: /WebSocket Routes/i }));
+    await waitFor(() => expect(screen.getByText("No")).toBeTruthy());
+  });
+
+  it("defaults WS route auth to NONE when missing", async () => {
+    mockApis.mockReturnValue({
+      data: { apis: [{ ApiId: "api-1", Name: "my-api", ProtocolType: "WEBSOCKET" }], total: 1 },
+      isLoading: false,
+    });
+    mockWsRoutes.mockReturnValue({
+      data: {
+        routes: [{ RouteId: "r-1", RouteKey: "$disconnect", isWellKnown: true }],
+        total: 1,
+      },
+    });
+    const user = userEvent.setup();
+    render(<ApiGatewayV2Dashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-api"));
+    await user.click(screen.getByRole("tab", { name: /WebSocket Routes/i }));
+    await waitFor(() => expect(screen.getByText("NONE")).toBeTruthy());
+  });
+});
+
+describe("ApiGatewayV2Dashboard — edge cases", () => {
+  it("defaults protocol to HTTP when missing", () => {
+    mockApis.mockReturnValue({
+      data: { apis: [{ ApiId: "api-1", Name: "just-http" }], total: 1 },
+      isLoading: false,
+    });
+    render(<ApiGatewayV2Dashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("just-http")).toBeTruthy();
+    expect(screen.getByText("HTTP")).toBeTruthy();
+  });
+
+  it("shows Yes for stage AutoDeploy", async () => {
+    mockApis.mockReturnValue({
+      data: { apis: [{ ApiId: "api-1", Name: "my-api", ProtocolType: "HTTP" }], total: 1 },
+      isLoading: false,
+    });
+    mockStages.mockReturnValue({
+      data: { stages: [{ StageName: "auto", AutoDeploy: true }], total: 1 },
+    });
+    const user = userEvent.setup();
+    render(<ApiGatewayV2Dashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-api"));
+    await user.click(screen.getByRole("tab", { name: /Stages/i }));
+    await waitFor(() => expect(screen.getByText("Yes")).toBeTruthy());
+  });
 });
