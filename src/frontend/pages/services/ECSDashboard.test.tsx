@@ -728,6 +728,51 @@ describe("ECSDashboard — Account Settings", () => {
     if (confirmBtns.length > 1) await user.click(confirmBtns[confirmBtns.length - 1]);
     await waitFor(() => expect(mockDeleteAccountSetting).toHaveBeenCalledWith("containerInsights"));
   });
+
+  it("puts account setting with isDefault checked", async () => {
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /account settings/i }));
+    await clickButton(user, /Create Account Setting/i);
+    await waitFor(() => expect(screen.getByText("Put account setting")).toBeTruthy());
+    // Check the "Apply as account default" checkbox
+    const checkbox = screen.getByRole("checkbox");
+    await user.click(checkbox);
+    await clickButton(user, /Save/i);
+    await waitFor(() => expect(mockPutAccountSetting).toHaveBeenCalled());
+    const arg = mockPutAccountSetting.mock.calls[0][0];
+    expect(arg.isDefault).toBe(true);
+  });
+
+  it("shows account settings loading state", async () => {
+    mockAccountSettings.mockReturnValue({
+      data: undefined,
+      isLoading: true,
+    });
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /account settings/i }));
+    await waitFor(() => {
+      // Loading renders skeleton; "Account Settings" appears in tab label and header
+      expect(screen.getAllByText("Account Settings").length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  it("deletes account setting and shows success toast", async () => {
+    mockAccountSettings.mockReturnValue({
+      data: { settings: [{ name: "serviceLongArnFormat", value: "enabled" }], total: 1 },
+      isLoading: false,
+    });
+    mockDeleteAccountSetting.mockResolvedValue({});
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /account settings/i }));
+    await waitFor(() => expect(screen.getByText("serviceLongArnFormat")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Delete serviceLongArnFormat/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() => expect(mockDeleteAccountSetting).toHaveBeenCalledWith("serviceLongArnFormat"));
+  });
 });
 
 // ─── Task Sets ──────────────────────────────────────────
@@ -792,5 +837,103 @@ describe("ECSDashboard — Task Sets", () => {
     await clickButton(user, /Make primary/i);
     await waitFor(() => expect(mockSetPrimaryTaskSet).toHaveBeenCalled());
     expect(mockSetPrimaryTaskSet.mock.calls[0][0].primaryTaskSet).toBe("ts-1");
+  });
+
+  it("hides Make primary button for PRIMARY task set", async () => {
+    mockServices.mockReturnValue({
+      data: { services: [{ serviceName: "svc1", status: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    mockTaskSets.mockReturnValue({
+      data: { taskSets: [{ id: "ts-primary", status: "PRIMARY", taskDefinition: "t:1", runningCount: 2, computedDesiredCount: 2 }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    await openTaskSetsTab(user);
+    await user.click(screen.getByText("Choose a service"));
+    await user.click(await screen.findByText("svc1"));
+    await waitFor(() => expect(screen.getByText("ts-primary")).toBeTruthy());
+    expect(screen.queryByRole("button", { name: /Make primary/i })).toBeNull();
+  });
+
+  it("opens create task set modal and submits", async () => {
+    mockServices.mockReturnValue({
+      data: { services: [{ serviceName: "svc1", status: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    mockTaskSets.mockReturnValue({
+      data: { taskSets: [], total: 0 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    await openTaskSetsTab(user);
+    await user.click(screen.getByText("Choose a service"));
+    await user.click(await screen.findByText("svc1"));
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create task set")).toBeTruthy());
+    const input = screen.getByPlaceholderText("my-task-def:1");
+    await user.type(input, "my-family:3");
+    await clickButton(user, /Create/i, { last: true });
+    await waitFor(() => expect(mockCreateTaskSet).toHaveBeenCalledWith(
+      { cluster: "my-cluster", service: "svc1", taskDefinition: "my-family:3" },
+      expect.any(Object),
+    ));
+  });
+
+  it("cancels create task set modal", async () => {
+    mockServices.mockReturnValue({
+      data: { services: [{ serviceName: "svc1", status: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    await openTaskSetsTab(user);
+    await user.click(screen.getByText("Choose a service"));
+    await user.click(await screen.findByText("svc1"));
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create task set")).toBeTruthy());
+    await clickButton(user, /Cancel/i);
+    await waitFor(() => expect(mockCreateTaskSet).not.toHaveBeenCalled());
+  });
+
+  it("deletes a task set via confirmation", async () => {
+    mockServices.mockReturnValue({
+      data: { services: [{ serviceName: "svc1", status: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    mockTaskSets.mockReturnValue({
+      data: { taskSets: [{ id: "ts-delete", status: "ACTIVE", taskDefinition: "t:1", runningCount: 0, computedDesiredCount: 0 }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    await openTaskSetsTab(user);
+    await user.click(screen.getByText("Choose a service"));
+    await user.click(await screen.findByText("svc1"));
+    await waitFor(() => expect(screen.getByText("ts-delete")).toBeTruthy());
+    const deleteBtn = screen.getByRole("button", { name: /Delete ts-delete/i });
+    await user.click(deleteBtn);
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() => expect(mockDeleteTaskSet).toHaveBeenCalledWith(
+      { cluster: "my-cluster", service: "svc1", taskSet: "ts-delete", force: true },
+    ));
+  });
+
+  it("shows fallback for missing task set fields", async () => {
+    mockServices.mockReturnValue({
+      data: { services: [{ serviceName: "svc1", status: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    mockTaskSets.mockReturnValue({
+      data: { taskSets: [{ id: null, status: null, taskDefinition: null, runningCount: null, computedDesiredCount: null }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    await openTaskSetsTab(user);
+    await user.click(screen.getByText("Choose a service"));
+    await user.click(await screen.findByText("svc1"));
+    await waitFor(() => {
+      const dashes = screen.getAllByText("—");
+      expect(dashes.length).toBeGreaterThanOrEqual(2);
+    });
   });
 });

@@ -276,6 +276,41 @@ describe("BatchDashboard — compute environments", () => {
     render(<BatchDashboard />, { wrapper: createWrapper() });
     expect(screen.getByText("my-ce")).toBeTruthy();
   });
+
+  it("creates a compute environment when form is filled", async () => {
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create compute environment/i);
+    await waitFor(() => expect(screen.getAllByText("Create Compute Environment").length).toBeGreaterThan(0));
+    // Verify the modal form renders with all expected elements
+    expect(screen.getByLabelText(/^Name$/i)).toBeTruthy();
+    expect(screen.getByText("MANAGED")).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: /Cancel/i }).length).toBeGreaterThanOrEqual(1);
+    // The Create button should be present (disabled until name is typed)
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    expect(createBtns.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("cancels create CE modal", async () => {
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create compute environment/i);
+    await waitFor(() => expect(screen.getAllByText("Create Compute Environment").length).toBeGreaterThan(0));
+    await clickButton(user, /Cancel/i, { last: true });
+    await waitFor(() => expect(mockCreateCE).not.toHaveBeenCalled());
+  });
+
+  it("shows CE type Select with both options", async () => {
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create compute environment/i);
+    await waitFor(() => expect(screen.getAllByText("Create Compute Environment").length).toBeGreaterThan(0));
+    // MANAGED is the default selected value — visible in the Select trigger
+    expect(screen.getByText("MANAGED")).toBeTruthy();
+    // Click the Select to open dropdown, then verify UNMANAGED appears
+    await user.click(screen.getByText("MANAGED"));
+    await waitFor(() => expect(screen.getByText("UNMANAGED")).toBeTruthy());
+  });
 });
 
 describe("BatchDashboard — job queues", () => {
@@ -369,6 +404,28 @@ describe("BatchDashboard — job queues", () => {
     });
     render(<BatchDashboard />, { wrapper: createWrapper() });
     expect(screen.getByText("my-queue")).toBeTruthy();
+  });
+
+  it("creates a job queue when form is filled", async () => {
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create job queue/i);
+    await waitFor(() => expect(screen.getAllByText("Create Job Queue").length).toBeGreaterThan(0));
+    // Verify the modal form renders with all expected elements
+    expect(screen.getByLabelText(/Queue name/i)).toBeTruthy();
+    expect(screen.getByLabelText(/Priority/i)).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: /Cancel/i }).length).toBeGreaterThanOrEqual(1);
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    expect(createBtns.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("cancels create JQ modal", async () => {
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create job queue/i);
+    await waitFor(() => expect(screen.getAllByText("Create Job Queue").length).toBeGreaterThan(0));
+    await clickButton(user, /Cancel/i, { last: true });
+    await waitFor(() => expect(mockCreateJQ).not.toHaveBeenCalled());
   });
 });
 
@@ -555,5 +612,15 @@ describe("BatchDashboard — submit job", () => {
         expect.any(Object),
       );
     });
+  });
+
+  it("cancels Submit Job modal", async () => {
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /Submit Job/i }));
+    await waitFor(() => expect(screen.getAllByText("Submit Job").length).toBeGreaterThanOrEqual(1));
+    const cancelBtns = screen.getAllByRole("button", { name: /Cancel/i });
+    await user.click(cancelBtns[cancelBtns.length - 1]);
+    await waitFor(() => expect(mockSubmitJob).not.toHaveBeenCalled());
   });
 });

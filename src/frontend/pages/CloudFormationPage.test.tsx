@@ -13,6 +13,17 @@ const mockCreateStack = vi.fn();
 const mockDeleteStack = vi.fn();
 const mockValidateTemplate = vi.fn();
 const mockExports = vi.fn();
+const mockChangeSets = vi.fn();
+const mockChangeSet = vi.fn();
+const mockCreateChangeSet = vi.fn();
+const mockExecuteChangeSet = vi.fn();
+const mockDeleteChangeSet = vi.fn();
+const mockStackSets = vi.fn();
+const mockStackSet = vi.fn();
+const mockCreateStackSet = vi.fn();
+const mockDeleteStackSet = vi.fn();
+const mockCreateStackInstances = vi.fn();
+const mockDeleteStackInstances = vi.fn();
 
 vi.mock("../hooks/useCloudFormation", () => ({
   useStacks: (...args: any[]) => mockStacks(...args),
@@ -25,6 +36,17 @@ vi.mock("../hooks/useCloudFormation", () => ({
   useStackResource: () => ({ data: { resource: null }, isLoading: false, isError: false, error: null }),
   useStackPolicy: () => ({ data: { policy: "" }, isLoading: false, isError: false, error: null }),
   useSetStackPolicy: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useChangeSets: (...args: any[]) => mockChangeSets(...args),
+  useChangeSet: (...args: any[]) => mockChangeSet(...args),
+  useCreateChangeSet: () => ({ mutateAsync: mockCreateChangeSet, isPending: false }),
+  useExecuteChangeSet: () => ({ mutateAsync: mockExecuteChangeSet, isPending: false }),
+  useDeleteChangeSet: () => ({ mutateAsync: mockDeleteChangeSet, isPending: false, variables: null }),
+  useStackSets: (...args: any[]) => mockStackSets(...args),
+  useStackSet: (...args: any[]) => mockStackSet(...args),
+  useCreateStackSet: () => ({ mutateAsync: mockCreateStackSet, isPending: false }),
+  useDeleteStackSet: () => ({ mutateAsync: mockDeleteStackSet, isPending: false }),
+  useCreateStackInstances: () => ({ mutateAsync: mockCreateStackInstances, isPending: false }),
+  useDeleteStackInstances: () => ({ mutateAsync: mockDeleteStackInstances, isPending: false }),
 }));
 
 vi.mock("../components/Toast", () => ({
@@ -62,6 +84,17 @@ describe("CloudFormationPage", () => {
     mockStack.mockReturnValue({ data: { stack: null, resources: [], events: [] }, isLoading: false, isError: false, error: null });
     mockStackTemplate.mockReturnValue({ data: { template: "{}" }, isLoading: false, isError: false, error: null });
     mockExports.mockReturnValue({ data: { exports: [] }, isLoading: false, isError: false, error: null });
+    mockChangeSets.mockReturnValue({ data: { changeSets: [] }, isLoading: false, isError: false, error: null });
+    mockChangeSet.mockReturnValue({ data: { changeSet: null }, isLoading: false, isError: false, error: null });
+    mockCreateChangeSet.mockResolvedValue({});
+    mockExecuteChangeSet.mockResolvedValue({});
+    mockDeleteChangeSet.mockResolvedValue({});
+    mockStackSets.mockReturnValue({ data: { stackSets: [] }, isLoading: false, isError: false, error: null });
+    mockStackSet.mockReturnValue({ data: { stackSet: null, instances: [], operations: [] }, isLoading: false, isError: false, error: null });
+    mockCreateStackSet.mockResolvedValue({});
+    mockDeleteStackSet.mockResolvedValue({});
+    mockCreateStackInstances.mockResolvedValue({});
+    mockDeleteStackInstances.mockResolvedValue({});
   });
 
   it("renders stack list", () => {
@@ -300,6 +333,144 @@ describe("CloudFormationPage", () => {
     await user.click(screen.getByRole("tab", { name: /Exports/i }));
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: /Exports/i, level: 2 })).toBeTruthy();
+    });
+  });
+
+  it("shows stack detail loading state", async () => {
+    mockStack.mockReturnValue({ data: undefined, isLoading: true });
+    const user = userEvent.setup();
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => {
+      expect(screen.getByText(/Loading\.\.\./)).toBeTruthy();
+    });
+  });
+
+  it("shows policy tab with set policy button", async () => {
+    const user = userEvent.setup();
+    mockStack.mockReturnValue({
+      data: {
+        stack: { stackId: "arn:1", status: "CREATE_COMPLETE", creationTime: new Date(), outputs: [], parameters: [], tags: [] },
+        resources: [], events: [],
+      },
+      isLoading: false,
+    });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getAllByText(/Stack: my-stack/i).length).toBeGreaterThan(0));
+    await user.click(screen.getByRole("tab", { name: /Policy/i }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Set policy/i })).toBeTruthy();
+    });
+  });
+
+  // ── Change Sets Tab ──
+
+  it("shows change sets tab with no stacks prompt", async () => {
+    mockStacks.mockReturnValue({ data: { stacks: [], total: 0 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Change Sets/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/No stacks available/)).toBeTruthy();
+    });
+  });
+
+  it("shows change sets after selecting a stack", async () => {
+    const user = userEvent.setup();
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Change Sets/i }));
+    await waitFor(() => expect(screen.getByText("my-stack")).toBeTruthy());
+    // Click the stack button to select it
+    await user.click(screen.getByRole("button", { name: "my-stack" }));
+    await waitFor(() => {
+      expect(screen.getByText(/Change sets for my-stack/)).toBeTruthy();
+    });
+  });
+
+  it("opens create change set modal", async () => {
+    const user = userEvent.setup();
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Change Sets/i }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "my-stack" })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-stack" }));
+    await waitFor(() => expect(screen.getByText(/Change sets for my-stack/)).toBeTruthy());
+    await clickButton(user, /Create change set/i);
+    await waitFor(() => {
+      expect(screen.getByText(/Create change set for my-stack/)).toBeTruthy();
+    });
+  });
+
+  // ── Stack Sets Tab ──
+
+  it("shows stack sets tab with empty state", async () => {
+    const user = userEvent.setup();
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Stack Sets/i }));
+    await waitFor(() => {
+      expect(screen.getByText("No stack sets")).toBeTruthy();
+    });
+  });
+
+  it("renders stack sets list with data", async () => {
+    mockStackSets.mockReturnValue({
+      data: { stackSets: [{ name: "my-ss", status: "ACTIVE", description: "Test" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Stack Sets/i }));
+    await waitFor(() => {
+      expect(screen.getByText("my-ss")).toBeTruthy();
+      expect(screen.getByText("ACTIVE")).toBeTruthy();
+    });
+  });
+
+  it("opens create stack set modal", async () => {
+    const user = userEvent.setup();
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Stack Sets/i }));
+    await waitFor(() => expect(screen.getByText("No stack sets")).toBeTruthy());
+    await clickButton(user, /Create stack set/i);
+    await waitFor(() => {
+      // Verify the modal renders with the unique placeholder
+      expect(screen.getByPlaceholderText("my-stack-set")).toBeTruthy();
+      expect(screen.getAllByText("Create stack set").length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  it("opens stack set detail modal", async () => {
+    mockStackSets.mockReturnValue({
+      data: { stackSets: [{ name: "my-ss", status: "ACTIVE", description: "Test" }], total: 1 },
+      isLoading: false,
+    });
+    mockStackSet.mockReturnValue({
+      data: { stackSet: { name: "my-ss", status: "ACTIVE", description: "Test", permissionModel: "SELF_MANAGED", parameters: [] }, instances: [], operations: [] },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Stack Sets/i }));
+    await waitFor(() => expect(screen.getByText("my-ss")).toBeTruthy());
+    await clickButton(user, /View/i);
+    await waitFor(() => {
+      expect(screen.getByText(/Stack Set: my-ss/)).toBeTruthy();
+    });
+  });
+
+  it("shows stack set detail loading state", async () => {
+    mockStackSets.mockReturnValue({
+      data: { stackSets: [{ name: "my-ss", status: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    mockStackSet.mockReturnValue({ data: null, isLoading: true });
+    const user = userEvent.setup();
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Stack Sets/i }));
+    await waitFor(() => expect(screen.getByText("my-ss")).toBeTruthy());
+    await clickButton(user, /View/i);
+    await waitFor(() => {
+      expect(screen.getByText(/Loading\.\.\./)).toBeTruthy();
     });
   });
 });
