@@ -823,4 +823,103 @@ describe("CodePipeline Routes", () => {
     });
   });
 
+  // ── Missing coverage gaps ──
+
+  describe("Executions — extra params", () => {
+    it("GET /pipelines/:name/executions — with maxResults", async () => {
+      mockSend.mockResolvedValueOnce({ pipelineExecutionSummaries: [] });
+      const res = await get("/pipelines/my-pipeline/executions?maxResults=25");
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].maxResults).toBe(25);
+    });
+
+    it("GET /pipelines/:name/executions — maxResults defaults to 50 when NaN", async () => {
+      mockSend.mockResolvedValueOnce({ pipelineExecutionSummaries: [] });
+      const res = await get("/pipelines/my-pipeline/executions?maxResults=abc");
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].maxResults).toBe(50);
+    });
+
+    it("POST /pipelines/:name/executions — with clientRequestToken", async () => {
+      mockSend.mockResolvedValueOnce({ pipelineExecutionId: "exec-token" });
+      const res = await post("/pipelines/my-pipeline/executions", { clientRequestToken: "token-xyz" });
+      expect(res.status).toBe(201);
+      expect(mockSend.mock.calls[0][0].clientRequestToken).toBe("token-xyz");
+    });
+  });
+
+  describe("Action Executions — extra params", () => {
+    it("GET /pipelines/:name/actions — with maxResults and nextToken", async () => {
+      mockSend.mockResolvedValueOnce({ actionExecutionDetails: [], nextToken: "tok" });
+      const res = await get("/pipelines/my-pipeline/actions?maxResults=50&nextToken=tok");
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].maxResults).toBe(50);
+      expect(mockSend.mock.calls[0][0].nextToken).toBe("tok");
+      const body = await res.json();
+      expect(body.nextToken).toBe("tok");
+    });
+  });
+
+  describe("Rule Executions — extra params", () => {
+    it("GET /pipelines/:name/rules — with maxResults and nextToken", async () => {
+      mockSend.mockResolvedValueOnce({ ruleExecutionDetails: [], nextToken: "rtok" });
+      const res = await get("/pipelines/my-pipeline/rules?maxResults=20&nextToken=rtok");
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].maxResults).toBe(20);
+      expect(mockSend.mock.calls[0][0].nextToken).toBe("rtok");
+      const body = await res.json();
+      expect(body.nextToken).toBe("rtok");
+    });
+  });
+
+  describe("Jobs — failure defaults", () => {
+    it("PUT /jobs/:jobId/result — failure uses defaults for type and message", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/jobs/job-default/result", { status: "Failure" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.result).toBe("failure");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("PutJobFailureResultCommand");
+      expect(mockSend.mock.calls[0][0].failureDetails.type).toBe("JobFailed");
+      expect(mockSend.mock.calls[0][0].failureDetails.message).toBe("Job failed");
+    });
+  });
+
+  describe("Webhooks — extra params", () => {
+    it("GET /webhooks — with maxResults and nextToken", async () => {
+      mockSend.mockResolvedValueOnce({ webhooks: [], NextToken: "wtok" });
+      const res = await get("/webhooks?maxResults=50&nextToken=wtok");
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].MaxResults).toBe(50);
+      expect(mockSend.mock.calls[0][0].NextToken).toBe("wtok");
+      const body = await res.json();
+      expect(body.NextToken).toBe("wtok");
+    });
+  });
+
+  describe("Action Types — extra params", () => {
+    it("GET /action-types — without owner filter (undefined)", async () => {
+      mockSend.mockResolvedValueOnce({ actionTypes: [] });
+      const res = await get("/action-types");
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].actionOwnerFilter).toBeUndefined();
+    });
+
+    it("POST /action-types — with settings and configurationProperties", async () => {
+      mockSend.mockResolvedValueOnce({ actionType: { id: { owner: "Custom", provider: "Mine", category: "Test", version: "2" } } });
+      const res = await post("/action-types", {
+        actionType: {
+          category: "Test",
+          provider: "Mine",
+          version: "2",
+          configurationProperties: [{ name: "key", required: true, secret: false }],
+          settings: { entityUrlTemplate: "url", executionUrlTemplate: "eurl" },
+        },
+      });
+      expect(res.status).toBe(201);
+      expect(mockSend.mock.calls[0][0].configurationProperties).toBeDefined();
+      expect(mockSend.mock.calls[0][0].settings).toBeDefined();
+    });
+  });
+
 });
