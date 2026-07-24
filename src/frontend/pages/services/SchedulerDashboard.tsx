@@ -532,7 +532,11 @@ function SchedulerGroupList({ onSelectGroup }: { onSelectGroup: (name: string) =
   const groups = data?.groups || [];
 
   const columns = [
-    { id: "name", header: "Group Name", cell: (item: any) => item.Name, isRowHeader: true },
+    { id: "name", header: "Group Name", cell: (item: any) => (
+      <Button variant="link" onClick={() => onSelectGroup(item.Name)}>
+        {item.Name}
+      </Button>
+    ), isRowHeader: true },
     {
       id: "state",
       header: "State",

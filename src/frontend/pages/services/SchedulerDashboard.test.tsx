@@ -29,6 +29,12 @@ const deleteScheduleState = vi.hoisted(() => ({
   variables: null as any,
 }));
 
+const updateScheduleState = vi.hoisted(() => ({
+  isError: false,
+  error: null as Error | null,
+  isPending: false,
+}));
+
 const groupsHookState = vi.hoisted(() => ({
   isError: false,
   error: null as Error | null,
@@ -42,6 +48,7 @@ const mockCreateGroup = vi.fn();
 const mockDeleteGroup = vi.fn();
 const mockCreateSchedule = vi.fn();
 const mockDeleteSchedule = vi.fn();
+const mockUpdateSchedule = vi.fn();
 
 vi.mock("../../hooks/useScheduler", () => ({
   useSchedulerGroups: (...args: any[]) => {
@@ -74,11 +81,10 @@ vi.mock("../../hooks/useScheduler", () => ({
     get variables() { return deleteScheduleState.variables; },
   }),
   useUpdateSchedule: () => ({
-    mutate: vi.fn(),
-    mutateAsync: vi.fn().mockResolvedValue({}),
-    isPending: false,
-    isError: false,
-    error: null,
+    mutate: mockUpdateSchedule,
+    get isPending() { return updateScheduleState.isPending; },
+    get isError() { return updateScheduleState.isError; },
+    get error() { return updateScheduleState.error; },
     reset: vi.fn(),
   }),
 }));
@@ -99,10 +105,14 @@ beforeEach(() => {
   createScheduleState.isPending = false;
   deleteScheduleState.isPending = false;
   deleteScheduleState.variables = null;
+  updateScheduleState.isError = false;
+  updateScheduleState.error = null;
+  updateScheduleState.isPending = false;
   groupsHookState.isError = false;
   groupsHookState.error = null;
   mockGroups.mockReturnValue({ data: { groups: [], total: 0 }, isLoading: false });
   mockSchedules.mockReturnValue({ data: { schedules: [], total: 0 }, isLoading: false });
+  mockUpdateSchedule.mockReset();
 });
 
 // ─── Tests ──────────────────────────────────────────────
@@ -298,6 +308,22 @@ describe("SchedulerDashboard — create group modal", () => {
 });
 
 describe("SchedulerDashboard — group detail", () => {
+  async function navigateToGroup(name: string) {
+    const user = userEvent.setup();
+    render(<SchedulerDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText(name)).toBeTruthy());
+    await user.click(screen.getByRole("button", { name }));
+    await waitFor(() => expect(screen.getByText(/Back to Schedule Groups/i)).toBeTruthy());
+    return user;
+  }
+
+  beforeEach(() => {
+    mockGroups.mockReturnValue({
+      data: { groups: [{ Name: "my-group", State: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+  });
+
   it("renders schedule count fallback for zero total", () => {
     mockSchedules.mockReturnValue({ data: { schedules: [], total: 0 } });
     mockGroups.mockReturnValue({
@@ -305,19 +331,359 @@ describe("SchedulerDashboard — group detail", () => {
       isLoading: false,
     });
     render(<SchedulerDashboard />, { wrapper: createWrapper() });
-    // GroupScheduleCount shows data?.total; when total is 0, renders "0"
     expect(screen.getByText("0")).toBeTruthy();
   });
 
-  it("shows schedule target with full ARN when no colon", () => {
-    // The SchedulerGroupDetail is unreachable via UI (group names are plain text
-    // in the auto-split component). Test that the schedule count renders correctly.
-    mockSchedules.mockReturnValue({ data: { schedules: [], total: 5 } });
+  it("navigates into group detail via clicking group name", async () => {
+    mockSchedules.mockReturnValue({ data: { schedules: [], total: 0 }, isLoading: false });
+    await navigateToGroup("my-group");
+    expect(screen.getByText(/Group: my-group/)).toBeTruthy();
+  });
+
+  it("goes back to group list from detail", async () => {
+    mockSchedules.mockReturnValue({ data: { schedules: [], total: 0 }, isLoading: false });
+    const user = await navigateToGroup("my-group");
+    mockGroups.mockReturnValue({ data: { groups: [], total: 0 }, isLoading: false });
+    await user.click(screen.getByText(/Back to Schedule Groups/));
+    await waitFor(() => expect(screen.getByText(/No schedule groups found/)).toBeTruthy());
+  });
+
+  it("shows loading for schedules", async () => {
+    mockSchedules.mockReturnValue({ data: undefined, isLoading: true });
+    await navigateToGroup("my-group");
+    expect(screen.getByText(/Back to Schedule Groups/)).toBeTruthy();
+  });
+
+  it("shows empty schedules message", async () => {
+    mockSchedules.mockReturnValue({ data: { schedules: [], total: 0 }, isLoading: false });
+    await navigateToGroup("my-group");
+    expect(screen.getByText(/No schedules in this group/)).toBeTruthy();
+  });
+
+  it("renders schedules with data", async () => {
+    mockSchedules.mockReturnValue({
+      data: {
+        schedules: [{
+          Name: "my-schedule",
+          ScheduleExpression: "rate(5 minutes)",
+          State: "ENABLED",
+          Target: { Arn: "arn:aws:lambda:us-east-1:123:function:my-fn" },
+        }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    await navigateToGroup("my-group");
+    expect(screen.getByText("my-schedule")).toBeTruthy();
+    expect(screen.getByText("rate(5 minutes)")).toBeTruthy();
+  });
+
+  it("shows short target name from ARN", async () => {
+    mockSchedules.mockReturnValue({
+      data: {
+        schedules: [{
+          Name: "s1",
+          ScheduleExpression: "rate(1 hour)",
+          Target: { Arn: "arn:aws:lambda:us-east-1:123:function:my-fn" },
+        }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    await navigateToGroup("my-group");
+    expect(screen.getByText("my-fn")).toBeTruthy();
+  });
+
+  it("shows full ARN as target when no colon", async () => {
+    mockSchedules.mockReturnValue({
+      data: {
+        schedules: [{
+          Name: "s2",
+          ScheduleExpression: "cron(0 * * * ? *)",
+          Target: { Arn: "simple-arn-no-colons" },
+        }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    await navigateToGroup("my-group");
+    expect(screen.getByText("simple-arn-no-colons")).toBeTruthy();
+  });
+
+  it("shows em-dash for missing target ARN", async () => {
+    mockSchedules.mockReturnValue({
+      data: {
+        schedules: [{
+          Name: "s3",
+          ScheduleExpression: "at(2024-01-01T00:00:00)",
+          Target: {},
+        }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    await navigateToGroup("my-group");
+    expect(screen.getByText("\u2014")).toBeTruthy();
+  });
+
+  it("defaults state to ENABLED when missing", async () => {
+    mockSchedules.mockReturnValue({
+      data: {
+        schedules: [{
+          Name: "no-state",
+          ScheduleExpression: "rate(1 minute)",
+        }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    await navigateToGroup("my-group");
+    expect(screen.getByText("ENABLED")).toBeTruthy();
+  });
+
+  it("filters schedules by name", async () => {
+    const user = userEvent.setup();
+    mockSchedules.mockReturnValue({
+      data: {
+        schedules: [
+          { Name: "alpha-schedule", ScheduleExpression: "rate(1 min)" },
+          { Name: "beta-schedule", ScheduleExpression: "rate(5 min)" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    render(<SchedulerDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-group")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-group" }));
+    await waitFor(() => expect(screen.getByText("alpha-schedule")).toBeTruthy());
+
+    const filterInput = screen.getByPlaceholderText("Find schedules by name");
+    await user.type(filterInput, "beta");
+    await waitFor(() => expect(screen.queryByText("alpha-schedule")).toBeNull());
+  });
+
+  it("deletes a schedule via confirmation", async () => {
+    const user = userEvent.setup();
+    mockSchedules.mockReturnValue({
+      data: {
+        schedules: [{ Name: "to-delete", ScheduleExpression: "rate(1 min)" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<SchedulerDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-group")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-group" }));
+    await waitFor(() => expect(screen.getByText("to-delete")).toBeTruthy());
+
+    const deleteBtn = screen.getByRole("button", { name: /Delete to-delete/i });
+    await user.click(deleteBtn);
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() => expect(mockDeleteSchedule).toHaveBeenCalledWith({ name: "to-delete", group: "my-group" }));
+  });
+});
+
+describe("SchedulerDashboard — create schedule modal", () => {
+  beforeEach(() => {
     mockGroups.mockReturnValue({
       data: { groups: [{ Name: "my-group", State: "ACTIVE" }], total: 1 },
       isLoading: false,
     });
+    mockSchedules.mockReturnValue({ data: { schedules: [], total: 0 }, isLoading: false });
+  });
+
+  async function openCreateSchedule(user: any) {
     render(<SchedulerDashboard />, { wrapper: createWrapper() });
-    expect(screen.getByText("5")).toBeTruthy();
+    await waitFor(() => expect(screen.getByText("my-group")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-group" }));
+    await waitFor(() => expect(screen.getByText(/Back to Schedule Groups/)).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Schedule name")).toBeTruthy());
+  }
+
+  it("opens create schedule modal", async () => {
+    const user = userEvent.setup();
+    await openCreateSchedule(user);
+    expect(screen.getByText("Create schedule")).toBeTruthy();
+  });
+
+  it("cancels create schedule modal", async () => {
+    const user = userEvent.setup();
+    await openCreateSchedule(user);
+    const cancelBtns = screen.getAllByRole("button", { name: /Cancel/i });
+    await user.click(cancelBtns[cancelBtns.length - 1]);
+    expect(mockCreateSchedule).not.toHaveBeenCalled();
+  });
+
+  it("shows create schedule error alert", async () => {
+    createScheduleState.isError = true;
+    createScheduleState.error = new Error("Schedule already exists");
+    const user = userEvent.setup();
+    await openCreateSchedule(user);
+    expect(screen.getByText("Schedule already exists")).toBeTruthy();
+    createScheduleState.isError = false;
+    createScheduleState.error = null;
+  });
+
+  it("renders schedule form fields with defaults", async () => {
+    const user = userEvent.setup();
+    await openCreateSchedule(user);
+    expect(screen.getByPlaceholderText("my-schedule")).toBeTruthy();
+    expect(screen.getByPlaceholderText("rate(5 minutes)")).toBeTruthy();
+    expect(screen.getByPlaceholderText(/arn:aws:lambda/)).toBeTruthy();
+    expect(screen.getByPlaceholderText(/arn:aws:iam/)).toBeTruthy();
+  });
+});
+
+describe("SchedulerDashboard — edit schedule modal", () => {
+  beforeEach(() => {
+    mockGroups.mockReturnValue({
+      data: { groups: [{ Name: "my-group", State: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    mockSchedules.mockReturnValue({
+      data: {
+        schedules: [{
+          Name: "edit-me",
+          ScheduleExpression: "rate(1 hour)",
+          State: "ENABLED",
+          Description: "Test schedule",
+          Target: { Arn: "arn:aws:lambda:us-east-1:123:function:my-fn", RoleArn: "arn:aws:iam::123:role/scheduler" },
+        }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+  });
+
+  async function openEditModal(user: any) {
+    render(<SchedulerDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-group")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-group" }));
+    await waitFor(() => expect(screen.getByText("edit-me")).toBeTruthy());
+    const editBtn = screen.getByRole("button", { name: /Edit edit-me/i });
+    await user.click(editBtn);
+    await waitFor(() => expect(screen.getByText(/Edit schedule: edit-me/)).toBeTruthy());
+  }
+
+  it("opens edit schedule modal with pre-filled form", async () => {
+    const user = userEvent.setup();
+    await openEditModal(user);
+    expect(screen.getByText(/Edit schedule: edit-me/)).toBeTruthy();
+  });
+
+  it("shows state select with ENABLED and DISABLED", async () => {
+    const user = userEvent.setup();
+    await openEditModal(user);
+    expect(screen.getByText("ENABLED")).toBeTruthy();
+  });
+
+  it("cancels edit schedule modal", async () => {
+    const user = userEvent.setup();
+    await openEditModal(user);
+    const cancelBtns = screen.getAllByRole("button", { name: /Cancel/i });
+    await user.click(cancelBtns[cancelBtns.length - 1]);
+    await waitFor(() => expect(screen.queryByText(/Edit schedule: edit-me/)).toBeNull());
+  });
+
+  it("shows edit schedule error alert", async () => {
+    updateScheduleState.isError = true;
+    updateScheduleState.error = new Error("Update failed");
+    const user = userEvent.setup();
+    await openEditModal(user);
+    expect(screen.getByText("Update failed")).toBeTruthy();
+  });
+});
+
+describe("SchedulerDashboard — submit flows", () => {
+  beforeEach(() => {
+    mockGroups.mockReturnValue({
+      data: { groups: [{ Name: "my-group", State: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+  });
+
+  it("create schedule button is disabled when form empty", async () => {
+    mockSchedules.mockReturnValue({ data: { schedules: [], total: 0 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<SchedulerDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-group")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-group" }));
+    await waitFor(() => expect(screen.getByText(/Back to Schedule Groups/)).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create schedule")).toBeTruthy());
+    // Create button should be disabled (no name, no target ARN)
+    const createBtns = screen.getAllByRole("button", { name: /Create/i });
+    const modalCreateBtn = createBtns[createBtns.length - 1];
+    expect(modalCreateBtn).toBeDisabled();
+  });
+
+  it("submits create schedule form", async () => {
+    mockSchedules.mockReturnValue({ data: { schedules: [], total: 0 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<SchedulerDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-group")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-group" }));
+    await waitFor(() => expect(screen.getByText(/Back to Schedule Groups/)).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Schedule name")).toBeTruthy());
+
+    await user.type(screen.getByPlaceholderText("my-schedule"), "new-schedule");
+    await user.type(screen.getByPlaceholderText(/arn:aws:lambda/), "arn:aws:lambda:us-east-1:123:function:test-fn");
+
+    const createBtns = screen.getAllByRole("button", { name: /Create/i });
+    await user.click(createBtns[createBtns.length - 1]);
+
+    await waitFor(() => {
+      expect(mockCreateSchedule).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "new-schedule",
+          groupName: "my-group",
+          scheduleExpression: "rate(1 minute)",
+          target: expect.objectContaining({ arn: "arn:aws:lambda:us-east-1:123:function:test-fn" }),
+        }),
+        expect.any(Object),
+      );
+    });
+  });
+
+  it("submits edit schedule form", async () => {
+    mockSchedules.mockReturnValue({
+      data: {
+        schedules: [{
+          Name: "edit-me",
+          ScheduleExpression: "rate(1 hour)",
+          State: "ENABLED",
+          Target: { Arn: "arn:aws:lambda:us-east-1:123:function:my-fn" },
+        }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+
+    const user = userEvent.setup();
+    render(<SchedulerDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-group")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-group" }));
+    await waitFor(() => expect(screen.getByText("edit-me")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Edit edit-me/i }));
+    await waitFor(() => expect(screen.getByText(/Edit schedule: edit-me/)).toBeTruthy());
+
+    const saveBtn = screen.getByRole("button", { name: /Save changes/i });
+    await user.click(saveBtn);
+
+    await waitFor(() => {
+      expect(mockUpdateSchedule).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "edit-me",
+          group: "my-group",
+          scheduleExpression: "rate(1 hour)",
+          state: "ENABLED",
+        }),
+        expect.any(Object),
+      );
+    });
   });
 });
