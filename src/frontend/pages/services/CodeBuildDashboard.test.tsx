@@ -335,6 +335,18 @@ describe("CodeBuildDashboard — create project modal", () => {
     createProjectState.isError = false;
     createProjectState.error = null;
   });
+
+  it("shows default error message when error has no message", async () => {
+    createProjectState.isError = true;
+    createProjectState.error = new Error();
+    const user = userEvent.setup();
+    render(<CodeBuildDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create project/i);
+    await waitFor(() => expect(screen.getByText("Create CodeBuild project")).toBeTruthy());
+    expect(screen.getByText("Failed to create project")).toBeTruthy();
+    createProjectState.isError = false;
+    createProjectState.error = null;
+  });
 });
 
 describe("CodeBuildDashboard — builds section", () => {
@@ -390,6 +402,40 @@ describe("CodeBuildDashboard — builds section", () => {
     render(<CodeBuildDashboard />, { wrapper: createWrapper() });
     // Short ID with no "/": split("/").pop() returns the whole string
     expect(screen.getByText("short-build-id")).toBeTruthy();
+  });
+
+  it("renders builds with empty ID", () => {
+    mockBuildsHook.mockReturnValue({
+      data: {
+        builds: [{ id: "", projectName: "p1", buildStatus: "SUCCEEDED", startTime: new Date().toISOString() }],
+      },
+    });
+    render(<CodeBuildDashboard />, { wrapper: createWrapper() });
+    // Build ID column: "".split("/").pop() = "" then "" || "" = "" → renders empty
+    expect(screen.getByText("p1")).toBeTruthy();
+  });
+
+  it("renders builds with null ID", () => {
+    mockBuildsHook.mockReturnValue({
+      data: {
+        builds: [{ id: null, projectName: "p2", buildStatus: "FAILED" }],
+      },
+    });
+    render(<CodeBuildDashboard />, { wrapper: createWrapper() });
+    // Build ID column: (null || "").split("/").pop() = "" then "" || null = null → renders nothing
+    expect(screen.getByText("p2")).toBeTruthy();
+    expect(screen.getByText("FAILED")).toBeTruthy();
+  });
+
+  it("shows build startTime formatted", () => {
+    mockBuildsHook.mockReturnValue({
+      data: {
+        builds: [{ id: "b1", projectName: "p3", buildStatus: "STOPPED", startTime: "2025-06-15T14:30:00Z" }],
+      },
+    });
+    const { container } = render(<CodeBuildDashboard />, { wrapper: createWrapper() });
+    // startTime truthy → new Date(startTime).toLocaleString() produces date-like output
+    expect(container.textContent).toMatch(/2025/);
   });
 
   it("shows empty builds section", () => {
