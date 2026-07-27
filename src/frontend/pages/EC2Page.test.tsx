@@ -1663,3 +1663,240 @@ describe("EC2InstanceList — action buttons by state", () => {
     expect(args.securityGroupIds).toEqual(["sg-9"]);
   });
 });
+
+// ─── Network Interfaces ──────────────────────────────
+
+describe("EC2NetworkInterfaceList (EC2Page — Network Interfaces tab)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setupDefaults();
+  });
+
+  it("renders network interfaces from data", async () => {
+    mockNetworkInterfaces.mockReturnValue({
+      data: { networkInterfaces: [{ id: "eni-1", vpcId: "vpc-1", subnetId: "subnet-1", privateIp: "10.0.0.5", status: "available", instanceId: null, description: "test" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Network Interfaces/i);
+    await waitFor(() => expect(screen.getAllByText("eni-1").length).toBeGreaterThan(0));
+  });
+
+  it("shows empty state", async () => {
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Network Interfaces/i);
+    await waitFor(() => expect(screen.getByText("No network interfaces")).toBeTruthy());
+  });
+
+  it("shows loading state", async () => {
+    mockNetworkInterfaces.mockReturnValue({ data: undefined, isLoading: true, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Network Interfaces/i);
+    await waitFor(() => expect(screen.getByText("Loading resources...")).toBeTruthy());
+  });
+
+  it("shows error state", async () => {
+    mockNetworkInterfaces.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: new Error("boom-eni") });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Network Interfaces/i);
+    await waitFor(() => expect(screen.getByText("boom-eni")).toBeTruthy());
+  });
+
+  it("shows dash for missing instance attachment", async () => {
+    mockNetworkInterfaces.mockReturnValue({
+      data: { networkInterfaces: [{ id: "eni-2", vpcId: "vpc-1", subnetId: "subnet-1", privateIp: "10.0.0.6", status: "available", instanceId: null, description: "" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Network Interfaces/i);
+    await waitFor(() => expect(screen.getAllByText("-").length).toBeGreaterThan(0));
+  });
+});
+
+// ─── Flow Logs ────────────────────────────────────
+
+describe("EC2FlowLogList (EC2Page — Flow Logs tab)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setupDefaults();
+  });
+
+  it("renders flow logs from data", async () => {
+    mockFlowLogs.mockReturnValue({
+      data: { flowLogs: [{ flowLogId: "fl-1", resourceId: "vpc-1", resourceType: "VPC", trafficType: "ALL", logDestinationType: "s3", flowLogStatus: "ACTIVE" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Flow Logs/i);
+    await waitFor(() => expect(screen.getAllByText("fl-1").length).toBeGreaterThan(0));
+  });
+
+  it("shows empty state", async () => {
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Flow Logs/i);
+    await waitFor(() => expect(screen.getByText("No flow logs found")).toBeTruthy());
+  });
+
+  it("shows loading state", async () => {
+    mockFlowLogs.mockReturnValue({ data: undefined, isLoading: true, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Flow Logs/i);
+    await waitFor(() => expect(screen.getByText("Loading resources...")).toBeTruthy());
+  });
+
+  it("shows error state", async () => {
+    mockFlowLogs.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: new Error("boom-fl") });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Flow Logs/i);
+    await waitFor(() => expect(screen.getByText("boom-fl")).toBeTruthy());
+  });
+
+  it("create flow log calls createFlowLog.mutate with resource from Select", async () => {
+    mockVpcs.mockReturnValue({
+      data: { vpcs: [{ id: "vpc-fl", cidrBlock: "10.0.0.0/16", state: "available", isDefault: false, instanceTenancy: "default" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Flow Logs/i);
+    await waitFor(() => expect(screen.getByText("No flow logs found")).toBeTruthy());
+    await clickButton(user, /Create Flow Log/i);
+    await waitFor(() => expect(screen.getAllByText("Create Flow Log").length).toBeGreaterThan(0));
+    await pickSelectOption(user, /Select resource/i, /vpc-fl/);
+    await clickLastButton(user, /^Create$/i);
+    await waitFor(() => expect(mockCreateFlowLog).toHaveBeenCalled());
+    expect(mockCreateFlowLog.mock.calls[0][0]).toMatchObject({ trafficType: "ALL" });
+  });
+
+  it("delete flow log calls deleteFlowLog.mutateAsync", async () => {
+    mockFlowLogs.mockReturnValue({
+      data: { flowLogs: [{ flowLogId: "fl-del", resourceId: "vpc-1", resourceType: "VPC", trafficType: "ALL", logDestinationType: "s3", flowLogStatus: "ACTIVE" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Flow Logs/i);
+    await waitFor(() => expect(screen.getAllByText("fl-del").length).toBeGreaterThan(0));
+    await user.click(screen.getByRole("button", { name: /Delete fl-del/i }));
+    await waitFor(() => expect(screen.getAllByText("Delete flow log").length).toBeGreaterThan(0));
+    await clickLastButton(user, /^Delete$/i);
+    await waitFor(() => expect(mockDeleteFlowLog).toHaveBeenCalledWith("fl-del"));
+  });
+
+  it("shows em-dash for missing resourceId", async () => {
+    mockFlowLogs.mockReturnValue({
+      data: { flowLogs: [{ flowLogId: "fl-dash", resourceId: null, resourceType: "VPC", trafficType: "ALL", logDestinationType: "s3", flowLogStatus: "ACTIVE" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Flow Logs/i);
+    await waitFor(() => expect(screen.getAllByText("-").length).toBeGreaterThan(0));
+  });
+});
+
+// ─── Network ACLs ─────────────────────────────────
+
+describe("EC2NetworkAclList (EC2Page — Network ACLs tab)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setupDefaults();
+    mockVpcs.mockReturnValue({
+      data: { vpcs: [{ id: "vpc-1", cidrBlock: "10.0.0.0/16", state: "available", isDefault: false, instanceTenancy: "default" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+  });
+
+  it("renders network ACLs from data", async () => {
+    mockNetworkAcls.mockReturnValue({
+      data: { networkAcls: [{ id: "acl-1", vpcId: "vpc-1", isDefault: true, entries: [{ ruleNumber: 100, protocol: "-1", cidrBlock: "0.0.0.0/0", ruleAction: "allow", egress: false }], associations: [{ subnetId: "subnet-1" }] }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Network ACLs/i);
+    await waitFor(() => expect(screen.getByText("vpc-1")).toBeTruthy());
+  });
+
+  it("shows empty state", async () => {
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Network ACLs/i);
+    await waitFor(() => expect(screen.getByText("No network ACLs found")).toBeTruthy());
+  });
+
+  it("shows loading state", async () => {
+    mockNetworkAcls.mockReturnValue({ data: undefined, isLoading: true, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Network ACLs/i);
+    await waitFor(() => expect(screen.getByText("Loading resources...")).toBeTruthy());
+  });
+
+  it("shows error state", async () => {
+    mockNetworkAcls.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: new Error("boom-acl") });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Network ACLs/i);
+    await waitFor(() => expect(screen.getByText("boom-acl")).toBeTruthy());
+  });
+
+  it("create ACL calls createNetworkAcl.mutate with VPC from Select", async () => {
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Network ACLs/i);
+    await waitFor(() => expect(screen.getByText("No network ACLs found")).toBeTruthy());
+    await clickButton(user, /Create Network ACL/i);
+    await waitFor(() => expect(screen.getAllByText("Create Network ACL").length).toBeGreaterThan(0));
+    // Select a VPC from the dropdown so Create button is enabled
+    await pickSelectOption(user, /Select a VPC/i, /vpc-1/);
+    await clickLastButton(user, /^Create$/i);
+    await waitFor(() => expect(mockCreateNetworkAcl).toHaveBeenCalled());
+    expect(mockCreateNetworkAcl.mock.calls[0][0]).toEqual({ vpcId: "vpc-1" });
+  });
+
+  it("delete non-default ACL shows Delete button", async () => {
+    mockNetworkAcls.mockReturnValue({
+      data: { networkAcls: [{ id: "acl-del", vpcId: "vpc-1", isDefault: false, entries: [], associations: [] }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Network ACLs/i);
+    await waitFor(() => expect(screen.getByText("vpc-1")).toBeTruthy());
+    expect(screen.getByText("vpc-1")).toBeTruthy();
+  });
+
+  it("shows detail view when expand button clicked", async () => {
+    mockNetworkAcls.mockReturnValue({
+      data: { networkAcls: [{ id: "acl-exp", vpcId: "vpc-1", isDefault: true, entries: [{ ruleNumber: 100, protocol: "-1", cidrBlock: "0.0.0.0/0", ruleAction: "allow", egress: false }, { ruleNumber: 101, protocol: "-1", cidrBlock: "0.0.0.0/0", ruleAction: "allow", egress: true }], associations: [{ subnetId: "subnet-1" }] }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Network ACLs/i);
+    await waitFor(() => expect(screen.getByText("vpc-1")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("vpc-1")).toBeTruthy());
+  });
+
+  it("cancels add rule modal", async () => {
+    mockNetworkAcls.mockReturnValue({
+      data: { networkAcls: [{ id: "acl-rule", vpcId: "vpc-1", isDefault: false, entries: [], associations: [] }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Network ACLs/i);
+    await waitFor(() => expect(screen.getByText("vpc-1")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("vpc-1")).toBeTruthy());
+  });
+});
