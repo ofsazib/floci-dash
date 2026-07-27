@@ -586,4 +586,121 @@ describe("ApiGatewayV2Dashboard — edge cases", () => {
     await user.click(screen.getByRole("tab", { name: /Stages/i }));
     await waitFor(() => expect(screen.getByText("Yes")).toBeTruthy());
   });
+
+  it("shows No for stage AutoDeploy when false", async () => {
+    mockApis.mockReturnValue({
+      data: { apis: [{ ApiId: "api-1", Name: "my-api", ProtocolType: "HTTP" }], total: 1 },
+      isLoading: false,
+    });
+    mockStages.mockReturnValue({
+      data: { stages: [{ StageName: "manual", AutoDeploy: false }], total: 1 },
+    });
+    const user = userEvent.setup();
+    render(<ApiGatewayV2Dashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-api"));
+    await user.click(screen.getByRole("tab", { name: /Stages/i }));
+    await waitFor(() => expect(screen.getByText("No")).toBeTruthy());
+  });
+
+  it("shows delete API not-loading when isPending but different variable", () => {
+    deleteApiState.isPending = true;
+    deleteApiState.variables = "other-id";
+    mockApis.mockReturnValue({
+      data: { apis: [{ ApiId: "api-1", Name: "my-api", ProtocolType: "HTTP" }], total: 1 },
+      isLoading: false,
+    });
+    render(<ApiGatewayV2Dashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("my-api")).toBeTruthy();
+  });
+});
+
+describe("ApiGatewayV2Dashboard — data edge cases", () => {
+  it("handles undefined routes data", async () => {
+    mockApis.mockReturnValue({
+      data: { apis: [{ ApiId: "api-1", Name: "my-api", ProtocolType: "HTTP" }], total: 1 },
+      isLoading: false,
+    });
+    mockRoutes.mockReturnValue({ data: undefined });
+    const user = userEvent.setup();
+    render(<ApiGatewayV2Dashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-api"));
+    await waitFor(() => expect(screen.getByText(/No routes/i)).toBeTruthy());
+  });
+
+  it("handles null routes data", async () => {
+    mockApis.mockReturnValue({
+      data: { apis: [{ ApiId: "api-1", Name: "my-api", ProtocolType: "HTTP" }], total: 1 },
+      isLoading: false,
+    });
+    mockRoutes.mockReturnValue({ data: { routes: null } });
+    const user = userEvent.setup();
+    render(<ApiGatewayV2Dashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-api"));
+    await waitFor(() => expect(screen.getByText(/No routes/i)).toBeTruthy());
+  });
+
+  it("handles undefined integrations data", async () => {
+    mockApis.mockReturnValue({
+      data: { apis: [{ ApiId: "api-1", Name: "my-api", ProtocolType: "HTTP" }], total: 1 },
+      isLoading: false,
+    });
+    mockIntegrations.mockReturnValue({ data: undefined });
+    const user = userEvent.setup();
+    render(<ApiGatewayV2Dashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-api"));
+    await user.click(screen.getByRole("tab", { name: /Integrations/i }));
+    await waitFor(() => expect(screen.getByText(/No integrations/i)).toBeTruthy());
+  });
+
+  it("handles undefined stages data", async () => {
+    mockApis.mockReturnValue({
+      data: { apis: [{ ApiId: "api-1", Name: "my-api", ProtocolType: "HTTP" }], total: 1 },
+      isLoading: false,
+    });
+    mockStages.mockReturnValue({ data: undefined });
+    const user = userEvent.setup();
+    render(<ApiGatewayV2Dashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-api"));
+    await user.click(screen.getByRole("tab", { name: /Stages/i }));
+    await waitFor(() => expect(screen.getByText(/No stages/i)).toBeTruthy());
+  });
+
+  it("handles undefined deployments data", async () => {
+    mockApis.mockReturnValue({
+      data: { apis: [{ ApiId: "api-1", Name: "my-api", ProtocolType: "HTTP" }], total: 1 },
+      isLoading: false,
+    });
+    mockDeployments.mockReturnValue({ data: undefined });
+    const user = userEvent.setup();
+    render(<ApiGatewayV2Dashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-api"));
+    await user.click(screen.getByRole("tab", { name: /Deployments/i }));
+    await waitFor(() => expect(screen.getByText(/No deployments/i)).toBeTruthy());
+  });
+
+  it("handles undefined WebSocket routes data", async () => {
+    mockApis.mockReturnValue({
+      data: { apis: [{ ApiId: "api-1", Name: "my-api", ProtocolType: "WEBSOCKET" }], total: 1 },
+      isLoading: false,
+    });
+    mockWsRoutes.mockReturnValue({ data: undefined });
+    const user = userEvent.setup();
+    render(<ApiGatewayV2Dashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-api"));
+    await user.click(screen.getByRole("tab", { name: /WebSocket Routes/i }));
+    await waitFor(() => expect(screen.getByText(/No WebSocket routes/i)).toBeTruthy());
+  });
+
+  it("shows create deployment loading state", async () => {
+    createDeployState.isPending = true;
+    mockApis.mockReturnValue({
+      data: { apis: [{ ApiId: "api-1", Name: "my-api", ProtocolType: "HTTP" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ApiGatewayV2Dashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-api"));
+    await user.click(screen.getByRole("tab", { name: /Deployments/i }));
+    await waitFor(() => expect(screen.getByText(/Deployments in/)).toBeTruthy());
+  });
 });
