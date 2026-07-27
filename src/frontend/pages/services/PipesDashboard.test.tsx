@@ -239,4 +239,70 @@ describe("PipesDashboard", () => {
     await user.type(filterInput, "beta");
     await waitFor(() => expect(screen.queryByText("alpha")).toBeNull());
   });
+
+  // ── Branch coverage: undefined pipes/total ────────────
+
+  it("handles pipes undefined in data (|| [] fallback)", () => {
+    mockPipes.mockReturnValue({
+      data: { total: 0 },
+      isLoading: false,
+    });
+    render(<PipesDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No EventBridge pipes/i)).toBeTruthy();
+  });
+
+  it("handles total undefined in data", () => {
+    mockPipes.mockReturnValue({
+      data: { pipes: [{ Name: "pipe-no-total", Source: "a", Target: "b", DesiredState: "STOPPED", CurrentState: "STOPPED", CreationTime: 1705000000 }] },
+      isLoading: false,
+    });
+    render(<PipesDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("pipe-no-total")).toBeTruthy();
+  });
+
+  it("handles pipes as null (|| [] fallback)", () => {
+    mockPipes.mockReturnValue({
+      data: { pipes: null, total: 0 },
+      isLoading: false,
+    });
+    render(<PipesDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No EventBridge pipes/i)).toBeTruthy();
+  });
+
+  // ── Branch coverage: loading states with non-matching variables ────
+
+  it("shows start pipe not-loading when isPending but different variable", () => {
+    startPipeState.isPending = true;
+    startPipeState.variables = "other-pipe";
+    mockPipes.mockReturnValue({
+      data: { pipes: [{ Name: "test-pipe", Source: "aws:lambda", Target: "arn", DesiredState: "STOPPED", CurrentState: "STOPPED", CreationTime: 1705000000 }], total: 1 },
+      isLoading: false,
+    });
+    render(<PipesDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("test-pipe")).toBeTruthy();
+    expect(screen.getByText("Start")).toBeTruthy();
+  });
+
+  it("shows stop pipe not-loading when isPending but different variable", () => {
+    stopPipeState.isPending = true;
+    stopPipeState.variables = "other-pipe";
+    mockPipes.mockReturnValue({
+      data: { pipes: [{ Name: "test-pipe", Source: "aws:lambda", Target: "arn", DesiredState: "RUNNING", CurrentState: "RUNNING", CreationTime: 1705000000 }], total: 1 },
+      isLoading: false,
+    });
+    render(<PipesDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("test-pipe")).toBeTruthy();
+    expect(screen.getByText("Stop")).toBeTruthy();
+  });
+
+  it("shows delete pipe not-loading when isPending but different variable", () => {
+    deletePipeState.isPending = true;
+    deletePipeState.variables = "other-pipe";
+    mockPipes.mockReturnValue({
+      data: { pipes: [{ Name: "test-pipe", Source: "aws:lambda", Target: "arn", DesiredState: "STOPPED", CurrentState: "STOPPED", CreationTime: 1705000000 }], total: 1 },
+      isLoading: false,
+    });
+    render(<PipesDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("test-pipe")).toBeTruthy();
+  });
 });
