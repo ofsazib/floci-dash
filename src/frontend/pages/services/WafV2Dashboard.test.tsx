@@ -428,3 +428,226 @@ describe("WafV2Dashboard", () => {
     await waitFor(() => expect(screen.queryByText("alpha-acl")).toBeNull());
   });
 });
+
+describe("WafV2Dashboard — data edge cases", () => {
+  it("handles undefined web ACLs in data", () => {
+    mockWebAcls.mockReturnValue({ data: {}, isLoading: false });
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No web ACLs found/i)).toBeTruthy();
+  });
+
+  it("handles undefined IP sets in data", () => {
+    mockIPSets.mockReturnValue({ data: {}, isLoading: false });
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No IP sets found/i)).toBeTruthy();
+  });
+
+  it("handles undefined regex sets in data", () => {
+    mockRegexSets.mockReturnValue({ data: {}, isLoading: false });
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No regex pattern sets found/i)).toBeTruthy();
+  });
+
+  it("handles undefined rule groups in data", () => {
+    mockRuleGroups.mockReturnValue({ data: {}, isLoading: false });
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No rule groups found/i)).toBeTruthy();
+  });
+
+  it("handles undefined logging configs in data", () => {
+    mockLoggingConfigs.mockReturnValue({ data: {}, isLoading: false });
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No logging configurations found/i)).toBeTruthy();
+  });
+
+  it("handles null web ACLs in data", () => {
+    mockWebAcls.mockReturnValue({ data: { webAcls: null }, isLoading: false });
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No web ACLs found/i)).toBeTruthy();
+  });
+
+  it("handles null IP sets in data", () => {
+    mockIPSets.mockReturnValue({ data: { ipSets: null }, isLoading: false });
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No IP sets found/i)).toBeTruthy();
+  });
+
+  it("handles null regex sets in data", () => {
+    mockRegexSets.mockReturnValue({ data: { regexPatternSets: null }, isLoading: false });
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No regex pattern sets found/i)).toBeTruthy();
+  });
+
+  it("handles null rule groups in data", () => {
+    mockRuleGroups.mockReturnValue({ data: { ruleGroups: null }, isLoading: false });
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No rule groups found/i)).toBeTruthy();
+  });
+
+  it("handles null logging configs in data", () => {
+    mockLoggingConfigs.mockReturnValue({ data: { loggingConfigurations: null }, isLoading: false });
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No logging configurations found/i)).toBeTruthy();
+  });
+
+  it("handles IP sets with total undefined", () => {
+    mockIPSets.mockReturnValue({
+      data: { ipSets: [{ Name: "my-ipset", Id: "ip-1" }] },
+      isLoading: false,
+    });
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("my-ipset")).toBeTruthy();
+  });
+
+  it("handles regex sets with total undefined", () => {
+    mockRegexSets.mockReturnValue({
+      data: { regexPatternSets: [{ Name: "my-regex", Id: "re-1" }] },
+      isLoading: false,
+    });
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("my-regex")).toBeTruthy();
+  });
+
+  it("handles rule groups with total undefined", () => {
+    mockRuleGroups.mockReturnValue({
+      data: { ruleGroups: [{ Name: "my-rule", Id: "rule-1" }] },
+      isLoading: false,
+    });
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("my-rule")).toBeTruthy();
+  });
+
+  it("renders IP sets with missing description as em-dash", () => {
+    mockIPSets.mockReturnValue({
+      data: { ipSets: [{ Name: "ip-no-desc", Id: "ip-1" }], total: 1 },
+      isLoading: false,
+    });
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("ip-no-desc")).toBeTruthy();
+    expect(screen.getByText("\u2014")).toBeTruthy();
+  });
+
+  it("renders regex sets with missing description as em-dash", () => {
+    mockRegexSets.mockReturnValue({
+      data: { regexPatternSets: [{ Name: "re-no-desc", Id: "re-1" }], total: 1 },
+      isLoading: false,
+    });
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("re-no-desc")).toBeTruthy();
+    expect(screen.getByText("\u2014")).toBeTruthy();
+  });
+
+  it("renders rule groups with missing description as em-dash", () => {
+    mockRuleGroups.mockReturnValue({
+      data: { ruleGroups: [{ Name: "rg-no-desc", Id: "rg-1" }], total: 1 },
+      isLoading: false,
+    });
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("rg-no-desc")).toBeTruthy();
+    expect(screen.getByText("\u2014")).toBeTruthy();
+  });
+});
+
+describe("WafV2Dashboard — form submissions", () => {
+  it("creates an IP set by filling form and submitting", async () => {
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create IP set/i);
+    await waitFor(() => expect(screen.getByText("Create IP Set")).toBeTruthy());
+
+    // Fill in name
+    await user.type(screen.getByPlaceholderText("my-ip-set"), "test-ip-set");
+
+    // Click Create
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[createBtns.length - 1]);
+
+    await waitFor(() => {
+      expect(mockCreateIPSetMutate).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("creates a regex pattern set by filling form and submitting", async () => {
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create regex set/i);
+    await waitFor(() => expect(screen.getByText("Create Regex Pattern Set")).toBeTruthy());
+
+    // Fill in name
+    await user.type(screen.getByPlaceholderText("my-regex-set"), "test-regex");
+
+    // Click Create
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[createBtns.length - 1]);
+
+    await waitFor(() => {
+      expect(mockCreateRegexSetMutate).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("creates a rule group by filling form and submitting", async () => {
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create rule group/i);
+    await waitFor(() => expect(screen.getByText("Create Rule Group")).toBeTruthy());
+
+    // Fill in name
+    await user.type(screen.getByPlaceholderText("my-rule-group"), "test-rule-group");
+
+    // Click Create
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[createBtns.length - 1]);
+
+    await waitFor(() => {
+      expect(mockCreateRuleGroupMutate).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("opens Configure Logging modal and shows Save button", async () => {
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Configure logging/i);
+    await waitFor(() => expect(screen.getByText("Configure Logging")).toBeTruthy());
+    expect(screen.getByRole("button", { name: /Save/i })).toBeTruthy();
+  });
+});
+
+describe("WafV2Dashboard — Edit Regex Set Modal", () => {
+  it("shows Edit Regex Set modal", async () => {
+    mockRegexSets.mockReturnValue({
+      data: {
+        regexPatternSets: [{ Name: "my-regex", Id: "re-1", Description: "Test regex" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-regex")).toBeTruthy());
+
+    const editBtns = screen.getAllByRole("button", { name: /Edit/i });
+    await user.click(editBtns[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Edit Regex Pattern Set/)).toBeTruthy();
+    });
+  });
+
+  it("cancels Edit Regex Set modal", async () => {
+    mockRegexSets.mockReturnValue({
+      data: { regexPatternSets: [{ Name: "my-regex", Id: "re-1", Description: "Test" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-regex")).toBeTruthy());
+
+    const editBtns = screen.getAllByRole("button", { name: /Edit/i });
+    await user.click(editBtns[0]);
+    await waitFor(() => expect(screen.getByText(/Edit Regex Pattern Set/)).toBeTruthy());
+
+    const cancelBtns = screen.getAllByRole("button", { name: /Cancel/i });
+    await user.click(cancelBtns[cancelBtns.length - 1]);
+    await waitFor(() => expect(mockUpdateRegexSetMutate).not.toHaveBeenCalled());
+  });
+});
