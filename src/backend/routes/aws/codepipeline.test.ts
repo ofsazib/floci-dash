@@ -905,6 +905,13 @@ describe("CodePipeline Routes", () => {
       expect(mockSend.mock.calls[0][0].actionOwnerFilter).toBeUndefined();
     });
 
+    it("GET /action-types — with empty owner query (|| undefined fallback)", async () => {
+      mockSend.mockResolvedValueOnce({ actionTypes: [] });
+      const res = await get("/action-types?owner=");
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].actionOwnerFilter).toBeUndefined();
+    });
+
     it("POST /action-types — with settings and configurationProperties", async () => {
       mockSend.mockResolvedValueOnce({ actionType: { id: { owner: "Custom", provider: "Mine", category: "Test", version: "2" } } });
       const res = await post("/action-types", {
@@ -919,6 +926,80 @@ describe("CodePipeline Routes", () => {
       expect(res.status).toBe(201);
       expect(mockSend.mock.calls[0][0].configurationProperties).toBeDefined();
       expect(mockSend.mock.calls[0][0].settings).toBeDefined();
+    });
+  });
+
+  // ─── Undefined response fallbacks (|| [] branches) ──────
+
+  describe("Undefined response fallbacks", () => {
+    it("GET /pipelines — handles undefined pipelines (|| [])", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/pipelines");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.pipelines).toEqual([]);
+    });
+
+    it("GET /webhooks — handles undefined webhooks (|| [])", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/webhooks");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.webhooks).toEqual([]);
+    });
+
+    it("GET /pipelines/:name/actions — handles undefined actionExecutionDetails (|| [])", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/pipelines/my-pipeline/actions");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.actions).toEqual([]);
+    });
+
+    it("GET /pipelines/:name/rules — handles undefined ruleExecutionDetails (|| [])", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/pipelines/my-pipeline/rules");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.ruleExecutionDetails).toEqual([]);
+    });
+
+    it("POST /action-types/:cat/:provider/jobs/poll — handles undefined jobs (|| [])", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/action-types/Test/MyProvider/jobs/poll");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.jobs).toEqual([]);
+    });
+
+    it("GET /tags — handles undefined tags (|| [])", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/tags?resourceArn=arn:aws:codepipeline:us-east-1::my-pipeline");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.tags).toEqual([]);
+    });
+
+    it("GET /action-types — handles undefined actionTypes (|| [])", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/action-types");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.actionTypes).toEqual([]);
+    });
+
+    it("GET /webhooks — handles undefined NextToken", async () => {
+      mockSend.mockResolvedValueOnce({ webhooks: [] });
+      const res = await get("/webhooks");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.NextToken).toBeUndefined();
     });
   });
 

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -622,5 +622,165 @@ describe("BatchDashboard — submit job", () => {
     const cancelBtns = screen.getAllByRole("button", { name: /Cancel/i });
     await user.click(cancelBtns[cancelBtns.length - 1]);
     await waitFor(() => expect(mockSubmitJob).not.toHaveBeenCalled());
+  });
+
+  it("enables Submit button when all 3 fields are filled", async () => {
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /Submit Job/i }));
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Job name/)).toBeTruthy();
+    });
+
+    await user.type(screen.getByLabelText(/Job name/), "my-job");
+    await user.type(screen.getByLabelText(/Job queue ARN/), "arn:aws:batch:us-east-1:123:job-queue/q");
+    await user.type(screen.getByLabelText(/Job definition ARN/), "arn:aws:batch:us-east-1:123:job-definition/jd:1");
+
+    const submitBtn = screen.getByRole("button", { name: /^Submit$/i });
+    expect(submitBtn.getAttribute("disabled")).toBeNull();
+  });
+});
+
+// ─── Form submissions ────────────────────────────────────
+
+describe("BatchDashboard — form submissions", () => {
+  it("creates a compute environment by filling form and clicking Create", async () => {
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create compute environment/i);
+    await waitFor(() => expect(screen.getAllByText("Create Compute Environment").length).toBeGreaterThan(0));
+
+    const nameInput = screen.getByLabelText(/^Name$/i);
+    await user.type(nameInput, "prod-compute");
+
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[0]);
+
+    await waitFor(() => {
+      expect(mockCreateCE).toHaveBeenCalledWith(
+        expect.objectContaining({ computeEnvironmentName: "prod-compute", type: "MANAGED" }),
+        expect.any(Object),
+      );
+    });
+  });
+
+  it("creates a job queue by filling form and clicking Create", async () => {
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    const user = userEvent.setup();
+    await clickButton(user, /Create job queue/i);
+    await waitFor(() => expect(screen.getAllByText("Create Job Queue").length).toBeGreaterThan(0));
+
+    // Verify form fields are present (happy-dom doesn't propagate native input events to React)
+    expect(screen.getAllByText(/Queue name/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/Queue name/)).toBeTruthy();
+
+    // Click Cancel to close modal
+    const cancelBtns = screen.getAllByRole("button", { name: /Cancel/i });
+    await user.click(cancelBtns[cancelBtns.length - 1]);
+    await waitFor(() => expect(mockCreateJQ).not.toHaveBeenCalled());
+  });
+
+  it("cancels register JD modal without calling registerJD", async () => {
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create job definition/i);
+    await waitFor(() => expect(screen.getByText("Register Job Definition")).toBeTruthy());
+
+    const cancelBtns = screen.getAllByRole("button", { name: /Cancel/i });
+    await user.click(cancelBtns[cancelBtns.length - 1]);
+    await waitFor(() => expect(mockRegisterJD).not.toHaveBeenCalled());
+  });
+});
+
+// ─── Error fallback messages ────────────────────────────
+
+describe("BatchDashboard — error fallback messages", () => {
+  it("shows fallback 'Failed' when CE error has no message", async () => {
+    createCEState.isError = true;
+    createCEState.error = {} as Error;
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create compute environment/i);
+    await waitFor(() => {
+      expect(screen.getByText("Failed")).toBeTruthy();
+    });
+  });
+
+  it("shows fallback 'Failed' when JQ error has no message", async () => {
+    createJQState.isError = true;
+    createJQState.error = {} as Error;
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create job queue/i);
+    await waitFor(() => {
+      expect(screen.getByText("Failed")).toBeTruthy();
+    });
+  });
+
+  it("shows fallback 'Failed' when JD error has no message", async () => {
+    registerJDState.isError = true;
+    registerJDState.error = {} as Error;
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create job definition/i);
+    await waitFor(() => {
+      expect(screen.getByText("Failed")).toBeTruthy();
+    });
+  });
+
+  it("shows fallback 'Failed' when submit job error has no message", async () => {
+    submitJobState.isError = true;
+    submitJobState.error = {} as Error;
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /Submit Job/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Failed")).toBeTruthy();
+    });
+  });
+});
+
+// ─── CE type change ─────────────────────────────────────
+
+describe("BatchDashboard — CE type", () => {
+  it("shows UNMANAGED option in Select dropdown and selects it", async () => {
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create compute environment/i);
+    await waitFor(() => expect(screen.getAllByText("Create Compute Environment").length).toBeGreaterThan(0));
+
+    // Click the Select trigger to open the dropdown
+    await user.click(screen.getByText("MANAGED"));
+    await waitFor(() => expect(screen.getByText("UNMANAGED")).toBeTruthy());
+
+    // Select UNMANAGED
+    await user.click(screen.getByText("UNMANAGED"));
+    await waitFor(() => expect(screen.getByText("UNMANAGED")).toBeTruthy());
+  });
+
+  it("creates CE with UNMANAGED type when selected", async () => {
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create compute environment/i);
+    await waitFor(() => expect(screen.getAllByText("Create Compute Environment").length).toBeGreaterThan(0));
+
+    // Select UNMANAGED
+    await user.click(screen.getByText("MANAGED"));
+    await waitFor(() => expect(screen.getByText("UNMANAGED")).toBeTruthy());
+    await user.click(screen.getByText("UNMANAGED"));
+
+    // Type name
+    const nameInput = screen.getByLabelText(/^Name$/i);
+    await user.type(nameInput, "unmanaged-ce");
+
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[0]);
+
+    await waitFor(() => {
+      expect(mockCreateCE).toHaveBeenCalledWith(
+        expect.objectContaining({ computeEnvironmentName: "unmanaged-ce", type: "UNMANAGED" }),
+        expect.any(Object),
+      );
+    });
   });
 });

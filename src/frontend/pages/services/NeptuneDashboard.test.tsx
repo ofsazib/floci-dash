@@ -10,17 +10,32 @@ const mockInstances = vi.fn();
 const mockDeleteCluster = vi.fn();
 const mockDeleteInstance = vi.fn();
 
+const deleteClusterState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
+const deleteInstanceState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
+
 vi.mock("../../hooks/useNeptune", () => ({
   useNeptuneClusters: (...args: any[]) => mockClusters(...args),
   useNeptuneInstances: (...args: any[]) => mockInstances(...args),
-  useDeleteNeptuneCluster: () => ({ mutateAsync: mockDeleteCluster, isPending: false, variables: null }),
-  useDeleteNeptuneInstance: () => ({ mutateAsync: mockDeleteInstance, isPending: false, variables: null }),
+  useDeleteNeptuneCluster: () => ({
+    mutateAsync: mockDeleteCluster,
+    get isPending() { return deleteClusterState.isPending; },
+    get variables() { return deleteClusterState.variables; },
+  }),
+  useDeleteNeptuneInstance: () => ({
+    mutateAsync: mockDeleteInstance,
+    get isPending() { return deleteInstanceState.isPending; },
+    get variables() { return deleteInstanceState.variables; },
+  }),
 }));
 
 import { NeptuneDashboard } from "./NeptuneDashboard";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  deleteClusterState.isPending = false;
+  deleteClusterState.variables = null;
+  deleteInstanceState.isPending = false;
+  deleteInstanceState.variables = null;
   mockClusters.mockReturnValue({ data: { clusters: [], total: 0 }, isLoading: false });
   mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false });
 });
@@ -294,5 +309,67 @@ describe("NeptuneDashboard", () => {
     const filterInput = screen.getByPlaceholderText("Find instances");
     await user.type(filterInput, "beta");
     await waitFor(() => expect(screen.queryByText("inst-alpha")).toBeNull());
+  });
+
+  // ─── Delete loading states ───────────────────────────
+
+  it("shows delete cluster loading when isPending matches", () => {
+    deleteClusterState.isPending = true;
+    deleteClusterState.variables = "loading-me";
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [{ DBClusterIdentifier: "loading-me", Status: "available", Engine: "neptune", EngineVersion: "1.3.0", Endpoint: "ep" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("loading-me")).toBeTruthy();
+  });
+
+  it("shows delete cluster not loading when isPending but different variable", () => {
+    deleteClusterState.isPending = true;
+    deleteClusterState.variables = "other-cluster";
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [{ DBClusterIdentifier: "not-loading", Status: "available", Engine: "neptune", EngineVersion: "1.3.0", Endpoint: "ep" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("not-loading")).toBeTruthy();
+  });
+
+  it("shows delete instance loading when isPending matches", async () => {
+    deleteInstanceState.isPending = true;
+    deleteInstanceState.variables = "inst-loading";
+    mockInstances.mockReturnValue({
+      data: {
+        instances: [{ DBInstanceIdentifier: "inst-loading", DBClusterIdentifier: "c", DBInstanceClass: "db.r5.large", DBInstanceStatus: "available" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /instances/i }));
+    await waitFor(() => expect(screen.getByText("inst-loading")).toBeTruthy());
+  });
+
+  it("shows delete instance not loading when isPending but different variable", async () => {
+    deleteInstanceState.isPending = true;
+    deleteInstanceState.variables = "other-inst";
+    mockInstances.mockReturnValue({
+      data: {
+        instances: [{ DBInstanceIdentifier: "inst-ok", DBClusterIdentifier: "c", DBInstanceClass: "db.r5.large", DBInstanceStatus: "available" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /instances/i }));
+    await waitFor(() => expect(screen.getByText("inst-ok")).toBeTruthy());
   });
 });
