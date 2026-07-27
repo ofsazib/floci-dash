@@ -537,3 +537,85 @@ describe("CodeBuildDashboard — curated images", () => {
     expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(1);
   });
 });
+
+describe("CodeBuildDashboard — data edge cases", () => {
+  it("handles undefined projects in data", () => {
+    mockProjectsHook.mockReturnValue({ data: {}, isLoading: false });
+    render(<CodeBuildDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No CodeBuild project/i)).toBeTruthy();
+  });
+
+  it("handles null projects in data", () => {
+    mockProjectsHook.mockReturnValue({ data: { projects: null }, isLoading: false });
+    render(<CodeBuildDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No CodeBuild project/i)).toBeTruthy();
+  });
+
+  it("handles undefined builds in data", () => {
+    mockBuildsHook.mockReturnValue({ data: {} });
+    render(<CodeBuildDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No builds yet/i)).toBeTruthy();
+  });
+
+  it("handles undefined credentials in data", () => {
+    mockCredentialsHook.mockReturnValue({ data: {} });
+    render(<CodeBuildDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No source credentials/i)).toBeTruthy();
+  });
+
+  it("handles undefined images in data", () => {
+    mockImagesHook.mockReturnValue({ data: {} });
+    render(<CodeBuildDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No curated images/i)).toBeTruthy();
+  });
+
+  it("handles credentials with null sourceCredentialsInfo", () => {
+    mockCredentialsHook.mockReturnValue({ data: { sourceCredentialsInfo: null } });
+    render(<CodeBuildDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No source credentials/i)).toBeTruthy();
+  });
+
+  it("handles images with null images", () => {
+    mockImagesHook.mockReturnValue({ data: { images: null } });
+    render(<CodeBuildDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No curated images/i)).toBeTruthy();
+  });
+
+  it("shows dash for project created when both created and createdAt are missing", () => {
+    mockProjectsHook.mockReturnValue({
+      data: {
+        projects: [{ name: "no-date-project", description: "No dates", language: "JS" }],
+      },
+      isLoading: false,
+    });
+    render(<CodeBuildDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("no-date-project")).toBeTruthy();
+    expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("CodeBuildDashboard — loading states", () => {
+  it("shows start build not-loading when isPending but different variable", () => {
+    startBuildState.isPending = true;
+    startBuildState.variables = "other-project";
+    mockProjectsHook.mockReturnValue({
+      data: { projects: [{ name: "my-project", description: "Test", language: "Python" }] },
+      isLoading: false,
+    });
+    render(<CodeBuildDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("my-project")).toBeTruthy();
+    expect(screen.getByText("Start build")).toBeTruthy();
+  });
+
+  it("shows delete project not-loading when isPending but different variable", () => {
+    deleteProjectState.isPending = true;
+    deleteProjectState.variables = "other-project";
+    mockProjectsHook.mockReturnValue({
+      data: { projects: [{ name: "my-project", description: "Test", language: "Python" }] },
+      isLoading: false,
+    });
+    render(<CodeBuildDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("my-project")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Delete my-project/i })).toBeTruthy();
+  });
+});
