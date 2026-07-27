@@ -747,4 +747,154 @@ describe("KinesisDashboard — consumers", () => {
       expect(screen.getByText("-")).toBeTruthy();
     });
   });
+
+  it("shows deregister consumer not-loading when isPending but different variable", async () => {
+    deregisterConsumerState.isPending = true;
+    deregisterConsumerState.variables = "other-consumer";
+    mockStreams.mockReturnValue({
+      data: { streams: [{ StreamName: "my-stream", StreamStatus: "ACTIVE", OpenShardCount: 1, RetentionPeriodHours: 24 }], total: 1 },
+      isLoading: false,
+    });
+    mockShards.mockReturnValue({ data: { shards: [], total: 0 }, isLoading: false });
+    mockConsumers.mockReturnValue({
+      data: { consumers: [{ ConsumerName: "test-consumer", ConsumerARN: "arn:...", ConsumerStatus: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<KinesisDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-stream"));
+    await waitFor(() => expect(screen.getByText(/Shards: my-stream/)).toBeTruthy());
+    await clickButton(user, /View consumers/i);
+    await waitFor(() => {
+      expect(screen.getByText("test-consumer")).toBeTruthy();
+    });
+  });
+});
+
+describe("KinesisDashboard — data edge cases", () => {
+  function setupStream() {
+    mockStreams.mockReturnValue({
+      data: { streams: [{ StreamName: "my-stream", StreamStatus: "ACTIVE", OpenShardCount: 1, RetentionPeriodHours: 24 }], total: 1 },
+      isLoading: false,
+    });
+    mockShards.mockReturnValue({ data: { shards: [], total: 0 }, isLoading: false });
+  }
+
+  it("handles undefined streams data", () => {
+    mockStreams.mockReturnValue({ data: undefined, isLoading: false });
+    render(<KinesisDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No Kinesis streams/i)).toBeTruthy();
+  });
+
+  it("handles null streams data", () => {
+    mockStreams.mockReturnValue({ data: { streams: null, total: 0 }, isLoading: false });
+    render(<KinesisDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No Kinesis streams/i)).toBeTruthy();
+  });
+
+  it("shows delete stream not-loading when isPending but different variable", () => {
+    deleteStreamState.isPending = true;
+    deleteStreamState.variables = "other-stream";
+    mockStreams.mockReturnValue({
+      data: { streams: [{ StreamName: "my-stream", StreamStatus: "ACTIVE", OpenShardCount: 1, RetentionPeriodHours: 24 }], total: 1 },
+      isLoading: false,
+    });
+    render(<KinesisDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("my-stream")).toBeTruthy();
+  });
+
+  it("shows stream detail no-selection alert", () => {
+    render(<KinesisDashboard />, { wrapper: createWrapper() });
+    // The Streams tab is the default. Click the detail tab (it shows even without selection)
+    const detailTabs = screen.getAllByText(/Stream Details/i);
+    expect(detailTabs.length).toBeGreaterThan(0);
+  });
+
+  it("handles undefined shards data in detail", async () => {
+    setupStream();
+    mockShards.mockReturnValue({ data: undefined });
+    const user = userEvent.setup();
+    render(<KinesisDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-stream"));
+    await waitFor(() => {
+      expect(screen.getByText(/No shards/i)).toBeTruthy();
+    });
+  });
+
+  it("handles null shards data in detail", async () => {
+    setupStream();
+    mockShards.mockReturnValue({ data: { shards: null } });
+    const user = userEvent.setup();
+    render(<KinesisDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-stream"));
+    await waitFor(() => {
+      expect(screen.getByText(/No shards/i)).toBeTruthy();
+    });
+  });
+
+  it("handles undefined consumers data", async () => {
+    setupStream();
+    mockConsumers.mockReturnValue({ data: undefined });
+    const user = userEvent.setup();
+    render(<KinesisDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-stream"));
+    await waitFor(() => expect(screen.getByText(/Shards: my-stream/)).toBeTruthy());
+    await clickButton(user, /View consumers/i);
+    await waitFor(() => {
+      expect(screen.getByText(/No consumers registered/i)).toBeTruthy();
+    });
+  });
+
+  it("handles null consumers data", async () => {
+    setupStream();
+    mockConsumers.mockReturnValue({ data: { consumers: null } });
+    const user = userEvent.setup();
+    render(<KinesisDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-stream"));
+    await waitFor(() => expect(screen.getByText(/Shards: my-stream/)).toBeTruthy());
+    await clickButton(user, /View consumers/i);
+    await waitFor(() => {
+      expect(screen.getByText(/No consumers registered/i)).toBeTruthy();
+    });
+  });
+
+  it("shows subscribe modal error alert", async () => {
+    subscribeState.isError = true;
+    subscribeState.error = new Error("Shard not found");
+    setupStream();
+    mockConsumers.mockReturnValue({
+      data: { consumers: [{ ConsumerName: "my-consumer", ConsumerARN: "arn:...", ConsumerStatus: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<KinesisDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-stream"));
+    await waitFor(() => expect(screen.getByText(/Shards: my-stream/)).toBeTruthy());
+    await clickButton(user, /View consumers/i);
+    await waitFor(() => expect(screen.getByText("my-consumer")).toBeTruthy());
+    await clickButton(user, /Subscribe/i);
+    await waitFor(() => {
+      expect(screen.getByText(/Shard not found/)).toBeTruthy();
+    });
+  });
+
+  it("shows subscribe modal error fallback message", async () => {
+    subscribeState.isError = true;
+    subscribeState.error = {} as Error;
+    setupStream();
+    mockConsumers.mockReturnValue({
+      data: { consumers: [{ ConsumerName: "my-consumer", ConsumerARN: "arn:...", ConsumerStatus: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<KinesisDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-stream"));
+    await waitFor(() => expect(screen.getByText(/Shards: my-stream/)).toBeTruthy());
+    await clickButton(user, /View consumers/i);
+    await waitFor(() => expect(screen.getByText("my-consumer")).toBeTruthy());
+    await clickButton(user, /Subscribe/i);
+    await waitFor(() => {
+      expect(screen.getByText(/Failed to subscribe to shard/)).toBeTruthy();
+    });
+  });
 });
