@@ -687,3 +687,110 @@ describe("SchedulerDashboard — submit flows", () => {
     });
   });
 });
+
+describe("SchedulerDashboard — data edge cases", () => {
+  beforeEach(() => {
+    mockGroups.mockReturnValue({
+      data: { groups: [{ Name: "my-group", State: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    mockSchedules.mockReturnValue({ data: { schedules: [], total: 0 }, isLoading: false });
+  });
+
+  it("handles groups error state (renders without crashing)", () => {
+    groupsHookState.isError = true;
+    groupsHookState.error = new Error("Failed to load groups");
+    mockGroups.mockReturnValue({ data: undefined, isLoading: false });
+    render(<SchedulerDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No schedule groups found/i)).toBeTruthy();
+  });
+
+  it("handles undefined groups data", () => {
+    mockGroups.mockReturnValue({ data: undefined, isLoading: false });
+    render(<SchedulerDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No schedule groups found/i)).toBeTruthy();
+  });
+
+  it("handles null groups data", () => {
+    mockGroups.mockReturnValue({ data: { groups: null, total: 0 }, isLoading: false });
+    render(<SchedulerDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No schedule groups found/i)).toBeTruthy();
+  });
+
+  it("handles undefined schedules data in detail", async () => {
+    mockSchedules.mockReturnValue({ data: undefined });
+    const user = userEvent.setup();
+    render(<SchedulerDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-group")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-group" }));
+    await waitFor(() => expect(screen.getByText(/No schedules in this group/)).toBeTruthy());
+  });
+
+  it("handles null schedules data in detail", async () => {
+    mockSchedules.mockReturnValue({ data: { schedules: null } });
+    const user = userEvent.setup();
+    render(<SchedulerDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-group")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-group" }));
+    await waitFor(() => expect(screen.getByText(/No schedules in this group/)).toBeTruthy());
+  });
+
+  it("shows create schedule error fallback message", async () => {
+    createScheduleState.isError = true;
+    createScheduleState.error = {} as Error;
+    const user = userEvent.setup();
+    render(<SchedulerDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-group")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-group" }));
+    await waitFor(() => expect(screen.getByText(/Back to Schedule Groups/)).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create schedule")).toBeTruthy());
+    expect(screen.getByText(/Failed to create schedule/)).toBeTruthy();
+    createScheduleState.isError = false;
+    createScheduleState.error = null;
+  });
+
+  it("shows update schedule error fallback message", async () => {
+    updateScheduleState.isError = true;
+    updateScheduleState.error = {} as Error;
+    mockSchedules.mockReturnValue({
+      data: { schedules: [{ Name: "edit-me", ScheduleExpression: "rate(1 hour)" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<SchedulerDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-group")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-group" }));
+    await waitFor(() => expect(screen.getByText("edit-me")).toBeTruthy());
+    const editBtn = screen.getByRole("button", { name: /Edit edit-me/i });
+    await user.click(editBtn);
+    await waitFor(() => expect(screen.getByText(/Edit schedule: edit-me/)).toBeTruthy());
+    expect(screen.getByText(/Failed to update schedule/)).toBeTruthy();
+  });
+
+  it("shows delete schedule loading state", async () => {
+    deleteScheduleState.isPending = true;
+    mockSchedules.mockReturnValue({
+      data: { schedules: [{ Name: "schedule-1", ScheduleExpression: "rate(1 min)" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<SchedulerDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-group")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-group" }));
+    await waitFor(() => expect(screen.getByText("schedule-1")).toBeTruthy());
+  });
+
+  it("shows update schedule loading state", async () => {
+    updateScheduleState.isPending = true;
+    mockSchedules.mockReturnValue({
+      data: { schedules: [{ Name: "edit-me", ScheduleExpression: "rate(1 hour)" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<SchedulerDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-group")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-group" }));
+    await waitFor(() => expect(screen.getByText("edit-me")).toBeTruthy());
+  });
+});
