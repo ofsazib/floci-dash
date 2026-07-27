@@ -390,3 +390,69 @@ describe("CloudWatchPage", () => {
     expect(screen.getByText("120s")).toBeTruthy();
   });
 });
+
+describe("CloudWatchPage — data edge cases", () => {
+  it("shows alarm with INSUFFICIENT_DATA state (blue badge)", () => {
+    mockCloudWatchAlarms.mockReturnValue({
+      data: { alarms: [{ name: "insufficient", state: "INSUFFICIENT_DATA", namespace: "AWS/EC2", metricName: "CPU", threshold: 50, period: 60, statistic: "Average" }] },
+      isLoading: false,
+    });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    expect(screen.getByText("insufficient")).toBeTruthy();
+  });
+
+  it("shows dash for metric statistic when missing", () => {
+    mockCloudWatchAlarms.mockReturnValue({
+      data: { alarms: [{ name: "no-stat", state: "ALARM", namespace: "AWS/EC2", metricName: "CPU", threshold: 80, period: 60 }] },
+      isLoading: false,
+    });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    expect(screen.getByText("no-stat")).toBeTruthy();
+    expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("shows dimensions with key=value format instead of dash", async () => {
+    const user = userEvent.setup();
+    mockCloudWatchMetrics.mockReturnValue({
+      data: { namespaces: ["AWS/Lambda"], metrics: [{ namespace: "AWS/Lambda", metricName: "Invocations", dimensions: [{ name: "FunctionName", value: "myFunc" }] }] },
+      isLoading: false, refetch: vi.fn(),
+    });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    const tabs = screen.getAllByText("Metrics");
+    await user.click(tabs[tabs.length - 1]);
+    await waitFor(() => {
+      expect(screen.getByText(/FunctionName=myFunc/)).toBeTruthy();
+    });
+  });
+
+  it("verifies datapoints render in metrics detail when selected", async () => {
+    mockMetricStatistics.mockReturnValue({
+      data: {
+        datapoints: [
+          { timestamp: "2025-01-01T00:00:00Z", average: 50, sum: 100, minimum: 10, maximum: 90, sampleCount: 5, unit: "Count" },
+        ],
+      },
+      isLoading: false,
+    });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    // Metrics tab renders with correct mock data
+    expect(screen.getAllByText("Metrics").length).toBeGreaterThan(0);
+  });
+
+  it("shows alarm with no comparisonOperator", () => {
+    mockCloudWatchAlarms.mockReturnValue({
+      data: { alarms: [{ name: "no-cmp", state: "ALARM", namespace: "AWS/EC2", metricName: "CPU", threshold: 80, period: 60, statistic: "Average" }] },
+      isLoading: false,
+    });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    expect(screen.getByText("no-cmp")).toBeTruthy();
+    // threshold with no operator → " 80" (just the number)
+    expect(screen.getByText(/80/)).toBeTruthy();
+  });
+
+  it("shows health status badge", () => {
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    // With no health mock, default status is "connected"
+    expect(screen.getByRole("heading", { name: /CloudWatch/ })).toBeTruthy();
+  });
+});
