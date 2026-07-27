@@ -150,4 +150,149 @@ describe("NeptuneDashboard", () => {
     await user.type(filterInput, "beta");
     await waitFor(() => expect(screen.queryByText("alpha")).toBeNull());
   });
+
+  // ─── Cluster edge cases ──────────────────────────────
+
+  it("shows dash for missing cluster engine version", () => {
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [{ DBClusterIdentifier: "no-ver", Status: "available", Engine: "neptune" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const { container } = render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("no-ver")).toBeTruthy();
+    // EngineVersion missing → "-" should appear
+    const dashes = container.querySelectorAll("td");
+    const dashTexts = Array.from(dashes).map((d) => d.textContent);
+    expect(dashTexts.filter((t) => t === "-").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("shows dash for missing cluster endpoint", () => {
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [{ DBClusterIdentifier: "no-ep", Status: "available", Engine: "neptune", EngineVersion: "1.3.0" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const { container } = render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("no-ep")).toBeTruthy();
+    const dashes = container.querySelectorAll("td");
+    const dashTexts = Array.from(dashes).map((d) => d.textContent);
+    expect(dashTexts.filter((t) => t === "-").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("shows zero members when DBClusterMembers is undefined", () => {
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [{ DBClusterIdentifier: "no-members", Status: "available", Engine: "neptune", EngineVersion: "1.3.0", Endpoint: "ep" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("0")).toBeTruthy();
+  });
+
+  // ─── Instance edge cases ─────────────────────────────
+
+  it("shows dash for missing instance cluster identifier", async () => {
+    mockInstances.mockReturnValue({
+      data: {
+        instances: [{ DBInstanceIdentifier: "no-cluster", DBInstanceClass: "db.r5.large", DBInstanceStatus: "available" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /instances/i }));
+    await waitFor(() => expect(screen.getByText("no-cluster")).toBeTruthy());
+    // Missing DBClusterIdentifier → "-" (use getAllByText since multiple dashes may exist)
+    expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("shows dash for missing instance class", async () => {
+    mockInstances.mockReturnValue({
+      data: {
+        instances: [{ DBInstanceIdentifier: "no-class", DBClusterIdentifier: "c1", DBInstanceStatus: "available" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /instances/i }));
+    await waitFor(() => expect(screen.getByText("no-class")).toBeTruthy());
+    const dashes = document.querySelectorAll("td");
+    const dashTexts = Array.from(dashes).map((d) => d.textContent);
+    expect(dashTexts.filter((t) => t === "-").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("shows dash for missing instance status", async () => {
+    mockInstances.mockReturnValue({
+      data: {
+        instances: [{ DBInstanceIdentifier: "no-status", DBClusterIdentifier: "c1", DBInstanceClass: "db.r5.large" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /instances/i }));
+    await waitFor(() => expect(screen.getByText("no-status")).toBeTruthy());
+    const dashes = document.querySelectorAll("td");
+    const dashTexts = Array.from(dashes).map((d) => d.textContent);
+    expect(dashTexts.filter((t) => t === "-").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("shows dash for missing instance endpoint address", async () => {
+    mockInstances.mockReturnValue({
+      data: {
+        instances: [{ DBInstanceIdentifier: "no-ep", DBClusterIdentifier: "c1", DBInstanceClass: "db.r5.large", DBInstanceStatus: "available", Endpoint: {} }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /instances/i }));
+    await waitFor(() => expect(screen.getByText("no-ep")).toBeTruthy());
+    const dashes = document.querySelectorAll("td");
+    const dashTexts = Array.from(dashes).map((d) => d.textContent);
+    expect(dashTexts.filter((t) => t === "-").length).toBeGreaterThanOrEqual(1);
+  });
+
+  // ─── Instances loading & filter ──────────────────────
+
+  it("shows loading skeleton when instances load", async () => {
+    mockInstances.mockReturnValue({ data: undefined, isLoading: true });
+    const user = userEvent.setup();
+    const { container } = render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /instances/i }));
+    await waitFor(() => expect(container.querySelectorAll("div").length).toBeGreaterThan(0));
+  });
+
+  it("filters instances by name", async () => {
+    mockInstances.mockReturnValue({
+      data: {
+        instances: [
+          { DBInstanceIdentifier: "inst-alpha", DBClusterIdentifier: "c", DBInstanceClass: "db.r5.large", DBInstanceStatus: "available" },
+          { DBInstanceIdentifier: "inst-beta", DBClusterIdentifier: "c", DBInstanceClass: "db.r5.large", DBInstanceStatus: "available" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /instances/i }));
+    await waitFor(() => expect(screen.getByText("inst-alpha")).toBeTruthy());
+
+    const filterInput = screen.getByPlaceholderText("Find instances");
+    await user.type(filterInput, "beta");
+    await waitFor(() => expect(screen.queryByText("inst-alpha")).toBeNull());
+  });
 });
