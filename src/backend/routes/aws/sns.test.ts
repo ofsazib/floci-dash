@@ -162,6 +162,13 @@ describe("SNS Routes", () => {
       expect((await res.json()).updated).toBe(true);
     });
 
+    it("PUT /topics/attributes — 400 when topicArn missing", async () => {
+      const res = await put("/topics/attributes", {});
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe("topicArn query parameter required");
+    });
+
     it("GET /topics/tags — lists topic tags", async () => {
       mockSend.mockResolvedValueOnce({
         Tags: [{ Key: "env", Value: "test" }],
@@ -184,6 +191,13 @@ describe("SNS Routes", () => {
       expect((await res.json()).tagged).toBe(true);
     });
 
+    it("POST /topics/tags — 400 when topicArn missing", async () => {
+      const res = await post("/topics/tags", { tags: [{ Key: "env", Value: "test" }] });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe("topicArn query parameter required");
+    });
+
     it("DELETE /topics/tags — untags a topic", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await del(
@@ -191,6 +205,20 @@ describe("SNS Routes", () => {
       );
       expect(res.status).toBe(200);
       expect((await res.json()).untagged).toBe(true);
+    });
+
+    it("DELETE /topics/tags — 400 when topicArn missing", async () => {
+      const res = await del("/topics/tags");
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe("topicArn query parameter required");
+    });
+
+    it("DELETE /topics/tags — 400 when tagKeys missing", async () => {
+      const res = await del("/topics/tags?topicArn=arn:aws:sns:us-east-1:000000000000:my-topic");
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe("tagKeys query parameter required");
     });
 
     it("POST /topics/publish — publishes to a topic", async () => {
@@ -213,6 +241,19 @@ describe("SNS Routes", () => {
       expect(res.status).toBe(400);
     });
 
+    it("POST /topics/publish — handles missing optional fields (subject)", async () => {
+      mockSend.mockResolvedValueOnce({ MessageId: "msg-no-subject" });
+      const res = await post("/topics/publish", {
+        topicArn: "arn:aws:sns:...:my-topic",
+        message: "Hello without subject",
+      });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.messageId).toBe("msg-no-subject");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.Subject).toBe("");
+    });
+
     it("POST /topics/publish-batch — publishes batch", async () => {
       mockSend.mockResolvedValueOnce({
         Successful: [{ Id: "1", MessageId: "m1" }],
@@ -226,6 +267,18 @@ describe("SNS Routes", () => {
       const body = await res.json();
       expect(body.successful).toHaveLength(1);
       expect(body.failed).toHaveLength(1);
+    });
+
+    it("POST /topics/publish-batch — handles undefined Successful and Failed", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/topics/publish-batch", {
+        topicArn: "arn:aws:sns:...:my-topic",
+        entries: [{ Id: "1", Message: "hello" }],
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.successful).toEqual([]);
+      expect(body.failed).toEqual([]);
     });
   });
 
@@ -302,6 +355,14 @@ describe("SNS Routes", () => {
       expect(body.attributes.RawMessageDelivery).toBe("true");
     });
 
+    it("GET /subscriptions/attributes — handles undefined Attributes", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/subscriptions/attributes?subscriptionArn=arn:aws:sns:...:sub");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.attributes).toEqual({});
+    });
+
     it("GET /subscriptions/attributes — 400 when arn missing", async () => {
       const res = await get("/subscriptions/attributes");
       expect(res.status).toBe(400);
@@ -336,6 +397,14 @@ describe("SNS Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.platformApplications).toHaveLength(1);
+    });
+
+    it("GET /platform-apps — handles undefined PlatformApplications", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/platform-apps");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.platformApplications).toEqual([]);
     });
 
     it("POST /platform-apps — creates platform app", async () => {
@@ -374,6 +443,14 @@ describe("SNS Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.endpoints).toHaveLength(1);
+    });
+
+    it("GET /platform-apps/endpoints — handles undefined Endpoints", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/platform-apps/endpoints?arn=arn:aws:sns:...:app/GCM/my-app");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.endpoints).toEqual([]);
     });
 
     it("GET /platform-apps/endpoints — 400 when arn missing", async () => {
