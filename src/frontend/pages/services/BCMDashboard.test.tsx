@@ -355,4 +355,170 @@ describe("BCMDashboard — tables", () => {
     render(<BCMDashboard />, { wrapper: createWrapper() });
     expect(screen.getByText(/No tables available/i)).toBeTruthy();
   });
+
+  it("shows tables header with total counter", () => {
+    mockTables.mockReturnValue({
+      data: {
+        tables: [{ TableName: "t1" }, { TableName: "t2" }],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    render(<BCMDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("2")).toBeTruthy();
+  });
+
+  it("handles undefined tables data", () => {
+    mockTables.mockReturnValue({ data: undefined });
+    render(<BCMDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No tables available/i)).toBeTruthy();
+  });
+
+  it("handles null tables in data", () => {
+    mockTables.mockReturnValue({ data: { tables: null, total: 0 } });
+    render(<BCMDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No tables available/i)).toBeTruthy();
+  });
+
 });
+
+describe("BCMDashboard — export executions edge cases", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    createExportState.isError = false;
+    createExportState.error = null;
+    mockExports.mockReturnValue({
+      data: {
+        exports: [
+          { ExportArn: "arn:aws:bcm-data-exports:us-east-1:123:export/edge-test", Name: "EdgeExport" },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockTables.mockReturnValue({ data: { tables: [], total: 0 } });
+  });
+
+  async function openExecutions(user: any) {
+    render(<BCMDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("EdgeExport")).toBeTruthy());
+    await user.click(screen.getByText("EdgeExport"));
+    await waitFor(() => expect(screen.getByText(/Executions for/)).toBeTruthy());
+  }
+
+  it("shows loading state for executions", async () => {
+    mockExportExecutions.mockReturnValue({ data: undefined, isLoading: true });
+    const user = userEvent.setup();
+    await openExecutions(user);
+    expect(screen.getByText(/Executions for/)).toBeTruthy();
+  });
+
+  it("shows executions with null fields rendering as em-dash", async () => {
+    mockExportExecutions.mockReturnValue({
+      data: {
+        executions: [
+          { ExecutionId: null, Status: null, CreatedAt: null },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    await openExecutions(user);
+    const dashes = screen.getAllByText("\u2014");
+    expect(dashes.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("shows executions with missing fields (undefined)", async () => {
+    mockExportExecutions.mockReturnValue({
+      data: {
+        executions: [{}],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    await openExecutions(user);
+    const dashes = screen.getAllByText("\u2014");
+    expect(dashes.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("shows empty states for undefined executions data", async () => {
+    mockExportExecutions.mockReturnValue({ data: undefined });
+    const user = userEvent.setup();
+    await openExecutions(user);
+    expect(screen.getByText(/No executions found/i)).toBeTruthy();
+  });
+
+  it("shows empty states for null executions in data", async () => {
+    mockExportExecutions.mockReturnValue({ data: { executions: null } });
+    const user = userEvent.setup();
+    await openExecutions(user);
+    expect(screen.getByText(/No executions found/i)).toBeTruthy();
+  });
+});
+
+describe("BCMDashboard — edge cases", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    createExportState.isError = false;
+    createExportState.error = null;
+    mockExports.mockReturnValue({
+      data: {
+        exports: [
+          { ExportArn: "arn:aws:bcm-data-exports:us-east-1:123:export/del-loading", Name: "DelLoading" },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockTables.mockReturnValue({ data: { tables: [], total: 0 } });
+    mockExportExecutions.mockReturnValue({ data: { executions: [], total: 0 } });
+  });
+
+  it("handles undefined exports data", () => {
+    mockExports.mockReturnValue({ data: undefined, isLoading: false, isError: false, error: null });
+    render(<BCMDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No exports found/i)).toBeTruthy();
+  });
+
+  it("handles null exports in data", () => {
+    mockExports.mockReturnValue({ data: { exports: null, total: 0 }, isLoading: false, isError: false, error: null });
+    render(<BCMDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No exports found/i)).toBeTruthy();
+  });
+
+  it("shows create export error fallback message", async () => {
+    createExportState.isError = true;
+    createExportState.error = {} as Error;
+    const user = userEvent.setup();
+    render(<BCMDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /create/i);
+    await waitFor(() => expect(screen.getByText("Create BCM Data Export")).toBeTruthy());
+    expect(screen.getByText(/Failed to create export/i)).toBeTruthy();
+    createExportState.isError = false;
+    createExportState.error = null;
+  });
+
+  it("renders export list with data filter function", () => {
+    mockExports.mockReturnValue({
+      data: {
+        exports: [
+          { ExportArn: "arn:1", Name: "filter-test" },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<BCMDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("filter-test")).toBeTruthy();
+  });
+
+});
+
