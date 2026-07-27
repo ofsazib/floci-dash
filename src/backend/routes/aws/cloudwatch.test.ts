@@ -146,6 +146,103 @@ describe("CloudWatch Routes", () => {
       expect(body.results).toHaveLength(1);
       expect(body.results[0].id).toBe("m1");
     });
+
+    it("GET /metrics — filters by metricName", async () => {
+      mockSend.mockResolvedValueOnce({
+        Metrics: [{ Namespace: "AWS/Lambda", MetricName: "Invocations", Dimensions: [] }],
+      });
+      const res = await get("/metrics?namespace=AWS/Lambda&metricName=Invocations");
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].MetricName).toBe("Invocations");
+    });
+
+    it("GET /metrics — handles metric without Dimensions property", async () => {
+      mockSend.mockResolvedValueOnce({
+        Metrics: [{ Namespace: "Custom/Test", MetricName: "Latency" }],
+      });
+      const res = await get("/metrics");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(body.metrics[0].dimensions).toEqual([]);
+    });
+
+    it("POST /metrics/data — with statisticValues, timestamps, dimensions", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/metrics/data", {
+        namespace: "Custom/Test",
+        metricData: [{
+          metricName: "latency",
+          value: 99,
+          unit: "Milliseconds",
+          timestamp: "2025-06-01T00:00:00Z",
+          dimensions: [{ name: "Service", value: "api" }],
+          statisticValues: { sampleCount: 10, sum: 990, minimum: 50, maximum: 150 },
+        }],
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.Namespace).toBe("Custom/Test");
+      expect(cmd.MetricData[0].Timestamp).toBeInstanceOf(Date);
+      expect(cmd.MetricData[0].Dimensions).toEqual([{ Name: "Service", Value: "api" }]);
+      expect(cmd.MetricData[0].StatisticValues.SampleCount).toBe(10);
+      expect(cmd.MetricData[0].StatisticValues.Sum).toBe(990);
+    });
+
+    it("POST /metrics/data — with empty metricData", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/metrics/data", { namespace: "Test", metricData: [] });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].MetricData).toEqual([]);
+    });
+
+    it("GET /metrics/statistics — handles invalid dimensions JSON gracefully", async () => {
+      mockSend.mockResolvedValueOnce({
+        Label: "CPUUtilization",
+        Datapoints: [{ Timestamp: new Date(), Average: 50, Unit: "Percent" }],
+      });
+      const res = await get("/metrics/statistics?namespace=AWS/EC2&metricName=CPUUtilization&dimensions=not-json");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.datapoints).toHaveLength(1);
+      expect(mockSend.mock.calls[0][0].Dimensions).toEqual([]);
+    });
+
+    it("POST /metrics/data/query — with expression only (no metricStat)", async () => {
+      mockSend.mockResolvedValueOnce({
+        MetricDataResults: [{ Id: "expr1", Label: "Expression", StatusCode: "Complete", Timestamps: [], Values: [] }],
+      });
+      const res = await post("/metrics/data/query", {          queries: [{ id: "expr1", expression: `SELECT AVG(CPUUtilization) FROM SCHEMA("AWS/EC2")`, returnData: false }],
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.results).toHaveLength(1);
+      expect(body.results[0].id).toBe("expr1");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.MetricDataQueries[0].MetricStat).toBeUndefined();
+      expect(cmd.MetricDataQueries[0].Expression).toBeDefined();
+      expect(cmd.MetricDataQueries[0].ReturnData).toBe(false);
+    });
+
+    it("POST /metrics/data/query — with dimensions on metricStat", async () => {
+      mockSend.mockResolvedValueOnce({
+        MetricDataResults: [{ Id: "m1", Label: "CPU", StatusCode: "Complete", Timestamps: [new Date()], Values: [50] }],
+      });
+      const res = await post("/metrics/data/query", {
+        queries: [{
+          id: "m1",
+          metricStat: {
+            namespace: "AWS/EC2",
+            metricName: "CPUUtilization",
+            stat: "Average",
+            dimensions: [{ name: "InstanceId", value: "i-001" }],
+          },
+        }],
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.MetricDataQueries[0].MetricStat.Metric.Dimensions).toEqual([{ Name: "InstanceId", Value: "i-001" }]);
+    });
   });
 
   describe("Alarms", () => {
@@ -202,6 +299,69 @@ describe("CloudWatch Routes", () => {
       expect(body.state).toBe("ALARM");
       expect(mockSend.mock.calls[0][0].StateValue).toBe("ALARM");
     });
+
+    it("GET /alarms — filters by prefix", async () => {
+      mockSend.mockResolvedValueOnce({
+        MetricAlarms: [{ AlarmName: "high-cpu", MetricName: "CPUUtilization", Namespace: "AWS/EC2", StateValue: "ALARM", Threshold: 80, ComparisonOperator: "GreaterThanThreshold", Period: 300, Statistic: "Average", AlarmActions: [] }],
+      });
+      const res = await get("/alarms?prefix=high");
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].AlarmNamePrefix).toBe("high");
+    });
+
+    it("GET /alarms — maps alarm with Dimensions", async () => {
+      mockSend.mockResolvedValueOnce({
+        MetricAlarms: [{
+          AlarmName: "dim-alarm",
+          MetricName: "CPUUtilization",
+          Namespace: "AWS/EC2",
+          StateValue: "ALARM",
+          Threshold: 80,
+          ComparisonOperator: "GreaterThanThreshold",
+          Period: 300,
+          Statistic: "Average",
+          AlarmActions: [],
+          Dimensions: [{ Name: "InstanceId", Value: "i-001" }],
+        }],
+      });
+      const res = await get("/alarms");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.alarms[0].dimensions).toEqual([{ name: "InstanceId", value: "i-001" }]);
+    });
+
+    it("POST /alarms — creates alarm with full fields (dimensions, tags, actionsEnabled false)", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/alarms", {
+        name: "full-alarm",
+        description: "Full alarm",
+        metricName: "CPUUtilization",
+        namespace: "AWS/EC2",
+        statistic: "Average",
+        period: 120,
+        evaluationPeriods: 3,
+        datapointsToAlarm: 2,
+        threshold: 90,
+        comparisonOperator: "GreaterThanThreshold",
+        treatMissingData: "ignore",
+        actionsEnabled: false,
+        alarmActions: ["arn:alert"],
+        okActions: ["arn:ok"],
+        unit: "Percent",
+        dimensions: [{ name: "InstanceId", value: "i-001" }],
+        tags: [{ key: "env", value: "prod" }],
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.created).toBe(true);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.ActionsEnabled).toBe(false);
+      expect(cmd.Dimensions).toHaveLength(1);
+      expect(cmd.Tags).toHaveLength(1);
+      expect(cmd.Period).toBe(120);
+      expect(cmd.EvaluationPeriods).toBe(3);
+      expect(cmd.DatapointsToAlarm).toBe(2);
+    });
   });
 
   describe("Tags", () => {
@@ -228,6 +388,13 @@ describe("CloudWatch Routes", () => {
       const body = await res.json();
       expect(body.untagged).toBe(true);
       expect(mockSend.mock.calls[0][0].TagKeys).toEqual(["env"]);
+    });
+
+    it("DELETE /tags/:arn — untags without keys (empty array)", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/tags/my-alarm-arn");
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].TagKeys).toEqual([]);
     });
   });
 });
