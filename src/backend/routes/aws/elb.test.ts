@@ -486,6 +486,15 @@ describe("ELB Routes", () => {
       expect(mockSend.mock.calls[0][0].Tags).toEqual([]);
     });
 
+    it("POST /tags — handles undefined tags (|| {} fallback)", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/tags", {
+        resourceArns: ["arn:lb1"],
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].Tags).toEqual([]);
+    });
+
     it("DELETE /tags — removes tags", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await del("/tags", {
@@ -495,6 +504,17 @@ describe("ELB Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.updated).toBe(true);
+    });
+
+    it("DELETE /tags — handles undefined tagKeys (|| [] fallback)", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/tags", {
+        resourceArns: ["arn:lb1"],
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+      expect(mockSend.mock.calls[0][0].TagKeys).toEqual([]);
     });
   });
 

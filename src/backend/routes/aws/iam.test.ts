@@ -193,6 +193,40 @@ describe("IAM Routes", () => {
       expect(mockSend).toHaveBeenCalledTimes(5);
     });
 
+    it("GET /users/:name — gets user detail with actual access keys and groups", async () => {
+      mockSend
+        .mockResolvedValueOnce({
+          User: {
+            UserName: "admin",
+            Arn: "arn:aws:iam::000000000000:user/admin",
+            UserId: "A1B2C3",
+            Path: "/",
+            CreateDate: new Date("2025-01-01"),
+          },
+        })
+        .mockResolvedValueOnce({ Groups: [{ GroupName: "admins", Arn: "arn:aws:iam::...", GroupId: "G1", Path: "/", CreateDate: new Date("2025-01-01") }] })
+        .mockResolvedValueOnce({}) // undefined AttachedPolicies → || [] fallback
+        .mockResolvedValueOnce({
+          AccessKeyMetadata: [
+            { AccessKeyId: "AKIA123", UserName: "admin", Status: "Active", CreateDate: new Date("2025-01-01") },
+            { AccessKeyId: "AKIA456", UserName: "admin", Status: "Inactive", CreateDate: new Date("2025-03-01") },
+          ],
+        })
+        .mockResolvedValueOnce({ PolicyNames: ["inline-policy-1"] });
+      const res = await get("/users/admin");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.user.name).toBe("admin");
+      expect(body.groups).toHaveLength(1);
+      expect(body.groups[0].name).toBe("admins");
+      expect(body.attachedPolicies).toEqual([]);
+      expect(body.accessKeys).toHaveLength(2);
+      expect(body.accessKeys[0].accessKeyId).toBe("AKIA123");
+      expect(body.accessKeys[0].status).toBe("Active");
+      expect(body.inlinePolicies).toEqual(["inline-policy-1"]);
+      expect(mockSend).toHaveBeenCalledTimes(5);
+    });
+
     it("POST /users/:name/access-keys — creates access key", async () => {
       mockSend.mockResolvedValueOnce({
         AccessKey: {
@@ -254,6 +288,14 @@ describe("IAM Routes", () => {
       expect(body.put).toBe(true);
       expect(body.policyName).toBe("my-policy");
       expect(mockSend.mock.calls[0][0].PolicyName).toBe("my-policy");
+    });
+
+    it("PUT /users/:name/inline-policies — 400 when document is invalid JSON", async () => {
+      const res = await put("/users/admin/inline-policies", {
+        policyName: "bad-policy",
+        document: "not-json",
+      });
+      expect(res.status).toBe(400);
     });
 
     it("DELETE /users/:name/inline-policies/:policyName — deletes inline policy", async () => {
@@ -340,6 +382,24 @@ describe("IAM Routes", () => {
       const body = await res.json();
       expect(body.role.name).toBe("ec2-role");
       expect(body.role.assumeRolePolicyDocument).toBeDefined();
+    });
+
+    it("GET /roles/:name — undefined attached policies (|| [] fallback)", async () => {
+      mockSend
+        .mockResolvedValueOnce({
+          Role: {
+            RoleName: "no-policy-role",
+            Arn: "arn:aws:iam::000000000000:role/no-policy-role",
+            RoleId: "R2",
+            Path: "/",
+            CreateDate: new Date("2025-01-01"),
+          },
+        })
+        .mockResolvedValueOnce({}) // undefined AttachedPolicies → || []
+        .mockResolvedValueOnce({ Tags: [] });
+      const res = await get("/roles/no-policy-role");
+      const body = await res.json();
+      expect(body.attachedPolicies).toEqual([]);
     });
   });
 
