@@ -1254,4 +1254,93 @@ describe("AutoScalingDashboard — describe types empty results", () => {
       expect(dashCount).toBeGreaterThanOrEqual(4);
     });
   });
+
+  // ─── Lifecycle hook transition/result branches ────────
+
+describe("AutoScalingDashboard — lifecycle hook branches", () => {
+  beforeEach(() => {
+    setupASGForAdvanced();
+  });
+
+  it("creates lifecycle hook with TERMINATING transition", async () => {
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await selectASG(user, "my-asg");
+    await user.click(screen.getAllByText(/Create hook/)[0]);
+    await waitFor(() => expect(screen.getByText(/Create Lifecycle Hook/)).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-hook"), "terminate-hook");
+    // Select TERMINATING transition (use getAllByText since describe types also shows it)
+    const launchMatches = screen.getAllByText("autoscaling:EC2_INSTANCE_LAUNCHING");
+    await user.click(launchMatches[launchMatches.length - 1]);
+    await waitFor(() => expect(screen.getByText("autoscaling:EC2_INSTANCE_TERMINATING")).toBeTruthy());
+    await user.click(screen.getByText("autoscaling:EC2_INSTANCE_TERMINATING"));
+    await user.click(screen.getByRole("button", { name: /Create$/ }));
+    await waitFor(() => {
+      expect(mockPutHook).toHaveBeenCalledWith(
+        expect.objectContaining({
+          lifecycleHookName: "terminate-hook",
+          lifecycleTransition: "autoscaling:EC2_INSTANCE_TERMINATING",
+        }),
+        expect.any(Object),
+      );
+    });
+  });
+
+  it("creates lifecycle hook with CONTINUE result", async () => {
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await selectASG(user, "my-asg");
+    await user.click(screen.getAllByText(/Create hook/)[0]);
+    await waitFor(() => expect(screen.getByText(/Create Lifecycle Hook/)).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-hook"), "continue-hook");
+    // Select CONTINUE result (default is ABANDON)
+    const resultTrigger = screen.getByText("ABANDON");
+    await user.click(resultTrigger);
+    await waitFor(() => expect(screen.getByText("CONTINUE")).toBeTruthy());
+    await user.click(screen.getByText("CONTINUE"));
+    await user.click(screen.getByRole("button", { name: /Create$/ }));
+    await waitFor(() => {
+      expect(mockPutHook).toHaveBeenCalledWith(
+        expect.objectContaining({
+          lifecycleHookName: "continue-hook",
+          defaultResult: "CONTINUE",
+        }),
+        expect.any(Object),
+      );
+    });
+  });
+
+  it("cancels create lifecycle hook modal", async () => {
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await selectASG(user, "my-asg");
+    await user.click(screen.getAllByText(/Create hook/)[0]);
+    await waitFor(() => expect(screen.getByText(/Create Lifecycle Hook/)).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /^Cancel$/ }));
+    await waitFor(() => {
+      expect(mockPutHook).not.toHaveBeenCalled();
+    });
+  });
+
+  it("completes lifecycle action with CONTINUE result", async () => {
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await selectASG(user, "my-asg");
+    await user.click(screen.getAllByText(/Complete action/)[0]);
+    await waitFor(() => expect(screen.getByText(/Complete Lifecycle Action/)).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-hook"), "continue-hook");
+    // Default is CONTINUE, just submit
+    await user.click(screen.getByRole("button", { name: /Complete$/ }));
+    await waitFor(() => {
+      expect(mockCompleteAction).toHaveBeenCalledWith(
+        expect.objectContaining({ lifecycleActionResult: "CONTINUE" }),
+        expect.any(Object),
+      );
+    });
+  });
+});
 });
