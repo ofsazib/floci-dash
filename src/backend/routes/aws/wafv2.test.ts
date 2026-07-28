@@ -25,6 +25,7 @@ vi.mock("@aws-sdk/client-wafv2", () => ({
   ListIPSetsCommand: createCmd("ListIPSetsCommand"),
   CreateIPSetCommand: createCmd("CreateIPSetCommand"),
   GetIPSetCommand: createCmd("GetIPSetCommand"),
+  UpdateIPSetCommand: createCmd("UpdateIPSetCommand"),
   DeleteIPSetCommand: createCmd("DeleteIPSetCommand"),
   ListRegexPatternSetsCommand: createCmd("ListRegexPatternSetsCommand"),
   CreateRegexPatternSetCommand: createCmd("CreateRegexPatternSetCommand"),
@@ -34,6 +35,7 @@ vi.mock("@aws-sdk/client-wafv2", () => ({
   ListRuleGroupsCommand: createCmd("ListRuleGroupsCommand"),
   CreateRuleGroupCommand: createCmd("CreateRuleGroupCommand"),
   GetRuleGroupCommand: createCmd("GetRuleGroupCommand"),
+  UpdateRuleGroupCommand: createCmd("UpdateRuleGroupCommand"),
   DeleteRuleGroupCommand: createCmd("DeleteRuleGroupCommand"),
   ListTagsForResourceCommand: createCmd("ListTagsForResourceCommand"),
   TagResourceCommand: createCmd("TagResourceCommand"),
@@ -140,6 +142,22 @@ describe("WAFv2 Routes — Web ACLs", () => {
     const res = await post("/web-acls/delete", { Id: "id-1", Name: "acl1", Scope: "REGIONAL" });
     expect(res.status).toBe(400);
   });
+
+  it("GET /web-acls/:id — gets web ACL", async () => {
+    mockSend.mockResolvedValueOnce({ WebACL: { Name: "acl1", Id: "id-1", DefaultAction: { Allow: {} } } });
+    const res = await get("/web-acls/id-1?name=acl1&scope=REGIONAL");
+    const json = await res.json();
+    expect(json.webAcl.Name).toBe("acl1");
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetWebACLCommand");
+    expect(mockSend.mock.calls[0][0].Id).toBe("id-1");
+    expect(mockSend.mock.calls[0][0].Name).toBe("acl1");
+    expect(mockSend.mock.calls[0][0].Scope).toBe("REGIONAL");
+  });
+
+  it("GET /web-acls/:id — 400 when name missing", async () => {
+    const res = await get("/web-acls/id-1?scope=REGIONAL");
+    expect(res.status).toBe(400);
+  });
 });
 
 describe("WAFv2 Routes — IP Sets", () => {
@@ -171,6 +189,56 @@ describe("WAFv2 Routes — IP Sets", () => {
 
   it("POST /ip-sets — 400 when Name missing", async () => {
     const res = await post("/ip-sets", { Scope: "REGIONAL" });
+    expect(res.status).toBe(400);
+  });
+
+  it("POST /ip-sets — 400 when Scope missing", async () => {
+    const res = await post("/ip-sets", { Name: "test" });
+    expect(res.status).toBe(400);
+  });
+
+  it("GET /ip-sets/:id — gets IP set", async () => {
+    mockSend.mockResolvedValueOnce({ IPSet: { Name: "set1", Id: "id-1", Addresses: ["10.0.0.0/24"] } });
+    const res = await get("/ip-sets/id-1?name=set1&scope=REGIONAL");
+    const json = await res.json();
+    expect(json.ipSet.Name).toBe("set1");
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetIPSetCommand");
+    expect(mockSend.mock.calls[0][0].Id).toBe("id-1");
+    expect(mockSend.mock.calls[0][0].Name).toBe("set1");
+    expect(mockSend.mock.calls[0][0].Scope).toBe("REGIONAL");
+  });
+
+  it("GET /ip-sets/:id — 400 when name missing", async () => {
+    const res = await get("/ip-sets/id-1");
+    expect(res.status).toBe(400);
+  });
+
+  it("PUT /ip-sets/:id — updates IP set", async () => {
+    mockSend.mockResolvedValueOnce({ LockToken: "lock-2" });
+    const res = await router.request("/ip-sets/id-1", {
+      method: "PUT",
+      body: JSON.stringify({ Name: "set1", Scope: "REGIONAL", LockToken: "lock-1", Addresses: ["192.168.1.0/24"] }),
+      headers: { "content-type": "application/json" },
+    });
+    const json = await res.json();
+    expect(json.updated).toBe(true);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("UpdateIPSetCommand");
+    expect(mockSend.mock.calls[0][0].Id).toBe("id-1");
+    expect(mockSend.mock.calls[0][0].LockToken).toBe("lock-1");
+    expect(mockSend.mock.calls[0][0].Addresses).toEqual(["192.168.1.0/24"]);
+  });
+
+  it("PUT /ip-sets/:id — 400 when LockToken missing", async () => {
+    const res = await router.request("/ip-sets/id-1", {
+      method: "PUT",
+      body: JSON.stringify({ Name: "set1", Scope: "REGIONAL" }),
+      headers: { "content-type": "application/json" },
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("POST /ip-sets/delete — 400 when LockToken missing", async () => {
+    const res = await post("/ip-sets/delete", { Id: "id-1", Name: "set1", Scope: "REGIONAL" });
     expect(res.status).toBe(400);
   });
 
@@ -213,6 +281,11 @@ describe("WAFv2 Routes — Regex Pattern Sets", () => {
 
   it("POST /regex-pattern-sets — 400 when Name missing", async () => {
     const res = await post("/regex-pattern-sets", { Scope: "REGIONAL" });
+    expect(res.status).toBe(400);
+  });
+
+  it("POST /regex-pattern-sets — 400 when Scope missing", async () => {
+    const res = await post("/regex-pattern-sets", { Name: "rx1" });
     expect(res.status).toBe(400);
   });
 
@@ -294,6 +367,52 @@ describe("WAFv2 Routes — Rule Groups", () => {
 
   it("POST /rule-groups — 400 when Name missing", async () => {
     const res = await post("/rule-groups", { Scope: "REGIONAL" });
+    expect(res.status).toBe(400);
+  });
+
+  it("POST /rule-groups — 400 when Scope missing", async () => {
+    const res = await post("/rule-groups", { Name: "rg1" });
+    expect(res.status).toBe(400);
+  });
+
+  it("GET /rule-groups/:id — gets rule group", async () => {
+    mockSend.mockResolvedValueOnce({ RuleGroup: { Name: "rg1", Id: "id-1", Capacity: 100 } });
+    const res = await get("/rule-groups/id-1?name=rg1&scope=REGIONAL");
+    const json = await res.json();
+    expect(json.ruleGroup.Name).toBe("rg1");
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetRuleGroupCommand");
+    expect(mockSend.mock.calls[0][0].Id).toBe("id-1");
+    expect(mockSend.mock.calls[0][0].Name).toBe("rg1");
+    expect(mockSend.mock.calls[0][0].Scope).toBe("REGIONAL");
+  });
+
+  it("GET /rule-groups/:id — 400 when name missing", async () => {
+    const res = await get("/rule-groups/id-1");
+    expect(res.status).toBe(400);
+  });
+
+  it("PUT /rule-groups/:id — updates rule group", async () => {
+    mockSend.mockResolvedValueOnce({ LockToken: "lock-2" });
+    const res = await router.request("/rule-groups/id-1", {
+      method: "PUT",
+      body: JSON.stringify({ Name: "rg1", Scope: "REGIONAL", LockToken: "lock-1", Rules: [{ Name: "rule1", Priority: 1, Statement: {}, Action: { Allow: {} } }] }),
+      headers: { "content-type": "application/json" },
+    });
+    const json = await res.json();
+    expect(json.updated).toBe(true);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("UpdateRuleGroupCommand");
+    expect(mockSend.mock.calls[0][0].Id).toBe("id-1");
+    expect(mockSend.mock.calls[0][0].LockToken).toBe("lock-1");
+    expect(mockSend.mock.calls[0][0].Rules).toHaveLength(1);
+    expect(mockSend.mock.calls[0][0].Rules[0].Name).toBe("rule1");
+  });
+
+  it("PUT /rule-groups/:id — 400 when LockToken missing", async () => {
+    const res = await router.request("/rule-groups/id-1", {
+      method: "PUT",
+      body: JSON.stringify({ Name: "rg1", Scope: "REGIONAL" }),
+      headers: { "content-type": "application/json" },
+    });
     expect(res.status).toBe(400);
   });
 

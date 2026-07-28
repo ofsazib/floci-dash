@@ -29,6 +29,19 @@ import {
   useDeleteWebhook,
   useActionTypes,
   useCreateCustomActionType,
+  useRollbackStage,
+  useOverrideStageCondition,
+  useActionType,
+  useUpdateCustomActionType,
+  useDeleteCustomActionType,
+  usePutActionRevision,
+  useRuleExecutions,
+  useRegisterWebhook,
+  useDeregisterWebhook,
+  usePollForJobs,
+  useAcknowledgeJob,
+  useJobDetails,
+  usePutJobResult,
 } from "./useCodePipeline";
 
 function createWrapper() {
@@ -258,6 +271,54 @@ describe("useCreateWebhook", () => {
   });
 });
 
+describe("useRegisterWebhook", () => {
+  it("calls api with POST method and encoded name", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useRegisterWebhook(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("my-hook");
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/codepipeline/webhooks/my-hook/register",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("invalidates webhooks query on success", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useRegisterWebhook(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync("my-hook");
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["aws", "codepipeline", "webhooks"] });
+  });
+});
+
+describe("useDeregisterWebhook", () => {
+  it("calls api with POST method and encoded name", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useDeregisterWebhook(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("my-hook");
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/codepipeline/webhooks/my-hook/deregister",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("invalidates webhooks query on success", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useDeregisterWebhook(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync("my-hook");
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["aws", "codepipeline", "webhooks"] });
+  });
+});
+
 describe("useDeleteWebhook", () => {
   it("calls api with DELETE method and encoded name", async () => {
     mockApi.mockResolvedValueOnce({});
@@ -433,5 +494,241 @@ describe("useActionExecutions", () => {
     const { result } = renderHook(() => useActionExecutions("my-pipeline", "exec-123"), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith("/aws/codepipeline/pipelines/my-pipeline/actions?executionId=exec-123");
+  });
+});
+
+// ─── ROLLBACK ────────────────────────────────────────────
+
+describe("useRollbackStage", () => {
+  it("calls api with POST method and encoded params", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useRollbackStage(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ name: "my-pipeline", executionId: "exec-1", stageName: "Deploy" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/codepipeline/pipelines/my-pipeline/executions/exec-1/rollback",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("invalidates executions query on success", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useRollbackStage(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync({ name: "my-pipeline", executionId: "exec-1", stageName: "Deploy" });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["aws", "codepipeline", "pipelines", "my-pipeline", "executions"],
+    });
+  });
+});
+
+// ─── OVERRIDE STAGE CONDITION ────────────────────────────
+
+describe("useOverrideStageCondition", () => {
+  it("calls api with POST method and encoded params", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useOverrideStageCondition(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ name: "my-pipeline", executionId: "exec-1", conditionType: "Success" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/codepipeline/pipelines/my-pipeline/executions/exec-1/override",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("invalidates pipeline state query on success", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useOverrideStageCondition(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync({ name: "my-pipeline", executionId: "exec-1", conditionType: "Success" });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["aws", "codepipeline", "pipelines", "my-pipeline", "state"],
+    });
+  });
+});
+
+// ─── RULE EXECUTIONS ─────────────────────────────────────
+
+describe("useRuleExecutions", () => {
+  it("does NOT call api when name is null", () => {
+    renderHook(() => useRuleExecutions(null), { wrapper: createWrapper() });
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api with name in path", async () => {
+    mockApi.mockResolvedValueOnce({ ruleExecutionDetails: [], total: 0 });
+    const { result } = renderHook(() => useRuleExecutions("my-pipeline"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/codepipeline/pipelines/my-pipeline/rules");
+  });
+});
+
+// ─── DELETE WEBHOOK INVALIDATION ─────────────────────────
+
+describe("useDeleteWebhook (invalidation)", () => {
+  it("invalidates webhooks query on success", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useDeleteWebhook(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync("my-hook");
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["aws", "codepipeline", "webhooks"] });
+  });
+});
+
+// ─── DELETE CUSTOM ACTION TYPE ───────────────────────────
+
+describe("useDeleteCustomActionType", () => {
+  it("calls api with DELETE method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useDeleteCustomActionType(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ owner: "test-owner", category: "Build", provider: "MyProvider", version: "1" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/codepipeline/action-types/test-owner/Build/MyProvider/1",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+
+  it("invalidates action types query on success", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useDeleteCustomActionType(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync({ owner: "test-owner", category: "Build", provider: "MyProvider", version: "1" });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["aws", "codepipeline", "action-types"] });
+  });
+});
+
+// ─── UPDATE CUSTOM ACTION TYPE ───────────────────────────
+
+describe("useUpdateCustomActionType", () => {
+  it("calls api with PUT method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useUpdateCustomActionType(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ owner: "test-owner", category: "Build", provider: "MyProvider", version: "1", actionVersion: { description: "Updated" } });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/codepipeline/action-types/test-owner/Build/MyProvider/1",
+      expect.objectContaining({ method: "PUT" }),
+    );
+  });
+
+  it("invalidates action types query on success", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useUpdateCustomActionType(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync({ owner: "test-owner", category: "Build", provider: "MyProvider", version: "1", actionVersion: { description: "Updated" } });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["aws", "codepipeline", "action-types"] });
+  });
+});
+
+// ─── ACTION TYPE QUERY ───────────────────────────────────
+
+describe("useActionType", () => {
+  it("does NOT call api when any param is null", () => {
+    renderHook(() => useActionType(null, null, null, null), { wrapper: createWrapper() });
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api with all encoded params in path", async () => {
+    mockApi.mockResolvedValueOnce({ actionType: {} });
+    const { result } = renderHook(() => useActionType("Custom", "Build", "MyProvider", "1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/codepipeline/action-types/Custom/Build/MyProvider/1");
+  });
+});
+
+// ─── PUT ACTION REVISION ─────────────────────────────────
+
+describe("usePutActionRevision", () => {
+  it("calls api with PUT method and encoded name", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => usePutActionRevision(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ name: "my-pipeline", actionName: "Source", revisionUrl: "https://example.com" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/codepipeline/pipelines/my-pipeline/actions/revision",
+      expect.objectContaining({ method: "PUT" }),
+    );
+  });
+
+  it("invalidates actions query on success", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => usePutActionRevision(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync({ name: "my-pipeline", actionName: "Source", revisionUrl: "https://example.com" });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["aws", "codepipeline", "pipelines", "my-pipeline", "actions"],
+    });
+  });
+});
+
+// ─── JOBS ────────────────────────────────────────────────
+
+describe("usePollForJobs", () => {
+  it("calls api with POST method", async () => {
+    mockApi.mockResolvedValueOnce({ jobs: [] });
+    const { result } = renderHook(() => usePollForJobs(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ category: "Build", provider: "MyProvider", maxBatchSize: 10 });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/codepipeline/action-types/Build/MyProvider/jobs/poll",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+});
+
+describe("useAcknowledgeJob", () => {
+  it("calls api with POST method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useAcknowledgeJob(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ jobId: "job-123", nonce: "abc" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/codepipeline/jobs/job-123/acknowledge",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+});
+
+describe("useJobDetails", () => {
+  it("does NOT call api when jobId is null", () => {
+    renderHook(() => useJobDetails(null), { wrapper: createWrapper() });
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api with jobId in path", async () => {
+    mockApi.mockResolvedValueOnce({ jobDetails: {} });
+    const { result } = renderHook(() => useJobDetails("job-123"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/codepipeline/jobs/job-123");
+  });
+});
+
+describe("usePutJobResult", () => {
+  it("calls api with PUT method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => usePutJobResult(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ jobId: "job-123", result: "Succeeded", executionDetails: { summary: "Done" } });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/codepipeline/jobs/job-123/result",
+      expect.objectContaining({ method: "PUT" }),
+    );
   });
 });
