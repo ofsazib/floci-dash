@@ -78,6 +78,12 @@ const noSuchPublicAccessBlock = vi.hoisted(() => {
   return err;
 });
 
+const unexpectedError = vi.hoisted(() => {
+  const err = new Error("Unexpected");
+  err.name = "InternalError";
+  return err;
+});
+
 beforeEach(() => {
   mockSend.mockReset();
   mockSend.mockResolvedValue({});
@@ -271,6 +277,14 @@ describe("S3 Config", () => {
       expect(res.status).toBe(400);
     });
 
+    it("GET /buckets/:name/lifecycle — handles rule with Filter Prefix", async () => {
+      mockSend.mockResolvedValueOnce({ Rules: [{ ID: "expire", Status: "Enabled", Filter: { Prefix: "docs/" } }] });
+      const res = await get("/buckets/my-bucket/lifecycle");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.rules[0].prefix).toBe("docs/");
+    });
+
     it("DELETE /buckets/:name/lifecycle — clears rules", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await del("/buckets/my-bucket/lifecycle");
@@ -297,6 +311,12 @@ describe("S3 Config", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.rules).toEqual([]);
+    });
+
+    it("GET /buckets/:name/cors — throws on unexpected error", async () => {
+      mockSend.mockRejectedValueOnce(unexpectedError);
+      const res = await get("/buckets/my-bucket/cors");
+      expect(res.status).toBe(500);
     });
 
     it("PUT /buckets/:name/cors — sets rules", async () => {
@@ -340,6 +360,12 @@ describe("S3 Config", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.configured).toBe(false);
+    });
+
+    it("GET /buckets/:name/website — throws on unexpected error", async () => {
+      mockSend.mockRejectedValueOnce(unexpectedError);
+      const res = await get("/buckets/my-bucket/website");
+      expect(res.status).toBe(500);
     });
 
     it("PUT /buckets/:name/website — sets config", async () => {
@@ -403,6 +429,12 @@ describe("S3 Config", () => {
     it("PUT /buckets/:name/encryption — 400 when algorithm missing", async () => {
       const res = await put("/buckets/my-bucket/encryption", {});
       expect(res.status).toBe(400);
+    });
+
+    it("GET /buckets/:name/encryption — throws on unexpected error", async () => {
+      mockSend.mockRejectedValueOnce(unexpectedError);
+      const res = await get("/buckets/my-bucket/encryption");
+      expect(res.status).toBe(500);
     });
 
     it("DELETE /buckets/:name/encryption — deletes encryption", async () => {
@@ -472,6 +504,12 @@ describe("S3 Config", () => {
       const body = await res.json();
       expect(body.updated).toBe(true);
       expect(mockSend.mock.calls[0][0].PublicAccessBlockConfiguration.BlockPublicAcls).toBe(true);
+    });
+
+    it("GET /buckets/:name/public-access-block — throws on unexpected error", async () => {
+      mockSend.mockRejectedValueOnce(unexpectedError);
+      const res = await get("/buckets/my-bucket/public-access-block");
+      expect(res.status).toBe(500);
     });
 
     it("DELETE /buckets/:name/public-access-block — deletes config", async () => {
@@ -574,6 +612,24 @@ describe("S3 Config", () => {
       const body = await res.json();
       expect(body.updated).toBe(true);
       expect(body.grants).toBe(1);
+    });
+
+    it("PUT /buckets/:name/acl — sets grants with owner", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/buckets/my-bucket/acl", {
+        owner: { ID: "owner1", DisplayName: "Owner" },
+        grants: [{ Grantee: { Type: "CanonicalUser", ID: "owner1" }, Permission: "FULL_CONTROL" }],
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+      expect(body.grants).toBe(1);
+      expect(mockSend.mock.calls[0][0].AccessControlPolicy.Owner.ID).toBe("owner1");
+    });
+
+    it("PUT /buckets/:name/acl — 400 when grants is not an array", async () => {
+      const res = await put("/buckets/my-bucket/acl", { grants: "not-an-array", cannedAcl: null });
+      expect(res.status).toBe(400);
     });
 
     it("PUT /buckets/:name/acl — 400 when no cannedAcl or grants", async () => {

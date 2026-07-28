@@ -223,6 +223,69 @@ describe("s3-select routes", () => {
       });
     });
 
+    it("parses event stream — message without :event-type header (|| '' fallback)", async () => {
+      // A message with no :event-type header — should be silently skipped
+      const unknownMsg = buildEventStreamMessage(
+        { ":message-type": "event" },
+        new TextEncoder().encode("some data")
+      );
+      const endMsg = buildEventStreamMessage(
+        { ":message-type": "event", ":event-type": "End" },
+        new Uint8Array(0)
+      );
+
+      const combined = new Uint8Array(unknownMsg.length + endMsg.length);
+      combined.set(unknownMsg, 0);
+      combined.set(endMsg, unknownMsg.length);
+
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        arrayBuffer: () => Promise.resolve(combined.buffer),
+      });
+      globalThis.fetch = mockFetch;
+
+      const res = await executeRoute("POST", "/buckets/my-bucket/select", {
+        key: "test.csv",
+        expression: "SELECT * FROM S3Object",
+      });
+      const data = await res.json();
+      expect(data.result).toBe("");
+      expect(data.stats).toBeNull();
+    });
+
+    it("parses Stats with missing fields (ternary falsy branch)", async () => {
+      const statsXml = "<Stats><BytesScanned>50</BytesScanned></Stats>";
+      const statsMsg = buildEventStreamMessage(
+        { ":message-type": "event", ":event-type": "Stats", ":content-type": "text/xml" },
+        new TextEncoder().encode(statsXml)
+      );
+      const endMsg = buildEventStreamMessage(
+        { ":message-type": "event", ":event-type": "End" },
+        new Uint8Array(0)
+      );
+
+      const combined = new Uint8Array(statsMsg.length + endMsg.length);
+      combined.set(statsMsg, 0);
+      combined.set(endMsg, statsMsg.length);
+
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        arrayBuffer: () => Promise.resolve(combined.buffer),
+      });
+      globalThis.fetch = mockFetch;
+
+      const res = await executeRoute("POST", "/buckets/my-bucket/select", {
+        key: "test.csv",
+        expression: "SELECT * FROM S3Object",
+      });
+      const data = await res.json();
+      expect(data.stats).toEqual({
+        bytesScanned: 50,
+        bytesProcessed: 0,
+        bytesReturned: 0,
+      });
+    });
+
     it("handles Floci error response", async () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: false,
