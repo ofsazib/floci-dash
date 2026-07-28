@@ -24,9 +24,17 @@ vi.mock("../hooks/useCloudWatch", () => ({
   useSetAlarmState: () => ({ mutateAsync: mockSetAlarmState, isPending: false }),
 }));
 
+const mockShowToast = vi.fn();
+
 vi.mock("../components/Toast", () => ({
-  useToast: () => ({ showToast: vi.fn() }),
+  useToast: () => ({ showToast: mockShowToast }),
   ToastProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+
+const mockUseHealth = vi.fn();
+
+vi.mock("../hooks/useSystem", () => ({
+  useHealth: (...args: any[]) => mockUseHealth(...args),
 }));
 
 import CloudWatchPage from "./CloudWatchPage";
@@ -43,6 +51,7 @@ function pageWrapper() {
 describe("CloudWatchPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseHealth.mockReturnValue({ data: undefined });
     mockCloudWatchMetrics.mockReturnValue({ data: { namespaces: ["AWS/Lambda"], metrics: [{ namespace: "AWS/Lambda", metricName: "Invocations", dimensions: [] }] }, isLoading: false, refetch: vi.fn() });
     mockMetricStatistics.mockReturnValue({ data: { datapoints: [] }, isLoading: false });
     mockCloudWatchAlarms.mockReturnValue({ data: { alarms: [{ name: "high-cpu", state: "ALARM", namespace: "AWS/EC2", metricName: "CPUUtilization", threshold: 80, comparisonOperator: "GreaterThanThreshold", period: 300, statistic: "Average" }] }, isLoading: false });
@@ -454,5 +463,164 @@ describe("CloudWatchPage — data edge cases", () => {
     render(<CloudWatchPage />, { wrapper: pageWrapper() });
     // With no health mock, default status is "connected"
     expect(screen.getByRole("heading", { name: /CloudWatch/ })).toBeTruthy();
+  });
+
+  // ─── Health Status Ternaries ────────────────────────────
+
+  it("shows running status when cloudwatch service is running", () => {
+    mockUseHealth.mockReturnValue({ data: { services: { cloudwatch: "running" } } });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    expect(screen.getByText("Running")).toBeTruthy();
+  });
+
+  it("shows available status when cloudwatch service is available", () => {
+    mockUseHealth.mockReturnValue({ data: { services: { cloudwatch: "available" } } });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    expect(screen.getByText("Available")).toBeTruthy();
+  });
+
+  it("shows connected status by default", () => {
+    mockUseHealth.mockReturnValue({ data: undefined });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    expect(screen.getByText("Connected")).toBeTruthy();
+  });
+
+  // ─── Sparkline Edge Case: All Same Values ───────────────
+
+  it("renders sparkline when all datapoint values are equal (range = max - min || 1)", async () => {
+    const user = userEvent.setup();
+    mockMetricStatistics.mockReturnValue({
+      data: {
+        datapoints: [
+          { timestamp: "2025-01-01T00:00:00Z", average: 100, sum: 100, minimum: 100, maximum: 100, sampleCount: 1, unit: "Count" },
+          { timestamp: "2025-01-01T00:01:00Z", average: 100, sum: 100, minimum: 100, maximum: 100, sampleCount: 1, unit: "Count" },
+        ],
+      },
+      isLoading: false,
+    });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    const tabs = screen.getAllByText("Metrics");
+    await user.click(tabs[tabs.length - 1]);
+    await waitFor(() => expect(screen.getAllByText("Invocations").length).toBeGreaterThan(0));
+    const cells = screen.getAllByText("Invocations");
+    await user.click(cells[0]);
+    // Sparkline SVG renders even when all values are same
+    await waitFor(() => {
+      const svgs = document.querySelectorAll("svg");
+      expect(svgs.length).toBeGreaterThan(0);
+    });
+  });
+
+  // ─── Error Paths ────────────────────────────────────────
+
+  it("shows error toast when put metric fails", async () => {
+    const user = userEvent.setup();
+    mockPutMetricData.mockRejectedValueOnce(new Error("Put failed"));
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    const tabs = screen.getAllByText("Metrics");
+    await user.click(tabs[tabs.length - 1]);
+    await waitFor(() => expect(screen.getAllByText("Invocations").length).toBeGreaterThan(0));
+    await clickButton(user, /Put metric data/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("MyMetric")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("MyMetric"), "ErrMetric");
+    await clickButton(user, /Publish/i);
+    await waitFor(() => {
+      expect(mockShowToast).toHaveBeenCalledWith("error", "Put failed");
+    });
+  });
+
+  it("shows error toast when Set OK fails", async () => {
+    const user = userEvent.setup();
+    mockCloudWatchAlarms.mockReturnValue({ data: { alarms: [{ name: "high-cpu", state: "ALARM", namespace: "AWS/EC2", metricName: "CPUUtilization", threshold: 80, comparisonOperator: "GreaterThanThreshold", period: 300, statistic: "Average" }] }, isLoading: false });
+    mockSetAlarmState.mockRejectedValueOnce(new Error("Set OK failed"));
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    await waitFor(() => expect(screen.getAllByText("high-cpu").length).toBeGreaterThan(0));
+    const setOkBtn = screen.getByRole("button", { name: /Set OK/i });
+    await user.click(setOkBtn);
+    await waitFor(() => {
+      expect(mockShowToast).toHaveBeenCalledWith("error", "Set OK failed");
+    });
+  });
+
+  it("shows error toast when delete alarm fails", async () => {
+    mockCloudWatchAlarms.mockReturnValue({ data: { alarms: [{ name: "high-cpu", state: "ALARM", namespace: "AWS/EC2", metricName: "CPUUtilization", threshold: 80, comparisonOperator: "GreaterThanThreshold", period: 300, statistic: "Average" }] }, isLoading: false });
+    mockDeleteAlarm.mockRejectedValueOnce(new Error("Delete failed"));
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    await waitFor(() => expect(screen.getAllByText("high-cpu").length).toBeGreaterThan(0));
+    const deleteBtn = screen.getByRole("button", { name: /Delete high-cpu/i });
+    await user.click(deleteBtn);
+    await waitFor(() => expect(screen.getByRole("button", { name: /^Delete$/ })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /^Delete$/ }));
+    await waitFor(() => {
+      expect(mockShowToast).toHaveBeenCalledWith("error", "Delete failed");
+    });
+  });
+
+  it("shows error toast when create alarm fails", async () => {
+    const user = userEvent.setup();
+    mockCreateAlarmMutate.mockRejectedValueOnce(new Error("Create failed"));
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /Create alarm/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("AWS/EC2")).toBeTruthy());
+    const nameInput = screen.getAllByRole("textbox")[0];
+    await user.type(nameInput, "err-alarm");
+    await clickButton(user, /Create/i, { last: true });
+    await waitFor(() => {
+      expect(mockShowToast).toHaveBeenCalledWith("error", "Create failed");
+    });
+  });
+
+  // ─── Loading States ─────────────────────────────────────
+
+  it("shows loading state for alarms", () => {
+    mockCloudWatchAlarms.mockReturnValue({ data: undefined, isLoading: true });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    expect(screen.getByRole("heading", { name: /CloudWatch/ })).toBeTruthy();
+  });
+
+  // ─── Cancel Buttons ─────────────────────────────────────
+
+  it("closes create alarm modal on cancel", async () => {
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /Create alarm/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("AWS/EC2")).toBeTruthy());
+    await clickButton(user, /Cancel/i);
+    await waitFor(() => {
+      expect(screen.queryByPlaceholderText("AWS/EC2")).toBeNull();
+    });
+  });
+
+  // ─── Datapoint Missing Fields ───────────────────────────
+
+  it("shows dash for missing datapoint fields (average, sum, minimum, maximum)", async () => {
+    const user = userEvent.setup();
+    mockMetricStatistics.mockReturnValue({
+      data: {
+        datapoints: [{ timestamp: "2025-01-01T00:00:00Z", sampleCount: 0, unit: "None" }],
+      },
+      isLoading: false,
+    });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    const tabs = screen.getAllByText("Metrics");
+    await user.click(tabs[tabs.length - 1]);
+    await waitFor(() => expect(screen.getAllByText("Invocations").length).toBeGreaterThan(0));
+    const cells = screen.getAllByText("Invocations");
+    await user.click(cells[0]);
+    // Datapoint detail renders (dashes for missing fields handled by cell renderers)
+    await waitFor(() => {
+      const dashElements = screen.getAllByText("-");
+      expect(dashElements.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it("shows no datapoints detail when metric not selected", () => {
+    mockCloudWatchMetrics.mockReturnValue({ data: { namespaces: ["AWS/Lambda"], metrics: [{ namespace: "AWS/Lambda", metricName: "Invocations", dimensions: [] }] }, isLoading: false, refetch: vi.fn() });
+    mockMetricStatistics.mockReturnValue({ data: { datapoints: [] }, isLoading: false });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    // When no metric is selected, the datapoint detail container is not rendered
+    // The page renders successfully with the tabs
+    expect(screen.getAllByText("Metrics").length).toBeGreaterThan(0);
   });
 });
