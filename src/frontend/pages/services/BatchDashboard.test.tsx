@@ -594,14 +594,9 @@ describe("BatchDashboard — submit job", () => {
       expect(screen.getByLabelText(/Job name/)).toBeTruthy();
     });
 
-    const nameInput = screen.getByLabelText(/Job name/);
-    await user.type(nameInput, "test-job");
-
-    const queueInput = screen.getByLabelText(/Job queue ARN/);
-    await user.type(queueInput, "arn:aws:batch:us-east-1:123:job-queue/my-queue");
-
-    const defInput = screen.getByLabelText(/Job definition ARN/);
-    await user.type(defInput, "arn:aws:batch:us-east-1:123:job-definition/my-jd:1");
+    fireEvent.change(screen.getByLabelText(/Job name/), { target: { value: "test-job" } });
+    fireEvent.change(screen.getByLabelText(/Job queue ARN/), { target: { value: "arn:aws:batch:us-east-1:123:job-queue/my-queue" } });
+    fireEvent.change(screen.getByLabelText(/Job definition ARN/), { target: { value: "arn:aws:batch:us-east-1:123:job-definition/my-jd:1" } });
 
     const submitBtns = screen.getAllByRole("button", { name: /^Submit$/i });
     await user.click(submitBtns[submitBtns.length - 1]);
@@ -632,12 +627,14 @@ describe("BatchDashboard — submit job", () => {
       expect(screen.getByLabelText(/Job name/)).toBeTruthy();
     });
 
-    await user.type(screen.getByLabelText(/Job name/), "my-job");
-    await user.type(screen.getByLabelText(/Job queue ARN/), "arn:aws:batch:us-east-1:123:job-queue/q");
-    await user.type(screen.getByLabelText(/Job definition ARN/), "arn:aws:batch:us-east-1:123:job-definition/jd:1");
+    fireEvent.change(screen.getByLabelText(/Job name/), { target: { value: "my-job" } });
+    fireEvent.change(screen.getByLabelText(/Job queue ARN/), { target: { value: "arn:aws:batch:us-east-1:123:job-queue/q" } });
+    fireEvent.change(screen.getByLabelText(/Job definition ARN/), { target: { value: "arn:aws:batch:us-east-1:123:job-definition/jd:1" } });
 
-    const submitBtn = screen.getByRole("button", { name: /^Submit$/i });
-    expect(submitBtn.getAttribute("disabled")).toBeNull();
+    await waitFor(() => {
+      const submitBtn = screen.getByRole("button", { name: /^Submit$/i });
+      expect(submitBtn.getAttribute("disabled")).toBeNull();
+    });
   });
 });
 
