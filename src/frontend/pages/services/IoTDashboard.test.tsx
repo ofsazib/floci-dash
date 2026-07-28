@@ -61,6 +61,7 @@ const deletePolicyState = vi.hoisted(() => ({ isPending: false, variables: null 
 const deleteRuleState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
 const deleteThingTypeState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
 const deleteCertState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
+const publishState = vi.hoisted(() => ({ isError: false, error: null as Error | null }));
 
 vi.mock("../../hooks/useIoT", () => ({
   useEndpoint: (...args: any[]) => mockEndpoint(...args),
@@ -151,7 +152,7 @@ vi.mock("../../hooks/useIoT", () => ({
   useConnection: (...args: any[]) => mockConnection(...args),
   useConnectionSubscriptions: (...args: any[]) => mockSubscriptions(...args),
   useDisconnectClient: () => ({ mutate: mockDisconnect, isPending: false }),
-  usePublish: () => ({ mutate: mockPublish, isPending: false, isError: false, error: null }),
+  usePublish: () => ({ mutate: mockPublish, isPending: false, get isError() { return publishState.isError; }, get error() { return publishState.error; } }),
   useRetainedMessages: (...args: any[]) => mockRetained(...args),
 }));
 
@@ -182,6 +183,8 @@ beforeEach(() => {
   deleteThingTypeState.variables = null;
   deleteCertState.isPending = false;
   deleteCertState.variables = null;
+  publishState.isError = false;
+  publishState.error = null;
 
   // Default mock returns for all queries
   mockEndpoint.mockReturnValue({
@@ -263,13 +266,14 @@ describe("IoTDashboard — rendering", () => {
     expect(screen.getByText(/test.iot.us-east-1.amazonaws.com/)).toBeTruthy();
   });
 
-  it("renders all 5 tabs", () => {
+  it("renders all 6 tabs", () => {
     render(<IoTDashboard />, { wrapper: createWrapper() });
     expect(screen.getByRole("tab", { name: /things/i })).toBeTruthy();
     expect(screen.getByRole("tab", { name: /certificates/i })).toBeTruthy();
     expect(screen.getByRole("tab", { name: /policies/i })).toBeTruthy();
     expect(screen.getByRole("tab", { name: /topic rules/i })).toBeTruthy();
     expect(screen.getByRole("tab", { name: /thing types/i })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /mqtt broker/i })).toBeTruthy();
   });
 
   it("shows loading skeleton when things, certs, and policies are all loading", () => {
@@ -1697,5 +1701,76 @@ describe("IoTDashboard — MQTT Broker tab", () => {
     render(<IoTDashboard />, { wrapper: createWrapper() });
     await user.click(screen.getByRole("tab", { name: /mqtt broker/i }));
     await waitFor(() => expect(screen.getByText("sensors/temp")).toBeTruthy());
+  });
+
+  it("shows publish button disabled when topic is empty", async () => {
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /mqtt broker/i }));
+    await clickButton(user, /publish to topic/i);
+    await waitFor(() => expect(screen.getByText("Publish MQTT message")).toBeTruthy());
+    const publishBtn = screen.getByRole("button", { name: /^Publish$/i });
+    expect(publishBtn.getAttribute("disabled")).not.toBeNull();
+  });
+
+  it("enables publish button when topic is filled", async () => {
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /mqtt broker/i }));
+    await clickButton(user, /publish to topic/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("sensors/temperature")).toBeTruthy());
+    const topicInput = screen.getByPlaceholderText("sensors/temperature");
+    await user.type(topicInput, "test/topic");
+    const publishBtn = screen.getByRole("button", { name: /^Publish$/i });
+    expect(publishBtn.getAttribute("disabled")).toBeNull();
+  });
+
+  it("shows publish error alert", async () => {
+    publishState.isError = true;
+    publishState.error = new Error("Publish failed");
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /mqtt broker/i }));
+    await clickButton(user, /publish to topic/i);
+    await waitFor(() => expect(screen.getByText("Publish failed")).toBeTruthy());
+  });
+
+  it("shows publish fallback 'Failed' when error has no message", async () => {
+    publishState.isError = true;
+    publishState.error = {} as Error;
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /mqtt broker/i }));
+    await clickButton(user, /publish to topic/i);
+    await waitFor(() => expect(screen.getByText("Failed")).toBeTruthy());
+  });
+
+  it("shows shadow modal with No shadow data message", async () => {
+    mockThings.mockReturnValue({
+      data: { things: [{ thingName: "NoShadowDev", thingTypeName: "Sensor", thingArn: "arn:1" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockShadow.mockReturnValue({ data: undefined, isLoading: false });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("NoShadowDev")).toBeTruthy());
+    await user.click(screen.getByText("NoShadowDev"));
+    await waitFor(() => expect(screen.getByRole("button", { name: /View shadow/i })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /View shadow/i }));
+    await waitFor(() => expect(screen.getByText("No shadow data")).toBeTruthy());
+  });
+
+  it("shows status indicator for disconnected client", async () => {
+    mockConnection.mockReturnValue({
+      data: { connection: { clientId: "offline-dev", connected: false, sourceIp: "10.0.0.9" } },
+      isLoading: false, isError: false,
+    });
+    mockSubscriptions.mockReturnValue({ data: { subscriptions: [] }, isLoading: false });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /mqtt broker/i }));
+    await user.type(screen.getByPlaceholderText("device-001"), "offline-dev");
+    await clickButton(user, /inspect/i);
+    await waitFor(() => expect(screen.getByText("Disconnected")).toBeTruthy());
   });
 });
