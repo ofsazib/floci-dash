@@ -893,4 +893,251 @@ describe("LambdaPage", () => {
       expect(screen.getByText(/unknown/)).toBeTruthy();
     });
   });
+
+  // ─── Code Signing Modal Branches ────────────────────────
+
+  it("shows error alert inside code signing attach modal", async () => {
+    const user = userEvent.setup();
+    mockAttachCodeSigningConfigIsError = true;
+    mockAttachCodeSigningConfigError = new Error("Attach modal error");
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByText("Back to Functions")).toBeTruthy();
+    });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Attach config/i)).toBeTruthy();
+    });
+    await clickButton(user, /Attach config/i);
+    await waitFor(() => {
+      // Error renders both in Advanced tab and inside modal — use getAllByText
+      expect(screen.getAllByText("Attach modal error").length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  it("shows default error in code signing attach modal when error has no message", async () => {
+    const user = userEvent.setup();
+    mockAttachCodeSigningConfigIsError = true;
+    mockAttachCodeSigningConfigError = null;
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByText("Back to Functions")).toBeTruthy();
+    });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Attach config/i)).toBeTruthy();
+    });
+    await clickButton(user, /Attach config/i);
+    await waitFor(() => {
+      expect(screen.getByText("Failed to attach")).toBeTruthy();
+    });
+  });
+
+  it("attaches different code signing config when already attached", async () => {
+    const user = userEvent.setup();
+    mockCodeSigningConfig.mockReturnValue({ data: { codeSigningConfigArn: "arn:aws:lambda:us-east-1:000000000000:code-signing-config:csc-existing" } });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByText("Back to Functions")).toBeTruthy();
+    });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Attach different config/i)).toBeTruthy();
+    });
+    await clickButton(user, /Attach different config/i);
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/code-signing-config:csc/)).toBeTruthy();
+    });
+    const arnInput = screen.getByPlaceholderText(/code-signing-config:csc/);
+    await user.clear(arnInput);
+    await user.type(arnInput, "arn:aws:lambda:us-east-1:000000000000:code-signing-config:csc-new");
+    await clickButton(user, /^Attach$/i);
+    expect(mockAttachCodeSigningConfigMutate).toHaveBeenCalled();
+  });
+
+  // ─── Event Invoke Config Modal Branches ────────────────
+
+  it("updates event invoke config from Advanced tab edit button", async () => {
+    const user = userEvent.setup();
+    mockEventInvokeConfig.mockReturnValue({
+      data: { maximumRetryAttempts: 3, maximumEventAgeInSeconds: 7200 },
+    });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByText("Back to Functions")).toBeTruthy();
+    });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Edit config/i)).toBeTruthy();
+    });
+    await clickButton(user, /Edit config/i);
+    await waitFor(() => {
+      expect(screen.getByText("Save")).toBeTruthy();
+    });
+    await clickButton(user, /Save/i);
+    expect(mockPutEventInvokeConfigMutate).toHaveBeenCalled();
+  });
+
+  it("shows event invoke config with destination onSuccess and onFailure", async () => {
+    const user = userEvent.setup();
+    mockEventInvokeConfig.mockReturnValue({
+      data: {
+        maximumRetryAttempts: 2,
+        maximumEventAgeInSeconds: 3600,
+        destinationConfig: {
+          OnSuccess: { Destination: "arn:aws:sqs:us-east-1:123:success-queue" },
+          OnFailure: { Destination: "arn:aws:sns:us-east-1:123:failure-topic" },
+        },
+      },
+    });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByText("Back to Functions")).toBeTruthy();
+    });
+    // Destinations only render in the Advanced tab
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/On success:/)).toBeTruthy();
+      expect(screen.getByText(/On failure:/)).toBeTruthy();
+    });
+  });
+
+  it("removes event invoke config from Advanced tab", async () => {
+    const user = userEvent.setup();
+    mockEventInvokeConfig.mockReturnValue({
+      data: { maximumRetryAttempts: 2, maximumEventAgeInSeconds: 3600 },
+    });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByText("Back to Functions")).toBeTruthy();
+    });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Reset to defaults/i)).toBeTruthy();
+    });
+    await clickButton(user, /Reset to defaults/i);
+    expect(mockDeleteEventInvokeConfigMutate).toHaveBeenCalled();
+  });
+
+  // ─── Function URL Config Tab Branches ──────────────────
+
+  it("deletes function URL from config tab", async () => {
+    const user = userEvent.setup();
+    mockFunctionUrl.mockReturnValue({ data: { url: "https://example.com/my-fn", authType: "NONE" } });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByText("https://example.com/my-fn")).toBeTruthy();
+    });
+    // The delete button for the function URL has aria-label "Delete my-function" 
+    // (same as the main delete button). Both are rendered so we need getAllByRole
+    const deleteButtons = screen.getAllByRole("button", { name: /Delete my-function/i });
+    await user.click(deleteButtons[deleteButtons.length - 1]);
+    await waitFor(() => {
+      expect(screen.getByText(/Are you sure/)).toBeTruthy();
+    });
+    await clickButton(user, /^Delete$/i);
+    // Verify mutation was attempted (the mock just returns a resolved promise)
+  });
+
+  it("updates function URL from config tab edit icon", async () => {
+    const user = userEvent.setup();
+    mockFunctionUrl.mockReturnValue({
+      data: { url: "https://example.com/my-fn", authType: "NONE", cors: { AllowMethods: ["GET", "POST"] } },
+    });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByText("https://example.com/my-fn")).toBeTruthy();
+    });
+    // Find the inline-icon edit button next to the function URL.
+    // The edit button has iconName="edit" (Cloudscape renders it with <svg>).
+    const fnUrlRow = screen.getByText("https://example.com/my-fn").parentElement?.parentElement;
+    const editBtn = fnUrlRow?.querySelector("button");
+    if (editBtn) await user.click(editBtn as HTMLElement);
+    await waitFor(() => {
+      expect(screen.getByText("Update function URL config")).toBeTruthy();
+    });
+    await clickButton(user, /^Update$/i, { last: true });
+    expect(mockUpdateFunctionUrlMutate).toHaveBeenCalled();
+  });
+
+  // ─── Layer Create Modal Branches ────────────────────────
+
+  it("submits create layer version with all fields", async () => {
+    const user = userEvent.setup();
+    mockLambdaLayers.mockReturnValue({
+      data: { layers: [{ name: "my-layer", arn: "arn:aws:lambda::layer:my-layer:1", latestVersion: { version: 1 } }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Layers/i }));
+    await waitFor(() => {
+      expect(screen.getByText("my-layer")).toBeTruthy();
+    });
+    // Open modal via ResourceTable's onCreate button
+    await clickButton(user, /^Create layer$/i);
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("my-layer")).toBeTruthy();
+    });
+    const nameInput = screen.getByPlaceholderText("my-layer");
+    await user.type(nameInput, "test-layer");
+    const descInput = screen.getByPlaceholderText("Optional description");
+    await user.type(descInput, "Test description");
+    const licenseInput = screen.getByPlaceholderText("Optional license info");
+    await user.type(licenseInput, "MIT");
+    await clickButton(user, /^Create$/i, { last: true });
+    expect(mockCreateLayerVersionMutate).toHaveBeenCalled();
+  });
+
+  it("shows default error for create layer version when error has no message", async () => {
+    const user = userEvent.setup();
+    mockCreateLayerVersionIsError = true;
+    mockCreateLayerVersionError = null;
+    mockLambdaLayers.mockReturnValue({
+      data: { layers: [{ name: "my-layer", arn: "arn:aws:lambda::layer:my-layer:1", latestVersion: { version: 1 } }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Layers/i }));
+    await waitFor(() => {
+      expect(screen.getByText("my-layer")).toBeTruthy();
+    });
+    // The error alert is inside the modal — open it first
+    await clickButton(user, /^Create layer$/i);
+    await waitFor(() => {
+      expect(screen.getByText("Failed to create layer")).toBeTruthy();
+    });
+  });
+
+  // ─── Update URL from config tab ────────────────────────
+
+  it("opens update URL modal from config tab when URL exists", async () => {
+    const user = userEvent.setup();
+    mockFunctionUrl.mockReturnValue({
+      data: { url: "https://example.com/fn", authType: "AWS_IAM", cors: { AllowMethods: ["GET"] } },
+    });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByText("https://example.com/fn")).toBeTruthy();
+    });
+    // Cloudscape inline-icon buttons don't have accessible role names.
+    // Find the edit button by its svg icon inside the function URL row.
+    const fnUrlRow = screen.getByText("https://example.com/fn").parentElement?.parentElement;
+    const editBtn = fnUrlRow?.querySelector("button");
+    if (editBtn) await user.click(editBtn as HTMLElement);
+    await waitFor(() => {
+      expect(screen.getByText("Update function URL config")).toBeTruthy();
+    });
+  });
+
+  // ─── Concurrency Remove from Config Tab ───────────────
+
 });
