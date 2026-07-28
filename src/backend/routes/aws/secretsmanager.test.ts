@@ -100,6 +100,13 @@ describe("Secrets Manager Routes", () => {
       expect(body.total).toBe(0);
     });
 
+    it("GET /secrets — handles undefined SecretList", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/secrets");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+    });
+
     it("POST /secrets — creates a secret", async () => {
       mockSend.mockResolvedValueOnce({
         ARN: "arn:aws:secretsmanager:...:secret:new-secret",
@@ -140,6 +147,25 @@ describe("Secrets Manager Routes", () => {
       expect(cmd.KmsKeyId).toBe("arn:aws:kms:...:key/123");
     });
 
+    it("POST /secrets — creates with tags missing key/value", async () => {
+      mockSend.mockResolvedValueOnce({
+        ARN: "arn:aws:secretsmanager:...:secret:tagged",
+        Name: "tagged",
+        VersionId: "v1",
+      });
+      const res = await post("/secrets", {
+        name: "tagged",
+        secretString: "pw",
+        tags: [{ key: "", value: "" }, { key: "env", value: "prod" }],
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.Tags[0].Key).toBe("");
+      expect(cmd.Tags[0].Value).toBe("");
+      expect(cmd.Tags[1].Key).toBe("env");
+      expect(cmd.Tags[1].Value).toBe("prod");
+    });
+
     it("POST /secrets — 400 when name is empty", async () => {
       const res = await post("/secrets", { name: "", secretString: "password" });
       expect(res.status).toBe(400);
@@ -170,6 +196,48 @@ describe("Secrets Manager Routes", () => {
       expect(body.secret.name).toBe("my-secret");
       expect(body.versions).toHaveLength(1);
       expect(body.versions[0].versionId).toBe("v1");
+    });
+
+    it("GET /secrets/:id — handles secret with no Tags and no Versions", async () => {
+      mockSend
+        .mockResolvedValueOnce({
+          Name: "minimal",
+          ARN: "arn:aws:secretsmanager:...:secret:minimal",
+          CreatedDate: new Date("2025-01-01"),
+        })
+        .mockResolvedValueOnce({});
+      const res = await get("/secrets/minimal");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.secret.name).toBe("minimal");
+      expect(body.secret.tags).toEqual([]);
+      expect(body.versions).toEqual([]);
+    });
+
+    it("GET /secrets/:id — handles version with no VersionStages", async () => {
+      mockSend
+        .mockResolvedValueOnce({
+          Name: "no-stages",
+          ARN: "arn:aws:secretsmanager:...:secret:no-stages",
+          Description: "No stages",
+          KmsKeyId: "arn:aws:kms:...:key/789",
+          CreatedDate: new Date("2025-01-01"),
+          Tags: [{ Key: "env", Value: "prod" }],
+          RotationEnabled: false,
+          LastChangedDate: new Date("2025-01-02"),
+        })
+        .mockResolvedValueOnce({
+          Versions: [
+            {
+              VersionId: "v1",
+              CreatedDate: new Date("2025-01-01"),
+            },
+          ],
+        });
+      const res = await get("/secrets/no-stages");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.versions[0].stages).toEqual([]);
     });
 
     it("GET /secrets/:id/value — gets secret value", async () => {
@@ -230,6 +298,20 @@ describe("Secrets Manager Routes", () => {
       const body = await res.json();
       expect(body.secretString).toBe("new-password");
       expect(mockSend.mock.calls[0][0].VersionId).toBe("v2");
+    });
+
+    it("GET /secrets/:id/value — handles no VersionStages", async () => {
+      mockSend.mockResolvedValueOnce({
+        Name: "my-secret",
+        ARN: "arn:aws:secretsmanager:...",
+        VersionId: "v1",
+        SecretString: "my-password",
+        CreatedDate: new Date("2025-01-01"),
+      });
+      const res = await get("/secrets/my-secret/value");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.versionStages).toEqual([]);
     });
 
     it("PUT /secrets/:id — updates secret metadata", async () => {
@@ -371,6 +453,24 @@ describe("Secrets Manager Routes", () => {
       });
       expect(res.status).toBe(200);
       expect((await res.json()).tagged).toBe(true);
+    });
+
+    it("POST /secrets/:id/tags — tags with missing key/value", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/secrets/my-secret/tags", {
+        tags: [{ key: "", value: "" }],
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.Tags[0].Key).toBe("");
+      expect(cmd.Tags[0].Value).toBe("");
+    });
+
+    it("POST /secrets/:id/tags — handles empty tags", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/secrets/my-secret/tags", {});
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].Tags).toEqual([]);
     });
 
     it("DELETE /secrets/:id/tags — untags a secret", async () => {

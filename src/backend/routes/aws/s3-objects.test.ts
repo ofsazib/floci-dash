@@ -113,6 +113,27 @@ describe("S3 Objects", () => {
       expect(body.deleted).toBe(true);
     });
 
+    it("GET /buckets/:name/objects/*/tags — 400 when key is empty", async () => {
+      const res = await get("/buckets/my-bucket/objects/%2F/tags");
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe("Object key is required");
+    });
+
+    it("PUT /buckets/:name/objects/*/tags — 400 when key is empty", async () => {
+      const res = await put("/buckets/my-bucket/objects/%2F/tags", { tags: [{ Key: "env", Value: "test" }] });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe("Object key is required");
+    });
+
+    it("DELETE /buckets/:name/objects/*/tags — 400 when key is empty", async () => {
+      const res = await del("/buckets/my-bucket/objects/%2F/tags");
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe("Object key is required");
+    });
+
     it("GET /buckets/:name/objects/*/tags — returns empty tags when TagSet is undefined", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await get("/buckets/my-bucket/objects/mykey/tags");
@@ -158,6 +179,13 @@ describe("S3 Objects", () => {
       expect(body.objectParts).toBeUndefined();
       expect(body.storageClass).toBeUndefined();
       expect(body.objectSize).toBeUndefined();
+    });
+
+    it("GET /buckets/:name/objects/*/attributes — 400 when key is empty", async () => {
+      const res = await get("/buckets/my-bucket/objects/%2F/attributes");
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe("Object key is required");
     });
   });
 
@@ -241,6 +269,13 @@ describe("S3 Objects", () => {
       expect(body.lastModified).toBeUndefined();
       expect(body.etag).toBeUndefined();
       expect(body.metadata).toEqual({});
+    });
+
+    it("HEAD /buckets/:name/objects/* — 400 when key is empty", async () => {
+      const res = await head("/buckets/my-bucket/objects/%2F/head");
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe("Object key is required");
     });
 
   });

@@ -145,4 +145,33 @@ describe("Active Routes", () => {
     expect(body.activeCount).toBe(0);
     expect(body.activeServices).toEqual([]);
   });
+
+  it("GET / — detects RDS instances", async () => {
+    mockSend
+      .mockResolvedValueOnce({ Buckets: [] })
+      .mockResolvedValueOnce({ TableNames: [] })
+      .mockResolvedValueOnce({ DBInstances: [{ DBInstanceIdentifier: "my-db" }] })
+      .mockResolvedValueOnce({ Reservations: [{ Instances: [] }] })  // empty instances — tests || 0 branch
+      .mockResolvedValueOnce({ Functions: [] })
+      .mockResolvedValueOnce({ MetricAlarms: [] });
+    const res = await router.request("/", { method: "GET" });
+    const body = await res.json();
+    expect(body.activeCount).toBe(1);
+    expect(body.activeServices).toContain("rds");
+    expect(body.activeServices).not.toContain("ec2");
+  });
+
+  it("GET / — handles undefined resource fields gracefully", async () => {
+    mockSend
+      .mockResolvedValueOnce({})  // undefined Buckets — tests ?. ?? branch
+      .mockResolvedValueOnce({})  // undefined TableNames
+      .mockResolvedValueOnce({})  // undefined DBInstances
+      .mockResolvedValueOnce({})  // undefined Reservations
+      .mockResolvedValueOnce({})  // undefined Functions
+      .mockResolvedValueOnce({})  // undefined MetricAlarms
+    const res = await router.request("/", { method: "GET" });
+    const body = await res.json();
+    expect(body.activeCount).toBe(0);
+    expect(body.activeServices).toEqual([]);
+  });
 });

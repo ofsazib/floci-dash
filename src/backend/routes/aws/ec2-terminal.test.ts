@@ -446,6 +446,96 @@ describe("EC2 Terminal WebSocket", () => {
     expect(ws.close).toHaveBeenCalled();
   });
 
+  it("handles socket end after close — if(!closed) false in onExit", async () => {
+    const server = createMockHttpServer();
+    setupTerminalWebSocket(server);
+
+    const createRes = createMockRes(JSON.stringify({ Id: "exec-123" }));
+    const okReq = createMockReq();
+    _nodeMock.mockHttpRequest.mockImplementation((_opts: any, cb: (res: any) => void) => {
+      cb(createRes);
+      return okReq;
+    });
+
+    const mockSocket = createMockSocket();
+    _nodeMock.mockNetConnect.mockImplementation((_path: string, cb?: () => void) => {
+      if (cb) setTimeout(cb, 0);
+      return mockSocket;
+    });
+
+    const ws = createMockWs();
+    const req = { url: validUrl, headers: { host: "localhost" } };
+    _wsMock.state.connectionHandler!(ws, req);
+
+    createRes._emit();
+
+    await vi.waitFor(() => {
+      expect(mockSocket.write).toHaveBeenCalled();
+    });
+
+    mockSocket._emitData(Buffer.from("HTTP/1.1 200 OK\r\n\r\n"));
+
+    await vi.waitFor(() => {
+      expect(ws.send).toHaveBeenCalled();
+    });
+
+    // Close the connection first
+    ws._trigger("close");
+    expect(mockSocket.destroy).toHaveBeenCalled();
+    ws.send.mockClear();
+
+    // Now trigger socket end — onExit runs but if(!closed) is false, so nothing happens
+    mockSocket._emitEnd();
+    await vi.waitFor(() => Promise.resolve());
+    // ws.send should NOT have been called again (no "Session ended" message)
+    expect(ws.send).not.toHaveBeenCalled();
+  });
+
+  it("handles socket error after close — if(!closed) false in onError", async () => {
+    const server = createMockHttpServer();
+    setupTerminalWebSocket(server);
+
+    const createRes = createMockRes(JSON.stringify({ Id: "exec-123" }));
+    const okReq = createMockReq();
+    _nodeMock.mockHttpRequest.mockImplementation((_opts: any, cb: (res: any) => void) => {
+      cb(createRes);
+      return okReq;
+    });
+
+    const mockSocket = createMockSocket();
+    _nodeMock.mockNetConnect.mockImplementation((_path: string, cb?: () => void) => {
+      if (cb) setTimeout(cb, 0);
+      return mockSocket;
+    });
+
+    const ws = createMockWs();
+    const req = { url: validUrl, headers: { host: "localhost" } };
+    _wsMock.state.connectionHandler!(ws, req);
+
+    createRes._emit();
+
+    await vi.waitFor(() => {
+      expect(mockSocket.write).toHaveBeenCalled();
+    });
+
+    mockSocket._emitData(Buffer.from("HTTP/1.1 200 OK\r\n\r\n"));
+
+    await vi.waitFor(() => {
+      expect(ws.send).toHaveBeenCalled();
+    });
+
+    // Close the connection first
+    ws._trigger("close");
+    expect(mockSocket.destroy).toHaveBeenCalled();
+    ws.send.mockClear();
+
+    // Now trigger socket error — onError runs but if(!closed) is false, so nothing happens
+    mockSocket._emitError(new Error("Late error"));
+    await vi.waitFor(() => Promise.resolve());
+    // ws.send should NOT have been called again (no error message sent)
+    expect(ws.send).not.toHaveBeenCalled();
+  });
+
   it("handles WebSocket server error", () => {
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const server = createMockHttpServer();
@@ -740,5 +830,256 @@ describe("EC2 Terminal WebSocket", () => {
     // Wait a tick to ensure the callback ran
     await vi.waitFor(() => Promise.resolve());
     expect(ws.send).not.toHaveBeenCalled();
+  });
+
+  it("handles ws.send throw in onOutput callback — catch ignored", async () => {
+    const server = createMockHttpServer();
+    setupTerminalWebSocket(server);
+
+    const createRes = createMockRes(JSON.stringify({ Id: "exec-123" }));
+    const okReq = createMockReq();
+    _nodeMock.mockHttpRequest.mockImplementation((_opts: any, cb: (res: any) => void) => {
+      cb(createRes);
+      return okReq;
+    });
+
+    const mockSocket = createMockSocket();
+    _nodeMock.mockNetConnect.mockImplementation((_path: string, cb?: () => void) => {
+      if (cb) setTimeout(cb, 0);
+      return mockSocket;
+    });
+
+    const ws = createMockWs();
+    const req = { url: validUrl, headers: { host: "localhost" } };
+    _wsMock.state.connectionHandler!(ws, req);
+
+    createRes._emit();
+
+    await vi.waitFor(() => {
+      expect(mockSocket.write).toHaveBeenCalled();
+    });
+
+    mockSocket._emitData(Buffer.from("HTTP/1.1 200 OK\r\n\r\n"));
+
+    await vi.waitFor(() => {
+      expect(ws.send).toHaveBeenCalled();
+    });
+
+    // Make ws.send throw — onOutput's try/catch should catch it
+    ws.send.mockImplementation(() => { throw new Error("Send failed"); });
+    // Trigger docker output via socket data after headers — onOutput is called
+    mockSocket._emitData(Buffer.from("terminal output"));
+    // Should not throw — the catch in onOutput ignored the error
+    await vi.waitFor(() => Promise.resolve());
+  });
+
+  it("handles ws.send throw in onExit callback — catch ignored", async () => {
+    const server = createMockHttpServer();
+    setupTerminalWebSocket(server);
+
+    const createRes = createMockRes(JSON.stringify({ Id: "exec-123" }));
+    const okReq = createMockReq();
+    _nodeMock.mockHttpRequest.mockImplementation((_opts: any, cb: (res: any) => void) => {
+      cb(createRes);
+      return okReq;
+    });
+
+    const mockSocket = createMockSocket();
+    _nodeMock.mockNetConnect.mockImplementation((_path: string, cb?: () => void) => {
+      if (cb) setTimeout(cb, 0);
+      return mockSocket;
+    });
+
+    const ws = createMockWs();
+    const req = { url: validUrl, headers: { host: "localhost" } };
+    _wsMock.state.connectionHandler!(ws, req);
+
+    createRes._emit();
+
+    await vi.waitFor(() => {
+      expect(mockSocket.write).toHaveBeenCalled();
+    });
+
+    mockSocket._emitData(Buffer.from("HTTP/1.1 200 OK\r\n\r\n"));
+
+    await vi.waitFor(() => {
+      expect(ws.send).toHaveBeenCalled();
+    });
+
+    // Make ws.send throw — onExit's try/catch should catch it
+    ws.send.mockImplementation(() => { throw new Error("Send failed"); });
+    // Trigger socket end — onExit is called which tries to send "Session ended"
+    mockSocket._emitEnd();
+    // Should not throw — the catch in onExit ignored the error
+    await vi.waitFor(() => Promise.resolve());
+    // close() should still have been called
+    expect(ws.close).toHaveBeenCalled();
+  });
+
+  it("handles ws.send throw in .catch handler — catch ignored", async () => {
+    const server = createMockHttpServer();
+    setupTerminalWebSocket(server);
+
+    const createRes = createMockRes(JSON.stringify({ Id: null }));  // No exec ID → promise rejection via !execId check
+    const okReq = createMockReq();
+    _nodeMock.mockHttpRequest.mockImplementation((_opts: any, cb: (res: any) => void) => {
+      cb(createRes);
+      return okReq;
+    });
+
+    const mockSocket = createMockSocket();
+    _nodeMock.mockNetConnect.mockImplementation((_path: string, cb?: () => void) => {
+      if (cb) setTimeout(cb, 0);
+      return mockSocket;
+    });
+
+    const ws = createMockWs();
+    const req = { url: validUrl, headers: { host: "localhost" } };
+    _wsMock.state.connectionHandler!(ws, req);
+
+    // Make ws.send throw — .catch handler's try/catch should catch it
+    ws.send.mockImplementation(() => { throw new Error("Send failed"); });
+
+    createRes._emit();
+
+    // Promise should reject (no exec ID) → .catch handler runs → ws.send throws → caught → close() called
+    await vi.waitFor(() => {
+      expect(ws.close).toHaveBeenCalled();
+    });
+  });
+
+  it("handles socket.write throw — catch ignored", async () => {
+    const server = createMockHttpServer();
+    setupTerminalWebSocket(server);
+
+    const createRes = createMockRes(JSON.stringify({ Id: "exec-123" }));
+    const createReq = createMockReq();
+    _nodeMock.mockHttpRequest.mockImplementation((_opts: any, cb: (res: any) => void) => {
+      cb(createRes);
+      return createReq;
+    });
+
+    const mockSocket = createMockSocket();
+    _nodeMock.mockNetConnect.mockImplementation((_path: string, cb?: () => void) => {
+      if (cb) setTimeout(cb, 0);
+      return mockSocket;
+    });
+
+    const ws = createMockWs();
+    const req = { url: validUrl, headers: { host: "localhost" } };
+    _wsMock.state.connectionHandler!(ws, req);
+
+    createRes._emit();
+
+    await vi.waitFor(() => {
+      expect(mockSocket.write).toHaveBeenCalled();
+    });
+
+    mockSocket._emitData(Buffer.from("HTTP/1.1 200 OK\r\n\r\n"));
+
+    await vi.waitFor(() => {
+      expect(ws.send).toHaveBeenCalled();
+    });
+
+    // Make socket.write throw — should be caught silently
+    mockSocket.write.mockImplementationOnce(() => { throw new Error("Write failed"); });
+    // Send a message — the write will throw and be caught
+    ws._handlers.message?.(Buffer.from("test"));
+    // Should not crash — the catch ignored the error
+    await vi.waitFor(() => Promise.resolve());
+    expect(mockSocket.write).toHaveBeenCalled();
+  });
+
+  it("handles socket.destroy throw — catch ignored", async () => {
+    const server = createMockHttpServer();
+    setupTerminalWebSocket(server);
+
+    const createRes = createMockRes(JSON.stringify({ Id: "exec-123" }));
+    const createReq = createMockReq();
+    _nodeMock.mockHttpRequest.mockImplementation((_opts: any, cb: (res: any) => void) => {
+      cb(createRes);
+      return createReq;
+    });
+
+    const mockSocket = createMockSocket();
+    _nodeMock.mockNetConnect.mockImplementation((_path: string, cb?: () => void) => {
+      if (cb) setTimeout(cb, 0);
+      return mockSocket;
+    });
+
+    const ws = createMockWs();
+    const req = { url: validUrl, headers: { host: "localhost" } };
+    _wsMock.state.connectionHandler!(ws, req);
+
+    createRes._emit();
+
+    await vi.waitFor(() => {
+      expect(mockSocket.write).toHaveBeenCalled();
+    });
+
+    mockSocket._emitData(Buffer.from("HTTP/1.1 200 OK\r\n\r\n"));
+
+    await vi.waitFor(() => {
+      expect(ws.send).toHaveBeenCalled();
+    });
+
+    // Make socket.destroy throw — should be caught silently
+    mockSocket.destroy.mockImplementationOnce(() => { throw new Error("Destroy failed"); });
+    // Trigger close — the destroy will throw and be caught
+    ws._trigger("close");
+    // Should not crash — the catch ignored the error
+    expect(mockSocket.destroy).toHaveBeenCalled();
+    expect(ws.close).toHaveBeenCalled();
+  });
+
+  it("handles resize POST failure — catch ignored", async () => {
+    const server = createMockHttpServer();
+    setupTerminalWebSocket(server);
+
+    const createRes = createMockRes(JSON.stringify({ Id: "exec-123" }));
+    const okReq = createMockReq();
+    const failingReq = createMockReq();
+    let callCount = 0;
+    _nodeMock.mockHttpRequest.mockImplementation((_opts: any, cb: (res: any) => void) => {
+      callCount++;
+      if (callCount === 2) {
+        // Resize call — trigger error to test .catch(() => {})
+        setTimeout(() => failingReq._emitError(new Error("Resize failed")), 0);
+        return failingReq;
+      }
+      cb(createRes);
+      return okReq;
+    });
+
+    const mockSocket = createMockSocket();
+    _nodeMock.mockNetConnect.mockImplementation((_path: string, cb?: () => void) => {
+      if (cb) setTimeout(cb, 0);
+      return mockSocket;
+    });
+
+    const ws = createMockWs();
+    const req = { url: validUrl, headers: { host: "localhost" } };
+    _wsMock.state.connectionHandler!(ws, req);
+
+    createRes._emit();
+
+    await vi.waitFor(() => {
+      expect(mockSocket.write).toHaveBeenCalled();
+    });
+
+    mockSocket._emitData(Buffer.from("HTTP/1.1 200 OK\r\n\r\n"));
+
+    await vi.waitFor(() => {
+      expect(ws.send).toHaveBeenCalled();
+    });
+
+    // Send resize message — should trigger resize POST which will fail
+    // The .catch(() => {}) should swallow the error
+    ws._handlers.message?.(Buffer.from(JSON.stringify({ type: "resize", cols: 120, rows: 40 })));
+
+    // Wait for the resize call to happen
+    await vi.waitFor(() => {
+      expect(callCount).toBeGreaterThanOrEqual(2);
+    });
   });
 });

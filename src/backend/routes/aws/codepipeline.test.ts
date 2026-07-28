@@ -321,6 +321,14 @@ describe("CodePipeline Routes", () => {
       const body = await res.json();
       expect(body.enabled).toBe(true);
     });
+
+    it("POST /pipelines/:name/transitions/:stageName/disable — with custom transitionType", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/pipelines/my-pipeline/transitions/Deploy/disable", { transitionType: "Outbound", reason: "Testing outbound" });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].transitionType).toBe("Outbound");
+      expect(mockSend.mock.calls[0][0].reason).toBe("Testing outbound");
+    });
   });
 
   describe("Approvals", () => {

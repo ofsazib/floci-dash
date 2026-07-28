@@ -232,6 +232,14 @@ describe("CodeDeploy Routes", () => {
       expect(json.deploymentConfigs).toHaveLength(1);
     });
 
+    it("GET /deployment-configs — handles undefined deploymentConfigsList (|| [] fallback)", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/deployment-configs");
+      const json = await res.json();
+      expect(json.deploymentConfigs).toEqual([]);
+      expect(json.total).toBe(0);
+    });
+
     it("POST /deployment-configs — creates a config", async () => {
       mockSend.mockResolvedValueOnce({ deploymentConfigId: "cfg-id-1" });
       const res = await post("/deployment-configs", {
@@ -309,6 +317,16 @@ describe("CodeDeploy Routes", () => {
       expect(json.deployments).toEqual([]);
     });
 
+    it("GET /applications/:name/deployments — handles undefined deploymentsInfo (|| [] fallback)", async () => {
+      mockSend
+        .mockResolvedValueOnce({ deployments: ["d1"] })
+        .mockResolvedValueOnce({});
+      const res = await get("/applications/my-app/deployments");
+      const json = await res.json();
+      expect(json.total).toBe(0);
+      expect(json.deployments).toEqual([]);
+    });
+
     it("GET /deployments/:deployId — gets a deployment", async () => {
       mockSend.mockResolvedValueOnce({
         deploymentInfo: { deploymentId: "d1", status: "Succeeded" },
@@ -317,6 +335,14 @@ describe("CodeDeploy Routes", () => {
       expect(res.status).toBe(200);
       const json = await res.json();
       expect(json.deployment.deploymentId).toBe("d1");
+    });
+
+    it("GET /deployments/:deployId — handles undefined deploymentInfo (|| null fallback)", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/deployments/d1");
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.deployment).toBeNull();
     });
   });
 
@@ -329,6 +355,13 @@ describe("CodeDeploy Routes", () => {
       expect(res.status).toBe(200);
       const json = await res.json();
       expect(json.tags).toHaveLength(1);
+    });
+
+    it("GET /tags — handles undefined Tags (|| [] fallback)", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/tags?resourceArn=arn:aws:codedeploy:us-east-1:123:application:my-app");
+      const json = await res.json();
+      expect(json.tags).toEqual([]);
     });
 
     it("GET /tags — 400 without resourceArn", async () => {

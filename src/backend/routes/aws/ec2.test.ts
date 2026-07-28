@@ -394,6 +394,15 @@ describe("EC2 Routes", () => {
       expect(mockSend.mock.calls[1][0].Attribute).toBe("disableApiTermination");
       expect(mockSend.mock.calls[1][0].Value).toBe("true");
     });
+
+    it("PATCH /instances/:id — empty body does not modify anything", async () => {
+      mockSend.mockResolvedValue({});
+      const res = await patch("/instances/i-001", {});
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.modified).toBe(true);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
   });
 
   // ── VPCs ──────────────────────────────────────────
@@ -710,6 +719,44 @@ describe("EC2 Routes", () => {
       expect(body.egressRuleRemoved).toBe(true);
       expect(mockSend.mock.calls[0][0].GroupId).toBe("sg-001");
     });
+
+    it("POST /security-groups/:id/rules/ingress — default ports without cidrIp", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/security-groups/sg-001/rules/ingress", {});
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].IpPermissions[0].IpProtocol).toBe("tcp");
+      expect(mockSend.mock.calls[0][0].IpPermissions[0].FromPort).toBe(22);
+      expect(mockSend.mock.calls[0][0].IpPermissions[0].ToPort).toBe(22);
+      expect(mockSend.mock.calls[0][0].IpPermissions[0].IpRanges).toBeUndefined();
+    });
+
+    it("DELETE /security-groups/:id/rules/ingress — default ports without cidrIp", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/security-groups/sg-001/rules/ingress", {});
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.ruleRemoved).toBe(true);
+      expect(mockSend.mock.calls[0][0].IpPermissions[0].IpRanges).toBeUndefined();
+    });
+
+    it("POST /security-groups/:id/rules/egress — all traffic without cidrIp", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/security-groups/sg-001/rules/egress", {});
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.egressRuleAdded).toBe(true);
+      expect(mockSend.mock.calls[0][0].IpPermissions[0].IpProtocol).toBe("-1");
+      expect(mockSend.mock.calls[0][0].IpPermissions[0].IpRanges).toBeUndefined();
+    });
+
+    it("DELETE /security-groups/:id/rules/egress — all traffic without cidrIp", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/security-groups/sg-001/rules/egress", {});
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.egressRuleRemoved).toBe(true);
+      expect(mockSend.mock.calls[0][0].IpPermissions[0].IpRanges).toBeUndefined();
+    });
   });
 
   // ── Key Pairs ─────────────────────────────────────
@@ -916,6 +963,11 @@ describe("EC2 Routes", () => {
       expect(mockSend.mock.calls[0][0].InternetGatewayId).toBe("igw-001");
       expect(mockSend.mock.calls[0][0].VpcId).toBe("vpc-001");
     });
+
+    it("POST /internet-gateways/:id/detach — 400 when VpcId missing", async () => {
+      const res = await post("/internet-gateways/igw-001/detach", {});
+      expect(res.status).toBe(400);
+    });
   });
 
   // ── Route Tables ──────────────────────────────────
@@ -985,6 +1037,19 @@ describe("EC2 Routes", () => {
       const res = await del("/route-tables/rtb-001/routes", {});
       expect(res.status).toBe(400);
     });
+
+    it("POST /route-tables/:id/disassociate — 400 when AssociationId missing", async () => {
+      const res = await post("/route-tables/rtb-001/disassociate", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /route-tables/:id/routes — uses default cidrBlock when omitted", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/route-tables/rtb-001/routes", { gatewayId: "igw-001" });
+      expect((await res.json()).created).toBe(true);
+      expect(mockSend.mock.calls[0][0].DestinationCidrBlock).toBe("0.0.0.0/0");
+      expect(mockSend.mock.calls[0][0].GatewayId).toBe("igw-001");
+    });
   });
 
   // ── NAT Gateways ──────────────────────────────────
@@ -1029,6 +1094,11 @@ describe("EC2 Routes", () => {
       const res = await del("/nat-gateways/nat-001");
       expect((await res.json()).deleted).toBe(true);
       expect(mockSend.mock.calls[0][0].NatGatewayId).toBe("nat-001");
+    });
+
+    it("POST /nat-gateways — 400 when subnetId missing", async () => {
+      const res = await post("/nat-gateways", { allocationId: "eipalloc-001" });
+      expect(res.status).toBe(400);
     });
   });
 
@@ -1098,6 +1168,11 @@ describe("EC2 Routes", () => {
       const res = await post("/elastic-ips/eipalloc-001/disassociate", { associationId: "eipassoc-001" });
       expect((await res.json()).disassociated).toBe(true);
       expect(mockSend.mock.calls[0][0].AssociationId).toBe("eipassoc-001");
+    });
+
+    it("POST /elastic-ips/:allocationId/disassociate — 400 when associationId missing", async () => {
+      const res = await post("/elastic-ips/eipalloc-001/disassociate", {});
+      expect(res.status).toBe(400);
     });
   });
 
