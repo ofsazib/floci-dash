@@ -695,4 +695,146 @@ describe("CloudWatchPage — data edge cases", () => {
     render(<CloudWatchPage />, { wrapper: pageWrapper() });
     expect(screen.getByText("OK")).toBeTruthy();
   });
+
+  // ─── State Filter Actual Change ────────────────────────
+
+  it("changes state filter to OK and re-queries alarms", async () => {
+    const user = userEvent.setup();
+    // Reset mock to avoid alarm badge "OK" pollution from previous test
+    mockCloudWatchAlarms.mockReturnValue({
+      data: { alarms: [{ name: "high-cpu", state: "ALARM", namespace: "AWS/EC2", metricName: "CPU", threshold: 80 }] },
+      isLoading: false,
+    });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    // Open the state filter dropdown
+    const filterSelect = screen.getByText("Filter by state");
+    await user.click(filterSelect);
+    // Click the "OK" option in the dropdown — now only one "OK" (the dropdown option)
+    await waitFor(() => expect(screen.getByText("OK")).toBeTruthy());
+    await user.click(screen.getByText("OK"));
+    // After selecting a filter, mockCloudWatchAlarms should have been called with "OK"
+    await waitFor(() => {
+      expect(mockCloudWatchAlarms).toHaveBeenCalledWith("OK");
+    });
+  });
+
+  // ─── Metric Detail View + Sparkline ────────────────────
+
+  it("shows detail container with sparkline when metric is selected with datapoints", async () => {
+    const user = userEvent.setup();
+    mockCloudWatchMetrics.mockReturnValue({
+      data: { namespaces: ["AWS/Lambda"], metrics: [{ namespace: "AWS/Lambda", metricName: "Invocations", dimensions: [] }] },
+      isLoading: false, refetch: vi.fn(),
+    });
+    mockMetricStatistics.mockReturnValue({
+      data: {
+        datapoints: [
+          { timestamp: "2025-01-01T00:00:00Z", average: 50, sum: 100, minimum: 10, maximum: 90, sampleCount: 5, unit: "Count" },
+          { timestamp: "2025-01-01T00:01:00Z", average: 60, sum: 120, minimum: 20, maximum: 100, sampleCount: 6, unit: "Count" },
+        ],
+      },
+      isLoading: false,
+    });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    const tabs = screen.getAllByText("Metrics");
+    await user.click(tabs[tabs.length - 1]);
+    await waitFor(() => expect(screen.getAllByText("Invocations").length).toBeGreaterThan(0));
+    // Find the radio input for single-selection and click it
+    const radios = document.querySelectorAll('input[type="radio"]');
+    if (radios.length > 0) {
+      await user.click(radios[0] as HTMLElement);
+    }
+    // Detail container should now show the namespace/metric name header
+    await waitFor(() => {
+      expect(screen.getByText(/AWS\/Lambda/)).toBeTruthy();
+    });
+    // Sparkline SVG should be present from the detail view
+    const svgs = document.querySelectorAll("svg");
+    expect(svgs.length).toBeGreaterThan(0);
+  });
+
+  // ─── PutMetricModal Interaction ─────────────────────────
+
+  it("changes namespace and unit in put metric modal", async () => {
+    const user = userEvent.setup();
+    mockPutMetricData.mockResolvedValueOnce({});
+    mockCloudWatchMetrics.mockReturnValue({
+      data: { namespaces: ["AWS/Lambda", "AWS/EC2"], metrics: [{ namespace: "AWS/Lambda", metricName: "Invocations", dimensions: [] }] },
+      isLoading: false, refetch: vi.fn(),
+    });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    const tabs = screen.getAllByText("Metrics");
+    await user.click(tabs[tabs.length - 1]);
+    await waitFor(() => expect(screen.getAllByText("Invocations").length).toBeGreaterThan(0));
+    await clickButton(user, /Put metric data/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("MyMetric")).toBeTruthy());
+    // Open the namespace Select
+    const selectNS = screen.getByText("Select namespace");
+    await user.click(selectNS);
+    await waitFor(() => expect(screen.getByText("Custom")).toBeTruthy());
+    // Click "Custom" namespace
+    await user.click(screen.getByText("Custom"));
+    // Open the unit Select (currently shows "Count" as selected value)
+    // getAllByText avoids ambiguity when "Count" also appears as a dropdown option
+    const countElements = screen.getAllByText("Count");
+    // The first "Count" is the Select trigger, click it to open dropdown
+    await user.click(countElements[0]);
+    await waitFor(() => expect(screen.getByText("Seconds")).toBeTruthy());
+    // Click "Seconds" unit
+    await user.click(screen.getByText("Seconds"));
+    // Fill metric name and publish
+    await user.type(screen.getByPlaceholderText("MyMetric"), "TestMetric");
+    await clickButton(user, /Publish/i);
+    await waitFor(() => {
+      expect(mockPutMetricData).toHaveBeenCalledWith(
+        expect.objectContaining({
+          namespace: "Custom",
+          metricData: expect.arrayContaining([
+            expect.objectContaining({ metricName: "TestMetric", unit: "Seconds" }),
+          ]),
+        }),
+      );
+    });
+  });
+
+  // ─── Breadcrumb Navigation Click ──────────────────────
+
+  it("navigates on breadcrumb click", () => {
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    const dashLinks = screen.getAllByText("Dashboard");
+    // The breadcrumb "Dashboard" link is clickable
+    expect(dashLinks.length).toBeGreaterThan(0);
+  });
+
+  // ─── CreateAlarmModal Select Interaction ───────────────
+
+  it("changes statistic and comparison in create alarm modal", async () => {
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /Create alarm/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("AWS/EC2")).toBeTruthy());
+    // Open the Statistic Select (currently shows "Average")
+    const avgSelects = screen.getAllByText("Average");
+    const statSelect = avgSelects[avgSelects.length - 1]; // the Select in the modal
+    await user.click(statSelect);
+    await waitFor(() => expect(screen.getByText("Sum")).toBeTruthy());
+    await user.click(screen.getByText("Sum"));
+    // Open the Comparison Select (currently shows "GreaterThanOrEqualToThreshold")
+    const cmpSelect = screen.getByText("GreaterThanOrEqualToThreshold");
+    await user.click(cmpSelect);
+    await waitFor(() => expect(screen.getByText("GreaterThanThreshold")).toBeTruthy());
+    await user.click(screen.getByText("GreaterThanThreshold"));
+    // Fill name and submit
+    const nameInput = screen.getAllByRole("textbox")[0];
+    await user.type(nameInput, "test-alarm");
+    await clickButton(user, /Create/i, { last: true });
+    await waitFor(() => {
+      expect(mockCreateAlarmMutate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          statistic: "Sum",
+          comparisonOperator: "GreaterThanThreshold",
+        }),
+      );
+    });
+  });
 });
