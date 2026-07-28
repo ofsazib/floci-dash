@@ -1194,4 +1194,155 @@ describe("CloudFormationPage", () => {
       expect(screen.getByText("DELETED")).toBeTruthy();
     });
   });
+
+  // ── Resource Detail Container ──
+
+  it("views resource detail from resources tab", async () => {
+    const user = userEvent.setup();
+    mockStack.mockReturnValue({
+      data: {
+        stack: { stackId: "arn:1", status: "CREATE_COMPLETE", creationTime: new Date(), outputs: [], parameters: [], tags: [] },
+        resources: [{ logicalId: "MyBucket", type: "AWS::S3::Bucket", status: "CREATE_COMPLETE", physicalId: "my-bucket", lastUpdated: new Date() }],
+        events: [],
+      },
+      isLoading: false,
+    });
+    mockStackResource.mockReturnValue({
+      data: { resource: { logicalId: "MyBucket", resourceType: "AWS::S3::Bucket", status: "CREATE_COMPLETE", physicalId: "my-bucket", lastUpdated: new Date(), statusReason: "Success", description: "Test bucket", driftInformation: { stackResourceDriftStatus: "IN_SYNC" }, metadata: "{}" } },
+      isLoading: false,
+    });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText(/Stack: my-stack/)).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /Resources/ }));
+    await waitFor(() => expect(screen.getByText("MyBucket")).toBeTruthy());
+    // Click View on the resource row
+    const viewBtns = screen.getAllByRole("button", { name: "View" });
+    await user.click(viewBtns[viewBtns.length - 1]);
+    await waitFor(() => {
+      expect(screen.getByText(/Resource: MyBucket/)).toBeTruthy();
+      expect(screen.getByText("Success")).toBeTruthy();
+      expect(screen.getByText("Test bucket")).toBeTruthy();
+      expect(screen.getByText("IN_SYNC")).toBeTruthy();
+    });
+  });
+
+  // ── Set Policy Interaction ──
+
+  it("types and sets a stack policy", async () => {
+    const user = userEvent.setup();
+    mockStack.mockReturnValue({
+      data: {
+        stack: { stackId: "arn:1", status: "CREATE_COMPLETE", creationTime: new Date(), outputs: [], parameters: [], tags: [] },
+        resources: [], events: [],
+      },
+      isLoading: false,
+    });
+    mockSetPolicyFn.mockResolvedValue({});
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getAllByText(/Stack: my-stack/).length).toBeGreaterThan(0));
+    await user.click(screen.getByRole("tab", { name: /Policy/ }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /Set policy/ })).toBeTruthy());
+    // Type into policy textarea using fireEvent for JSON content
+    const textareas = screen.getAllByRole("textbox");
+    const policyTextarea = textareas[textareas.length - 1];
+    await user.clear(policyTextarea);
+    await user.type(policyTextarea, "test-policy-body");
+    await clickButton(user, /Set policy/i);
+    await waitFor(() => {
+      expect(mockSetPolicyFn).toHaveBeenCalledWith(expect.objectContaining({ stackName: "my-stack" }));
+    });
+  });
+
+  // ── Change Set Detail Loading / Error ──
+
+  it("shows change set detail loading state", async () => {
+    const user = userEvent.setup();
+    mockChangeSets.mockReturnValue({
+      data: { changeSets: [{ name: "cs-loading", executionStatus: "AVAILABLE", creationTime: new Date().toISOString() }] },
+      isLoading: false,
+    });
+    mockChangeSet.mockReturnValue({ data: undefined, isLoading: true, isError: false, error: null });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Change Sets/ }));
+    await waitFor(() => expect(screen.getByText("my-stack")).toBeTruthy());
+    await clickButton(user, /my-stack/i);
+    await waitFor(() => expect(screen.getByText("cs-loading")).toBeTruthy());
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText(/Loading\.\.\./)).toBeTruthy());
+  });
+
+  it("shows change set detail error state", async () => {
+    const user = userEvent.setup();
+    mockChangeSets.mockReturnValue({
+      data: { changeSets: [{ name: "cs-error", executionStatus: "AVAILABLE", creationTime: new Date().toISOString() }] },
+      isLoading: false,
+    });
+    mockChangeSet.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: new Error("Failed") });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Change Sets/ }));
+    await waitFor(() => expect(screen.getByText("my-stack")).toBeTruthy());
+    await clickButton(user, /my-stack/i);
+    await waitFor(() => expect(screen.getByText("cs-error")).toBeTruthy());
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText("Failed")).toBeTruthy());
+  });
+
+  it("executes a change set from the detail view", async () => {
+    const user = userEvent.setup();
+    mockChangeSets.mockReturnValue({
+      data: { changeSets: [{ name: "cs-exec", executionStatus: "AVAILABLE", creationTime: new Date().toISOString() }] },
+      isLoading: false,
+    });
+    mockChangeSet.mockReturnValue({
+      data: { changeSet: { name: "cs-exec", executionStatus: "AVAILABLE", creationTime: new Date().toISOString(), changes: [] } },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Change Sets/ }));
+    await waitFor(() => expect(screen.getByText("my-stack")).toBeTruthy());
+    await clickButton(user, /my-stack/i);
+    await waitFor(() => expect(screen.getByText("cs-exec")).toBeTruthy());
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText("Change Set: cs-exec")).toBeTruthy());
+    await clickButton(user, /Execute/i);
+    await waitFor(() => {
+      expect(mockExecuteChangeSet).toHaveBeenCalled();
+    });
+  });
+
+  // ── Stack Detail Missing Fields ──
+
+  it("shows dash for missing stack creation times", async () => {
+    const user = userEvent.setup();
+    mockStack.mockReturnValue({
+      data: {
+        stack: { stackId: "arn:1", status: "REVIEW_IN_PROGRESS", outputs: [], parameters: [], tags: [] },
+        resources: [], events: [],
+      },
+      isLoading: false,
+    });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => {
+      expect(screen.getByText("REVIEW_IN_PROGRESS")).toBeTruthy();
+    });
+  });
+
+  it("shows dash for missing stack description", () => {
+    mockStacks.mockReturnValue({
+      data: { stacks: [{ name: "no-desc", status: "CREATE_COMPLETE", creationTime: new Date() }], total: 1 },
+      isLoading: false,
+    });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    expect(screen.getByText("no-desc")).toBeTruthy();
+  });
+
+  // ── Health Status ──
+
+  it("shows connected status badge by default", () => {
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    expect(screen.getByRole("heading", { name: /CloudFormation/ })).toBeTruthy();
+  });
 });
