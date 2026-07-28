@@ -21,6 +21,11 @@ const mockRecorders = vi.fn();
 const mockPacks = vi.fn();
 const mockDeleteRule = vi.fn();
 const mockDeletePack = vi.fn();
+const mockCompliance = vi.fn();
+const mockEvalStatus = vi.fn();
+const mockPackStatuses = vi.fn();
+const mockRecorderStatuses = vi.fn();
+const mockStartEval = vi.fn();
 
 vi.mock("../../hooks/useConfigService", () => ({
   useConfigRules: (...args: any[]) => mockRules(...args),
@@ -37,33 +42,13 @@ vi.mock("../../hooks/useConfigService", () => ({
     isPending: false,
     variables: null,
   }),
-  useConfigRecorderStatuses: () => ({
-    data: { statuses: [], total: 0 },
-    isLoading: false,
-    isError: false,
-    error: null,
-  }),
-  useConformancePackStatuses: () => ({
-    data: { statuses: [], total: 0 },
-    isLoading: false,
-    isError: false,
-    error: null,
-  }),
-  useComplianceByConfigRule: () => ({
-    data: { compliance: [], total: 0 },
-    isLoading: false,
-    isError: false,
-    error: null,
-  }),
-  useConfigRuleEvaluationStatus: () => ({
-    data: { statuses: [], total: 0 },
-    isLoading: false,
-    isError: false,
-    error: null,
-  }),
+  useConfigRecorderStatuses: (...args: any[]) => mockRecorderStatuses(...args),
+  useConformancePackStatuses: (...args: any[]) => mockPackStatuses(...args),
+  useComplianceByConfigRule: (...args: any[]) => mockCompliance(...args),
+  useConfigRuleEvaluationStatus: (...args: any[]) => mockEvalStatus(...args),
   useStartConfigRulesEvaluation: () => ({
     mutate: vi.fn(),
-    mutateAsync: vi.fn().mockResolvedValue({}),
+    mutateAsync: mockStartEval,
     isPending: false,
     isError: false,
     error: null,
@@ -96,6 +81,23 @@ beforeEach(() => {
     isError: false,
     error: null,
   });
+  mockCompliance.mockReturnValue({
+    data: { compliance: [], total: 0 },
+    isLoading: false,
+  });
+  mockEvalStatus.mockReturnValue({
+    data: { statuses: [], total: 0 },
+    isLoading: false,
+  });
+  mockPackStatuses.mockReturnValue({
+    data: { statuses: [], total: 0 },
+    isLoading: false,
+  });
+  mockRecorderStatuses.mockReturnValue({
+    data: { statuses: [], total: 0 },
+    isLoading: false,
+  });
+  mockStartEval.mockResolvedValue({});
 });
 
 // ─── Tests ──────────────────────────────────────────────
@@ -107,11 +109,12 @@ describe("ConfigServiceDashboard — rendering", () => {
     expect(container.querySelectorAll("div").length).toBeGreaterThan(0);
   });
 
-  it("shows all 3 tabs", () => {
+  it("shows all 4 tabs", () => {
     render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
     expect(screen.getByRole("tab", { name: /config rules/i })).toBeTruthy();
     expect(screen.getByRole("tab", { name: /recorders/i })).toBeTruthy();
     expect(screen.getByRole("tab", { name: /conformance packs/i })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /advanced/i })).toBeTruthy();
   });
 
   it("shows empty message for rules (first tab by default)", () => {
@@ -320,6 +323,185 @@ describe("ConfigServiceDashboard — Conformance Packs tab", () => {
     await user.click(screen.getByRole("tab", { name: /conformance packs/i }));
     await waitFor(() => {
       expect(screen.getByText("minimal-pack")).toBeTruthy();
+    });
+  });
+});
+
+describe("ConfigServiceDashboard — Advanced tab", () => {
+  it("switches to Advanced tab and shows compliance table", async () => {
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Compliance by Config Rule/)).toBeTruthy();
+    });
+  });
+
+  it("shows empty compliance message", async () => {
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/No compliance data/)).toBeTruthy();
+    });
+  });
+
+  it("shows Evaluate All Rules button", async () => {
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Evaluate All Rules/i })).toBeTruthy();
+    });
+  });
+
+  it("shows Rule Evaluation Status table", async () => {
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Rule Evaluation Status/)).toBeTruthy();
+    });
+  });
+
+  it("shows Conformance Pack Status table", async () => {
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Conformance Pack Status/)).toBeTruthy();
+    });
+  });
+
+  it("shows Configuration Recorder Status table", async () => {
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Configuration Recorder Status/)).toBeTruthy();
+    });
+  });
+
+  it("shows empty evaluation status", async () => {
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/No evaluation status/)).toBeTruthy();
+    });
+  });
+
+  it("shows empty pack status", async () => {
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/No pack status/)).toBeTruthy();
+    });
+  });
+
+  it("shows empty recorder status", async () => {
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/No recorder status/)).toBeTruthy();
+    });
+  });
+
+  it("renders compliance data with COMPLIANT and NON_COMPLIANT statuses", async () => {
+    const user = userEvent.setup();
+    mockCompliance.mockReturnValue({
+      data: {
+        compliance: [
+          { ConfigRuleName: "good-rule", Compliance: { ComplianceType: "COMPLIANT" } },
+          { ConfigRuleName: "bad-rule", Compliance: { ComplianceType: "NON_COMPLIANT", ContributorCount: { CappedCount: 5 } } },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText("good-rule")).toBeTruthy();
+      expect(screen.getByText("bad-rule")).toBeTruthy();
+      expect(screen.getByText("COMPLIANT")).toBeTruthy();
+      expect(screen.getByText("NON_COMPLIANT")).toBeTruthy();
+      expect(screen.getByText("5")).toBeTruthy();
+    });
+  });
+
+  it("renders evaluation status with SUCCEEDED", async () => {
+    const user = userEvent.setup();
+    mockEvalStatus.mockReturnValue({
+      data: {
+        statuses: [
+          { ConfigRuleName: "eval-rule", LastStatus: "SUCCEEDED", LastSuccessfulInvocationTime: "2025-01-15T00:00:00Z", LastErrorMessage: "" },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText("eval-rule")).toBeTruthy();
+      expect(screen.getByText("SUCCEEDED")).toBeTruthy();
+    });
+  });
+
+  it("renders pack status with CREATE_COMPLETE and CREATE_FAILED", async () => {
+    const user = userEvent.setup();
+    mockPackStatuses.mockReturnValue({
+      data: {
+        statuses: [
+          { ConformancePackName: "good-pack", ConformancePackState: "CREATE_COMPLETE", LastUpdateTime: "2025-01-15T00:00:00Z" },
+          { ConformancePackName: "bad-pack", ConformancePackState: "CREATE_FAILED", ConformancePackStatusReason: "S3 error" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText("good-pack")).toBeTruthy();
+      expect(screen.getByText("bad-pack")).toBeTruthy();
+      expect(screen.getByText("CREATE_COMPLETE")).toBeTruthy();
+      expect(screen.getByText("CREATE_FAILED")).toBeTruthy();
+    });
+  });
+
+  it("renders recorder status with recording Yes", async () => {
+    const user = userEvent.setup();
+    mockRecorderStatuses.mockReturnValue({
+      data: {
+        statuses: [
+          { name: "rec1", recording: true, lastStatus: "Success", lastStartTime: "2025-01-15T00:00:00Z" },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText("rec1")).toBeTruthy();
+      expect(screen.getByText("Yes")).toBeTruthy();
+      expect(screen.getByText("Success")).toBeTruthy();
+    });
+  });
+
+  it("clicks Evaluate All Rules button", async () => {
+    mockStartEval.mockResolvedValueOnce({});
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+    const btn = screen.getByRole("button", { name: /Evaluate All Rules/i });
+    await user.click(btn);
+    await waitFor(() => {
+      expect(mockStartEval).toHaveBeenCalled();
     });
   });
 });
