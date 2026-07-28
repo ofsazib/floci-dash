@@ -286,6 +286,63 @@ describe("s3-select routes", () => {
       });
     });
 
+    it("parses event stream — malformed binary with totalLen < 12", async () => {
+      // Construct raw binary with totalLen = 11 (< 12) to trigger the validation break
+      const buf = new ArrayBuffer(12);
+      const view = new DataView(buf);
+      view.setInt32(0, 11, false);  // totalLen < 12 → break
+      view.setInt32(4, 0, false);   // headersLen = 0
+      view.setInt32(8, 0, false);   // CRC placeholder
+      const malformedData = new Uint8Array(buf);
+
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        arrayBuffer: () => Promise.resolve(malformedData.buffer),
+      });
+      globalThis.fetch = mockFetch;
+
+      const res = await executeRoute("POST", "/buckets/my-bucket/select", {
+        key: "test.csv",
+        expression: "SELECT * FROM S3Object",
+      });
+      const data = await res.json();
+      expect(data.result).toBe("");
+      expect(data.stats).toBeNull();
+    });
+
+    it("parses Stats with no BytesScanned field (ternary falsy for scanned)", async () => {
+      const statsXml = "<Stats><BytesProcessed>50</BytesProcessed></Stats>";
+      const statsMsg = buildEventStreamMessage(
+        { ":message-type": "event", ":event-type": "Stats", ":content-type": "text/xml" },
+        new TextEncoder().encode(statsXml)
+      );
+      const endMsg = buildEventStreamMessage(
+        { ":message-type": "event", ":event-type": "End" },
+        new Uint8Array(0)
+      );
+
+      const combined = new Uint8Array(statsMsg.length + endMsg.length);
+      combined.set(statsMsg, 0);
+      combined.set(endMsg, statsMsg.length);
+
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        arrayBuffer: () => Promise.resolve(combined.buffer),
+      });
+      globalThis.fetch = mockFetch;
+
+      const res = await executeRoute("POST", "/buckets/my-bucket/select", {
+        key: "test.csv",
+        expression: "SELECT * FROM S3Object",
+      });
+      const data = await res.json();
+      expect(data.stats).toEqual({
+        bytesScanned: 0,
+        bytesProcessed: 50,
+        bytesReturned: 0,
+      });
+    });
+
     it("handles Floci error response", async () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: false,
