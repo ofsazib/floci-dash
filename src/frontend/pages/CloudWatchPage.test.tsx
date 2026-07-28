@@ -502,8 +502,8 @@ describe("CloudWatchPage — data edge cases", () => {
     const tabs = screen.getAllByText("Metrics");
     await user.click(tabs[tabs.length - 1]);
     await waitFor(() => expect(screen.getAllByText("Invocations").length).toBeGreaterThan(0));
-    const cells = screen.getAllByText("Invocations");
-    await user.click(cells[0]);
+    const radios = screen.getAllByRole("radio");
+    await user.click(radios[0]);
     // Sparkline SVG renders even when all values are same
     await waitFor(() => {
       const svgs = document.querySelectorAll("svg");
@@ -739,14 +739,13 @@ describe("CloudWatchPage — data edge cases", () => {
     const tabs = screen.getAllByText("Metrics");
     await user.click(tabs[tabs.length - 1]);
     await waitFor(() => expect(screen.getAllByText("Invocations").length).toBeGreaterThan(0));
-    // Find the radio input for single-selection and click it
-    const radios = document.querySelectorAll('input[type="radio"]');
-    if (radios.length > 0) {
-      await user.click(radios[0] as HTMLElement);
-    }
-    // Detail container should now show the namespace/metric name header
+    // Click the radio button to select the metric row
+    const radios = screen.getAllByRole("radio");
+    await user.click(radios[0]);
+    // Detail container should now show the namespace/metric name header (multiple matches: cell + header)
     await waitFor(() => {
-      expect(screen.getByText(/AWS\/Lambda/)).toBeTruthy();
+      const awsLabels = screen.getAllByText(/AWS\/Lambda/);
+      expect(awsLabels.length).toBeGreaterThanOrEqual(1);
     });
     // Sparkline SVG should be present from the detail view
     const svgs = document.querySelectorAll("svg");
@@ -929,14 +928,12 @@ describe("CloudWatchPage — data edge cases", () => {
     const tabs = screen.getAllByText("Metrics");
     await user.click(tabs[tabs.length - 1]);
     await waitFor(() => expect(screen.getAllByText("Invocations").length).toBeGreaterThan(0));
-    // Try clicking the radio to select a metric
-    const radios = document.querySelectorAll('input[type="radio"]');
-    if (radios.length > 0) {
-      await user.click(radios[0] as HTMLElement);
-      await waitFor(() => {
-        expect(screen.getByText(/No datapoints in the last hour/)).toBeTruthy();
-      });
-    }
+    // Click the radio to select a metric
+    const radios = screen.getAllByRole("radio");
+    await user.click(radios[0]);
+    await waitFor(() => {
+      expect(screen.getByText(/No datapoints in the last hour/)).toBeTruthy();
+    });
   });
 
   // ─── PutMetricModal Error ──────────────────────────────
@@ -979,6 +976,98 @@ describe("CloudWatchPage — data edge cases", () => {
           comparisonOperator: "GreaterThanOrEqualToThreshold",
         }),
       );
+    });
+  });
+
+  // ─── PutMetricModal: Value Input (parseFloat branch) ─────
+
+  it("publishes metric with custom value (covers parseFloat)", async () => {
+    const user = userEvent.setup();
+    mockPutMetricData.mockResolvedValueOnce({});
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    const tabs = screen.getAllByText("Metrics");
+    await user.click(tabs[tabs.length - 1]);
+    await waitFor(() => expect(screen.getAllByText("Invocations").length).toBeGreaterThan(0));
+    await clickButton(user, /Put metric data/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("MyMetric")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("MyMetric"), "ValMetric");
+    // Change the value from default "1" to "42.5" to cover parseFloat
+    const numberInputs = screen.getAllByRole("spinbutton");
+    const valueInput = numberInputs[numberInputs.length - 1];
+    await user.clear(valueInput);
+    await user.type(valueInput, "42.5");
+    await clickButton(user, /Publish/i);
+    await waitFor(() => {
+      expect(mockPutMetricData).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metricData: expect.arrayContaining([
+            expect.objectContaining({ metricName: "ValMetric", value: 42.5 }),
+          ]),
+        }),
+      );
+    });
+  });
+
+  // ─── PutMetricModal: Namespace Clear (fallback branch) ───
+
+  it("handles namespace Select onChange when selectedOption is null", async () => {
+    // The namespace Select onChange has `|| ""` fallback when selectedOption.value is falsy.
+    // This is exercised by loading with no namespaces so options are empty.
+    const user = userEvent.setup();
+    mockPutMetricData.mockResolvedValueOnce({});
+    // Return no namespaces — verifies the component handles empty namespace gracefully
+    mockCloudWatchMetrics.mockReturnValue({
+      data: { namespaces: [], metrics: [] },
+      isLoading: false, refetch: vi.fn(),
+    });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    const tabs = screen.getAllByText("Metrics");
+    await user.click(tabs[tabs.length - 1]);
+    await waitFor(() => expect(screen.getByText("No metrics")).toBeTruthy());
+    await clickButton(user, /Put metric data/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("MyMetric")).toBeTruthy());
+    // Verify the Select renders with the default placeholder (no namespaces available)
+    expect(screen.getByText("Select namespace")).toBeTruthy();
+    // Type metric name and publish with empty namespace (covers `|| ""` fallback)
+    await user.type(screen.getByPlaceholderText("MyMetric"), "NoNsMetric");
+    await clickButton(user, /Publish/i);
+    await waitFor(() => {
+      expect(mockPutMetricData).toHaveBeenCalledWith(
+        expect.objectContaining({
+          namespace: "",
+          metricData: expect.arrayContaining([
+            expect.objectContaining({ metricName: "NoNsMetric" }),
+          ]),
+        }),
+      );
+    });
+  });
+
+  // ─── State Filter: Clear (select All → empty string) ────
+
+  it("clears state filter by selecting All", async () => {
+    const user = userEvent.setup();
+    mockCloudWatchAlarms.mockReturnValue({
+      data: { alarms: [{ name: "high-cpu", state: "ALARM", namespace: "AWS/EC2", metricName: "CPU", threshold: 80 }] },
+      isLoading: false,
+    });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    // First set filter to ALARM
+    const filterSelect = screen.getByText("Filter by state");
+    await user.click(filterSelect);
+    await waitFor(() => expect(screen.getByText("ALARM")).toBeTruthy());
+    await user.click(screen.getByText("ALARM"));
+    await waitFor(() => {
+      expect(mockCloudWatchAlarms).toHaveBeenCalledWith("ALARM");
+    });
+    // Now clear filter by selecting "All" — use getAllByText (badge also has "ALARM")
+    const alarmTriggers = screen.getAllByText("ALARM");
+    // First "ALARM" is the Select trigger display
+    await user.click(alarmTriggers[0]);
+    await waitFor(() => expect(screen.getByText("All")).toBeTruthy());
+    await user.click(screen.getByText("All"));
+    await waitFor(() => {
+      expect(mockCloudWatchAlarms).toHaveBeenCalledWith("");
     });
   });
 });

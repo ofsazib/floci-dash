@@ -117,6 +117,7 @@ function MetricsTab() {
             placeholder="All namespaces"
           />
           <Table
+            selectionType="single"
             columnDefinitions={[
               { id: "namespace", header: "Namespace", cell: (m: any) => m.namespace },
               { id: "metric", header: "Metric", cell: (m: any) => m.metricName },
