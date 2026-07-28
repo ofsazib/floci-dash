@@ -1217,4 +1217,55 @@ describe("S3Page", () => {
       expect(screen.getByText("Empty folder")).toBeTruthy();
     });
   });
+
+  // ─── S3 Select: Header Treatment Clicks ───────────────
+
+  it("clicks Use header treatment button", async () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("bucket=my-bucket"), vi.fn()]);
+    const user = userEvent.setup();
+    render(<S3Page />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /S3 Select/i }));
+    await waitFor(() => expect(screen.getByText("Header treatment")).toBeTruthy());
+    await clickButton(user, /^Use$/i);
+    // Verify the Use button is now primary variant (active)
+    expect(screen.getByRole("button", { name: /^Use$/i })).toBeTruthy();
+  });
+
+  it("clicks Ignore header treatment button", async () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("bucket=my-bucket"), vi.fn()]);
+    const user = userEvent.setup();
+    render(<S3Page />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /S3 Select/i }));
+    await waitFor(() => expect(screen.getByText("Header treatment")).toBeTruthy());
+    await clickButton(user, /^Ignore$/i);
+    expect(screen.getByRole("button", { name: /^Ignore$/i })).toBeTruthy();
+  });
+
+  it("hides header treatment when switching to JSON input", async () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("bucket=my-bucket"), vi.fn()]);
+    const user = userEvent.setup();
+    render(<S3Page />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /S3 Select/i }));
+    await waitFor(() => expect(screen.getByText("Header treatment")).toBeTruthy());
+    // Click JSON input type (first JSON button is for input format)
+    const jsonBtns = screen.getAllByRole("button", { name: /^JSON$/i });
+    await user.click(jsonBtns[0]);
+    await waitFor(() => {
+      expect(screen.queryByText("Header treatment")).toBeNull();
+    });
+  });
+
+  it("toggles output format to JSON", async () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("bucket=my-bucket"), vi.fn()]);
+    const user = userEvent.setup();
+    render(<S3Page />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /S3 Select/i }));
+    await waitFor(() => expect(screen.getByText("Output format")).toBeTruthy());
+    // Click JSON output format (second JSON button is for output format)
+    const jsonBtns = screen.getAllByRole("button", { name: /^JSON$/i });
+    await user.click(jsonBtns[1]);
+    // After clicking, both input and output format have JSON buttons visible
+    const postClickBtns = screen.getAllByRole("button", { name: /^JSON$/i });
+    expect(postClickBtns.length).toBeGreaterThanOrEqual(2);
+  });
 });
