@@ -283,4 +283,89 @@ describe("SecretsManagerPage", () => {
       expect(mockDeleteSecret).toHaveBeenCalledWith({ id: "my-secret", force: true });
     });
   });
+
+  // ─── CreateSecretModal: Submit ─────────────────────────
+
+  it("submits create secret form with name and value", async () => {
+    const user = userEvent.setup();
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /Create secret/i);
+    await waitFor(() => {
+      expect(screen.getAllByPlaceholderText("my-app/db-password").length).toBeGreaterThan(0);
+    });
+    await user.type(screen.getByPlaceholderText("my-app/db-password"), "app/api-key");
+    const textareas = screen.getAllByRole("textbox");
+    await user.type(textareas[textareas.length - 1], "super-secret");
+    await clickButton(user, /^Create$/);
+    await waitFor(() => {
+      expect(mockCreateSecret).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "app/api-key", secretString: "super-secret" }),
+      );
+    });
+  });
+
+  // ─── SecretDetailModal: Loading ────────────────────────
+
+  it("detail modal shows loading state", async () => {
+    mockSecret.mockReturnValue({
+      data: undefined,
+      isLoading: true, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => {
+      expect(screen.getByText("Loading...")).toBeTruthy();
+    });
+  });
+
+  // ─── SecretDetailModal: Not Found ──────────────────────
+
+  it("detail modal shows not found when secret is null", async () => {
+    mockSecret.mockReturnValue({
+      data: { secret: null, versions: [] },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => {
+      expect(screen.getByText("Secret not found")).toBeTruthy();
+    });
+  });
+
+  // ─── SecretDetailModal: Tags Tab Empty ─────────────────
+
+  it("detail modal tags tab shows no tags message", async () => {
+    mockSecret.mockReturnValue({
+      data: { secret: { ...defaultSecret, tags: [] }, versions: [] },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => {
+      expect(screen.getAllByText(/Secret: my-secret/i).length).toBeGreaterThan(0);
+    });
+    await user.click(screen.getByRole("tab", { name: /Tags/i }));
+    await waitFor(() => {
+      expect(screen.getByText("No tags")).toBeTruthy();
+    });
+  });
+
+  // ─── SecretDetailModal: KMS Key Default ────────────────
+
+  it("detail modal shows default KMS key when not set", async () => {
+    mockSecret.mockReturnValue({
+      data: { secret: { ...defaultSecret, kmsKeyId: undefined }, versions: [] },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => {
+      expect(screen.getByText(/aws\/secretsmanager \(default\)/)).toBeTruthy();
+    });
+  });
+
 });
