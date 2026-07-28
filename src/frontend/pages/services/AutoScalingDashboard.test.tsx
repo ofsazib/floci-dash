@@ -732,6 +732,41 @@ describe("AutoScalingDashboard — lifecycle hooks", () => {
       expect(screen.getByText(/Lifecycle Hooks/)).toBeTruthy();
     });
   });
+
+  it("cancels complete lifecycle action modal", async () => {
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await selectASG(user, "my-asg");
+    await user.click(screen.getAllByText(/Complete action/)[0]);
+    await waitFor(() => expect(screen.getByText(/Complete Lifecycle Action/)).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /^Cancel$/ }));
+    await waitFor(() => {
+      expect(mockCompleteAction).not.toHaveBeenCalled();
+    });
+  });
+
+  it("completes lifecycle action with ABANDON result", async () => {
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await selectASG(user, "my-asg");
+    await user.click(screen.getAllByText(/Complete action/)[0]);
+    await waitFor(() => expect(screen.getByText(/Complete Lifecycle Action/)).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-hook"), "abandon-hook");
+    // Open the Action Result Select (defaults to CONTINUE)
+    const continueTriggers = screen.getAllByText("CONTINUE");
+    await user.click(continueTriggers[0]);
+    await waitFor(() => expect(screen.getByText("ABANDON")).toBeTruthy());
+    await user.click(screen.getByText("ABANDON"));
+    await user.click(screen.getByRole("button", { name: /Complete$/ }));
+    await waitFor(() => {
+      expect(mockCompleteAction).toHaveBeenCalledWith(
+        expect.objectContaining({ lifecycleActionResult: "ABANDON" }),
+        expect.any(Object),
+      );
+    });
+  });
 });
 
 describe("AutoScalingDashboard — create ASG button", () => {
