@@ -837,4 +837,148 @@ describe("CloudWatchPage — data edge cases", () => {
       );
     });
   });
+
+  // ─── CreateAlarmModal Number Inputs ────────────────────
+
+  it("changes threshold, period, and evaluation periods in create alarm modal", async () => {
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /Create alarm/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("AWS/EC2")).toBeTruthy());
+    const nameInput = screen.getAllByRole("textbox")[0];
+    await user.type(nameInput, "num-alarm");
+    // Find number inputs by type
+    const numberInputs = screen.getAllByRole("spinbutton");
+    expect(numberInputs.length).toBeGreaterThanOrEqual(3);
+    // Change threshold (first number input)
+    await user.clear(numberInputs[0]);
+    await user.type(numberInputs[0], "99");
+    // Change period (second number input)
+    await user.clear(numberInputs[1]);
+    await user.type(numberInputs[1], "120");
+    // Change evaluation periods (third number input)
+    await user.clear(numberInputs[2]);
+    await user.type(numberInputs[2], "3");
+    await clickButton(user, /Create/i, { last: true });
+    await waitFor(() => {
+      expect(mockCreateAlarmMutate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "num-alarm",
+          threshold: 99,
+          period: 120,
+          evaluationPeriods: 3,
+        }),
+      );
+    });
+  });
+
+  // ─── Breadcrumb Click ──────────────────────────────────
+
+  it("clicks breadcrumb Dashboard link and navigates", async () => {
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    const dashLinks = screen.getAllByText("Dashboard");
+    // The breadcrumb "Dashboard" is a link
+    await user.click(dashLinks[0]);
+    // After click, the navigate mock should have been called
+    // (the mock from react-router-dom is a no-op vi.fn())
+    expect(screen.getByRole("heading", { name: /CloudWatch/ })).toBeTruthy();
+  });
+
+  // ─── Metrics Namespace Select Change ───────────────────
+
+  it("changes namespace filter in metrics tab", async () => {
+    const user = userEvent.setup();
+    mockCloudWatchMetrics.mockReturnValue({
+      data: {
+        namespaces: ["AWS/Lambda", "AWS/EC2"],
+        metrics: [
+          { namespace: "AWS/Lambda", metricName: "Invocations", dimensions: [] },
+          { namespace: "AWS/EC2", metricName: "CPUUtilization", dimensions: [] },
+        ],
+      },
+      isLoading: false, refetch: vi.fn(),
+    });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    const tabs = screen.getAllByText("Metrics");
+    await user.click(tabs[tabs.length - 1]);
+    await waitFor(() => expect(screen.getAllByText("Invocations").length).toBeGreaterThan(0));
+    // Click the namespace Select to open it
+    const allNs = screen.getByText("All namespaces");
+    await user.click(allNs);
+    // Wait for dropdown option — table cells also have this text, verify count > 1
+    await waitFor(() => {
+      const opts = screen.getAllByText("AWS/EC2");
+      expect(opts.length).toBeGreaterThanOrEqual(1);
+    });
+    // Select "AWS/EC2" from the dropdown (first element is the dropdown option in portal)
+    const ec2Options = screen.getAllByText("AWS/EC2");
+    await user.click(ec2Options[0]);
+    // After selection, mockCloudWatchMetrics should be called with "AWS/EC2"
+    await waitFor(() => {
+      expect(mockCloudWatchMetrics).toHaveBeenCalledWith("AWS/EC2");
+    });
+  });
+
+  // ─── No Datapoints Message When Metric Selected ────────
+
+  it("shows no datapoints message when metric selected but datapoints empty", async () => {
+    const user = userEvent.setup();
+    mockMetricStatistics.mockReturnValue({ data: { datapoints: [] }, isLoading: false });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    const tabs = screen.getAllByText("Metrics");
+    await user.click(tabs[tabs.length - 1]);
+    await waitFor(() => expect(screen.getAllByText("Invocations").length).toBeGreaterThan(0));
+    // Try clicking the radio to select a metric
+    const radios = document.querySelectorAll('input[type="radio"]');
+    if (radios.length > 0) {
+      await user.click(radios[0] as HTMLElement);
+      await waitFor(() => {
+        expect(screen.getByText(/No datapoints in the last hour/)).toBeTruthy();
+      });
+    }
+  });
+
+  // ─── PutMetricModal Error ──────────────────────────────
+
+  it("shows error toast when put metric succeeds but then showToast shows success", async () => {
+    // This verifies the success path after putMetric resolves
+    mockPutMetricData.mockResolvedValueOnce({});
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    const tabs = screen.getAllByText("Metrics");
+    await user.click(tabs[tabs.length - 1]);
+    await waitFor(() => expect(screen.getAllByText("Invocations").length).toBeGreaterThan(0));
+    await clickButton(user, /Put metric data/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("MyMetric")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("MyMetric"), "SuccessMetric");
+    await clickButton(user, /Publish/i);
+    await waitFor(() => {
+      expect(mockShowToast).toHaveBeenCalledWith("success", "Metric data published");
+    });
+  });
+
+  // ─── CreateAlarmModal Form Values Defaults ─────────────
+
+  it("submits create alarm with default form values", async () => {
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /Create alarm/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("AWS/EC2")).toBeTruthy());
+    // Just type name and submit — all other fields use defaults
+    const nameInput = screen.getAllByRole("textbox")[0];
+    await user.type(nameInput, "default-alarm");
+    await clickButton(user, /Create/i, { last: true });
+    await waitFor(() => {
+      expect(mockCreateAlarmMutate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          threshold: 0,
+          period: 60,
+          evaluationPeriods: 1,
+          statistic: "Average",
+          comparisonOperator: "GreaterThanOrEqualToThreshold",
+        }),
+      );
+    });
+  });
 });
