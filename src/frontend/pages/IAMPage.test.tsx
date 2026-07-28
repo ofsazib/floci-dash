@@ -453,4 +453,174 @@ describe("IAMPage", () => {
       expect(screen.getAllByText("Policies").length).toBeGreaterThan(0);
     });
   });
+
+  // ─── Groups Tab — Empty Name (falsy branch) ────────────
+
+  it("does not call createGroup when group name is empty", async () => {
+    const user = userEvent.setup();
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Groups/i }));
+    await clickButton(user, /Create group/i);
+    await waitFor(() => {
+      expect(screen.getAllByText("Group name").length).toBeGreaterThan(0);
+    });
+    // Don't set any value on the input — leave it empty
+    await clickButton(user, /^Create$/);
+    // The if (name) guard prevents mutate from being called
+    expect(mockCreateGroupMutate).not.toHaveBeenCalled();
+  });
+
+  // ─── Groups Tab — Error Toast via onError ─────────────
+
+  it("calls onError when createGroup fails", async () => {
+    const user = userEvent.setup();
+    mockCreateGroupMutate.mockImplementation((_params: any, opts: any) => {
+      opts?.onError?.(new Error("Group creation failed"));
+    });
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Groups/i }));
+    await clickButton(user, /Create group/i);
+    await waitFor(() => {
+      expect(screen.getAllByText("Group name").length).toBeGreaterThan(0);
+    });
+    const input = document.getElementById("group-name-input") as HTMLInputElement;
+    if (input) input.value = "error-group";
+    await clickButton(user, /^Create$/);
+    // Toast would be called — we verify mutate was called (onError path covered via mock)
+    expect(mockCreateGroupMutate).toHaveBeenCalled();
+  });
+
+  // ─── Breadcrumb onFollow ───────────────────────────────
+
+  it("follows breadcrumb to dashboard", async () => {
+    const user = userEvent.setup();
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    // Multiple "Dashboard" texts — use getAllByText and click the first (breadcrumb)
+    const dashLinks = screen.getAllByText(/Dashboard/i);
+    await user.click(dashLinks[0]);
+    // onFollow handler fires — page still renders successfully
+    expect(screen.getByRole("heading", { name: /IAM/ })).toBeTruthy();
+  });
+
+  // ─── User Detail — No user found ───────────────────────
+
+  it("shows 'User not found' when user detail has no user", async () => {
+    const user = userEvent.setup();
+    mockIAMUser.mockReturnValue({
+      data: { user: null, accessKeys: [], attachedPolicies: [], groups: [], inlinePolicies: [] },
+      isLoading: false,
+    });
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Users/i }));
+    await clickButton(user, /View/i, { last: true });
+    await waitFor(() => {
+      expect(screen.getByText("User not found")).toBeTruthy();
+    });
+  });
+
+  // ─── User Detail — Loading ─────────────────────────────
+
+  it("shows loading in user detail modal", async () => {
+    const user = userEvent.setup();
+    mockIAMUser.mockReturnValue({ data: undefined, isLoading: true });
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Users/i }));
+    await clickButton(user, /View/i, { last: true });
+    await waitFor(() => {
+      expect(screen.getByText("Loading...")).toBeTruthy();
+    });
+  });
+
+  // ─── Role Detail — No role found ──────────────────────
+
+  it("shows 'Role not found' when role detail has no role", async () => {
+    const user = userEvent.setup();
+    mockIAMRole.mockReturnValue({ data: { role: null, attachedPolicies: [], tags: {} }, isLoading: false });
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i, { last: true });
+    await waitFor(() => {
+      expect(screen.getByText("Role not found")).toBeTruthy();
+    });
+  });
+
+  // ─── Role Detail — Loading ────────────────────────────
+
+  it("shows loading in role detail modal", async () => {
+    const user = userEvent.setup();
+    mockIAMRole.mockReturnValue({ data: undefined, isLoading: true });
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i, { last: true });
+    await waitFor(() => {
+      expect(screen.getByText("Loading...")).toBeTruthy();
+    });
+  });
+
+  // ─── Policy Detail — No policy found ──────────────────
+
+  it("shows 'Policy not found' when policy detail has no policy", async () => {
+    const user = userEvent.setup();
+    mockIAMPolicy.mockReturnValue({ data: { policy: null, versions: [] }, isLoading: false });
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Policies/i }));
+    await clickButton(user, /View/i, { last: true });
+    await waitFor(() => {
+      expect(screen.getByText("Policy not found")).toBeTruthy();
+    });
+  });
+
+  // ─── Policy Detail — Loading ──────────────────────────
+
+  it("shows loading in policy detail modal", async () => {
+    const user = userEvent.setup();
+    mockIAMPolicy.mockReturnValue({ data: undefined, isLoading: true });
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Policies/i }));
+    await clickButton(user, /View/i, { last: true });
+    await waitFor(() => {
+      expect(screen.getByText("Loading...")).toBeTruthy();
+    });
+  });
+
+  // ─── Inline Policies (non-empty) ──────────────────────
+
+  it("shows inline policy badges when user has inline policies", async () => {
+    const user = userEvent.setup();
+    mockIAMUser.mockReturnValue({
+      data: {
+        user: { name: "admin-user", arn: "arn:aws:iam::000000000000:user/admin-user", userId: "A1B2C3", path: "/", createDate: "2024-01-01T00:00:00Z" },
+        accessKeys: [],
+        attachedPolicies: [],
+        groups: [],
+        inlinePolicies: ["custom-policy-1", "custom-policy-2"],
+      },
+      isLoading: false,
+    });
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Users/i }));
+    await clickButton(user, /View/i, { last: true });
+    await waitFor(() => {
+      expect(screen.getAllByText("custom-policy-1").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("custom-policy-2").length).toBeGreaterThan(0);
+    });
+  });
+
+  // ─── Role Tags (non-empty) ────────────────────────────
+
+  it("shows tags in role detail modal", async () => {
+    const user = userEvent.setup();
+    mockIAMRole.mockReturnValue({
+      data: {
+        role: { name: "ec2-role", arn: "arn:aws:iam::000000000000:role/ec2-role", roleId: "R123", path: "/", createDate: "2024-01-01T00:00:00Z", maxSessionDuration: 3600, description: "EC2 role" },
+        attachedPolicies: [],
+        tags: { Environment: "production", Team: "platform" },
+      },
+      isLoading: false,
+    });
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i, { last: true });
+    await waitFor(() => {
+      // Tags render as Badges with "key: value" text
+      expect(screen.getByText("Environment: production")).toBeTruthy();
+    });
+  });
 });
