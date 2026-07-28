@@ -755,6 +755,104 @@ describe("BatchDashboard — CE type", () => {
     await waitFor(() => expect(screen.getByText("UNMANAGED")).toBeTruthy());
   });
 
+  // ─── Mixed loading states ────────────────────────────
+
+  it("shows loading when only CE is loading", () => {
+    mockComputeEnvs.mockReturnValue({ data: undefined, isLoading: true });
+    mockJobQueues.mockReturnValue({ data: { jobQueues: [] }, isLoading: false });
+    mockJobDefs.mockReturnValue({ data: { jobDefinitions: [] }, isLoading: false });
+    const { container } = render(<BatchDashboard />, { wrapper: createWrapper() });
+    expect(container.querySelectorAll("div").length).toBeGreaterThan(0);
+  });
+
+  it("shows loading when only JQ is loading", () => {
+    mockComputeEnvs.mockReturnValue({ data: { computeEnvironments: [] }, isLoading: false });
+    mockJobQueues.mockReturnValue({ data: undefined, isLoading: true });
+    mockJobDefs.mockReturnValue({ data: { jobDefinitions: [] }, isLoading: false });
+    const { container } = render(<BatchDashboard />, { wrapper: createWrapper() });
+    expect(container.querySelectorAll("div").length).toBeGreaterThan(0);
+  });
+
+  it("shows loading when only JD is loading", () => {
+    mockComputeEnvs.mockReturnValue({ data: { computeEnvironments: [] }, isLoading: false });
+    mockJobQueues.mockReturnValue({ data: { jobQueues: [] }, isLoading: false });
+    mockJobDefs.mockReturnValue({ data: undefined, isLoading: true });
+    const { container } = render(<BatchDashboard />, { wrapper: createWrapper() });
+    expect(container.querySelectorAll("div").length).toBeGreaterThan(0);
+  });
+
+  // ─── Null data fallbacks ─────────────────────────────
+
+  it("renders with null CE data", () => {
+    mockComputeEnvs.mockReturnValue({ data: null, isLoading: false });
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No compute environment/i)).toBeTruthy();
+  });
+
+  it("renders with null JQ data", () => {
+    mockJobQueues.mockReturnValue({ data: null, isLoading: false });
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("Job Queues")).toBeTruthy();
+  });
+
+  it("renders with null JD data", () => {
+    mockJobDefs.mockReturnValue({ data: null, isLoading: false });
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("Job Definitions")).toBeTruthy();
+  });
+
+  // ─── JQ disabled edge cases ──────────────────────────
+
+  it("disables Create JQ button when only name is empty", async () => {
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create job queue/i);
+    await waitFor(() => expect(screen.getAllByText("Create Job Queue").length).toBeGreaterThan(0));
+    // Fill priority but leave name empty
+    const priorityInput = screen.getByLabelText(/Priority/i);
+    await user.type(priorityInput, "10");
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    const createBtn = createBtns[createBtns.length - 1];
+    expect(createBtn.getAttribute("disabled")).not.toBeNull();
+  });
+
+  it("disables Create JQ button when only priority is empty", async () => {
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create job queue/i);
+    await waitFor(() => expect(screen.getAllByText("Create Job Queue").length).toBeGreaterThan(0));
+    // Fill name but leave priority empty
+    const nameInput = screen.getByLabelText(/Queue name/i);
+    await user.type(nameInput, "test-q");
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    const createBtn = createBtns[createBtns.length - 1];
+    expect(createBtn.getAttribute("disabled")).not.toBeNull();
+  });
+
+  // ─── Submit job disabled edge cases ──────────────────
+
+  it("disables Submit when only jobQueue is empty", async () => {
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /Submit Job/i }));
+    await waitFor(() => expect(screen.getByLabelText(/Job name/)).toBeTruthy());
+    fireEvent.change(screen.getByLabelText(/Job name/), { target: { value: "my-job" } });
+    fireEvent.change(screen.getByLabelText(/Job definition ARN/), { target: { value: "arn:aws:batch:..." } });
+    const submitBtn = screen.getByRole("button", { name: /^Submit$/i });
+    expect(submitBtn.getAttribute("disabled")).not.toBeNull();
+  });
+
+  it("disables Submit when only jobDefinition is empty", async () => {
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /Submit Job/i }));
+    await waitFor(() => expect(screen.getByLabelText(/Job name/)).toBeTruthy());
+    fireEvent.change(screen.getByLabelText(/Job name/), { target: { value: "my-job" } });
+    fireEvent.change(screen.getByLabelText(/Job queue ARN/), { target: { value: "arn:aws:batch:..." } });
+    const submitBtn = screen.getByRole("button", { name: /^Submit$/i });
+    expect(submitBtn.getAttribute("disabled")).not.toBeNull();
+  });
+
   it("creates CE with UNMANAGED type when selected", async () => {
     const user = userEvent.setup();
     render(<BatchDashboard />, { wrapper: createWrapper() });
