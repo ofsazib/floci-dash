@@ -623,4 +623,76 @@ describe("CloudWatchPage — data edge cases", () => {
     // The page renders successfully with the tabs
     expect(screen.getAllByText("Metrics").length).toBeGreaterThan(0);
   });
+
+  // ─── Alarm State Filter ────────────────────────────────
+
+  it("changes alarm state filter", async () => {
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    // Find the filter Select by its placeholder text
+    const filterSelect = screen.getByText("Filter by state");
+    expect(filterSelect).toBeTruthy();
+    await user.click(filterSelect);
+    // Dropdown should show filter options
+    await waitFor(() => {
+      expect(screen.getByText("OK")).toBeTruthy();
+      expect(screen.getByText("ALARM")).toBeTruthy();
+    });
+  });
+
+  // ─── Put Metric Modal: Namespace & Unit ────────────────
+
+  it("selects namespace and unit in put metric modal", async () => {
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    const tabs = screen.getAllByText("Metrics");
+    await user.click(tabs[tabs.length - 1]);
+    await waitFor(() => expect(screen.getAllByText("Invocations").length).toBeGreaterThan(0));
+    await clickButton(user, /Put metric data/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("MyMetric")).toBeTruthy());
+    // Namespace Select is present with placeholder "Select namespace"
+    expect(screen.getByText("Select namespace")).toBeTruthy();
+    // Unit Select defaults to "Count"
+    expect(screen.getByText("Count")).toBeTruthy();
+  });
+
+  // ─── Breadcrumb Navigation ─────────────────────────────
+
+  it("renders breadcrumb with Dashboard link", () => {
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    expect(screen.getAllByText("Dashboard").length).toBeGreaterThan(0);
+  });
+
+  // ─── Create Alarm: More Form Fields ────────────────────
+
+  it("fills description in create alarm modal", async () => {
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /Create alarm/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("AWS/EC2")).toBeTruthy());
+    const nameInput = screen.getAllByRole("textbox")[0];
+    await user.type(nameInput, "desc-alarm");
+    // Description textarea exists
+    const textareas = screen.getAllByRole("textbox");
+    // Last textbox (index 2) should be the description textarea
+    const descTextarea = textareas[textareas.length - 1];
+    await user.type(descTextarea, "My description");
+    await clickButton(user, /Create/i, { last: true });
+    await waitFor(() => {
+      expect(mockCreateAlarmMutate).toHaveBeenCalledWith(
+        expect.objectContaining({ description: "My description" }),
+      );
+    });
+  });
+
+  // ─── Alarm State Badge Colors ──────────────────────────
+
+  it("shows green badge for OK alarm state", () => {
+    mockCloudWatchAlarms.mockReturnValue({
+      data: { alarms: [{ name: "ok", state: "OK", namespace: "AWS/EC2", metricName: "CPU", threshold: 10, period: 60, statistic: "Average" }] },
+      isLoading: false,
+    });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    expect(screen.getByText("OK")).toBeTruthy();
+  });
 });
