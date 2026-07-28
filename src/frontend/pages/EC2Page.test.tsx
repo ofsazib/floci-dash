@@ -124,6 +124,14 @@ const mockDeleteFlowLog = vi.fn();
 const mockNetworkAcls = vi.fn();
 const mockCreateNetworkAcl = vi.fn();
 const mockDeleteNetworkAcl = vi.fn();
+const mockCreateAclEntry = vi.fn();
+const mockDeleteAclEntry = vi.fn();
+
+const createAclEntryState = vi.hoisted(() => ({
+  isPending: false,
+  isError: false,
+  error: null as Error | null,
+}));
 
 vi.mock("../hooks/useEC2FlowLogs", () => ({
   useEC2FlowLogs: (...args: any[]) => mockFlowLogs(...args),
@@ -135,8 +143,14 @@ vi.mock("../hooks/useEC2NetworkAcls", () => ({
   useEC2NetworkAcls: (...args: any[]) => mockNetworkAcls(...args),
   useEC2CreateNetworkAcl: () => ({ mutate: mockCreateNetworkAcl, isPending: false }),
   useEC2DeleteNetworkAcl: () => ({ mutateAsync: mockDeleteNetworkAcl, isPending: false }),
-  useEC2CreateNetworkAclEntry: () => ({ mutate: vi.fn(), isPending: false }),
-  useEC2DeleteNetworkAclEntry: () => ({ mutate: vi.fn(), isPending: false }),
+  useEC2CreateNetworkAclEntry: () => ({
+    mutate: mockCreateAclEntry,
+    isPending: createAclEntryState.isPending,
+    isError: createAclEntryState.isError,
+    error: createAclEntryState.error,
+    reset: vi.fn(),
+  }),
+  useEC2DeleteNetworkAclEntry: () => ({ mutate: mockDeleteAclEntry, isPending: false }),
 }));
 
 // ─── Static imports (after mock) ───────────────────────
@@ -1809,6 +1823,9 @@ describe("EC2FlowLogList (EC2Page — Flow Logs tab)", () => {
 describe("EC2NetworkAclList (EC2Page — Network ACLs tab)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    createAclEntryState.isPending = false;
+    createAclEntryState.isError = false;
+    createAclEntryState.error = null;
     setupDefaults();
     mockVpcs.mockReturnValue({
       data: { vpcs: [{ id: "vpc-1", cidrBlock: "10.0.0.0/16", state: "available", isDefault: false, instanceTenancy: "default" }], total: 1 },
@@ -1888,15 +1905,91 @@ describe("EC2NetworkAclList (EC2Page — Network ACLs tab)", () => {
     await waitFor(() => expect(screen.getByText("vpc-1")).toBeTruthy());
   });
 
-  it("cancels add rule modal", async () => {
+  it("opens and cancels add rule modal", async () => {
     mockNetworkAcls.mockReturnValue({
-      data: { networkAcls: [{ id: "acl-rule", vpcId: "vpc-1", isDefault: false, entries: [], associations: [] }], total: 1 },
+      data: { networkAcls: [{ networkAclId: "acl-rule", id: "acl-rule", vpcId: "vpc-1", isDefault: false, entries: [], associations: [] }], total: 1 },
       isLoading: false, isError: false, error: null,
     });
     const user = userEvent.setup();
     render(<EC2Page />, { wrapper: pageWrapper() });
     await goToTab(user, /Network ACLs/i);
     await waitFor(() => expect(screen.getByText("vpc-1")).toBeTruthy());
+    // Click the View rules button to expand ACL details (Add Inbound Rule only visible after expand)
+    await clickButton(user, /View rules for acl-rule/i);
+    await clickButton(user, /Add Inbound Rule/i);
+    await clickButton(user, /^Cancel$/);
+    await waitFor(() => {
+      expect(mockCreateAclEntry).not.toHaveBeenCalled();
+    });
+  });
+
+  it("submits add inbound rule", async () => {
+    mockNetworkAcls.mockReturnValue({
+      data: { networkAcls: [{ networkAclId: "acl-rule", id: "acl-rule", vpcId: "vpc-1", isDefault: false, entries: [], associations: [] }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockCreateAclEntry.mockImplementation((_params: any, opts?: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Network ACLs/i);
     await waitFor(() => expect(screen.getByText("vpc-1")).toBeTruthy());
+    await clickButton(user, /View rules for acl-rule/i);
+    await clickButton(user, /Add Inbound Rule/i);
+    // Type rule number
+    const numberInput = screen.getByPlaceholderText("100");
+    await user.clear(numberInput);
+    await user.type(numberInput, "200");
+    // Type CIDR block (clear default first)
+    const cidrInput = screen.getByPlaceholderText("0.0.0.0/0");
+    await user.clear(cidrInput);
+    await user.type(cidrInput, "10.0.0.0/8");
+    await clickButton(user, /Add Rule/i);
+    await waitFor(() => {
+      expect(mockCreateAclEntry).toHaveBeenCalledWith(
+        expect.objectContaining({
+          aclId: "acl-rule",
+          ruleNumber: 200,
+          cidrBlock: "10.0.0.0/8",
+          egress: false,
+        }),
+        expect.any(Object),
+      );
+    });
+  });
+
+  it("shows error alert when create entry fails", async () => {
+    createAclEntryState.isError = true;
+    createAclEntryState.error = new Error("Entry creation failed");
+    mockNetworkAcls.mockReturnValue({
+      data: { networkAcls: [{ networkAclId: "acl-err", id: "acl-err", vpcId: "vpc-1", isDefault: false, entries: [], associations: [] }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Network ACLs/i);
+    await waitFor(() => expect(screen.getByText("vpc-1")).toBeTruthy());
+    await clickButton(user, /View rules for acl-err/i);
+    await clickButton(user, /Add Inbound Rule/i);
+    await waitFor(() => {
+      expect(screen.getByText("Entry creation failed")).toBeTruthy();
+    });
+  });
+
+  it("shows default error message when create entry fails without message", async () => {
+    createAclEntryState.isError = true;
+    createAclEntryState.error = null;
+    mockNetworkAcls.mockReturnValue({
+      data: { networkAcls: [{ networkAclId: "acl-err2", id: "acl-err2", vpcId: "vpc-1", isDefault: false, entries: [], associations: [] }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Network ACLs/i);
+    await waitFor(() => expect(screen.getByText("vpc-1")).toBeTruthy());
+    await clickButton(user, /View rules for acl-err2/i);
+    await clickButton(user, /Add Inbound Rule/i);
+    await waitFor(() => {
+      expect(screen.getByText("Failed to add rule")).toBeTruthy();
+    });
   });
 });
