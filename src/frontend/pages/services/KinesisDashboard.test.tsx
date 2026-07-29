@@ -1034,4 +1034,92 @@ describe("KinesisDashboard — data edge cases", () => {
       expect(screen.getByText(/Failed to subscribe to shard/)).toBeTruthy();
     });
   });
+
+  it("renders subscribe modal with Close button", async () => {
+    setupStream();
+    mockConsumers.mockReturnValue({
+      data: { consumers: [{ ConsumerName: "sub-consumer", ConsumerARN: "arn:...", ConsumerStatus: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<KinesisDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-stream"));
+    await waitFor(() => expect(screen.getByText(/Shards: my-stream/)).toBeTruthy());
+    await clickButton(user, /View consumers/i);
+    await waitFor(() => expect(screen.getByText("sub-consumer")).toBeTruthy());
+    await clickButton(user, /Subscribe/i);
+    await waitFor(() => expect(screen.getByText(/Subscribe to Shard/)).toBeTruthy());
+    // Verify the modal footer Close button exists (covers subscribe modal render branch)
+    expect(screen.getByRole("button", { name: /^Close$/ })).toBeTruthy();
+  });
+
+  it("changes subscribe starting position to AT_TIMESTAMP", async () => {
+    setupStream();
+    mockConsumers.mockReturnValue({
+      data: { consumers: [{ ConsumerName: "sub-consumer", ConsumerARN: "arn:...", ConsumerStatus: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<KinesisDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-stream"));
+    await waitFor(() => expect(screen.getByText(/Shards: my-stream/)).toBeTruthy());
+    await clickButton(user, /View consumers/i);
+    await waitFor(() => expect(screen.getByText("sub-consumer")).toBeTruthy());
+    await clickButton(user, /Subscribe/i);
+    await waitFor(() => expect(screen.getByText(/Subscribe to Shard/)).toBeTruthy());
+    const posSelect = screen.getByText(/TRIM_HORIZON/);
+    await user.click(posSelect);
+    await waitFor(() => expect(screen.getByText("AT_TIMESTAMP")).toBeTruthy());
+    await user.click(screen.getByText("AT_TIMESTAMP"));
+    expect(screen.getByText("AT_TIMESTAMP")).toBeTruthy();
+  });
+
+  it("switches tabs and clears selection via Streams tab click", async () => {
+    mockStreams.mockReturnValue({
+      data: { streams: [{ StreamName: "my-stream", StreamStatus: "ACTIVE", OpenShardCount: 1, RetentionPeriodHours: 24 }], total: 1 },
+      isLoading: false,
+    });
+    mockShards.mockReturnValue({ data: { shards: [], total: 0 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<KinesisDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-stream"));
+    await waitFor(() => expect(screen.getByText(/Shards: my-stream/)).toBeTruthy());
+    // Click Streams tab — should clear selection and show stream list
+    const streamsTab = screen.getByRole("tab", { name: /streams/i });
+    await user.click(streamsTab);
+    await waitFor(() => {
+      expect(screen.getByText("my-stream")).toBeTruthy();
+    });
+  });
+
+  it("navigates back to shards from consumers tab", async () => {
+    setupStream();
+    const user = userEvent.setup();
+    render(<KinesisDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-stream"));
+    await waitFor(() => expect(screen.getByText(/Shards: my-stream/)).toBeTruthy());
+    await clickButton(user, /View consumers/i);
+    await waitFor(() => expect(screen.getByText(/No consumers registered/)).toBeTruthy());
+    await clickButton(user, /Back to shards/i);
+    await waitFor(() => expect(screen.getByText(/Shards: my-stream/)).toBeTruthy());
+  });
+
+  it("subscribe modal shows Fetch records button as disabled when no shard selected", async () => {
+    setupStream();
+    mockConsumers.mockReturnValue({
+      data: { consumers: [{ ConsumerName: "sub-consumer", ConsumerARN: "arn:...", ConsumerStatus: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<KinesisDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-stream"));
+    await waitFor(() => expect(screen.getByText(/Shards: my-stream/)).toBeTruthy());
+    await clickButton(user, /View consumers/i);
+    await waitFor(() => expect(screen.getByText("sub-consumer")).toBeTruthy());
+    await clickButton(user, /Subscribe/i);
+    await waitFor(() => expect(screen.getByText(/Subscribe to Shard/)).toBeTruthy());
+    // Fetch records button should be disabled when no shard is selected
+    const fetchBtn = screen.getByRole("button", { name: /Fetch records/i });
+    expect(fetchBtn.getAttribute("disabled")).not.toBeNull();
+  });
 });
