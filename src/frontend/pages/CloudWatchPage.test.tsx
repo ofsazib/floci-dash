@@ -1052,18 +1052,19 @@ describe("CloudWatchPage — data edge cases", () => {
       isLoading: false,
     });
     render(<CloudWatchPage />, { wrapper: pageWrapper() });
-    // First set filter to ALARM
+    // First set filter to ALARM — use getAllByText since badge also shows ALARM
     const filterSelect = screen.getByText("Filter by state");
     await user.click(filterSelect);
-    await waitFor(() => expect(screen.getByText("ALARM")).toBeTruthy());
-    await user.click(screen.getByText("ALARM"));
+    await waitFor(() => {
+      const alarmOptions = screen.getAllByText(/^ALARM$/);
+      expect(alarmOptions.length).toBeGreaterThanOrEqual(1);
+    });
+    await user.click(screen.getAllByText(/^ALARM$/)[0]);
     await waitFor(() => {
       expect(mockCloudWatchAlarms).toHaveBeenCalledWith("ALARM");
     });
-    // Now clear filter by selecting "All" — use getAllByText (badge also has "ALARM")
-    const alarmTriggers = screen.getAllByText("ALARM");
-    // First "ALARM" is the Select trigger display
-    await user.click(alarmTriggers[0]);
+    // Now clear filter by selecting "All"
+    await user.click(screen.getAllByText(/^ALARM$/)[0]);
     await waitFor(() => expect(screen.getByText("All")).toBeTruthy());
     await user.click(screen.getByText("All"));
     await waitFor(() => {
