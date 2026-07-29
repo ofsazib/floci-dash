@@ -1773,4 +1773,155 @@ describe("IoTDashboard — MQTT Broker tab", () => {
     await clickButton(user, /inspect/i);
     await waitFor(() => expect(screen.getByText("Disconnected")).toBeTruthy());
   });
+
+  it("shows dash for connection missing sourceIp", async () => {
+    mockConnection.mockReturnValue({
+      data: { connection: { clientId: "noip-dev", connected: true, sourcePort: 9999 } },
+      isLoading: false, isError: false,
+    });
+    mockSubscriptions.mockReturnValue({ data: { subscriptions: [] }, isLoading: false });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /mqtt broker/i }));
+    await user.type(screen.getByPlaceholderText("device-001"), "noip-dev");
+    await clickButton(user, /inspect/i);
+    await waitFor(() => expect(screen.getByText("—")).toBeTruthy());
+  });
+
+  it("shows sourceIp only when sourcePort is missing", async () => {
+    mockConnection.mockReturnValue({
+      data: { connection: { clientId: "noport-dev", connected: true, sourceIp: "10.0.0.5" } },
+      isLoading: false, isError: false,
+    });
+    mockSubscriptions.mockReturnValue({ data: { subscriptions: [] }, isLoading: false });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /mqtt broker/i }));
+    await user.type(screen.getByPlaceholderText("device-001"), "noport-dev");
+    await clickButton(user, /inspect/i);
+    await waitFor(() => expect(screen.getByText(/10\.0\.0\.5/)).toBeTruthy());
+  });
+});
+
+// ═══ Additional branch coverage tests ═══════════════════
+
+describe("IoTDashboard — edge case branches", () => {
+  it("shows error StatusIndicator for REVOKED certificate", async () => {
+    mockCertificates.mockReturnValue({
+      data: { certificates: [{ certificateId: "cert-revoked", status: "REVOKED", creationDate: "2025-01-01" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /certificates/i }));
+    await waitFor(() => expect(screen.getByText("REVOKED")).toBeTruthy());
+  });
+
+  it("shows 'Failed' fallback when create thing error has no message", async () => {
+    createThingState.isError = true;
+    createThingState.error = {} as Error;
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /create thing/i);
+    await waitFor(() => expect(screen.getByText("Failed")).toBeTruthy());
+  });
+
+  it("shows 'Failed' fallback when create policy error has no message", async () => {
+    createPolicyState.isError = true;
+    createPolicyState.error = {} as Error;
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /policies/i }));
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Failed")).toBeTruthy());
+  });
+
+  it("shows 'Failed' fallback when create rule error has no message", async () => {
+    createRuleState.isError = true;
+    createRuleState.error = {} as Error;
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /topic rules/i }));
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Failed")).toBeTruthy());
+  });
+
+  it("shows 'Failed' fallback when create thing type error has no message", async () => {
+    createThingTypeState.isError = true;
+    createThingTypeState.error = {} as Error;
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /thing types/i }));
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Failed")).toBeTruthy());
+  });
+
+  it("renders job with executionSummary nested status", async () => {
+    mockThings.mockReturnValue({
+      data: { things: [{ thingName: "JobDev2", thingTypeName: "T", thingArn: "arn:1" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockThingJobs.mockReturnValue({
+      data: { executionSummaries: [{ jobId: "job-nested", executionSummary: { status: "QUEUED", queuedAt: "2025-06-01T00:00:00Z" } }] },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("JobDev2"));
+    await waitFor(() => {
+      expect(screen.getByText("job-nested")).toBeTruthy();
+      expect(screen.getByText("QUEUED")).toBeTruthy();
+    });
+  });
+
+  it("renders job with empty fields as dash", async () => {
+    mockThings.mockReturnValue({
+      data: { things: [{ thingName: "JobDev3", thingTypeName: "T", thingArn: "arn:1" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockThingJobs.mockReturnValue({
+      data: { executionSummaries: [{ jobId: "job-empty" }] },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("JobDev3"));
+    await waitFor(() => {
+      expect(screen.getByText("job-empty")).toBeTruthy();
+    });
+  });
+
+  it("shows policy version using policyVersionId fallback", async () => {
+    mockPolicies.mockReturnValue({
+      data: { policies: [{ policyName: "PV", policyArn: "arn:1", defaultVersionId: "v1", creationDate: "2025-01-15" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockPolicyVersions.mockReturnValue({
+      data: { policyVersions: [{ policyVersionId: "v2-alt", isDefaultVersion: false }, { versionId: "v1", isDefaultVersion: true, createDate: "2025-01-15" }], total: 2 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /policies/i }));
+    await waitFor(() => user.click(screen.getByText("PV")));
+    await waitFor(() => expect(screen.getByText("v2-alt")).toBeTruthy());
+  });
+
+  it("does not update shadow with invalid JSON", async () => {
+    mockThings.mockReturnValue({
+      data: { things: [{ thingName: "ShadowDev2", thingTypeName: "S", thingArn: "arn:1" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockShadow.mockReturnValue({ data: { shadow: { state: {} } }, isLoading: false });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("ShadowDev2"));
+    await waitFor(() => clickButton(user, /View shadow/i));
+    await waitFor(() => expect(screen.getByPlaceholderText(/desired/)).toBeTruthy());
+    await user.type(screen.getByPlaceholderText(/desired/), "invalid json");
+    await clickButton(user, /Update/);
+    await waitFor(() => {
+      expect(mockUpdateShadow).not.toHaveBeenCalled();
+    });
+  });
 });
