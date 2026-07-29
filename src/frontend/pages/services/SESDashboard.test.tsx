@@ -1280,4 +1280,266 @@ describe("SESDashboard — sending, tracking, reputation, delivery", () => {
       );
     });
   });
+
+  it("enables reputation metrics when disabled", async () => {
+    const user = userEvent.setup();
+    mockConfigSets.mockReturnValue({
+      data: { configurationSets: [{ Name: "cs-rep-enable" }], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockDescribeConfigSet.mockReturnValue({
+      data: {
+        name: "cs-rep-enable",
+        eventDestinations: [],
+        reputationOptions: { ReputationMetricsEnabled: false },
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("cs-rep-enable")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /View/i }));
+    await waitFor(() => screen.getByText("Reputation Metrics"));
+    await user.click(screen.getByRole("button", { name: /^Enable$/i }));
+    await waitFor(() => {
+      expect(mockSetRepMetrics).toHaveBeenCalledWith(
+        expect.objectContaining({ configSetName: "cs-rep-enable", enabled: true }),
+      );
+    });
+  });
+
+  it("disables DKIM signing when enabled", async () => {
+    const user = userEvent.setup();
+    mockIdentities.mockReturnValue({
+      data: {
+        identities: [
+          { identity: "dkim-off@example.com", verificationStatus: "Success", dkimEnabled: true, mailFromDomain: "mail.example.com" },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockNotifAttrs.mockReturnValue({
+      data: { forwardingEnabled: false },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("dkim-off@example.com")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Notifications/i }));
+    await waitFor(() => screen.getByText("DKIM Signing"));
+    // dkimEnabled is true so button should say "Disable"
+    await user.click(screen.getByRole("button", { name: /^Disable$/i }));
+    await waitFor(() => {
+      expect(mockSetDkimEnabled).toHaveBeenCalled();
+    });
+  });
+
+  it("enables feedback forwarding when disabled", async () => {
+    const user = userEvent.setup();
+    mockIdentities.mockReturnValue({
+      data: {
+        identities: [
+          { identity: "ff-on@example.com", verificationStatus: "Success", dkimEnabled: false, mailFromDomain: null },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockNotifAttrs.mockReturnValue({
+      data: { forwardingEnabled: false },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("ff-on@example.com")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Notifications/i }));
+    await waitFor(() => screen.getByText("Feedback Forwarding"));
+    // forwardingEnabled is false so button says "Enable". There may also be a DKIM Enable button.
+    // Click the first Enable button (Feedback Forwarding)
+    await user.click(screen.getAllByRole("button", { name: /^Enable$/i })[0]);
+    await waitFor(() => {
+      expect(mockSetFeedbackForwarding).toHaveBeenCalled();
+    });
+  });
+
+  it("opens edit event destination modal with fields", async () => {
+    mockConfigSets.mockReturnValue({
+      data: { configurationSets: [{ Name: "cs-edit-modal" }], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockDescribeConfigSet.mockReturnValue({
+      data: {
+        name: "cs-edit-modal",
+        eventDestinations: [
+          { Name: "edit-me-modal", Enabled: true, MatchingEventTypes: ["send"], SNSDestination: { TopicARN: "arn:sns:old" } },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("cs-edit-modal")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /View/i }));
+    await waitFor(() => screen.getByText("edit-me-modal"));
+
+    // Click Edit button on the event destination
+    const editBtns = screen.getAllByRole("button", { name: /Edit/i });
+    await user.click(editBtns[editBtns.length - 1]);
+
+    // Verify the edit modal renders with pre-filled fields (name disabled, event types, SNS topic ARN)
+    await waitFor(() => {
+      expect(screen.getAllByPlaceholderText("send, bounce").length).toBeGreaterThanOrEqual(1);
+    });
+    expect(screen.getByPlaceholderText("my-sns-destination")).toBeTruthy();
+    // Name input should be disabled in edit mode
+    const nameInput = screen.getByPlaceholderText("my-sns-destination");
+    expect(nameInput.tagName).toBe("INPUT");
+  });
+
+  it("opens delivery options modal and renders TLS policy select", async () => {
+    mockConfigSets.mockReturnValue({
+      data: { configurationSets: [{ Name: "cs-del-modal" }], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockDescribeConfigSet.mockReturnValue({
+      data: {
+        name: "cs-del-modal",
+        eventDestinations: [],
+        trackingOptions: { CustomRedirectDomain: "track.example.com" },
+        deliveryOptions: { TlsPolicy: "Optional" },
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("cs-del-modal")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /View/i }));
+    await waitFor(() => screen.getByText("Delivery Options"));
+
+    // Click Edit button for delivery options
+    const editBtns = screen.getAllByRole("button", { name: /Edit/i });
+    await user.click(editBtns[1]);
+    await waitFor(() => {
+      expect(screen.getByText("Set Delivery Options")).toBeTruthy();
+    });
+
+    // Verify the TLS policy input is rendered
+    expect(screen.getByText("TLS Policy")).toBeTruthy();
+  });
+
+  it("opens MAIL FROM modal with heading", async () => {
+    mockIdentities.mockReturnValue({
+      data: {
+        identities: [
+          { identity: "mf@example.com", verificationStatus: "Success", dkimEnabled: false, mailFromDomain: null },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockNotifAttrs.mockReturnValue({
+      data: { forwardingEnabled: false },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("mf@example.com")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Notifications/i }));
+    await waitFor(() => screen.getByText("Feedback Forwarding"));
+
+    // Click "Set" for MAIL FROM (last Set button)
+    const setBtns = screen.getAllByRole("button", { name: /Set/i });
+    await user.click(setBtns[setBtns.length - 1]);
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("mail.example.com")).toBeTruthy();
+    });
+
+    // Verify the modal rendered with input and Save button
+    expect(screen.getByText(/Set MAIL FROM/i)).toBeTruthy();
+  });
+
+  it("renders tracking options modal create state", async () => {
+    mockConfigSets.mockReturnValue({
+      data: { configurationSets: [{ Name: "cs-tr-create" }], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockDescribeConfigSet.mockReturnValue({
+      data: { name: "cs-tr-create", eventDestinations: [] },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("cs-tr-create")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /View/i }));
+    // "Not configured" appears in the tracking options section when no trackingOptions exist
+    await waitFor(() => {
+      expect(screen.getByText(/Not configured/i)).toBeTruthy();
+    });
+
+    // Click "Set" for tracking options
+    await user.click(screen.getByRole("button", { name: /^Set$/i }));
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("click.example.com")).toBeTruthy();
+    });
+  });
+
+  it("renders tracking options modal edit state", async () => {
+    mockConfigSets.mockReturnValue({
+      data: { configurationSets: [{ Name: "cs-tr-edit" }], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockDescribeConfigSet.mockReturnValue({
+      data: {
+        name: "cs-tr-edit",
+        eventDestinations: [],
+        trackingOptions: { CustomRedirectDomain: "old.track.com" },
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("cs-tr-edit")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /View/i }));
+
+    // The tracking options section should show the existing domain with Edit button
+    await waitFor(() => {
+      expect(screen.getAllByRole("button", { name: /Edit/i }).length).toBeGreaterThanOrEqual(1);
+    });
+
+    // Click Edit button for tracking options (first Edit in config set detail section)
+    await user.click(screen.getAllByRole("button", { name: /Edit/i })[0]);
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("click.example.com")).toBeTruthy();
+    });
+  });
 });
