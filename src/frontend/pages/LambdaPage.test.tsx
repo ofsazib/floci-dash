@@ -110,6 +110,16 @@ describe("LambdaPage", () => {
     expect(screen.getAllByText("nodejs22.x").length).toBeGreaterThan(0);
   });
 
+  it("shows function with Failed state", async () => {
+    mockFunctions.mockReturnValue({
+      data: { functions: [{ name: "failed-fn", runtime: "nodejs20.x", handler: "index.handler", state: "Failed", timeout: 3, memorySize: 128 }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    expect(screen.getByText("failed-fn")).toBeTruthy();
+    expect(screen.getByText("Failed")).toBeTruthy();
+  });
+
   it("shows loading state", () => {
     mockFunctions.mockReturnValue({ data: undefined, isLoading: true, isError: false, error: null });
     render(<LambdaPage />, { wrapper: createWrapper() });
@@ -432,6 +442,20 @@ describe("LambdaPage", () => {
       expect(screen.getByText("Test layer")).toBeTruthy();
       expect(screen.getByText(/1\.0 KB/)).toBeTruthy();
       expect(screen.getAllByText("nodejs22.x").length).toBeGreaterThan(0);
+    });
+  });
+
+  it("shows layer with codeSize=0 and no runtimes", async () => {
+    const user = userEvent.setup();
+    mockLambdaLayers.mockReturnValue({
+      data: { layers: [{ name: "zero-code", arn: "arn:aws:lambda::layer:zero:1", latestVersion: { version: 1, description: "Zero bytes", codeSize: 0, compatibleRuntimes: [] } }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Layers/i }));
+    await waitFor(() => {
+      expect(screen.getByText("zero-code")).toBeTruthy();
+      expect(screen.getByText("Zero bytes")).toBeTruthy();
     });
   });
 
@@ -1113,6 +1137,23 @@ describe("LambdaPage", () => {
     await clickButton(user, /^Create layer$/i);
     await waitFor(() => {
       expect(screen.getByText("Failed to create layer")).toBeTruthy();
+    });
+  });
+
+  it("shows create layer version modal renders with header and fields", async () => {
+    const user = userEvent.setup();
+    mockLambdaLayers.mockReturnValue({
+      data: { layers: [{ name: "btn-layer", arn: "arn:aws:lambda::layer:btn:1", latestVersion: { version: 1 } }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Layers/i }));
+    await waitFor(() => {
+      expect(screen.getByText("btn-layer")).toBeTruthy();
+    });
+    await clickButton(user, /^Create layer$/i);
+    await waitFor(() => {
+      expect(screen.getByText("Create layer version")).toBeTruthy();
     });
   });
 
