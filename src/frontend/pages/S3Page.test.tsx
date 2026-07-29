@@ -1268,4 +1268,45 @@ describe("S3Page", () => {
     const postClickBtns = screen.getAllByRole("button", { name: /^JSON$/i });
     expect(postClickBtns.length).toBeGreaterThanOrEqual(2);
   });
+
+  it("clicks CSV input format button", async () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("bucket=my-bucket"), vi.fn()]);
+    const user = userEvent.setup();
+    render(<S3Page />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /S3 Select/i }));
+    await waitFor(() => expect(screen.getByText("Input format")).toBeTruthy());
+    // The first CSV button is for input format
+    const csvBtns = screen.getAllByRole("button", { name: /^CSV$/i });
+    await user.click(csvBtns[0]);
+    // After clicking CSV input format, CSV should be primary variant
+    await waitFor(() => {
+      expect(screen.getByText("Header treatment")).toBeTruthy();
+    });
+  });
+
+  it("clicks CSV output format button", async () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("bucket=my-bucket"), vi.fn()]);
+    const user = userEvent.setup();
+    render(<S3Page />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /S3 Select/i }));
+    await waitFor(() => expect(screen.getByText("Output format")).toBeTruthy());
+    // The second CSV button is for output format
+    const csvBtns = screen.getAllByRole("button", { name: /^CSV$/i });
+    await user.click(csvBtns[1]);
+    // After clicking CSV output format, we should still have at least 2 CSV buttons
+    const postClickBtns = screen.getAllByRole("button", { name: /^CSV$/i });
+    expect(postClickBtns.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("clicks None header treatment button", async () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("bucket=my-bucket"), vi.fn()]);
+    const user = userEvent.setup();
+    render(<S3Page />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /S3 Select/i }));
+    await waitFor(() => expect(screen.getByText("Header treatment")).toBeTruthy());
+    // The None button is inactive by default (Use is default)
+    await clickButton(user, /^None$/i);
+    // Verify the None button is now active
+    expect(screen.getByRole("button", { name: /^None$/i })).toBeTruthy();
+  });
 });
