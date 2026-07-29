@@ -703,4 +703,100 @@ describe("ApiGatewayV2Dashboard — data edge cases", () => {
     await user.click(screen.getByRole("tab", { name: /Deployments/i }));
     await waitFor(() => expect(screen.getByText(/Deployments in/)).toBeTruthy());
   });
+
+  // ─── Route auth/target fallbacks ────────────────────────
+
+  it("defaults route auth to NONE when AuthorizationType is missing", async () => {
+    mockApis.mockReturnValue({
+      data: { apis: [{ ApiId: "api-1", Name: "my-api", ProtocolType: "HTTP" }], total: 1 },
+      isLoading: false,
+    });
+    mockRoutes.mockReturnValue({
+      data: { routes: [{ RouteId: "r-1", RouteKey: "ANY /path" }], total: 1 },
+    });
+    const user = userEvent.setup();
+    render(<ApiGatewayV2Dashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-api"));
+    await waitFor(() => expect(screen.getByText("ANY /path")).toBeTruthy());
+    // Route column shows auth defaulted to NONE and target to "-"
+    expect(screen.getByText("NONE")).toBeTruthy();
+    expect(screen.getByText("-")).toBeTruthy();
+  });
+
+  // ─── Integration with all fields present ─────────────────
+
+  it("renders integration with all fields including method", async () => {
+    mockApis.mockReturnValue({
+      data: { apis: [{ ApiId: "api-1", Name: "my-api", ProtocolType: "HTTP" }], total: 1 },
+      isLoading: false,
+    });
+    mockIntegrations.mockReturnValue({
+      data: { integrations: [{ IntegrationId: "i-full", IntegrationType: "HTTP_PROXY", IntegrationUri: "https://example.com", IntegrationMethod: "POST" }], total: 1 },
+    });
+    const user = userEvent.setup();
+    render(<ApiGatewayV2Dashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-api"));
+    await user.click(screen.getByRole("tab", { name: /Integrations/i }));
+    await waitFor(() => {
+      expect(screen.getByText("HTTP_PROXY")).toBeTruthy();
+      expect(screen.getByText("https://example.com")).toBeTruthy();
+      expect(screen.getByText("POST")).toBeTruthy();
+    });
+  });
+
+  // ─── Back button click ──────────────────────────────────
+
+  it("clicks Back to APIs and returns to list view", async () => {
+    mockApis.mockReturnValue({
+      data: { apis: [{ ApiId: "api-1", Name: "my-api", ProtocolType: "HTTP" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ApiGatewayV2Dashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-api"));
+    await waitFor(() => expect(screen.getByText(/Back to APIs/i)).toBeTruthy());
+
+    await user.click(screen.getByText(/Back to APIs/i));
+    await waitFor(() => {
+      expect(screen.getByText(/API Gateway V2 APIs/i)).toBeTruthy();
+      expect(screen.queryByText(/Back to APIs/i)).toBeNull();
+    });
+  });
+
+  // ─── Deployment with all fields missing ─────────────────
+
+  it("shows dash for deployment missing status/description/created", async () => {
+    mockApis.mockReturnValue({
+      data: { apis: [{ ApiId: "api-1", Name: "my-api", ProtocolType: "HTTP" }], total: 1 },
+      isLoading: false,
+    });
+    mockDeployments.mockReturnValue({
+      data: { deployments: [{ DeploymentId: "d-bare" }], total: 1 },
+    });
+    const user = userEvent.setup();
+    render(<ApiGatewayV2Dashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-api"));
+    await user.click(screen.getByRole("tab", { name: /Deployments/i }));
+    await waitFor(() => {
+      expect(screen.getByText("d-bare")).toBeTruthy();
+      const dashes = screen.getAllByText("-");
+      expect(dashes.length).toBeGreaterThanOrEqual(3);
+    });
+  });
+
+  // ─── API with WEBSOCKET protocol ────────────────────────
+
+  it("renders API with WEBSOCKET protocol in list", () => {
+    mockApis.mockReturnValue({
+      data: {
+        apis: [{ ApiId: "api-1", Name: "ws-api", ProtocolType: "WEBSOCKET", ApiEndpoint: "wss://abc.execute-api.amazonaws.com", CreatedDate: 1705000000 }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<ApiGatewayV2Dashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("ws-api")).toBeTruthy();
+    expect(screen.getByText("WEBSOCKET")).toBeTruthy();
+  });
+
 });
