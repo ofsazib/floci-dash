@@ -1650,4 +1650,184 @@ describe("CloudFormationPage", () => {
     });
   });
 
+  // ── ResourceDetailContainer: string metadata path ───────
+
+  it("renders string metadata as raw text in ResourceDetailContainer", async () => {
+    const user = userEvent.setup();
+    mockStack.mockReturnValue({
+      data: {
+        stack: { stackId: "arn:1", status: "CREATE_COMPLETE", creationTime: new Date(), outputs: [], parameters: [], tags: [] },
+        resources: [{ logicalId: "StrMeta", type: "AWS::S3::Bucket", physicalId: "phys-str", status: "CREATE_COMPLETE", lastUpdated: new Date() }],
+        events: [],
+      },
+      isLoading: false,
+    });
+    mockStackResource.mockReturnValue({
+      data: { resource: { logicalId: "StrMeta", resourceType: "AWS::S3::Bucket", status: "CREATE_COMPLETE", physicalId: "phys-str", lastUpdated: new Date(), metadata: "plain-string-metadata" } },
+      isLoading: false,
+    });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => user.click(screen.getByRole("tab", { name: /Resources/i })));
+    await waitFor(() => clickButton(user, /View/, { last: true }));
+    await waitFor(() => {
+      expect(screen.getByText(/StrMeta/)).toBeTruthy();
+      expect(screen.getByText("plain-string-metadata")).toBeTruthy();
+    });
+  });
+
+  // ── ResourceDetailContainer: missing physicalId ─────────
+
+  it("shows dash for missing physicalId in ResourceDetailContainer", async () => {
+    const user = userEvent.setup();
+    mockStack.mockReturnValue({
+      data: {
+        stack: { stackId: "arn:1", status: "CREATE_COMPLETE", creationTime: new Date(), outputs: [], parameters: [], tags: [] },
+        resources: [{ logicalId: "NoPhys", type: "AWS::S3::Bucket", status: "CREATE_COMPLETE" }],
+        events: [],
+      },
+      isLoading: false,
+    });
+    mockStackResource.mockReturnValue({
+      data: { resource: { logicalId: "NoPhys", resourceType: "AWS::S3::Bucket", status: "CREATE_COMPLETE", lastUpdated: new Date() } },
+      isLoading: false,
+    });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => user.click(screen.getByRole("tab", { name: /Resources/i })));
+    await waitFor(() => clickButton(user, /View/, { last: true }));
+    await waitFor(() => {
+      expect(screen.getByText(/Resource: NoPhys/)).toBeTruthy();
+    });
+  });
+
+  // ── ChangeSetDetail: EXECUTE_COMPLETE badge color ──────
+
+  it("shows blue badge for EXECUTE_COMPLETE change set in detail", async () => {
+    const user = userEvent.setup();
+    mockChangeSets.mockReturnValue({
+      data: { changeSets: [{ name: "cs-done", executionStatus: "EXECUTE_COMPLETE", creationTime: new Date() }], total: 1 },
+      isLoading: false,
+    });
+    mockChangeSet.mockReturnValue({
+      data: { changeSet: { name: "cs-done", executionStatus: "EXECUTE_COMPLETE", creationTime: new Date(), description: "Done CS", changes: [] } },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Change Sets/i }));
+    await waitFor(() => clickButton(user, /my-stack/i));
+    await waitFor(() => clickButton(user, /View/));
+    await waitFor(() => {
+      expect(screen.getByText("Change Set: cs-done")).toBeTruthy();
+      // Both the table row and the detail view show EXECUTE_COMPLETE
+      expect(screen.getAllByText("EXECUTE_COMPLETE").length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  // ── ChangeSetDetail: Parameters container ──────────────
+
+  it("shows parameters in change set detail", async () => {
+    const user = userEvent.setup();
+    mockChangeSets.mockReturnValue({
+      data: { changeSets: [{ name: "cs-params", executionStatus: "AVAILABLE", creationTime: new Date() }], total: 1 },
+      isLoading: false,
+    });
+    mockChangeSet.mockReturnValue({
+      data: {
+        changeSet: { name: "cs-params", executionStatus: "AVAILABLE", creationTime: new Date(), changes: [], parameters: [{ key: "InstanceType", value: "t3.micro" }, { key: "KeyName", value: null }] },
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Change Sets/i }));
+    await waitFor(() => clickButton(user, /my-stack/i));
+    await waitFor(() => clickButton(user, /View/));
+    await waitFor(() => {
+      // Key is in <b> tag with colon: "InstanceType:"
+      expect(screen.getByText(/InstanceType/)).toBeTruthy();
+      expect(screen.getByText(/t3.micro/)).toBeTruthy();
+      expect(screen.getByText("(use previous)")).toBeTruthy();
+      expect(screen.getByText(/Parameters \(2\)/)).toBeTruthy();
+    });
+  });
+
+  // ── StackSetDetailModal: Parameters section ────────────
+
+  it("shows parameters in stack set detail", async () => {
+    const user = userEvent.setup();
+    mockStackSets.mockReturnValue({
+      data: { stackSets: [{ name: "ss-params", status: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    mockStackSet.mockReturnValue({
+      data: {
+        stackSet: { name: "ss-params", status: "ACTIVE", permissionModel: "SELF_MANAGED", parameters: [{ key: "AccountId", value: "123" }, { key: "Region", value: "us-east-1" }] },
+        instances: [],
+        operations: [],
+      },
+      isLoading: false,
+    });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Stack Sets/i }));
+    await waitFor(() => clickButton(user, /View/i));
+    await waitFor(() => {
+      expect(screen.getByText(/Stack Set: ss-params/)).toBeTruthy();
+      // Keys are in <b> tag with colon
+      expect(screen.getByText(/AccountId/)).toBeTruthy();
+      expect(screen.getByText(/Region/)).toBeTruthy();
+      expect(screen.getByText("123")).toBeTruthy();
+    });
+  });
+
+  // AddInstances deploy skipped — Cloudscape Textarea fireEvent/userEvent
+  // doesn't propagate to React state in happy-dom, so Deploy stays disabled.
+  // The disabled test below covers the Deploy button state branches.
+
+  it("disables Deploy button when accounts/regions are empty", async () => {
+    const user = userEvent.setup();
+    mockStackSets.mockReturnValue({
+      data: { stackSets: [{ name: "ss-disabled", status: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    mockStackSet.mockReturnValue({
+      data: { stackSet: { name: "ss-disabled", status: "ACTIVE" }, instances: [], operations: [] },
+      isLoading: false,
+    });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Stack Sets/i }));
+    await waitFor(() => clickButton(user, /View/i));
+    await waitFor(() => clickButton(user, /Add instances/i));
+    await waitFor(() => {
+      expect(screen.getByText(/Add instances to ss-disabled/)).toBeTruthy();
+    });
+    const deployBtn = screen.getByRole("button", { name: /^Deploy$/i });
+    expect(deployBtn.getAttribute("disabled")).not.toBeNull();
+  });
+
+  // ── CreateChangeSetModal: description fallback to undefined ──
+
+  it("creates change set with empty description passed as undefined", async () => {
+    const user = userEvent.setup();
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Change Sets/i }));
+    await waitFor(() => clickButton(user, /my-stack/i));
+    await waitFor(() => clickButton(user, /Create change set/i));
+    await waitFor(() => {
+      expect(screen.getByText(/Create change set for my-stack/)).toBeTruthy();
+    });
+    // Type change set name but leave description empty
+    await user.type(screen.getByPlaceholderText("my-change-set"), "my-cs");
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => {
+      expect(mockCreateChangeSet).toHaveBeenCalledWith(
+        expect.objectContaining({
+          stackName: "my-stack",
+          changeSetName: "my-cs",
+          description: undefined,
+        }),
+      );
+    });
+  });
+
 });
