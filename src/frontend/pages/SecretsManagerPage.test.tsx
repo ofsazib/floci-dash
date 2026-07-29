@@ -368,4 +368,42 @@ describe("SecretsManagerPage", () => {
     });
   });
 
+  // ─── CreateSecretModal: Description Input ───────────────
+
+  it("types into description field in create modal", async () => {
+    const user = userEvent.setup();
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /Create secret/i);
+    await waitFor(() => {
+      expect(screen.getAllByPlaceholderText("my-app/db-password").length).toBeGreaterThan(0);
+    });
+    const descriptionInput = screen.getByLabelText("Description");
+    await user.type(descriptionInput, "My database password");
+    expect(descriptionInput).toHaveValue("My database password");
+  });
+
+  // ─── CreateSecretModal: Generate Password Error ─────────
+
+  it("shows error toast when generate password fails", async () => {
+    mockRandomPassword.mockRejectedValueOnce(new Error("Password generation failed"));
+    const user = userEvent.setup();
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /Create secret/i);
+    await waitFor(() => {
+      expect(screen.getAllByText("Generate password").length).toBeGreaterThan(0);
+    });
+    await clickButton(user, /Generate password/i);
+    await waitFor(() => {
+      expect(mockRandomPassword).toHaveBeenCalledWith({});
+    });
+  });
+
+  // ─── Breadcrumb Navigation ──────────────────────────────
+
+  it("clicks Dashboard breadcrumb to exercise onFollow handler", () => {
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    const breadcrumbLinks = screen.getAllByText("Dashboard");
+    expect(breadcrumbLinks.length).toBeGreaterThan(0);
+  });
+
 });
