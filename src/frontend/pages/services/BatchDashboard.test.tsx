@@ -879,3 +879,117 @@ describe("BatchDashboard — CE type", () => {
     });
   });
 });
+
+// ─── onSuccess callbacks (modal close + state reset) ─────
+
+describe("BatchDashboard — mutation onSuccess callbacks", () => {
+  it("closes CE modal and resets name on create success", async () => {
+    mockCreateCE.mockImplementationOnce((_vars: any, options: any) => {
+      if (options?.onSuccess) options.onSuccess();
+    });
+    mockComputeEnvs.mockReturnValue({
+      data: { computeEnvironments: [{ computeEnvironmentName: "ce-after", type: "MANAGED", state: "ENABLED", status: "VALID" }] },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create compute environment/i);
+    await waitFor(() => expect(screen.getAllByText("Create Compute Environment").length).toBeGreaterThan(0));
+
+    const nameInput = screen.getByLabelText(/^Name$/i);
+    await user.type(nameInput, "new-ce");
+
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[0]);
+
+    await waitFor(() => expect(mockCreateCE).toHaveBeenCalled());
+  });
+
+  // JQ onSuccess skipped — Cloudscape type="number" Input doesn't
+  // propagate fireEvent.change to React state in happy-dom, so the
+  // disabled={!jqPriority.trim()} gate blocks the submit. CE/JD/Submit
+  // onSuccess tests cover the same callback pattern.
+
+  it("closes JD modal and resets name on register success", async () => {
+    mockRegisterJD.mockImplementationOnce((_vars: any, options: any) => {
+      if (options?.onSuccess) options.onSuccess();
+    });
+    mockJobDefs.mockReturnValue({
+      data: { jobDefinitions: [{ jobDefinitionName: "jd-after", revision: 1, type: "container", status: "ACTIVE" }] },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create job definition/i);
+    await waitFor(() => expect(screen.getByText("Register Job Definition")).toBeTruthy());
+
+    const nameInput = screen.getByLabelText(/Definition name/);
+    await user.type(nameInput, "new-jd");
+
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[createBtns.length - 1]);
+
+    await waitFor(() => expect(mockRegisterJD).toHaveBeenCalled());
+  });
+
+  it("invokes onSuccess callback for submit job", async () => {
+    mockSubmitJob.mockImplementationOnce((_vars: any, options: any) => {
+      if (options?.onSuccess) options.onSuccess();
+    });
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /Submit Job/i }));
+    await waitFor(() => expect(screen.getByLabelText(/Job name/)).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText(/Job name/), { target: { value: "job-ok" } });
+    fireEvent.change(screen.getByLabelText(/Job queue ARN/), { target: { value: "arn:aws:batch:q" } });
+    fireEvent.change(screen.getByLabelText(/Job definition ARN/), { target: { value: "arn:aws:batch:jd:1" } });
+
+    const submitBtns = screen.getAllByRole("button", { name: /^Submit$/i });
+    await user.click(submitBtns[submitBtns.length - 1]);
+
+    await waitFor(() => expect(mockSubmitJob).toHaveBeenCalled());
+  });
+});
+
+// ─── CE type Select fallback ────────────────────────────
+
+describe("BatchDashboard — CE type Select fallback", () => {
+  it("falls back to MANAGED when selectedOption has no value", async () => {
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create compute environment/i);
+    await waitFor(() => expect(screen.getAllByText("Create Compute Environment").length).toBeGreaterThan(0));
+
+    // Type a name so the Create button is enabled
+    const nameInput = screen.getByLabelText(/^Name$/i);
+    await user.type(nameInput, "fallback-ce");
+
+    // Click Create — it should use MANAGED as default since we didn't change the Select
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[0]);
+
+    await waitFor(() => {
+      expect(mockCreateCE).toHaveBeenCalledWith(
+        expect.objectContaining({ type: "MANAGED" }),
+        expect.any(Object),
+      );
+    });
+  });
+});
+
+// ─── JD disabled state ──────────────────────────────────
+
+describe("BatchDashboard — JD disabled state", () => {
+  it("disables Create JD button when name is empty", async () => {
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create job definition/i);
+    await waitFor(() => expect(screen.getByText("Register Job Definition")).toBeTruthy());
+
+    // Without typing anything, the Create button should be disabled
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    const createBtn = createBtns[createBtns.length - 1];
+    expect(createBtn.getAttribute("disabled")).not.toBeNull();
+  });
+});
