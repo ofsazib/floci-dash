@@ -1992,4 +1992,139 @@ describe("EC2NetworkAclList (EC2Page — Network ACLs tab)", () => {
       expect(screen.getByText("Failed to add rule")).toBeTruthy();
     });
   });
+
+  it("submits add inbound rule with DENY action", async () => {
+    mockCreateAclEntry.mockImplementation((_params: any, opts?: any) => opts?.onSuccess?.());
+    mockNetworkAcls.mockReturnValue({
+      data: { networkAcls: [{ networkAclId: "acl-deny", id: "acl-deny", vpcId: "vpc-1", isDefault: false, entries: [], associations: [] }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Network ACLs/i);
+    await waitFor(() => expect(screen.getByText("vpc-1")).toBeTruthy());
+    await clickButton(user, /View rules for acl-deny/i);
+    await clickButton(user, /Add Inbound Rule/i);
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("100")).toBeTruthy();
+    });
+    // Change rule number
+    const numberInput = screen.getByPlaceholderText("100");
+    await user.clear(numberInput);
+    await user.type(numberInput, "300");
+    // Change Action to DENY
+    const actionSelect = screen.getByText("ALLOW");
+    await user.click(actionSelect);
+    await waitFor(() => expect(screen.getByText("DENY")).toBeTruthy());
+    await user.click(screen.getByText("DENY"));
+    // Submit
+    await clickButton(user, /Add Rule/i);
+    await waitFor(() => {
+      expect(mockCreateAclEntry).toHaveBeenCalledWith(
+        expect.objectContaining({ aclId: "acl-deny", ruleNumber: 300, ruleAction: "deny" }),
+        expect.any(Object),
+      );
+    });
+  });
+
+  it("submits add inbound rule with custom protocol", async () => {
+    mockCreateAclEntry.mockImplementation((_params: any, opts?: any) => opts?.onSuccess?.());
+    mockNetworkAcls.mockReturnValue({
+      data: { networkAcls: [{ networkAclId: "acl-proto", id: "acl-proto", vpcId: "vpc-1", isDefault: false, entries: [], associations: [] }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Network ACLs/i);
+    await waitFor(() => expect(screen.getByText("vpc-1")).toBeTruthy());
+    await clickButton(user, /View rules for acl-proto/i);
+    await clickButton(user, /Add Inbound Rule/i);
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("100")).toBeTruthy();
+    });
+    // Type rule number
+    const numberInput = screen.getByPlaceholderText("100");
+    await user.clear(numberInput);
+    await user.type(numberInput, "400");
+    // Change CIDR
+    const cidrInput = screen.getByPlaceholderText("0.0.0.0/0");
+    await user.clear(cidrInput);
+    await user.type(cidrInput, "10.0.0.0/8");
+    // Submit
+    await clickButton(user, /Add Rule/i);
+    await waitFor(() => {
+      expect(mockCreateAclEntry).toHaveBeenCalledWith(
+        expect.objectContaining({ aclId: "acl-proto", ruleNumber: 400, cidrBlock: "10.0.0.0/8" }),
+        expect.any(Object),
+      );
+    });
+  });
+
+  it("submits add inbound rule with port ranges", async () => {
+    mockCreateAclEntry.mockImplementation((_params: any, opts?: any) => opts?.onSuccess?.());
+    mockNetworkAcls.mockReturnValue({
+      data: { networkAcls: [{ networkAclId: "acl-port", id: "acl-port", vpcId: "vpc-1", isDefault: false, entries: [], associations: [] }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Network ACLs/i);
+    await waitFor(() => expect(screen.getByText("vpc-1")).toBeTruthy());
+    await clickButton(user, /View rules for acl-port/i);
+    await clickButton(user, /Add Inbound Rule/i);
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("100")).toBeTruthy();
+    });
+    // Type rule number
+    const numberInput = screen.getByPlaceholderText("100");
+    await user.clear(numberInput);
+    await user.type(numberInput, "500");
+    // Fill port range from/to
+    const portFromInput = screen.getByPlaceholderText("From");
+    const portToInput = screen.getByPlaceholderText("To");
+    await user.type(portFromInput, "80");
+    await user.type(portToInput, "443");
+    // Submit (button text is "Add Rule" but only appears inside the modal)
+    await user.click(screen.getByRole("button", { name: /Add Rule/i }));
+    await waitFor(() => {
+      expect(mockCreateAclEntry).toHaveBeenCalledWith(
+        expect.objectContaining({ aclId: "acl-port", ruleNumber: 500 }),
+        expect.any(Object),
+      );
+    });
+  });
+
+  it("submits add outbound rule (egress: true)", async () => {
+    mockCreateAclEntry.mockImplementation((_params: any, opts?: any) => opts?.onSuccess?.());
+    mockNetworkAcls.mockReturnValue({
+      data: { networkAcls: [{ networkAclId: "acl-egress", id: "acl-egress", vpcId: "vpc-1", isDefault: false, entries: [], associations: [] }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Network ACLs/i);
+    await waitFor(() => expect(screen.getByText("vpc-1")).toBeTruthy());
+    await clickButton(user, /View rules for acl-egress/i);
+    // Click "Add Outbound Rule" button
+    await clickButton(user, /Add Outbound Rule/i);
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("100")).toBeTruthy();
+    });
+    // Type rule number
+    const numberInput = screen.getByPlaceholderText("100");
+    await user.clear(numberInput);
+    await user.type(numberInput, "600");
+    // Change CIDR
+    const cidrInput = screen.getByPlaceholderText("0.0.0.0/0");
+    await user.clear(cidrInput);
+    await user.type(cidrInput, "192.168.0.0/16");
+    // Submit
+    await user.click(screen.getByRole("button", { name: /Add Rule/i }));
+    await waitFor(() => {
+      expect(mockCreateAclEntry).toHaveBeenCalledWith(
+        expect.objectContaining({ aclId: "acl-egress", ruleNumber: 600, egress: true }),
+        expect.any(Object),
+      );
+    });
+  });
 });
