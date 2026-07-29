@@ -1011,4 +1011,52 @@ describe("CodePipeline Routes", () => {
     });
   });
 
+  // ─── Jobs: failure with externalExecutionId ────────────
+
+  describe("Jobs — failure with externalExecutionId", () => {
+    it("PUT /jobs/:jobId/result — failure includes externalExecutionId", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/jobs/job-ext/result", {
+        status: "Failure",
+        externalExecutionId: "ext-123",
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].failureDetails.externalExecutionId).toBe("ext-123");
+    });
+  });
+
+  // ─── Tags: individual field validation ─────────────────
+
+  describe("Tags — individual field validation", () => {
+    it("POST /tags — requires tags (only resourceArn provided)", async () => {
+      const res = await post("/tags", { resourceArn: "arn:aws:codepipeline:us-east-1::pipeline" });
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE /tags — requires tagKeys (only resourceArn provided)", async () => {
+      const res = await del("/tags?resourceArn=arn:aws:codepipeline:us-east-1::pipeline");
+      expect(res.status).toBe(400);
+    });
+  });
+
+  // ─── PollForJobs: maxBatchSize NaN default ─────────────
+
+  describe("PollForJobs — maxBatchSize default", () => {
+    it("POST /action-types/:cat/:provider/jobs/poll — maxBatchSize defaults to 10 when NaN", async () => {
+      mockSend.mockResolvedValueOnce({ jobs: [] });
+      const res = await post("/action-types/Test/MyProvider/jobs/poll?maxBatchSize=abc");
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].maxBatchSize).toBe(10);
+    });
+  });
+
+  // ─── Approval: missing individual fields ────────────────
+
+  describe("Approvals — missing individual fields", () => {
+    it("POST /pipelines/:name/approvals — requires stageName (missing all others)", async () => {
+      const res = await post("/pipelines/my-pipeline/approvals", { stageName: "Approval" });
+      expect(res.status).toBe(400);
+    });
+  });
+
 });
