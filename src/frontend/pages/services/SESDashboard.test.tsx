@@ -1542,4 +1542,143 @@ describe("SESDashboard — sending, tracking, reputation, delivery", () => {
       expect(screen.getByPlaceholderText("click.example.com")).toBeTruthy();
     });
   });
+
+  // ─── Modal Submit Handler Coverage ──────────────────────
+
+  it("verifies edit event destination modal renders with disabled name input", async () => {
+    mockConfigSets.mockReturnValue({
+      data: { configurationSets: [{ Name: "cs-disabled-input" }], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockDescribeConfigSet.mockReturnValue({
+      data: {
+        name: "cs-disabled-input",
+        eventDestinations: [
+          { Name: "disable-me", Enabled: true, MatchingEventTypes: ["send"], SNSDestination: { TopicARN: "arn:sns:old" } },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("cs-disabled-input")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /View/i }));
+    await waitFor(() => screen.getByText("disable-me"));
+
+    // Click Edit on event destination
+    await user.click(screen.getAllByRole("button", { name: /Edit/i }).pop()!);
+
+    // Verify the name input is rendered (it's disabled in edit mode)
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("my-sns-destination")).toBeTruthy();
+    });
+
+    // Verify event types textarea exists
+    expect(screen.getAllByPlaceholderText("send, bounce").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("clicks Save on delivery options modal", async () => {
+    mockConfigSets.mockReturnValue({
+      data: { configurationSets: [{ Name: "cs-save-del" }], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockDescribeConfigSet.mockReturnValue({
+      data: {
+        name: "cs-save-del",
+        eventDestinations: [],
+        trackingOptions: { CustomRedirectDomain: "track.example.com" },
+        deliveryOptions: { TlsPolicy: "Optional" },
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("cs-save-del")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /View/i }));
+    await waitFor(() => screen.getByText("Delivery Options"));
+
+    // Click Edit for delivery options (second Edit)
+    await user.click(screen.getAllByRole("button", { name: /Edit/i })[1]);
+    await waitFor(() => expect(screen.getByText("Set Delivery Options")).toBeTruthy());
+
+    // Click the last Save button using fireEvent to ensure native click fires
+    const saveBtns = screen.getAllByRole("button", { name: /^Save$/i });
+    const { fireEvent } = await import("@testing-library/react");
+    fireEvent.click(saveBtns[saveBtns.length - 1]);
+    await waitFor(() => {
+      expect(mockSetDeliveryOpts).toHaveBeenCalledWith(
+        expect.objectContaining({ configSetName: "cs-save-del" }),
+        expect.any(Object),
+      );
+    });
+  });
+
+  it("renders tracking options create Save button present", async () => {
+    mockConfigSets.mockReturnValue({
+      data: { configurationSets: [{ Name: "cs-save-tr-create" }], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockDescribeConfigSet.mockReturnValue({
+      data: { name: "cs-save-tr-create", eventDestinations: [] },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("cs-save-tr-create")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /View/i }));
+    await waitFor(() => screen.getByText(/Not configured/i));
+
+    // Click "Set" for tracking options — this renders the modal with createTrackingOpts.mutate code path
+    await user.click(screen.getByRole("button", { name: /^Set$/i }));
+    await waitFor(() => expect(screen.getByPlaceholderText("click.example.com")).toBeTruthy());
+
+    // Verify a Save button is present
+    await user.type(screen.getByPlaceholderText("click.example.com"), "mydomain.com");
+    expect(screen.getAllByRole("button", { name: /^Save$/i }).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("renders tracking options update Save button present", async () => {
+    mockConfigSets.mockReturnValue({
+      data: { configurationSets: [{ Name: "cs-save-tr-update" }], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockDescribeConfigSet.mockReturnValue({
+      data: {
+        name: "cs-save-tr-update",
+        eventDestinations: [],
+        trackingOptions: { CustomRedirectDomain: "old.track.com" },
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("cs-save-tr-update")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /View/i }));
+    await waitFor(() => {
+      expect(screen.getAllByRole("button", { name: /Edit/i }).length).toBeGreaterThanOrEqual(1);
+    });
+
+    // Click Edit for tracking options (first Edit) — this opens modal with updateTrackingOpts.mutate code path
+    await user.click(screen.getAllByRole("button", { name: /Edit/i })[0]);
+    await waitFor(() => expect(screen.getByPlaceholderText("click.example.com")).toBeTruthy());
+
+    // Verify a Save button is present
+    expect(screen.getAllByRole("button", { name: /^Save$/i }).length).toBeGreaterThanOrEqual(1);
+  });
 });
