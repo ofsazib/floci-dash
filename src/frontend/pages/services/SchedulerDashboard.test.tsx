@@ -781,8 +781,7 @@ describe("SchedulerDashboard — data edge cases", () => {
     await waitFor(() => expect(screen.getByText("schedule-1")).toBeTruthy());
   });
 
-  it("shows update schedule loading state", async () => {
-    updateScheduleState.isPending = true;
+  it("shows update schedule loading state", async () => {     updateScheduleState.isPending = true;
     mockSchedules.mockReturnValue({
       data: { schedules: [{ Name: "edit-me", ScheduleExpression: "rate(1 hour)" }], total: 1 },
       isLoading: false,
@@ -792,5 +791,82 @@ describe("SchedulerDashboard — data edge cases", () => {
     await waitFor(() => expect(screen.getByText("my-group")).toBeTruthy());
     await user.click(screen.getByRole("button", { name: "my-group" }));
     await waitFor(() => expect(screen.getByText("edit-me")).toBeTruthy());
+  });
+
+  it("shows create group error fallback message", async () => {
+    createGroupState.isError = true;
+    createGroupState.error = {} as Error;
+    const user = userEvent.setup();
+    render(<SchedulerDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create schedule group")).toBeTruthy());
+    expect(screen.getByText(/Failed to create schedule group/)).toBeTruthy();
+    createGroupState.isError = false;
+    createGroupState.error = null;
+  });
+
+  it("submits create schedule with description", async () => {
+    mockSchedules.mockReturnValue({ data: { schedules: [], total: 0 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<SchedulerDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-group")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-group" }));
+    await waitFor(() => expect(screen.getByText(/Back to Schedule Groups/)).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Schedule name")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-schedule"), "described-schedule");
+    await user.type(screen.getByPlaceholderText(/arn:aws:lambda/), "arn:aws:lambda:us-east-1:123:function:test");
+    // Description is the 5th textbox in the create form (name, expr, target, role, description)
+    const textboxes = screen.getAllByRole("textbox");
+    const descInput = textboxes[4]; // 5th textbox = description
+    await user.type(descInput, "A test description");
+    const createBtns = screen.getAllByRole("button", { name: /Create/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => {
+      expect(mockCreateSchedule).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "described-schedule", description: "A test description" }),
+        expect.any(Object),
+      );
+    });
+  });
+
+  it("edit modal Save changes enabled when form is filled", async () => {
+    mockSchedules.mockReturnValue({
+      data: {
+        schedules: [{ Name: "edit-me", ScheduleExpression: "rate(1 hour)", Target: { Arn: "arn:aws:lambda:us-east-1:123:function:my-fn" } }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<SchedulerDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-group")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-group" }));
+    await waitFor(() => expect(screen.getByText("edit-me")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Edit edit-me/i }));
+    await waitFor(() => expect(screen.getByText(/Edit schedule: edit-me/)).toBeTruthy());
+    // Save changes should be enabled when expression and targetARN are pre-filled
+    const saveBtn = screen.getByRole("button", { name: /Save changes/i });
+    expect(saveBtn.getAttribute("disabled")).toBeNull();
+  });
+
+  it("openEdit pre-fills missing Target.Arn with empty string", async () => {
+    mockSchedules.mockReturnValue({
+      data: {
+        schedules: [{ Name: "no-target", ScheduleExpression: "rate(1 min)", Target: {} }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<SchedulerDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-group")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-group" }));
+    await waitFor(() => expect(screen.getByText("no-target")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Edit no-target/i }));
+    await waitFor(() => expect(screen.getByText(/Edit schedule: no-target/)).toBeTruthy());
+    // Verify the form opens (targetArn falls back to empty string, Save disabled)
+    const saveBtn = screen.getByRole("button", { name: /Save changes/i });
+    expect(saveBtn).toBeDisabled();
   });
 });
