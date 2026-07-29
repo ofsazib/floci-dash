@@ -396,5 +396,115 @@ describe("CloudWatch Routes", () => {
       expect(res.status).toBe(200);
       expect(mockSend.mock.calls[0][0].TagKeys).toEqual([]);
     });
+
+    it("POST /tags/:arn — tags without body.tags (uses empty object)", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/tags/my-alarm-arn", {});
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].Tags).toEqual([]);
+    });
+  });
+
+  // ═══ Additional branch coverage tests ═══════════════
+
+  describe("Alarms — edge cases", () => {
+    it("GET /alarms — alarm without Dimensions property", async () => {
+      mockSend.mockResolvedValueOnce({
+        MetricAlarms: [{ AlarmName: "no-dim", MetricName: "CPU", Namespace: "AWS/EC2", StateValue: "OK", Threshold: 50, ComparisonOperator: "GreaterThanThreshold", Period: 60, Statistic: "Average" }],
+      });
+      const res = await get("/alarms");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.alarms[0].dimensions).toEqual([]);
+    });
+
+    it("GET /alarms — returns empty alarms list", async () => {
+      mockSend.mockResolvedValueOnce({ MetricAlarms: [] });
+      const res = await get("/alarms");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.alarms).toEqual([]);
+    });
+  });
+
+  describe("Metrics — additional edge cases", () => {
+    it("GET /metrics/statistics — label falls back to metricName", async () => {
+      mockSend.mockResolvedValueOnce({
+        Label: undefined,
+        Datapoints: [{ Timestamp: new Date(), Average: 25, Unit: "Percent" }],
+      });
+      const res = await get("/metrics/statistics?namespace=Test&metricName=MyMetric");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.label).toBe("MyMetric");
+    });
+
+    it("GET /alarms — maps alarm without state fields to empty arrays", async () => {
+      mockSend.mockResolvedValueOnce({
+        MetricAlarms: [{ AlarmName: "bare-alarm", MetricName: "CPU", Namespace: "AWS/EC2", StateValue: "OK", Threshold: 80, ComparisonOperator: "GT", Period: 60, Statistic: "Avg" }],
+      });
+      const res = await get("/alarms");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.alarms[0].alarmActions).toEqual([]);
+      expect(body.alarms[0].okActions).toEqual([]);
+      expect(body.alarms[0].insufficientDataActions).toEqual([]);
+    });
+  });
+
+  describe("Statistics — dimensions", () => {
+    it("GET /metrics/statistics — without dimensions query param", async () => {
+      mockSend.mockResolvedValueOnce({
+        Label: "CPUUtilization",
+        Datapoints: [{ Timestamp: new Date(), Average: 75, Unit: "Percent" }],
+      });
+      const res = await get("/metrics/statistics?namespace=AWS/EC2&metricName=CPUUtilization");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.datapoints).toHaveLength(1);
+      expect(mockSend.mock.calls[0][0].Dimensions).toEqual([]);
+    });
+  });
+
+  describe("MetricData — edge cases", () => {
+    it("POST /metrics/data — metricData without timestamp", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/metrics/data", {
+        namespace: "Test",
+        metricData: [{ metricName: "latency", value: 10, unit: "Milliseconds" }],
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].MetricData[0].Timestamp).toBeUndefined();
+    });
+
+    it("POST /metrics/data — metricData without statisticValues", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/metrics/data", {
+        namespace: "Test",
+        metricData: [{ metricName: "latency", value: 10, unit: "Milliseconds" }],
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].MetricData[0].StatisticValues).toBeUndefined();
+    });
+
+    it("POST /metrics/data/query — MetricDataResults without Timestamps", async () => {
+      mockSend.mockResolvedValueOnce({
+        MetricDataResults: [{ Id: "m1", Label: "Test", StatusCode: "Complete", Values: [10] }],
+      });
+      const res = await post("/metrics/data/query", { queries: [{ id: "m1", expression: "SELECT 1" }] });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.results[0].timestamps).toEqual([]);
+    });
+
+    it("POST /metrics/data/query — MetricDataResults without Values", async () => {
+      mockSend.mockResolvedValueOnce({
+        MetricDataResults: [{ Id: "m1", Label: "Test", StatusCode: "Complete", Timestamps: [] }],
+      });
+      const res = await post("/metrics/data/query", { queries: [{ id: "m1", expression: "SELECT 1" }] });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.results[0].values).toEqual([]);
+    });
   });
 });
