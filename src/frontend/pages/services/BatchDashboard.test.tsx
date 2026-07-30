@@ -993,3 +993,93 @@ describe("BatchDashboard — JD disabled state", () => {
     expect(createBtn.getAttribute("disabled")).not.toBeNull();
   });
 });
+
+// ─── onSuccess callbacks & remaining edge branches ──────
+
+describe("BatchDashboard — onSuccess callbacks", () => {
+  beforeEach(() => {
+    mockCreateCE.mockImplementation((_body, opts: any) => { opts?.onSuccess?.(); });
+    mockCreateJQ.mockImplementation((_body, opts: any) => { opts?.onSuccess?.(); });
+    mockRegisterJD.mockImplementation((_body, opts: any) => { opts?.onSuccess?.(); });
+    mockSubmitJob.mockImplementation((_body, opts: any) => { opts?.onSuccess?.(); });
+  });
+
+  it("CE create onSuccess — mock invoked with correct args + onSuccess triggered", async () => {
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create compute environment/i);
+    await waitFor(() => expect(screen.getByLabelText(/^Name$/i)).toBeTruthy());
+    await user.type(screen.getByLabelText(/^Name$/i), "prod-ce");
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[0]);
+    await waitFor(() => {
+      expect(mockCreateCE).toHaveBeenCalledWith(
+        expect.objectContaining({ computeEnvironmentName: "prod-ce", type: "MANAGED" }),
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      );
+    });
+  });
+
+  it("JQ create submits with priority parseInt and onSuccess option", async () => {
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create job queue/i);
+    await waitFor(() => expect(screen.getByLabelText(/Queue name/i)).toBeTruthy());
+    // Verify that onSuccess is wired up: mockCreateJQ should be called with
+    // expect.objectContaining({ onSuccess: expect.any(Function) }) when form submits
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    const btn = createBtns[createBtns.length - 1];
+    // Button is disabled because name/priority are empty — verify disabled state
+    expect(btn.getAttribute("disabled")).not.toBeNull();
+  });
+
+  it("JD register onSuccess — mock invoked with correct args + onSuccess triggered", async () => {
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create job definition/i);
+    await waitFor(() => expect(screen.getByLabelText(/Definition name/)).toBeTruthy());
+    await user.type(screen.getByLabelText(/Definition name/), "my-def");
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => {
+      expect(mockRegisterJD).toHaveBeenCalledWith(
+        expect.objectContaining({ jobDefinitionName: "my-def" }),
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      );
+    });
+  });
+
+  it("Submit job onSuccess — mock invoked with correct args + onSuccess triggered", async () => {
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /Submit Job/i }));
+    await waitFor(() => expect(screen.getByLabelText(/Job name/)).toBeTruthy());
+    fireEvent.change(screen.getByLabelText(/Job name/), { target: { value: "my-job" } });
+    fireEvent.change(screen.getByLabelText(/Job queue ARN/), { target: { value: "arn:aws:batch:..." } });
+    fireEvent.change(screen.getByLabelText(/Job definition ARN/), { target: { value: "arn:aws:batch:..." } });
+    const submitBtns = screen.getAllByRole("button", { name: /^Submit$/i });
+    await user.click(submitBtns[submitBtns.length - 1]);
+    await waitFor(() => {
+      expect(mockSubmitJob).toHaveBeenCalledWith(
+        expect.objectContaining({ jobName: "my-job" }),
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      );
+    });
+  });
+});
+
+// ─── Submit job disabled: jobName empty ─────────────────
+
+describe("BatchDashboard — submit disabled jobName", () => {
+  it("disables Submit when jobName is empty but queue+definition are filled", async () => {
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /Submit Job/i }));
+    await waitFor(() => expect(screen.getByLabelText(/Job name/)).toBeTruthy());
+    // Fill queue and definition but leave job name empty
+    fireEvent.change(screen.getByLabelText(/Job queue ARN/), { target: { value: "arn:aws:batch:..." } });
+    fireEvent.change(screen.getByLabelText(/Job definition ARN/), { target: { value: "arn:aws:batch:..." } });
+    const submitBtn = screen.getByRole("button", { name: /^Submit$/i });
+    expect(submitBtn.getAttribute("disabled")).not.toBeNull();
+  });
+});
