@@ -186,3 +186,36 @@ describe("PricingDashboard — hook arguments", () => {
     expect(mockPriceLists).toHaveBeenCalledWith(null);
   });
 });
+
+// ─── Edge cases ─────────────────────────────────────────
+
+describe("PricingDashboard — edge cases", () => {
+  it("shows only first 5 services when more than 5 exist", () => {
+    const many = [];
+    for (let i = 1; i <= 7; i++) many.push({ ServiceCode: "Svc" + i });
+    mockServices.mockReturnValue({ data: { services: many }, isLoading: false });
+    render(<PricingDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/Found 7 services/i)).toBeTruthy();
+    expect(screen.getByText("Svc1")).toBeTruthy();
+    expect(screen.getByText("Svc5")).toBeTruthy();
+    expect(screen.queryByText("Svc6")).toBeNull();
+    expect(screen.queryByText("Svc7")).toBeNull();
+  });
+
+  it("shows exactly 5 services when there are exactly 5", () => {
+    const five = [];
+    for (let i = 1; i <= 5; i++) five.push({ ServiceCode: "S" + i });
+    mockServices.mockReturnValue({ data: { services: five }, isLoading: false });
+    render(<PricingDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("S1")).toBeTruthy();
+    expect(screen.getByText("S5")).toBeTruthy();
+  });
+
+  it("shows no service buttons when empty array", () => {
+    mockServices.mockReturnValue({ data: { services: [] }, isLoading: false });
+    const { container } = render(<PricingDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/Found 0 services/i)).toBeTruthy();
+    // No service code buttons should exist
+    expect(container.querySelectorAll("button").length).toBe(0);
+  });
+});
