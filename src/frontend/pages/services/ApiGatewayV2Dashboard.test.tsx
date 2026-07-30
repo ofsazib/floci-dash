@@ -799,4 +799,140 @@ describe("ApiGatewayV2Dashboard — data edge cases", () => {
     expect(screen.getByText("WEBSOCKET")).toBeTruthy();
   });
 
+  // ─── API list: data.apis undefined ──────────────────────
+
+  it("handles data with undefined apis array", () => {
+    mockApis.mockReturnValue({ data: { total: 0 } as any, isLoading: false });
+    render(<ApiGatewayV2Dashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No APIs/i)).toBeTruthy();
+  });
+
+  // ─── Routes tab: explicit JWT auth ──────────────────────
+
+  it("shows custom AuthorizationType for route", async () => {
+    mockApis.mockReturnValue({
+      data: { apis: [{ ApiId: "api-1", Name: "my-api", ProtocolType: "HTTP" }], total: 1 },
+      isLoading: false,
+    });
+    mockRoutes.mockReturnValue({
+      data: { routes: [{ RouteId: "r-1", RouteKey: "GET /secure", AuthorizationType: "JWT", Target: "integ-1" }], total: 1 },
+    });
+    const user = userEvent.setup();
+    render(<ApiGatewayV2Dashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-api"));
+    await waitFor(() => expect(screen.getByText("JWT")).toBeTruthy());
+  });
+
+  // ─── Integrations tab: filter to 0 results ──────────────
+
+  it("filters integrations to 0 results", async () => {
+    mockApis.mockReturnValue({
+      data: { apis: [{ ApiId: "api-1", Name: "my-api", ProtocolType: "HTTP" }], total: 1 },
+      isLoading: false,
+    });
+    mockIntegrations.mockReturnValue({
+      data: { integrations: [{ IntegrationId: "i-1", IntegrationType: "AWS_PROXY", IntegrationUri: "arn:...", IntegrationMethod: "POST" }], total: 1 },
+    });
+    const user = userEvent.setup();
+    render(<ApiGatewayV2Dashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-api"));
+    await user.click(screen.getByRole("tab", { name: /Integrations/i }));
+    await waitFor(() => expect(screen.getByText("AWS_PROXY")).toBeTruthy());
+
+    const filter = screen.getByPlaceholderText("Find integrations");
+    await user.type(filter, "ZZZ_NO_MATCH");
+    await waitFor(() => expect(screen.queryByText("AWS_PROXY")).toBeNull());
+  });
+
+  // ─── Deployments: FAILED status + filter to 0 ───────────
+
+  it("shows FAILED deployment status", async () => {
+    mockApis.mockReturnValue({
+      data: { apis: [{ ApiId: "api-1", Name: "my-api", ProtocolType: "HTTP" }], total: 1 },
+      isLoading: false,
+    });
+    mockDeployments.mockReturnValue({
+      data: { deployments: [{ DeploymentId: "d-fail", DeploymentStatus: "FAILED", Description: "Failed deploy" }], total: 1 },
+    });
+    const user = userEvent.setup();
+    render(<ApiGatewayV2Dashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-api"));
+    await user.click(screen.getByRole("tab", { name: /Deployments/i }));
+    await waitFor(() => {
+      expect(screen.getByText("d-fail")).toBeTruthy();
+      expect(screen.getByText("FAILED")).toBeTruthy();
+    });
+  });
+
+  it("filters deployments to 0 results", async () => {
+    mockApis.mockReturnValue({
+      data: { apis: [{ ApiId: "api-1", Name: "my-api", ProtocolType: "HTTP" }], total: 1 },
+      isLoading: false,
+    });
+    mockDeployments.mockReturnValue({
+      data: { deployments: [{ DeploymentId: "deploy-1", DeploymentStatus: "SUCCEEDED" }], total: 1 },
+    });
+    const user = userEvent.setup();
+    render(<ApiGatewayV2Dashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-api"));
+    await user.click(screen.getByRole("tab", { name: /Deployments/i }));
+    await waitFor(() => expect(screen.getByText("deploy-1")).toBeTruthy());
+
+    const filter = screen.getByPlaceholderText("Find deployments");
+    await user.type(filter, "ZZZ");
+    await waitFor(() => expect(screen.queryByText("deploy-1")).toBeNull());
+  });
+
+  // ─── WS Routes: integration with null IntegrationUri ────
+
+  it("shows dash for WS route integration with null URI", async () => {
+    mockApis.mockReturnValue({
+      data: { apis: [{ ApiId: "api-1", Name: "my-api", ProtocolType: "WEBSOCKET" }], total: 1 },
+      isLoading: false,
+    });
+    mockWsRoutes.mockReturnValue({
+      data: {
+        routes: [{ RouteId: "r-1", RouteKey: "$default", isWellKnown: true, integration: { IntegrationType: "MOCK", IntegrationUri: null }, authorizationType: "CUSTOM" }],
+        total: 1,
+      },
+    });
+    const user = userEvent.setup();
+    render(<ApiGatewayV2Dashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-api"));
+    await user.click(screen.getByRole("tab", { name: /WebSocket Routes/i }));
+    await waitFor(() => {
+      expect(screen.getByText("MOCK")).toBeTruthy();
+      expect(screen.getByText("CUSTOM")).toBeTruthy();
+      const dashes = screen.getAllByText("-");
+      expect(dashes.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  // ─── WS Routes: filter by key ───────────────────────────
+
+  it("filters WebSocket routes by key", async () => {
+    mockApis.mockReturnValue({
+      data: { apis: [{ ApiId: "api-1", Name: "my-api", ProtocolType: "WEBSOCKET" }], total: 1 },
+      isLoading: false,
+    });
+    mockWsRoutes.mockReturnValue({
+      data: {
+        routes: [
+          { RouteId: "r-1", RouteKey: "$connect", isWellKnown: true },
+          { RouteId: "r-2", RouteKey: "sendmessage", isWellKnown: false },
+        ],
+        total: 2,
+      },
+    });
+    const user = userEvent.setup();
+    render(<ApiGatewayV2Dashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-api"));
+    await user.click(screen.getByRole("tab", { name: /WebSocket Routes/i }));
+    await waitFor(() => expect(screen.getByText("$connect")).toBeTruthy());
+
+    const filter = screen.getByPlaceholderText("Find WebSocket routes");
+    await user.type(filter, "send");
+    await waitFor(() => expect(screen.queryByText("$connect")).toBeNull());
+  });
+
 });
