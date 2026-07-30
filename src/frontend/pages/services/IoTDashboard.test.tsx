@@ -1924,4 +1924,151 @@ describe("IoTDashboard — edge case branches", () => {
       expect(mockUpdateShadow).not.toHaveBeenCalled();
     });
   });
+
+  // ─── Topic Rules: Enable/Disable ────────────────────
+
+  it("calls enableRule when Enable is clicked on disabled rule", async () => {
+    mockTopicRules.mockReturnValue({
+      data: {
+        rules: [{ ruleName: "disabled-rule", ruleDisabled: true, sql: "SELECT *", createdDate: "2025-01-01" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /topic rules/i }));
+    await waitFor(() => expect(screen.getByText("disabled-rule")).toBeTruthy());
+    // Inline-icon buttons strip text — find by row and click first button
+    const row = screen.getByText("disabled-rule").closest('tr') || screen.getByText("disabled-rule").closest('[role="row"]');
+    expect(row).toBeTruthy();
+    const btns = within(row as HTMLElement).getAllByRole("button");
+    await user.click(btns[0]);
+    await waitFor(() => expect(mockEnableRule).toHaveBeenCalledWith("disabled-rule"));
+  });
+
+  it("calls disableRule when Disable is clicked on enabled rule", async () => {
+    mockTopicRules.mockReturnValue({
+      data: {
+        rules: [{ ruleName: "enabled-rule", ruleDisabled: false, sql: "SELECT *", createdDate: "2025-01-01" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /topic rules/i }));
+    await waitFor(() => expect(screen.getByText("enabled-rule")).toBeTruthy());
+    // Inline-icon buttons strip text — find by row and click first button
+    const row = screen.getByText("enabled-rule").closest('tr') || screen.getByText("enabled-rule").closest('[role="row"]');
+    expect(row).toBeTruthy();
+    const btns = within(row as HTMLElement).getAllByRole("button");
+    await user.click(btns[0]);
+    await waitFor(() => expect(mockDisableRule).toHaveBeenCalledWith("enabled-rule"));
+  });
+
+  // ─── Create Thing Type submission ────────────────────
+
+  it("opens create thing type modal and submits", async () => {
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /thing types/i }));
+    await clickButton(user, /Create thing type/i);
+    await waitFor(() => expect(screen.getAllByText("Create thing type").length).toBeGreaterThan(0));
+    await user.type(screen.getByPlaceholderText("LightBulb"), "LightBulbV2");
+    await user.type(screen.getByPlaceholderText("Smart light bulb"), "Updated bulb");
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => expect(mockCreateThingType).toHaveBeenCalled());
+  });
+
+  // ─── Create Policy submission ────────────────────────
+
+  it("opens create policy modal and submits", async () => {
+    const user = userEvent.setup();
+    const { fireEvent } = await import("@testing-library/react");
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /policies/i }));
+    await clickButton(user, /Create policy/i);
+    await waitFor(() => expect(screen.getAllByText("Create policy").length).toBeGreaterThan(0));
+    await user.type(screen.getByPlaceholderText("MyIoTPolicy"), "my-policy");
+    // JSON with curly braces breaks userEvent.type — use fireEvent.change
+    fireEvent.change(screen.getByPlaceholderText(/"Version"/), { target: { value: '{"Version":"2012-10-17"}' } });
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => expect(mockCreatePolicy).toHaveBeenCalled());
+  });
+
+  // ─── Create Topic Rule submission ────────────────────
+
+  it("opens create topic rule modal and submits", async () => {
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /topic rules/i }));
+    await clickButton(user, /Create topic rule/i);
+    await waitFor(() => expect(screen.getAllByText("Create topic rule").length).toBeGreaterThan(0));
+    await user.type(screen.getByPlaceholderText("my_rule"), "route_temp");
+    await user.type(screen.getByPlaceholderText("SELECT * FROM 'device/+'"), "SELECT * FROM 'sensors/+'");
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => expect(mockCreateTopicRule).toHaveBeenCalled());
+  });
+
+  // ─── MQTT Publish submission ─────────────────────────
+
+  it("opens publish modal and submits with topic and payload", async () => {
+    const user = userEvent.setup();
+    const { fireEvent } = await import("@testing-library/react");
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /mqtt broker/i }));
+    await clickButton(user, /Publish to topic/i);
+    await waitFor(() => expect(screen.getAllByText("Publish MQTT message").length).toBeGreaterThan(0));
+    await user.type(screen.getByPlaceholderText("sensors/temperature"), "sensors/temp");
+    // JSON with curly braces breaks userEvent.type — use fireEvent.change
+    fireEvent.change(screen.getByPlaceholderText('{"temp": 25}'), { target: { value: '{"temp": 30}' } });
+    const pubBtns = screen.getAllByRole("button", { name: /^Publish$/i });
+    await user.click(pubBtns[pubBtns.length - 1]);
+    await waitFor(() => expect(mockPublish).toHaveBeenCalled());
+  });
+
+  // ─── MQTT Client Disconnect ──────────────────────────
+
+  it("inspects a client and disconnects it", async () => {
+    mockConnection.mockReturnValue({
+      data: { connection: { clientId: "device-001", connected: true, sourceIp: "192.168.1.1", sourcePort: 8883 } },
+      isLoading: false, isError: false,
+    });
+    mockSubscriptions.mockReturnValue({ data: { subscriptions: [] }, isLoading: false });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /mqtt broker/i }));
+    await waitFor(() => expect(screen.getByPlaceholderText("device-001")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("device-001"), "device-001");
+    await clickButton(user, /Inspect/);
+    await waitFor(() => expect(screen.getByText("Connected")).toBeTruthy());
+    await clickButton(user, /Disconnect client/);
+    await waitFor(() => expect(mockDisconnect).toHaveBeenCalledWith("device-001", expect.anything()));
+  });
+
+  // ─── Policy Versions: isDefaultVersion ───────────────
+
+  it("shows Yes indicator for default policy version", async () => {
+    mockPolicies.mockReturnValue({
+      data: {
+        policies: [{ policyName: "my-pol", policyArn: "arn:aws:iot:::policy/my-pol", defaultVersionId: "1", creationDate: "2025-01-01" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    mockPolicyVersions.mockReturnValue({
+      data: { policyVersions: [{ versionId: "1", isDefaultVersion: true, createDate: "2025-01-01" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /policies/i }));
+    await waitFor(() => expect(screen.getByText("my-pol")).toBeTruthy());
+    await user.click(screen.getByText("my-pol"));
+    await waitFor(() => expect(screen.getByText("Yes")).toBeTruthy());
+  });
 });
