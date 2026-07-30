@@ -1478,4 +1478,100 @@ describe("EC2 Routes", () => {
       expect(res.status).toBe(400);
     });
   });
+
+  // ── Route table routes with natGatewayId ─────────
+
+  describe("Route Table Routes — natGatewayId", () => {
+    it("POST /route-tables/:id/routes — creates route with natGatewayId", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/route-tables/rtb-001/routes", {
+        destinationCidrBlock: "0.0.0.0/0",
+        natGatewayId: "nat-001",
+      });
+      expect((await res.json()).created).toBe(true);
+      expect(mockSend.mock.calls[0][0].NatGatewayId).toBe("nat-001");
+      expect(mockSend.mock.calls[0][0].GatewayId).toBeUndefined();
+    });
+  });
+
+  // ── VPC Endpoint create with optional params ─────
+
+  describe("VPC Endpoint — optional params", () => {
+    it("POST /vpc-endpoints — creates with optional params", async () => {
+      mockSend.mockResolvedValueOnce({ VpcEndpoint: { VpcEndpointId: "vpce-opt" } });
+      const res = await post("/vpc-endpoints", {
+        vpcId: "vpc-001",
+        serviceName: "com.amazonaws.vpce.s3",
+        vpcEndpointType: "GatewayLoadBalancer",
+        subnetIds: ["subnet-001"],
+        securityGroupIds: ["sg-001"],
+      });
+      expect(res.status).toBe(200);
+      expect((await res.json()).created).toBe(true);
+      expect(mockSend.mock.calls[0][0].VpcEndpointType).toBe("GatewayLoadBalancer");
+      expect(mockSend.mock.calls[0][0].SubnetIds).toEqual(["subnet-001"]);
+      expect(mockSend.mock.calls[0][0].SecurityGroupIds).toEqual(["sg-001"]);
+    });
+  });
+
+  // ── Launch Template optional fields ──────────────
+
+  describe("Launch Template — optional fields", () => {
+    it("POST /launch-templates — with keyName and securityGroupIds", async () => {
+      mockSend.mockResolvedValueOnce({ LaunchTemplate: { LaunchTemplateId: "lt-opt" } });
+      const res = await post("/launch-templates", {
+        launchTemplateName: "my-template",
+        imageId: "ami-001",
+        instanceType: "t3.micro",
+        keyName: "my-key",
+        securityGroupIds: ["sg-001"],
+      });
+      expect(res.status).toBe(200);
+      expect((await res.json()).created).toBe(true);
+      expect(mockSend.mock.calls[0][0].LaunchTemplateData.KeyName).toBe("my-key");
+      expect(mockSend.mock.calls[0][0].LaunchTemplateData.SecurityGroupIds).toEqual(["sg-001"]);
+    });
+
+    it("POST /launch-templates/:id/versions — with keyName", async () => {
+      mockSend.mockResolvedValueOnce({ LaunchTemplateVersion: { VersionNumber: 3 } });
+      const res = await post("/launch-templates/lt-001/versions", {
+        imageId: "ami-001",
+        instanceType: "t3.micro",
+        keyName: "my-key",
+        securityGroupIds: ["sg-001"],
+      });
+      expect(res.status).toBe(200);
+      expect((await res.json()).created).toBe(true);
+      expect(mockSend.mock.calls[0][0].LaunchTemplateData.KeyName).toBe("my-key");
+      expect(mockSend.mock.calls[0][0].LaunchTemplateData.SecurityGroupIds).toEqual(["sg-001"]);
+    });
+
+    it("PATCH /launch-templates/:id — no-op when defaultVersion not given", async () => {
+      mockSend.mockResolvedValue({});
+      const res = await patch("/launch-templates/lt-001", {});
+      expect((await res.json()).modified).toBe(true);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── Instance status with no events ───────────────
+
+  describe("Instance Status — no events", () => {
+    it("GET /instances/:id/status — returns empty events when Events missing", async () => {
+      mockSend.mockResolvedValueOnce({
+        InstanceStatuses: [
+          {
+            InstanceStatus: { Status: "ok" },
+            SystemStatus: { Status: "ok" },
+          },
+        ],
+      });
+      const res = await get("/instances/i-001/status");
+      const body = await res.json();
+      expect(body.instanceStatus).toBe("ok");
+      expect(body.systemStatus).toBe("ok");
+      expect(body.events).toEqual([]);
+    });
+  });
+
 });
