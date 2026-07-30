@@ -1059,4 +1059,42 @@ describe("CodePipeline Routes", () => {
     });
   });
 
+  // ─── Null fallbacks for single-resource lookups ─────────
+
+  describe("Null fallbacks", () => {
+    it("GET /pipelines/:name/executions/:executionId — returns null when execution not found", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/pipelines/my-pipeline/executions/exec-missing");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.execution).toBeNull();
+    });
+
+    it("GET /action-types/:owner/:cat/:prov/:ver — returns null when action type not found", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/action-types/Custom/Deploy/NoSuchProvider/1");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.actionType).toBeNull();
+    });
+  });
+
+  // ─── maxResults NaN defaults for remaining routes ───────
+
+  describe("maxResults NaN defaults", () => {
+    it("GET /webhooks — maxResults defaults to 100 when NaN", async () => {
+      mockSend.mockResolvedValueOnce({ webhooks: [] });
+      const res = await get("/webhooks?maxResults=xyz");
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].MaxResults).toBe(100);
+    });
+
+    it("GET /pipelines/:name/actions — maxResults defaults to 100 when NaN", async () => {
+      mockSend.mockResolvedValueOnce({ actionExecutionDetails: [] });
+      const res = await get("/pipelines/my-pipeline/actions?maxResults=notanumber");
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].maxResults).toBe(100);
+    });
+  });
+
 });
