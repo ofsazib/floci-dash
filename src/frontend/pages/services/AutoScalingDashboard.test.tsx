@@ -1331,8 +1331,7 @@ describe("AutoScalingDashboard — lifecycle hook branches", () => {
     await user.click(screen.getByRole("tab", { name: /Advanced/i }));
     await selectASG(user, "my-asg");
     await user.click(screen.getAllByText(/Complete action/)[0]);
-    await waitFor(() => expect(screen.getByText(/Complete Lifecycle Action/)).toBeTruthy());
-    await user.type(screen.getByPlaceholderText("my-hook"), "continue-hook");
+    await waitFor(() => expect(screen.getByText(/Complete Lifecycle Action/)).toBeTruthy());     await user.type(screen.getByPlaceholderText("my-hook"), "continue-hook");
     // Default is CONTINUE, just submit
     await user.click(screen.getByRole("button", { name: /Complete$/ }));
     await waitFor(() => {
@@ -1343,4 +1342,111 @@ describe("AutoScalingDashboard — lifecycle hook branches", () => {
     });
   });
 });
+
+describe("AutoScalingDashboard — scaling policy branches", () => {
+  beforeEach(() => {
+    setupASGForAdvanced();
+  });
+
+  it("creates StepScaling policy with PercentChangeInCapacity", async () => {
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await selectASG(user, "my-asg");
+    await user.click(screen.getAllByText(/Create policy/)[0]);
+    await waitFor(() => expect(screen.getByText(/Create Scaling Policy/)).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("scale-up"), "step-policy");
+    // Change policy type to Step Scaling
+    const simpleTrigger = screen.getByText("Simple Scaling");
+    await user.click(simpleTrigger);
+    await waitFor(() => expect(screen.getByText("Step Scaling")).toBeTruthy());
+    await user.click(screen.getByText("Step Scaling"));
+    // Change adjustment type to PercentChangeInCapacity
+    const adjTrigger = screen.getByText("ChangeInCapacity");
+    await user.click(adjTrigger);
+    await waitFor(() => expect(screen.getByText("PercentChangeInCapacity")).toBeTruthy());
+    await user.click(screen.getByText("PercentChangeInCapacity"));
+    await user.click(screen.getByRole("button", { name: /^Create$/ }));
+    await waitFor(() => {
+      expect(mockCreatePolicy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          policyName: "step-policy",
+          policyType: "StepScaling",
+          adjustmentType: "PercentChangeInCapacity",
+        }),
+        expect.any(Object),
+      );
+    });
+  });
+});
+
+});
+
+describe("AutoScalingDashboard — metric collection types granularities", () => {
+  it("shows No granularities when metric lacks granularities", async () => {
+    mockMetricCollectionTypes.mockReturnValue({
+      data: { metricCollectionTypes: [{ metric: "GroupDesiredCapacity", granularities: [] }] },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/No granularities/)).toBeTruthy();
+    });
+  });
+});
+
+describe("AutoScalingDashboard — classic LBs attach", () => {
+  beforeEach(() => {
+    setupASGForAdvanced();
+  });
+
+  it("submits attach classic LBs", async () => {
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await selectASG(user, "my-asg");
+    // Click Attach in the Classic Load Balancers section (second Attach button)
+    const attachBtns = screen.getAllByRole("button", { name: /Attach/ });
+    await user.click(attachBtns[1]);
+    await waitFor(() => expect(screen.getByText(/Attach Classic Load Balancers/)).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-classic-lb"), "lb1, lb2");
+    const allAttachBtns = screen.getAllByRole("button", { name: /^Attach$/ });
+    await user.click(allAttachBtns[allAttachBtns.length - 1]);
+    await waitFor(() => {
+      expect(mockAttachLBs).toHaveBeenCalled();
+    });
+  });
+});
+
+describe("AutoScalingDashboard — lifecycle hook with ARNs", () => {
+  beforeEach(() => {
+    setupASGForAdvanced();
+  });
+
+  it("creates lifecycle hook with target and role ARNs", async () => {
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await selectASG(user, "my-asg");
+    await user.click(screen.getAllByText(/Create hook/)[0]);
+    await waitFor(() => expect(screen.getByText(/Create Lifecycle Hook/)).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-hook"), "arn-hook");
+    // Fill notification target ARN and role ARN (optional fields)
+    const arnInputs = screen.getAllByPlaceholderText(/arn:aws:/);
+    await user.type(arnInputs[0], "arn:aws:sns:us-east-1:123:my-topic");
+    await user.type(arnInputs[1], "arn:aws:iam::123:role/hook-role");
+    await user.click(screen.getByRole("button", { name: /Create$/ }));
+    await waitFor(() => {
+      expect(mockPutHook).toHaveBeenCalledWith(
+        expect.objectContaining({
+          lifecycleHookName: "arn-hook",
+          notificationTargetARN: "arn:aws:sns:us-east-1:123:my-topic",
+          roleARN: "arn:aws:iam::123:role/hook-role",
+        }),
+        expect.any(Object),
+      );
+    });
+  });
 });
