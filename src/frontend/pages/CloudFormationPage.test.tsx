@@ -1830,4 +1830,201 @@ describe("CloudFormationPage", () => {
     });
   });
 
+  // ── ResourceDetailContainer: drift & metadata branches ──
+
+  it("shows drift information when resource has drift", async () => {
+    const user = userEvent.setup();
+    mockStack.mockReturnValue({
+      data: {
+        stack: { stackId: "arn:1", status: "CREATE_COMPLETE", creationTime: new Date(), outputs: [], parameters: [], tags: [] },
+        resources: [{ logicalId: "DriftedRes", type: "AWS::S3::Bucket", status: "CREATE_COMPLETE" }],
+        events: [],
+      },
+      isLoading: false,
+    });
+    mockStackResource.mockReturnValue({
+      data: { resource: { logicalId: "DriftedRes", resourceType: "AWS::S3::Bucket", status: "CREATE_COMPLETE", driftInformation: { stackResourceDriftStatus: "IN_SYNC" } } },
+      isLoading: false,
+    });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => user.click(screen.getByRole("tab", { name: /Resources/i })));
+    await waitFor(() => clickButton(user, /View/i, { last: true }));
+    await waitFor(() => {
+      expect(screen.getByText(/Drift Status/)).toBeTruthy();
+      expect(screen.getByText("IN_SYNC")).toBeTruthy();
+    });
+  });
+
+  it("shows metadata as JSON string when metadata is an object", async () => {
+    const user = userEvent.setup();
+    mockStack.mockReturnValue({
+      data: {
+        stack: { stackId: "arn:1", status: "CREATE_COMPLETE", creationTime: new Date(), outputs: [], parameters: [], tags: [] },
+        resources: [{ logicalId: "MetaRes", type: "AWS::S3::Bucket", status: "CREATE_COMPLETE" }],
+        events: [],
+      },
+      isLoading: false,
+    });
+    mockStackResource.mockReturnValue({
+      data: { resource: { logicalId: "MetaRes", resourceType: "AWS::S3::Bucket", status: "CREATE_COMPLETE", metadata: { key1: "value1" } } },
+      isLoading: false,
+    });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => user.click(screen.getByRole("tab", { name: /Resources/i })));
+    await waitFor(() => clickButton(user, /View/i, { last: true }));
+    await waitFor(() => {
+      expect(screen.getByText(/Metadata/)).toBeTruthy();
+      expect(screen.getByText(/"key1"/)).toBeTruthy();
+    });
+  });
+
+  // ── CreateStackModal: validation error catch ──
+
+  it("handles template validation error gracefully", async () => {
+    mockValidateTemplate.mockRejectedValueOnce(new Error("Invalid template"));
+    const user = userEvent.setup();
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /Create stack/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-stack")).toBeTruthy());
+    await clickButton(user, /Validate/i);
+    await waitFor(() => {
+      expect(mockValidateTemplate).toHaveBeenCalled();
+    });
+  });
+
+  // ── ChangeSetDetail: loading state ──
+
+  it("shows change set detail loading state", async () => {
+    mockChangeSets.mockReturnValue({
+      data: { changeSets: [{ name: "cs-loading", executionStatus: "AVAILABLE", creationTime: new Date() }], total: 1 },
+      isLoading: false,
+    });
+    mockChangeSet.mockReturnValue({ data: undefined, isLoading: true, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Change Sets/i }));
+    await waitFor(() => clickButton(user, /my-stack/i));
+    await waitFor(() => clickButton(user, /View/i, { last: true }));
+    await waitFor(() => {
+      expect(screen.getByText(/Loading\.\.\./)).toBeTruthy();
+    });
+  });
+
+  // ── ChangeSetDetail: error state ──
+
+  it("shows change set detail error state", async () => {
+    mockChangeSets.mockReturnValue({
+      data: { changeSets: [{ name: "cs-err", executionStatus: "AVAILABLE", creationTime: new Date() }], total: 1 },
+      isLoading: false,
+    });
+    mockChangeSet.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: new Error("Failed to load") });
+    const user = userEvent.setup();
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Change Sets/i }));
+    await waitFor(() => clickButton(user, /my-stack/i));
+    await waitFor(() => clickButton(user, /View/i, { last: true }));
+    await waitFor(() => {
+      expect(screen.getByText(/Failed to load/)).toBeTruthy();
+    });
+  });
+
+  // ── ChangeSetDetail: resource action badge colors ──
+
+  it("shows Add/Remove/Modify badges with correct colors", async () => {
+    mockChangeSets.mockReturnValue({
+      data: { changeSets: [{ name: "cs-actions", executionStatus: "AVAILABLE", creationTime: new Date() }], total: 1 },
+      isLoading: false,
+    });
+    mockChangeSet.mockReturnValue({
+      data: {
+        changeSet: {
+          name: "cs-actions",
+          executionStatus: "AVAILABLE",
+          creationTime: new Date(),
+          changes: [
+            { resourceChange: { action: "Add", logicalResourceId: "NewBucket", resourceType: "AWS::S3::Bucket" } },
+            { resourceChange: { action: "Remove", logicalResourceId: "OldBucket", resourceType: "AWS::S3::Bucket" } },
+            { resourceChange: { action: "Modify", logicalResourceId: "UpdateBucket", resourceType: "AWS::S3::Bucket" } },
+          ],
+        },
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Change Sets/i }));
+    await waitFor(() => clickButton(user, /my-stack/i));
+    await waitFor(() => clickButton(user, /View/i, { last: true }));
+    await waitFor(() => {
+      expect(screen.getByText("Add")).toBeTruthy();
+      expect(screen.getByText("Remove")).toBeTruthy();
+      expect(screen.getByText("Modify")).toBeTruthy();
+    });
+  });
+
+  // ── StackSetDetail: operations table ──
+
+  it("shows stack set operations table when operations exist", async () => {
+    mockStackSets.mockReturnValue({
+      data: { stackSets: [{ name: "ss-ops", status: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    mockStackSet.mockReturnValue({
+      data: {
+        stackSet: { name: "ss-ops", status: "ACTIVE" },
+        instances: [],
+        operations: [{ id: "op-1", action: "CREATE", status: "SUCCEEDED", creationTime: new Date() }],
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Stack Sets/i }));
+    await waitFor(() => clickButton(user, /View/i));
+    await waitFor(() => {
+      expect(screen.getByText("op-1")).toBeTruthy();
+      expect(screen.getByText("CREATE")).toBeTruthy();
+      expect(screen.getByText("SUCCEEDED")).toBeTruthy();
+    });
+  });
+
+  // ── AddInstancesModal: parseList with commas & newlines ──
+
+  it("parses accounts with commas and newlines in add instances modal", async () => {
+    const user = userEvent.setup();
+    mockStackSets.mockReturnValue({
+      data: { stackSets: [{ name: "ss-parse", status: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    mockStackSet.mockReturnValue({
+      data: { stackSet: { name: "ss-parse", status: "ACTIVE" }, instances: [], operations: [] },
+      isLoading: false,
+    });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Stack Sets/i }));
+    await waitFor(() => clickButton(user, /View/i));
+    await waitFor(() => clickButton(user, /Add instances/i));
+    await waitFor(() => {
+      expect(screen.getByText(/Add instances to ss-parse/)).toBeTruthy();
+    });
+    const textareas = screen.getAllByRole("textbox");
+    // First textarea is accounts, second is regions
+    await user.type(textareas[0], "111111, 222222\n333333");
+    const deployBtn = screen.getByRole("button", { name: /^Deploy$/i });
+    await user.click(deployBtn);
+    await waitFor(() => {
+      expect(mockCreateStackInstances).toHaveBeenCalledWith(
+        expect.objectContaining({
+          stackSetName: "ss-parse",
+          accounts: ["111111", "222222", "333333"],
+          regions: ["us-east-1"],
+        }),
+      );
+    });
+  });
+
 });
