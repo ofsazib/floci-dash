@@ -462,4 +462,26 @@ describe("NeptuneDashboard", () => {
     expect(screen.getByText("1.3.2")).toBeTruthy();
     expect(screen.getByText("2")).toBeTruthy();
   });
+
+  // ─── Cluster with undefined DBClusterMembers (nullish coalescing) ───
+  it("shows zero members when DBClusterMembers is null", () => {
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [{
+          DBClusterIdentifier: "null-members",
+          Status: "available",
+          Engine: "neptune",
+          EngineVersion: "1.3.0",
+          Endpoint: "ep",
+          DBClusterMembers: null,
+        }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("null-members")).toBeTruthy();
+    // null?.length → undefined → 0
+    expect(screen.getByText("0")).toBeTruthy();
+  });
 });

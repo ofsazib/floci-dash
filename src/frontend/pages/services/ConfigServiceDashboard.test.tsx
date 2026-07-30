@@ -638,3 +638,60 @@ describe("ConfigServiceDashboard — Advanced tab", () => {
     });
   });
 });
+
+// ─── Advanced tab: evaluation status null invocation time ───
+describe("ConfigServiceDashboard — advanced edge cases", () => {
+  it("shows dash for null invocation time in evaluation status", async () => {
+    const user = userEvent.setup();
+    mockEvalStatus.mockReturnValue({
+      data: {
+        statuses: [{ ConfigRuleName: "no-time", LastStatus: "SUCCEEDED", LastSuccessfulInvocationTime: null, LastErrorMessage: null }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText("no-time")).toBeTruthy();
+      // null LastSuccessfulInvocationTime → "-"
+      const dashes = screen.getAllByText("-");
+      expect(dashes.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it("shows dash for null LastUpdateTime in pack status", async () => {
+    const user = userEvent.setup();
+    mockPackStatuses.mockReturnValue({
+      data: {
+        statuses: [{ ConformancePackName: "no-update", ConformancePackState: "CREATE_COMPLETE", LastUpdateTime: null }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText("no-update")).toBeTruthy();
+      expect(screen.getAllByText("-").length).toBeGreaterThan(0);
+    });
+  });
+
+  it("shows dash for null lastStartTime and lastStopTime in recorder status", async () => {
+    const user = userEvent.setup();
+    mockRecorderStatuses.mockReturnValue({
+      data: {
+        statuses: [{ name: "no-times", recording: true, lastStartTime: null, lastStopTime: null, lastStatus: "Pending" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText("no-times")).toBeTruthy();
+      // Two dashes for null lastStartTime and null lastStopTime
+      expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(2);
+    });
+  });
+});

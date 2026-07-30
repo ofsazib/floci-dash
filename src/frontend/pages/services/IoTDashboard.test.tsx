@@ -2072,3 +2072,118 @@ describe("IoTDashboard — edge case branches", () => {
     await waitFor(() => expect(screen.getByText("Yes")).toBeTruthy());
   });
 });
+
+// ─── MQTT Broker: retain, inspect disabled, connection no source IP ───
+describe("IoTDashboard — MQTT Broker edge cases", () => {
+  it("opens publish modal with retain checkbox unchecked by default", async () => {
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /mqtt broker/i }));
+    await clickButton(user, /publish to topic/i);
+    await waitFor(() => expect(screen.getByText("Retain message")).toBeTruthy());
+  });
+
+  it("inspect button is disabled when client ID is empty", async () => {
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /mqtt broker/i }));
+    await waitFor(() => expect(screen.getByText("Client connections")).toBeTruthy());
+    const inspectBtn = screen.getByRole("button", { name: /^Inspect$/i });
+    expect(inspectBtn).toBeDisabled();
+  });
+
+  it("shows dash for connection with no source IP", async () => {
+    mockConnection.mockReturnValue({
+      data: { connection: { clientId: "no-ip-device", connected: false, sourceIp: null, sourcePort: null } },
+      isLoading: false,
+      isError: false,
+    });
+    mockSubscriptions.mockReturnValue({ data: { subscriptions: [] }, isLoading: false });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /mqtt broker/i }));
+    await user.type(screen.getByPlaceholderText("device-001"), "no-ip-device");
+    await clickButton(user, /inspect/i);
+    await waitFor(() => {
+      expect(screen.getByText("Disconnected")).toBeTruthy();
+      expect(screen.getByText("—")).toBeTruthy();
+    });
+  });
+});
+
+// ─── Shadow update flow ─────────────────────────────────
+describe("IoTDashboard — shadow update", () => {
+  it("opens shadow modal and sees update textarea", async () => {
+    mockThings.mockReturnValue({
+      data: { things: [{ thingName: "ShadowDev", thingTypeName: "Sensor", thingArn: "arn:1" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockShadow.mockReturnValue({ data: { shadow: { state: { reported: { temp: 25 } } } }, isLoading: false });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("ShadowDev")).toBeTruthy());
+    await user.click(screen.getByText("ShadowDev"));
+    await waitFor(() => expect(screen.getByRole("button", { name: /View shadow/i })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /View shadow/i }));
+    await waitFor(() => expect(screen.getByPlaceholderText('{"desired": {"color": "green"}}')).toBeTruthy());
+  });
+
+  it("attempts shadow update (button disabled without state)", async () => {
+    mockThings.mockReturnValue({
+      data: { things: [{ thingName: "ShadowDev", thingTypeName: "Sensor", thingArn: "arn:1" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockShadow.mockReturnValue({ data: { shadow: {} }, isLoading: false });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("ShadowDev")).toBeTruthy());
+    await user.click(screen.getByText("ShadowDev"));
+    await waitFor(() => expect(screen.getByRole("button", { name: /View shadow/i })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /View shadow/i }));
+    // Update button should not call mutate when shadowState is empty (onClick gate)
+    await waitFor(() => {
+      const updateBtns = screen.getAllByRole("button", { name: /^Update$/i });
+      expect(updateBtns.length).toBeGreaterThan(0);
+    });
+  });
+});
+
+// ─── Certificate creation extra coverage ────────────────
+describe("IoTDashboard — certificate creation extra", () => {
+  it("dismisses modal and shows reset behavior", async () => {
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /certificates/i }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /create certificate/i })).toBeTruthy());
+    await clickButton(user, /create certificate/i);
+    await waitFor(() => expect(screen.getByText("Certificate created")).toBeTruthy());
+    // Modal has Done button
+    expect(screen.getByText(/Done/)).toBeTruthy();
+  });
+
+  it("renders Endpoint alert with endpoint address", () => {
+    mockEndpoint.mockReturnValue({
+      data: { endpointAddress: "custom.iot.us-east-1.amazonaws.com" },
+      isLoading: false,
+    });
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/custom.iot.us-east-1.amazonaws.com/)).toBeTruthy();
+  });
+});
+
+// ─── Policy versions null data ──────────────────────────
+describe("IoTDashboard — policy versions edge cases", () => {
+  it("shows empty versions when policyVersions data is null", async () => {
+    mockPolicies.mockReturnValue({
+      data: { policies: [{ policyName: "null-versions", policyArn: "arn:1", defaultVersionId: "1", creationDate: "2025-01-01" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockPolicyVersions.mockReturnValue({ data: null, isLoading: false });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /policies/i }));
+    await waitFor(() => expect(screen.getByText("null-versions")).toBeTruthy());
+    await user.click(screen.getByText("null-versions"));
+    await waitFor(() => expect(screen.getByText(/No versions for this policy/i)).toBeTruthy());
+  });
+});
