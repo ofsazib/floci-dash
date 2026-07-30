@@ -30,6 +30,7 @@ const deleteTrailState = vi.hoisted(() => ({
   variables: null as string | null,
 }));
 const lookupState = vi.hoisted(() => ({ isPending: false, isError: false, error: null as Error | null }));
+const putSelectorsState = vi.hoisted(() => ({ isError: false, error: null as Error | null }));
 
 vi.mock("../../hooks/useCloudTrail", () => ({
   useCloudTrailTrails: (...args: any[]) => mockTrails(...args),
@@ -48,7 +49,12 @@ vi.mock("../../hooks/useCloudTrail", () => ({
     get error() { return lookupState.error; },
   }),
   useEventSelectors: (...args: any[]) => mockEventSelectors(...args),
-  usePutEventSelectors: () => ({ mutate: mockPutEventSelectors, isPending: false, isError: false, error: null }),
+  usePutEventSelectors: () => ({
+    mutate: mockPutEventSelectors,
+    isPending: false,
+    get isError() { return putSelectorsState.isError; },
+    get error() { return putSelectorsState.error; },
+  }),
 }));
 
 import { CloudTrailDashboard } from "./CloudTrailDashboard";
@@ -62,6 +68,8 @@ beforeEach(() => {
   lookupState.isPending = false;
   lookupState.isError = false;
   lookupState.error = null;
+  putSelectorsState.isError = false;
+  putSelectorsState.error = null;
 
   mockTrails.mockReturnValue({
     data: { trails: [], total: 0 },
@@ -646,5 +654,79 @@ describe("CloudTrailDashboard — Advanced Event Selectors", () => {
     // Save
     await clickButton(user, /save event selectors/i);
     expect(mockPutEventSelectors).toHaveBeenCalled();
+  });
+});
+
+describe("CloudTrailDashboard — event selectors edge cases", () => {
+  function trailsWithOne() {
+    mockTrails.mockReturnValue({
+      data: {
+        trails: [
+          { Name: "my-trail", TrailARN: "arn:aws:cloudtrail:us-east-1::trail/my-trail", S3BucketName: "b", IsMultiRegionTrail: true, IncludeGlobalServiceEvents: true, HomeRegion: "us-east-1", CreationDate: 1700000000 },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    mockEventSelectors.mockReturnValue({
+      data: { trailName: "my-trail", eventSelectors: [], advancedEventSelectors: [] },
+      isLoading: false,
+    });
+  }
+
+  it("changes ReadWriteType to ReadOnly and saves", async () => {
+    trailsWithOne();
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-trail")).toBeTruthy());
+    await clickButton(user, /event selectors/i);
+    await waitFor(() => expect(screen.getByText("Event Selectors for my-trail")).toBeTruthy());
+    // Change ReadWriteType from "All" to "ReadOnly"
+    const rwTrigger = screen.getByText("All");
+    await user.click(rwTrigger);
+    await waitFor(() => expect(screen.getByText("ReadOnly")).toBeTruthy());
+    await user.click(screen.getByText("ReadOnly"));
+    await clickButton(user, /save event selectors/i);
+    expect(mockPutEventSelectors).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventSelectors: [expect.objectContaining({ ReadWriteType: "ReadOnly" })],
+      }),
+      expect.anything(),
+    );
+  });
+
+  it("shows putSelectors error alert", async () => {
+    putSelectorsState.isError = true;
+    putSelectorsState.error = new Error("Update denied");
+    trailsWithOne();
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-trail")).toBeTruthy());
+    await clickButton(user, /event selectors/i);
+    await waitFor(() => expect(screen.getByText("Update denied")).toBeTruthy());
+    putSelectorsState.isError = false;
+    putSelectorsState.error = null;
+  });
+
+  it("changes lookup attribute key from default EventId", async () => {
+    mockLookupEvents.mockImplementation((_params, opts) => {
+      opts?.onSuccess?.({ events: [], nextToken: null, total: 0 });
+    });
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /lookup events/i }));
+    // Change attribute key from EventId to EventName
+    const attrTrigger = screen.getByText("Event ID");
+    await user.click(attrTrigger);
+    await waitFor(() => expect(screen.getByText("Event Name")).toBeTruthy());
+    await user.click(screen.getByText("Event Name"));
+    await user.type(screen.getByPlaceholderText("Filter value..."), "CreateBucket");
+    await clickButton(user, /search events/i);
+    expect(mockLookupEvents).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lookupAttributes: [{ AttributeKey: "EventName", AttributeValue: "CreateBucket" }],
+      }),
+      expect.anything(),
+    );
   });
 });
