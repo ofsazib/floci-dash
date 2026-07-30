@@ -869,4 +869,106 @@ describe("SchedulerDashboard — data edge cases", () => {
     const saveBtn = screen.getByRole("button", { name: /Save changes/i });
     expect(saveBtn).toBeDisabled();
   });
+
+  it("edit schedule changes state to DISABLED and submits", async () => {
+    mockSchedules.mockReturnValue({
+      data: {
+        schedules: [{ Name: "edit-me", ScheduleExpression: "rate(1 hour)", State: "ENABLED", Target: { Arn: "arn:aws:lambda:us-east-1:123:function:my-fn" } }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<SchedulerDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-group")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-group" }));
+    await waitFor(() => expect(screen.getByText("edit-me")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Edit edit-me/i }));
+    await waitFor(() => expect(screen.getByText(/Edit schedule: edit-me/)).toBeTruthy());
+    // Change state from ENABLED to DISABLED via Select dropdown
+    const stateTrigger = screen.getByText("ENABLED");
+    await user.click(stateTrigger);
+    await waitFor(() => expect(screen.getByText("DISABLED")).toBeTruthy());
+    await user.click(screen.getByText("DISABLED"));
+    // Click Save changes
+    await user.click(screen.getByRole("button", { name: /Save changes/i }));
+    await waitFor(() => {
+      expect(mockUpdateSchedule).toHaveBeenCalledWith(
+        expect.objectContaining({ state: "DISABLED" }),
+        expect.any(Object),
+      );
+    });
+  });
+
+  it("create schedule shows loading state", async () => {
+    createScheduleState.isPending = true;
+    const user = userEvent.setup();
+    render(<SchedulerDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-group")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-group" }));
+    await waitFor(() => expect(screen.getByText(/Back to Schedule Groups/)).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create schedule")).toBeTruthy());
+    expect(screen.getByText("Create schedule")).toBeTruthy();
+    createScheduleState.isPending = false;
+  });
+
+  it("create schedule submits with role ARN", async () => {
+    mockSchedules.mockReturnValue({ data: { schedules: [], total: 0 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<SchedulerDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-group")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-group" }));
+    await waitFor(() => expect(screen.getByText(/Back to Schedule Groups/)).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Schedule name")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-schedule"), "role-schedule");
+    await user.type(screen.getByPlaceholderText(/arn:aws:lambda/), "arn:aws:lambda:us-east-1:123:function:test-fn");
+    await user.type(screen.getByPlaceholderText(/arn:aws:iam/), "arn:aws:iam::123:role/scheduler-role");
+    const createBtns = screen.getAllByRole("button", { name: /Create/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => {
+      expect(mockCreateSchedule).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "role-schedule",
+          target: expect.objectContaining({ roleArn: "arn:aws:iam::123:role/scheduler-role" }),
+        }),
+        expect.any(Object),
+      );
+    });
+  });
+
+  it("edit schedule modifies expression and description and submits", async () => {
+    mockSchedules.mockReturnValue({
+      data: {
+        schedules: [{ Name: "edit-me", ScheduleExpression: "rate(1 hour)", State: "ENABLED", Description: "Test schedule", Target: { Arn: "arn:aws:lambda:us-east-1:123:function:my-fn" } }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<SchedulerDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-group")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-group" }));
+    await waitFor(() => expect(screen.getByText("edit-me")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Edit edit-me/i }));
+    await waitFor(() => expect(screen.getByText(/Edit schedule: edit-me/)).toBeTruthy());
+    // Target inputs by their pre-filled display values
+    const exprInput = screen.getByDisplayValue("rate(1 hour)");
+    await user.clear(exprInput);
+    await user.type(exprInput, "cron(0 12 * * ? *)");
+    const descInput = screen.getByDisplayValue("Test schedule");
+    await user.clear(descInput);
+    await user.type(descInput, "Updated description");
+    await user.click(screen.getByRole("button", { name: /Save changes/i }));
+    await waitFor(() => {
+      expect(mockUpdateSchedule).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scheduleExpression: "cron(0 12 * * ? *)",
+          description: "Updated description",
+        }),
+        expect.any(Object),
+      );
+    });
+  });
 });
