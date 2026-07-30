@@ -1122,4 +1122,74 @@ describe("KinesisDashboard — data edge cases", () => {
     const fetchBtn = screen.getByRole("button", { name: /Fetch records/i });
     expect(fetchBtn.getAttribute("disabled")).not.toBeNull();
   });
+
+  it("subscribe shows multiple records with arrival timestamps", async () => {
+    mockSubscribeToShard.mockResolvedValue({
+      events: [
+        { partitionKey: "pk-a", sequenceNumber: "seq-a", data: "YQ==", approximateArrivalTimestamp: "2024-06-01T10:00:00Z" },
+        { partitionKey: "pk-b", sequenceNumber: "seq-b", data: "Yg==", approximateArrivalTimestamp: "2024-06-01T11:00:00Z" },
+      ],
+    });
+    setupStream();
+    mockConsumers.mockReturnValue({
+      data: { consumers: [{ ConsumerName: "sub-consumer", ConsumerARN: "arn:...", ConsumerStatus: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    mockShards.mockReturnValue({
+      data: { shards: [{ ShardId: "shard-001" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<KinesisDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-stream"));
+    await waitFor(() => expect(screen.getByText(/Shards: my-stream/)).toBeTruthy());
+    await clickButton(user, /View consumers/i);
+    await waitFor(() => expect(screen.getByText("sub-consumer")).toBeTruthy());
+    await clickButton(user, /Subscribe/i);
+    await waitFor(() => expect(screen.getByText(/Subscribe to Shard/)).toBeTruthy());
+    const selectTriggers = screen.getAllByRole("button", { name: /Select a shard/i });
+    await user.click(selectTriggers[selectTriggers.length - 1]);
+    await waitFor(() => expect(screen.getAllByText("shard-001").length).toBeGreaterThan(0));
+    await user.click(screen.getAllByText("shard-001")[0]);
+    await user.click(screen.getByRole("button", { name: /Fetch records/i }));
+    await waitFor(() => {
+      expect(screen.getByText("pk-a")).toBeTruthy();
+      expect(screen.getByText("pk-b")).toBeTruthy();
+    });
+    // Records header should show count 2
+    expect(screen.getByText("Records (2)")).toBeTruthy();
+  });
+
+  it("subscribe record without arrival timestamp does not show Arrival row", async () => {
+    mockSubscribeToShard.mockResolvedValue({
+      events: [
+        { partitionKey: "no-ts", sequenceNumber: "seq-ts", data: "Zg==" },
+      ],
+    });
+    setupStream();
+    mockConsumers.mockReturnValue({
+      data: { consumers: [{ ConsumerName: "sub-consumer", ConsumerARN: "arn:...", ConsumerStatus: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    mockShards.mockReturnValue({
+      data: { shards: [{ ShardId: "shard-001" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<KinesisDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-stream"));
+    await waitFor(() => expect(screen.getByText(/Shards: my-stream/)).toBeTruthy());
+    await clickButton(user, /View consumers/i);
+    await waitFor(() => expect(screen.getByText("sub-consumer")).toBeTruthy());
+    await clickButton(user, /Subscribe/i);
+    await waitFor(() => expect(screen.getByText(/Subscribe to Shard/)).toBeTruthy());
+    const selectTriggers = screen.getAllByRole("button", { name: /Select a shard/i });
+    await user.click(selectTriggers[selectTriggers.length - 1]);
+    await waitFor(() => expect(screen.getAllByText("shard-001").length).toBeGreaterThan(0));
+    await user.click(screen.getAllByText("shard-001")[0]);
+    await user.click(screen.getByRole("button", { name: /Fetch records/i }));
+    await waitFor(() => expect(screen.getByText("no-ts")).toBeTruthy());
+    // Record renders but Arrival row is absent (approximateArrivalTimestamp is falsy)
+    expect(screen.queryByText(/Arrival:/)).toBeNull();
+  });
 });
