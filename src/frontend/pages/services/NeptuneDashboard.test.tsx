@@ -372,4 +372,94 @@ describe("NeptuneDashboard", () => {
     await user.click(screen.getByRole("tab", { name: /instances/i }));
     await waitFor(() => expect(screen.getByText("inst-ok")).toBeTruthy());
   });
+
+  // ─── Null data fallbacks ─────────────────────────────
+
+  it("handles null clustersData gracefully", () => {
+    mockClusters.mockReturnValue({ data: null, isLoading: false });
+    render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No Neptune clusters/i)).toBeTruthy();
+  });
+
+  it("handles null instancesData gracefully", async () => {
+    mockInstances.mockReturnValue({ data: null, isLoading: false });
+    const user = userEvent.setup();
+    render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /instances/i }));
+    await waitFor(() => expect(screen.getByText(/No Neptune instances/i)).toBeTruthy());
+  });
+
+  // ─── Cluster members truthy branch ───────────────────
+
+  it("shows member count when cluster has members", () => {
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [{
+          DBClusterIdentifier: "multi-members",
+          Status: "available",
+          Engine: "neptune",
+          EngineVersion: "1.3.0",
+          Endpoint: "ep",
+          DBClusterMembers: [{ DBInstanceIdentifier: "a" }, { DBInstanceIdentifier: "b" }, { DBInstanceIdentifier: "c" }],
+        }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("3")).toBeTruthy();
+  });
+
+  // ─── Instance with no Endpoint at all ────────────────
+
+  it("shows dash for instance with no Endpoint property", async () => {
+    mockInstances.mockReturnValue({
+      data: {
+        instances: [{ DBInstanceIdentifier: "no-endpoint-prop", DBClusterIdentifier: "c", DBInstanceClass: "db.r5.large", DBInstanceStatus: "available" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /instances/i }));
+    await waitFor(() => expect(screen.getByText("no-endpoint-prop")).toBeTruthy());
+    const dashes = document.querySelectorAll("td");
+    const dashTexts = Array.from(dashes).map((d) => d.textContent);
+    expect(dashTexts.filter((t) => t === "-").length).toBeGreaterThanOrEqual(1);
+  });
+
+  // ─── Instance loading on first tab click ─────────────
+
+  it("shows instances loading when switching to instances tab", async () => {
+    mockInstances.mockReturnValue({ data: undefined, isLoading: true });
+    const user = userEvent.setup();
+    render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /instances/i }));
+    await waitFor(() => expect(screen.getByText("Neptune Instances")).toBeTruthy());
+  });
+
+  // ─── Cluster with full data (all fields populated) ───
+
+  it("renders cluster with all fields populated", () => {
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [{
+          DBClusterIdentifier: "full-cluster",
+          Status: "creating",
+          Engine: "neptune",
+          EngineVersion: "1.3.2",
+          Endpoint: "full.abc.neptune.amazonaws.com",
+          DBClusterMembers: [{ DBInstanceIdentifier: "writer" }, { DBInstanceIdentifier: "reader" }],
+        }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("full-cluster")).toBeTruthy();
+    expect(screen.getByText("creating")).toBeTruthy();
+    expect(screen.getByText("1.3.2")).toBeTruthy();
+    expect(screen.getByText("2")).toBeTruthy();
+  });
 });
