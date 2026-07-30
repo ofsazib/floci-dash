@@ -504,4 +504,137 @@ describe("ConfigServiceDashboard — Advanced tab", () => {
       expect(mockStartEval).toHaveBeenCalled();
     });
   });
+
+  // ─── Compliance: warning status (INSUFFICIENT_DATA) ──
+
+  it("shows warning indicator for INSUFFICIENT_DATA compliance", async () => {
+    const user = userEvent.setup();
+    mockCompliance.mockReturnValue({
+      data: {
+        compliance: [{ ConfigRuleName: "warn-rule", Compliance: { ComplianceType: "INSUFFICIENT_DATA" } }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText("warn-rule")).toBeTruthy();
+      expect(screen.getByText("INSUFFICIENT_DATA")).toBeTruthy();
+    });
+  });
+
+  // ─── Compliance: null Compliance type + null ContributorCount ──
+
+  it("shows dash for null ComplianceType and null CappedCount", async () => {
+    const user = userEvent.setup();
+    mockCompliance.mockReturnValue({
+      data: {
+        compliance: [{ ConfigRuleName: "null-rule", Compliance: null }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText("null-rule")).toBeTruthy();
+      const dashes = screen.getAllByText("-");
+      expect(dashes.length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  // ─── Evaluation status: FAILED + error message ───────
+
+  it("renders evaluation status with FAILED and error message", async () => {
+    const user = userEvent.setup();
+    mockEvalStatus.mockReturnValue({
+      data: {
+        statuses: [{ ConfigRuleName: "fail-rule", LastStatus: "FAILED", LastSuccessfulInvocationTime: "", LastErrorMessage: "Access denied" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText("fail-rule")).toBeTruthy();
+      expect(screen.getByText("FAILED")).toBeTruthy();
+      expect(screen.getByText("Access denied")).toBeTruthy();
+    });
+  });
+
+  // ─── Evaluation status: unknown status (warning) ─────
+
+  it("shows warning for unknown evaluation status", async () => {
+    const user = userEvent.setup();
+    mockEvalStatus.mockReturnValue({
+      data: {
+        statuses: [{ ConfigRuleName: "pending-rule", LastStatus: "IN_PROGRESS", LastSuccessfulInvocationTime: "", LastErrorMessage: "" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText("pending-rule")).toBeTruthy();
+      expect(screen.getByText("IN_PROGRESS")).toBeTruthy();
+    });
+  });
+
+  // ─── Pack status: DELETE_FAILED + in-progress fallback ──
+
+  it("renders pack status with DELETE_FAILED", async () => {
+    const user = userEvent.setup();
+    mockPackStatuses.mockReturnValue({
+      data: {
+        statuses: [{ ConformancePackName: "del-pack", ConformancePackState: "DELETE_FAILED", ConformancePackStatusReason: "Permission error" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText("del-pack")).toBeTruthy();
+      expect(screen.getByText("DELETE_FAILED")).toBeTruthy();
+    });
+  });
+
+  it("shows in-progress indicator for generic pack state", async () => {
+    const user = userEvent.setup();
+    mockPackStatuses.mockReturnValue({
+      data: {
+        statuses: [{ ConformancePackName: "update-pack", ConformancePackState: "UPDATE_IN_PROGRESS" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText("update-pack")).toBeTruthy();
+      expect(screen.getByText("UPDATE_IN_PROGRESS")).toBeTruthy();
+    });
+  });
+
+  // ─── Recorder status: recording No + null dates ─────
+
+  it("renders recorder status with recording No and null dates", async () => {
+    const user = userEvent.setup();
+    mockRecorderStatuses.mockReturnValue({
+      data: {
+        statuses: [{ name: "stopped-rec", recording: false }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText("stopped-rec")).toBeTruthy();
+      expect(screen.getByText("No")).toBeTruthy();
+    });
+  });
 });
