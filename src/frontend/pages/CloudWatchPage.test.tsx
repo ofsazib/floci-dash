@@ -1071,4 +1071,82 @@ describe("CloudWatchPage — data edge cases", () => {
       expect(mockCloudWatchAlarms).toHaveBeenCalledWith("");
     });
   });
+
+  // ─── Sparkline Single Value ────────────────────────────
+
+  it("renders sparkline with a single datapoint", async () => {
+    const user = userEvent.setup();
+    mockUseHealth.mockReturnValue({ data: undefined });
+    mockCloudWatchMetrics.mockReturnValue({
+      data: { namespaces: ["AWS/Lambda"], metrics: [{ namespace: "AWS/Lambda", metricName: "Invocations", dimensions: [] }] },
+      isLoading: false, refetch: vi.fn(),
+    });
+    mockMetricStatistics.mockReturnValue({
+      data: {
+        datapoints: [{ timestamp: "2025-01-01T00:00:00Z", average: 42, sum: 42, minimum: 42, maximum: 42, sampleCount: 1, unit: "Count" }],
+      },
+      isLoading: false,
+    });
+    mockCloudWatchAlarms.mockReturnValue({ data: { alarms: [] }, isLoading: false });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    const tabs = screen.getAllByText("Metrics");
+    await user.click(tabs[tabs.length - 1]);
+    await waitFor(() => expect(screen.getAllByText("Invocations").length).toBeGreaterThan(0));
+    const radios = screen.getAllByRole("radio");
+    await user.click(radios[0]);
+    await waitFor(() => {
+      const svgs = document.querySelectorAll("svg");
+      expect(svgs.length).toBeGreaterThan(0);
+    });
+  });
+
+  // ─── Create Alarm with Minimum Statistic ────────────────
+
+  it("submits create alarm with Minimum statistic", async () => {
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /Create alarm/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("AWS/EC2")).toBeTruthy());
+    const nameInput = screen.getAllByRole("textbox")[0];
+    await user.type(nameInput, "min-alarm");
+    // Change statistic from Average to Minimum
+    const avgSelects = screen.getAllByText("Average");
+    await user.click(avgSelects[avgSelects.length - 1]);
+    await waitFor(() => expect(screen.getByText("Minimum")).toBeTruthy());
+    await user.click(screen.getByText("Minimum"));
+    await clickButton(user, /Create/i, { last: true });
+    await waitFor(() => {
+      expect(mockCreateAlarmMutate).toHaveBeenCalledWith(
+        expect.objectContaining({ statistic: "Minimum" }),
+      );
+    });
+  });
+
+  // ─── Datapoint Null Timestamp ──────────────────────────
+
+  it("shows dash for datapoint with null timestamp", async () => {
+    const user = userEvent.setup();
+    mockUseHealth.mockReturnValue({ data: undefined });
+    mockCloudWatchMetrics.mockReturnValue({
+      data: { namespaces: ["AWS/Lambda"], metrics: [{ namespace: "AWS/Lambda", metricName: "Invocations", dimensions: [] }] },
+      isLoading: false, refetch: vi.fn(),
+    });
+    mockMetricStatistics.mockReturnValue({
+      data: {
+        datapoints: [{ timestamp: null, average: 10, sum: 20, sampleCount: 1, unit: "Count" }],
+      },
+      isLoading: false,
+    });
+    mockCloudWatchAlarms.mockReturnValue({ data: { alarms: [] }, isLoading: false });
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    const tabs = screen.getAllByText("Metrics");
+    await user.click(tabs[tabs.length - 1]);
+    await waitFor(() => expect(screen.getAllByText("Invocations").length).toBeGreaterThan(0));
+    const radios = screen.getAllByRole("radio");
+    await user.click(radios[0]);
+    await waitFor(() => {
+      const dashes = screen.getAllByText("-");
+      expect(dashes.length).toBeGreaterThanOrEqual(1);
+    });
+  });
 });
