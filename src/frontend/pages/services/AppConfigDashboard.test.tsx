@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -9,26 +9,87 @@ const mockApps = vi.fn();
 const mockDeleteApp = vi.fn();
 const mockEnvs = vi.fn();
 const mockProfiles = vi.fn();
+const mockCreateEnv = vi.fn();
+const mockDeleteEnv = vi.fn();
+const mockCreateProfile = vi.fn();
+const mockDeleteProfile = vi.fn();
+
+const createEnvState = vi.hoisted(() => ({
+  isPending: false,
+  isError: false,
+  error: null as Error | null,
+}));
+
+const deleteEnvState = vi.hoisted(() => ({
+  isPending: false,
+  variables: null as string | null,
+}));
+
+const createProfileState = vi.hoisted(() => ({
+  isPending: false,
+  isError: false,
+  error: null as Error | null,
+}));
+
+const deleteProfileState = vi.hoisted(() => ({
+  isPending: false,
+  variables: null as string | null,
+}));
 
 vi.mock("../../hooks/useAppConfig", () => ({
   useAppConfigApplications: (...args: any[]) => mockApps(...args),
   useDeleteAppConfigApplication: () => ({ mutateAsync: mockDeleteApp, isPending: false, variables: null }),
   useAppConfigEnvironments: (...args: any[]) => mockEnvs(...args),
   useAppConfigProfiles: (...args: any[]) => mockProfiles(...args),
-  useCreateAppConfigEnvironment: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
-  useDeleteAppConfigEnvironment: () => ({ mutateAsync: vi.fn(), isPending: false, variables: null }),
-  useCreateAppConfigProfile: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
-  useDeleteAppConfigProfile: () => ({ mutateAsync: vi.fn(), isPending: false, variables: null }),
+  useCreateAppConfigEnvironment: () => ({
+    mutate: mockCreateEnv,
+    get isPending() { return createEnvState.isPending; },
+    get isError() { return createEnvState.isError; },
+    get error() { return createEnvState.error; },
+  }),
+  useDeleteAppConfigEnvironment: () => ({
+    mutateAsync: mockDeleteEnv,
+    get isPending() { return deleteEnvState.isPending; },
+    get variables() { return deleteEnvState.variables; },
+  }),
+  useCreateAppConfigProfile: () => ({
+    mutate: mockCreateProfile,
+    get isPending() { return createProfileState.isPending; },
+    get isError() { return createProfileState.isError; },
+    get error() { return createProfileState.error; },
+  }),
+  useDeleteAppConfigProfile: () => ({
+    mutateAsync: mockDeleteProfile,
+    get isPending() { return deleteProfileState.isPending; },
+    get variables() { return deleteProfileState.variables; },
+  }),
 }));
 
 import { AppConfigDashboard } from "./AppConfigDashboard";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  createEnvState.isPending = false;
+  createEnvState.isError = false;
+  createEnvState.error = null;
+  deleteEnvState.isPending = false;
+  deleteEnvState.variables = null;
+  createProfileState.isPending = false;
+  createProfileState.isError = false;
+  createProfileState.error = null;
+  deleteProfileState.isPending = false;
+  deleteProfileState.variables = null;
   mockApps.mockReturnValue({ data: { applications: [], total: 0 }, isLoading: false });
   mockEnvs.mockReturnValue({ data: { environments: [], total: 0 } });
   mockProfiles.mockReturnValue({ data: { profiles: [], total: 0 } });
 });
+
+function setupOneApp() {
+  mockApps.mockReturnValue({
+    data: { applications: [{ Id: "app-1", Name: "my-app", Description: "Test app" }], total: 1 },
+    isLoading: false,
+  });
+}
 
 describe("AppConfigDashboard", () => {
   it("shows loading skeleton", () => {
@@ -155,5 +216,221 @@ describe("AppConfigDashboard", () => {
     const filterInput = screen.getByPlaceholderText("Find applications");
     await user.type(filterInput, "beta");
     await waitFor(() => expect(screen.queryByText("alpha-app")).toBeNull());
+  });
+});
+
+// ─── App Detail — Environments Tab ──────────────────────
+
+describe("AppConfigDashboard — environments", () => {
+  async function navigateToDetail(user: any) {
+    setupOneApp();
+    render(<AppConfigDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("my-app"));
+    await user.click(screen.getByText("my-app"));
+    await waitFor(() => expect(screen.getByRole("tab", { name: /Environments/i })).toBeTruthy());
+  }
+
+  it("opens create environment modal", async () => {
+    const user = userEvent.setup();
+    await navigateToDetail(user);
+    await clickButton(user, /Create/i);
+    await waitFor(() => {
+      expect(screen.getByText("Create environment")).toBeTruthy();
+    });
+  });
+
+  it("environment modal shows required fields", async () => {
+    const user = userEvent.setup();
+    await navigateToDetail(user);
+    await clickButton(user, /Create/i);
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("production")).toBeTruthy();
+      expect(screen.getByText("Environment name")).toBeTruthy();
+    });
+  });
+
+  it("create env button disabled when name empty", async () => {
+    const user = userEvent.setup();
+    await navigateToDetail(user);
+    await clickButton(user, /Create/i);
+    await waitFor(() => screen.getByText("Create environment"));
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/ });
+    // The last "Create" button is the one in the modal footer
+    const createBtn = createBtns[createBtns.length - 1];
+    expect((createBtn as HTMLButtonElement).disabled || createBtn.getAttribute("aria-disabled") === "true").toBe(true);
+  });
+
+  it("shows create env error alert", async () => {
+    createEnvState.isError = true;
+    createEnvState.error = new Error("Env creation denied");
+    const user = userEvent.setup();
+    await navigateToDetail(user);
+    await clickButton(user, /Create/i);
+    await waitFor(() => {
+      expect(screen.getByText("Env creation denied")).toBeTruthy();
+    });
+  });
+
+  it("deletes an environment", async () => {
+    mockEnvs.mockReturnValue({
+      data: { environments: [{ Id: "env-del", Name: "dev", State: "ACTIVE" }], total: 1 },
+    });
+    const user = userEvent.setup();
+    await navigateToDetail(user);
+    await waitFor(() => screen.getByText("dev"));
+    const deleteBtn = screen.getByRole("button", { name: /Delete dev/i });
+    await user.click(deleteBtn);
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() => expect(mockDeleteEnv).toHaveBeenCalledWith("env-del"));
+  });
+
+  it("shows dash for null state and description in env", async () => {
+    mockEnvs.mockReturnValue({
+      data: { environments: [{ Id: "env-null", Name: "empty-env" }], total: 1 },
+    });
+    const user = userEvent.setup();
+    await navigateToDetail(user);
+    await waitFor(() => {
+      expect(screen.getByText("empty-env")).toBeTruthy();
+    });
+    expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("filters environments by name", async () => {
+    mockEnvs.mockReturnValue({
+      data: {
+        environments: [
+          { Id: "e1", Name: "prod", State: "ACTIVE" },
+          { Id: "e2", Name: "staging", State: "ACTIVE" },
+        ],
+        total: 2,
+      },
+    });
+    const user = userEvent.setup();
+    await navigateToDetail(user);
+    await waitFor(() => screen.getByText("prod"));
+    const filterInput = screen.getByPlaceholderText("Find environments");
+    await user.type(filterInput, "stage");
+    await waitFor(() => expect(screen.queryByText("prod")).toBeNull());
+  });
+});
+
+// ─── App Detail — Profiles Tab ──────────────────────────
+
+describe("AppConfigDashboard — profiles", () => {
+  async function navigateToProfiles(user: any) {
+    setupOneApp();
+    render(<AppConfigDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("my-app"));
+    await user.click(screen.getByText("my-app"));
+    await waitFor(() => screen.getByRole("tab", { name: /Configuration Profiles/i }));
+    await user.click(screen.getByRole("tab", { name: /Configuration Profiles/i }));
+  }
+
+  it("opens create profile modal", async () => {
+    const user = userEvent.setup();
+    await navigateToProfiles(user);
+    await clickButton(user, /Create/i);
+    await waitFor(() => {
+      expect(screen.getByText("Create configuration profile")).toBeTruthy();
+    });
+  });
+
+  it("submits create profile with all fields", async () => {
+    const user = userEvent.setup();
+    await navigateToProfiles(user);
+    await clickButton(user, /Create$/i);
+    await waitFor(() => screen.getByText("Create configuration profile"));
+    const nameInput = screen.getByPlaceholderText("my-config");
+    const locInput = screen.getByPlaceholderText("hosted");
+    fireEvent.change(nameInput, { target: { value: "app-cfg" } });
+    fireEvent.change(locInput, { target: { value: "ssm-param-store" } });
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/ });
+    await user.click(createBtns[createBtns.length - 1]);
+    expect(mockCreateProfile).toHaveBeenCalledWith(
+      { name: "app-cfg", locationUri: "ssm-param-store", description: undefined },
+      expect.any(Object)
+    );
+  });
+
+  it("create profile defaults locationUri to hosted", async () => {
+    const user = userEvent.setup();
+    await navigateToProfiles(user);
+    await clickButton(user, /Create$/i);
+    await waitFor(() => screen.getByText("Create configuration profile"));
+    const nameInput = screen.getByPlaceholderText("my-config");
+    fireEvent.change(nameInput, { target: { value: "simple-cfg" } });
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/ });
+    await user.click(createBtns[createBtns.length - 1]);
+    expect(mockCreateProfile).toHaveBeenCalledWith(
+      expect.objectContaining({ locationUri: "hosted" }),
+      expect.any(Object)
+    );
+  });
+
+  it("create profile button disabled when name empty", async () => {
+    const user = userEvent.setup();
+    await navigateToProfiles(user);
+    await clickButton(user, /Create$/i);
+    await waitFor(() => screen.getByText("Create configuration profile"));
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/ });
+    const createBtn = createBtns[createBtns.length - 1];
+    expect((createBtn as HTMLButtonElement).disabled || createBtn.getAttribute("aria-disabled") === "true").toBe(true);
+  });
+
+  it("shows create profile error alert", async () => {
+    createProfileState.isError = true;
+    createProfileState.error = new Error("Profile creation denied");
+    const user = userEvent.setup();
+    await navigateToProfiles(user);
+    await clickButton(user, /Create/i);
+    await waitFor(() => {
+      expect(screen.getByText("Profile creation denied")).toBeTruthy();
+    });
+  });
+
+  it("deletes a profile", async () => {
+    mockProfiles.mockReturnValue({
+      data: { profiles: [{ Id: "prof-del", Name: "old-config", Type: "AWS.Freeform" }], total: 1 },
+    });
+    const user = userEvent.setup();
+    await navigateToProfiles(user);
+    await waitFor(() => screen.getByText("old-config"));
+    const deleteBtn = screen.getByRole("button", { name: /Delete old-config/i });
+    await user.click(deleteBtn);
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() => expect(mockDeleteProfile).toHaveBeenCalledWith("prof-del"));
+  });
+
+  it("shows dash for null type and location in profile", async () => {
+    mockProfiles.mockReturnValue({
+      data: { profiles: [{ Id: "prof-null", Name: "bare-profile" }], total: 1 },
+    });
+    const user = userEvent.setup();
+    await navigateToProfiles(user);
+    await waitFor(() => {
+      expect(screen.getByText("bare-profile")).toBeTruthy();
+    });
+    expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("filters profiles by name", async () => {
+    mockProfiles.mockReturnValue({
+      data: {
+        profiles: [
+          { Id: "p1", Name: "feature-flags", Type: "AWS.Freeform" },
+          { Id: "p2", Name: "ui-config", Type: "AWS.Freeform" },
+        ],
+        total: 2,
+      },
+    });
+    const user = userEvent.setup();
+    await navigateToProfiles(user);
+    await waitFor(() => screen.getByText("feature-flags"));
+    const filterInput = screen.getByPlaceholderText("Find profiles");
+    await user.type(filterInput, "ui");
+    await waitFor(() => expect(screen.queryByText("feature-flags")).toBeNull());
   });
 });
