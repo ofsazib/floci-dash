@@ -2027,4 +2027,155 @@ describe("CloudFormationPage", () => {
     });
   });
 
+  // ── ChangeSetDetail: null/empty changes and parameters ──
+
+  it("shows change set detail with null changes and null parameters", async () => {
+    const user = userEvent.setup();
+    mockChangeSets.mockReturnValue({
+      data: { changeSets: [{ name: "cs-null", executionStatus: "AVAILABLE", creationTime: new Date() }], total: 1 },
+      isLoading: false,
+    });
+    mockChangeSet.mockReturnValue({
+      data: { changeSet: { name: "cs-null", executionStatus: "AVAILABLE", creationTime: new Date(), changes: null, parameters: null } },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Change Sets/i }));
+    await waitFor(() => user.click(screen.getByRole("button", { name: "my-stack" })));
+    await waitFor(() => clickButton(user, /View/));
+    await waitFor(() => {
+      expect(screen.getByText(/Change Set: cs-null/)).toBeTruthy();
+      // No Changes or Parameters containers when null
+      expect(screen.queryByText(/Changes/)).toBeNull();
+      expect(screen.queryByText(/Parameters/)).toBeNull();
+    });
+  });
+
+  it("shows change set detail with empty scope in change", async () => {
+    const user = userEvent.setup();
+    mockChangeSets.mockReturnValue({
+      data: { changeSets: [{ name: "cs-noscope", executionStatus: "AVAILABLE", creationTime: new Date() }], total: 1 },
+      isLoading: false,
+    });
+    mockChangeSet.mockReturnValue({
+      data: {
+        changeSet: { name: "cs-noscope", executionStatus: "AVAILABLE", creationTime: new Date(),
+          changes: [{ resourceChange: { action: "Modify", logicalResourceId: "Res", resourceType: "AWS::S3::Bucket", scope: [] } }],
+          parameters: [],
+        },
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Change Sets/i }));
+    await waitFor(() => user.click(screen.getByRole("button", { name: "my-stack" })));
+    await waitFor(() => clickButton(user, /View/));
+    await waitFor(() => {
+      expect(screen.getByText("Modify")).toBeTruthy();
+      // Empty scope → "-"
+      expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it("shows change set detail change with no replacement field", async () => {
+    const user = userEvent.setup();
+    mockChangeSets.mockReturnValue({
+      data: { changeSets: [{ name: "cs-norepl", executionStatus: "AVAILABLE", creationTime: new Date() }], total: 1 },
+      isLoading: false,
+    });
+    mockChangeSet.mockReturnValue({
+      data: {
+        changeSet: { name: "cs-norepl", executionStatus: "AVAILABLE", creationTime: new Date(),
+          changes: [{ resourceChange: { action: "Add", logicalResourceId: "Res", resourceType: "AWS::S3::Bucket" } }],
+        },
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Change Sets/i }));
+    await waitFor(() => user.click(screen.getByRole("button", { name: "my-stack" })));
+    await waitFor(() => clickButton(user, /View/));
+    await waitFor(() => {
+      expect(screen.getByText("Add")).toBeTruthy();
+      // No replacement → "-"
+      expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  // ── Stack Set: missing description/permissionModel, with parameters ──
+
+  it("shows stack set with default permissionModel when missing", async () => {
+    const user = userEvent.setup();
+    mockStackSets.mockReturnValue({
+      data: { stackSets: [{ name: "ss-bare", status: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    mockStackSet.mockReturnValue({
+      data: { stackSet: { name: "ss-bare", status: "ACTIVE" }, instances: [], operations: [] },
+      isLoading: false,
+    });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Stack Sets/i }));
+    await waitFor(() => clickButton(user, /View/i));
+    await waitFor(() => {
+      expect(screen.getByText(/Stack Set: ss-bare/)).toBeTruthy();
+      expect(screen.getByText("SELF_MANAGED")).toBeTruthy();
+      // description || "-"
+      expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it("shows stack set with parameters", async () => {
+    const user = userEvent.setup();
+    mockStackSets.mockReturnValue({
+      data: { stackSets: [{ name: "ss-params", status: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    mockStackSet.mockReturnValue({
+      data: { stackSet: { name: "ss-params", status: "ACTIVE", parameters: [{ key: "Env", value: "prod" }] }, instances: [], operations: [] },
+      isLoading: false,
+    });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Stack Sets/i }));
+    await waitFor(() => clickButton(user, /View/i));
+    await waitFor(() => {
+      expect(screen.getByText(/Env/)).toBeTruthy();
+      expect(screen.getByText("prod")).toBeTruthy();
+    });
+  });
+
+  // ── Add Instances: disabled Deploy button ──
+
+  it("add instances Deploy button is disabled with empty accounts", async () => {
+    const user = userEvent.setup();
+    mockStackSets.mockReturnValue({
+      data: { stackSets: [{ name: "ss-dis", status: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    mockStackSet.mockReturnValue({
+      data: { stackSet: { name: "ss-dis", status: "ACTIVE" }, instances: [], operations: [] },
+      isLoading: false,
+    });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Stack Sets/i }));
+    await waitFor(() => clickButton(user, /View/i));
+    await waitFor(() => clickButton(user, /Add instances/i));
+    await waitFor(() => expect(screen.getByText(/Add instances to ss-dis/)).toBeTruthy());
+    const deployBtn = screen.getByRole("button", { name: /^Deploy$/i });
+    expect(deployBtn).toBeDisabled();
+  });
+
+  // ── Exports: null exportingStackId ──
+
+  it("shows null exportingStackId without crashing", async () => {
+    const user = userEvent.setup();
+    mockExports.mockReturnValue({
+      data: { exports: [{ name: "exp-null", value: "val", exportingStackId: null }], total: 1 },
+      isLoading: false,
+    });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Exports/i }));
+    await waitFor(() => expect(screen.getByText("exp-null")).toBeTruthy());
+  });
+
 });
