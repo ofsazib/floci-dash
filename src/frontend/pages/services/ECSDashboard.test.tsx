@@ -937,3 +937,142 @@ describe("ECSDashboard — Task Sets", () => {
     });
   });
 });
+
+// ─── Error states ───────────────────────────────────────────
+
+describe("ECSDashboard — error states", () => {
+  it("shows error alert when cluster list fails to load", () => {
+    mockClusters.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new Error("Failed to connect to ECS"),
+    });
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/Failed to load ECS clusters/)).toBeTruthy();
+    expect(screen.getByText("Failed to connect to ECS")).toBeTruthy();
+  });
+
+  describe("detail-level errors", () => {
+    beforeEach(() => {
+      mockClusters.mockReturnValue({
+        data: {
+          clusters: [{ clusterName: "my-cluster", status: "ACTIVE", clusterArn: "arn:aws:ecs:::cluster/my-cluster" }],
+          total: 1,
+        },
+        isLoading: false,
+        isError: false,
+        error: null,
+      });
+    });
+
+    it("shows run task error alert", async () => {
+      runTaskState.isError = true;
+      runTaskState.error = new Error("Task definition not found");
+      const user = userEvent.setup();
+      render(<ECSDashboard />, { wrapper: createWrapper() });
+      await clickButton(user, /View/i);
+      await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
+      await user.click(screen.getByRole("tab", { name: /tasks/i }));
+      await clickButton(user, /Create task/i);
+      await waitFor(() => expect(screen.getByText("Run task")).toBeTruthy());
+      expect(screen.getByText("Task definition not found")).toBeTruthy();
+      runTaskState.isError = false;
+      runTaskState.error = null;
+    });
+
+    it("shows create service error alert", async () => {
+      createServiceState.isError = true;
+      createServiceState.error = new Error("Service name already exists");
+      const user = userEvent.setup();
+      render(<ECSDashboard />, { wrapper: createWrapper() });
+      await clickButton(user, /View/i);
+      await waitFor(() => expect(screen.getByText("my-cluster")).toBeTruthy());
+      const createBtns = screen.getAllByRole("button", { name: /Create/i });
+      await user.click(createBtns[0]);
+      await waitFor(() => expect(screen.getAllByText("Create Service").length).toBeGreaterThan(0));
+      expect(screen.getByText("Service name already exists")).toBeTruthy();
+      createServiceState.isError = false;
+      createServiceState.error = null;
+    });
+  });
+});
+
+// ─── Modal disabled buttons ─────────────────────────────────
+
+describe("ECSDashboard — modal disabled buttons", () => {
+  it("create cluster button is disabled when name empty", async () => {
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create cluster")).toBeTruthy());
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    expect(createBtns[createBtns.length - 1]).toBeDisabled();
+  });
+
+  describe("detail-level disabled buttons", () => {
+    beforeEach(() => {
+      mockClusters.mockReturnValue({
+        data: {
+          clusters: [{ clusterName: "my-cluster", status: "ACTIVE", clusterArn: "arn:aws:ecs:::cluster/my-cluster" }],
+          total: 1,
+        },
+        isLoading: false,
+        isError: false,
+        error: null,
+      });
+    });
+
+    it("run task button is disabled when task def input empty", async () => {
+      const user = userEvent.setup();
+      render(<ECSDashboard />, { wrapper: createWrapper() });
+      await clickButton(user, /View/i);
+      await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
+      await user.click(screen.getByRole("tab", { name: /tasks/i }));
+      await clickButton(user, /Create task/i);
+      await waitFor(() => expect(screen.getByText("Run task")).toBeTruthy());
+      const runBtns = screen.getAllByRole("button", { name: /^Run$/i });
+      expect(runBtns[runBtns.length - 1]).toBeDisabled();
+    });
+  });
+});
+
+// ─── Services filter ────────────────────────────────────────
+
+describe("ECSDashboard — services filter", () => {
+  beforeEach(() => {
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [{ clusterName: "my-cluster", status: "ACTIVE", clusterArn: "arn:aws:ecs:::cluster/my-cluster" }],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+  });
+
+  it("filters services by name", async () => {
+    mockServices.mockReturnValue({
+      data: {
+        services: [
+          { serviceName: "web-service", status: "ACTIVE", desiredCount: 2, runningCount: 2, taskDefinition: "arn:aws:ecs:::task-def/web:1" },
+          { serviceName: "worker-service", status: "ACTIVE", desiredCount: 1, runningCount: 1, taskDefinition: "arn:aws:ecs:::task-def/worker:1" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText("web-service")).toBeTruthy());
+    expect(screen.getByText("worker-service")).toBeTruthy();
+    const filterInput = screen.getByPlaceholderText("Find services");
+    await user.type(filterInput, "worker");
+    await waitFor(() => {
+      expect(screen.queryByText("worker-service")).toBeTruthy();
+      expect(screen.queryByText("web-service")).toBeNull();
+    });
+  });
+});
