@@ -1450,3 +1450,78 @@ describe("AutoScalingDashboard — lifecycle hook with ARNs", () => {
     });
   });
 });
+
+describe("AutoScalingDashboard — instance refresh with date", () => {
+  it("shows formatted date when startTime is present", async () => {
+    setupASGForAdvanced();
+    mockInstanceRefreshes.mockReturnValue({
+      data: { instanceRefreshes: [{ instanceRefreshId: "ir-date", status: "Successful", percentageComplete: 100, startTime: "2025-06-15T12:00:00Z" }] },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await selectASG(user, "my-asg");
+    await waitFor(() => {
+      expect(screen.getByText("ir-date")).toBeTruthy();
+      expect(screen.getByText("100%")).toBeTruthy();
+    });
+  });
+
+  it("shows dash for null startTime", async () => {
+    setupASGForAdvanced();
+    mockInstanceRefreshes.mockReturnValue({
+      data: { instanceRefreshes: [{ instanceRefreshId: "ir-null-date", status: "Cancelled", percentageComplete: 50, startTime: null }] },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await selectASG(user, "my-asg");
+    await waitFor(() => {
+      expect(screen.getByText("ir-null-date")).toBeTruthy();
+      expect(screen.getByText("-")).toBeTruthy();
+    });
+  });
+});
+
+describe("AutoScalingDashboard — metric granularities edge", () => {
+  it("shows No granularities when granularities is null", async () => {
+    mockMetricCollectionTypes.mockReturnValue({
+      data: { metricCollectionTypes: [{ metric: "GroupTotalInstances", granularities: null }] },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/No granularities/)).toBeTruthy();
+    });
+  });
+
+  it("shows create scaling policy with ExactCapacity adjustment", async () => {
+    setupASGForAdvanced();
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await selectASG(user, "my-asg");
+    await user.click(screen.getAllByText(/Create policy/)[0]);
+    await waitFor(() => expect(screen.getByText(/Create Scaling Policy/)).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("scale-up"), "exact-policy");
+    // Change adjustment type to ExactCapacity
+    const adjTrigger = screen.getByText("ChangeInCapacity");
+    await user.click(adjTrigger);
+    await waitFor(() => expect(screen.getByText("ExactCapacity")).toBeTruthy());
+    await user.click(screen.getByText("ExactCapacity"));
+    await user.click(screen.getByRole("button", { name: /^Create$/ }));
+    await waitFor(() => {
+      expect(mockCreatePolicy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          policyName: "exact-policy",
+          adjustmentType: "ExactCapacity",
+        }),
+        expect.any(Object),
+      );
+    });
+  });
+});
