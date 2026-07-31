@@ -618,6 +618,37 @@ describe("CognitoDashboard — app clients tab", () => {
     await user.click(screen.getByRole("tab", { name: /App Clients/i }));
     await waitFor(() => expect(screen.getByText("named")).toBeTruthy());
   });
+
+  it("filters clients with null name via fallback to empty string", async () => {
+    mockPools.mockReturnValue({
+      data: { userPools: [{ Id: "p1", Name: "pool", Status: "Enabled" }], total: 1 },
+      isLoading: false,
+    });
+    mockClients.mockReturnValue({
+      data: {
+        clients: [
+          { ClientId: "c1" },
+          { ClientId: "c2", ClientName: "named" },
+        ],
+        total: 2,
+      },
+    });
+    const user = userEvent.setup();
+    render(<CognitoDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("pool"));
+    await user.click(screen.getByText("pool"));
+    await user.click(screen.getByRole("tab", { name: /App Clients/i }));
+    await waitFor(() => expect(screen.getByText("named")).toBeTruthy());
+
+    // Typing into the filter triggers filterFunction for BOTH clients,
+    // exercising the (i.name || "") fallback for the null-name client.
+    const filterInput = screen.getByPlaceholderText("Find clients");
+    await user.type(filterInput, "named");
+    // The null-name client (c1) must not crash the filter — it gets filtered out
+    // while the named client stays visible.
+    await waitFor(() => expect(screen.queryByText("c1")).toBeNull());
+    expect(screen.getByText("named")).toBeTruthy();
+  });
 });
 
 describe("CognitoDashboard — advanced tab", () => {
@@ -960,6 +991,38 @@ describe("CognitoDashboard — advanced tab: more coverage", () => {
     });
   });
 
+  it("deletes a resource server without a Name using its Identifier", async () => {
+    mockResourceServers.mockReturnValue({
+      resourceServers: [{ Identifier: "rs-id-only" }],
+      total: 1,
+    });
+    const { user } = await navToAdvanced();
+    await waitFor(() => expect(screen.getByText("rs-id-only")).toBeTruthy());
+
+    // itemName falls back to the Identifier when Name is missing
+    const deleteBtn = screen.getByRole("button", { name: /Delete rs-id-only/i });
+    await user.click(deleteBtn);
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /^Delete$/i }));
+    await waitFor(() => {
+      expect(mockDeleteResourceServer).toHaveBeenCalledWith("rs-id-only");
+    });
+  });
+
+  it("disables resource server delete button while deleting", async () => {
+    advancedStates.deleteResourceServer.isPending = true;
+    advancedStates.deleteResourceServer.variables = "rs-del";
+    mockResourceServers.mockReturnValue({
+      resourceServers: [{ Identifier: "rs-del", Name: "To Delete" }],
+      total: 1,
+    });
+    await navToAdvanced();
+    await waitFor(() => expect(screen.getByText("To Delete")).toBeTruthy());
+
+    const deleteBtn = screen.getByRole("button", { name: /Delete To Delete/i });
+    expect(deleteBtn).toBeDisabled();
+  });
+
   it("shows MFA ON with success indicator", async () => {
     mockMfaConfig.mockReturnValue({ mfaConfiguration: "ON" });
     const { user } = await navToAdvanced();
@@ -1086,6 +1149,21 @@ describe("CognitoDashboard — auth flows: flow type switching", () => {
     );
   });
 
+  it("switches to Confirm Sign Up and submits without secret hash", async () => {
+    const { user } = await navToAuthFlows();
+    await selectFlowOperation(user, "Confirm Sign Up");
+    await user.type(screen.getByPlaceholderText("Client ID"), "client-1");
+    await user.type(screen.getByPlaceholderText("Username"), "user1");
+    await user.type(screen.getByPlaceholderText("123456"), "123456");
+    // Leave Secret Hash empty → secretHash: authFlowSecretHash || undefined
+    await user.click(screen.getByRole("button", { name: /Run Flow/i }));
+    await waitFor(() =>
+      expect(mockConfirmSignUp).toHaveBeenCalledWith(
+        expect.objectContaining({ confirmationCode: "123456", secretHash: undefined }),
+      ),
+    );
+  });
+
   it("switches to Admin Respond to Challenge and submits parsed JSON", async () => {
     const { user } = await navToAuthFlows();
     await selectFlowOperation(user, "Admin Respond to Challenge");
@@ -1102,6 +1180,19 @@ describe("CognitoDashboard — auth flows: flow type switching", () => {
         expect.objectContaining({
           challengeResponses: { NEW_PASSWORD: "Pass123!" },
         }),
+      ),
+    );
+  });
+
+  it("switches to Admin Respond to Challenge and submits with empty responses", async () => {
+    const { user } = await navToAuthFlows();
+    await selectFlowOperation(user, "Admin Respond to Challenge");
+    await user.type(screen.getByPlaceholderText("Client ID"), "client-1");
+    // Leave Challenge Responses empty → challengeResponses: undefined
+    await user.click(screen.getByRole("button", { name: /Run Flow/i }));
+    await waitFor(() =>
+      expect(mockAdminRespondChallenge).toHaveBeenCalledWith(
+        expect.objectContaining({ challengeResponses: undefined }),
       ),
     );
   });
@@ -1202,6 +1293,17 @@ describe("CognitoDashboard — auth flows: flow type switching", () => {
     await user.type(screen.getByPlaceholderText("Password"), "pass");
     await user.click(screen.getByRole("button", { name: /Run Flow/i }));
     await waitFor(() => expect(screen.getByText(/Auth failed/)).toBeTruthy());
+  });
+
+  it("shows generic failure message for non-Error rejection", async () => {
+    mockInitiateAuth.mockRejectedValue("raw string failure");
+    const { user } = await navToAuthFlows();
+    await user.type(screen.getByPlaceholderText("Client ID"), "client-1");
+    await user.type(screen.getByPlaceholderText("Username"), "user1");
+    await user.type(screen.getByPlaceholderText("Password"), "pass");
+    await user.click(screen.getByRole("button", { name: /Run Flow/i }));
+    // err?.message is undefined for a string rejection → fallback message
+    await waitFor(() => expect(screen.getByText(/Auth flow failed/)).toBeTruthy());
   });
 });
 
