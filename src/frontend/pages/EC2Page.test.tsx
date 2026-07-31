@@ -1816,6 +1816,33 @@ describe("EC2FlowLogList (EC2Page — Flow Logs tab)", () => {
     await goToTab(user, /Flow Logs/i);
     await waitFor(() => expect(screen.getAllByText("-").length).toBeGreaterThan(0));
   });
+
+  it("create flow log with destination type shows ARN field and submits optional fields", async () => {
+    mockVpcs.mockReturnValue({
+      data: { vpcs: [{ id: "vpc-fl2", cidrBlock: "10.0.0.0/16", state: "available", isDefault: false, instanceTenancy: "default" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Flow Logs/i);
+    await waitFor(() => expect(screen.getByText("No flow logs found")).toBeTruthy());
+    await clickButton(user, /Create Flow Log/i);
+    await waitFor(() => expect(screen.getAllByText("Create Flow Log").length).toBeGreaterThan(0));
+    await pickSelectOption(user, /Select resource/i, /vpc-fl2/);
+    // Open the log destination type select (currently "s3") and choose cloud-watch-logs
+    await pickSelectOption(user, /s3/i, /cloud-watch-logs/);
+    await waitFor(() => expect(screen.getByPlaceholderText("arn:aws:s3:::flow-logs-bucket")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("arn:aws:s3:::flow-logs-bucket"), "arn:aws:logs:us-east-1:123456789012:log-group:fl");
+    await clickLastButton(user, /^Create$/i);
+    await waitFor(() => expect(mockCreateFlowLog).toHaveBeenCalled());
+    expect(mockCreateFlowLog.mock.calls[0][0]).toMatchObject({
+      resourceId: "vpc-fl2",
+      trafficType: "ALL",
+      logDestinationType: "cloud-watch-logs",
+      logDestination: "arn:aws:logs:us-east-1:123456789012:log-group:fl",
+      maxAggregationInterval: 600,
+    });
+  });
 });
 
 // ─── Network ACLs ─────────────────────────────────
@@ -2126,5 +2153,118 @@ describe("EC2NetworkAclList (EC2Page — Network ACLs tab)", () => {
         expect.any(Object),
       );
     });
+  });
+
+  it("renders expanded ACL detail with sorted rules, port ranges, and statuses", async () => {
+    mockNetworkAcls.mockReturnValue({
+      data: {
+        networkAcls: [
+          {
+            networkAclId: "acl-exp2",
+            vpcId: "vpc-1",
+            isDefault: false,
+            entries: [
+              { ruleNumber: 200, protocol: "6", cidrBlock: "10.0.0.0/8", ruleAction: "deny", egress: false, portRange: { from: 80, to: 443 } },
+              { ruleNumber: 100, protocol: "-1", cidrBlock: "0.0.0.0/0", ruleAction: "allow", egress: false },
+            ],
+            associations: [{ subnetId: "subnet-1", networkAclAssociationId: "aclassoc-1" }],
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Network ACLs/i);
+    await waitFor(() => expect(screen.getByText("vpc-1")).toBeTruthy());
+    await clickButton(user, /View rules for acl-exp2/i);
+    await waitFor(() => expect(screen.getByText("#100")).toBeTruthy());
+    // Protocol "-1" renders as "All"; port range renders as :80-443
+    expect(screen.getByText("All")).toBeTruthy();
+    expect(screen.getByText(/80-443/)).toBeTruthy();
+    expect(screen.getAllByText("ALLOW").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("DENY").length).toBeGreaterThan(0);
+    // Subnet association rows
+    expect(screen.getByText("subnet-1")).toBeTruthy();
+    expect(screen.getByText("aclassoc-1")).toBeTruthy();
+  });
+
+  it("shows no-rules and no-associations messages in expanded ACL", async () => {
+    mockNetworkAcls.mockReturnValue({
+      data: {
+        networkAcls: [{ networkAclId: "acl-empty", vpcId: "vpc-1", isDefault: false, entries: [], associations: [] }],
+        total: 1,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Network ACLs/i);
+    await waitFor(() => expect(screen.getByText("vpc-1")).toBeTruthy());
+    await clickButton(user, /View rules for acl-empty/i);
+    await waitFor(() => {
+      expect(screen.getByText("No inbound rules found")).toBeTruthy();
+      expect(screen.getByText("No outbound rules found")).toBeTruthy();
+      expect(screen.getByText("No subnet associations")).toBeTruthy();
+    });
+  });
+
+  it("delete rule calls deleteEntry.mutate with egress flag", async () => {
+    mockNetworkAcls.mockReturnValue({
+      data: {
+        networkAcls: [
+          {
+            networkAclId: "acl-del2",
+            vpcId: "vpc-1",
+            isDefault: false,
+            entries: [{ ruleNumber: 100, protocol: "6", cidrBlock: "10.0.0.0/8", ruleAction: "allow", egress: true }],
+            associations: [],
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Network ACLs/i);
+    await waitFor(() => expect(screen.getByText("vpc-1")).toBeTruthy());
+    await clickButton(user, /View rules for acl-del2/i);
+    await waitFor(() => expect(screen.getByText("#100")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Delete rule 100/i }));
+    await waitFor(() => {
+      expect(mockDeleteAclEntry).toHaveBeenCalledWith({ aclId: "acl-del2", ruleNumber: 100, egress: true });
+    });
+  });
+});
+
+// ─── CommandBox copy ──────────────────────────────────
+
+describe("EC2InstanceDetail — CommandBox copy", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setupDefaults();
+    mockInstances.mockReturnValue({
+      data: { instances: [{ id: "i-copy", state: "running", instanceType: "t2.micro" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockInstanceDetail.mockReturnValue({
+      data: { id: "i-copy", state: "running", instanceType: "t2.micro", privateIp: "10.0.0.1", publicIp: "54.0.0.1", vpcId: "vpc-1", subnetId: "subnet-1", keyName: "my-key", imageId: "ami-0abc", availabilityZone: "us-east-1a", architecture: "x86_64", platform: "Linux", launchTime: "2024-01-01T00:00:00Z", iamInstanceProfile: null, ebsOptimized: false, monitoring: "disabled", rootDeviceName: "/dev/xvda", rootDeviceType: "ebs" },
+      isLoading: false, isError: false, error: null,
+    });
+  });
+
+  it("shows Copied state after clicking the copy button", async () => {
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Instances/i);
+    await clickButton(user, /i-copy/i);
+    await waitFor(() => expect(screen.getByText("Docker Exec")).toBeTruthy());
+    // Connection Info panel renders 3 CommandBoxes — click the first copy button.
+    // happy-dom's native Clipboard.writeText resolves, so handleCopy reaches
+    // setCopied(true) and the aria-label flips from "Copy to clipboard" to "Copied".
+    await user.click(screen.getAllByRole("button", { name: /Copy to clipboard/i })[0]);
+    await waitFor(() => expect(screen.getByRole("button", { name: /Copied/i })).toBeTruthy());
   });
 });
