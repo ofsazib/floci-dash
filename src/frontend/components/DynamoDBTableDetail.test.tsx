@@ -769,6 +769,33 @@ describe("DynamoDBTableDetail — preset edge cases", () => {
       expect(screen.getByDisplayValue("status")).toBeTruthy();
     });
   });
+
+  it("does not load a preset when the placeholder option is selected", async () => {
+    const user = userEvent.setup();
+    const presets = {
+      users: [
+        {
+          name: "active-items",
+          conditions: [
+            { attr: "status", op: "=", value: "active", enabled: true },
+          ],
+          logic: "AND",
+        },
+      ],
+    };
+    localStorage.setItem(
+      "floci-dash-dynamodb-presets",
+      JSON.stringify(presets),
+    );
+    render(<DynamoDBTableDetail tableName="users" onBack={vi.fn()} />, {
+      wrapper: createWrapper(),
+    });
+    await user.click(screen.getByRole("button", { name: /Select a preset/ }));
+    await user.click(
+      screen.getByRole("option", { name: "Select a preset..." }),
+    );
+    expect(screen.queryByDisplayValue("status")).toBeNull();
+  });
 });
 
 // ─── Filter edge cases ───────────────────────────────────
@@ -982,6 +1009,41 @@ describe("DynamoDBTableDetail — item row actions", () => {
     });
   });
 
+  it("excludes extra attributes with an empty value from the update payload", async () => {
+    const user = userEvent.setup();
+    (useDynamoDBFilteredScan as any).mockReturnValue({
+      data: {
+        ...scanData,
+        items: [{ pk: "u1", sk: "meta", name: "Alice" }],
+        count: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<DynamoDBTableDetail tableName="users" onBack={vi.fn()} />, {
+      wrapper: createWrapper(),
+    });
+    await user.click(screen.getAllByRole("button", { name: /^Edit$/i })[0]);
+    const dialog = screen.getByRole("dialog");
+    await user.click(
+      within(dialog).getByRole("button", { name: /Add attribute/i }),
+    );
+    const nameInputs = within(dialog).getAllByPlaceholderText("Attribute name");
+    await user.type(nameInputs[nameInputs.length - 1], "city");
+    await user.click(
+      within(dialog).getByRole("button", { name: /Save changes/i }),
+    );
+    await waitFor(() => {
+      expect(mockPutItem.mutate).toHaveBeenCalledWith(
+        expect.objectContaining({ pk: "u1", sk: "meta", name: "Alice" }),
+        expect.any(Object),
+      );
+    });
+    const payload = (mockPutItem.mutate as any).mock.calls[0][0];
+    expect(payload.city).toBeUndefined();
+  });
+
   it("shows update item error alert in edit modal", async () => {
     const user = userEvent.setup();
     mockPutItem.isError = true;
@@ -1022,6 +1084,49 @@ describe("DynamoDBTableDetail — item row actions", () => {
         pk: "u1",
         sk: "meta",
       });
+    });
+  });
+
+  it("deletes an item with an empty key payload when the table has no key schema", async () => {
+    const user = userEvent.setup();
+    (useDynamoDBTableDetail as any).mockReturnValue({
+      data: { ...detailData, keySchema: undefined },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<DynamoDBTableDetail tableName="users" onBack={vi.fn()} />, {
+      wrapper: createWrapper(),
+    });
+    const deleteBtns = screen.getAllByRole("button", {
+      name: /Delete item in users/i,
+    });
+    await user.click(deleteBtns[0]);
+    await waitFor(() => {
+      expect(mockDeleteItem.mutateAsync).toHaveBeenCalledWith({});
+    });
+  });
+
+  it("deletes an item with only the hash key when the table has no sort key", async () => {
+    const user = userEvent.setup();
+    (useDynamoDBTableDetail as any).mockReturnValue({
+      data: {
+        ...detailData,
+        keySchema: [{ AttributeName: "pk", KeyType: "HASH" }],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<DynamoDBTableDetail tableName="users" onBack={vi.fn()} />, {
+      wrapper: createWrapper(),
+    });
+    const deleteBtns = screen.getAllByRole("button", {
+      name: /Delete item in users/i,
+    });
+    await user.click(deleteBtns[0]);
+    await waitFor(() => {
+      expect(mockDeleteItem.mutateAsync).toHaveBeenCalledWith({ pk: "u1" });
     });
   });
 
@@ -1154,6 +1259,30 @@ describe("DynamoDBTableDetail — put item modal", () => {
     expect(
       within(dialog).getAllByPlaceholderText("Attribute name").length,
     ).toBe(1);
+  });
+
+  it("updates one extra attribute row without affecting the other", async () => {
+    const user = userEvent.setup();
+    render(<DynamoDBTableDetail tableName="users" onBack={vi.fn()} />, {
+      wrapper: createWrapper(),
+    });
+    await user.click(screen.getByTestId("rt-create"));
+    const dialog = screen.getByRole("dialog");
+    await user.click(
+      within(dialog).getByRole("button", { name: /Add attribute/i }),
+    );
+    const nameInputs = within(dialog).getAllByPlaceholderText("Attribute name");
+    expect(nameInputs).toHaveLength(2);
+    await user.type(nameInputs[0], "team");
+    const valueInputs = within(dialog).getAllByPlaceholderText("Value");
+    await user.type(valueInputs[0], "core");
+    const updatedNames =
+      within(dialog).getAllByPlaceholderText("Attribute name");
+    const updatedValues = within(dialog).getAllByPlaceholderText("Value");
+    expect(updatedNames[0]).toHaveProperty("value", "team");
+    expect(updatedValues[0]).toHaveProperty("value", "core");
+    expect(updatedNames[1]).toHaveProperty("value", "");
+    expect(updatedValues[1]).toHaveProperty("value", "");
   });
 
   it("shows put item error alert in modal", async () => {
