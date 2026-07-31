@@ -235,6 +235,17 @@ describe("POST /api/aws/appsync/apis/:apiId/data-sources", () => {
     expect(body.dataSource.name).toBe("ds1");
   });
 
+  it("creates a data source with default type NONE when type is omitted", async () => {
+    mockSend.mockResolvedValue({ dataSource: { name: "ds3", type: "NONE" } });
+    const res = await app.request("/api/aws/appsync/apis/abc123/data-sources", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "ds3" }),
+    });
+    expect(res.status).toBe(201);
+    expect(mockSend.mock.calls[0][0].type).toBe("NONE");
+  });
+
   it("creates a data source with explicit type and advanced config", async () => {
     mockSend.mockResolvedValue({ dataSource: { name: "ds2", type: "AWS_LAMBDA" } });
     const res = await app.request("/api/aws/appsync/apis/abc123/data-sources", {
