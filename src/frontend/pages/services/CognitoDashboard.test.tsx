@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -10,6 +10,10 @@ import React from "react";
 const deletePoolState = vi.hoisted(() => ({
   isPending: false,
   variables: null as string | null,
+}));
+
+const clientSecretsState = vi.hoisted(() => ({
+  isLoading: false,
 }));
 
 const advancedStates = vi.hoisted(() => ({
@@ -153,7 +157,7 @@ vi.mock("../../hooks/useCognito", () => ({
   }),
   useUserPoolClientSecrets: (...args: any[]) => ({
     data: mockClientSecrets(args[0], args[1]) || { secrets: [] },
-    isLoading: false,
+    isLoading: clientSecretsState.isLoading,
   }),
   useAddUserPoolClientSecret: () => ({
     mutate: mockAddClientSecret,
@@ -175,6 +179,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   deletePoolState.isPending = false;
   deletePoolState.variables = null;
+  clientSecretsState.isLoading = false;
 
   mockPools.mockReturnValue({ data: { userPools: [], total: 0 }, isLoading: false });
   mockUsers.mockReturnValue({ data: { users: [], total: 0 } });
@@ -1015,5 +1020,500 @@ describe("CognitoDashboard — advanced tab: more coverage", () => {
         })
       );
     });
+  });
+});
+
+// ─── Auth Flows — flow type switching (Cloudscape Select) ──
+//
+// The Flow Operation Select trigger displays the current value ("initiate"
+// by default). Clicking the trigger opens the dropdown; options render as
+// plain text (visible span + screenreader div), so we use getAllByText and
+// click the first (visible) match — same pattern as ELBDashboard/Kinesis tests.
+
+describe("CognitoDashboard — auth flows: flow type switching", () => {
+  async function navToAuthFlows() {
+    mockPools.mockReturnValue({
+      data: { userPools: [{ Id: "p1", Name: "pool", Status: "Enabled" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CognitoDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("pool"));
+    await user.click(screen.getByText("pool"));
+    await user.click(screen.getByRole("tab", { name: /Auth Flows/i }));
+    await waitFor(() => expect(screen.getByText("Authentication Flow Tester")).toBeTruthy());
+    return { user };
+  }
+
+  async function selectFlowOperation(user: any, optionLabel: string) {
+    // Flow Operation select trigger shows the current value ("initiate").
+    const trigger = screen.getAllByText("initiate")[0];
+    await user.click(trigger);
+    await waitFor(() =>
+      expect(screen.getAllByText(optionLabel).length).toBeGreaterThan(0),
+    );
+    await user.click(screen.getAllByText(optionLabel)[0]);
+  }
+
+  it("switches to Admin Initiate Auth and submits", async () => {
+    const { user } = await navToAuthFlows();
+    await selectFlowOperation(user, "Admin Initiate Auth");
+    // Auth Flow select remains visible for this flow type
+    expect(screen.getByText("Auth Flow")).toBeTruthy();
+    await user.type(screen.getByPlaceholderText("Client ID"), "client-1");
+    await user.type(screen.getByPlaceholderText("Username"), "user1");
+    await user.type(screen.getByPlaceholderText("Password"), "pass");
+    await user.click(screen.getByRole("button", { name: /Run Flow/i }));
+    await waitFor(() => expect(mockAdminInitiateAuth).toHaveBeenCalled());
+  });
+
+  it("switches to Confirm Sign Up and submits with code + secret hash", async () => {
+    const { user } = await navToAuthFlows();
+    await selectFlowOperation(user, "Confirm Sign Up");
+    // Confirmation Code + Secret Hash fields visible; no Password field
+    expect(screen.getByPlaceholderText("123456")).toBeTruthy();
+    expect(screen.getByPlaceholderText("Secret hash for client with secret")).toBeTruthy();
+    expect(screen.queryByPlaceholderText("Password")).toBeNull();
+    await user.type(screen.getByPlaceholderText("Client ID"), "client-1");
+    await user.type(screen.getByPlaceholderText("Username"), "user1");
+    await user.type(screen.getByPlaceholderText("123456"), "123456");
+    await user.type(screen.getByPlaceholderText("Secret hash for client with secret"), "s3cr3t");
+    await user.click(screen.getByRole("button", { name: /Run Flow/i }));
+    await waitFor(() =>
+      expect(mockConfirmSignUp).toHaveBeenCalledWith(
+        expect.objectContaining({ confirmationCode: "123456", secretHash: "s3cr3t" }),
+      ),
+    );
+  });
+
+  it("switches to Admin Respond to Challenge and submits parsed JSON", async () => {
+    const { user } = await navToAuthFlows();
+    await selectFlowOperation(user, "Admin Respond to Challenge");
+    await user.type(screen.getByPlaceholderText("Client ID"), "client-1");
+    // Challenge Responses is a JSON textarea — use fireEvent.change to avoid
+    // userEvent parsing {} as keyboard descriptors.
+    fireEvent.change(
+      screen.getByPlaceholderText('{"NEW_PASSWORD": "Password123!"}'),
+      { target: { value: '{"NEW_PASSWORD": "Pass123!"}' } },
+    );
+    await user.click(screen.getByRole("button", { name: /Run Flow/i }));
+    await waitFor(() =>
+      expect(mockAdminRespondChallenge).toHaveBeenCalledWith(
+        expect.objectContaining({
+          challengeResponses: { NEW_PASSWORD: "Pass123!" },
+        }),
+      ),
+    );
+  });
+
+  it("switches to Forgot Password and submits", async () => {
+    const { user } = await navToAuthFlows();
+    await selectFlowOperation(user, "Forgot Password");
+    expect(screen.getByPlaceholderText("Secret hash for client with secret")).toBeTruthy();
+    await user.type(screen.getByPlaceholderText("Client ID"), "client-1");
+    await user.type(screen.getByPlaceholderText("Username"), "user1");
+    await user.click(screen.getByRole("button", { name: /Run Flow/i }));
+    await waitFor(() => expect(mockForgotPassword).toHaveBeenCalled());
+  });
+
+  it("switches to Confirm Forgot Password and submits", async () => {
+    const { user } = await navToAuthFlows();
+    await selectFlowOperation(user, "Confirm Forgot Password");
+    await user.type(screen.getByPlaceholderText("Client ID"), "client-1");
+    await user.type(screen.getByPlaceholderText("Username"), "user1");
+    await user.type(screen.getByPlaceholderText("Password"), "newpass");
+    await user.type(screen.getByPlaceholderText("123456"), "123456");
+    await user.click(screen.getByRole("button", { name: /Run Flow/i }));
+    await waitFor(() =>
+      expect(mockConfirmForgotPassword).toHaveBeenCalledWith(
+        expect.objectContaining({ password: "newpass", confirmationCode: "123456" }),
+      ),
+    );
+  });
+
+  it("switches to Get User and submits access token", async () => {
+    const { user } = await navToAuthFlows();
+    await selectFlowOperation(user, "Get User");
+    // Only Access Token field — no Client ID / Username / Password
+    expect(screen.getByPlaceholderText("Access token from successful authentication")).toBeTruthy();
+    expect(screen.queryByPlaceholderText("Client ID")).toBeNull();
+    expect(screen.queryByPlaceholderText("Username")).toBeNull();
+    await user.type(screen.getByPlaceholderText("Access token from successful authentication"), "tok-1");
+    await user.click(screen.getByRole("button", { name: /Run Flow/i }));
+    await waitFor(() =>
+      expect(mockGetUserAuth).toHaveBeenCalledWith({ accessToken: "tok-1" }),
+    );
+  });
+
+  it("switches to Update User Attributes and submits parsed attributes", async () => {
+    const { user } = await navToAuthFlows();
+    await selectFlowOperation(user, "Update User Attributes");
+    await user.type(screen.getByPlaceholderText("Access token from successful authentication"), "tok-1");
+    fireEvent.change(
+      screen.getByPlaceholderText('[{"Name": "email", "Value": "user@example.com"}]'),
+      { target: { value: '[{"Name": "email", "Value": "a@b.com"}]' } },
+    );
+    await user.click(screen.getByRole("button", { name: /Run Flow/i }));
+    await waitFor(() =>
+      expect(mockUpdateUserAttributes).toHaveBeenCalledWith(
+        expect.objectContaining({ userAttributes: [{ Name: "email", Value: "a@b.com" }] }),
+      ),
+    );
+  });
+
+  it("switches to Delete User Attributes and submits split names", async () => {
+    const { user } = await navToAuthFlows();
+    await selectFlowOperation(user, "Delete User Attributes");
+    await user.type(screen.getByPlaceholderText("Access token from successful authentication"), "tok-1");
+    await user.type(screen.getByPlaceholderText("email, phone_number"), "email, phone_number");
+    await user.click(screen.getByRole("button", { name: /Run Flow/i }));
+    await waitFor(() =>
+      expect(mockDeleteUserAttributes).toHaveBeenCalledWith(
+        expect.objectContaining({ userAttributeNames: ["email", "phone_number"] }),
+      ),
+    );
+  });
+
+  it("changes the Auth Flow select to USER_SRP_AUTH", async () => {
+    const { user } = await navToAuthFlows();
+    // Auth Flow select shows USER_PASSWORD_AUTH by default; switch it
+    const trigger = screen.getAllByText("USER_PASSWORD_AUTH")[0];
+    await user.click(trigger);
+    await waitFor(() =>
+      expect(screen.getAllByText("USER_SRP_AUTH").length).toBeGreaterThan(0),
+    );
+    await user.click(screen.getAllByText("USER_SRP_AUTH")[0]);
+    await user.type(screen.getByPlaceholderText("Client ID"), "client-1");
+    await user.type(screen.getByPlaceholderText("Username"), "user1");
+    await user.type(screen.getByPlaceholderText("Password"), "pass");
+    await user.click(screen.getByRole("button", { name: /Run Flow/i }));
+    await waitFor(() =>
+      expect(mockInitiateAuth).toHaveBeenCalledWith(
+        expect.objectContaining({ authFlow: "USER_SRP_AUTH" }),
+      ),
+    );
+  });
+
+  it("shows error result when a flow fails", async () => {
+    mockInitiateAuth.mockRejectedValue(new Error("Auth failed"));
+    const { user } = await navToAuthFlows();
+    await user.type(screen.getByPlaceholderText("Client ID"), "client-1");
+    await user.type(screen.getByPlaceholderText("Username"), "user1");
+    await user.type(screen.getByPlaceholderText("Password"), "pass");
+    await user.click(screen.getByRole("button", { name: /Run Flow/i }));
+    await waitFor(() => expect(screen.getByText(/Auth failed/)).toBeTruthy());
+  });
+});
+
+// ─── Auth Flows — disabled switch cases ──────────────────
+
+describe("CognitoDashboard — auth flows: disabled logic", () => {
+  async function navToAuthFlows() {
+    mockPools.mockReturnValue({
+      data: { userPools: [{ Id: "p1", Name: "pool", Status: "Enabled" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CognitoDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("pool"));
+    await user.click(screen.getByText("pool"));
+    await user.click(screen.getByRole("tab", { name: /Auth Flows/i }));
+    await waitFor(() => expect(screen.getByText("Authentication Flow Tester")).toBeTruthy());
+    return { user };
+  }
+
+  async function selectFlowOperation(user: any, optionLabel: string) {
+    const trigger = screen.getAllByText("initiate")[0];
+    await user.click(trigger);
+    await waitFor(() =>
+      expect(screen.getAllByText(optionLabel).length).toBeGreaterThan(0),
+    );
+    await user.click(screen.getAllByText(optionLabel)[0]);
+  }
+
+  it("confirm-sign-up Run disabled until confirmation code filled", async () => {
+    const { user } = await navToAuthFlows();
+    await selectFlowOperation(user, "Confirm Sign Up");
+    await user.type(screen.getByPlaceholderText("Client ID"), "client-1");
+    await user.type(screen.getByPlaceholderText("Username"), "user1");
+    expect(screen.getByRole("button", { name: /Run Flow/i })).toBeDisabled();
+    await user.type(screen.getByPlaceholderText("123456"), "123456");
+    expect(screen.getByRole("button", { name: /Run Flow/i })).not.toBeDisabled();
+  });
+
+  it("admin-respond-challenge Run enabled with client ID only", async () => {
+    const { user } = await navToAuthFlows();
+    await selectFlowOperation(user, "Admin Respond to Challenge");
+    // Challenge name defaults to NEW_PASSWORD_REQUIRED (truthy), so only clientId needed
+    expect(screen.getByRole("button", { name: /Run Flow/i })).toBeDisabled();
+    await user.type(screen.getByPlaceholderText("Client ID"), "client-1");
+    expect(screen.getByRole("button", { name: /Run Flow/i })).not.toBeDisabled();
+  });
+
+  it("forgot-password Run disabled until username filled", async () => {
+    const { user } = await navToAuthFlows();
+    await selectFlowOperation(user, "Forgot Password");
+    await user.type(screen.getByPlaceholderText("Client ID"), "client-1");
+    expect(screen.getByRole("button", { name: /Run Flow/i })).toBeDisabled();
+    await user.type(screen.getByPlaceholderText("Username"), "user1");
+    expect(screen.getByRole("button", { name: /Run Flow/i })).not.toBeDisabled();
+  });
+
+  it("confirm-forgot-password Run disabled until all fields filled", async () => {
+    const { user } = await navToAuthFlows();
+    await selectFlowOperation(user, "Confirm Forgot Password");
+    await user.type(screen.getByPlaceholderText("Client ID"), "client-1");
+    await user.type(screen.getByPlaceholderText("Username"), "user1");
+    await user.type(screen.getByPlaceholderText("Password"), "p");
+    expect(screen.getByRole("button", { name: /Run Flow/i })).toBeDisabled();
+    await user.type(screen.getByPlaceholderText("123456"), "123456");
+    expect(screen.getByRole("button", { name: /Run Flow/i })).not.toBeDisabled();
+  });
+
+  it("get-user Run disabled until access token filled", async () => {
+    const { user } = await navToAuthFlows();
+    await selectFlowOperation(user, "Get User");
+    expect(screen.getByRole("button", { name: /Run Flow/i })).toBeDisabled();
+    await user.type(screen.getByPlaceholderText("Access token from successful authentication"), "tok");
+    expect(screen.getByRole("button", { name: /Run Flow/i })).not.toBeDisabled();
+  });
+
+  it("update-user-attributes Run disabled until attributes filled", async () => {
+    const { user } = await navToAuthFlows();
+    await selectFlowOperation(user, "Update User Attributes");
+    await user.type(screen.getByPlaceholderText("Access token from successful authentication"), "tok");
+    expect(screen.getByRole("button", { name: /Run Flow/i })).toBeDisabled();
+    fireEvent.change(
+      screen.getByPlaceholderText('[{"Name": "email", "Value": "user@example.com"}]'),
+      { target: { value: '[{"Name": "email", "Value": "a@b.com"}]' } },
+    );
+    expect(screen.getByRole("button", { name: /Run Flow/i })).not.toBeDisabled();
+  });
+
+  it("delete-user-attributes Run disabled until access token filled", async () => {
+    const { user } = await navToAuthFlows();
+    await selectFlowOperation(user, "Delete User Attributes");
+    expect(screen.getByRole("button", { name: /Run Flow/i })).toBeDisabled();
+    await user.type(screen.getByPlaceholderText("Access token from successful authentication"), "tok");
+    expect(screen.getByRole("button", { name: /Run Flow/i })).not.toBeDisabled();
+  });
+});
+
+// ─── Advanced Tab — MFA update, RS scopes, custom attr type ──
+
+describe("CognitoDashboard — advanced tab: interactive actions", () => {
+  async function navToAdvanced() {
+    mockPools.mockReturnValue({
+      data: { userPools: [{ Id: "p1", Name: "pool", Status: "Enabled" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CognitoDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("pool"));
+    await user.click(screen.getByText("pool"));
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => expect(screen.getByText("Resource Servers")).toBeTruthy());
+    return { user };
+  }
+
+  it("selects MFA mode and updates config", async () => {
+    const { user } = await navToAdvanced();
+    // MFA mode Select trigger shows its selectedOption label ("Select")
+    const trigger = screen.getAllByText("Select")[0];
+    await user.click(trigger);
+    await waitFor(() => expect(screen.getAllByText("ON").length).toBeGreaterThan(0));
+    await user.click(screen.getAllByText("ON")[0]);
+    const updateBtn = screen.getByRole("button", { name: /Update MFA/i });
+    expect(updateBtn).not.toBeDisabled();
+    await user.click(updateBtn);
+    await waitFor(() =>
+      expect(mockSetMfaConfig).toHaveBeenCalledWith({ mfaConfiguration: "ON" }),
+    );
+  });
+
+  it("creates resource server with scopes parsed from comma list", async () => {
+    const { user } = await navToAdvanced();
+    await user.click(screen.getByRole("button", { name: /Create Resource Server/i }));
+    await waitFor(() =>
+      expect(screen.getAllByText("Create Resource Server").length).toBeGreaterThanOrEqual(1),
+    );
+    const inputs = screen.getAllByRole("textbox");
+    await user.type(inputs[0], "https://api.new.com");
+    await user.type(inputs[1], "New API");
+    await user.type(inputs[2], "read, write");
+    await user.click(screen.getByRole("button", { name: /^Create$/i }));
+    await waitFor(() =>
+      expect(mockCreateResourceServer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scopes: [
+            { ScopeName: "read", ScopeDescription: "read" },
+            { ScopeName: "write", ScopeDescription: "write" },
+          ],
+        }),
+      ),
+    );
+  });
+
+  it("cancels the Create Resource Server modal", async () => {
+    const { user } = await navToAdvanced();
+    await user.click(screen.getByRole("button", { name: /Create Resource Server/i }));
+    await waitFor(() => expect(screen.getByPlaceholderText("https://api.example.com")).toBeTruthy());
+    const rsInput = screen.getByPlaceholderText("https://api.example.com");
+    const dialog = rsInput.closest('[role="dialog"]') as HTMLElement;
+    const cancelBtn = Array.from(dialog.querySelectorAll("button")).find(
+      (b) => b.textContent?.trim() === "Cancel",
+    );
+    expect(cancelBtn).toBeTruthy();
+    await user.click(cancelBtn!);
+    expect(mockCreateResourceServer).not.toHaveBeenCalled();
+  });
+
+  it("selects a custom attribute data type and submits", async () => {
+    const { user } = await navToAdvanced();
+    await user.click(screen.getByRole("button", { name: /Add Custom Attribute/i }));
+    await waitFor(() => expect(screen.getByPlaceholderText(/custom:/)).toBeTruthy());
+    // Data Type select shows "string" by default; switch to "number"
+    const dtTrigger = screen.getAllByText("string")[0];
+    await user.click(dtTrigger);
+    await waitFor(() => expect(screen.getAllByText("Number").length).toBeGreaterThan(0));
+    await user.click(screen.getAllByText("Number")[0]);
+    const attrInput = screen.getByPlaceholderText(/custom:/);
+    await user.click(attrInput);
+    await user.paste("custom:count");
+    await user.click(screen.getByRole("button", { name: /^Add$/i }));
+    await waitFor(() =>
+      expect(mockAddCustomAttributes).toHaveBeenCalledWith(
+        expect.objectContaining({
+          customAttributes: expect.arrayContaining([
+            expect.objectContaining({ AttributeDataType: "number" }),
+          ]),
+        }),
+      ),
+    );
+  });
+
+  it("cancels the Add Custom Attributes modal", async () => {
+    const { user } = await navToAdvanced();
+    await user.click(screen.getByRole("button", { name: /Add Custom Attribute/i }));
+    await waitFor(() => expect(screen.getByPlaceholderText(/custom:/)).toBeTruthy());
+    const attrInput = screen.getByPlaceholderText(/custom:/);
+    const dialog = attrInput.closest('[role="dialog"]') as HTMLElement;
+    const cancelBtn = Array.from(dialog.querySelectorAll("button")).find(
+      (b) => b.textContent?.trim() === "Cancel",
+    );
+    expect(cancelBtn).toBeTruthy();
+    await user.click(cancelBtn!);
+    expect(mockAddCustomAttributes).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Client Secrets — loading, fallback IDs, dismiss ──────
+
+describe("CognitoDashboard — client secrets: edge cases", () => {
+  async function openClientSecretsModal() {
+    mockPools.mockReturnValue({
+      data: { userPools: [{ Id: "p1", Name: "pool", Status: "Enabled" }], total: 1 },
+      isLoading: false,
+    });
+    mockClients.mockReturnValue({
+      data: { clients: [{ ClientId: "client-1", ClientName: "myapp" }], total: 1 },
+    });
+    const user = userEvent.setup();
+    render(<CognitoDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("pool"));
+    await user.click(screen.getByText("pool"));
+    await user.click(screen.getByRole("tab", { name: /App Clients/i }));
+    await waitFor(() => expect(screen.getByText("myapp")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Manage Secrets/i }));
+    await waitFor(() => expect(screen.getByText(/Client Secrets for client-1/i)).toBeTruthy());
+    return { user };
+  }
+
+  it("shows loading spinner while secrets load", async () => {
+    clientSecretsState.isLoading = true;
+    mockClientSecrets.mockReturnValue({ secrets: [{ ClientSecretId: "sec-1" }] });
+    await openClientSecretsModal();
+    // Loading branch: neither the secrets list nor the empty message renders
+    expect(screen.queryByText("sec-1")).toBeNull();
+    expect(screen.queryByText("No client secrets")).toBeNull();
+    // The Add Secret form is still present while the list area is replaced by the spinner
+    expect(screen.getByRole("button", { name: /Add Secret/i })).toBeTruthy();
+  });
+
+  it("renders secrets using fallback identifier fields", async () => {
+    mockClientSecrets.mockReturnValue({
+      secrets: [{ SecretId: "sec-fallback", CreationDate: 1705000000 }],
+    });
+    await openClientSecretsModal();
+    expect(screen.getByText("sec-fallback")).toBeTruthy();
+  });
+
+  it("deletes a client secret using fallback identifier", async () => {
+    mockClientSecrets.mockReturnValue({
+      secrets: [{ SecretId: "sec-fallback" }],
+    });
+    const { user } = await openClientSecretsModal();
+    await user.click(screen.getByRole("button", { name: /Delete sec-fallback/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /^Delete$/i }));
+    await waitFor(() =>
+      expect(mockDeleteClientSecret).toHaveBeenCalledWith(
+        expect.objectContaining({ secretId: "sec-fallback" }),
+      ),
+    );
+  });
+
+  it("dismisses the secrets modal via close button", async () => {
+    mockClientSecrets.mockReturnValue({ secrets: [{ ClientSecretId: "sec-1" }] });
+    const { user } = await openClientSecretsModal();
+    const addSecretBtn = screen.getByRole("button", { name: /Add Secret/i });
+    expect(addSecretBtn).not.toBeDisabled();
+    // Click the Modal dismiss control to close (secretsClientId → null)
+    const header = screen.getByText(/Client Secrets for client-1/);
+    const dialog = header.closest('[role="dialog"]') as HTMLElement;
+    const dismissBtn = dialog.querySelector('[class*="dismiss"]') as HTMLElement;
+    expect(dismissBtn).toBeTruthy();
+    fireEvent.click(dismissBtn);
+    // After dismiss, Add Secret is disabled because secretsClientId is null
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Add Secret/i })).toBeDisabled(),
+    );
+  });
+});
+
+// ─── Undefined query data fallbacks ───────────────────────
+
+describe("CognitoDashboard — undefined query data", () => {
+  async function navToPool() {
+    mockPools.mockReturnValue({
+      data: { userPools: [{ Id: "p1", Name: "pool", Status: "Enabled" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CognitoDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("pool"));
+    await user.click(screen.getByText("pool"));
+    await waitFor(() => expect(screen.getByText(/Users in p1/i)).toBeTruthy());
+    return { user };
+  }
+
+  it("shows empty users when users data is undefined", async () => {
+    mockUsers.mockReturnValue({ data: undefined });
+    await navToPool();
+    expect(screen.getByText(/No users/i)).toBeTruthy();
+  });
+
+  it("shows empty groups when groups data is undefined", async () => {
+    mockGroups.mockReturnValue({ data: undefined });
+    const { user } = await navToPool();
+    await user.click(screen.getByRole("tab", { name: /Groups/i }));
+    await waitFor(() => expect(screen.getByText(/No groups/i)).toBeTruthy());
+  });
+
+  it("shows empty clients when clients data is undefined", async () => {
+    mockClients.mockReturnValue({ data: undefined });
+    const { user } = await navToPool();
+    await user.click(screen.getByRole("tab", { name: /App Clients/i }));
+    await waitFor(() => expect(screen.getByText(/No app clients/i)).toBeTruthy());
   });
 });
