@@ -236,6 +236,29 @@ describe("ELB Routes", () => {
       const body = await res.json();
       expect(body.updated).toBe(true);
     });
+
+    it("GET /load-balancers — handles undefined LoadBalancers (|| [] fallback)", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/load-balancers");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.loadBalancers).toEqual([]);
+    });
+
+    it("GET /load-balancers/:arn/attributes — handles undefined Attributes (|| [] fallback)", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/load-balancers/arn:lb1/attributes");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.attributes).toEqual({});
+    });
+
+    it("PUT /load-balancers/:arn/attributes — handles missing attributes (|| {} fallback)", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/load-balancers/arn:lb1/attributes", {});
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].Attributes).toEqual([]);
+    });
   });
 
   describe("Target Groups", () => {
@@ -344,6 +367,22 @@ describe("ELB Routes", () => {
       const body = await res.json();
       expect(body.total).toBe(0);
     });
+
+    it("GET /target-groups — handles undefined TargetGroups (|| [] fallback)", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/target-groups");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.targetGroups).toEqual([]);
+    });
+
+    it("GET /target-groups/:arn/attributes — handles undefined Attributes (|| [] fallback)", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/target-groups/arn:tg1/attributes");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.attributes).toEqual({});
+    });
   });
 
   describe("Listeners", () => {
@@ -425,6 +464,21 @@ describe("ELB Routes", () => {
       const body = await res.json();
       expect(body.attributes["routing.http2.enabled"]).toBe("true");
     });
+
+    it("GET /load-balancers/:arn/listeners — handles undefined Listeners (|| [] fallback)", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/load-balancers/arn:lb1/listeners");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.listeners).toEqual([]);
+    });
+
+    it("GET /listeners/:arn/attributes — handles undefined Attributes (|| [] fallback)", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/listeners/arn:listener1/attributes");
+      const body = await res.json();
+      expect(body.attributes).toEqual({});
+    });
   });
 
   describe("Target Registration", () => {
@@ -461,6 +515,11 @@ describe("ELB Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.deregistered).toBe(true);
+    });
+
+    it("POST /target-groups/:arn/deregister — 400 when targets missing", async () => {
+      const res = await post("/target-groups/arn:tg1/deregister", { targets: [] });
+      expect(res.status).toBe(400);
     });
   });
 
@@ -577,6 +636,16 @@ describe("ELB Routes", () => {
       const body = await res.json();
       expect(body.total).toBe(0);
     });
+
+    it("GET /ssl-policies — handles policies without sslProtocols/ciphers (|| [] fallbacks)", async () => {
+      mockSend.mockResolvedValueOnce({
+        SslPolicies: [{ Name: "ELBSecurityPolicy-minimal" }],
+      });
+      const res = await get("/ssl-policies");
+      const body = await res.json();
+      expect(body.sslPolicies[0].sslProtocols).toEqual([]);
+      expect(body.sslPolicies[0].ciphers).toEqual([]);
+    });
   });
 
   describe("Listener Certificates", () => {
@@ -585,6 +654,14 @@ describe("ELB Routes", () => {
       const res = await get("/listeners/arn:l1/certificates");
       const body = await res.json();
       expect(body.certificates).toHaveLength(1);
+    });
+
+    it("GET — handles undefined Certificates (|| [] and || 0 fallbacks)", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/listeners/arn:l1/certificates");
+      const body = await res.json();
+      expect(body.certificates).toEqual([]);
+      expect(body.total).toBe(0);
     });
 
     it("POST — adds certificate", async () => {
@@ -665,6 +742,14 @@ describe("ELB Routes", () => {
       expect(body.rules[0].ruleName).toBe("default");
     });
 
+    it("GET — handles undefined Rules (|| [] fallback)", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/listeners/arn:l1/rules");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.rules).toEqual([]);
+    });
+
     it("POST — creates rule", async () => {
       mockSend.mockResolvedValueOnce({ Rules: [{ RuleArn: "arn:rule1" }] });
       const res = await post("/listeners/arn:l1/rules", {
@@ -715,6 +800,16 @@ describe("ELB Routes", () => {
         { RuleArn: "arn:rule1", Priority: 10 },
         { RuleArn: "arn:rule2", Priority: 20 },
       ]);
+    });
+
+    it("PUT /rules/set-priorities — handles undefined Rules in response", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/rules/set-priorities", {
+        rulePriorities: [{ ruleArn: "arn:rule1", priority: 10 }],
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("SetRulePrioritiesCommand");
+      expect((await res.json()).rules).toEqual([]);
     });
 
     it("PUT /rules/set-priorities — 400 when empty", async () => {
