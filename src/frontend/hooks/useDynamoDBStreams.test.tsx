@@ -14,6 +14,7 @@ import {
   useDynamoDBStreamDetail,
   useDynamoDBGetShardIterator,
   useDynamoDBGetRecords,
+  useDynamoDBStreamPoller,
 } from "./useDynamoDBStreams";
 
 function createWrapper() {
@@ -288,5 +289,57 @@ describe("useDynamoDBGetRecords", () => {
     expect(resp.total).toBe(1);
     expect(resp.nextShardIterator).toBe("next-iter");
     expect(resp.millisBehindLatest).toBe(100);
+  });
+});
+
+describe("useDynamoDBStreamPoller", () => {
+  it("pollRecords calls getRecords.mutateAsync with the shard iterator", async () => {
+    mockApi.mockResolvedValueOnce({
+      records: [],
+      total: 0,
+      nextShardIterator: null,
+      millisBehindLatest: 0,
+    });
+    const { result } = renderHook(() => useDynamoDBStreamPoller(), {
+      wrapper: createWrapper(),
+    });
+    const resp = await result.current.pollRecords("iter-1");
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/dynamodb/streams/records",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ shardIterator: "iter-1" }),
+      })
+    );
+    expect(resp.total).toBe(0);
+  });
+
+  it("continuePolling fetches records when a next shard iterator is provided", async () => {
+    mockApi.mockResolvedValueOnce({
+      records: [{ eventID: "evt2", eventName: "MODIFY", dynamodb: null }],
+      total: 1,
+      nextShardIterator: null,
+      millisBehindLatest: 10,
+    });
+    const { result } = renderHook(() => useDynamoDBStreamPoller(), {
+      wrapper: createWrapper(),
+    });
+    const resp = await result.current.continuePolling("next-iter");
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/dynamodb/streams/records",
+      expect.objectContaining({
+        body: JSON.stringify({ shardIterator: "next-iter" }),
+      })
+    );
+    expect(resp?.total).toBe(1);
+  });
+
+  it("continuePolling returns null when next shard iterator is null", async () => {
+    const { result } = renderHook(() => useDynamoDBStreamPoller(), {
+      wrapper: createWrapper(),
+    });
+    const resp = result.current.continuePolling(null);
+    expect(resp).toBeNull();
+    expect(mockApi).not.toHaveBeenCalled();
   });
 });
