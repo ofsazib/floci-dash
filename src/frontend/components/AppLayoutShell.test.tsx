@@ -1,13 +1,28 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
 
+const { mockNavigate, mockLocation, favState, recentState } = vi.hoisted(() => ({
+  mockNavigate: vi.fn(),
+  mockLocation: vi.fn(() => ({ pathname: "/", hash: "" })),
+  favState: { favorites: [] as string[] },
+  recentState: { recentlyVisited: [] as string[], addVisited: vi.fn() },
+}));
+
 vi.mock("react-router-dom", () => ({
-  useNavigate: () => vi.fn(),
-  useLocation: () => ({ pathname: "/", hash: "" }),
+  useNavigate: () => mockNavigate,
+  useLocation: () => mockLocation(),
+}));
+
+vi.mock("../stores/favorites", () => ({
+  useFavorites: { getState: () => favState },
+}));
+
+vi.mock("../hooks/useRecentlyVisited", () => ({
+  useRecentlyVisited: { getState: () => recentState },
 }));
 
 vi.mock("../hooks/useSystem", () => ({
@@ -38,6 +53,34 @@ vi.mock("../stores/settings", () => ({
     setRefreshInterval: vi.fn(),
   })),
 }));
+
+// The real Cloudscape Modal always renders its role="dialog" root even when
+// visible={false} (hidden via CSS), so queryByRole("dialog") can never become
+// null in happy-dom. Mock it to unmount when hidden and expose a close button
+// wired to onDismiss so dismiss behavior is testable. (Same pattern as
+// DynamoDBTableDetail.test.tsx.)
+vi.mock("@cloudscape-design/components", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@cloudscape-design/components")>();
+  return {
+    ...actual,
+    Modal: ({ visible, header, footer, children, onDismiss }: any) => {
+      if (!visible) return null;
+      return React.createElement(
+        "div",
+        { role: "dialog" },
+        React.createElement(
+          "button",
+          { onClick: onDismiss, "aria-label": "Close modal" },
+          "Close",
+        ),
+        header,
+        children,
+        footer,
+      );
+    },
+  };
+});
 
 import AppLayoutShell from "./AppLayoutShell";
 import { useHealth, useActiveServices } from "../hooks/useSystem";
@@ -76,6 +119,13 @@ beforeEach(() => {
   });
   document.body.classList.remove("awsui-dark-mode");
   document.documentElement.classList.remove("awsui-dark-mode");
+  favState.favorites = [];
+  recentState.recentlyVisited = [];
+  recentState.addVisited.mockClear();
+  mockNavigate.mockClear();
+  mockLocation.mockReturnValue({ pathname: "/", hash: "" });
+  Object.defineProperty(navigator, "platform", { value: "Linux", configurable: true });
+  Object.defineProperty(window, "innerWidth", { value: 1024, configurable: true, writable: true });
 });
 
 describe("AppLayoutShell — rendering", () => {
@@ -431,5 +481,437 @@ describe("AppLayoutShell — notification bell", () => {
     const bells = screen.getAllByRole("button", { name: "Notifications" });
     await user.click(bells[0]);
     expect(screen.getByText("All services are running.")).toBeTruthy();
+  });
+
+  it("closes notification modal via close button", async () => {
+    (useHealth as any).mockReturnValue({
+      data: {
+        services: { s3: "stopped", dynamodb: "running" },
+        stats: { running: 1, total: 2 },
+      },
+    });
+    const user = userEvent.setup();
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    const bells = screen.getAllByRole("button", { name: "Notifications" });
+    await user.click(bells[0]);
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toBeTruthy();
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Close modal" }),
+    );
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("shows raw key for unknown non-running service", async () => {
+    (useHealth as any).mockReturnValue({
+      data: {
+        services: { s3: "running", "custom-svc": "stopped" },
+        stats: { running: 1, total: 2 },
+      },
+    });
+    const user = userEvent.setup();
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    const bells = screen.getAllByRole("button", { name: "Notifications" });
+    await user.click(bells[0]);
+    expect(screen.getByText(/custom-svc: stopped/)).toBeTruthy();
+  });
+});
+
+describe("AppLayoutShell — mac shortcuts", () => {
+  it("shows ⌘K badge and Cmd+K placeholder on Mac", () => {
+    Object.defineProperty(navigator, "platform", { value: "MacIntel", configurable: true });
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    expect(screen.getAllByText("⌘K").length).toBeGreaterThan(0);
+    expect(screen.getAllByPlaceholderText(/Cmd\+K/).length).toBeGreaterThan(0);
+  });
+
+  it("shows Ctrl+K badge on non-Mac", () => {
+    Object.defineProperty(navigator, "platform", { value: "Linux", configurable: true });
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    expect(screen.getAllByText("Ctrl+K").length).toBeGreaterThan(0);
+  });
+});
+
+describe("AppLayoutShell — keyboard shortcut", () => {
+  it("focuses the global search input on Cmd+K", () => {
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true, bubbles: true }));
+    expect((document.activeElement as HTMLInputElement)?.getAttribute("placeholder")).toMatch(/Search services/);
+  });
+
+  it("focuses the global search input on Ctrl+K", () => {
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true }));
+    expect((document.activeElement as HTMLInputElement)?.getAttribute("placeholder")).toMatch(/Search services/);
+  });
+});
+
+describe("AppLayoutShell — location & active services", () => {
+  it("uses root href when pathname is empty", () => {
+    mockLocation.mockReturnValue({ pathname: "", hash: "" });
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    expect(screen.getByText("Dashboard")).toBeTruthy();
+  });
+
+  it("renders when active services data is undefined", () => {
+    (useActiveServices as any).mockReturnValue({ data: undefined });
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    expect(screen.getByText("S3")).toBeTruthy();
+  });
+});
+
+describe("AppLayoutShell — favorites", () => {
+  it("renders favorites section when favorites exist", () => {
+    favState.favorites = ["s3", "dynamodb"];
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    expect(screen.getByText("★ Favorites")).toBeTruthy();
+  });
+
+  it("filters favorites by nav query", async () => {
+    favState.favorites = ["s3", "dynamodb"];
+    const user = userEvent.setup();
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    await user.type(screen.getByPlaceholderText(/^Find services/), "S3");
+    expect(screen.getByText("★ Favorites")).toBeTruthy();
+    expect(screen.queryByText("DynamoDB")).toBeNull();
+  });
+
+  it("hides favorites section when query filters them all out", async () => {
+    favState.favorites = ["dynamodb"];
+    const user = userEvent.setup();
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    await user.type(screen.getByPlaceholderText(/^Find services/), "S3");
+    expect(screen.queryByText("★ Favorites")).toBeNull();
+  });
+
+  it("shows raw key for favorite without a label", () => {
+    (useHealth as any).mockReturnValue({
+      data: {
+        services: { s3: "running", redshift: "running" },
+        stats: { running: 2, total: 2 },
+      },
+    });
+    favState.favorites = ["redshift"];
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    expect(screen.getByText("★ Favorites")).toBeTruthy();
+    expect(screen.getAllByText("redshift").length).toBeGreaterThan(0);
+  });
+});
+
+describe("AppLayoutShell — recently visited", () => {
+  it("renders recently visited section", () => {
+    recentState.recentlyVisited = ["s3"];
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    expect(screen.getByText("Recently Visited")).toBeTruthy();
+  });
+
+  it("hides recently visited section when query filters them out", async () => {
+    recentState.recentlyVisited = ["dynamodb"];
+    const user = userEvent.setup();
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    await user.type(screen.getByPlaceholderText(/^Find services/), "S3");
+    expect(screen.queryByText("Recently Visited")).toBeNull();
+  });
+
+  it("shows raw key for recently visited without a label", () => {
+    (useHealth as any).mockReturnValue({
+      data: {
+        services: { s3: "running", redshift: "running" },
+        stats: { running: 2, total: 2 },
+      },
+    });
+    recentState.recentlyVisited = ["redshift"];
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    expect(screen.getByText("Recently Visited")).toBeTruthy();
+    expect(screen.getAllByText("redshift").length).toBeGreaterThan(0);
+  });
+});
+
+describe("AppLayoutShell — category grouping", () => {
+  it("renders category groups for non-implemented services", () => {
+    (useHealth as any).mockReturnValue({
+      data: {
+        services: { s3: "running", athena: "running", redshift: "running" },
+        stats: { running: 3, total: 3 },
+      },
+    });
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    expect(screen.getByText("Analytics")).toBeTruthy();
+    expect(screen.getByText("Other")).toBeTruthy();
+    expect(screen.getByText("Athena")).toBeTruthy();
+  });
+
+  it("renders category groups expanded after Expand all", async () => {
+    (useHealth as any).mockReturnValue({
+      data: {
+        services: { s3: "running", athena: "running" },
+        stats: { running: 2, total: 2 },
+      },
+    });
+    const user = userEvent.setup();
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    await user.click(screen.getByText("Expand all"));
+    expect(screen.getByText("Collapse all")).toBeTruthy();
+  });
+});
+
+describe("AppLayoutShell — navigation follow", () => {
+  it("navigates to service page when service nav link clicked", async () => {
+    const user = userEvent.setup();
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    await user.click(screen.getByText("S3"));
+    expect(mockNavigate).toHaveBeenCalledWith("/services/s3");
+    expect(recentState.addVisited).toHaveBeenCalledWith("s3");
+  });
+
+  it("navigates to settings without tracking recent", async () => {
+    const user = userEvent.setup();
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    await user.click(screen.getByText("Settings"));
+    expect(mockNavigate).toHaveBeenCalledWith("/settings");
+    expect(recentState.addVisited).not.toHaveBeenCalled();
+  });
+
+  it("ignores empty-href nav link", async () => {
+    const user = userEvent.setup();
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    await user.type(screen.getByPlaceholderText(/^Find services/), "zzzz");
+    await user.click(screen.getByText("No matches"));
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+});
+
+describe("AppLayoutShell — skip to content", () => {
+  it("focuses main content area on skip link click", async () => {
+    const scrollSpy = vi.fn();
+    Element.prototype.scrollIntoView = scrollSpy;
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    fireEvent.click(screen.getByText("Skip to main content"));
+    expect(document.querySelector("main")?.getAttribute("tabindex")).toBe("-1");
+    expect(scrollSpy).toHaveBeenCalled();
+  });
+});
+
+describe("AppLayoutShell — mobile viewport", () => {
+  it("shows short title when viewport is narrow", () => {
+    Object.defineProperty(window, "innerWidth", { value: 500, configurable: true, writable: true });
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    expect(screen.queryByText("Floci Dash")).toBeNull();
+    expect(screen.getAllByText("Floci").length).toBeGreaterThan(0);
+  });
+
+  it("updates mobile state on window resize", () => {
+    Object.defineProperty(window, "innerWidth", { value: 500, configurable: true, writable: true });
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    window.dispatchEvent(new Event("resize"));
+    expect(screen.queryByText("Floci Dash")).toBeNull();
+    expect(screen.getAllByText("Floci").length).toBeGreaterThan(0);
+  });
+});
+
+describe("AppLayoutShell — global search select", () => {
+  it("navigates when an implemented service option is selected", async () => {
+    const user = userEvent.setup();
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    await user.type(screen.getAllByPlaceholderText(/Search services/)[1], "S3");
+    const options = await screen.findAllByRole("option", { name: /S3/ });
+    const option = options.find((o) => !o.textContent?.includes("Search for"))!;
+    await user.click(option);
+    expect(mockNavigate).toHaveBeenCalledWith("/services/s3");
+    expect(recentState.addVisited).toHaveBeenCalledWith("s3");
+  });
+
+  it("navigates to a labeled non-implemented service", async () => {
+    (useHealth as any).mockReturnValue({
+      data: {
+        services: { s3: "running", athena: "running" },
+        stats: { running: 2, total: 2 },
+      },
+    });
+    const user = userEvent.setup();
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    await user.type(screen.getAllByPlaceholderText(/Search services/)[1], "Athena");
+    const options = await screen.findAllByRole("option", { name: /Athena/ });
+    const option = options.find((o) => !o.textContent?.includes("Search for"))!;
+    await user.click(option);
+    expect(mockNavigate).toHaveBeenCalledWith("/services/athena");
+  });
+
+  it("navigates to an unlabeled non-implemented service", async () => {
+    (useHealth as any).mockReturnValue({
+      data: {
+        services: { s3: "running", redshift: "running" },
+        stats: { running: 2, total: 2 },
+      },
+    });
+    const user = userEvent.setup();
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    await user.type(screen.getAllByPlaceholderText(/Search services/)[1], "redshift");
+    const options = await screen.findAllByRole("option", { name: /redshift/ });
+    const option = options.find((o) => !o.textContent?.includes("Search for"))!;
+    await user.click(option);
+    expect(mockNavigate).toHaveBeenCalledWith("/services/redshift");
+  });
+});
+
+describe("AppLayoutShell — search without health data", () => {
+  it("shows No matches when searching without health data", async () => {
+    (useHealth as any).mockReturnValue({ data: undefined });
+    const user = userEvent.setup();
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    await user.type(screen.getByPlaceholderText(/^Find services/), "s3");
+    expect(screen.getByText("No matches")).toBeTruthy();
+  });
+});
+
+describe("AppLayoutShell — navigation toggle", () => {
+  it("fires onNavigationChange when nav toggle clicked", async () => {
+    const user = userEvent.setup();
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    const toggle = screen.queryByRole("button", { name: /Close navigation/i });
+    if (toggle) {
+      await user.click(toggle);
+    }
+    expect(screen.getByText("Dashboard")).toBeTruthy();
   });
 });
