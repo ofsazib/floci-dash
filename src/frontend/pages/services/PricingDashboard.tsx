@@ -522,7 +522,7 @@ export function PricingDashboard() {
         <Box>
           Found {(servicesData?.services || []).length} services
           {servicesData?.services?.slice(0, 5).map((s: any) => (
-            <Button key={s.ServiceCode} variant="link" onFollow={() => setSelectedServiceCode(s.ServiceCode)}>
+            <Button key={s.ServiceCode} variant="link" onClick={() => setSelectedServiceCode(s.ServiceCode)}>
               {s.ServiceCode}
             </Button>
           ))}

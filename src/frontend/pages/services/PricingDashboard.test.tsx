@@ -139,12 +139,10 @@ describe("PricingDashboard — service selection conditional rendering", () => {
       data: { priceLists: [{ priceListArn: "arn:test" }] },
     });
 
-    // Note: selectedServiceCode is set via onFollow on a Cloudscape link Button,
-    // which cannot be triggered with userEvent.click in happy-dom.
-    // These sections are tested via hook data only (not click interaction).
     const { container } = render(<PricingDashboard />, { wrapper: createWrapper() });
     expect(screen.getByText("Services")).toBeTruthy();
-    // Hooks are called with null (no service selected), so conditional sections are hidden
+    // Hooks are called with null (no service selected), so conditional sections are hidden.
+    // Service selection via click is covered in the "service selection interaction" describe.
     expect(container.textContent).not.toMatch(/Attributes for/i);
   });
 });
@@ -217,5 +215,84 @@ describe("PricingDashboard — edge cases", () => {
     expect(screen.getByText(/Found 0 services/i)).toBeTruthy();
     // No service code buttons should exist
     expect(container.querySelectorAll("button").length).toBe(0);
+  });
+});
+
+// ─── Service Selection Interaction ────────────────────────
+
+describe("PricingDashboard — service selection interaction", () => {
+  it("selects a service and renders all conditional sections", async () => {
+    mockAttrValues.mockReturnValue({ data: { attributeValues: [{ name: "A" }] } });
+    mockProducts.mockReturnValue({ data: { priceList: [{ product: { productFamily: "Compute" } }] }, isLoading: false });
+    mockPriceLists.mockReturnValue({ data: { priceLists: [{ priceListArn: "arn:1" }] } });
+    const user = userEvent.setup();
+    render(<PricingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /AmazonEC2/i }));
+    expect(screen.getByText(/Attributes for AmazonEC2/i)).toBeTruthy();
+    expect(screen.getByText(/1 attribute values/i)).toBeTruthy();
+    expect(screen.getByText("Products")).toBeTruthy();
+    expect(screen.getByText(/1 products/i)).toBeTruthy();
+    expect(screen.getByText("Price Lists")).toBeTruthy();
+    expect(screen.getByText(/1 price lists/i)).toBeTruthy();
+    expect(screen.getByText(/Get Price List File URL/i)).toBeTruthy();
+  });
+
+  it("calls hooks with the selected service code", async () => {
+    const user = userEvent.setup();
+    render(<PricingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /AmazonEC2/i }));
+    expect(mockAttrValues).toHaveBeenCalledWith("AmazonEC2");
+    expect(mockProducts).toHaveBeenCalledWith({ serviceCode: "AmazonEC2" });
+    expect(mockPriceLists).toHaveBeenCalledWith("AmazonEC2");
+  });
+
+  it("shows 0 counts when data arrays are undefined after selection", async () => {
+    mockAttrValues.mockReturnValue({ data: { attributeValues: undefined } });
+    mockProducts.mockReturnValue({ data: { priceList: undefined }, isLoading: false });
+    mockPriceLists.mockReturnValue({ data: { priceLists: undefined } });
+    const user = userEvent.setup();
+    render(<PricingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /AmazonEC2/i }));
+    expect(screen.getByText(/0 attribute values/i)).toBeTruthy();
+    expect(screen.getByText(/0 products/i)).toBeTruthy();
+    expect(screen.getByText(/0 price lists/i)).toBeTruthy();
+  });
+
+  it("shows products section with spinner when loading after selection", async () => {
+    mockProducts.mockReturnValue({ data: undefined, isLoading: true });
+    const user = userEvent.setup();
+    render(<PricingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /AmazonEC2/i }));
+    expect(screen.getByText("Products")).toBeTruthy();
+    // No product count is rendered while loading (header "Products" itself still matches
+    // /products$/i case-insensitively, so anchor the regex to the count format "N products")
+    expect(screen.queryByText(/^\d+ products$/i)).toBeNull();
+  });
+
+  it("calls getUrl.mutate with the price list ARN when Get URL is clicked", async () => {
+    const user = userEvent.setup();
+    render(<PricingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /AmazonEC2/i }));
+    await user.click(screen.getByRole("button", { name: /Get URL/i }));
+    expect(mockGetUrl).toHaveBeenCalledWith({
+      priceListArn: "arn:aws:pricing::123456789012:price-list/AmazonEC2/us-east-1/v1",
+      fileFormat: "json",
+    });
+  });
+
+  it("shows the URL when getUrl data is present after selection", async () => {
+    getUrlState.data = { url: "https://pricing.example.com/file.json" };
+    const user = userEvent.setup();
+    render(<PricingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /AmazonEC2/i }));
+    expect(screen.getByText(/URL: https:\/\/pricing\.example\.com\/file\.json/i)).toBeTruthy();
+  });
+
+  it("shows loading state on Get URL button after selection", async () => {
+    getUrlState.isPending = true;
+    const user = userEvent.setup();
+    render(<PricingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /AmazonEC2/i }));
+    expect(screen.getByRole("button", { name: /Get URL/i })).toBeTruthy();
   });
 });
