@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
 import userEvent from "@testing-library/user-event";
@@ -18,6 +18,19 @@ const WEBSITE_DATA = { configured: true, indexDocument: "index.html", errorDocum
 const LOGGING_DATA = { enabled: false, targetBucket: "", targetPrefix: "" };
 const NOTIFICATIONS_DATA = { lambdaConfigurations: [], queueConfigurations: [], topicConfigurations: [] };
 const PUBLIC_ACCESS_DATA = { blockPublicAcls: false, ignorePublicAcls: false, blockPublicPolicy: false, restrictPublicBuckets: false };
+const ACL_DATA = {
+  owner: { displayName: "Owner Name", id: "owner-id-123" },
+  grants: [
+    { grantee: { uri: "http://acs.amazonaws.com/groups/global/AllUsers" }, permission: "READ" },
+    { grantee: { uri: "http://acs.amazonaws.com/groups/global/AuthenticatedUsers" }, permission: "WRITE" },
+    { grantee: { uri: "http://acs.amazonaws.com/groups/s3/LogDelivery" }, permission: "READ_ACP" },
+    { grantee: { displayName: "alice" }, permission: "FULL_CONTROL" },
+    { grantee: { id: "id-abc" }, permission: "WRITE_ACP" },
+    { grantee: { emailAddress: "bob@example.com" }, permission: "READ" },
+    { grantee: { type: "CanonicalUser" }, permission: "READ" },
+  ],
+  totalGrants: 7,
+};
 
 
 const mkQuery = <T,>(data: T) => ({ data, isLoading: false, isError: false, error: null });
@@ -54,6 +67,8 @@ vi.mock("../hooks/useS3Config", () => ({
   useS3UpdatePublicAccessBlock: vi.fn(() => mkMutation()),
   useS3BucketLogging: vi.fn(() => mkQuery(LOGGING_DATA)),
   useS3UpdateBucketLogging: vi.fn(() => mkMutation()),
+  useS3BucketAcl: vi.fn(() => mkQuery(ACL_DATA)),
+  useS3PutBucketAcl: vi.fn(() => mkMutation()),
 }));
 
 import S3BucketConfig from "./S3BucketConfig";
@@ -82,6 +97,8 @@ import {
   useS3DeleteBucketWebsite,
   useS3UpdatePublicAccessBlock,
   useS3UpdateBucketLogging,
+  useS3BucketAcl,
+  useS3PutBucketAcl,
 } from "../hooks/useS3Config";
 
 function createWrapper() {
@@ -97,7 +114,7 @@ beforeEach(() => {
 describe("S3BucketConfig — tab navigation", () => {
   it("renders all 11 tab buttons", () => {
     render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
-    const tabs = ["Overview", "Versioning", "Tags", "Policy", "Encryption", "Lifecycle", "CORS", "Website", "Notifications", "Public Access", "Logging"];
+    const tabs = ["Overview", "Versioning", "Tags", "Policy", "Encryption", "Lifecycle", "CORS", "Website", "Notifications", "Public Access", "Logging", "ACL"];
     for (const tab of tabs) {
       expect(screen.getByRole("button", { name: tab })).toBeTruthy();
     }
@@ -645,5 +662,653 @@ describe("S3BucketConfig — Notifications tab", () => {
     render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
     await user.click(screen.getByRole("button", { name: "Notifications" }));
     expect(screen.queryByText("Event Notifications")).toBeNull();
+  });
+
+  it("handles undefined notification arrays with ARN fallback", async () => {
+    (useS3BucketNotifications as any).mockReturnValue({
+      data: { total: 1, snsNotifications: [{}] },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Notifications" }));
+    expect(screen.getByText("SNS")).toBeTruthy();
+    expect(screen.getByText("—")).toBeTruthy();
+  });
+});
+
+// ─── Overview edge cases ─────────────────────────────────
+
+describe("S3BucketConfig — overview edge cases", () => {
+  it("shows enabled logging target bucket", () => {
+    (useS3BucketLogging as any).mockReturnValue({
+      data: { enabled: true, targetBucket: "logs-bucket", targetPrefix: "logs/" },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    expect(screen.getByText("Enabled → logs-bucket")).toBeTruthy();
+  });
+
+  it("shows zero tags when total is missing", () => {
+    (useS3BucketTags as any).mockReturnValue({
+      data: { tags: [] },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    expect(screen.getByText("0 tag(s)")).toBeTruthy();
+  });
+});
+
+// ─── Versioning edge cases ───────────────────────────────
+
+describe("S3BucketConfig — versioning edge cases", () => {
+  it("selects versioning status from data", async () => {
+    const user = userEvent.setup();
+    (useS3BucketVersioning as any).mockReturnValue({
+      data: { status: "Suspended" },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Versioning" }));
+    await waitFor(() => {
+      expect(screen.getByText("Suspended")).toBeTruthy();
+    });
+  });
+
+  it("falls back to Enabled for unknown versioning status", async () => {
+    const user = userEvent.setup();
+    (useS3BucketVersioning as any).mockReturnValue({
+      data: { status: "Paused" },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Versioning" }));
+    await waitFor(() => {
+      expect(screen.getByText("Enabled")).toBeTruthy();
+    });
+  });
+
+  it("shows versioning error alert", async () => {
+    const user = userEvent.setup();
+    (useS3UpdateVersioning as any).mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      isError: true,
+      error: new Error("ver-boom"),
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Versioning" }));
+    expect(screen.getByText("ver-boom")).toBeTruthy();
+  });
+
+  it("shows versioning error fallback when no message", async () => {
+    const user = userEvent.setup();
+    (useS3UpdateVersioning as any).mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      isError: true,
+      error: {},
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Versioning" }));
+    expect(screen.getByText("Failed to update versioning")).toBeTruthy();
+  });
+});
+
+// ─── Tags edge cases ─────────────────────────────────────
+
+describe("S3BucketConfig — tags edge cases", () => {
+  it("edits a single tag pair without affecting others", async () => {
+    const user = userEvent.setup();
+    (useS3BucketTags as any).mockReturnValue({
+      data: { tags: [{ Key: "env", Value: "prod" }, { Key: "team", Value: "core" }], total: 2 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Tags" }));
+    const keyInputs = screen.getAllByPlaceholderText("Tag key");
+    expect(keyInputs).toHaveLength(2);
+    await user.clear(keyInputs[0]);
+    await user.type(keyInputs[0], "newkey");
+    expect(screen.getAllByPlaceholderText("Tag key")[0]).toHaveProperty("value", "newkey");
+    expect(screen.getAllByPlaceholderText("Tag key")[1]).toHaveProperty("value", "team");
+    const valueInputs = screen.getAllByPlaceholderText("Tag value");
+    await user.type(valueInputs[1], "-x");
+    expect(screen.getAllByPlaceholderText("Tag value")[1]).toHaveProperty("value", "core-x");
+    expect(screen.getAllByPlaceholderText("Tag value")[0]).toHaveProperty("value", "prod");
+  });
+
+  it("shows tags loading spinner", async () => {
+    const user = userEvent.setup();
+    (useS3BucketTags as any).mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+      error: null,
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Tags" }));
+    expect(screen.queryByText("Bucket Tags")).toBeNull();
+  });
+
+  it("shows tags error fallback when no message", async () => {
+    const user = userEvent.setup();
+    (useS3BucketTags as any).mockReturnValue(mkQuery(TAGS_DATA));
+    (useS3UpdateBucketTags as any).mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      isError: true,
+      error: {},
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Tags" }));
+    expect(screen.getByText("Failed to update tags")).toBeTruthy();
+  });
+});
+
+// ─── Policy edge cases ───────────────────────────────────
+
+describe("S3BucketConfig — policy edge cases", () => {
+  it("shows raw policy text when policy is invalid JSON", async () => {
+    const user = userEvent.setup();
+    (useS3BucketPolicy as any).mockReturnValue({
+      data: { policy: "not-json", hasPolicy: true },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Policy" }));
+    await waitFor(() => {
+      expect(screen.getByDisplayValue("not-json")).toBeTruthy();
+    });
+  });
+
+  it("shows empty policy when no policy exists", async () => {
+    const user = userEvent.setup();
+    (useS3BucketPolicy as any).mockReturnValue({
+      data: {},
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Policy" }));
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/Version/)).toBeTruthy();
+    });
+    expect(screen.queryByRole("button", { name: /Delete policy/i })).toBeNull();
+  });
+
+  it("shows policy loading spinner", async () => {
+    const user = userEvent.setup();
+    (useS3BucketPolicy as any).mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+      error: null,
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Policy" }));
+    expect(screen.queryByText("Bucket Policy")).toBeNull();
+  });
+
+  it("shows policy error fallback when no message", async () => {
+    const user = userEvent.setup();
+    (useS3BucketPolicy as any).mockReturnValue(mkQuery(POLICY_DATA));
+    (useS3UpdateBucketPolicy as any).mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      isError: true,
+      error: {},
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Policy" }));
+    await waitFor(() => {
+      expect(screen.getByDisplayValue(/Version/)).toBeTruthy();
+    });
+    expect(screen.getByText("Failed to update policy")).toBeTruthy();
+  });
+});
+
+// ─── Encryption edge cases ───────────────────────────────
+
+describe("S3BucketConfig — encryption edge cases", () => {
+  it("shows encryption error alert", async () => {
+    const user = userEvent.setup();
+    (useS3BucketEncryption as any).mockReturnValue(mkQuery(ENCRYPTION_DATA));
+    (useS3UpdateBucketEncryption as any).mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      isError: true,
+      error: new Error("enc-boom"),
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Encryption" }));
+    expect(screen.getByText("enc-boom")).toBeTruthy();
+  });
+
+  it("shows encryption error fallback when no message", async () => {
+    const user = userEvent.setup();
+    (useS3BucketEncryption as any).mockReturnValue(mkQuery(ENCRYPTION_DATA));
+    (useS3UpdateBucketEncryption as any).mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      isError: true,
+      error: {},
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Encryption" }));
+    expect(screen.getByText("Failed to update encryption")).toBeTruthy();
+  });
+});
+
+// ─── Lifecycle rule management ───────────────────────────
+
+describe("S3BucketConfig — lifecycle rule management", () => {
+  it("loads an existing rule into the edit form and updates it", async () => {
+    const user = userEvent.setup();
+    const mockMutate = vi.fn();
+    (useS3UpdateBucketLifecycle as any).mockReturnValue({
+      mutate: mockMutate,
+      isPending: false,
+      isError: false,
+      error: null,
+    });
+    (useS3BucketLifecycle as any).mockReturnValue({
+      data: {
+        rules: [
+          {
+            id: "edit-me",
+            status: "Enabled",
+            prefix: "logs/",
+            expiration: { Days: 90, ExpiredObjectDeleteMarker: true },
+            noncurrentVersionExpiration: { NoncurrentDays: 30 },
+            abortIncompleteMultipartUpload: { DaysAfterInitiation: 7 },
+            transitions: [{ StorageClass: "DEEP_ARCHIVE", Days: 60 }],
+          },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Lifecycle" }));
+    await user.click(screen.getByRole("button", { name: /Edit rule/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Edit lifecycle rule")).toBeTruthy();
+    });
+    expect(screen.getByPlaceholderText("e.g. expire-old-logs")).toHaveProperty("value", "edit-me");
+    expect(screen.getByPlaceholderText("e.g. logs/")).toHaveProperty("value", "logs/");
+    expect(screen.getByPlaceholderText("e.g. 90")).toHaveProperty("value", "90");
+    const days30 = screen.getAllByPlaceholderText("e.g. 30");
+    expect(days30[0]).toHaveProperty("value", "30");
+    expect(days30[1]).toHaveProperty("value", "60");
+    expect(screen.getByPlaceholderText("e.g. 7")).toHaveProperty("value", "7");
+    await user.click(screen.getByRole("button", { name: /Update rule/i }));
+    await waitFor(() => {
+      expect(mockMutate).toHaveBeenCalled();
+    });
+    const payload = mockMutate.mock.calls[0][0];
+    expect(payload).toHaveLength(1);
+    expect(payload[0]).toEqual(
+      expect.objectContaining({
+        Status: "Enabled",
+        ID: "edit-me",
+        Filter: { Prefix: "logs/" },
+        Expiration: { Days: 90 },
+        NoncurrentVersionExpiration: { NoncurrentDays: 30 },
+        AbortIncompleteMultipartUpload: { DaysAfterInitiation: 7 },
+        Transitions: [{ StorageClass: "DEEP_ARCHIVE", Days: 60 }],
+      }),
+    );
+  });
+
+  it("creates a rule with only delete marker expiration", async () => {
+    const user = userEvent.setup();
+    const mockMutate = vi.fn();
+    (useS3UpdateBucketLifecycle as any).mockReturnValue({
+      mutate: mockMutate,
+      isPending: false,
+      isError: false,
+      error: null,
+    });
+    (useS3BucketLifecycle as any).mockReturnValue({
+      data: { rules: [] },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Lifecycle" }));
+    await waitFor(() => {
+      expect(screen.getByText(/No lifecycle rules configured/)).toBeTruthy();
+    });
+    await user.click(screen.getAllByRole("button", { name: /Add lifecycle rule/i })[0]);
+    await waitFor(() => {
+      expect(screen.getAllByText("Add lifecycle rule").length).toBeGreaterThanOrEqual(1);
+    });
+    await user.click(screen.getByRole("checkbox"));
+    await user.click(screen.getAllByRole("button", { name: /^Add rule$/i })[0]);
+    await waitFor(() => {
+      expect(mockMutate).toHaveBeenCalled();
+    });
+    const payload = mockMutate.mock.calls[0][0];
+    expect(payload[0]).toEqual(
+      expect.objectContaining({ Expiration: { ExpiredObjectDeleteMarker: true } }),
+    );
+  });
+
+  it("deletes a lifecycle rule", async () => {
+    const user = userEvent.setup();
+    const mockMutate = vi.fn();
+    (useS3UpdateBucketLifecycle as any).mockReturnValue({
+      mutate: mockMutate,
+      isPending: false,
+      isError: false,
+      error: null,
+    });
+    (useS3BucketLifecycle as any).mockReturnValue({
+      data: { rules: [{ ID: "r1", Status: "Enabled" }, { ID: "r2", Status: "Enabled" }] },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Lifecycle" }));
+    const deleteBtns = screen.getAllByRole("button", { name: /Delete rule/i });
+    await user.click(deleteBtns[0]);
+    await waitFor(() => {
+      expect(mockMutate).toHaveBeenCalled();
+    });
+    expect(mockMutate.mock.calls[0][0]).toHaveLength(1);
+    expect(mockMutate.mock.calls[0][0][0]).toEqual(
+      expect.objectContaining({ ID: "r2" }),
+    );
+  });
+
+  it("deletes all lifecycle rules", async () => {
+    const user = userEvent.setup();
+    const mockDelete = vi.fn();
+    (useS3DeleteBucketLifecycle as any).mockReturnValue({
+      mutate: mockDelete,
+      isPending: false,
+      isError: false,
+      error: null,
+    });
+    (useS3BucketLifecycle as any).mockReturnValue({
+      data: { rules: [{ ID: "r1", Status: "Enabled" }] },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Lifecycle" }));
+    await user.click(screen.getByRole("button", { name: /Delete all/i }));
+    expect(mockDelete).toHaveBeenCalled();
+  });
+
+  it("renders lifecycle table cell variants", async () => {
+    const user = userEvent.setup();
+    (useS3BucketLifecycle as any).mockReturnValue({
+      data: {
+        rules: [
+          { id: "lower", status: "Enabled", filter: { Tag: { Key: "env", Value: "prod" } }, expiration: { ExpiredObjectDeleteMarker: true }, transitions: [{ StorageClass: "GLACIER", Days: 60 }] },
+          { ID: "upper", Status: "Disabled", Filter: { Prefix: "x/" }, Expiration: { Days: 15 } },
+          { ID: "bare" },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Lifecycle" }));
+    expect(screen.getByText("lower")).toBeTruthy();
+    expect(screen.getByText("upper")).toBeTruthy();
+    expect(screen.getByText("Tag: env=prod")).toBeTruthy();
+    expect(screen.getByText("Delete markers")).toBeTruthy();
+    expect(screen.getByText("GLACIER after 60 days")).toBeTruthy();
+    expect(screen.getByText("Prefix: x/")).toBeTruthy();
+    expect(screen.getByText("15 days")).toBeTruthy();
+    expect(screen.getByText("All objects")).toBeTruthy();
+    expect(screen.getByText("bare")).toBeTruthy();
+  });
+
+  it("shows lifecycle loading spinner", async () => {
+    const user = userEvent.setup();
+    (useS3BucketLifecycle as any).mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+      error: null,
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Lifecycle" }));
+    expect(screen.queryByText(/Lifecycle Rules/i)).toBeNull();
+  });
+
+  it("shows lifecycle error fallback when no message", async () => {
+    const user = userEvent.setup();
+    (useS3UpdateBucketLifecycle as any).mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      isError: true,
+      error: {},
+    });
+    (useS3BucketLifecycle as any).mockReturnValue({
+      data: { rules: [] },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Lifecycle" }));
+    await user.click(screen.getAllByRole("button", { name: /Add lifecycle rule/i })[0]);
+    await waitFor(() => {
+      expect(screen.getByText("Failed to update lifecycle rules")).toBeTruthy();
+    });
+  });
+});
+
+// ─── CORS edge cases ─────────────────────────────────────
+
+describe("S3BucketConfig — CORS edge cases", () => {
+  it("renders existing CORS rules from data", async () => {
+    const user = userEvent.setup();
+    (useS3BucketCors as any).mockReturnValue({
+      data: { rules: [{ AllowedMethods: ["GET"], AllowedOrigins: ["*"] }], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "CORS" }));
+    await waitFor(() => {
+      expect(screen.getByDisplayValue(/AllowedMethods/)).toBeTruthy();
+    });
+  });
+
+  it("wraps a single CORS object in an array on save", async () => {
+    const user = userEvent.setup();
+    const mockMutate = vi.fn();
+    (useS3UpdateBucketCors as any).mockReturnValue({
+      mutate: mockMutate,
+      isPending: false,
+      isError: false,
+      error: null,
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "CORS" }));
+    const textarea = screen.getByRole("textbox");
+    fireEvent.change(textarea, { target: { value: '{"AllowedOrigins":["*"]}' } });
+    await user.click(screen.getByRole("button", { name: /Save CORS rules/i }));
+    await waitFor(() => {
+      expect(mockMutate).toHaveBeenCalledWith([{ AllowedOrigins: ["*"] }]);
+    });
+  });
+});
+
+// ─── Website edge cases ──────────────────────────────────
+
+describe("S3BucketConfig — website edge cases", () => {
+  it("disables save when website index document is missing", async () => {
+    const user = userEvent.setup();
+    (useS3BucketWebsite as any).mockReturnValue({
+      data: { configured: true, indexDocument: "", errorDocument: "error.html" },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Website" }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Save website configuration/i })).toBeDisabled();
+    });
+  });
+});
+
+// ─── Public Access edge cases ────────────────────────────
+
+describe("S3BucketConfig — public access edge cases", () => {
+  it("shows public access error fallback when no message", async () => {
+    const user = userEvent.setup();
+    (useS3PublicAccessBlock as any).mockReturnValue(mkQuery(PUBLIC_ACCESS_DATA));
+    (useS3UpdatePublicAccessBlock as any).mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      isError: true,
+      error: {},
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Public Access" }));
+    expect(screen.getByText("Failed to update public access block")).toBeTruthy();
+  });
+});
+
+// ─── Logging edge cases ──────────────────────────────────
+
+describe("S3BucketConfig — logging edge cases", () => {
+  it("shows logging error fallback when no message", async () => {
+    const user = userEvent.setup();
+    (useS3UpdateBucketLogging as any).mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      isError: true,
+      error: {},
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Logging" }));
+    expect(screen.getByText("Failed to update logging")).toBeTruthy();
+  });
+});
+
+// ─── ACL tab ─────────────────────────────────────────────
+
+describe("S3BucketConfig — ACL tab", () => {
+  it("renders owner and grantee labels", async () => {
+    const user = userEvent.setup();
+    (useS3BucketAcl as any).mockReturnValue({
+      data: ACL_DATA,
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "ACL" }));
+    expect(screen.getByText("Bucket ACL (Access Control List)")).toBeTruthy();
+    expect(screen.getByText("Owner Name")).toBeTruthy();
+    expect(screen.getByText("Everyone (AllUsers)")).toBeTruthy();
+    expect(screen.getByText("Authenticated Users")).toBeTruthy();
+    expect(screen.getByText("Log Delivery")).toBeTruthy();
+    expect(screen.getByText("alice")).toBeTruthy();
+    expect(screen.getByText("ID: id-abc")).toBeTruthy();
+    expect(screen.getByText("bob@example.com")).toBeTruthy();
+    expect(screen.getAllByText("CanonicalUser").length).toBeGreaterThan(0);
+    expect(screen.getByText("FULL_CONTROL")).toBeTruthy();
+  });
+
+  it("applies a canned ACL", async () => {
+    const user = userEvent.setup();
+    const mockMutate = vi.fn();
+    (useS3PutBucketAcl as any).mockReturnValue({
+      mutate: mockMutate,
+      isPending: false,
+      isError: false,
+      error: null,
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "ACL" }));
+    await user.click(screen.getByRole("button", { name: /Apply ACL/i }));
+    expect(mockMutate).toHaveBeenCalledWith({ cannedAcl: "private" });
+  });
+
+  it("renders ACL without owner or grants", async () => {
+    const user = userEvent.setup();
+    (useS3BucketAcl as any).mockReturnValue({
+      data: { owner: undefined, grants: [], totalGrants: 0 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "ACL" }));
+    expect(screen.queryByText("Current Grants")).toBeNull();
+    expect(screen.queryByText(/Owner Name/)).toBeNull();
+    expect(screen.getByRole("button", { name: /Apply ACL/i })).toBeTruthy();
+  });
+
+  it("shows ACL loading spinner", async () => {
+    const user = userEvent.setup();
+    (useS3BucketAcl as any).mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+      error: null,
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "ACL" }));
+    expect(screen.queryByText("Bucket ACL (Access Control List)")).toBeNull();
+  });
+
+  it("shows ACL error alert", async () => {
+    const user = userEvent.setup();
+    (useS3BucketAcl as any).mockReturnValue(mkQuery(ACL_DATA));
+    (useS3PutBucketAcl as any).mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      isError: true,
+      error: new Error("acl-boom"),
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "ACL" }));
+    expect(screen.getByText("acl-boom")).toBeTruthy();
+  });
+
+  it("shows ACL error fallback when no message", async () => {
+    const user = userEvent.setup();
+    (useS3BucketAcl as any).mockReturnValue(mkQuery(ACL_DATA));
+    (useS3PutBucketAcl as any).mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      isError: true,
+      error: {},
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "ACL" }));
+    expect(screen.getByText("Failed to update ACL")).toBeTruthy();
   });
 });
