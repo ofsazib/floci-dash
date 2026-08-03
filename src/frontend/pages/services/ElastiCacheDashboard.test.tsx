@@ -284,6 +284,76 @@ describe("ElastiCacheDashboard — replication groups", () => {
     render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
     expect(screen.getByText("Connection failed")).toBeTruthy();
   });
+
+  it("shows 0 member clusters when MemberClusters is missing", () => {
+    mockRG.mockReturnValue({
+      data: {
+        replicationGroups: [{ ReplicationGroupId: "rg-min", Status: "available" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("rg-min")).toBeTruthy();
+    // (rg.MemberClusters || []).length right side — field absent entirely
+    expect(screen.getByText("0")).toBeTruthy();
+  });
+
+  it("renders creating, modifying, and warning statuses", () => {
+    mockRG.mockReturnValue({
+      data: {
+        replicationGroups: [
+          { ReplicationGroupId: "rg-mod", Status: "modifying", MemberClusters: ["c1"] },
+          { ReplicationGroupId: "rg-del", Status: "deleting", MemberClusters: ["c1"] },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("rg-mod")).toBeTruthy();
+    expect(screen.getByText("rg-del")).toBeTruthy();
+    // "modifying" evaluates the || right operand; "deleting" hits the warning branch
+    expect(screen.getByText("modifying")).toBeTruthy();
+    expect(screen.getByText("deleting")).toBeTruthy();
+  });
+
+  it("creates replication group with only the required ID", async () => {
+    const user = userEvent.setup();
+    mockRG.mockReturnValue({ data: { replicationGroups: [], total: 0 }, isLoading: false });
+    render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getAllByText("Create Replication Group").length).toBeGreaterThan(0));
+
+    await user.type(screen.getByPlaceholderText("my-rg"), "new-rg");
+    await clickButton(user, /Create/i, { last: true });
+    // Description and AuthToken left empty — covers both if() else sides
+    expect(mockCreateRG).toHaveBeenCalledWith({ ReplicationGroupId: "new-rg" }, expect.any(Object));
+  });
+
+  it("shows generic load error fallback for replication groups", () => {
+    mockRG.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: null,
+    });
+    render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("Failed to load replication groups")).toBeTruthy();
+  });
+
+  it("shows generic create error fallback for replication group", async () => {
+    createRGState.isError = true;
+    createRGState.error = null;
+    const user = userEvent.setup();
+    mockRG.mockReturnValue({ data: { replicationGroups: [], total: 0 }, isLoading: false });
+    render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getAllByText("Create Replication Group").length).toBeGreaterThan(0));
+    expect(screen.getByText("Failed to create replication group")).toBeTruthy();
+    createRGState.isError = false;
+    createRGState.error = null;
+  });
 });
 
 describe("ElastiCacheDashboard — cache clusters", () => {
@@ -383,6 +453,99 @@ describe("ElastiCacheDashboard — cache clusters", () => {
     render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
     await user.click(screen.getByRole("tab", { name: /cache clusters/i }));
     await waitFor(() => expect(screen.getByText("CC load failed")).toBeTruthy());
+  });
+
+  it("creates cache cluster", async () => {
+    const user = userEvent.setup();
+    mockCC.mockReturnValue({ data: { cacheClusters: [], total: 0 }, isLoading: false });
+    render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /cache clusters/i }));
+    await waitFor(() => expect(screen.getByText("No cache clusters found")).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getAllByText("Create Cache Cluster").length).toBeGreaterThan(0));
+
+    await user.type(screen.getByPlaceholderText("my-cache-cluster"), "new-cc");
+    await clickButton(user, /Create/i, { last: true });
+    expect(mockCreateCC).toHaveBeenCalledWith({ CacheClusterId: "new-cc" }, expect.any(Object));
+  });
+
+  it("renders cache cluster creating, modifying, and warning statuses", async () => {
+    const user = userEvent.setup();
+    mockCC.mockReturnValue({
+      data: {
+        cacheClusters: [
+          { CacheClusterId: "cc-creating", CacheClusterStatus: "creating", Engine: "redis" },
+          { CacheClusterId: "cc-modifying", CacheClusterStatus: "modifying", Engine: "redis" },
+          { CacheClusterId: "cc-deleting", CacheClusterStatus: "deleting", Engine: "redis" },
+        ],
+        total: 3,
+      },
+      isLoading: false,
+    });
+    render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /cache clusters/i }));
+    await waitFor(() => expect(screen.getByText("cc-creating")).toBeTruthy());
+    expect(screen.getByText("cc-modifying")).toBeTruthy();
+    expect(screen.getByText("cc-deleting")).toBeTruthy();
+  });
+
+  it("shows generic load error fallback for cache clusters", async () => {
+    const user = userEvent.setup();
+    mockCC.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: null,
+    });
+    render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /cache clusters/i }));
+    await waitFor(() => expect(screen.getByText("Failed to load cache clusters")).toBeTruthy());
+  });
+
+  it("shows create error alert for cache cluster", async () => {
+    createCCState.isError = true;
+    createCCState.error = new Error("CC already exists");
+    const user = userEvent.setup();
+    mockCC.mockReturnValue({ data: { cacheClusters: [], total: 0 }, isLoading: false });
+    render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /cache clusters/i }));
+    await waitFor(() => expect(screen.getByText("No cache clusters found")).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getAllByText("Create Cache Cluster").length).toBeGreaterThan(0));
+    expect(screen.getByText("CC already exists")).toBeTruthy();
+    createCCState.isError = false;
+    createCCState.error = null;
+  });
+
+  it("shows generic create error fallback for cache cluster", async () => {
+    createCCState.isError = true;
+    createCCState.error = null;
+    const user = userEvent.setup();
+    mockCC.mockReturnValue({ data: { cacheClusters: [], total: 0 }, isLoading: false });
+    render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /cache clusters/i }));
+    await waitFor(() => expect(screen.getByText("No cache clusters found")).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getAllByText("Create Cache Cluster").length).toBeGreaterThan(0));
+    expect(screen.getByText("Failed to create cache cluster")).toBeTruthy();
+    createCCState.isError = false;
+    createCCState.error = null;
+  });
+
+  it("shows delete cache cluster loading state", async () => {
+    deleteCCState.isPending = true;
+    deleteCCState.variables = { CacheClusterId: "my-cc" };
+    const user = userEvent.setup();
+    mockCC.mockReturnValue({
+      data: {
+        cacheClusters: [{ CacheClusterId: "my-cc", CacheClusterStatus: "available" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /cache clusters/i }));
+    await waitFor(() => expect(screen.getByText("my-cc")).toBeTruthy());
   });
 });
 
@@ -504,5 +667,79 @@ describe("ElastiCacheDashboard — users", () => {
     render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
     await user.click(screen.getByRole("tab", { name: /users/i }));
     await waitFor(() => expect(screen.getByText("User load failed")).toBeTruthy());
+  });
+
+  it("creates user with only the required ID", async () => {
+    const user = userEvent.setup();
+    mockUsers.mockReturnValue({ data: { users: [], total: 0 }, isLoading: false });
+    render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /users/i }));
+    await waitFor(() => expect(screen.getByText("No users found")).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create ElastiCache User")).toBeTruthy());
+
+    await user.type(screen.getByPlaceholderText("my-user"), "new-user");
+    await clickButton(user, /Create/i, { last: true });
+    // UserName and AccessString left empty — covers both if() else sides
+    expect(mockCreateUser).toHaveBeenCalledWith({ UserId: "new-user" }, expect.any(Object));
+  });
+
+  it("shows generic load error fallback for users", async () => {
+    const user = userEvent.setup();
+    mockUsers.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: null,
+    });
+    render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /users/i }));
+    await waitFor(() => expect(screen.getByText("Failed to load users")).toBeTruthy());
+  });
+
+  it("shows delete user loading state", async () => {
+    deleteUserState.isPending = true;
+    deleteUserState.variables = { UserId: "user-1" };
+    const user = userEvent.setup();
+    mockUsers.mockReturnValue({
+      data: {
+        users: [{ UserId: "user-1", UserName: "u1", Status: "active" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /users/i }));
+    await waitFor(() => expect(screen.getByText("user-1")).toBeTruthy());
+  });
+
+  it("shows create error alert for user", async () => {
+    createUserState.isError = true;
+    createUserState.error = new Error("User already exists");
+    const user = userEvent.setup();
+    mockUsers.mockReturnValue({ data: { users: [], total: 0 }, isLoading: false });
+    render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /users/i }));
+    await waitFor(() => expect(screen.getByText("No users found")).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create ElastiCache User")).toBeTruthy());
+    expect(screen.getByText("User already exists")).toBeTruthy();
+    createUserState.isError = false;
+    createUserState.error = null;
+  });
+
+  it("shows generic create error fallback for user", async () => {
+    createUserState.isError = true;
+    createUserState.error = null;
+    const user = userEvent.setup();
+    mockUsers.mockReturnValue({ data: { users: [], total: 0 }, isLoading: false });
+    render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /users/i }));
+    await waitFor(() => expect(screen.getByText("No users found")).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create ElastiCache User")).toBeTruthy());
+    expect(screen.getByText("Failed to create user")).toBeTruthy();
+    createUserState.isError = false;
+    createUserState.error = null;
   });
 });
