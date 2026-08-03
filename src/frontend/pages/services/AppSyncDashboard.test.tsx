@@ -23,14 +23,19 @@ const mockCreateKey = vi.fn();
 const mockDeleteKey = vi.fn();
 const mockTypes = vi.fn();
 
+const createApiState = vi.hoisted(() => ({
+  isError: false,
+  error: null as Error | null,
+}));
+
 vi.mock("../../hooks/useAppSync", () => ({
   useAppSyncApis: (...args: any[]) => mockApis(...args),
   useAppSyncApi: (...args: any[]) => mockApi(...args),
   useCreateAppSyncApi: () => ({
     mutate: mockCreateApi,
     isPending: false,
-    isError: false,
-    error: null,
+    isError: createApiState.isError,
+    error: createApiState.error,
     reset: vi.fn(),
   }),
   useDeleteAppSyncApi: () => ({
@@ -83,14 +88,17 @@ vi.mock("../../hooks/useAppSync", () => ({
 
 import { AppSyncDashboard } from "./AppSyncDashboard";
 
+const toastMock = vi.fn();
 vi.mock("../../components/Toast", () => ({
-  useToast: () => ({ showToast: vi.fn() }),
+  useToast: () => ({ showToast: toastMock }),
 }));
 
 // ─── Setup ──────────────────────────────────────────────
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
+  createApiState.isError = false;
+  createApiState.error = null;
   mockApis.mockReturnValue({
     data: { apis: [], total: 0 },
     isLoading: false,
@@ -104,6 +112,21 @@ beforeEach(() => {
   mockApiKeys.mockReturnValue({ data: { apiKeys: [], total: 0 }, isLoading: false });
   mockTypes.mockReturnValue({ data: { types: [], total: 0 }, isLoading: false });
 });
+
+// Navigate to the API detail view (list → click View → wait for back button)
+async function navToDetail(user: any, apiData?: any) {
+  mockApis.mockReturnValue({
+    data: { apis: [{ name: "my-api", apiId: "abc123", authenticationType: "API_KEY" }], total: 1 },
+    isLoading: false,
+  });
+  mockApi.mockReturnValue({
+    data: { api: apiData ?? { name: "my-api", apiId: "abc123", authenticationType: "API_KEY" } },
+    isLoading: false,
+  });
+  render(<AppSyncDashboard />, { wrapper: createWrapper() });
+  await clickButton(user, /View/i);
+  await waitFor(() => expect(screen.getByRole("button", { name: /Back to GraphQL APIs/i })).toBeTruthy());
+}
 
 // ─── Tests ──────────────────────────────────────────────
 
@@ -160,6 +183,104 @@ describe("AppSyncDashboard — API list", () => {
     await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
     await clickButton(user, /^Delete$/i);
     await waitFor(() => expect(mockDeleteApi).toHaveBeenCalledWith("abc123"));
+  });
+
+  it("filters APIs with a missing name", async () => {
+    const user = userEvent.setup();
+    mockApis.mockReturnValue({
+      data: {
+        apis: [
+          { name: null as any, apiId: "id-null" },
+          { name: "beta-api", apiId: "id-beta" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    render(<AppSyncDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("beta-api")).toBeTruthy());
+    const filterInput = screen.getByPlaceholderText("Find APIs by name");
+    await user.type(filterInput, "beta");
+    await waitFor(() => {
+      expect(screen.getByText("beta-api")).toBeTruthy();
+      expect(screen.queryByText("id-null")).toBeNull();
+    });
+  });
+
+  it("changes authentication type and creates API", async () => {
+    const user = userEvent.setup();
+    render(<AppSyncDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getAllByText("Create GraphQL API").length).toBeGreaterThan(0));
+    // Click the auth Select trigger (shows current option "API_KEY"), then pick "AWS_IAM"
+    await user.click(screen.getAllByText("API_KEY")[0]);
+    await user.click(screen.getAllByText("AWS_IAM")[0]);
+    await user.type(screen.getByPlaceholderText("my-graphql-api"), "iam-api");
+    await waitFor(async () => {
+      const btns = screen.getAllByRole("button", { name: /Create/i });
+      const submit = btns[btns.length - 1];
+      expect(submit).not.toBeDisabled();
+      await user.click(submit);
+    });
+    await waitFor(() => {
+      expect(mockCreateApi).toHaveBeenCalledWith(
+        { name: "iam-api", authenticationType: "AWS_IAM" },
+        expect.any(Object),
+      );
+    });
+  });
+
+  it("shows error alert in create API modal", async () => {
+    createApiState.isError = true;
+    createApiState.error = new Error("API name taken");
+    const user = userEvent.setup();
+    render(<AppSyncDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getAllByText("Create GraphQL API").length).toBeGreaterThan(0));
+    expect(screen.getByText("API name taken")).toBeTruthy();
+  });
+
+  it("shows Failed fallback when create API error has no message", async () => {
+    createApiState.isError = true;
+    createApiState.error = {} as Error;
+    const user = userEvent.setup();
+    render(<AppSyncDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getAllByText("Create GraphQL API").length).toBeGreaterThan(0));
+    expect(screen.getByText("Failed to create GraphQL API")).toBeTruthy();
+  });
+
+  it("invokes onSuccess when create API succeeds", async () => {
+    mockCreateApi.mockImplementation((_args: any, opts?: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    render(<AppSyncDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getAllByText("Create GraphQL API").length).toBeGreaterThan(0));
+    await user.type(screen.getByPlaceholderText("my-graphql-api"), "ok-api");
+    await waitFor(async () => {
+      const btns = screen.getAllByRole("button", { name: /Create/i });
+      const submit = btns[btns.length - 1];
+      expect(submit).not.toBeDisabled();
+      await user.click(submit);
+    });
+    await waitFor(() => {
+      expect(mockCreateApi).toHaveBeenCalledWith(
+        { name: "ok-api", authenticationType: "API_KEY" },
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      );
+    });
+  });
+
+  it("dismisses the create API modal via close button", async () => {
+    const user = userEvent.setup();
+    render(<AppSyncDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getAllByText("Create GraphQL API").length).toBeGreaterThan(0));
+    // First dismiss control in document order belongs to the Create GraphQL API modal
+    const dismissBtn = document.querySelector('[class*="dismiss"]');
+    expect(dismissBtn).toBeTruthy();
+    await user.click(dismissBtn as HTMLElement);
+    expect(mockCreateApi).not.toHaveBeenCalled();
   });
 });
 
@@ -243,6 +364,71 @@ describe("AppSyncDashboard — API detail", () => {
     // Modal opens — Cloudscape Select for data source is hard to interact with,
     // so we verify the modal renders instead of filling the full form
     await waitFor(() => expect(screen.getByText("Create function")).toBeTruthy());
+  });
+});
+
+describe("AppSyncDashboard — detail fallback fields", () => {
+  it("shows dash for data source without type", async () => {
+    const user = userEvent.setup();
+    mockDataSources.mockReturnValue({
+      data: { dataSources: [{ name: "ds-min" }], total: 1 },
+      isLoading: false,
+    });
+    await navToDetail(user);
+    expect(screen.getByText("ds-min")).toBeTruthy();
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("shows fallbacks for resolver without metadata", async () => {
+    const user = userEvent.setup();
+    mockResolvers.mockReturnValue({
+      data: { resolvers: [{ fieldName: "getX", typeName: "Query" }], total: 1 },
+      isLoading: false,
+    });
+    await navToDetail(user);
+    await user.click(screen.getByRole("tab", { name: /resolvers/i }));
+    await waitFor(() => expect(screen.getByText("getX")).toBeTruthy());
+    expect(screen.getByText("UNIT")).toBeTruthy();
+    // dataSourceName and runtime fall back to "—"
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("shows fallbacks for function without metadata", async () => {
+    const user = userEvent.setup();
+    mockFunctions.mockReturnValue({
+      data: { functions: [{ name: "fn-min", functionId: "fn-1" }], total: 1 },
+      isLoading: false,
+    });
+    await navToDetail(user);
+    await user.click(screen.getByRole("tab", { name: /functions/i }));
+    await waitFor(() => expect(screen.getByText("fn-min")).toBeTruthy());
+    // dataSourceName and functionVersion fall back to "—"
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("shows fallbacks for API key without description or expiry", async () => {
+    const user = userEvent.setup();
+    mockApiKeys.mockReturnValue({
+      data: { apiKeys: [{ id: "k-min" }], total: 1 },
+      isLoading: false,
+    });
+    await navToDetail(user);
+    await user.click(screen.getByRole("tab", { name: /api keys/i }));
+    await waitFor(() => expect(screen.getByText("k-min")).toBeTruthy());
+    // description and expiry fall back to "—"
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("shows SDL fallback for type without format", async () => {
+    const user = userEvent.setup();
+    mockTypes.mockReturnValue({
+      data: { types: [{ name: "T-min" }], total: 1 },
+      isLoading: false,
+    });
+    await navToDetail(user);
+    await user.click(screen.getByRole("tab", { name: /types/i }));
+    await waitFor(() => expect(screen.getByText("T-min")).toBeTruthy());
+    expect(screen.getByText("SDL")).toBeTruthy();
   });
 });
 
@@ -508,5 +694,131 @@ describe("AppSyncDashboard — detail view operations", () => {
     await waitFor(() => expect(screen.getByText("Create function")).toBeTruthy());
     await clickButton(user, /Cancel/i);
     await waitFor(() => expect(screen.getByText("No functions.")).toBeTruthy());
+  });
+});
+
+describe("AppSyncDashboard — remaining branches", () => {
+  it("shows empty states when all detail hooks return no data", async () => {
+    const user = userEvent.setup();
+    mockDataSources.mockReturnValue({ data: undefined, isLoading: false });
+    mockResolvers.mockReturnValue({ data: undefined, isLoading: false });
+    mockFunctions.mockReturnValue({ data: undefined, isLoading: false });
+    mockApiKeys.mockReturnValue({ data: undefined, isLoading: false });
+    mockTypes.mockReturnValue({ data: undefined, isLoading: false });
+    await navToDetail(user);
+    await waitFor(() => expect(screen.getByText("No data sources.")).toBeTruthy());
+    // All tab counters fall back to 0 when the hooks return no data (|| [])
+    expect(screen.getByRole("tab", { name: /Data Sources \(0\)/i })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /Resolvers \(0\)/i })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /Functions \(0\)/i })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /API Keys \(0\)/i })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /Types \(0\)/i })).toBeTruthy();
+  });
+
+  it("shows GraphQL API fallback header and dash when api lacks name and auth type", async () => {
+    const user = userEvent.setup();
+    await navToDetail(user, { apiId: "abc123" });
+    await waitFor(() => expect(screen.getByText("GraphQL API")).toBeTruthy());
+    expect(screen.getByText("—")).toBeTruthy();
+  });
+
+  it("shows Enabled when xray is enabled", async () => {
+    const user = userEvent.setup();
+    await navToDetail(user, {
+      name: "my-api",
+      apiId: "abc123",
+      authenticationType: "API_KEY",
+      xrayEnabled: true,
+    });
+    await waitFor(() => expect(screen.getByText("Enabled")).toBeTruthy());
+  });
+
+  it("creates API key and shows the returned key", async () => {
+    mockCreateKey.mockImplementation((_args: any, opts?: any) => opts?.onSuccess?.({ apiKey: "ak-123" }));
+    const user = userEvent.setup();
+    await navToDetail(user);
+    await user.click(screen.getByRole("tab", { name: /api keys/i }));
+    await waitFor(() => expect(screen.getByText("No API keys.")).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("API Key Created")).toBeTruthy());
+    expect(screen.getByDisplayValue("ak-123")).toBeTruthy();
+  });
+
+  it("shows 'Key not returned' when API key creation returns no key", async () => {
+    mockCreateKey.mockImplementation((_args: any, opts?: any) => opts?.onSuccess?.({}));
+    const user = userEvent.setup();
+    await navToDetail(user);
+    await user.click(screen.getByRole("tab", { name: /api keys/i }));
+    await waitFor(() => expect(screen.getByText("No API keys.")).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByDisplayValue("Key not returned")).toBeTruthy());
+  });
+
+  it("changes data source type in the create data source modal", async () => {
+    const user = userEvent.setup();
+    await navToDetail(user);
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create data source")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-datasource"), "new-ds");
+    // Change the Type select from NONE to HTTP
+    await user.click(screen.getAllByText("NONE")[0]);
+    await user.click(screen.getAllByText("HTTP")[0]);
+    // The open modal's footer is the enabled exact-"Create" button (the hidden
+    // function modal's footer is also matched by role queries, so pick enabled)
+    const createBtn = screen
+      .getAllByRole("button", { name: /^Create$/i })
+      .find((b) => !(b as HTMLButtonElement).disabled);
+    expect(createBtn).toBeTruthy();
+    await user.click(createBtn!);
+    await waitFor(() =>
+      expect(mockCreateDS).toHaveBeenCalledWith(
+        { apiId: "abc123", name: "new-ds", type: "HTTP", description: "" },
+        expect.objectContaining({ onSuccess: expect.any(Function) })
+      )
+    );
+  });
+
+  it("disables create function until a data source is selected", async () => {
+    const user = userEvent.setup();
+    mockDataSources.mockReturnValue({
+      data: { dataSources: [{ name: "my-ds", type: "NONE" }], total: 1 },
+      isLoading: false,
+    });
+    await navToDetail(user);
+    await user.click(screen.getByRole("tab", { name: /functions/i }));
+    await waitFor(() => expect(screen.getByText("No functions.")).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create function")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-function"), "fn-x");
+    // Name is filled but data source is not selected yet -> Create disabled
+    const btns = screen.getAllByRole("button", { name: /^Create$/i });
+    expect(btns[btns.length - 1]).toBeDisabled();
+  });
+
+  it("selects a data source and creates a function", async () => {
+    mockCreateFunc.mockImplementation((_args: any, opts?: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    mockDataSources.mockReturnValue({
+      data: { dataSources: [{ name: "my-ds", type: "NONE" }], total: 1 },
+      isLoading: false,
+    });
+    await navToDetail(user);
+    await user.click(screen.getByRole("tab", { name: /functions/i }));
+    await waitFor(() => expect(screen.getByText("No functions.")).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create function")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-function"), "fn-x");
+    // Select the data source from the dropdown
+    await user.click(screen.getAllByText("Select data source")[0]);
+    await user.click(screen.getAllByText("my-ds")[0]);
+    const btns = screen.getAllByRole("button", { name: /^Create$/i });
+    expect(btns[btns.length - 1]).not.toBeDisabled();
+    await user.click(btns[btns.length - 1]);
+    await waitFor(() =>
+      expect(mockCreateFunc).toHaveBeenCalledWith(
+        { apiId: "abc123", name: "fn-x", dataSourceName: "my-ds", code: "" },
+        expect.objectContaining({ onSuccess: expect.any(Function) })
+      )
+    );
   });
 });
