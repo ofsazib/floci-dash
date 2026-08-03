@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -89,7 +89,7 @@ import { S3VectorsDashboard } from "./S3VectorsDashboard";
 // ─── Setup ──────────────────────────────────────────────
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
   createBucketState.isError = false;
   createBucketState.error = null;
   createBucketState.isPending = false;
@@ -122,6 +122,28 @@ beforeEach(() => {
     error: null,
   });
 });
+
+// Navigate to the vector operations view (bucket selected → index selected)
+async function navToVectorOps(user: any, bucketName: string, indexName: string) {
+  mockBuckets.mockReturnValue({
+    data: { buckets: [{ vectorBucketName: bucketName, vectorBucketArn: `arn:aws:s3vectors:bucket/${bucketName}` }], total: 1 },
+    isLoading: false,
+    isError: false,
+    error: null,
+  });
+  mockIndexes.mockReturnValue({
+    data: { indexes: [{ indexName, dimension: 128, distanceMetric: "cosine" }], total: 1 },
+    isLoading: false,
+    isError: false,
+    error: null,
+  });
+  render(<S3VectorsDashboard />, { wrapper: createWrapper() });
+  await waitFor(() => expect(screen.getByText(bucketName)).toBeTruthy());
+  await user.click(screen.getByRole("button", { name: /Indexes/i }));
+  await waitFor(() => expect(screen.getByText(indexName)).toBeTruthy());
+  await user.click(screen.getByRole("button", { name: /Vectors/i }));
+  await waitFor(() => expect(screen.getByText(/Vector Data/i)).toBeTruthy());
+}
 
 // ─── Tests ──────────────────────────────────────────────
 
@@ -219,6 +241,140 @@ describe("S3VectorsDashboard — buckets", () => {
     await waitFor(() => {
       expect(mockDeleteBucket).toHaveBeenCalledWith("del-bucket");
     });
+  });
+
+  it("renders bucket using fallback name field", () => {
+    mockBuckets.mockReturnValue({
+      data: {
+        buckets: [{ name: "fallback-bucket", vectorBucketArn: "arn:aws:s3vectors:bucket/fallback-bucket" }],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<S3VectorsDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("fallback-bucket")).toBeTruthy();
+  });
+
+  it("filters buckets by name", async () => {
+    mockBuckets.mockReturnValue({
+      data: {
+        buckets: [
+          { vectorBucketName: "keep-bucket", vectorBucketArn: "arn:1" },
+          { vectorBucketName: "drop-bucket", vectorBucketArn: "arn:2" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<S3VectorsDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("keep-bucket")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("Find by name"), "keep");
+    await waitFor(() => {
+      expect(screen.getByText("keep-bucket")).toBeTruthy();
+      expect(screen.queryByText("drop-bucket")).toBeNull();
+    });
+  });
+
+  it("deletes the currently selected bucket and resets selection", async () => {
+    mockBuckets.mockReturnValue({
+      data: {
+        buckets: [{ vectorBucketName: "sel-bucket", vectorBucketArn: "arn:aws:s3vectors:bucket/sel-bucket" }],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<S3VectorsDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("sel-bucket")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Indexes/i }));
+    await waitFor(() => expect(screen.getByText(/Indexes in sel-bucket/i)).toBeTruthy());
+
+    await user.click(screen.getByRole("button", { name: /Delete sel-bucket/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() => {
+      expect(mockDeleteBucket).toHaveBeenCalledWith("sel-bucket");
+      // selection reset → the indexes table disappears
+      expect(screen.queryByText(/Indexes in sel-bucket/i)).toBeNull();
+    });
+  });
+
+  it("shows error toast when bucket delete fails", async () => {
+    mockBuckets.mockReturnValue({
+      data: {
+        buckets: [{ vectorBucketName: "fail-bucket", vectorBucketArn: "arn:aws:s3vectors:bucket/fail-bucket" }],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockDeleteBucket.mockRejectedValue(new Error("delete failed"));
+    const user = userEvent.setup();
+    render(<S3VectorsDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("fail-bucket")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Delete fail-bucket/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("error", "delete failed"));
+  });
+
+  it("cancels and dismisses the create bucket modal", async () => {
+    const user = userEvent.setup();
+    render(<S3VectorsDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create Vector bucket/i);
+    // First Cancel button in DOM order belongs to the Create Vector Bucket modal
+    await clickButton(user, /^Cancel$/i);
+    expect(mockCreateBucket).not.toHaveBeenCalled();
+    // Reopen, then dismiss via the modal close (X) button (modals portal to document.body).
+    // First dismiss control in document order belongs to the Create Vector Bucket modal.
+    await clickButton(user, /Create Vector bucket/i);
+    const dismissBtn = document.querySelector('[class*="dismiss"]');
+    expect(dismissBtn).toBeTruthy();
+    await user.click(dismissBtn as HTMLElement);
+    expect(mockCreateBucket).not.toHaveBeenCalled();
+  });
+
+  it("shows success toast when bucket creation succeeds", async () => {
+    mockCreateBucket.mockImplementation((_args: any, opts?: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    render(<S3VectorsDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create Vector bucket/i);
+    await user.type(screen.getByPlaceholderText("my-vector-bucket"), "ok-bucket");
+    await waitFor(async () => {
+      const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+      const enabled = createBtns.find((b) => !b.hasAttribute("disabled"));
+      if (!enabled) throw new Error("Create button still disabled");
+      await user.click(enabled);
+    });
+    await waitFor(() => {
+      expect(mockCreateBucket).toHaveBeenCalledWith({ vectorBucketName: "ok-bucket" }, expect.any(Object));
+      expect(toastMock).toHaveBeenCalledWith("success", "Bucket ok-bucket created");
+    });
+  });
+
+  it("shows error toast when bucket creation fails", async () => {
+    mockCreateBucket.mockImplementation((_args: any, opts?: any) =>
+      opts?.onError?.(new Error("bucket create failed"))
+    );
+    const user = userEvent.setup();
+    render(<S3VectorsDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create Vector bucket/i);
+    await user.type(screen.getByPlaceholderText("my-vector-bucket"), "fail-bucket");
+    await waitFor(async () => {
+      const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+      const enabled = createBtns.find((b) => !b.hasAttribute("disabled"));
+      if (!enabled) throw new Error("Create button still disabled");
+      await user.click(enabled);
+    });
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("error", "bucket create failed"));
   });
 });
 
@@ -350,6 +506,289 @@ describe("S3VectorsDashboard — indexes", () => {
 
     createIndexState.isError = false;
     createIndexState.error = null;
+  });
+
+  it("renders index with fallback fields", async () => {
+    mockBuckets.mockReturnValue({
+      data: {
+        buckets: [{ vectorBucketName: "bucket-fb", vectorBucketArn: "arn:aws:s3vectors:bucket/bucket-fb" }],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockIndexes.mockReturnValue({
+      data: {
+        indexes: [{ name: "fb-index", indexArn: "arn:aws:s3vectors:index/fb-index" }],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<S3VectorsDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("bucket-fb")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Indexes/i }));
+    await waitFor(() => expect(screen.getByText("fb-index")).toBeTruthy());
+    // dimension + distanceMetric fall back to "-", dataType falls back to "float32"
+    expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("float32").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("shows empty indexes when data is undefined", async () => {
+    mockBuckets.mockReturnValue({
+      data: {
+        buckets: [{ vectorBucketName: "bucket-e", vectorBucketArn: "arn:aws:s3vectors:bucket/bucket-e" }],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockIndexes.mockReturnValue({ data: undefined, isLoading: false, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<S3VectorsDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("bucket-e")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Indexes/i }));
+    await waitFor(() => expect(screen.getByText(/Indexes in bucket-e/i)).toBeTruthy());
+    // ResourceTable empty title is "No indexs found" (resourceName "Index" + "s")
+    expect(screen.getByText(/No index/i)).toBeTruthy();
+  });
+
+  it("deletes an index", async () => {
+    mockBuckets.mockReturnValue({
+      data: {
+        buckets: [{ vectorBucketName: "bucket-del", vectorBucketArn: "arn:aws:s3vectors:bucket/bucket-del" }],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockIndexes.mockReturnValue({
+      data: { indexes: [{ indexName: "del-index", dimension: 128, distanceMetric: "cosine" }], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<S3VectorsDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("bucket-del")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Indexes/i }));
+    await waitFor(() => expect(screen.getByText("del-index")).toBeTruthy());
+
+    await user.click(screen.getByRole("button", { name: /Delete del-index/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() => {
+      expect(mockDeleteIndex).toHaveBeenCalledWith({ bucketName: "bucket-del", indexName: "del-index" });
+    });
+  });
+
+  it("deletes the selected index and clears the vector view", async () => {
+    mockBuckets.mockReturnValue({
+      data: {
+        buckets: [{ vectorBucketName: "bucket-sel", vectorBucketArn: "arn:aws:s3vectors:bucket/bucket-sel" }],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockIndexes.mockReturnValue({
+      data: { indexes: [{ indexName: "sel-index", dimension: 128, distanceMetric: "cosine" }], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<S3VectorsDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("bucket-sel")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Indexes/i }));
+    await waitFor(() => expect(screen.getByText("sel-index")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Vectors/i }));
+    await waitFor(() => expect(screen.getByText(/Vector Data/i)).toBeTruthy());
+
+    await user.click(screen.getByRole("button", { name: /Delete sel-index/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() => {
+      expect(mockDeleteIndex).toHaveBeenCalledWith({ bucketName: "bucket-sel", indexName: "sel-index" });
+      // selectedIndex reset → the vector data section disappears
+      expect(screen.queryByText(/Vector Data/i)).toBeNull();
+    });
+  });
+
+  it("shows error toast when index delete fails", async () => {
+    mockBuckets.mockReturnValue({
+      data: {
+        buckets: [{ vectorBucketName: "bucket-fail", vectorBucketArn: "arn:aws:s3vectors:bucket/bucket-fail" }],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockIndexes.mockReturnValue({
+      data: { indexes: [{ indexName: "idx-fail", dimension: 128, distanceMetric: "cosine" }], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockDeleteIndex.mockRejectedValue(new Error("index delete failed"));
+    const user = userEvent.setup();
+    render(<S3VectorsDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("bucket-fail")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Indexes/i }));
+    await waitFor(() => expect(screen.getByText("idx-fail")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Delete idx-fail/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("error", "index delete failed"));
+  });
+
+  it("filters indexes by name", async () => {
+    mockBuckets.mockReturnValue({
+      data: {
+        buckets: [{ vectorBucketName: "bucket-fi", vectorBucketArn: "arn:aws:s3vectors:bucket/bucket-fi" }],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockIndexes.mockReturnValue({
+      data: {
+        indexes: [
+          { indexName: "idx-a", dimension: 128, distanceMetric: "cosine" },
+          { indexName: "idx-b", dimension: 64, distanceMetric: "euclidean" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<S3VectorsDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("bucket-fi")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Indexes/i }));
+    await waitFor(() => expect(screen.getByText("idx-a")).toBeTruthy());
+    // [0] is the buckets table filter, [1] is the indexes table filter
+    const filterInputs = screen.getAllByPlaceholderText("Find by name");
+    await user.type(filterInputs[1], "idx-a");
+    await waitFor(() => {
+      expect(screen.getByText("idx-a")).toBeTruthy();
+      expect(screen.queryByText("idx-b")).toBeNull();
+    });
+  });
+
+  it("shows success toast when index creation succeeds", async () => {
+    mockCreateIndex.mockImplementation((_args: any, opts?: any) => opts?.onSuccess?.());
+    mockBuckets.mockReturnValue({
+      data: {
+        buckets: [{ vectorBucketName: "bucket-ok", vectorBucketArn: "arn:aws:s3vectors:bucket/bucket-ok" }],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockIndexes.mockReturnValue({ data: { indexes: [], total: 0 }, isLoading: false, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<S3VectorsDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("bucket-ok")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Indexes/i }));
+    await waitFor(() => expect(screen.getByText(/Indexes in bucket-ok/i)).toBeTruthy());
+
+    await clickButton(user, /Create Index/i);
+    await user.type(screen.getByPlaceholderText("my-index"), "ok-index");
+    await user.type(screen.getByPlaceholderText("128"), "64");
+    await waitFor(async () => {
+      const btns = screen.getAllByRole("button", { name: /^Create$/i });
+      const enabled = btns.find((b) => !b.hasAttribute("disabled"));
+      if (!enabled) throw new Error("Create button still disabled");
+      await user.click(enabled);
+    });
+    await waitFor(() => {
+      expect(mockCreateIndex).toHaveBeenCalledWith(
+        { bucketName: "bucket-ok", indexName: "ok-index", dimension: 64, distanceMetric: "cosine" },
+        expect.any(Object),
+      );
+      expect(toastMock).toHaveBeenCalledWith("success", "Index ok-index created");
+    });
+  });
+
+  it("shows error toast when index creation fails", async () => {
+    mockCreateIndex.mockImplementation((_args: any, opts?: any) =>
+      opts?.onError?.(new Error("index create failed"))
+    );
+    mockBuckets.mockReturnValue({
+      data: {
+        buckets: [{ vectorBucketName: "bucket-ok2", vectorBucketArn: "arn:aws:s3vectors:bucket/bucket-ok2" }],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockIndexes.mockReturnValue({ data: { indexes: [], total: 0 }, isLoading: false, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<S3VectorsDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("bucket-ok2")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Indexes/i }));
+    await waitFor(() => expect(screen.getByText(/Indexes in bucket-ok2/i)).toBeTruthy());
+
+    await clickButton(user, /Create Index/i);
+    await user.type(screen.getByPlaceholderText("my-index"), "ok-index2");
+    await user.type(screen.getByPlaceholderText("128"), "64");
+    await waitFor(async () => {
+      const btns = screen.getAllByRole("button", { name: /^Create$/i });
+      const enabled = btns.find((b) => !b.hasAttribute("disabled"));
+      if (!enabled) throw new Error("Create button still disabled");
+      await user.click(enabled);
+    });
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("error", "index create failed"));
+  });
+
+  it("changes distance metric via select", async () => {
+    mockBuckets.mockReturnValue({
+      data: {
+        buckets: [{ vectorBucketName: "bucket-m", vectorBucketArn: "arn:aws:s3vectors:bucket/bucket-m" }],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockIndexes.mockReturnValue({ data: { indexes: [], total: 0 }, isLoading: false, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<S3VectorsDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("bucket-m")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Indexes/i }));
+    await waitFor(() => expect(screen.getByText(/Indexes in bucket-m/i)).toBeTruthy());
+
+    await clickButton(user, /Create Index/i);
+    // Click the Select trigger (shows current option "cosine"), then pick "euclidean".
+    // Relies on the indexes table being EMPTY here so "cosine" only matches the Select trigger.
+    await user.click(screen.getAllByText("cosine")[0]);
+    await user.click(screen.getAllByText("euclidean")[0]);
+    await user.type(screen.getByPlaceholderText("my-index"), "metric-index");
+    await user.type(screen.getByPlaceholderText("128"), "16");
+    await waitFor(async () => {
+      const btns = screen.getAllByRole("button", { name: /^Create$/i });
+      const enabled = btns.find((b) => !b.hasAttribute("disabled"));
+      if (!enabled) throw new Error("Create button still disabled");
+      await user.click(enabled);
+    });
+    await waitFor(() => {
+      expect(mockCreateIndex).toHaveBeenCalledWith(
+        { bucketName: "bucket-m", indexName: "metric-index", dimension: 16, distanceMetric: "euclidean" },
+        expect.any(Object),
+      );
+    });
   });
 });
 
@@ -644,6 +1083,113 @@ describe("S3VectorsDashboard — vector operations", () => {
     await waitFor(() => {
       expect(screen.getByText("result-1")).toBeTruthy();
     });
+  });
+
+  it("shows query results with missing distance and metadata", async () => {
+    mockQuery.mockImplementation((_args: any, opts?: any) =>
+      opts?.onSuccess?.({ vectors: [{ key: "r-fallback" }] })
+    );
+    const user = userEvent.setup();
+    await navToVectorOps(user, "bucket-qf", "qf-index");
+    const allQueryBtns = screen.getAllByRole("button", { name: /^Query$/i });
+    await user.click(allQueryBtns[allQueryBtns.length - 1]);
+    await waitFor(() => expect(screen.getByText("r-fallback")).toBeTruthy());
+    // distance falls back to "-", metadata count falls back to 0
+    expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("0").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("shows toast when query returns no vectors", async () => {
+    mockQuery.mockImplementation((_args: any, opts?: any) => opts?.onSuccess?.({}));
+    const user = userEvent.setup();
+    await navToVectorOps(user, "bucket-q0", "q0-index");
+    const allQueryBtns = screen.getAllByRole("button", { name: /^Query$/i });
+    await user.click(allQueryBtns[allQueryBtns.length - 1]);
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("success", "Query returned 0 results"));
+  });
+
+  it("shows error toast when query fails", async () => {
+    mockQuery.mockImplementation((_args: any, opts?: any) => opts?.onError?.(new Error("query failed")));
+    const user = userEvent.setup();
+    await navToVectorOps(user, "bucket-qe", "qe-index");
+    const allQueryBtns = screen.getAllByRole("button", { name: /^Query$/i });
+    await user.click(allQueryBtns[allQueryBtns.length - 1]);
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("error", "query failed"));
+  });
+
+  it("shows invalid JSON toast for query vector", async () => {
+    const user = userEvent.setup();
+    await navToVectorOps(user, "bucket-qi", "qi-index");
+    fireEvent.change(screen.getByPlaceholderText("[0.1, 0.2, 0.3]"), { target: { value: "not-json" } });
+    const allQueryBtns = screen.getAllByRole("button", { name: /^Query$/i });
+    await user.click(allQueryBtns[allQueryBtns.length - 1]);
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("error", "Invalid JSON for query vector"));
+  });
+
+  it("uses default topK 10 when topK is empty", async () => {
+    const user = userEvent.setup();
+    await navToVectorOps(user, "bucket-tk", "tk-index");
+    fireEvent.change(screen.getByPlaceholderText("10"), { target: { value: "" } });
+    const allQueryBtns = screen.getAllByRole("button", { name: /^Query$/i });
+    await user.click(allQueryBtns[allQueryBtns.length - 1]);
+    await waitFor(() => {
+      expect(mockQuery).toHaveBeenCalledWith(expect.objectContaining({ topK: 10 }), expect.any(Object));
+    });
+  });
+
+  it("shows invalid JSON toast for put vectors", async () => {
+    const user = userEvent.setup();
+    await navToVectorOps(user, "bucket-pi", "pi-index");
+    const ta = screen.getByPlaceholderText('[{"key":"v1","data":{"float32":[0.1,0.2]},"metadata":{"label":"test"}}]');
+    fireEvent.change(ta, { target: { value: "not-json" } });
+    await user.click(screen.getByRole("button", { name: /^Put$/i }));
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("error", "Invalid JSON"));
+  });
+
+  it("shows success toast when vectors are stored", async () => {
+    mockPutVectors.mockImplementation((_args: any, opts?: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    await navToVectorOps(user, "bucket-ps", "ps-index");
+    await user.click(screen.getByRole("button", { name: /^Put$/i }));
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("success", "Vectors stored"));
+  });
+
+  it("shows error toast when putting vectors fails", async () => {
+    mockPutVectors.mockImplementation((_args: any, opts?: any) => opts?.onError?.(new Error("put failed")));
+    const user = userEvent.setup();
+    await navToVectorOps(user, "bucket-pe", "pe-index");
+    await user.click(screen.getByRole("button", { name: /^Put$/i }));
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("error", "put failed"));
+  });
+});
+
+describe("S3VectorsDashboard — error alert fallbacks", () => {
+  it("shows Failed fallback in create bucket modal", () => {
+    createBucketState.isError = true;
+    createBucketState.error = {} as Error;
+    render(<S3VectorsDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("Failed")).toBeTruthy();
+  });
+
+  it("shows Failed fallback in create index modal", () => {
+    createIndexState.isError = true;
+    createIndexState.error = {} as Error;
+    render(<S3VectorsDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("Failed")).toBeTruthy();
+  });
+
+  it("shows Failed fallback in put vectors modal", () => {
+    putVectorsState.isError = true;
+    putVectorsState.error = {} as Error;
+    render(<S3VectorsDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("Failed")).toBeTruthy();
+  });
+
+  it("shows Failed fallback in query modal", () => {
+    queryState.isError = true;
+    queryState.error = {} as Error;
+    render(<S3VectorsDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("Failed")).toBeTruthy();
   });
 });
 
