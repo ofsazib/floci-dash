@@ -77,6 +77,18 @@ describe("useCreateWebACL", () => {
       expect.objectContaining({ method: "POST" })
     );
   });
+
+  it("falls back to REGIONAL when Scope is missing", async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useCreateWebACL(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync({ Name: "acl1" });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["aws", "wafv2", "web-acls", "REGIONAL"] });
+  });
 });
 
 describe("useWebACL", () => {
@@ -149,6 +161,18 @@ describe("useCreateIPSet", () => {
       expect.objectContaining({ method: "POST" })
     );
   });
+
+  it("falls back to REGIONAL when Scope is missing", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useCreateIPSet(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync({ Name: "set1" });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["aws", "wafv2", "ip-sets", "REGIONAL"] });
+  });
 });
 
 describe("useDeleteIPSet", () => {
@@ -184,6 +208,18 @@ describe("useCreateRegexPatternSet", () => {
       expect.objectContaining({ method: "POST" })
     );
   });
+
+  it("falls back to REGIONAL when Scope is missing", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useCreateRegexPatternSet(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync({ Name: "rx1" });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["aws", "wafv2", "regex-pattern-sets", "REGIONAL"] });
+  });
 });
 
 describe("useDeleteRegexPatternSet", () => {
@@ -218,6 +254,18 @@ describe("useCreateRuleGroup", () => {
       "/aws/wafv2/rule-groups",
       expect.objectContaining({ method: "POST" })
     );
+  });
+
+  it("falls back to REGIONAL when Scope is missing", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useCreateRuleGroup(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync({ Name: "rg1" });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["aws", "wafv2", "rule-groups", "REGIONAL"] });
   });
 });
 

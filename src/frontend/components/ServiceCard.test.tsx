@@ -89,4 +89,24 @@ describe("ServiceCard", () => {
     await user.click(starBtn);
     expect(mockNavigate).not.toHaveBeenCalled();
   });
+
+  it("toggles favorite on star Enter keypress", async () => {
+    const user = userEvent.setup();
+    render(<ServiceCard serviceKey="s3" status="running" />);
+    const starBtn = screen.getByRole("button", { name: /add s3 to favorites/i });
+    starBtn.focus();
+    await user.keyboard("{Enter}");
+    expect(mockToggleFavorite).toHaveBeenCalledWith("s3");
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it("toggles favorite on star Space keypress", async () => {
+    const user = userEvent.setup();
+    render(<ServiceCard serviceKey="s3" status="running" />);
+    const starBtn = screen.getByRole("button", { name: /add s3 to favorites/i });
+    starBtn.focus();
+    await user.keyboard(" ");
+    expect(mockToggleFavorite).toHaveBeenCalledWith("s3");
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
 });
