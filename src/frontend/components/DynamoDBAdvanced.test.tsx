@@ -336,4 +336,233 @@ describe("DynamoDBAdvanced", () => {
     expect(screen.getByText("0 B")).toBeTruthy();
   });
 
+  // ─── GSI/LSI fallback cells ─────────────────────────────
+
+  it("renders fallback values for partial GSI/LSI data", () => {
+    render(
+      <DynamoDBAdvanced tableName="t" tableDetail={{
+        name: "t", status: "ACTIVE", keySchema: [],
+        globalSecondaryIndexes: [
+          // no IndexName/IndexStatus/ItemCount/IndexSizeBytes; only a RANGE key
+          { name: "gsi-name", status: "CREATING", KeySchema: [{ AttributeName: "rk", KeyType: "RANGE" }] },
+          {},
+        ],
+        localSecondaryIndexes: [
+          { name: "lsi-name", KeySchema: [{ AttributeName: "sk", KeyType: "RANGE" }] },
+          {},
+        ],
+      }} />,
+      { wrapper: createWrapper() },
+    );
+    expect(screen.getByText("gsi-name")).toBeTruthy();
+    expect(screen.getByText("CREATING")).toBeTruthy();
+    expect(screen.getByText("Unknown")).toBeTruthy();
+    expect(screen.getByText("lsi-name")).toBeTruthy();
+    // missing partition/sort keys, item counts and sizes all render "—"
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(6);
+  });
+
+  // ─── TTL edge cases ─────────────────────────────────────
+
+  it("TTL tab shows spinner while loading", async () => {
+    mockHooks.useDynamoDBTTL.mockReturnValue({ data: undefined, isLoading: true });
+    const user = userEvent.setup();
+    render(<DynamoDBAdvanced tableName="t" tableDetail={{ name: "t", status: "ACTIVE", keySchema: [] }} />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("TTL"));
+    expect(screen.queryByText("Time to Live (TTL)")).toBeFalsy();
+  });
+
+  it("TTL tab renders Unknown status when data is undefined", async () => {
+    mockHooks.useDynamoDBTTL.mockReturnValue({ data: undefined, isLoading: false });
+    const user = userEvent.setup();
+    render(<DynamoDBAdvanced tableName="t" tableDetail={{ name: "t", status: "ACTIVE", keySchema: [] }} />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("TTL"));
+    expect(screen.getByText("Unknown")).toBeTruthy();
+    expect(screen.getByText("TTL disabled")).toBeTruthy();
+  });
+
+  // ─── Tags editing & saving ──────────────────────────────
+
+  it("edits tag inputs and saves all valid tags", async () => {
+    const mockMutate = vi.fn();
+    mockHooks.useDynamoDBUpdateTags.mockReturnValue({ mutate: mockMutate, isPending: false, isError: false });
+    mockHooks.useDynamoDBTableTags.mockReturnValue({
+      data: { tags: [{ Key: "env", Value: "prod" }, { Key: "team", Value: "core" }] },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<DynamoDBAdvanced tableName="t" tableDetail={{ name: "t", status: "ACTIVE", keySchema: [] }} />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Tags"));
+    await waitFor(() => expect(screen.getByDisplayValue("env")).toBeTruthy());
+    const keyInputs = screen.getAllByPlaceholderText("Tag key");
+    const valueInputs = screen.getAllByPlaceholderText("Tag value");
+    expect(keyInputs.length).toBe(2);
+    await user.clear(keyInputs[0]);
+    await user.type(keyInputs[0], "environment");
+    await user.clear(valueInputs[0]);
+    await user.type(valueInputs[0], "production");
+    await user.click(screen.getByText("Save tags"));
+    expect(mockMutate).toHaveBeenCalledWith([
+      { Key: "environment", Value: "production" },
+      { Key: "team", Value: "core" },
+    ]);
+  });
+
+  it("filters out incomplete tag rows on save", async () => {
+    const mockMutate = vi.fn();
+    mockHooks.useDynamoDBUpdateTags.mockReturnValue({ mutate: mockMutate, isPending: false, isError: false });
+    const user = userEvent.setup();
+    render(<DynamoDBAdvanced tableName="t" tableDetail={{ name: "t", status: "ACTIVE", keySchema: [] }} />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Tags"));
+    await user.click(screen.getByText("Add tag"));
+    await user.click(screen.getByText("Add tag"));
+    await user.type(screen.getAllByPlaceholderText("Tag key")[0], "env");
+    await user.type(screen.getAllByPlaceholderText("Tag value")[0], "prod");
+    await user.click(screen.getByText("Save tags"));
+    // The second (still empty) row is filtered out
+    expect(mockMutate).toHaveBeenCalledWith([{ Key: "env", Value: "prod" }]);
+  });
+
+  // ─── Backups edge cases ─────────────────────────────────
+
+  it("Backups shows Unknown status and fallback error with minimal data", async () => {
+    mockHooks.useDynamoDBContinuousBackups.mockReturnValue({ data: undefined, isLoading: false });
+    mockHooks.useDynamoDBUpdateContinuousBackups.mockReturnValue({ mutate: vi.fn(), isError: true, error: {} as Error });
+    const user = userEvent.setup();
+    render(<DynamoDBAdvanced tableName="t" tableDetail={{ name: "t", status: "ACTIVE", keySchema: [] }} />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Backups"));
+    expect(screen.getByText("Unknown")).toBeTruthy();
+    expect(screen.getByText("PITR disabled")).toBeTruthy();
+    expect(screen.getByText("Failed to update continuous backups")).toBeTruthy();
+  });
+
+  // ─── PartiQL single statement edge cases ────────────────
+
+  it("Single Statement shows Query failed fallback error", async () => {
+    mockHooks.useDynamoDBPartiQL.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: true, error: {} as Error });
+    const user = userEvent.setup();
+    render(<DynamoDBAdvanced tableName="t" tableDetail={{ name: "t", status: "ACTIVE", keySchema: [] }} />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("PartiQL"));
+    expect(screen.getByText("Query failed")).toBeTruthy();
+  });
+
+  it("Single Statement shows No results found for empty items", async () => {
+    const mockMutate = vi.fn((_args, opts) => opts?.onSuccess({ items: [], count: 0 }));
+    mockHooks.useDynamoDBPartiQL.mockReturnValue({ mutate: mockMutate, isPending: false, isError: false });
+    const user = userEvent.setup();
+    render(<DynamoDBAdvanced tableName="t" tableDetail={{ name: "t", status: "ACTIVE", keySchema: [] }} />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("PartiQL"));
+    await user.click(screen.getByText("Run query"));
+    await waitFor(() => expect(screen.getByText("No results found.")).toBeTruthy());
+  });
+
+  // ─── PartiQL transaction editor ─────────────────────────
+
+  it("Transaction editor executes statements and renders responses", async () => {
+    const mockMutate = vi.fn((_stmts, opts) =>
+      opts?.onSuccess({ responses: [{ Item: { pk: "123" } }, {}], total: 2 })
+    );
+    mockHooks.useDynamoDBPartiQLTransaction.mockReturnValue({ mutate: mockMutate, isPending: false, isError: false });
+    const user = userEvent.setup();
+    render(<DynamoDBAdvanced tableName="t" tableDetail={{ name: "t", status: "ACTIVE", keySchema: [] }} />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("PartiQL"));
+    await user.click(screen.getByText("Transaction"));
+    await user.click(screen.getByRole("button", { name: /Execute transaction/i }));
+    await waitFor(() => expect(screen.getByText("Transaction result")).toBeTruthy());
+    expect(mockMutate).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ Statement: expect.any(String) })]),
+      expect.objectContaining({ onSuccess: expect.any(Function) })
+    );
+    expect(screen.getByText("Statement 1")).toBeTruthy();
+    expect(screen.getByText("Statement 2")).toBeTruthy();
+    // response with an Item renders JSON; response without one renders Ok
+    expect(screen.getByText(/"pk"/)).toBeTruthy();
+    expect(screen.getAllByText("Ok").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("Transaction editor shows committed message when no responses", async () => {
+    const mockMutate = vi.fn((_stmts, opts) => opts?.onSuccess({ total: 0 }));
+    mockHooks.useDynamoDBPartiQLTransaction.mockReturnValue({ mutate: mockMutate, isPending: false, isError: false });
+    const user = userEvent.setup();
+    render(<DynamoDBAdvanced tableName="t" tableDetail={{ name: "t", status: "ACTIVE", keySchema: [] }} />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("PartiQL"));
+    await user.click(screen.getByText("Transaction"));
+    await user.click(screen.getByRole("button", { name: /Execute transaction/i }));
+    await waitFor(() => expect(screen.getByText("Transaction committed successfully.")).toBeTruthy());
+  });
+
+  it("Transaction editor shows error alert on failure", async () => {
+    mockHooks.useDynamoDBPartiQLTransaction.mockReturnValue({
+      mutate: vi.fn(), isPending: false, isError: true, error: new Error("Txn failed"),
+    });
+    const user = userEvent.setup();
+    render(<DynamoDBAdvanced tableName="t" tableDetail={{ name: "t", status: "ACTIVE", keySchema: [] }} />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("PartiQL"));
+    await user.click(screen.getByText("Transaction"));
+    expect(screen.getByText("Txn failed")).toBeTruthy();
+  });
+
+  it("Transaction editor shows fallback error without message", async () => {
+    mockHooks.useDynamoDBPartiQLTransaction.mockReturnValue({
+      mutate: vi.fn(), isPending: false, isError: true, error: {} as Error,
+    });
+    const user = userEvent.setup();
+    render(<DynamoDBAdvanced tableName="t" tableDetail={{ name: "t", status: "ACTIVE", keySchema: [] }} />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("PartiQL"));
+    await user.click(screen.getByText("Transaction"));
+    expect(screen.getByText("Transaction failed")).toBeTruthy();
+  });
+
+  // ─── PartiQL batch editor ───────────────────────────────
+
+  it("Batch editor executes statements and renders result variants", async () => {
+    const longItem = { data: "x".repeat(150) };
+    const mockMutate = vi.fn((_stmts, opts) =>
+      opts?.onSuccess({
+        total: 3,
+        responses: [
+          { tableName: "t1", item: { id: "1" } },
+          { tableName: "", error: { Code: "E1", Message: "boom" } },
+          { item: longItem },
+        ],
+      })
+    );
+    mockHooks.useDynamoDBPartiQLBatch.mockReturnValue({ mutate: mockMutate, isPending: false, isError: false });
+    const user = userEvent.setup();
+    render(<DynamoDBAdvanced tableName="t" tableDetail={{ name: "t", status: "ACTIVE", keySchema: [] }} />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("PartiQL"));
+    await user.click(screen.getByText("Batch"));
+    await user.click(screen.getByRole("button", { name: /Execute batch/i }));
+    await waitFor(() => expect(screen.getByText("Batch results")).toBeTruthy());
+    expect(mockMutate).toHaveBeenCalled();
+    expect(screen.getByText("t1")).toBeTruthy();
+    expect(screen.getByText("E1: boom")).toBeTruthy();
+    expect(screen.getAllByText("Ok").length).toBeGreaterThanOrEqual(1);
+    // The long item is truncated with an ellipsis appended to the same text node
+    expect(screen.getByText(/…/)).toBeTruthy();
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("Batch editor shows error alert on failure", async () => {
+    mockHooks.useDynamoDBPartiQLBatch.mockReturnValue({
+      mutate: vi.fn(), isPending: false, isError: true, error: new Error("Batch failed"),
+    });
+    const user = userEvent.setup();
+    render(<DynamoDBAdvanced tableName="t" tableDetail={{ name: "t", status: "ACTIVE", keySchema: [] }} />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("PartiQL"));
+    await user.click(screen.getByText("Batch"));
+    expect(screen.getByText("Batch failed")).toBeTruthy();
+  });
+
+  it("Batch editor shows fallback error without message", async () => {
+    mockHooks.useDynamoDBPartiQLBatch.mockReturnValue({
+      mutate: vi.fn(), isPending: false, isError: true, error: {} as Error,
+    });
+    const user = userEvent.setup();
+    render(<DynamoDBAdvanced tableName="t" tableDetail={{ name: "t", status: "ACTIVE", keySchema: [] }} />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("PartiQL"));
+    await user.click(screen.getByText("Batch"));
+    expect(screen.getByText("Batch execution failed")).toBeTruthy();
+  });
+
 });
