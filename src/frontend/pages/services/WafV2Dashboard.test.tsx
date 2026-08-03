@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -25,33 +25,42 @@ const mockLoggingConfigs = vi.fn();
 const mockWebAclForResource = vi.fn();
 const mockResourcesForWebAcl = vi.fn();
 const mockPermissionPolicy = vi.fn();
+const mockRegexSetQuery = vi.fn();
+
+// Controllable state for delete-hook loading states (hoisted so vi.mock can use them)
+const deleteWebAclState = vi.hoisted(() => ({ isPending: false, variables: null as any }));
+const deleteIPSetState = vi.hoisted(() => ({ isPending: false, variables: null as any }));
+const deleteRegexSetState = vi.hoisted(() => ({ isPending: false, variables: null as any }));
+const deleteRuleGroupState = vi.hoisted(() => ({ isPending: false, variables: null as any }));
+const deleteLoggingState = vi.hoisted(() => ({ isPending: false, variables: null as any }));
+const deletePermissionState = vi.hoisted(() => ({ isPending: false, variables: null as any }));
 
 vi.mock("../../hooks/useWafV2", () => ({
   useWebACLs: (...args: any[]) => mockWebAcls(...args),
   useCreateWebACL: () => ({ mutate: mockCreateWebAcl, isPending: false }),
-  useDeleteWebACL: () => ({ mutateAsync: mockDeleteWebAcl, isPending: false, variables: null }),
+  useDeleteWebACL: () => ({ mutateAsync: mockDeleteWebAcl, isPending: deleteWebAclState.isPending, variables: deleteWebAclState.variables }),
   useIPSets: (...args: any[]) => mockIPSets(...args),
   useRegexPatternSets: (...args: any[]) => mockRegexSets(...args),
   useRuleGroups: (...args: any[]) => mockRuleGroups(...args),
   useCreateIPSet: () => ({ mutate: mockCreateIPSetMutate, isPending: false, isError: false, error: null, reset: vi.fn() }),
   useUpdateIPSet: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null, reset: vi.fn() }),
-  useDeleteIPSet: () => ({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, variables: null }),
-  useRegexPatternSet: () => ({ data: null, isLoading: false, isError: false, error: null }),
+  useDeleteIPSet: () => ({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: deleteIPSetState.isPending, variables: deleteIPSetState.variables }),
+  useRegexPatternSet: (...args: any[]) => mockRegexSetQuery(...args),
   useCreateRegexPatternSet: () => ({ mutate: mockCreateRegexSetMutate, isPending: false, isError: false, error: null, reset: vi.fn() }),
   useUpdateRegexPatternSet: () => ({ mutate: mockUpdateRegexSetMutate, isPending: false, isError: false, error: null, reset: vi.fn() }),
-  useDeleteRegexPatternSet: () => ({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, variables: null }),
+  useDeleteRegexPatternSet: () => ({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: deleteRegexSetState.isPending, variables: deleteRegexSetState.variables }),
   useCreateRuleGroup: () => ({ mutate: mockCreateRuleGroupMutate, isPending: false, isError: false, error: null, reset: vi.fn() }),
-  useDeleteRuleGroup: () => ({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, variables: null }),
+  useDeleteRuleGroup: () => ({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: deleteRuleGroupState.isPending, variables: deleteRuleGroupState.variables }),
   useLoggingConfigurations: (...args: any[]) => mockLoggingConfigs(...args),
   usePutLoggingConfiguration: () => ({ mutate: mockPutLoggingMutate, isPending: false, isError: false, error: null, reset: vi.fn() }),
-  useDeleteLoggingConfiguration: () => ({ mutateAsync: mockDeleteLoggingMutateAsync, isPending: false, variables: null }),
+  useDeleteLoggingConfiguration: () => ({ mutateAsync: mockDeleteLoggingMutateAsync, isPending: deleteLoggingState.isPending, variables: deleteLoggingState.variables }),
   useAssociateWebACL: () => ({ mutate: mockAssociateMutate, isPending: false, isError: false, error: null, reset: vi.fn() }),
   useDisassociateWebACL: () => ({ mutate: mockDisassociateMutate, isPending: false, isError: false, error: null, reset: vi.fn() }),
   useGetWebACLForResource: (...args: any[]) => mockWebAclForResource(...args),
   useResourcesForWebACL: (...args: any[]) => mockResourcesForWebAcl(...args),
   usePermissionPolicy: (...args: any[]) => mockPermissionPolicy(...args),
   usePutPermissionPolicy: () => ({ mutate: mockPutPermissionMutate, isPending: false, isError: false, error: null, reset: vi.fn() }),
-  useDeletePermissionPolicy: () => ({ mutateAsync: mockDeletePermissionMutateAsync, isPending: false, variables: null }),
+  useDeletePermissionPolicy: () => ({ mutateAsync: mockDeletePermissionMutateAsync, isPending: deletePermissionState.isPending, variables: deletePermissionState.variables }),
 }));
 
 import { WafV2Dashboard } from "./WafV2Dashboard";
@@ -66,6 +75,19 @@ beforeEach(() => {
   mockWebAclForResource.mockReturnValue({ data: null, isLoading: false });
   mockResourcesForWebAcl.mockReturnValue({ data: null, isLoading: false });
   mockPermissionPolicy.mockReturnValue({ data: null, isLoading: false });
+  mockRegexSetQuery.mockReturnValue({ data: null, isLoading: false, isError: false, error: null });
+  deleteWebAclState.isPending = false;
+  deleteWebAclState.variables = null;
+  deleteIPSetState.isPending = false;
+  deleteIPSetState.variables = null;
+  deleteRegexSetState.isPending = false;
+  deleteRegexSetState.variables = null;
+  deleteRuleGroupState.isPending = false;
+  deleteRuleGroupState.variables = null;
+  deleteLoggingState.isPending = false;
+  deleteLoggingState.variables = null;
+  deletePermissionState.isPending = false;
+  deletePermissionState.variables = null;
 });
 
 describe("WafV2Dashboard — create modals", () => {
@@ -649,5 +671,317 @@ describe("WafV2Dashboard — Edit Regex Set Modal", () => {
     const cancelBtns = screen.getAllByRole("button", { name: /Cancel/i });
     await user.click(cancelBtns[cancelBtns.length - 1]);
     await waitFor(() => expect(mockUpdateRegexSetMutate).not.toHaveBeenCalled());
+  });
+});
+
+describe("WafV2Dashboard — delete loading states", () => {
+  it("shows loading state on web ACL delete while pending", async () => {
+    mockWebAcls.mockReturnValue({
+      data: { webAcls: [{ Name: "pending-acl", Id: "acl-1" }], total: 1 },
+      isLoading: false,
+    });
+    deleteWebAclState.isPending = true;
+    deleteWebAclState.variables = { Name: "pending-acl" };
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("pending-acl")).toBeTruthy());
+    expect(screen.getByRole("button", { name: /Delete pending-acl/i })).toBeDisabled();
+  });
+
+  it("shows loading state on IP set delete while pending", async () => {
+    mockIPSets.mockReturnValue({
+      data: { ipSets: [{ Name: "pending-ip", Id: "ip-1" }], total: 1 },
+      isLoading: false,
+    });
+    deleteIPSetState.isPending = true;
+    deleteIPSetState.variables = { Name: "pending-ip" };
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("pending-ip")).toBeTruthy());
+    expect(screen.getByRole("button", { name: /Delete pending-ip/i })).toBeDisabled();
+  });
+
+  it("shows loading state on regex set delete while pending", async () => {
+    mockRegexSets.mockReturnValue({
+      data: { regexPatternSets: [{ Name: "pending-regex", Id: "re-1" }], total: 1 },
+      isLoading: false,
+    });
+    deleteRegexSetState.isPending = true;
+    deleteRegexSetState.variables = { Name: "pending-regex" };
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("pending-regex")).toBeTruthy());
+    expect(screen.getByRole("button", { name: /Delete pending-regex/i })).toBeDisabled();
+  });
+
+  it("shows loading state on rule group delete while pending", async () => {
+    mockRuleGroups.mockReturnValue({
+      data: { ruleGroups: [{ Name: "pending-rule", Id: "rg-1" }], total: 1 },
+      isLoading: false,
+    });
+    deleteRuleGroupState.isPending = true;
+    deleteRuleGroupState.variables = { Name: "pending-rule" };
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("pending-rule")).toBeTruthy());
+    expect(screen.getByRole("button", { name: /Delete pending-rule/i })).toBeDisabled();
+  });
+
+  it("shows loading state on logging config delete while pending", async () => {
+    mockLoggingConfigs.mockReturnValue({
+      data: {
+        loggingConfigurations: [{ ResourceArn: "arn:...:webacl/log-acl", LogDestinationConfigs: ["arn:..."] }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    deleteLoggingState.isPending = true;
+    deleteLoggingState.variables = { ResourceArn: "arn:...:webacl/log-acl" };
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("arn:...:webacl/log-acl")).toBeTruthy());
+    expect(screen.getByRole("button", { name: /Delete arn:\.\.\.:webacl\/log-acl/i })).toBeDisabled();
+  });
+
+  it("shows loading state on permission policy delete while pending", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    const permInput = screen.getAllByPlaceholderText(/arn:aws:wafv2.*webacl/)[1];
+    await user.type(permInput, "arn:aws:wafv2:us-east-1:123:webacl/perm");
+    deletePermissionState.isPending = true;
+    deletePermissionState.variables = { ResourceArn: "arn:aws:wafv2:us-east-1:123:webacl/perm" };
+    // Re-render so the hook re-reads the hoisted loading state; React preserves
+    // the internal permissionResourceArn state (same component type/position).
+    rerender(<WafV2Dashboard />);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Delete arn:aws:wafv2:us-east-1:123:webacl\/perm/i })).toBeDisabled()
+    );
+  });
+});
+
+describe("WafV2Dashboard — misc edge cases", () => {
+  it("filters web ACLs without crashing when a name is missing", async () => {
+    mockWebAcls.mockReturnValue({
+      data: {
+        webAcls: [{ Name: null, Id: "id-null" }, { Name: "beta-acl", Id: "id-beta" }],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("beta-acl")).toBeTruthy());
+    const filterInput = screen.getByPlaceholderText("Find web ACLs by name");
+    await user.type(filterInput, "beta");
+    await waitFor(() => expect(screen.getByText("beta-acl")).toBeTruthy());
+  });
+
+  it("shows em-dash when logging config lacks destinations field", () => {
+    mockLoggingConfigs.mockReturnValue({
+      data: {
+        loggingConfigurations: [{ ResourceArn: "arn:...", ManagedByFirewallManager: false }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("\u2014")).toBeTruthy();
+  });
+
+  it("rule group capacity falls back to 100 when cleared", async () => {
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create rule group/i);
+    await waitFor(() => expect(screen.getByText("Create Rule Group")).toBeTruthy());
+    const capInput = screen.getByDisplayValue("100");
+    fireEvent.change(capInput, { target: { value: "" } });
+    expect(screen.getByDisplayValue("100")).toBeTruthy();
+    fireEvent.change(screen.getByDisplayValue("100"), { target: { value: "250" } });
+    expect(screen.getByDisplayValue("250")).toBeTruthy();
+  });
+});
+
+describe("WafV2Dashboard — modal saves", () => {
+  it("saves a logging configuration", async () => {
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Configure logging/i);
+    await waitFor(() => expect(screen.getByText("Configure Logging")).toBeTruthy());
+    const arnInputs = screen.getAllByPlaceholderText(/arn:aws:wafv2.*webacl/);
+    await user.type(arnInputs[arnInputs.length - 1], "arn:aws:wafv2:us-east-1:123:webacl/log");
+    await user.type(screen.getByPlaceholderText("arn:aws:logs:..."), "arn:aws:logs:us-east-1:123:log-group:lg");
+    await clickButton(user, /Save/i);
+    await waitFor(() =>
+      expect(mockPutLoggingMutate).toHaveBeenCalledWith(
+        expect.objectContaining({ ResourceArn: "arn:aws:wafv2:us-east-1:123:webacl/log" }),
+        expect.objectContaining({ onSuccess: expect.any(Function) })
+      )
+    );
+  });
+
+  it("logging Save is disabled until both fields are filled", async () => {
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Configure logging/i);
+    await waitFor(() => expect(screen.getByText("Configure Logging")).toBeTruthy());
+    const arnInputs = screen.getAllByPlaceholderText(/arn:aws:wafv2.*webacl/);
+    await user.type(arnInputs[arnInputs.length - 1], "arn:aws:wafv2:us-east-1:123:webacl/log");
+    expect(screen.getByRole("button", { name: /Save/i })).toBeDisabled();
+  });
+
+  it("associates a web ACL to a resource", async () => {
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getAllByRole("button", { name: /Associate Web ACL/i })[0]);
+    await waitFor(() => expect(screen.getByText(/Web ACL ARN/)).toBeTruthy());
+    const arnInputs = screen.getAllByPlaceholderText(/arn:aws:wafv2.*webacl/);
+    await user.type(arnInputs[arnInputs.length - 1], "arn:aws:wafv2:us-east-1:123:webacl/acl");
+    const lbInputs = screen.getAllByPlaceholderText("arn:aws:elasticloadbalancing:...");
+    await user.type(lbInputs[lbInputs.length - 1], "arn:aws:elasticloadbalancing:us-east-1:123:loadbalancer/lb");
+    await clickButton(user, /^Associate$/i);
+    await waitFor(() =>
+      expect(mockAssociateMutate).toHaveBeenCalledWith(
+        expect.objectContaining({ WebACLArn: "arn:aws:wafv2:us-east-1:123:webacl/acl" }),
+        expect.objectContaining({ onSuccess: expect.any(Function) })
+      )
+    );
+  });
+
+  it("Associate is disabled until both fields are filled", async () => {
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getAllByRole("button", { name: /Associate Web ACL/i })[0]);
+    await waitFor(() => expect(screen.getByText(/Web ACL ARN/)).toBeTruthy());
+    const arnInputs = screen.getAllByPlaceholderText(/arn:aws:wafv2.*webacl/);
+    await user.type(arnInputs[arnInputs.length - 1], "arn:aws:wafv2:us-east-1:123:webacl/acl");
+    expect(screen.getByRole("button", { name: /^Associate$/i })).toBeDisabled();
+  });
+
+  it("disassociates a web ACL from a resource", async () => {
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getAllByRole("button", { name: /Disassociate Web ACL/i })[0]);
+    await waitFor(() => expect(screen.getByRole("button", { name: /^Disassociate$/ })).toBeTruthy());
+    const lbInputs = screen.getAllByPlaceholderText("arn:aws:elasticloadbalancing:...");
+    await user.type(lbInputs[lbInputs.length - 1], "arn:aws:elasticloadbalancing:us-east-1:123:loadbalancer/lb");
+    await clickButton(user, /^Disassociate$/i);
+    await waitFor(() =>
+      expect(mockDisassociateMutate).toHaveBeenCalledWith(
+        expect.objectContaining({ ResourceArn: "arn:aws:elasticloadbalancing:us-east-1:123:loadbalancer/lb" }),
+        expect.objectContaining({ onSuccess: expect.any(Function) })
+      )
+    );
+  });
+
+  it("saves a permission policy", async () => {
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Put policy/i);
+    await waitFor(() => expect(screen.getByText("Put Permission Policy")).toBeTruthy());
+    const arnInputs = screen.getAllByPlaceholderText(/arn:aws:wafv2.*webacl/);
+    await user.type(arnInputs[arnInputs.length - 1], "arn:aws:wafv2:us-east-1:123:webacl/perm");
+    // fireEvent.change avoids userEvent parsing the JSON braces as keyboard descriptors
+    fireEvent.change(screen.getByPlaceholderText('{"Version": "2012-10-17", ...}'), {
+      target: { value: '{"Version": "2012-10-17"}' },
+    });
+    await clickButton(user, /Save/i);
+    await waitFor(() =>
+      expect(mockPutPermissionMutate).toHaveBeenCalledWith(
+        expect.objectContaining({ ResourceArn: "arn:aws:wafv2:us-east-1:123:webacl/perm" }),
+        expect.objectContaining({ onSuccess: expect.any(Function) })
+      )
+    );
+  });
+
+  it("permission policy Save is disabled until policy is entered", async () => {
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Put policy/i);
+    await waitFor(() => expect(screen.getByText("Put Permission Policy")).toBeTruthy());
+    const arnInputs = screen.getAllByPlaceholderText(/arn:aws:wafv2.*webacl/);
+    await user.type(arnInputs[arnInputs.length - 1], "arn:aws:wafv2:us-east-1:123:webacl/perm");
+    expect(screen.getByRole("button", { name: /Save/i })).toBeDisabled();
+  });
+});
+
+describe("WafV2Dashboard — Edit Regex Set data states", () => {
+  it("loads and saves the regex set from the query", async () => {
+    mockRegexSets.mockReturnValue({
+      data: { regexPatternSets: [{ Name: "my-regex", Id: "re-1", Description: "Test" }], total: 1 },
+      isLoading: false,
+    });
+    mockRegexSetQuery.mockReturnValue({
+      data: {
+        regexPatternSet: {
+          Description: "SQL patterns",
+          RegularExpressionList: [{ RegexString: ".*union.*" }, { RegexString: ".*select.*" }],
+          LockToken: "tok-1",
+        },
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-regex")).toBeTruthy());
+    await user.click(screen.getAllByRole("button", { name: /Edit/i })[0]);
+    await waitFor(() => expect(screen.getByDisplayValue("SQL patterns")).toBeTruthy());
+    const textarea = screen.getByPlaceholderText(".*union.*select.*") as HTMLTextAreaElement;
+    expect(textarea.value).toBe(".*union.*\n.*select.*");
+    await clickButton(user, /Save/i);
+    await waitFor(() =>
+      expect(mockUpdateRegexSetMutate).toHaveBeenCalledWith(
+        expect.objectContaining({ Id: "re-1", Name: "my-regex", LockToken: "tok-1", Description: "SQL patterns" }),
+        expect.objectContaining({ onSuccess: expect.any(Function) })
+      )
+    );
+  });
+
+  it("handles minimal regex set data and saves without description", async () => {
+    mockRegexSets.mockReturnValue({
+      data: { regexPatternSets: [{ Name: "my-regex", Id: "re-1" }], total: 1 },
+      isLoading: false,
+    });
+    mockRegexSetQuery.mockReturnValue({
+      data: { regexPatternSet: { LockToken: "tok-2" } },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-regex")).toBeTruthy());
+    await user.click(screen.getAllByRole("button", { name: /Edit/i })[0]);
+    await waitFor(() => expect(screen.getByPlaceholderText(".*union.*select.*")).toBeTruthy());
+    await clickButton(user, /Save/i);
+    await waitFor(() =>
+      expect(mockUpdateRegexSetMutate).toHaveBeenCalledWith(
+        expect.objectContaining({ Description: undefined, RegularExpressionList: [] }),
+        expect.objectContaining({ onSuccess: expect.any(Function) })
+      )
+    );
+  });
+
+  it("shows a spinner while the regex set query is loading", async () => {
+    mockRegexSets.mockReturnValue({
+      data: { regexPatternSets: [{ Name: "my-regex", Id: "re-1" }], total: 1 },
+      isLoading: false,
+    });
+    mockRegexSetQuery.mockReturnValue({ data: null, isLoading: true, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-regex")).toBeTruthy());
+    await user.click(screen.getAllByRole("button", { name: /Edit/i })[0]);
+    await waitFor(() => expect(screen.getByText(/Edit Regex Pattern Set/)).toBeTruthy());
+    expect(screen.queryByPlaceholderText(".*union.*select.*")).toBeFalsy();
+  });
+
+  it("shows an error alert when the regex set query fails", async () => {
+    mockRegexSets.mockReturnValue({
+      data: { regexPatternSets: [{ Name: "my-regex", Id: "re-1" }], total: 1 },
+      isLoading: false,
+    });
+    mockRegexSetQuery.mockReturnValue({ data: null, isLoading: false, isError: true, error: new Error("x") });
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-regex")).toBeTruthy());
+    await user.click(screen.getAllByRole("button", { name: /Edit/i })[0]);
+    await waitFor(() => expect(screen.getByText("Failed to load regex pattern set.")).toBeTruthy());
   });
 });
