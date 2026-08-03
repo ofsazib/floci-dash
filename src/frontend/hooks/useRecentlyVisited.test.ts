@@ -16,6 +16,16 @@ describe("loadRecentlyVisited", () => {
     expect(recentlyVisited).toEqual([]);
   });
 
+  it("loads stored items from localStorage at store creation", async () => {
+    // loadRecentlyVisited() runs once at module import time, so we must
+    // reset modules and re-import with populated localStorage to exercise
+    // the `if (raw)` truthy branch.
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(["s3", "lambda"]));
+    vi.resetModules();
+    const { useRecentlyVisited: reloaded } = await import("./useRecentlyVisited");
+    expect(reloaded.getState().recentlyVisited).toEqual(["s3", "lambda"]);
+  });
+
   it("returns empty array when JSON is invalid", () => {
     localStorage.setItem(STORAGE_KEY, "not-json");
     useRecentlyVisited.setState({ recentlyVisited: [] });
