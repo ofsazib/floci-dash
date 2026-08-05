@@ -66,6 +66,22 @@ const mockDeleteVolume = vi.fn();
 const mockDeleteLaunchTemplate = vi.fn();
 const mockReleaseElasticIp = vi.fn();
 
+// Hoisted delete/action states for loading/error branches
+const deleteVpcState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
+const deleteSubnetState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
+const deleteSgState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
+const deleteKeyPairState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
+const deleteIgwState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
+const deleteRtState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
+const deleteNatState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
+const deleteVolState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
+const deleteLtState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
+const terminateInstanceState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
+const deleteFlowLogState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
+const deleteAclState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
+const createFlowLogState = vi.hoisted(() => ({ isPending: false, isError: false, error: null as Error | null }));
+const createAclState = vi.hoisted(() => ({ isPending: false, isError: false, error: null as Error | null }));
+
 vi.mock("../hooks/useEC2", () => ({
   useEC2Instances: (...args: any[]) => mockInstances(...args),
   useEC2KeyPairs: (...args: any[]) => mockKeyPairs(...args),
@@ -86,30 +102,30 @@ vi.mock("../hooks/useEC2", () => ({
   useEC2StartInstance: () => ({ mutate: mockStartInstance, isPending: false }),
   useEC2StopInstance: () => ({ mutate: mockStopInstance, isPending: false }),
   useEC2RebootInstance: () => ({ mutate: mockRebootInstance, isPending: false }),
-  useEC2TerminateInstance: () => ({ mutateAsync: mockTerminateInstance, isPending: false }),
+  useEC2TerminateInstance: () => ({ mutateAsync: mockTerminateInstance, ...terminateInstanceState }),
   useEC2CreateVpc: () => ({ mutate: mockCreateVpc, isPending: false }),
-  useEC2DeleteVpc: () => ({ mutateAsync: mockDeleteVpc, isPending: false }),
+  useEC2DeleteVpc: () => ({ mutateAsync: mockDeleteVpc, ...deleteVpcState }),
   useEC2CreateSubnet: () => ({ mutate: mockCreateSubnet, isPending: false }),
-  useEC2DeleteSubnet: () => ({ mutateAsync: mockDeleteSubnet, isPending: false }),
+  useEC2DeleteSubnet: () => ({ mutateAsync: mockDeleteSubnet, ...deleteSubnetState }),
   useEC2CreateSecurityGroup: () => ({ mutate: mockCreateSecurityGroup, isPending: false }),
-  useEC2DeleteSecurityGroup: () => ({ mutateAsync: mockDeleteSecurityGroup, isPending: false }),
+  useEC2DeleteSecurityGroup: () => ({ mutateAsync: mockDeleteSecurityGroup, ...deleteSgState }),
   useEC2AuthorizeIngress: () => ({ mutate: mockAuthorizeIngress, isPending: false }),
   useEC2RevokeIngress: () => ({ mutate: mockRevokeIngress, isPending: false }),
   useEC2CreateKeyPair: () => ({ mutate: mockCreateKeyPair, isPending: false }),
   useEC2ImportKeyPair: () => ({ mutate: mockImportKeyPair, isPending: false }),
-  useEC2DeleteKeyPair: () => ({ mutateAsync: mockDeleteKeyPair, isPending: false }),
+  useEC2DeleteKeyPair: () => ({ mutateAsync: mockDeleteKeyPair, ...deleteKeyPairState }),
   useEC2CreateInternetGateway: () => ({ mutate: mockCreateInternetGateway, isPending: false }),
-  useEC2DeleteInternetGateway: () => ({ mutateAsync: mockDeleteInternetGateway, isPending: false }),
+  useEC2DeleteInternetGateway: () => ({ mutateAsync: mockDeleteInternetGateway, ...deleteIgwState }),
   useEC2AttachInternetGateway: () => ({ mutate: mockAttachInternetGateway, isPending: false }),
   useEC2DetachInternetGateway: () => ({ mutate: mockDetachInternetGateway, isPending: false }),
   useEC2CreateRouteTable: () => ({ mutate: mockCreateRouteTable, isPending: false }),
-  useEC2DeleteRouteTable: () => ({ mutateAsync: mockDeleteRouteTable, isPending: false }),
+  useEC2DeleteRouteTable: () => ({ mutateAsync: mockDeleteRouteTable, ...deleteRtState }),
   useEC2CreateNatGateway: () => ({ mutate: mockCreateNatGateway, isPending: false }),
-  useEC2DeleteNatGateway: () => ({ mutateAsync: mockDeleteNatGateway, isPending: false }),
+  useEC2DeleteNatGateway: () => ({ mutateAsync: mockDeleteNatGateway, ...deleteNatState }),
   useEC2CreateVolume: () => ({ mutate: mockCreateVolume, isPending: false }),
-  useEC2DeleteVolume: () => ({ mutateAsync: mockDeleteVolume, isPending: false }),
+  useEC2DeleteVolume: () => ({ mutateAsync: mockDeleteVolume, ...deleteVolState }),
   useEC2CreateLaunchTemplate: () => ({ mutate: mockCreateLaunchTemplate, isPending: false }),
-  useEC2DeleteLaunchTemplate: () => ({ mutateAsync: mockDeleteLaunchTemplate, isPending: false }),
+  useEC2DeleteLaunchTemplate: () => ({ mutateAsync: mockDeleteLaunchTemplate, ...deleteLtState }),
   useEC2AllocateElasticIp: () => ({ mutate: mockAllocateElasticIp, isPending: false }),
   useEC2ReleaseElasticIp: () => ({ mutateAsync: mockReleaseElasticIp, isPending: false }),
   useEC2ModifyVpc: () => ({ mutate: vi.fn(), isPending: false }),
@@ -135,14 +151,14 @@ const createAclEntryState = vi.hoisted(() => ({
 
 vi.mock("../hooks/useEC2FlowLogs", () => ({
   useEC2FlowLogs: (...args: any[]) => mockFlowLogs(...args),
-  useEC2CreateFlowLog: () => ({ mutate: mockCreateFlowLog, isPending: false }),
-  useEC2DeleteFlowLog: () => ({ mutateAsync: mockDeleteFlowLog, isPending: false }),
+  useEC2CreateFlowLog: () => ({ mutate: mockCreateFlowLog, ...createFlowLogState }),
+  useEC2DeleteFlowLog: () => ({ mutateAsync: mockDeleteFlowLog, ...deleteFlowLogState }),
 }));
 
 vi.mock("../hooks/useEC2NetworkAcls", () => ({
   useEC2NetworkAcls: (...args: any[]) => mockNetworkAcls(...args),
-  useEC2CreateNetworkAcl: () => ({ mutate: mockCreateNetworkAcl, isPending: false }),
-  useEC2DeleteNetworkAcl: () => ({ mutateAsync: mockDeleteNetworkAcl, isPending: false }),
+  useEC2CreateNetworkAcl: () => ({ mutate: mockCreateNetworkAcl, ...createAclState }),
+  useEC2DeleteNetworkAcl: () => ({ mutateAsync: mockDeleteNetworkAcl, ...deleteAclState }),
   useEC2CreateNetworkAclEntry: () => ({
     mutate: mockCreateAclEntry,
     isPending: createAclEntryState.isPending,
@@ -156,6 +172,24 @@ vi.mock("../hooks/useEC2NetworkAcls", () => ({
 // ─── Static imports (after mock) ───────────────────────
 
 import EC2Page, { EC2InstanceList, EC2LaunchTemplateList } from "./EC2Page";
+
+// Global reset for all hoisted states
+beforeEach(() => {
+  deleteVpcState.isPending = false; deleteVpcState.variables = null;
+  deleteSubnetState.isPending = false; deleteSubnetState.variables = null;
+  deleteSgState.isPending = false; deleteSgState.variables = null;
+  deleteKeyPairState.isPending = false; deleteKeyPairState.variables = null;
+  deleteIgwState.isPending = false; deleteIgwState.variables = null;
+  deleteRtState.isPending = false; deleteRtState.variables = null;
+  deleteNatState.isPending = false; deleteNatState.variables = null;
+  deleteVolState.isPending = false; deleteVolState.variables = null;
+  deleteLtState.isPending = false; deleteLtState.variables = null;
+  terminateInstanceState.isPending = false; terminateInstanceState.variables = null;
+  deleteFlowLogState.isPending = false; deleteFlowLogState.variables = null;
+  deleteAclState.isPending = false; deleteAclState.variables = null;
+  createFlowLogState.isPending = false; createFlowLogState.isError = false; createFlowLogState.error = null;
+  createAclState.isPending = false; createAclState.isError = false; createAclState.error = null;
+});
 
 // ─── Tests ─────────────────────────────────────────────
 
@@ -2266,5 +2300,205 @@ describe("EC2InstanceDetail — CommandBox copy", () => {
     // setCopied(true) and the aria-label flips from "Copy to clipboard" to "Copied".
     await user.click(screen.getAllByRole("button", { name: /Copy to clipboard/i })[0]);
     await waitFor(() => expect(screen.getByRole("button", { name: /Copied/i })).toBeTruthy());
+  });
+});
+
+// ─── Delete Loading States (bulk hoisted state coverage) ─
+
+describe("EC2Page — delete loading states", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setupDefaults();
+  });
+
+  it("shows delete VPC in loading state", async () => {
+    deleteVpcState.isPending = true;
+    deleteVpcState.variables = "vpc-1";
+    mockVpcs.mockReturnValue({ data: { vpcs: [{ vpcId: "vpc-1", id: "vpc-1", cidrBlock: "10.0.0.0/16", isDefault: false, state: "available" }], total: 1 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /VPCs/i);
+    await waitFor(() => expect(screen.getByText("vpc-1")).toBeTruthy());
+  });
+
+  it("shows delete Subnet in loading state", async () => {
+    deleteSubnetState.isPending = true;
+    deleteSubnetState.variables = "subnet-1";
+    mockSubnets.mockReturnValue({ data: { subnets: [{ id: "subnet-1", subnetId: "subnet-1", vpcId: "vpc-1", cidrBlock: "10.0.1.0/24", state: "available", availabilityZone: "us-east-1a" }], total: 1 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Subnets/i);
+    await waitFor(() => expect(screen.getByText("subnet-1")).toBeTruthy());
+  });
+
+  it("shows delete Security Group in loading state", async () => {
+    deleteSgState.isPending = true;
+    deleteSgState.variables = "sg-1";
+    mockSecurityGroups.mockReturnValue({ data: { securityGroups: [{ id: "sg-1", groupId: "sg-1", name: "test-sg", description: "test", vpcId: "vpc-1" }], total: 1 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Security Groups/i);
+    await waitFor(() => expect(screen.getByText("test-sg")).toBeTruthy());
+  });
+
+  it("shows delete Key Pair in loading state", async () => {
+    deleteKeyPairState.isPending = true;
+    deleteKeyPairState.variables = "my-key";
+    mockKeyPairs.mockReturnValue({ data: { keyPairs: [{ name: "my-key", keyFingerprint: "aa:bb", keyType: "rsa" }], total: 1 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Key Pairs/i);
+    await waitFor(() => expect(screen.getByText("my-key")).toBeTruthy());
+  });
+
+  it("shows delete Internet Gateway in loading state", async () => {
+    deleteIgwState.isPending = true;
+    deleteIgwState.variables = "igw-1";
+    mockInternetGateways.mockReturnValue({ data: { internetGateways: [{ id: "igw-1", internetGatewayId: "igw-1", attachments: [{ vpcId: "vpc-1" }] }], total: 1 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Internet Gateways/i);
+    await waitFor(() => expect(screen.getByText("igw-1")).toBeTruthy());
+  });
+
+  it("shows delete Route Table in loading state", async () => {
+    deleteRtState.isPending = true;
+    deleteRtState.variables = "rtb-1";
+    mockRouteTables.mockReturnValue({ data: { routeTables: [{ id: "rtb-1", routeTableId: "rtb-1", vpcId: "vpc-1", routes: [] }], total: 1 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Route Tables/i);
+    await waitFor(() => expect(screen.getByText("rtb-1")).toBeTruthy());
+  });
+
+  it("shows delete NAT Gateway in loading state", async () => {
+    deleteNatState.isPending = true;
+    deleteNatState.variables = "nat-1";
+    mockNatGateways.mockReturnValue({ data: { natGateways: [{ id: "nat-1", natGatewayId: "nat-1", subnetId: "subnet-1", vpcId: "vpc-1", state: "available" }], total: 1 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /NAT Gateways/i);
+    await waitFor(() => expect(screen.getByText("nat-1")).toBeTruthy());
+  });
+
+  it("shows delete Volume in loading state", async () => {
+    deleteVolState.isPending = true;
+    deleteVolState.variables = "vol-1";
+    mockVolumes.mockReturnValue({ data: { volumes: [{ id: "vol-1", size: 10, volumeType: "gp2", state: "available", az: "us-east-1a", attachments: [] }], total: 1 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Volumes/i);
+    await waitFor(() => expect(screen.getByText("vol-1")).toBeTruthy());
+  });
+
+  it("shows delete Launch Template in loading state", async () => {
+    deleteLtState.isPending = true;
+    deleteLtState.variables = "lt-1";
+    mockLaunchTemplates.mockReturnValue({ data: { launchTemplates: [{ id: "lt-1", name: "my-template", defaultVersion: 1, latestVersion: 1, createdAt: "2025-01-01" }], total: 1 }, isLoading: false });
+    mockAmis.mockReturnValue({ data: { images: [] }, isLoading: false });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Launch Templates/i);
+    await waitFor(() => expect(screen.getByText("my-template")).toBeTruthy());
+  });
+});
+
+// ─── Volume Status Ternaries ───────────────────────────
+
+describe("EC2Page — volume status indicators", () => {
+  beforeEach(() => { vi.clearAllMocks(); setupDefaults(); });
+
+  it("shows success status for available volume", async () => {
+    mockVolumes.mockReturnValue({ data: { volumes: [{ id: "vol-avail", size: 10, volumeType: "gp2", state: "available", az: "us-east-1a", attachments: [] }], total: 1 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Volumes/i);
+    await waitFor(() => expect(screen.getByText("available")).toBeTruthy());
+  });
+
+  it("shows in-progress status for in-use volume", async () => {
+    mockVolumes.mockReturnValue({ data: { volumes: [{ id: "vol-inuse", size: 20, volumeType: "gp3", state: "in-use", az: "us-east-1b", attachments: [{ instanceId: "i-1", deviceName: "/dev/xvda" }] }], total: 1 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Volumes/i);
+    await waitFor(() => expect(screen.getByText("in-use")).toBeTruthy());
+  });
+
+  it("shows warning status for error volume", async () => {
+    mockVolumes.mockReturnValue({ data: { volumes: [{ id: "vol-err", size: 5, volumeType: "standard", state: "error", az: "us-east-1c", attachments: [] }], total: 1 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Volumes/i);
+    await waitFor(() => expect(screen.getByText("error")).toBeTruthy());
+  });
+});
+
+// ─── Flow Logs Create Error + Delete Loading ───────────
+
+describe("EC2Page — flow log edge cases", () => {
+  beforeEach(() => { vi.clearAllMocks(); setupDefaults(); });
+
+  it("shows create flow log error alert", async () => {
+    createFlowLogState.isError = true;
+    createFlowLogState.error = new Error("S3 bucket not found");
+    mockFlowLogs.mockReturnValue({ data: { flowLogs: [], total: 0 }, isLoading: false });
+    mockVpcs.mockReturnValue({ data: { vpcs: [] }, isLoading: false });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Flow Logs/i);
+    await clickButton(user, /Create Flow Log/i);
+    await waitFor(() => expect(screen.getByText("S3 bucket not found")).toBeTruthy());
+  });
+
+  it("shows delete flow log in loading state", async () => {
+    deleteFlowLogState.isPending = true;
+    deleteFlowLogState.variables = "fl-1";
+    mockFlowLogs.mockReturnValue({ data: { flowLogs: [{ flowLogId: "fl-1", resourceId: "vpc-1", resourceType: "VPC", trafficType: "ALL", logDestinationType: "s3", flowLogStatus: "ACTIVE" }], total: 1 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Flow Logs/i);
+    await waitFor(() => expect(screen.getByText("fl-1")).toBeTruthy());
+  });
+});
+
+// ─── Network ACLs Create Error + Delete Loading ─────────
+
+describe("EC2Page — network ACL edge cases", () => {
+  beforeEach(() => { vi.clearAllMocks(); setupDefaults(); });
+
+  it("shows delete ACL in loading state", async () => {
+    deleteAclState.isPending = true;
+    deleteAclState.variables = "acl-1";
+    mockNetworkAcls.mockReturnValue({ data: { networkAcls: [{ networkAclId: "acl-1", id: "acl-1", vpcId: "vpc-1", isDefault: false, entries: [], associations: [] }], total: 1 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Network ACLs/i);
+    await waitFor(() => expect(screen.getByText("acl-1")).toBeTruthy());
+  });
+});
+
+// ─── Volumes Create Edge ───────────────────────────────
+
+describe("EC2Page — volumes create", () => {
+  beforeEach(() => { vi.clearAllMocks(); setupDefaults(); });
+
+  it("creates volume with size and AZ", async () => {
+    mockVolumes.mockReturnValue({ data: { volumes: [], total: 0 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Volumes/i);
+    await clickButton(user, /Create Volume/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("us-east-1a")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("us-east-1a"), "us-east-1a");
+    const sizeInput = screen.getAllByRole("spinbutton")[0];
+    await user.clear(sizeInput);
+    await user.type(sizeInput, "20");
+    await clickButton(user, /^Create$/);
+    await waitFor(() => {
+      expect(mockCreateVolume).toHaveBeenCalledWith(
+        expect.objectContaining({ availabilityZone: "us-east-1a", size: 20 }),
+        expect.any(Object)
+      );
+    });
   });
 });
