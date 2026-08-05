@@ -9,10 +9,13 @@ const mockTables = vi.fn();
 const mockCreateTableMutate = vi.fn();
 const mockDeleteTableMutateAsync = vi.fn();
 
+const deleteTableState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
+const createTableState = vi.hoisted(() => ({ isPending: false, isError: false, error: null as Error | null }));
+
 vi.mock("../../hooks/useDynamoDB", () => ({
   useDynamoDBTables: (...args: any[]) => mockTables(...args),
-  useDynamoDBCreateTable: () => ({ mutate: mockCreateTableMutate, isPending: false, isError: false, error: null }),
-  useDynamoDBDeleteTable: () => ({ mutateAsync: mockDeleteTableMutateAsync, isPending: false, variables: null }),
+  useDynamoDBCreateTable: () => ({ mutate: mockCreateTableMutate, ...createTableState }),
+  useDynamoDBDeleteTable: () => ({ mutateAsync: mockDeleteTableMutateAsync, ...deleteTableState }),
 }));
 
 vi.mock("../../components/DeleteButton", () => ({
@@ -32,6 +35,11 @@ import { DynamoDBTables } from "./DynamoDBTables";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  deleteTableState.isPending = false;
+  deleteTableState.variables = null;
+  createTableState.isPending = false;
+  createTableState.isError = false;
+  createTableState.error = null;
   mockTables.mockReturnValue({
     data: { tables: ["my-table", "other-table"], total: 2 },
     isLoading: false,
@@ -152,5 +160,92 @@ describe("DynamoDBTables — filter", () => {
       expect(screen.getByText("my-table")).toBeTruthy();
       expect(screen.queryByText("other-table")).toBeNull();
     });
+  });
+});
+
+// ─── Error & edge cases ─────────────────────────────────
+
+describe("DynamoDBTables — error fallbacks", () => {
+  it("shows generic error when isError true with null error", () => {
+    mockTables.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: null,
+    });
+    render(<DynamoDBTables />, { wrapper: createWrapper() });
+    expect(screen.getByText("Failed to load tables")).toBeTruthy();
+  });
+
+  it("shows create error alert with message", async () => {
+    const user = userEvent.setup();
+    createTableState.isError = true;
+    createTableState.error = new Error("Table already exists");
+    render(<DynamoDBTables />, { wrapper: createWrapper() });
+    const createButtons = screen.getAllByRole("button", { name: /Create Table/i });
+    await user.click(createButtons[0]);
+    await waitFor(() => {
+      expect(screen.getByText("Table already exists")).toBeTruthy();
+    });
+  });
+
+  it("shows generic create error when isError true with null error", async () => {
+    const user = userEvent.setup();
+    createTableState.isError = true;
+    createTableState.error = null;
+    render(<DynamoDBTables />, { wrapper: createWrapper() });
+    const createButtons = screen.getAllByRole("button", { name: /Create Table/i });
+    await user.click(createButtons[0]);
+    await waitFor(() => {
+      expect(screen.getByText("Failed to create table")).toBeTruthy();
+    });
+  });
+});
+
+// ─── Create with range key ──────────────────────────────
+
+describe("DynamoDBTables — create with range key", () => {
+  it("fills range key and submits with rangeKey in payload", async () => {
+    const user = userEvent.setup();
+    render(<DynamoDBTables />, { wrapper: createWrapper() });
+    const createButtons = screen.getAllByRole("button", { name: /Create Table/i });
+    await user.click(createButtons[0]);
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("my-table")).toBeTruthy();
+    });
+    await user.type(screen.getByPlaceholderText("my-table"), "test-table");
+    await user.type(screen.getByPlaceholderText("pk"), "id");
+    await user.type(screen.getByPlaceholderText("sk"), "sortKey");
+    const submit = screen.getAllByRole("button", { name: /Create table/i });
+    await user.click(submit[submit.length - 1]);
+    expect(mockCreateTableMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "test-table",
+        hashKey: "id",
+        rangeKey: "sortKey",
+      }),
+      expect.any(Object)
+    );
+  });
+});
+
+// ─── Delete loading state ───────────────────────────────
+
+describe("DynamoDBTables — delete loading", () => {
+  it("renders delete buttons when isPending with matching variables", () => {
+    deleteTableState.isPending = true;
+    deleteTableState.variables = "my-table";
+    render(<DynamoDBTables />, { wrapper: createWrapper() });
+    expect(screen.getByText("my-table")).toBeTruthy();
+    // Two tables = two delete buttons
+    expect(screen.getAllByTestId("delete-button")).toHaveLength(2);
+  });
+
+  it("renders delete buttons when isPending with non-matching variables", () => {
+    deleteTableState.isPending = true;
+    deleteTableState.variables = "other-table";
+    render(<DynamoDBTables />, { wrapper: createWrapper() });
+    expect(screen.getByText("my-table")).toBeTruthy();
+    expect(screen.getAllByTestId("delete-button")).toHaveLength(2);
   });
 });

@@ -149,4 +149,57 @@ describe("Settings", () => {
     render(<Settings />, { wrapper: createWrapper() });
     expect(screen.getByDisplayValue("http://localhost:4566")).toBeTruthy();
   });
+
+  // ─── Refresh label branches ──────────────────────────
+
+  it("shows 5 seconds label when refreshInterval is 5000", () => {
+    mockUseSettings.mockReturnValue({
+      darkMode: false,
+      refreshInterval: 5000,
+      flociEndpoint: "http://localhost:4566",
+      toggleDarkMode: mockToggleDarkMode,
+      setRefreshInterval: mockSetRefreshInterval,
+      setFlociEndpoint: mockSetFlociEndpoint,
+    });
+    render(<Settings />, { wrapper: createWrapper() });
+    expect(screen.getByText("5 seconds")).toBeTruthy();
+  });
+
+  it("shows 30 seconds label when refreshInterval is 30000", () => {
+    mockUseSettings.mockReturnValue({
+      darkMode: false,
+      refreshInterval: 30000,
+      flociEndpoint: "http://localhost:4566",
+      toggleDarkMode: mockToggleDarkMode,
+      setRefreshInterval: mockSetRefreshInterval,
+      setFlociEndpoint: mockSetFlociEndpoint,
+    });
+    render(<Settings />, { wrapper: createWrapper() });
+    expect(screen.getByText("30 seconds")).toBeTruthy();
+  });
+
+  it("shows Off label when refreshInterval is 0", () => {
+    mockUseSettings.mockReturnValue({
+      darkMode: false,
+      refreshInterval: 0,
+      flociEndpoint: "http://localhost:4566",
+      toggleDarkMode: mockToggleDarkMode,
+      setRefreshInterval: mockSetRefreshInterval,
+      setFlociEndpoint: mockSetFlociEndpoint,
+    });
+    render(<Settings />, { wrapper: createWrapper() });
+    expect(screen.getByText("Off")).toBeTruthy();
+  });
+
+  // ─── Endpoint save non-Error rejection ───────────────
+
+  it("shows generic error when save rejects with non-Error", async () => {
+    mockApi.mockRejectedValueOnce("Network failure");
+    const user = userEvent.setup();
+    render(<Settings />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Save endpoint"));
+    await waitFor(() => {
+      expect(screen.getByText(/Failed to update endpoint/)).toBeTruthy();
+    });
+  });
 });
