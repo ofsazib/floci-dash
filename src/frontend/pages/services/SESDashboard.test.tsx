@@ -1682,3 +1682,137 @@ describe("SESDashboard — sending, tracking, reputation, delivery", () => {
     expect(screen.getAllByRole("button", { name: /^Save$/i }).length).toBeGreaterThanOrEqual(1);
   });
 });
+
+// ─── || [] fallback branches ──────────────────────────
+
+describe("SESDashboard — fallback rendering", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockIdentities.mockReturnValue({ data: { identities: [], total: 0 }, isLoading: false, isError: false, error: null });
+    mockVerifiedEmails.mockReturnValue({ data: { emails: [], total: 0 }, isLoading: false, isError: false, error: null });
+    mockConfigSets.mockReturnValue({ data: { configurationSets: [], total: 0 }, isLoading: false, isError: false, error: null });
+    mockDescribeConfigSet.mockReturnValue({ data: null, isLoading: false, isError: false, error: null });
+  });
+
+  it("renders with undefined identities (covers || [] right side)", () => {
+    mockIdentities.mockReturnValue({ data: undefined, isLoading: false, isError: false, error: null });
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("No email identities")).toBeTruthy();
+  });
+
+  it("renders config sets with undefined data (covers || [] right side)", () => {
+    mockIdentities.mockReturnValue({ data: { identities: [{ identity: "test@example.com", verificationStatus: "Success", dkimEnabled: true }], total: 1 }, isLoading: false });
+    mockConfigSets.mockReturnValue({ data: undefined, isLoading: false, isError: false, error: null });
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("No configuration sets found")).toBeTruthy();
+  });
+});
+
+// ─── Config set delete loading ─────────────────────────
+
+describe("SESDashboard — config set delete loading", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockIdentities.mockReturnValue({ data: { identities: [], total: 0 }, isLoading: false });
+    mockVerifiedEmails.mockReturnValue({ data: { emails: [], total: 0 }, isLoading: false });
+    createConfigSetState.isPending = false;
+  });
+
+  it("shows delete config set in loading state", () => {
+    deleteConfigSetState.isPending = true;
+    deleteConfigSetState.variables = "my-config-set";
+    mockConfigSets.mockReturnValue({ data: { configurationSets: [{ Name: "my-config-set" }], total: 1 }, isLoading: false });
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("my-config-set")).toBeTruthy();
+  });
+});
+
+// ─── Event dest edge cases ─────────────────────────────
+
+describe("SESDashboard — event dest edge cases", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockIdentities.mockReturnValue({ data: { identities: [], total: 0 }, isLoading: false });
+    mockVerifiedEmails.mockReturnValue({ data: { emails: [], total: 0 }, isLoading: false });
+    mockConfigSets.mockReturnValue({ data: { configurationSets: [{ Name: "cs-1" }], total: 1 }, isLoading: false });
+  });
+
+  it("shows empty event destinations message", async () => {
+    const user = userEvent.setup();
+    mockDescribeConfigSet.mockReturnValue({ data: { name: "cs-1", eventDestinations: [] }, isLoading: false });
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("cs-1")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /View/i }));
+    await waitFor(() => expect(screen.getByText("No event destinations configured.")).toBeTruthy());
+  });
+
+  it("shows event dest without MatchingEventTypes", async () => {
+    const user = userEvent.setup();
+    mockDescribeConfigSet.mockReturnValue({
+      data: { name: "cs-1", eventDestinations: [{ Name: "ed-1", Enabled: true }] },
+      isLoading: false,
+    });
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("cs-1")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /View/i }));
+    await waitFor(() => expect(screen.getByText("ed-1")).toBeTruthy());
+  });
+
+  it("renders with undefined eventDestinations (covers || [] right side)", async () => {
+    const user = userEvent.setup();
+    mockDescribeConfigSet.mockReturnValue({ data: { name: "cs-1" }, isLoading: false });
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("cs-1")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /View/i }));
+    await waitFor(() => expect(screen.getByText("No event destinations configured.")).toBeTruthy());
+  });
+});
+
+// ─── Notification topic save + tracking/delivery ────────
+
+describe("SESDashboard — notification + tracking + delivery", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockIdentities.mockReturnValue({ data: { identities: [{ identity: "test@example.com", verificationStatus: "Success", dkimEnabled: true, dkimVerificationStatus: "Success" }], total: 1 }, isLoading: false });
+    mockVerifiedEmails.mockReturnValue({ data: { emails: [], total: 0 }, isLoading: false });
+    mockConfigSets.mockReturnValue({ data: { configurationSets: [{ Name: "cs-1" }], total: 1 }, isLoading: false });
+    mockDescribeConfigSet.mockReturnValue({ data: { name: "cs-1", eventDestinations: [] }, isLoading: false });
+    mockNotifAttrs.mockReturnValue({
+      data: { bounceTopic: { TopicArn: "" }, complaintTopic: null, deliveryTopic: null, forwardingEnabled: true, headersInBounceNotificationsEnabled: true, headersInComplaintNotificationsEnabled: false },
+      isLoading: false,
+    });
+  });
+
+  it("verifies mail from domain set button opens modal", async () => {
+    const user = userEvent.setup();
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    const notifBtns = screen.getAllByRole("button", { name: /Notifications/i });
+    await user.click(notifBtns[0]);
+    await waitFor(() => expect(screen.getAllByText("MAIL FROM Domain").length).toBeGreaterThanOrEqual(1));
+  });
+
+  it("verifies notification detail shows complaint feedback", async () => {
+    const user = userEvent.setup();
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getAllByRole("button", { name: /Notifications/i })[0]);
+    await waitFor(() => expect(screen.getByText(/Feedback Forwarding/i)).toBeTruthy());
+  });
+
+  it("verifies config set detail shows tracking options header", async () => {
+    const user = userEvent.setup();
+    mockDescribeConfigSet.mockReturnValue({ data: { name: "cs-1", eventDestinations: [] }, isLoading: false });
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("cs-1")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /View/i }));
+    await waitFor(() => expect(screen.getAllByText(/Tracking Options/i).length).toBeGreaterThanOrEqual(1));
+  });
+
+  it("verifies config set detail shows delivery options header", async () => {
+    const user = userEvent.setup();
+    mockDescribeConfigSet.mockReturnValue({ data: { name: "cs-1", eventDestinations: [], deliveryOptions: { TlsPolicy: "Require" } }, isLoading: false });
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("cs-1")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /View/i }));
+    await waitFor(() => expect(screen.getAllByText(/Delivery Options/i).length).toBeGreaterThanOrEqual(1));
+  });
+});
