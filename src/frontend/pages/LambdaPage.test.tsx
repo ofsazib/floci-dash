@@ -1181,4 +1181,298 @@ describe("LambdaPage", () => {
 
   // ─── Concurrency Remove from Config Tab ───────────────
 
+  // ─── Error Fallback Messages (|| right-side) ──────────
+
+  it("shows default error when functions fail without message", () => {
+    mockFunctions.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: null });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    expect(screen.getByText("Failed to load functions")).toBeTruthy();
+  });
+
+  it("shows default error when creating function fails without message", async () => {
+    const user = userEvent.setup();
+    mockCreateFunctionIsError = true;
+    mockCreateFunctionError = null;
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => {
+      expect(screen.getByText("Failed to create function")).toBeTruthy();
+    });
+  });
+
+  it("shows default error when detail fails without message", async () => {
+    const user = userEvent.setup();
+    mockFunctionDetail.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: null });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByText("Failed to load")).toBeTruthy();
+    });
+  });
+
+  it("shows default error when invoke fails without message", async () => {
+    const user = userEvent.setup();
+    mockInvokeFunction.mockReturnValue({ mutate: mockInvokeFunctionMutate, isPending: false, isError: true, error: null, data: null });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: /Test/i })).toBeTruthy();
+    });
+    await user.click(screen.getByRole("tab", { name: /Test/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Invocation failed")).toBeTruthy();
+    });
+  });
+
+  it("shows default error when layers fail without message", async () => {
+    const user = userEvent.setup();
+    mockLambdaLayers.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: null });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Layers/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Failed to load layers")).toBeTruthy();
+    });
+  });
+
+  it("shows default error when creating URL fails without message", async () => {
+    const user = userEvent.setup();
+    mockCreateFunctionUrlIsError = true;
+    mockCreateFunctionUrlError = null;
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByText("Back to Functions")).toBeTruthy();
+    });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Failed to create URL")).toBeTruthy();
+    });
+  });
+
+  it("shows default error when setting concurrency fails without message", async () => {
+    const user = userEvent.setup();
+    mockSetConcurrencyIsError = true;
+    mockSetConcurrencyError = null;
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByText("Back to Functions")).toBeTruthy();
+    });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Failed to set concurrency")).toBeTruthy();
+    });
+  });
+
+  it("shows default error when event invoke config fails without message", async () => {
+    const user = userEvent.setup();
+    mockPutEventInvokeConfigIsError = true;
+    mockPutEventInvokeConfigError = null;
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByText("Back to Functions")).toBeTruthy();
+    });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Failed to update event invoke config")).toBeTruthy();
+    });
+  });
+
+  it("shows default error when detaching code signing fails without message", async () => {
+    const user = userEvent.setup();
+    mockDetachCodeSigningConfigIsError = true;
+    mockDetachCodeSigningConfigError = null;
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByText("Back to Functions")).toBeTruthy();
+    });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Failed to detach code signing config")).toBeTruthy();
+    });
+  });
+
+  // ─── State/Status Branches ────────────────────────────
+
+  it("shows function with Pending state in list", () => {
+    mockFunctions.mockReturnValue({
+      data: { functions: [{ name: "pending-fn", runtime: "nodejs22.x", handler: "index.handler", state: "Pending", timeout: 3, memorySize: 128 }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    expect(screen.getByText("pending-fn")).toBeTruthy();
+    expect(screen.getByText("Pending")).toBeTruthy();
+  });
+
+  it("shows detail with Pending state", async () => {
+    const user = userEvent.setup();
+    mockFunctionDetail.mockReturnValue({
+      data: { configuration: { runtime: "nodejs22.x", handler: "index.handler", state: "Pending" } },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByText("Pending")).toBeTruthy();
+    });
+  });
+
+  it("shows trigger with Disabled state", async () => {
+    const user = userEvent.setup();
+    mockEventSourceMappings.mockReturnValue({
+      data: { eventSourceMappings: [{ eventSourceArn: "arn:aws:dynamodb:us-east-1::table/my-table/stream", state: "Disabled", batchSize: 5 }], total: 1 },
+      isLoading: false,
+    });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: /Triggers/ })).toBeTruthy();
+    });
+    await user.click(screen.getByRole("tab", { name: /Triggers/ }));
+    await waitFor(() => {
+      expect(screen.getByText("Disabled")).toBeTruthy();
+      expect(screen.getByText("5")).toBeTruthy();
+    });
+  });
+
+  // ─── Table || "-" Fallbacks ──────────────────────────
+
+  it("shows dash for missing function fields in table", () => {
+    mockFunctions.mockReturnValue({
+      data: { functions: [{ name: "sparse-fn", runtime: null, handler: null, memorySize: null, timeout: null, state: null, lastModified: null }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    expect(screen.getByText("sparse-fn")).toBeTruthy();
+    // Dash for missing runtime, handler, memory, timeout, state
+    const dashes = screen.getAllByText("-");
+    expect(dashes.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it("shows dash for missing version fields", async () => {
+    const user = userEvent.setup();
+    mockLambdaVersions.mockReturnValue({
+      data: { versions: [{ version: null, lastModified: null, codeSize: null, description: null }], total: 1 },
+      isLoading: false,
+    });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: /Versions/ })).toBeTruthy();
+    });
+    await user.click(screen.getByRole("tab", { name: /Versions/ }));
+    await waitFor(() => {
+      expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(3);
+    });
+  });
+
+  it("shows dash for missing alias fields", async () => {
+    const user = userEvent.setup();
+    mockLambdaAliases.mockReturnValue({
+      data: { aliases: [{ name: null, functionVersion: null, description: null }], total: 1 },
+      isLoading: false,
+    });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: /Aliases/ })).toBeTruthy();
+    });
+    await user.click(screen.getByRole("tab", { name: /Aliases/ }));
+    await waitFor(() => {
+      expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(3);
+    });
+  });
+
+  it("shows dash for missing trigger fields", async () => {
+    const user = userEvent.setup();
+    mockEventSourceMappings.mockReturnValue({
+      data: { eventSourceMappings: [{ eventSourceArn: null, state: null, batchSize: null }], total: 1 },
+      isLoading: false,
+    });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: /Triggers/ })).toBeTruthy();
+    });
+    await user.click(screen.getByRole("tab", { name: /Triggers/ }));
+    await waitFor(() => {
+      expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  // ─── Config Fallbacks ─────────────────────────────────
+
+  it("shows function URL config fallbacks when authType and CORS are missing", async () => {
+    const user = userEvent.setup();
+    mockFunctionUrl.mockReturnValue({ data: { url: "https://example.com/fn" } });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByText(/NONE/)).toBeTruthy();
+    });
+  });
+
+  it("shows code signing ARN placeholder when not set", async () => {
+    const user = userEvent.setup();
+    mockCodeSigningConfig.mockReturnValue({ data: {} });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByText("No code signing config attached")).toBeTruthy();
+    });
+  });
+
+  it("shows event invoke config with null retry values", async () => {
+    const user = userEvent.setup();
+    mockEventInvokeConfig.mockReturnValue({
+      data: { maximumRetryAttempts: null, maximumEventAgeInSeconds: null },
+    });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByText("No event invoke config set")).toBeTruthy();
+    });
+  });
+
+  // ─── Misc Edge Cases ──────────────────────────────────
+
+  it("does not create function when handler is empty", async () => {
+    const user = userEvent.setup();
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("my-function")).toBeTruthy();
+    });
+    const nameInput = screen.getByPlaceholderText("my-function");
+    await user.type(nameInput, "test-fn");
+    // Handler input is prefilled with "index.handler" — clear it
+    const handlerInput = screen.getByPlaceholderText("index.handler");
+    await user.clear(handlerInput);
+    // Button should be disabled (handler is empty)
+    expect(mockCreateFunctionMutate).not.toHaveBeenCalled();
+  });
+
+  it("does not create layer version when name is empty", async () => {
+    const user = userEvent.setup();
+    mockLambdaLayers.mockReturnValue({
+      data: { layers: [{ name: "my-layer", arn: "arn:aws:lambda::layer:my-layer:1", latestVersion: { version: 1 } }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Layers/i }));
+    await waitFor(() => {
+      expect(screen.getByText("my-layer")).toBeTruthy();
+    });
+    await clickButton(user, /^Create layer$/i);
+    await waitFor(() => {
+      expect(screen.getByText("Create layer version")).toBeTruthy();
+    });
+    // Don't fill name, just click create
+    await clickButton(user, /^Create$/i, { last: true });
+    // mutate should not be called since name is empty
+    expect(mockCreateLayerVersionMutate).not.toHaveBeenCalled();
+  });
+
 });
