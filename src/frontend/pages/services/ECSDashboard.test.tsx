@@ -1075,4 +1075,34 @@ describe("ECSDashboard — services filter", () => {
       expect(screen.queryByText("web-service")).toBeNull();
     });
   });
+
+  // ── Service form disabled without task def ───────────
+
+  it("create service button disabled when task definition not selected", async () => {
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => {
+      expect(screen.getAllByText("Create Service").length).toBeGreaterThan(0);
+    });
+    // The Create button should be disabled — the first in the modal footer
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    expect(createBtns[createBtns.length - 1]).toBeDisabled();
+  });
+
+  it("create service button disabled when name is empty", async () => {
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => {
+      expect(screen.getAllByText("Create Service").length).toBeGreaterThan(0);
+    });
+    // Name is empty, task def not selected — button should be disabled
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    expect(createBtns[createBtns.length - 1]).toBeDisabled();
+  });
 });
