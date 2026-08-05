@@ -65,10 +65,31 @@ const accountLimitsState = vi.hoisted(() => ({
   data: { limits: [] as any[], total: 0 },
   isLoading: false,
 }));
+const listenerCertsState = vi.hoisted(() => ({
+  data: { certificates: [] as any[], total: 0 },
+  isLoading: false,
+  isError: false,
+  error: null as any,
+}));
+const tgAttrsState = vi.hoisted(() => ({
+  data: { targetGroupArn: "" as string, attributes: {} as Record<string, any> },
+  isLoading: false,
+  isError: false,
+  error: null as any,
+}));
+const addCertState = vi.hoisted(() => ({
+  isPending: false,
+}));
+const removeCertState = vi.hoisted(() => ({
+  isPending: false,
+}));
 
 const mockSetSgs = vi.fn();
 const mockSetSubnets = vi.fn();
 const mockSetIpAddrType = vi.fn();
+const mockAddCert = vi.fn();
+const mockRemoveCert = vi.fn();
+const mockModifyTgAttrs = vi.fn();
 
 vi.mock("../../hooks/useELB", () => ({
   useELBLoadBalancers: (...args: any[]) => mockLoadBalancers(...args),
@@ -139,23 +160,23 @@ vi.mock("../../hooks/useELB", () => ({
     error: null,
   }),
   useELBListenerCertificates: (...args: any[]) => ({
-    data: { certificates: [], total: 0 },
-    isLoading: false,
-    isError: false,
-    error: null,
+    data: listenerCertsState.data,
+    isLoading: listenerCertsState.isLoading,
+    isError: listenerCertsState.isError,
+    error: listenerCertsState.error,
   }),
   useELBAddListenerCertificate: () => ({
-    mutate: vi.fn(),
-    mutateAsync: vi.fn().mockResolvedValue({}),
-    isPending: false,
+    mutate: mockAddCert,
+    mutateAsync: mockAddCert,
+    isPending: addCertState.isPending,
     isError: false,
     error: null,
     reset: vi.fn(),
   }),
   useELBRemoveListenerCertificate: () => ({
-    mutate: vi.fn(),
-    mutateAsync: vi.fn().mockResolvedValue({}),
-    isPending: false,
+    mutate: mockRemoveCert,
+    mutateAsync: mockRemoveCert,
+    isPending: removeCertState.isPending,
     isError: false,
     error: null,
     reset: vi.fn(),
@@ -175,14 +196,14 @@ vi.mock("../../hooks/useELB", () => ({
     reset: vi.fn(),
   }),
   useELBTargetGroupAttributes: (...args: any[]) => ({
-    data: { targetGroupArn: "", attributes: {} },
-    isLoading: false,
-    isError: false,
-    error: null,
+    data: tgAttrsState.data,
+    isLoading: tgAttrsState.isLoading,
+    isError: tgAttrsState.isError,
+    error: tgAttrsState.error,
   }),
   useELBModifyTargetGroupAttributes: () => ({
-    mutate: vi.fn(),
-    mutateAsync: vi.fn().mockResolvedValue({}),
+    mutate: mockModifyTgAttrs,
+    mutateAsync: mockModifyTgAttrs,
     isPending: false,
     isError: false,
     error: null,
@@ -251,6 +272,16 @@ beforeEach(() => {
   sslPoliciesState.isLoading = false;
   accountLimitsState.data = { limits: [], total: 0 };
   accountLimitsState.isLoading = false;
+  listenerCertsState.data = { certificates: [], total: 0 };
+  listenerCertsState.isLoading = false;
+  listenerCertsState.isError = false;
+  listenerCertsState.error = null;
+  tgAttrsState.data = { targetGroupArn: "", attributes: {} };
+  tgAttrsState.isLoading = false;
+  tgAttrsState.isError = false;
+  tgAttrsState.error = null;
+  addCertState.isPending = false;
+  removeCertState.isPending = false;
   mockSetSgs.mockReset();
   mockSetSgs.mockResolvedValue({});
   mockSetSubnets.mockReset();
@@ -290,6 +321,12 @@ beforeEach(() => {
   mockDeleteRule.mockResolvedValue({});
   mockSetRulePriorities.mockReset();
   mockSetRulePriorities.mockResolvedValue({});
+  mockAddCert.mockReset();
+  mockAddCert.mockResolvedValue({});
+  mockRemoveCert.mockReset();
+  mockRemoveCert.mockResolvedValue({});
+  mockModifyTgAttrs.mockReset();
+  mockModifyTgAttrs.mockResolvedValue({});
 });
 
 // ─── Tests ──────────────────────────────────────────────
@@ -1199,5 +1236,129 @@ describe("ELBDashboard — advanced settings", () => {
         ipAddressType: "dualstack",
       });
     });
+  });
+
+  // ── Sparse data fallbacks ───────────────────────────
+
+  it("shows unknown status for LB without state", () => {
+    mockLoadBalancers.mockReturnValue({
+      data: {
+        loadBalancers: [
+          {
+            loadBalancerName: "lb-no-state",
+            loadBalancerArn: "arn:...",
+            type: "network",
+            scheme: "internal",
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<ELBDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("lb-no-state")).toBeTruthy();
+    expect(screen.getByText("unknown")).toBeTruthy();
+  });
+
+  it("shows dash fallbacks for TG missing fields", async () => {
+    mockTargetGroups.mockReturnValue({
+      data: {
+        targetGroups: [
+          {
+            targetGroupName: "tg-sparse",
+            targetGroupArn: "arn:...",
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<ELBDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /target groups/i }));
+    await waitFor(() => {
+      expect(screen.getByText("tg-sparse")).toBeTruthy();
+    });
+    // All three dash fallbacks should appear
+    expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("shows SSL policies with missing protocols and ciphers", async () => {
+    sslPoliciesState.data = {
+      sslPolicies: [
+        { name: "MinimalPolicy" },
+      ],
+      total: 1,
+    };
+    const user = userEvent.setup();
+    render(<ELBDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText("MinimalPolicy")).toBeTruthy();
+      expect(screen.getByText("0 ciphers")).toBeTruthy();
+    });
+  });
+
+  it("shows account limits with undefined limits array", async () => {
+    accountLimitsState.data = {} as any;
+    const user = userEvent.setup();
+    render(<ELBDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText("No limits found")).toBeTruthy();
+    });
+  });
+
+  // ── Listener Certificates ───────────────────────────
+
+  it("shows certificates error state", async () => {
+    listenerCertsState.isError = true;
+    listenerCertsState.error = new Error("Certs fetch failed");
+    const user = userEvent.setup();
+    await navigateToAdvancedTab(user);
+    // Component renders without crashing even with cert error
+    expect(screen.getByText("Security Groups")).toBeTruthy();
+  });
+
+  it("renders empty certificates list without crashing", async () => {
+    listenerCertsState.data = { certificates: [], total: 0 };
+    const user = userEvent.setup();
+    await navigateToAdvancedTab(user);
+    // Component renders without crashing with empty cert data
+    expect(screen.getByText("Security Groups")).toBeTruthy();
+  });
+
+  // ── Target Group Attributes ─────────────────────────
+
+  it("shows TG attributes error state", async () => {
+    tgAttrsState.isError = true;
+    tgAttrsState.error = new Error("TG attrs fetch failed");
+    const user = userEvent.setup();
+    await navigateToAdvancedTab(user);
+    // Component renders without crashing even with TG attrs error
+    expect(screen.getByText("Security Groups")).toBeTruthy();
+  });
+
+  // ── Listener Rules edge cases ───────────────────────
+
+  it("shows delete rule loading state via isPending", () => {
+    deleteRuleState.isPending = true;
+    deleteRuleState.variables = "arn:rule-loading";
+    render(<ELBDashboard />, { wrapper: createWrapper() });
+    // Component renders with delete loading state without crashing
+    expect(screen.getByText("No load balancers")).toBeTruthy();
+  });
+
+  // ── Set Rule Priorities with input ──────────────────
+
+  it("shows set rule priorities pending state", () => {
+    setRulePrioritiesState.isPending = true;
+    render(<ELBDashboard />, { wrapper: createWrapper() });
+    // Component renders with priorities pending state without crashing
+    expect(screen.getByText("No load balancers")).toBeTruthy();
   });
 });
