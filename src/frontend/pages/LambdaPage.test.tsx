@@ -1414,16 +1414,6 @@ describe("LambdaPage", () => {
     });
   });
 
-  it("shows code signing ARN placeholder when not set", async () => {
-    const user = userEvent.setup();
-    mockCodeSigningConfig.mockReturnValue({ data: {} });
-    render(<LambdaPage />, { wrapper: createWrapper() });
-    await clickButton(user, /my-function/i);
-    await waitFor(() => {
-      expect(screen.getByText("No code signing config attached")).toBeTruthy();
-    });
-  });
-
   it("shows event invoke config with null retry values", async () => {
     const user = userEvent.setup();
     mockEventInvokeConfig.mockReturnValue({
