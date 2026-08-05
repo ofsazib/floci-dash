@@ -1097,4 +1097,44 @@ describe("CodePipeline Routes", () => {
     });
   });
 
+  // ─── Jobs: success with optional fields omitted ─────────
+
+  describe("Jobs — success edge cases", () => {
+    it("PUT /jobs/:jobId/result — success without optional fields", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/jobs/job-minimal/result", { status: "Success" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.result).toBe("success");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("PutJobSuccessResultCommand");
+      expect(mockSend.mock.calls[0][0].currentRevision).toBeUndefined();
+      expect(mockSend.mock.calls[0][0].continuationToken).toBeUndefined();
+    });
+  });
+
+  // ─── GET /action-types/:owner.../:ver — empty response ──
+
+  describe("Action Types — empty responses", () => {
+    it("GET /pipelines/:name/rules — with maxResults only (no nextToken)", async () => {
+      mockSend.mockResolvedValueOnce({ ruleExecutionDetails: [] });
+      const res = await get("/pipelines/my-pipeline/rules?maxResults=30");
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].maxResults).toBe(30);
+      expect(mockSend.mock.calls[0][0].nextToken).toBeUndefined();
+    });
+  });
+
+  // ─── Pipelines: null metadata branch ───────────────────
+
+  describe("Pipelines — metadata edge cases", () => {
+    it("GET /pipelines/:name — returns pipeline with null metadata", async () => {
+      mockSend.mockResolvedValueOnce({ pipeline: { name: "p", version: 1 }, metadata: undefined });
+      const res = await get("/pipelines/p");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.pipeline.name).toBe("p");
+      expect(body.metadata).toBeNull();
+    });
+  });
+
 });
