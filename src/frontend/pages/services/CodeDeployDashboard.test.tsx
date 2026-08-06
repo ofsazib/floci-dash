@@ -436,4 +436,204 @@ describe("CodeDeployDashboard — deployment configs tab", () => {
       expect(screen.getByText("Config creation failed")).toBeTruthy();
     });
   });
+
+
+  // ── Sparse data fallbacks ───────────────────────────
+
+  it("deselects app when clicking its name again", async () => {
+    mockApps.mockReturnValue({
+      data: { applications: [{ applicationName: "my-app", createTime: "2024-01-15T00:00:00Z" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-app")).toBeTruthy());
+    await user.click(screen.getByText("my-app"));
+    await waitFor(() => expect(screen.getByText(/Deployment Groups.*my-app/)).toBeTruthy());
+    await user.click(screen.getByText("my-app"));
+    await waitFor(() => expect(screen.queryByText(/Deployment Groups.*my-app/)).toBeNull());
+  });
+
+  it("shows empty deployment groups when data lacks the array", async () => {
+    mockApps.mockReturnValue({
+      data: { applications: [{ applicationName: "my-app", createTime: "2024-01-15T00:00:00Z" }], total: 1 },
+      isLoading: false,
+    });
+    mockDeploymentGroups.mockReturnValue({ data: {}, isLoading: false });
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-app"));
+    await waitFor(() => expect(screen.getByText(/No deployment groups/i)).toBeTruthy());
+  });
+
+  it("shows dashes for group without role or config", async () => {
+    mockApps.mockReturnValue({
+      data: { applications: [{ applicationName: "my-app", createTime: "2024-01-15T00:00:00Z" }], total: 1 },
+      isLoading: false,
+    });
+    mockDeploymentGroups.mockReturnValue({
+      data: { deploymentGroups: [{ deploymentGroupName: "sparse-group" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-app"));
+    await waitFor(() => {
+      expect(screen.getByText("sparse-group")).toBeTruthy();
+      expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  it("shows empty deployments when data lacks the array", async () => {
+    mockApps.mockReturnValue({
+      data: { applications: [{ applicationName: "my-app", createTime: "2024-01-15T00:00:00Z" }], total: 1 },
+      isLoading: false,
+    });
+    mockDeployments.mockReturnValue({ data: {}, isLoading: false });
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-app"));
+    await waitFor(() => expect(screen.getByText(/No deployments/i)).toBeTruthy());
+  });
+
+  it("filters deployments when an item has no id", async () => {
+    mockApps.mockReturnValue({
+      data: { applications: [{ applicationName: "my-app", createTime: "2024-01-15T00:00:00Z" }], total: 1 },
+      isLoading: false,
+    });
+    mockDeployments.mockReturnValue({
+      data: {
+        deployments: [
+          { deploymentId: "d-1", deploymentGroupName: "g", status: "Succeeded", createTime: "2024-01-15T00:00:00Z" },
+          { deploymentGroupName: "g", status: "InProgress", createTime: "2024-01-16T00:00:00Z" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-app"));
+    await waitFor(() => expect(screen.getByText("d-1")).toBeTruthy());
+    const filterInput = screen.getByPlaceholderText("Find deployments by ID");
+    await user.type(filterInput, "d-1");
+    await waitFor(() => expect(screen.getByText("d-1")).toBeTruthy());
+  });
+
+  it("shows empty configs when data lacks the array", async () => {
+    mockDeploymentConfigs.mockReturnValue({ data: {}, isLoading: false });
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Deployment Configs/i }));
+    await waitFor(() => expect(screen.getByText(/No deployment configs/i)).toBeTruthy());
+  });
+
+  it("shows dash for object config without name", async () => {
+    mockDeploymentConfigs.mockReturnValue({
+      data: { deploymentConfigs: [{ computePlatform: "Server" }] },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Deployment Configs/i }));
+    await waitFor(() => expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(1));
+  });
+
+  it("shows fallback error when create application fails with no message", async () => {
+    createAppState.isError = true;
+    createAppState.error = new Error("");
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Failed to create application")).toBeTruthy());
+  });
+
+  it("disables create group button when role ARN is missing", async () => {
+    mockApps.mockReturnValue({
+      data: { applications: [{ applicationName: "my-app", createTime: "2024-01-15T00:00:00Z" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-app"));
+    await waitFor(() => expect(screen.getByText(/Deployment Groups.*my-app/)).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Create group/i }));
+    await waitFor(() => expect(screen.getByText("Create deployment group")).toBeTruthy());
+    const nameInput = screen.getAllByPlaceholderText("my-group")[0];
+    await user.type(nameInput, "grp");
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    expect(createBtns[createBtns.length - 1].getAttribute("disabled")).not.toBeNull();
+  });
+
+  it("shows create deployment group error alert", async () => {
+    createGroupState.isError = true;
+    createGroupState.error = new Error("Group creation failed");
+    mockApps.mockReturnValue({
+      data: { applications: [{ applicationName: "my-app", createTime: "2024-01-15T00:00:00Z" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-app"));
+    await waitFor(() => expect(screen.getByText(/Deployment Groups.*my-app/)).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Create group/i }));
+    await waitFor(() => expect(screen.getByText("Group creation failed")).toBeTruthy());
+  });
+
+  it("shows fallback create deployment group error", async () => {
+    createGroupState.isError = true;
+    createGroupState.error = new Error("");
+    mockApps.mockReturnValue({
+      data: { applications: [{ applicationName: "my-app", createTime: "2024-01-15T00:00:00Z" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-app"));
+    await waitFor(() => expect(screen.getByText(/Deployment Groups.*my-app/)).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Create group/i }));
+    await waitFor(() => expect(screen.getByText("Failed to create group")).toBeTruthy());
+  });
+
+  it("shows create deployment error alert", async () => {
+    createDeployState.isError = true;
+    createDeployState.error = new Error("Deployment creation failed");
+    mockApps.mockReturnValue({
+      data: { applications: [{ applicationName: "my-app", createTime: "2024-01-15T00:00:00Z" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-app"));
+    await waitFor(() => expect(screen.getByText(/Deployment Groups.*my-app/)).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Create deployment/i }));
+    await waitFor(() => expect(screen.getByText("Deployment creation failed")).toBeTruthy());
+  });
+
+  it("shows fallback create deployment error", async () => {
+    createDeployState.isError = true;
+    createDeployState.error = new Error("");
+    mockApps.mockReturnValue({
+      data: { applications: [{ applicationName: "my-app", createTime: "2024-01-15T00:00:00Z" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-app"));
+    await waitFor(() => expect(screen.getByText(/Deployment Groups.*my-app/)).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Create deployment/i }));
+    await waitFor(() => expect(screen.getByText("Failed to create deployment")).toBeTruthy());
+  });
+
+  it("shows fallback create config error", async () => {
+    createConfigState.isError = true;
+    createConfigState.error = new Error("");
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Deployment Configs/i }));
+    await waitFor(() => expect(screen.getByText(/No deployment configs/i)).toBeTruthy());
+    const createBtns = screen.getAllByRole("button", { name: /Create/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => expect(screen.getByText("Failed to create config")).toBeTruthy());
+  });
 });

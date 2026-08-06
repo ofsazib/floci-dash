@@ -335,4 +335,163 @@ describe("Route53Dashboard", () => {
     await user.click(screen.getByText(/Back to Hosted Zones/i));
     await waitFor(() => expect(screen.getByText("test.com.")).toBeTruthy());
   });
+
+
+  // ── Sparse data & fallbacks ─────────────────────────
+
+  it("renders zone without Id gracefully", () => {
+    mockZones.mockReturnValue({
+      data: { hostedZones: [{ Name: "noid.com.", ResourceRecordSetCount: 1 }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<Route53Dashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("noid.com.")).toBeTruthy();
+  });
+
+  it("filters zones when a zone has no name", async () => {
+    mockZones.mockReturnValue({
+      data: {
+        hostedZones: [
+          { Id: "/hostedzone/Z1", Name: "alpha.com.", ResourceRecordSetCount: 1 },
+          { Id: "/hostedzone/Z2", ResourceRecordSetCount: 2 },
+        ],
+        total: 2,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<Route53Dashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("alpha.com.")).toBeTruthy());
+    const filterInput = screen.getByPlaceholderText("Find zones by name");
+    await user.type(filterInput, "alpha");
+    await waitFor(() => expect(screen.getByText("alpha.com.")).toBeTruthy());
+  });
+
+  it("shows fallback error when create zone error has no message", async () => {
+    createZoneState.isError = true;
+    createZoneState.error = new Error("");
+    const user = userEvent.setup();
+    render(<Route53Dashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Failed to create hosted zone")).toBeTruthy());
+  });
+
+  it("shows dash for record without type", async () => {
+    mockZones.mockReturnValue({
+      data: { hostedZones: [{ Id: "/hostedzone/Z456", Name: "test.com.", ResourceRecordSetCount: 2 }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockRecordSets.mockReturnValue({
+      data: { recordSets: [{ Name: "test.com." }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<Route53Dashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("test.com."));
+    await user.click(screen.getByText("View"));
+    await waitFor(() => {
+      expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it("shows fallback error when record sets fail with no message", async () => {
+    mockZones.mockReturnValue({
+      data: { hostedZones: [{ Id: "/hostedzone/Z456", Name: "test.com.", ResourceRecordSetCount: 2 }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockRecordSets.mockReturnValue({
+      data: undefined, isLoading: false, isError: true, error: new Error(""),
+    });
+    const user = userEvent.setup();
+    render(<Route53Dashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("test.com."));
+    await user.click(screen.getByText("View"));
+    await waitFor(() => expect(screen.getByText("Failed to load record sets")).toBeTruthy());
+  });
+
+  it("filters records by name including missing names", async () => {
+    mockZones.mockReturnValue({
+      data: { hostedZones: [{ Id: "/hostedzone/Z456", Name: "test.com.", ResourceRecordSetCount: 3 }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockRecordSets.mockReturnValue({
+      data: {
+        recordSets: [
+          { Name: "www.test.com.", Type: "A", TTL: 300, ResourceRecords: [{ Value: "1.2.3.4" }] },
+          { Type: "A", TTL: 300, ResourceRecords: [{ Value: "5.6.7.8" }] },
+        ],
+        total: 2,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<Route53Dashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("test.com."));
+    await user.click(screen.getByText("View"));
+    await waitFor(() => expect(screen.getByText("www.test.com.")).toBeTruthy());
+    const filterInput = screen.getByPlaceholderText("Find records by name");
+    await user.type(filterInput, "www");
+    await waitFor(() => expect(screen.getByText("www.test.com.")).toBeTruthy());
+  });
+
+  // ── Create record modal ─────────────────────────────
+
+  async function openRecordModal(user: ReturnType<typeof userEvent.setup>) {
+    mockZones.mockReturnValue({
+      data: { hostedZones: [{ Id: "/hostedzone/Z456", Name: "test.com.", ResourceRecordSetCount: 2 }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockRecordSets.mockReturnValue({ data: { recordSets: [], total: 0 }, isLoading: false, isError: false, error: null });
+    render(<Route53Dashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("test.com."));
+    await user.click(screen.getByText("View"));
+    await waitFor(() => expect(screen.getByText(/Resource Record Sets/i)).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create record")).toBeTruthy());
+  }
+
+  it("disables create record button when value is empty", async () => {
+    const user = userEvent.setup();
+    await openRecordModal(user);
+    const nameInput = screen.getByPlaceholderText("www.example.com.");
+    await user.type(nameInput, "www.test.com.");
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    expect(createBtns[createBtns.length - 1].getAttribute("disabled")).not.toBeNull();
+  });
+
+  it("shows create record error alert", async () => {
+    createRecordState.isError = true;
+    createRecordState.error = new Error("Record creation failed");
+    const user = userEvent.setup();
+    await openRecordModal(user);
+    await waitFor(() => expect(screen.getByText("Record creation failed")).toBeTruthy());
+  });
+
+  it("shows fallback create record error", async () => {
+    createRecordState.isError = true;
+    createRecordState.error = new Error("");
+    const user = userEvent.setup();
+    await openRecordModal(user);
+    await waitFor(() => expect(screen.getByText("Failed to create record")).toBeTruthy());
+  });
+
+  it("creates a record with a different type selected", async () => {
+    const user = userEvent.setup();
+    await openRecordModal(user);
+    await user.type(screen.getByPlaceholderText("www.example.com."), "cname.test.com.");
+    await user.type(screen.getByPlaceholderText("192.168.1.1"), "target.example.com");
+    // Change type via Select: trigger shows current value "A"
+    const trigger = screen.getAllByText("A")[0];
+    await user.click(trigger);
+    await waitFor(() => expect(screen.getAllByText("CNAME").length).toBeGreaterThan(0));
+    await user.click(screen.getAllByText("CNAME")[0]);
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => {
+      expect(mockCreateRecord).toHaveBeenCalledWith(
+        expect.objectContaining({ type: "CNAME" }),
+        expect.any(Object),
+      );
+    });
+  });
 });
