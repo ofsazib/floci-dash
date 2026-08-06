@@ -1625,6 +1625,14 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 | 25.20 | integration.test.ts — bump timeout to 30s on slow RDS provisioning tests (DB instance/cluster create) that flaked under full-suite parallel load (10s global timeout) | Done | 2026-08-06 |
 | 25.21 | Verify: full suite 7602/7602 passed (269 files), typecheck clean | Done | 2026-08-06 |
 
+**Batch 6 — SES route branch coverage** (2026-08-06)
+
+| # | Task | Status | Date |
+|---|------|--------|------|
+| 25.22 | ses.ts — replace 21 unreachable `decodeURIComponent(c.req.param(X) \|\| "")` fallbacks with `param(X)!` (routes only match when param present — dead branches) | Done | 2026-08-06 |
+| 25.23 | ses.test.ts — add 7 tests: missing Identities key, detail-route DKIM/MailFrom fallbacks, describe without EventDestinations, event-destination 400s (missing matchingEventTypes) + cloudWatch/firehose/SNS destination combinations for POST and PUT | Done | 2026-08-06 |
+| 25.24 | Verify: ses.ts 74.41%→**100% branch**, 56 route tests pass, full suite 7610/7610 (269 files), typecheck clean | Done | 2026-08-06 |
+
 
 ---
 

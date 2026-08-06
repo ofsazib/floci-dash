@@ -80,14 +80,14 @@ router.post("/identities/verify-domain", async (c: Context) => {
 });
 
 router.delete("/identities/:value", async (c: Context) => {
-  const value = decodeURIComponent(c.req.param("value") || "");
+  const value = decodeURIComponent(c.req.param("value")!);
   const client = getClient();
   await client.send(new DeleteIdentityCommand({ Identity: value }));
   return c.json({ identity: value, deleted: true });
 });
 
 router.get("/identities/:value", async (c: Context) => {
-  const value = decodeURIComponent(c.req.param("value") || "");
+  const value = decodeURIComponent(c.req.param("value")!);
   const client = getClient();
   const attrsResult = await client.send(
     new GetIdentityVerificationAttributesCommand({ Identities: [value] })
@@ -111,7 +111,7 @@ router.get("/identities/:value", async (c: Context) => {
 // ── DKIM ──────────────────────────────────────────────────
 
 router.put("/identities/:value/dkim", async (c: Context) => {
-  const value = decodeURIComponent(c.req.param("value") || "");
+  const value = decodeURIComponent(c.req.param("value")!);
   const body = await c.req.json<{ enabled: boolean }>();
   const client = getClient();
   await client.send(
@@ -126,7 +126,7 @@ router.put("/identities/:value/dkim", async (c: Context) => {
 // ── Mail From ─────────────────────────────────────────────
 
 router.put("/identities/:value/mail-from", async (c: Context) => {
-  const value = decodeURIComponent(c.req.param("value") || "");
+  const value = decodeURIComponent(c.req.param("value")!);
   const body = await c.req.json<{ mailFromDomain: string }>();
   if (!body.mailFromDomain) return c.json({ error: "mailFromDomain is required" }, 400);
   const client = getClient();
@@ -142,7 +142,7 @@ router.put("/identities/:value/mail-from", async (c: Context) => {
 // ── Notification Attributes ─────────────────────────────
 
 router.get("/identities/:value/notification-attributes", async (c: Context) => {
-  const value = decodeURIComponent(c.req.param("value") || "");
+  const value = decodeURIComponent(c.req.param("value")!);
   const client = getClient();
   const result = await client.send(
     new GetIdentityNotificationAttributesCommand({ Identities: [value] })
@@ -161,7 +161,7 @@ router.get("/identities/:value/notification-attributes", async (c: Context) => {
 });
 
 router.put("/identities/:value/notification-topic", async (c: Context) => {
-  const value = decodeURIComponent(c.req.param("value") || "");
+  const value = decodeURIComponent(c.req.param("value")!);
   const body = await c.req.json<{ notificationType: string; snsTopic?: string }>();
   if (!body.notificationType) return c.json({ error: "notificationType is required" }, 400);
 
@@ -177,7 +177,7 @@ router.put("/identities/:value/notification-topic", async (c: Context) => {
 });
 
 router.put("/identities/:value/feedback-forwarding", async (c: Context) => {
-  const value = decodeURIComponent(c.req.param("value") || "");
+  const value = decodeURIComponent(c.req.param("value")!);
   const body = await c.req.json<{ forwardingEnabled: boolean }>();
   if (typeof body.forwardingEnabled !== "boolean") return c.json({ error: "forwardingEnabled (boolean) is required" }, 400);
 
@@ -192,7 +192,7 @@ router.put("/identities/:value/feedback-forwarding", async (c: Context) => {
 });
 
 router.put("/identities/:value/headers-in-notifications", async (c: Context) => {
-  const value = decodeURIComponent(c.req.param("value") || "");
+  const value = decodeURIComponent(c.req.param("value")!);
   const body = await c.req.json<{ notificationType: string; enabled: boolean }>();
   if (!body.notificationType) return c.json({ error: "notificationType is required" }, 400);
   if (typeof body.enabled !== "boolean") return c.json({ error: "enabled (boolean) is required" }, 400);
@@ -262,7 +262,7 @@ router.post("/configuration-sets", async (c: Context) => {
 });
 
 router.get("/configuration-sets/:name", async (c: Context) => {
-  const name = decodeURIComponent(c.req.param("name") || "");
+  const name = decodeURIComponent(c.req.param("name")!);
   const client = getClient();
   const result = await client.send(
     new DescribeConfigurationSetCommand({
@@ -287,7 +287,7 @@ router.get("/configuration-sets/:name", async (c: Context) => {
 });
 
 router.delete("/configuration-sets/:name", async (c: Context) => {
-  const name = decodeURIComponent(c.req.param("name") || "");
+  const name = decodeURIComponent(c.req.param("name")!);
   const client = getClient();
   await client.send(new DeleteConfigurationSetCommand({ ConfigurationSetName: name }));
   return c.json({ name, deleted: true });
@@ -296,7 +296,7 @@ router.delete("/configuration-sets/:name", async (c: Context) => {
 // ── Event Destinations ─────────────────────────────────────
 
 router.post("/configuration-sets/:name/event-destinations", async (c: Context) => {
-  const name = decodeURIComponent(c.req.param("name") || "");
+  const name = decodeURIComponent(c.req.param("name")!);
   const body = await c.req.json<any>();
   if (!body.eventDestinationName) return c.json({ error: "eventDestinationName is required" }, 400);
   if (!body.matchingEventTypes?.length) return c.json({ error: "matchingEventTypes is required" }, 400);
@@ -321,8 +321,8 @@ router.post("/configuration-sets/:name/event-destinations", async (c: Context) =
 });
 
 router.put("/configuration-sets/:name/event-destinations/:edName", async (c: Context) => {
-  const name = decodeURIComponent(c.req.param("name") || "");
-  const edName = decodeURIComponent(c.req.param("edName") || "");
+  const name = decodeURIComponent(c.req.param("name")!);
+  const edName = decodeURIComponent(c.req.param("edName")!);
   const body = await c.req.json<any>();
   if (!body.matchingEventTypes?.length) return c.json({ error: "matchingEventTypes is required" }, 400);
 
@@ -346,8 +346,8 @@ router.put("/configuration-sets/:name/event-destinations/:edName", async (c: Con
 });
 
 router.delete("/configuration-sets/:name/event-destinations/:edName", async (c: Context) => {
-  const name = decodeURIComponent(c.req.param("name") || "");
-  const edName = decodeURIComponent(c.req.param("edName") || "");
+  const name = decodeURIComponent(c.req.param("name")!);
+  const edName = decodeURIComponent(c.req.param("edName")!);
   const client = getClient();
   await client.send(
     new DeleteConfigurationSetEventDestinationCommand({
@@ -361,7 +361,7 @@ router.delete("/configuration-sets/:name/event-destinations/:edName", async (c: 
 // ── Sending Enabled ────────────────────────────────────────
 
 router.put("/configuration-sets/:name/sending-enabled", async (c: Context) => {
-  const name = decodeURIComponent(c.req.param("name") || "");
+  const name = decodeURIComponent(c.req.param("name")!);
   const body = await c.req.json<{ enabled: boolean }>();
   if (typeof body.enabled !== "boolean") return c.json({ error: "enabled (boolean) is required" }, 400);
   const client = getClient();
@@ -377,7 +377,7 @@ router.put("/configuration-sets/:name/sending-enabled", async (c: Context) => {
 // ── Tracking Options ───────────────────────────────────────
 
 router.post("/configuration-sets/:name/tracking-options", async (c: Context) => {
-  const name = decodeURIComponent(c.req.param("name") || "");
+  const name = decodeURIComponent(c.req.param("name")!);
   const body = await c.req.json<{ customRedirectDomain: string }>();
   if (!body.customRedirectDomain) return c.json({ error: "customRedirectDomain is required" }, 400);
   const client = getClient();
@@ -391,7 +391,7 @@ router.post("/configuration-sets/:name/tracking-options", async (c: Context) => 
 });
 
 router.put("/configuration-sets/:name/tracking-options", async (c: Context) => {
-  const name = decodeURIComponent(c.req.param("name") || "");
+  const name = decodeURIComponent(c.req.param("name")!);
   const body = await c.req.json<{ customRedirectDomain: string }>();
   if (!body.customRedirectDomain) return c.json({ error: "customRedirectDomain is required" }, 400);
   const client = getClient();
@@ -405,7 +405,7 @@ router.put("/configuration-sets/:name/tracking-options", async (c: Context) => {
 });
 
 router.delete("/configuration-sets/:name/tracking-options", async (c: Context) => {
-  const name = decodeURIComponent(c.req.param("name") || "");
+  const name = decodeURIComponent(c.req.param("name")!);
   const client = getClient();
   await client.send(
     new DeleteConfigurationSetTrackingOptionsCommand({ ConfigurationSetName: name })
@@ -416,7 +416,7 @@ router.delete("/configuration-sets/:name/tracking-options", async (c: Context) =
 // ── Reputation Metrics ────────────────────────────────────
 
 router.put("/configuration-sets/:name/reputation-metrics", async (c: Context) => {
-  const name = decodeURIComponent(c.req.param("name") || "");
+  const name = decodeURIComponent(c.req.param("name")!);
   const body = await c.req.json<{ enabled: boolean }>();
   if (typeof body.enabled !== "boolean") return c.json({ error: "enabled (boolean) is required" }, 400);
   const client = getClient();
@@ -432,7 +432,7 @@ router.put("/configuration-sets/:name/reputation-metrics", async (c: Context) =>
 // ── Delivery Options ───────────────────────────────────────
 
 router.put("/configuration-sets/:name/delivery-options", async (c: Context) => {
-  const name = decodeURIComponent(c.req.param("name") || "");
+  const name = decodeURIComponent(c.req.param("name")!);
   const body = await c.req.json<{ tlsPolicy?: string }>();
   const client = getClient();
   await client.send(

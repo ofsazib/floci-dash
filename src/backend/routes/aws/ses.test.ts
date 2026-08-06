@@ -137,6 +137,16 @@ describe("SES Routes", () => {
       expect(body.identities[0].mailFromDomain).toBeNull();
     });
 
+    it("GET /identities — returns empty when Identities key missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/identities");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.identities).toEqual([]);
+      expect(mockSend).toHaveBeenCalledTimes(1); // short-circuits before enrichment
+    });
+
     it("GET /identities/:value — returns single identity detail", async () => {
       mockSend
         .mockResolvedValueOnce({
@@ -160,6 +170,17 @@ describe("SES Routes", () => {
       expect(body.identity).toBe("test@example.com");
       expect(body.verificationStatus).toBe("Success");
       expect(body.dkimEnabled).toBe(true);
+    });
+
+    it("GET /identities/:value — falls back to false/null when DKIM and MailFrom missing", async () => {
+      mockSend
+        .mockResolvedValueOnce({ VerificationAttributes: { "test@example.com": { VerificationStatus: "Pending" } } })
+        .mockResolvedValueOnce({ DkimAttributes: {} })
+        .mockResolvedValueOnce({ MailFromDomainAttributes: {} });
+      const res = await get("/identities/test%40example.com");
+      const body = await res.json();
+      expect(body.dkimEnabled).toBe(false);
+      expect(body.mailFromDomain).toBeNull();
     });
 
     it("POST /identities/verify-email — verifies email", async () => {
@@ -446,6 +467,16 @@ describe("SES Routes", () => {
       expect(mockSend.mock.calls[0][0].__cmdName).toBe("DescribeConfigurationSetCommand");
     });
 
+    it("GET /configuration-sets/:name — returns empty eventDestinations when missing", async () => {
+      mockSend.mockResolvedValueOnce({ ConfigurationSet: { Name: "no-events" } });
+      const res = await get("/configuration-sets/no-events");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.name).toBe("no-events");
+      expect(body.eventDestinations).toEqual([]);
+      expect(body.trackingOptions).toBeNull();
+    });
+
     it("GET /configuration-sets/:name — 404 when not found", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await get("/configuration-sets/nonexistent");
@@ -477,6 +508,30 @@ describe("SES Routes", () => {
       expect(mockSend.mock.calls[0][0].EventDestination.SNSDestination.TopicARN).toBe("arn:sns:bounce");
     });
 
+    it("POST /configuration-sets/:name/event-destinations — 400 when matchingEventTypes missing", async () => {
+      const res = await post("/configuration-sets/my-cs/event-destinations", { eventDestinationName: "ed1" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST — supports cloudWatch and firehose destinations without SNS", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/configuration-sets/my-cs/event-destinations", {
+        eventDestinationName: "ed2",
+        matchingEventTypes: ["open"],
+        cloudWatchDestination: {
+          DimensionConfigurations: [
+            { DimensionName: "d", DimensionValueSource: "messageTag", DefaultDimensionValue: "v" },
+          ],
+        },
+        kinesisFirehoseDestination: { DeliveryStreamARN: "arn:firehose" },
+      });
+      expect(res.status).toBe(201);
+      const dest = mockSend.mock.calls[0][0].EventDestination;
+      expect(dest.CloudWatchDestination).toBeDefined();
+      expect(dest.KinesisFirehoseDestination.DeliveryStreamARN).toBe("arn:firehose");
+      expect(dest.SNSDestination).toBeUndefined();
+    });
+
     it("POST /configuration-sets/:name/event-destinations — 400 when missing params", async () => {
       const res = await post("/configuration-sets/my-cs/event-destinations", {});
       expect(res.status).toBe(400);
@@ -490,6 +545,28 @@ describe("SES Routes", () => {
       const body = await res.json();
       expect(body.updated).toBe(true);
       expect(mockSend.mock.calls[0][0].__cmdName).toBe("UpdateConfigurationSetEventDestinationCommand");
+    });
+
+    it("PUT — 400 when matchingEventTypes missing", async () => {
+      const res = await put("/configuration-sets/my-cs/event-destinations/ed1", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("PUT — supports SNS, cloudWatch, and firehose destinations", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/configuration-sets/my-cs/event-destinations/ed1", {
+        matchingEventTypes: ["send"],
+        snsTopicARN: "arn:sns:send",
+        cloudWatchDestination: { DimensionConfigurations: [] },
+        kinesisFirehoseDestination: { DeliveryStreamARN: "arn:firehose" },
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+      const dest = mockSend.mock.calls[0][0].EventDestination;
+      expect(dest.SNSDestination.TopicARN).toBe("arn:sns:send");
+      expect(dest.CloudWatchDestination).toBeDefined();
+      expect(dest.KinesisFirehoseDestination).toBeDefined();
     });
 
     it("DELETE — deletes destination", async () => {
