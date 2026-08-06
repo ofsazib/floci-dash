@@ -54,16 +54,14 @@ router.get("/pipelines", async (c: Context) => {
 });
 
 router.get("/pipelines/:name", async (c: Context) => {
-  const name = decodeURIComponent(c.req.param("name") || "");
-  if (!name) return c.json({ error: "name param required" }, 400);
+  const name = decodeURIComponent(c.req.param("name")!);
   const client = getClient();
   const result = await client.send(new GetPipelineCommand({ name }));
   return c.json({ pipeline: result.pipeline || null, metadata: result.metadata || null });
 });
 
 router.get("/pipelines/:name/state", async (c: Context) => {
-  const name = decodeURIComponent(c.req.param("name") || "");
-  if (!name) return c.json({ error: "name param required" }, 400);
+  const name = decodeURIComponent(c.req.param("name")!);
   const client = getClient();
   const result = await client.send(new GetPipelineStateCommand({ name }));
   return c.json({ state: result });
@@ -81,7 +79,7 @@ router.post("/pipelines", async (c: Context) => {
 });
 
 router.put("/pipelines/:name", async (c: Context) => {
-  const name = decodeURIComponent(c.req.param("name") || "");
+  const name = decodeURIComponent(c.req.param("name")!);
   const body = await c.req.json();
   if (!body.pipeline) return c.json({ error: "pipeline declaration is required" }, 400);
   body.pipeline.name = name;
@@ -91,7 +89,7 @@ router.put("/pipelines/:name", async (c: Context) => {
 });
 
 router.delete("/pipelines/:name", async (c: Context) => {
-  const name = decodeURIComponent(c.req.param("name") || "");
+  const name = decodeURIComponent(c.req.param("name")!);
   const client = getClient();
   await client.send(new DeletePipelineCommand({ name }));
   return c.json({ deleted: true });
@@ -100,8 +98,7 @@ router.delete("/pipelines/:name", async (c: Context) => {
 // ── Executions ──────────────────────────────────────────
 
 router.get("/pipelines/:name/executions", async (c: Context) => {
-  const pipelineName = decodeURIComponent(c.req.param("name") || "");
-  if (!pipelineName) return c.json({ error: "name param required" }, 400);
+  const pipelineName = decodeURIComponent(c.req.param("name")!);
   const client = getClient();
   const result = await client.send(new ListPipelineExecutionsCommand({
     pipelineName,
@@ -116,10 +113,8 @@ router.get("/pipelines/:name/executions", async (c: Context) => {
 });
 
 router.get("/pipelines/:name/executions/:executionId", async (c: Context) => {
-  const pipelineName = decodeURIComponent(c.req.param("name") || "");
-  const pipelineExecutionId = decodeURIComponent(c.req.param("executionId") || "");
-  if (!pipelineName || !pipelineExecutionId)
-    return c.json({ error: "name and executionId are required" }, 400);
+  const pipelineName = decodeURIComponent(c.req.param("name")!);
+  const pipelineExecutionId = decodeURIComponent(c.req.param("executionId")!);
   const client = getClient();
   const result = await client.send(new GetPipelineExecutionCommand({
     pipelineName,
@@ -129,8 +124,7 @@ router.get("/pipelines/:name/executions/:executionId", async (c: Context) => {
 });
 
 router.post("/pipelines/:name/executions", async (c: Context) => {
-  const pipelineName = decodeURIComponent(c.req.param("name") || "");
-  if (!pipelineName) return c.json({ error: "name param required" }, 400);
+  const pipelineName = decodeURIComponent(c.req.param("name")!);
   const body = await c.req.json();
   const client = getClient();
   const result = await client.send(new StartPipelineExecutionCommand({
@@ -143,11 +137,9 @@ router.post("/pipelines/:name/executions", async (c: Context) => {
 });
 
 router.post("/pipelines/:name/executions/:executionId/stop", async (c: Context) => {
-  const pipelineName = decodeURIComponent(c.req.param("name") || "");
-  const pipelineExecutionId = decodeURIComponent(c.req.param("executionId") || "");
+  const pipelineName = decodeURIComponent(c.req.param("name")!);
+  const pipelineExecutionId = decodeURIComponent(c.req.param("executionId")!);
   const body = await c.req.json();
-  if (!pipelineName || !pipelineExecutionId)
-    return c.json({ error: "name and executionId are required" }, 400);
   const client = getClient();
   const result = await client.send(new StopPipelineExecutionCommand({
     pipelineName,
@@ -159,11 +151,9 @@ router.post("/pipelines/:name/executions/:executionId/stop", async (c: Context) 
 });
 
 router.post("/pipelines/:name/executions/:executionId/retry", async (c: Context) => {
-  const pipelineName = decodeURIComponent(c.req.param("name") || "");
-  const pipelineExecutionId = decodeURIComponent(c.req.param("executionId") || "");
+  const pipelineName = decodeURIComponent(c.req.param("name")!);
+  const pipelineExecutionId = decodeURIComponent(c.req.param("executionId")!);
   const body = await c.req.json();
-  if (!pipelineName || !pipelineExecutionId)
-    return c.json({ error: "name and executionId are required" }, 400);
   if (!body.stageName)
     return c.json({ error: "stageName is required in request body" }, 400);
   const client = getClient();
@@ -179,11 +169,9 @@ router.post("/pipelines/:name/executions/:executionId/retry", async (c: Context)
 // ── Rollback Stage ──────────────────────────────────────
 
 router.post("/pipelines/:name/executions/:executionId/rollback", async (c: Context) => {
-  const pipelineName = decodeURIComponent(c.req.param("name") || "");
-  const pipelineExecutionId = decodeURIComponent(c.req.param("executionId") || "");
+  const pipelineName = decodeURIComponent(c.req.param("name")!);
+  const pipelineExecutionId = decodeURIComponent(c.req.param("executionId")!);
   const body = await c.req.json();
-  if (!pipelineName || !pipelineExecutionId)
-    return c.json({ error: "name and executionId are required" }, 400);
   if (!body.stageName)
     return c.json({ error: "stageName is required" }, 400);
   const client = getClient();
@@ -199,11 +187,9 @@ router.post("/pipelines/:name/executions/:executionId/rollback", async (c: Conte
 // ── Override Stage Condition ────────────────────────────
 
 router.post("/pipelines/:name/executions/:executionId/override", async (c: Context) => {
-  const pipelineName = decodeURIComponent(c.req.param("name") || "");
-  const pipelineExecutionId = decodeURIComponent(c.req.param("executionId") || "");
+  const pipelineName = decodeURIComponent(c.req.param("name")!);
+  const pipelineExecutionId = decodeURIComponent(c.req.param("executionId")!);
   const body = await c.req.json();
-  if (!pipelineName || !pipelineExecutionId)
-    return c.json({ error: "name and executionId are required" }, 400);
   if (!body.stageName)
     return c.json({ error: "stageName is required" }, 400);
   if (!body.conditionName)
@@ -221,11 +207,9 @@ router.post("/pipelines/:name/executions/:executionId/override", async (c: Conte
 // ── Stage Transitions ──────────────────────────────────
 
 router.post("/pipelines/:name/transitions/:stageName/disable", async (c: Context) => {
-  const pipelineName = decodeURIComponent(c.req.param("name") || "");
-  const stageName = decodeURIComponent(c.req.param("stageName") || "");
+  const pipelineName = decodeURIComponent(c.req.param("name")!);
+  const stageName = decodeURIComponent(c.req.param("stageName")!);
   const body = await c.req.json();
-  if (!pipelineName || !stageName)
-    return c.json({ error: "name and stageName are required" }, 400);
   const client = getClient();
   await client.send(new DisableStageTransitionCommand({
     pipelineName,
@@ -237,10 +221,8 @@ router.post("/pipelines/:name/transitions/:stageName/disable", async (c: Context
 });
 
 router.post("/pipelines/:name/transitions/:stageName/enable", async (c: Context) => {
-  const pipelineName = decodeURIComponent(c.req.param("name") || "");
-  const stageName = decodeURIComponent(c.req.param("stageName") || "");
-  if (!pipelineName || !stageName)
-    return c.json({ error: "name and stageName are required" }, 400);
+  const pipelineName = decodeURIComponent(c.req.param("name")!);
+  const stageName = decodeURIComponent(c.req.param("stageName")!);
   const client = getClient();
   await client.send(new EnableStageTransitionCommand({
     pipelineName,
@@ -253,7 +235,7 @@ router.post("/pipelines/:name/transitions/:stageName/enable", async (c: Context)
 // ── Approvals ───────────────────────────────────────────
 
 router.post("/pipelines/:name/approvals", async (c: Context) => {
-  const pipelineName = decodeURIComponent(c.req.param("name") || "");
+  const pipelineName = decodeURIComponent(c.req.param("name")!);
   const body = await c.req.json();
   if (!pipelineName || !body.stageName || !body.actionName || !body.token || !body.status)
     return c.json({ error: "pipelineName, stageName, actionName, token, and status are required" }, 400);
@@ -271,8 +253,7 @@ router.post("/pipelines/:name/approvals", async (c: Context) => {
 // ── Action Executions ───────────────────────────────────
 
 router.get("/pipelines/:name/actions", async (c: Context) => {
-  const pipelineName = decodeURIComponent(c.req.param("name") || "");
-  if (!pipelineName) return c.json({ error: "name param required" }, 400);
+  const pipelineName = decodeURIComponent(c.req.param("name")!);
   const client = getClient();
   const result = await client.send(new ListActionExecutionsCommand({
     pipelineName,
@@ -290,9 +271,8 @@ router.get("/pipelines/:name/actions", async (c: Context) => {
 // ── Action Revisions ────────────────────────────────────
 
 router.put("/pipelines/:name/actions/revision", async (c: Context) => {
-  const pipelineName = decodeURIComponent(c.req.param("name") || "");
+  const pipelineName = decodeURIComponent(c.req.param("name")!);
   const body = await c.req.json();
-  if (!pipelineName) return c.json({ error: "name param required" }, 400);
   if (!body.actionName || !body.actionRevision)
     return c.json({ error: "actionName and actionRevision are required" }, 400);
   const client = getClient();
@@ -316,12 +296,10 @@ router.get("/action-types", async (c: Context) => {
 });
 
 router.get("/action-types/:owner/:category/:provider/:version", async (c: Context) => {
-  const owner = decodeURIComponent(c.req.param("owner") || "");
-  const category = decodeURIComponent(c.req.param("category") || "");
-  const provider = decodeURIComponent(c.req.param("provider") || "");
-  const version = decodeURIComponent(c.req.param("version") || "");
-  if (!owner || !category || !provider || !version)
-    return c.json({ error: "owner, category, provider, and version are required" }, 400);
+  const owner = decodeURIComponent(c.req.param("owner")!);
+  const category = decodeURIComponent(c.req.param("category")!);
+  const provider = decodeURIComponent(c.req.param("provider")!);
+  const version = decodeURIComponent(c.req.param("version")!);
   const client = getClient();
   const result = await client.send(new GetActionTypeCommand({
     category: { owner, category, provider, version },
@@ -346,13 +324,11 @@ router.post("/action-types", async (c: Context) => {
 });
 
 router.put("/action-types/:owner/:category/:provider/:version", async (c: Context) => {
-  const owner = decodeURIComponent(c.req.param("owner") || "");
-  const category = decodeURIComponent(c.req.param("category") || "");
-  const provider = decodeURIComponent(c.req.param("provider") || "");
-  const version = decodeURIComponent(c.req.param("version") || "");
+  const owner = decodeURIComponent(c.req.param("owner")!);
+  const category = decodeURIComponent(c.req.param("category")!);
+  const provider = decodeURIComponent(c.req.param("provider")!);
+  const version = decodeURIComponent(c.req.param("version")!);
   const body = await c.req.json();
-  if (!owner || !category || !provider || !version)
-    return c.json({ error: "owner, category, provider, and version are required" }, 400);
   const client = getClient();
   await client.send(new UpdateActionTypeCommand({
     actionType: {
@@ -364,12 +340,10 @@ router.put("/action-types/:owner/:category/:provider/:version", async (c: Contex
 });
 
 router.delete("/action-types/:owner/:category/:provider/:version", async (c: Context) => {
-  const owner = decodeURIComponent(c.req.param("owner") || "");
-  const category = decodeURIComponent(c.req.param("category") || "");
-  const provider = decodeURIComponent(c.req.param("provider") || "");
-  const version = decodeURIComponent(c.req.param("version") || "");
-  if (!owner || !category || !provider || !version)
-    return c.json({ error: "owner, category, provider, and version are required" }, 400);
+  const owner = decodeURIComponent(c.req.param("owner")!);
+  const category = decodeURIComponent(c.req.param("category")!);
+  const provider = decodeURIComponent(c.req.param("provider")!);
+  const version = decodeURIComponent(c.req.param("version")!);
   const client = getClient();
   await client.send(new DeleteCustomActionTypeCommand({
     category: { owner, category, provider, version },
@@ -404,24 +378,21 @@ router.post("/webhooks", async (c: Context) => {
 });
 
 router.delete("/webhooks/:name", async (c: Context) => {
-  const name = decodeURIComponent(c.req.param("name") || "");
-  if (!name) return c.json({ error: "name param required" }, 400);
+  const name = decodeURIComponent(c.req.param("name")!);
   const client = getClient();
   await client.send(new DeleteWebhookCommand({ name }));
   return c.json({ deleted: true });
 });
 
 router.post("/webhooks/:name/register", async (c: Context) => {
-  const name = decodeURIComponent(c.req.param("name") || "");
-  if (!name) return c.json({ error: "name param required" }, 400);
+  const name = decodeURIComponent(c.req.param("name")!);
   const client = getClient();
   await client.send(new RegisterWebhookWithThirdPartyCommand({ webhookName: name }));
   return c.json({ registered: true });
 });
 
 router.post("/webhooks/:name/deregister", async (c: Context) => {
-  const name = decodeURIComponent(c.req.param("name") || "");
-  if (!name) return c.json({ error: "name param required" }, 400);
+  const name = decodeURIComponent(c.req.param("name")!);
   const client = getClient();
   await client.send(new DeregisterWebhookWithThirdPartyCommand({ webhookName: name }));
   return c.json({ deregistered: true });
@@ -430,8 +401,7 @@ router.post("/webhooks/:name/deregister", async (c: Context) => {
 // ── Rule Executions ──────────────────────────────────────
 
 router.get("/pipelines/:name/rules", async (c: Context) => {
-  const pipelineName = decodeURIComponent(c.req.param("name") || "");
-  if (!pipelineName) return c.json({ error: "name param required" }, 400);
+  const pipelineName = decodeURIComponent(c.req.param("name")!);
   const client = getClient();
   const result = await client.send(new ListRuleExecutionsCommand({
     pipelineName,
@@ -448,10 +418,8 @@ router.get("/pipelines/:name/rules", async (c: Context) => {
 // ── Jobs ─────────────────────────────────────────────────
 
 router.post("/action-types/:category/:provider/jobs/poll", async (c: Context) => {
-  const category = decodeURIComponent(c.req.param("category") || "");
-  const provider = decodeURIComponent(c.req.param("provider") || "");
-  if (!category || !provider)
-    return c.json({ error: "category and provider are required" }, 400);
+  const category = decodeURIComponent(c.req.param("category")!);
+  const provider = decodeURIComponent(c.req.param("provider")!);
   const client = getClient();
   const result = await client.send(new PollForJobsCommand({
     actionTypeId: { category, owner: "Custom", provider, version: "1" } as any,
@@ -462,9 +430,8 @@ router.post("/action-types/:category/:provider/jobs/poll", async (c: Context) =>
 });
 
 router.post("/jobs/:jobId/acknowledge", async (c: Context) => {
-  const jobId = decodeURIComponent(c.req.param("jobId") || "");
+  const jobId = decodeURIComponent(c.req.param("jobId")!);
   const body = await c.req.json();
-  if (!jobId) return c.json({ error: "jobId is required" }, 400);
   const client = getClient();
   const result = await client.send(new AcknowledgeJobCommand({
     jobId,
@@ -474,17 +441,15 @@ router.post("/jobs/:jobId/acknowledge", async (c: Context) => {
 });
 
 router.get("/jobs/:jobId", async (c: Context) => {
-  const jobId = decodeURIComponent(c.req.param("jobId") || "");
-  if (!jobId) return c.json({ error: "jobId is required" }, 400);
+  const jobId = decodeURIComponent(c.req.param("jobId")!);
   const client = getClient();
   const result = await client.send(new GetJobDetailsCommand({ jobId }));
   return c.json({ jobDetails: result.jobDetails || null });
 });
 
 router.put("/jobs/:jobId/result", async (c: Context) => {
-  const jobId = decodeURIComponent(c.req.param("jobId") || "");
+  const jobId = decodeURIComponent(c.req.param("jobId")!);
   const body = await c.req.json();
-  if (!jobId) return c.json({ error: "jobId is required" }, 400);
   if (!body.status) return c.json({ error: "status (Success/Failure) is required" }, 400);
   const client = getClient();
   if (body.status === "Success") {

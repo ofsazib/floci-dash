@@ -1654,6 +1654,13 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 | 25.29 | ec2messages.test.ts — add 4 tests: Floci error responses (`!res.ok` throw + `text \|\| statusText` fallbacks), empty body → `{}`, fail message defaults `FailureType` to "Unknown" | Done | 2026-08-06 |
 | 25.30 | Verify: ec2messages.ts 75%→**100% branch**, 16 route tests pass, full suite 7619/7619 (269 files), typecheck clean | Done | 2026-08-06 |
 
+**Batch 10 — CodePipeline route branch coverage** (2026-08-06)
+
+| # | Task | Status | Date |
+|---|------|--------|------|
+| 25.31 | codepipeline.ts — replace 44 unreachable `decodeURIComponent(c.req.param(X) \|\| "")` fallbacks with `param(X)!` + remove 25 unreachable param-validation guards (`if (!name)` etc. — URL params never decode empty; empty segments 404 before routing) | Done | 2026-08-06 |
+| 25.32 | Verify: codepipeline.ts 75.62%→**100% branch**, 115 route tests pass, full suite 7619/7619 (269 files), typecheck clean | Done | 2026-08-06 |
+
 
 ---
 
