@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -652,5 +652,306 @@ describe("LambdaDashboard — layers tab", () => {
     const filterInput = screen.getByPlaceholderText("Find layers by name");
     await user.type(filterInput, "beta");
     await waitFor(() => expect(screen.queryByText("alpha-layer")).toBeNull());
+  });
+});
+
+// ─── Remaining branch targets ───────────────────────────
+
+describe("LambdaDashboard — remaining branches", () => {
+  const fnListWith = (functions: any[]) =>
+    mockFunctions.mockReturnValue({
+      data: { functions, total: functions.length },
+      isLoading: false, isError: false, error: null,
+    });
+
+  const defaultDetail = () =>
+    mockFnDetail.mockReturnValue({
+      data: { configuration: { runtime: "nodejs22.x", handler: "index.handler", state: "Active" } },
+      isLoading: false, isError: false, error: null,
+    });
+
+  const openDetail = async (user: any) => {
+    await waitFor(() => expect(screen.getByText("my-fn")).toBeTruthy());
+    await user.click(screen.getByText("my-fn"));
+    await waitFor(() => expect(screen.getByText(/Back to Functions/i)).toBeTruthy());
+  };
+
+  it("shows fallback message when function load error has no message", () => {
+    mockFunctions.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: undefined });
+    render(<LambdaDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("Failed to load functions")).toBeTruthy();
+  });
+
+  it("shows Active fallback for unknown function state", () => {
+    fnListWith([{ name: "pending-fn", state: undefined }]);
+    render(<LambdaDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("pending-fn")).toBeTruthy();
+    expect(screen.getByText("Active")).toBeTruthy();
+  });
+
+  it("shows fallback create function error message", async () => {
+    createFnState.isError = true;
+    createFnState.error = new Error("");
+    const user = userEvent.setup();
+    render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Failed to create function")).toBeTruthy());
+  });
+
+  it("changes runtime select in create function modal", async () => {
+    fnListWith([{ name: "my-fn", state: "Active" }]);
+    const user = userEvent.setup();
+    render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("nodejs22.x")).toBeTruthy());
+    await user.click(screen.getByText("nodejs22.x"));
+    await user.click(screen.getByText("python3.12"));
+    const nameInput = screen.getByPlaceholderText("my-function");
+    await user.type(nameInput, "rt-fn");
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => {
+      expect(mockCreateFn).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "rt-fn", runtime: "python3.12" }),
+        expect.any(Object),
+      );
+    });
+  });
+
+  it("updates timeout and memory in create function modal", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(container.textContent).toContain("Create Function"));
+    const nameInput = screen.getByPlaceholderText("my-function");
+    await user.type(nameInput, "cfg-fn");
+    const timeoutInput = screen.getByLabelText("Timeout (seconds)");
+    fireEvent.change(timeoutInput, { target: { value: "5" } });
+    const memInput = screen.getByLabelText("Memory (MB)");
+    fireEvent.change(memInput, { target: { value: "256" } });
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => {
+      expect(mockCreateFn).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "cfg-fn", timeout: 5, memorySize: 256 }),
+        expect.any(Object),
+      );
+    });
+  });
+
+  it("falls back to default timeout and memory when cleared", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(container.textContent).toContain("Create Function"));
+    const nameInput = screen.getByPlaceholderText("my-function");
+    await user.type(nameInput, "cfg-fn2");
+    fireEvent.change(screen.getByLabelText("Timeout (seconds)"), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText("Memory (MB)"), { target: { value: "" } });
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => {
+      expect(mockCreateFn).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "cfg-fn2", timeout: 3, memorySize: 128 }),
+        expect.any(Object),
+      );
+    });
+  });
+
+  it("shows fallback detail error message", async () => {
+    fnListWith([{ name: "my-fn", state: "Active" }]);
+    mockFnDetail.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: undefined });
+    const user = userEvent.setup();
+    render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("my-fn"));
+    await user.click(screen.getByText("my-fn"));
+    await waitFor(() => expect(screen.getByText("Failed to load")).toBeTruthy());
+  });
+
+  it("returns null when detail data is undefined without loading or error", async () => {
+    fnListWith([{ name: "my-fn", state: "Active" }]);
+    mockFnDetail.mockReturnValue({ data: undefined, isLoading: false, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("my-fn"));
+    await user.click(screen.getByText("my-fn"));
+    await waitFor(() => {
+      expect(screen.queryByText(/Back to Functions/i)).toBeNull();
+    });
+  });
+
+  it("shows Active fallback for unknown config state", async () => {
+    fnListWith([{ name: "my-fn", state: "Active" }]);
+    mockFnDetail.mockReturnValue({ data: { configuration: { state: undefined } }, isLoading: false, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await openDetail(user);
+    await waitFor(() => expect(screen.getByText("Active")).toBeTruthy());
+  });
+
+  it("shows fallback invoke error message", async () => {
+    fnListWith([{ name: "my-fn", state: "Active" }]);
+    defaultDetail();
+    invokeFnState.isError = true;
+    invokeFnState.error = new Error("");
+    const user = userEvent.setup();
+    render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await openDetail(user);
+    await user.click(screen.getByRole("tab", { name: /Test/ }));
+    await waitFor(() => expect(screen.getByText("Invocation failed")).toBeTruthy());
+  });
+
+  it("shows empty versions when versions key missing", async () => {
+    fnListWith([{ name: "my-fn", state: "Active" }]);
+    defaultDetail();
+    mockVersions.mockReturnValue({ data: { total: 0 } });
+    const user = userEvent.setup();
+    render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await openDetail(user);
+    await user.click(screen.getByRole("tab", { name: /Versions/ }));
+    await waitFor(() => expect(screen.getByText("No published versions")).toBeTruthy());
+  });
+
+  it("shows version details when present", async () => {
+    fnListWith([{ name: "my-fn", state: "Active" }]);
+    defaultDetail();
+    mockVersions.mockReturnValue({ data: { versions: [{ version: "2", lastModified: "2024-02-15T00:00:00Z", codeSize: 2048, description: "v2" }], total: 1 } });
+    const user = userEvent.setup();
+    render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await openDetail(user);
+    await user.click(screen.getByRole("tab", { name: /Versions/ }));
+    await waitFor(() => expect(screen.getByText("2")).toBeTruthy());
+    expect(screen.getByText("v2")).toBeTruthy();
+    expect(screen.getByText(/KB/)).toBeTruthy();
+  });
+
+  it("shows empty aliases when aliases key missing", async () => {
+    fnListWith([{ name: "my-fn", state: "Active" }]);
+    defaultDetail();
+    mockAliases.mockReturnValue({ data: { total: 0 } });
+    const user = userEvent.setup();
+    render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await openDetail(user);
+    await user.click(screen.getByRole("tab", { name: /Aliases/ }));
+    await waitFor(() => expect(screen.getByText("No aliases")).toBeTruthy());
+  });
+
+  it("shows dashes for sparse aliases", async () => {
+    fnListWith([{ name: "my-fn", state: "Active" }]);
+    defaultDetail();
+    mockAliases.mockReturnValue({ data: { aliases: [{}], total: 1 } });
+    const user = userEvent.setup();
+    render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await openDetail(user);
+    await user.click(screen.getByRole("tab", { name: /Aliases/ }));
+    await waitFor(() => {
+      const dashes = screen.getAllByText("—");
+      expect(dashes.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it("shows empty triggers when esm key missing", async () => {
+    fnListWith([{ name: "my-fn", state: "Active" }]);
+    defaultDetail();
+    mockEsm.mockReturnValue({ data: { total: 0 } });
+    const user = userEvent.setup();
+    render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await openDetail(user);
+    await user.click(screen.getByRole("tab", { name: /Triggers/ }));
+    await waitFor(() => expect(screen.getByText("No event source mappings")).toBeTruthy());
+  });
+
+  it("shows Enabling and dashes for sparse triggers", async () => {
+    fnListWith([{ name: "my-fn", state: "Active" }]);
+    defaultDetail();
+    mockEsm.mockReturnValue({ data: { eventSourceMappings: [{}], total: 1 } });
+    const user = userEvent.setup();
+    render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await openDetail(user);
+    await user.click(screen.getByRole("tab", { name: /Triggers/ }));
+    await waitFor(() => expect(screen.getByText("Enabling")).toBeTruthy());
+  });
+
+  it("shows fallback layers error message", async () => {
+    mockLayers.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: undefined });
+    const user = userEvent.setup();
+    render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Layers/i }));
+    await waitFor(() => expect(screen.getByText("Failed to load layers")).toBeTruthy());
+  });
+
+  it("creates a layer version with description and license", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Layers/i }));
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-layer")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-layer"), "layer-1");
+    await user.type(screen.getByPlaceholderText("Optional description"), "my desc");
+    await user.type(screen.getByPlaceholderText("Optional license info"), "MIT");
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => {
+      expect(mockCreateLayer).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "layer-1", description: "my desc", licenseInfo: "MIT", compatibleRuntimes: ["nodejs22.x"] }),
+        expect.any(Object),
+      );
+    });
+  });
+
+  it("creates a layer version without description or license", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Layers/i }));
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-layer")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-layer"), "layer-2");
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => {
+      expect(mockCreateLayer).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "layer-2", description: undefined, licenseInfo: undefined }),
+        expect.any(Object),
+      );
+    });
+  });
+
+  it("shows create layer error alert", async () => {
+    createLayerState.isError = true;
+    createLayerState.error = new Error("Layer create failed");
+    const user = userEvent.setup();
+    render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Layers/i }));
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Layer create failed")).toBeTruthy());
+  });
+
+  it("shows fallback create layer error message", async () => {
+    createLayerState.isError = true;
+    createLayerState.error = new Error("");
+    const user = userEvent.setup();
+    render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Layers/i }));
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Failed to create layer")).toBeTruthy());
+  });
+
+  it("changes compatible runtime select in create layer modal", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Layers/i }));
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-layer")).toBeTruthy());
+    await user.click(screen.getByText("nodejs22.x"));
+    await user.click(screen.getByText("python3.13"));
+    await user.type(screen.getByPlaceholderText("my-layer"), "layer-3");
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => {
+      expect(mockCreateLayer).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "layer-3", compatibleRuntimes: ["python3.13"] }),
+        expect.any(Object),
+      );
+    });
   });
 });

@@ -203,7 +203,6 @@ function LambdaFunctionList({ onSelect }: { onSelect: (name: string) => void }) 
                 loading={createFunction.isPending}
                 disabled={!form.name || !form.handler}
                 onClick={() => {
-                  if (!form.name || !form.handler) return;
                   createFunction.mutate(
                     {
                       name: form.name,
@@ -246,7 +245,7 @@ function LambdaFunctionList({ onSelect }: { onSelect: (name: string) => void }) 
                 onChange={({ detail }) =>
                   setForm((p) => ({
                     ...p,
-                    runtime: detail.selectedOption.value || "nodejs22.x",
+                    runtime: detail.selectedOption.value!,
                   }))
                 }
                 options={RUNTIMES}
@@ -620,7 +619,6 @@ function LambdaLayerList() {
                 loading={createLayerVersion.isPending}
                 disabled={!form.name}
                 onClick={() => {
-                  if (!form.name) return;
                   createLayerVersion.mutate(
                     {
                       name: form.name,
@@ -664,8 +662,7 @@ function LambdaLayerList() {
                 onChange={({ detail }) =>
                   setForm((p) => ({
                     ...p,
-                    compatibleRuntimes:
-                      detail.selectedOption.value || "nodejs22.x",
+                    compatibleRuntimes: detail.selectedOption.value!,
                   }))
                 }
                 options={RUNTIMES}
