@@ -112,4 +112,41 @@ describe("AppConfigDataDashboard", () => {
       expect(screen.getByText("application/json")).toBeTruthy();
     });
   });
+
+  it("updates token when nextPollConfigurationToken is returned", async () => {
+    mockStartSession.mockResolvedValue({ initialConfigurationToken: "token-a" });
+    mockGetLatest.mockResolvedValue({ content: "hello", nextPollConfigurationToken: "token-b" });
+    const user = userEvent.setup();
+    render(<AppConfigDataDashboard />, { wrapper: createWrapper() });
+
+    await user.type(screen.getByPlaceholderText("my-app"), "app");
+    await user.type(screen.getByPlaceholderText("prod"), "env");
+    await user.type(screen.getByPlaceholderText("profile-1"), "prof");
+    await user.click(screen.getByRole("button", { name: /Start Session/i }));
+    await waitFor(() => screen.getByText(/token-a/));
+
+    await user.click(screen.getByText("Get Latest Configuration"));
+    await waitFor(() => {
+      expect(screen.getByText(/token-b/)).toBeTruthy();
+    });
+  });
+
+  it("shows dash and empty fallbacks for sparse result", async () => {
+    mockStartSession.mockResolvedValue({ initialConfigurationToken: "token-c" });
+    mockGetLatest.mockResolvedValue({});
+    const user = userEvent.setup();
+    render(<AppConfigDataDashboard />, { wrapper: createWrapper() });
+
+    await user.type(screen.getByPlaceholderText("my-app"), "app");
+    await user.type(screen.getByPlaceholderText("prod"), "env");
+    await user.type(screen.getByPlaceholderText("profile-1"), "prof");
+    await user.click(screen.getByRole("button", { name: /Start Session/i }));
+    await waitFor(() => screen.getByText(/token-c/));
+
+    await user.click(screen.getByText("Get Latest Configuration"));
+    await waitFor(() => {
+      expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(2);
+      expect(screen.getByText("(empty)")).toBeTruthy();
+    });
+  });
 });
