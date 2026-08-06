@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -1104,5 +1104,567 @@ describe("ECSDashboard — services filter", () => {
     // Name is empty, task def not selected — button should be disabled
     const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
     expect(createBtns[createBtns.length - 1]).toBeDisabled();
+  });
+
+
+});
+
+// ─── Toast error paths ────────────────────────────────────
+
+describe("ECSDashboard — account settings toast errors", () => {
+  it("shows error toast with message when deleting account setting fails", async () => {
+    mockAccountSettings.mockReturnValue({
+      data: { settings: [{ name: "containerInsights", value: "enabled" }], total: 1 },
+      isLoading: false,
+    });
+    mockDeleteAccountSetting.mockRejectedValue(new Error("Delete failed"));
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /account settings/i }));
+    await waitFor(() => expect(screen.getAllByText("containerInsights").length).toBeGreaterThan(0));
+    await user.click(screen.getByRole("button", { name: /Delete containerInsights/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("error", "Delete failed"));
+  });
+
+  it("shows fallback toast when delete account setting error has no message", async () => {
+    mockAccountSettings.mockReturnValue({
+      data: { settings: [{ name: "containerInsights", value: "enabled" }], total: 1 },
+      isLoading: false,
+    });
+    mockDeleteAccountSetting.mockRejectedValue(new Error(""));
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /account settings/i }));
+    await waitFor(() => expect(screen.getAllByText("containerInsights").length).toBeGreaterThan(0));
+    await user.click(screen.getByRole("button", { name: /Delete containerInsights/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("error", "Failed to delete setting"));
+  });
+
+  it("shows error toast with message when put setting fails", async () => {
+    mockPutAccountSetting.mockImplementation((_body: any, opts: any) => opts?.onError?.(new Error("Put failed")));
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /account settings/i }));
+    await clickButton(user, /Create Account Setting/i);
+    await waitFor(() => expect(screen.getByText("Put account setting")).toBeTruthy());
+    await clickButton(user, /Save/i);
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("error", "Put failed"));
+  });
+
+  it("shows fallback toast when put setting error has no message", async () => {
+    mockPutAccountSetting.mockImplementation((_body: any, opts: any) => opts?.onError?.(new Error("")));
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /account settings/i }));
+    await clickButton(user, /Create Account Setting/i);
+    await waitFor(() => expect(screen.getByText("Put account setting")).toBeTruthy());
+    await clickButton(user, /Save/i);
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("error", "Failed to put setting"));
+  });
+});
+
+describe("ECSDashboard — task set toast errors", () => {
+  beforeEach(() => {
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [{ clusterName: "my-cluster", status: "ACTIVE", clusterArn: "arn:aws:ecs:::cluster/my-cluster" }],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockServices.mockReturnValue({
+      data: { services: [{ serviceName: "svc1", status: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    mockTaskSets.mockReturnValue({
+      data: { taskSets: [{ id: "ts-1", status: "ACTIVE", taskDefinition: "t:1", runningCount: 1, computedDesiredCount: 1 }], total: 1 },
+      isLoading: false,
+    });
+  });
+
+  async function openWithService(user: ReturnType<typeof userEvent.setup>) {
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /task sets/i }));
+    await user.click(screen.getByText("Choose a service"));
+    await user.click(await screen.findByText("svc1"));
+    await waitFor(() => expect(screen.getByText("ts-1")).toBeTruthy());
+  }
+
+  it("shows error toast when set primary fails", async () => {
+    mockSetPrimaryTaskSet.mockRejectedValue(new Error("Primary failed"));
+    const user = userEvent.setup();
+    await openWithService(user);
+    await clickButton(user, /Make primary/i);
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("error", "Primary failed"));
+  });
+
+  it("shows fallback toast when set primary error has no message", async () => {
+    mockSetPrimaryTaskSet.mockRejectedValue(new Error(""));
+    const user = userEvent.setup();
+    await openWithService(user);
+    await clickButton(user, /Make primary/i);
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("error", "Failed to set primary"));
+  });
+
+  it("shows error toast when delete task set fails", async () => {
+    mockDeleteTaskSet.mockRejectedValue(new Error("Delete TS failed"));
+    const user = userEvent.setup();
+    await openWithService(user);
+    await user.click(screen.getByRole("button", { name: /Delete ts-1/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("error", "Delete TS failed"));
+  });
+
+  it("shows fallback toast when delete task set error has no message", async () => {
+    mockDeleteTaskSet.mockRejectedValue(new Error(""));
+    const user = userEvent.setup();
+    await openWithService(user);
+    await user.click(screen.getByRole("button", { name: /Delete ts-1/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("error", "Failed to delete task set"));
+  });
+
+  it("shows error toast when create task set fails", async () => {
+    mockCreateTaskSet.mockImplementation((_body: any, opts: any) => opts?.onError?.(new Error("Create TS failed")));
+    const user = userEvent.setup();
+    await openWithService(user);
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create task set")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-task-def:1"), "my-family:3");
+    await clickButton(user, /Create/i, { last: true });
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("error", "Create TS failed"));
+  });
+
+  it("shows fallback toast when create task set error has no message", async () => {
+    mockCreateTaskSet.mockImplementation((_body: any, opts: any) => opts?.onError?.(new Error("")));
+    const user = userEvent.setup();
+    await openWithService(user);
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create task set")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-task-def:1"), "my-family:3");
+    await clickButton(user, /Create/i, { last: true });
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("error", "Failed to create task set"));
+  });
+});
+
+// ─── Fallback error alerts ────────────────────────────────
+
+describe("ECSDashboard — fallback error alerts", () => {
+  it("shows fallback create cluster error message", async () => {
+    createClusterState.isError = true;
+    createClusterState.error = new Error("");
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create cluster")).toBeTruthy());
+    expect(screen.getByText("Failed to create cluster")).toBeTruthy();
+  });
+
+  it("shows fallback cluster list error message", () => {
+    mockClusters.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new Error(""),
+    });
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("Unknown error")).toBeTruthy();
+  });
+
+  it("shows fallback create service error message", async () => {
+    createServiceState.isError = true;
+    createServiceState.error = new Error("");
+    mockClusters.mockReturnValue({
+      data: { clusters: [{ clusterName: "my-cluster", status: "ACTIVE", clusterArn: "arn:1" }], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getAllByText("Create Service").length).toBeGreaterThan(0));
+    expect(screen.getByText("Failed to create service")).toBeTruthy();
+  });
+
+  it("shows fallback run task error message", async () => {
+    runTaskState.isError = true;
+    runTaskState.error = new Error("");
+    mockClusters.mockReturnValue({
+      data: { clusters: [{ clusterName: "my-cluster", status: "ACTIVE", clusterArn: "arn:1" }], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /tasks/i }));
+    await clickButton(user, /Run/i);
+    await waitFor(() => expect(screen.getByText("Run task")).toBeTruthy());
+    expect(screen.getByText("Failed to run task")).toBeTruthy();
+  });
+});
+
+// ─── Sparse data fallbacks ────────────────────────────────
+
+describe("ECSDashboard — sparse data fallbacks", () => {
+  it("filters clusters without crashing when a cluster has no name", async () => {
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [
+          { clusterName: "alpha-cluster", status: "ACTIVE", clusterArn: "arn:1" },
+          { clusterName: null, status: "ACTIVE", clusterArn: "arn:2" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("alpha-cluster")).toBeTruthy());
+    const filterInput = screen.getByPlaceholderText("Find clusters by name");
+    await user.type(filterInput, "alpha");
+    await waitFor(() => expect(screen.getByText("alpha-cluster")).toBeTruthy());
+  });
+
+  it("shows dashes for account setting missing name and value", async () => {
+    mockAccountSettings.mockReturnValue({
+      data: { settings: [{ name: null, value: null }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /account settings/i }));
+    await waitFor(() => {
+      expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it("shows ACTIVE status for service with missing status", async () => {
+    mockClusters.mockReturnValue({
+      data: { clusters: [{ clusterName: "my-cluster", status: "ACTIVE", clusterArn: "arn:1" }], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockServices.mockReturnValue({
+      data: { services: [{ serviceName: "svc-no-status", taskDefinition: "arn:1" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText("svc-no-status")).toBeTruthy());
+    // StatusBadge maps unknown statuses to "Connected"
+    expect(screen.getAllByText("Connected").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("filters services without crashing when a service has no name", async () => {
+    mockClusters.mockReturnValue({
+      data: { clusters: [{ clusterName: "my-cluster", status: "ACTIVE", clusterArn: "arn:1" }], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockServices.mockReturnValue({
+      data: {
+        services: [
+          { serviceName: "alpha-svc", status: "ACTIVE", taskDefinition: "arn:1" },
+          { serviceName: null, status: "ACTIVE", taskDefinition: "arn:2" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText("alpha-svc")).toBeTruthy());
+    const filterInput = screen.getByPlaceholderText("Find services");
+    await user.type(filterInput, "alpha");
+    await waitFor(() => expect(screen.getByText("alpha-svc")).toBeTruthy());
+  });
+
+  it("shows empty tasks when data lacks the tasks array", async () => {
+    mockClusters.mockReturnValue({
+      data: { clusters: [{ clusterName: "my-cluster", status: "ACTIVE", clusterArn: "arn:1" }], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockTasks.mockReturnValue({ data: {}, isLoading: false });
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /tasks/i }));
+    await waitFor(() => expect(screen.getByText(/No running tasks/)).toBeTruthy());
+  });
+
+  it("shows UNKNOWN status for task with missing lastStatus", async () => {
+    mockClusters.mockReturnValue({
+      data: { clusters: [{ clusterName: "my-cluster", status: "ACTIVE", clusterArn: "arn:1" }], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockTasks.mockReturnValue({
+      data: { tasks: [{ taskArn: "arn:aws:ecs:::task/abc" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /tasks/i }));
+    // StatusBadge maps unknown statuses to "Connected"
+    await waitFor(() => expect(screen.getByText("abc")).toBeTruthy());
+    expect(screen.getAllByText("Connected").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("shows empty task defs when data lacks the array", async () => {
+    mockClusters.mockReturnValue({
+      data: { clusters: [{ clusterName: "my-cluster", status: "ACTIVE", clusterArn: "arn:1" }], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockTaskDefs.mockReturnValue({ data: {}, isLoading: false });
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /task definitions/i }));
+    await waitFor(() => expect(screen.getByText(/No task definitions registered/i)).toBeTruthy());
+  });
+
+  it("renders task def without slash in arn", async () => {
+    mockClusters.mockReturnValue({
+      data: { clusters: [{ clusterName: "my-cluster", status: "ACTIVE", clusterArn: "arn:1" }], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockTaskDefs.mockReturnValue({
+      data: { taskDefinitionArns: ["plain-arn"], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /task definitions/i }));
+    await waitFor(() => expect(screen.getByText("plain-arn")).toBeTruthy());
+  });
+
+  it("filters task defs without crashing when arn missing", async () => {
+    mockClusters.mockReturnValue({
+      data: { clusters: [{ clusterName: "my-cluster", status: "ACTIVE", clusterArn: "arn:1" }], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockTaskDefs.mockReturnValue({
+      data: { taskDefinitionArns: ["alpha:1", ""], total: 2 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /task definitions/i }));
+    await waitFor(() => expect(screen.getByText("alpha:1")).toBeTruthy());
+    const filterInput = screen.getByPlaceholderText("Find task definitions");
+    await user.type(filterInput, "alpha");
+    await waitFor(() => expect(screen.getByText("alpha:1")).toBeTruthy());
+  });
+});
+
+// ─── Service form interactions ────────────────────────────
+
+describe("ECSDashboard — service form interactions", () => {
+  beforeEach(() => {
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [{ clusterName: "my-cluster", status: "ACTIVE", clusterArn: "arn:aws:ecs:::cluster/my-cluster" }],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockTaskDefFamilies.mockReturnValue({ data: { families: ["my-family"] }, isLoading: false });
+  });
+
+  async function openServiceModal(user: ReturnType<typeof userEvent.setup>) {
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getAllByText("Create Service").length).toBeGreaterThan(0));
+  }
+
+  it("create service button disabled when only name filled", async () => {
+    const user = userEvent.setup();
+    await openServiceModal(user);
+    await user.type(screen.getByPlaceholderText("my-service"), "my-svc");
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    expect(createBtns[createBtns.length - 1]).toBeDisabled();
+  });
+
+  it("fills desired count and selects task def, then submits and shows error toast", async () => {
+    mockCreateService.mockImplementation((_body: any, opts: any) => opts?.onError?.(new Error("Service create failed")));
+    const user = userEvent.setup();
+    await openServiceModal(user);
+    await user.type(screen.getByPlaceholderText("my-service"), "svc");
+    // Select task definition from Cloudscape Select
+    await user.click(screen.getByText("Select task definition"));
+    await user.click(await screen.findByText("my-family"));
+    const countInput = screen.getByLabelText(/Desired count/i);
+    await user.clear(countInput);
+    await user.type(countInput, "5");
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("error", "Service create failed"));
+    expect(mockCreateService).toHaveBeenCalledWith(
+      expect.objectContaining({ serviceName: "svc", desiredCount: 5 }),
+      expect.any(Object),
+    );
+  });
+
+  it("resets desired count to 0 when non-numeric value entered", async () => {
+    const user = userEvent.setup();
+    await openServiceModal(user);
+    const countInput = screen.getByLabelText(/Desired count/i);
+    await user.clear(countInput);
+    fireEvent.change(countInput, { target: { value: "abc" } });
+    // With task def selected and name filled, submit to verify count is 0
+    await user.type(screen.getByPlaceholderText("my-service"), "svc");
+    await user.click(screen.getByText("Select task definition"));
+    await user.click(await screen.findByText("my-family"));
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => {
+      expect(mockCreateService).toHaveBeenCalledWith(
+        expect.objectContaining({ desiredCount: 0 }),
+        expect.any(Object),
+      );
+    });
+  });
+});
+
+// ─── Remaining branch targets ─────────────────────────────
+
+describe("ECSDashboard — remaining branch targets", () => {
+  it("shows fallback toast when create service error has no message", async () => {
+    mockCreateService.mockImplementation((_body: any, opts: any) => opts?.onError?.(new Error("")));
+    mockClusters.mockReturnValue({
+      data: { clusters: [{ clusterName: "my-cluster", status: "ACTIVE", clusterArn: "arn:1" }], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockTaskDefFamilies.mockReturnValue({ data: { families: ["my-family"] }, isLoading: false });
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getAllByText("Create Service").length).toBeGreaterThan(0));
+    await user.type(screen.getByPlaceholderText("my-service"), "svc");
+    await user.click(screen.getByText("Select task definition"));
+    await user.click(await screen.findByText("my-family"));
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("error", "Failed to create service"));
+  });
+
+  it("renders empty task sets when data lacks the array", async () => {
+    mockClusters.mockReturnValue({
+      data: { clusters: [{ clusterName: "my-cluster", status: "ACTIVE", clusterArn: "arn:1" }], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockServices.mockReturnValue({
+      data: { services: [{ serviceName: "svc1", status: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    mockTaskSets.mockReturnValue({ data: {}, isLoading: false });
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /task sets/i }));
+    await user.click(screen.getByText("Choose a service"));
+    await user.click(await screen.findByText("svc1"));
+    await waitFor(() => expect(screen.getByText("No task sets for this service.")).toBeTruthy());
+  });
+
+  it("renders empty task def families when data lacks the array", async () => {
+    mockClusters.mockReturnValue({
+      data: { clusters: [{ clusterName: "my-cluster", status: "ACTIVE", clusterArn: "arn:1" }], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockTaskDefFamilies.mockReturnValue({ data: {}, isLoading: false });
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getAllByText("Create Service").length).toBeGreaterThan(0));
+    // Select renders with empty options — no crash
+    expect(screen.getByText("Select task definition")).toBeTruthy();
+  });
+
+  it("changes launch type via select", async () => {
+    mockClusters.mockReturnValue({
+      data: { clusters: [{ clusterName: "my-cluster", status: "ACTIVE", clusterArn: "arn:1" }], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockTaskDefFamilies.mockReturnValue({ data: { families: ["my-family"] }, isLoading: false });
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getAllByText("Create Service").length).toBeGreaterThan(0));
+    // Launch type Select shows current value "FARGATE"
+    await user.click(screen.getAllByText("FARGATE")[0]);
+    await waitFor(() => expect(screen.getAllByText("EC2").length).toBeGreaterThan(0));
+    await user.click(screen.getAllByText("EC2")[0]);
+    // Submit with name + task def to verify launchType EC2
+    mockCreateService.mockImplementation((_body: any, opts: any) => opts?.onSuccess?.());
+    await user.type(screen.getByPlaceholderText("my-service"), "svc");
+    await user.click(screen.getByText("Select task definition"));
+    await user.click(await screen.findByText("my-family"));
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => {
+      expect(mockCreateService).toHaveBeenCalledWith(
+        expect.objectContaining({ launchType: "EC2" }),
+        expect.any(Object),
+      );
+    });
   });
 });
