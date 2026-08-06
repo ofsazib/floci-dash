@@ -181,4 +181,13 @@ describe("FirehoseDashboard — filtering", () => {
       expect(screen.queryByText("visible-stream")).toBeNull();
     });
   });
+
+
+  // ── Sparse data ─────────────────────────────────────
+
+  it("renders empty when data lacks the streams array", () => {
+    mockFirehoseStreams.mockReturnValue({ data: { total: 0 }, isLoading: false });
+    render(<FirehoseDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("No delivery streams")).toBeTruthy();
+  });
 });

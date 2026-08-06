@@ -8,15 +8,23 @@ import React from "react";
 const mockJobs = vi.fn();
 const mockDeleteJob = vi.fn();
 
+const deleteJobState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
+
 vi.mock("../../hooks/useTranscribe", () => ({
   useTranscriptionJobs: (...args: any[]) => mockJobs(...args),
-  useDeleteTranscriptionJob: () => ({ mutateAsync: mockDeleteJob, isPending: false, variables: null }),
+  useDeleteTranscriptionJob: () => ({
+    mutateAsync: mockDeleteJob,
+    get isPending() { return deleteJobState.isPending; },
+    get variables() { return deleteJobState.variables; },
+  }),
 }));
 
 import { TranscribeDashboard } from "./TranscribeDashboard";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  deleteJobState.isPending = false;
+  deleteJobState.variables = null;
   mockJobs.mockReturnValue({ data: { jobs: [], total: 0 }, isLoading: false });
 });
 
@@ -98,5 +106,25 @@ describe("TranscribeDashboard", () => {
     await waitFor(() => {
       expect(screen.queryByText("alpha-job")).toBeNull();
     });
+  });
+
+
+  // ── Sparse data & delete loading ────────────────────
+
+  it("renders empty when data lacks the jobs array", () => {
+    mockJobs.mockReturnValue({ data: { total: 0 }, isLoading: false });
+    render(<TranscribeDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No transcription jobs/i)).toBeTruthy();
+  });
+
+  it("renders delete loading state", () => {
+    deleteJobState.isPending = true;
+    deleteJobState.variables = "loading-job";
+    mockJobs.mockReturnValue({
+      data: { jobs: [{ TranscriptionJobName: "loading-job", TranscriptionJobStatus: "COMPLETED" }], total: 1 },
+      isLoading: false,
+    });
+    render(<TranscribeDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("loading-job")).toBeTruthy();
   });
 });
