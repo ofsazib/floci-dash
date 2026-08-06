@@ -114,6 +114,24 @@ describe("EC2 Flow Logs Routes", () => {
       const cmd = mockSend.mock.calls[0][0];
       expect(cmd.Filter).toBeUndefined();
     });
+
+    it("GET /flow-logs — returns empty when FlowLogs key missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/flow-logs");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.flowLogs).toEqual([]);
+    });
+
+    it("GET /flow-logs — handles sparse flow log (no CreationTime, no Tags)", async () => {
+      mockSend.mockResolvedValueOnce({ FlowLogs: [{ FlowLogId: "fl-sparse" }] });
+      const res = await get("/flow-logs");
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(body.flowLogs[0].creationTime).toBeNull();
+      expect(body.flowLogs[0].deliverCrossAccountRole).toBeNull();
+      expect(body.flowLogs[0].tags).toEqual([]);
+    });
   });
 
   describe("Create Flow Log", () => {
@@ -208,6 +226,20 @@ describe("EC2 Flow Logs Routes", () => {
       expect(body.created).toBe(false);
       expect(body.unsuccessful).toHaveLength(1);
     });
+
+    it("POST /flow-logs — sparse response (no FlowLogIds, no Unsuccessful)", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/flow-logs", {
+        resourceId: "vpc-sparse",
+        resourceType: "VPC",
+        trafficType: "ALL",
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.created).toBe(false);
+      expect(body.flowLogIds).toEqual([]);
+      expect(body.unsuccessful).toEqual([]);
+    });
   });
 
   describe("Delete Flow Log", () => {
@@ -236,6 +268,15 @@ describe("EC2 Flow Logs Routes", () => {
       const body = await res.json();
       expect(body.deleted).toBe(false);
       expect(body.unsuccessful).toHaveLength(1);
+    });
+
+    it("DELETE /flow-logs/:id — sparse response (no Unsuccessful)", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/flow-logs/fl-ok");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deleted).toBe(true);
+      expect(body.unsuccessful).toEqual([]);
     });
   });
 });

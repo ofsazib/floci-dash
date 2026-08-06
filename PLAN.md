@@ -1661,6 +1661,13 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 | 25.31 | codepipeline.ts — replace 44 unreachable `decodeURIComponent(c.req.param(X) \|\| "")` fallbacks with `param(X)!` + remove 25 unreachable param-validation guards (`if (!name)` etc. — URL params never decode empty; empty segments 404 before routing) | Done | 2026-08-06 |
 | 25.32 | Verify: codepipeline.ts 75.62%→**100% branch**, 115 route tests pass, full suite 7619/7619 (269 files), typecheck clean | Done | 2026-08-06 |
 
+**Batch 11 — EC2 Flow Logs route branch coverage** (2026-08-06)
+
+| # | Task | Status | Date |
+|---|------|--------|------|
+| 25.33 | ec2-flow-logs.test.ts — add 4 sparse-response tests (missing FlowLogs key, flow log without CreationTime/Tags, create/delete responses without FlowLogIds/Unsuccessful) | Done | 2026-08-06 |
+| 25.34 | Verify: ec2-flow-logs.ts 75.75%→**100% branch**, 17 route tests pass, full suite 7623/7623 (269 files), typecheck clean | Done | 2026-08-06 |
+
 
 ---
 
