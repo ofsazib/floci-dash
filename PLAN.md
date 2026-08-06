@@ -1613,6 +1613,15 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 | 25.16 | s3.ts — replace unreachable `\|\| ''` fallbacks with `param()!` non-null assertions (codebase convention, keeps branch coverage clean, fixes typecheck) | Done | 2026-08-06 |
 | 25.17 | Verify: 62 S3 route tests pass, typecheck clean, full suite 7300 passed (1 integration failure — Floci not running, expected) | Done | 2026-08-06 |
 
+**Batch 5 — RGT route branch coverage + RDS integration timeout** (2026-08-06)
+
+| # | Task | Status | Date |
+|---|------|--------|------|
+| 25.18 | resourcegroupstagging.test.ts — add 7 branch tests (all optional query params forwarded, resourcesPerPage=0 fallback, sparse responses for all 5 endpoints, tags:{} 400) | Done | 2026-08-06 |
+| 25.19 | Verify: resourcegroupstagging.ts 73.7%→100% branch, 21 route tests pass | Done | 2026-08-06 |
+| 25.20 | integration.test.ts — bump timeout to 30s on slow RDS provisioning tests (DB instance/cluster create) that flaked under full-suite parallel load (10s global timeout) | Done | 2026-08-06 |
+| 25.21 | Verify: full suite 7602/7602 passed (269 files), typecheck clean | Done | 2026-08-06 |
+
 
 ---
 

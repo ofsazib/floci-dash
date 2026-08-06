@@ -2695,6 +2695,8 @@ describe("RDS Integration", () => {
 
   // ── DB Instances ────────────────────────────────────────
 
+  // Floci simulates provisioning, so creation can exceed the 10s global
+  // timeout when the full suite hammers Floci in parallel.
   it("creates a DB instance (Floci may not support — pass gracefully)", async () => {
     const { status, data } = await api("POST", "/api/aws/rds/db-instances", {
       dbInstanceIdentifier: dbId,
@@ -2707,7 +2709,7 @@ describe("RDS Integration", () => {
     if (status !== 200) return;
     expect(data.created).toBe(true);
     expect(data.id).toBe(dbId);
-  });
+  }, 30000);
 
   it("lists DB instances", async () => {
     const { status, data } = await api("GET", "/api/aws/rds/db-instances");
@@ -2764,7 +2766,7 @@ describe("RDS Integration", () => {
     const delRes = await api("DELETE", `/api/aws/rds/db-clusters/${clusterId}`);
     expect(delRes.status).toBe(200);
     expect(delRes.data.deleted).toBe(true);
-  });
+  }, 30000);
 
   // ── Cleanup ─────────────────────────────────────────────
 

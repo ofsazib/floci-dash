@@ -175,3 +175,102 @@ describe("Resource Groups Tagging Routes", () => {
     });
   });
 });
+
+
+// ─── Remaining branch targets ────────────────────────────
+
+describe("Resource Groups Tagging Sparse Data & Params", () => {
+  beforeEach(() => {
+    mockSend.mockReset();
+  });
+
+  describe("GET /resources query params", () => {
+    it("parses and forwards all optional query params", async () => {
+      mockSend.mockResolvedValueOnce({ ResourceTagMappingList: [] });
+      const qs = new URLSearchParams({
+        tagFilters: JSON.stringify([{ Key: "env", Values: ["prod"] }]),
+        resourceTypeFilters: JSON.stringify(["AWS::S3::Bucket"]),
+        resourcesPerPage: "100",
+        paginationToken: "next-token",
+      }).toString();
+      const res = await get(`/resources?${qs}`);
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetResourcesCommand");
+      expect(mockSend.mock.calls[0][0].TagFilters).toEqual([{ Key: "env", Values: ["prod"] }]);
+      expect(mockSend.mock.calls[0][0].ResourceTypeFilters).toEqual(["AWS::S3::Bucket"]);
+      expect(mockSend.mock.calls[0][0].ResourcesPerPage).toBe(100);
+      expect(mockSend.mock.calls[0][0].PaginationToken).toBe("next-token");
+    });
+
+    it("falls back to 50 when resourcesPerPage is 0", async () => {
+      mockSend.mockResolvedValueOnce({ ResourceTagMappingList: [] });
+      const res = await get("/resources?resourcesPerPage=0");
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].ResourcesPerPage).toBe(50);
+    });
+
+    it("returns empty list when ResourceTagMappingList key missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/resources");
+      const body = await res.json();
+      expect(body.resourceTagMappingList).toEqual([]);
+      expect(body.total).toBe(0);
+      expect(body.paginationToken).toBeUndefined();
+    });
+  });
+
+  describe("POST /tag edge cases", () => {
+    it("returns 400 when tags is an empty object", async () => {
+      const res = await post("/tag", { resourceARNList: ["arn:aws:s3:::my-bucket"], tags: {} });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe("tags is required");
+    });
+
+    it("returns empty failedResourcesMap when key missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/tag", {
+        resourceARNList: ["arn:aws:s3:::my-bucket"],
+        tags: { env: "prod" },
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.failedResourcesMap).toEqual({});
+    });
+  });
+
+  describe("POST /untag edge cases", () => {
+    it("returns empty failedResourcesMap when key missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/untag", {
+        resourceARNList: ["arn:aws:s3:::my-bucket"],
+        tagKeys: ["env"],
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.failedResourcesMap).toEqual({});
+    });
+  });
+
+  describe("GET /tag-keys edge cases", () => {
+    it("returns empty list when TagKeys key missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/tag-keys");
+      const body = await res.json();
+      expect(body.tagKeys).toEqual([]);
+      expect(body.total).toBe(0);
+      expect(body.paginationToken).toBeUndefined();
+    });
+  });
+
+  describe("GET /tag-values edge cases", () => {
+    it("returns empty list when TagValues key missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/tag-values?key=Environment");
+      const body = await res.json();
+      expect(body.tagValues).toEqual([]);
+      expect(body.total).toBe(0);
+      expect(body.paginationToken).toBeUndefined();
+    });
+  });
+});
