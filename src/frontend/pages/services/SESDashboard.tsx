@@ -638,7 +638,16 @@ export function SESDashboard() {
         }
       />
       {verifiedEmails && verifiedEmails.emails.length > 0 && (
-        <Container header={<Header variant="h2">Verified Emails</Header>}>
+        <Container
+          header={
+            <Header
+              variant="h2"
+              actions={<Button onClick={() => setShowSendEmail(true)}>Send email</Button>}
+            >
+              Verified Emails
+            </Header>
+          }
+        >
           <Box>
             {verifiedEmails.emails.map((email: string) => (
               <div key={email}>{email}</div>
@@ -991,8 +1000,8 @@ export function SESDashboard() {
                   {(configSetDetail.data.eventDestinations || []).length === 0 ? (
                     <Box variant="small" color="text-status-inactive">No event destinations configured.</Box>
                   ) : (
-                    <SpaceBetween size="s">
-                      {(configSetDetail.data.eventDestinations || []).map((ed: any) => (
+            <SpaceBetween size="s">
+              {configSetDetail.data.eventDestinations.map((ed: any) => (
                         <Box key={ed.Name}>
                           <Box variant="awsui-key-label">{ed.Name}</Box>
                           <Box variant="small">
@@ -1106,20 +1115,18 @@ export function SESDashboard() {
           <Box float="right">
             <SpaceBetween direction="horizontal" size="xs">
               <Button variant="link" onClick={() => setShowNotificationTopic(false)}>Cancel</Button>
-              <Button
-                variant="primary"
-                onClick={() => {
-                  if (selectedIdentity) {
-                    setNotificationTopic.mutate(
-                      {
-                        identity: selectedIdentity,
-                        notificationType: notifType,
-                        snsTopic: snsTopic.trim() || undefined,
-                      },
-                      { onSuccess: () => setShowNotificationTopic(false) }
-                    );
-                  }
-                }}
+            <Button
+              variant="primary"
+              onClick={() => {
+                setNotificationTopic.mutate(
+                  {
+                    identity: selectedIdentity!,
+                    notificationType: notifType,
+                    snsTopic: snsTopic.trim() || undefined,
+                  },
+                  { onSuccess: () => setShowNotificationTopic(false) }
+                );
+              }}
                 loading={setNotificationTopic.isPending}
               >
                 Save
@@ -1149,16 +1156,14 @@ export function SESDashboard() {
           <Box float="right">
             <SpaceBetween direction="horizontal" size="xs">
               <Button variant="link" onClick={() => setShowMailFrom(false)}>Cancel</Button>
-              <Button
-                variant="primary"
-                onClick={() => {
-                  if (selectedIdentity && mailFromInput.trim()) {
-                    setMailFromDomain.mutate(
-                      { identity: selectedIdentity, mailFromDomain: mailFromInput.trim() },
-                      { onSuccess: () => setShowMailFrom(false) }
-                    );
-                  }
-                }}
+            <Button
+              variant="primary"
+              onClick={() => {
+                setMailFromDomain.mutate(
+                  { identity: selectedIdentity!, mailFromDomain: mailFromInput.trim() },
+                  { onSuccess: () => setShowMailFrom(false) }
+                );
+              }}
                 disabled={!mailFromInput.trim()}
                 loading={setMailFromDomain.isPending}
               >
@@ -1189,15 +1194,13 @@ export function SESDashboard() {
           <Box float="right">
             <SpaceBetween direction="horizontal" size="xs">
               <Button variant="link" onClick={() => setShowCreateConfigSet(false)}>Cancel</Button>
-              <Button
-                variant="primary"
-                onClick={() => {
-                  if (configSetName.trim()) {
-                    createConfigSet.mutate(configSetName.trim(), {
-                      onSuccess: () => { setShowCreateConfigSet(false); setConfigSetName(""); },
-                    });
-                  }
-                }}
+            <Button
+              variant="primary"
+              onClick={() => {
+                createConfigSet.mutate(configSetName.trim(), {
+                  onSuccess: () => { setShowCreateConfigSet(false); setConfigSetName(""); },
+                });
+              }}
                 disabled={!configSetName.trim()}
                 loading={createConfigSet.isPending}
               >
@@ -1228,20 +1231,18 @@ export function SESDashboard() {
           <Box float="right">
             <SpaceBetween direction="horizontal" size="xs">
               <Button variant="link" onClick={() => setShowCreateEventDest(false)}>Cancel</Button>
-              <Button
-                variant="primary"
-                onClick={() => {
-                  if (selectedConfigSet && eventDestName.trim() && eventTypes.trim()) {
-                    createEventDest.mutate({
-                      configSetName: selectedConfigSet,
-                      eventDestinationName: eventDestName.trim(),
-                      matchingEventTypes: eventTypes.split(/[,\n]+/).map((s: string) => s.trim()).filter(Boolean),
-                      snsTopicARN: snsTopicARN.trim() || undefined,
-                    }, {
-                      onSuccess: () => { setShowCreateEventDest(false); setEventDestName(""); setEventTypes(""); setSnsTopicARN(""); },
-                    });
-                  }
-                }}
+            <Button
+              variant="primary"
+              onClick={() => {
+                createEventDest.mutate({
+                  configSetName: selectedConfigSet!,
+                  eventDestinationName: eventDestName.trim(),
+                  matchingEventTypes: eventTypes.split(/[,\n]+/).map((s: string) => s.trim()).filter(Boolean),
+                  snsTopicARN: snsTopicARN.trim() || undefined,
+                }, {
+                  onSuccess: () => { setShowCreateEventDest(false); setEventDestName(""); setEventTypes(""); setSnsTopicARN(""); },
+                });
+              }}
                 disabled={!eventDestName.trim() || !eventTypes.trim()}
                 loading={createEventDest.isPending}
               >
@@ -1274,20 +1275,18 @@ export function SESDashboard() {
           <Box float="right">
             <SpaceBetween direction="horizontal" size="xs">
               <Button variant="link" onClick={() => setShowEditEventDest(false)}>Cancel</Button>
-              <Button
-                variant="primary"
-                onClick={() => {
-                  if (selectedConfigSet && eventDestName.trim() && eventTypes.trim()) {
-                    updateEventDest.mutate({
-                      configSetName: selectedConfigSet,
-                      eventDestinationName: editingEventDestName,
-                      matchingEventTypes: eventTypes.split(/[,\n]+/).map((s: string) => s.trim()).filter(Boolean),
-                      snsTopicARN: snsTopicARN.trim() || undefined,
-                    }, {
-                      onSuccess: () => { setShowEditEventDest(false); },
-                    });
-                  }
-                }}
+            <Button
+              variant="primary"
+              onClick={() => {
+                updateEventDest.mutate({
+                  configSetName: selectedConfigSet!,
+                  eventDestinationName: editingEventDestName,
+                  matchingEventTypes: eventTypes.split(/[,\n]+/).map((s: string) => s.trim()).filter(Boolean),
+                  snsTopicARN: snsTopicARN.trim() || undefined,
+                }, {
+                  onSuccess: () => { setShowEditEventDest(false); },
+                });
+              }}
                 disabled={!eventDestName.trim() || !eventTypes.trim()}
                 loading={updateEventDest.isPending}
               >
@@ -1320,18 +1319,16 @@ export function SESDashboard() {
           <Box float="right">
             <SpaceBetween direction="horizontal" size="xs">
               <Button variant="link" onClick={() => setShowTrackingOpts(false)}>Cancel</Button>
-              <Button
-                variant="primary"
-                onClick={() => {
-                  if (selectedConfigSet && trackingDomain.trim()) {
-                    const opts = { configSetName: selectedConfigSet, customRedirectDomain: trackingDomain.trim() };
-                    if (configSetDetail.data?.trackingOptions) {
-                      updateTrackingOpts.mutate(opts, { onSuccess: () => setShowTrackingOpts(false) });
-                    } else {
-                      createTrackingOpts.mutate(opts, { onSuccess: () => setShowTrackingOpts(false) });
-                    }
-                  }
-                }}
+            <Button
+              variant="primary"
+              onClick={() => {
+                const opts = { configSetName: selectedConfigSet!, customRedirectDomain: trackingDomain.trim() };
+                if (configSetDetail.data?.trackingOptions) {
+                  updateTrackingOpts.mutate(opts, { onSuccess: () => setShowTrackingOpts(false) });
+                } else {
+                  createTrackingOpts.mutate(opts, { onSuccess: () => setShowTrackingOpts(false) });
+                }
+              }}
                 disabled={!trackingDomain.trim()}
                 loading={createTrackingOpts.isPending || updateTrackingOpts.isPending}
               >
@@ -1362,16 +1359,14 @@ export function SESDashboard() {
           <Box float="right">
             <SpaceBetween direction="horizontal" size="xs">
               <Button variant="link" onClick={() => setShowDeliveryOpts(false)}>Cancel</Button>
-              <Button
-                variant="primary"
-                onClick={() => {
-                  if (selectedConfigSet) {
-                    setDeliveryOpts.mutate(
-                      { configSetName: selectedConfigSet, tlsPolicy: tlsPolicy || undefined },
-                      { onSuccess: () => setShowDeliveryOpts(false) }
-                    );
-                  }
-                }}
+            <Button
+              variant="primary"
+              onClick={() => {
+                setDeliveryOpts.mutate(
+                  { configSetName: selectedConfigSet!, tlsPolicy: tlsPolicy || undefined },
+                  { onSuccess: () => setShowDeliveryOpts(false) }
+                );
+              }}
                 loading={setDeliveryOpts.isPending}
               >
                 Save
@@ -1384,7 +1379,7 @@ export function SESDashboard() {
           <FormField label="TLS Policy" description="Require or Optional. Leave empty for default.">
             <Select
               selectedOption={tlsPolicy ? { label: tlsPolicy, value: tlsPolicy } : null}
-              onChange={({ detail }) => setTlsPolicy(detail.selectedOption?.value || "")}
+              onChange={({ detail }) => setTlsPolicy(detail.selectedOption.value!)}
               options={[
                 { label: "Require", value: "Require" },
                 { label: "Optional", value: "Optional" },

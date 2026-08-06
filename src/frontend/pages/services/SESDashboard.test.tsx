@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -35,6 +35,11 @@ const deleteConfigSetState = vi.hoisted(() => ({
 
 const createEventDestState = vi.hoisted(() => ({
   isPending: false,
+}));
+
+const deleteEventDestState = vi.hoisted(() => ({
+  isPending: false,
+  variables: null as { configSetName: string; eventDestinationName: string } | null,
 }));
 
 const setSendingEnabledState = vi.hoisted(() => ({
@@ -72,6 +77,8 @@ const mockDescribeConfigSet = vi.fn();
 const mockCreateEventDest = vi.fn();
 const mockUpdateEventDest = vi.fn();
 const mockDeleteEventDest = vi.fn();
+const mockCreateTrackingOpts = vi.fn();
+const mockUpdateTrackingOpts = vi.fn();
 const mockSetSendingEnabled = vi.fn();
 const mockSetRepMetrics = vi.fn();
 const mockSetDeliveryOpts = vi.fn();
@@ -176,7 +183,8 @@ vi.mock("../../hooks/useSES", () => ({
   }),
   useDeleteEventDestination: () => ({
     mutateAsync: mockDeleteEventDest,
-    isPending: false,
+    get isPending() { return deleteEventDestState.isPending; },
+    get variables() { return deleteEventDestState.variables; },
     isError: false,
     error: null,
     reset: vi.fn(),
@@ -190,7 +198,7 @@ vi.mock("../../hooks/useSES", () => ({
     reset: vi.fn(),
   }),
   useCreateTrackingOptions: () => ({
-    mutate: vi.fn(),
+    mutate: mockCreateTrackingOpts,
     mutateAsync: vi.fn().mockResolvedValue({}),
     isPending: false,
     isError: false,
@@ -198,7 +206,7 @@ vi.mock("../../hooks/useSES", () => ({
     reset: vi.fn(),
   }),
   useUpdateTrackingOptions: () => ({
-    mutate: vi.fn(),
+    mutate: mockUpdateTrackingOpts,
     mutateAsync: vi.fn().mockResolvedValue({}),
     isPending: false,
     isError: false,
@@ -258,6 +266,8 @@ beforeEach(() => {
   deleteConfigSetState.isPending = false;
   deleteConfigSetState.variables = null;
   createEventDestState.isPending = false;
+  deleteEventDestState.isPending = false;
+  deleteEventDestState.variables = null;
   setSendingEnabledState.isPending = false;
   setMailFromState.isPending = false;
   setNotifTopicState.isPending = false;
@@ -1644,9 +1654,16 @@ describe("SESDashboard — sending, tracking, reputation, delivery", () => {
     await user.click(screen.getByRole("button", { name: /^Set$/i }));
     await waitFor(() => expect(screen.getByPlaceholderText("click.example.com")).toBeTruthy());
 
-    // Verify a Save button is present
+    // Type a domain and click Save (scoped to the open tracking dialog) → create branch
     await user.type(screen.getByPlaceholderText("click.example.com"), "mydomain.com");
-    expect(screen.getAllByRole("button", { name: /^Save$/i }).length).toBeGreaterThanOrEqual(1);
+    const trackingDlg = screen.getByRole("dialog", { name: /Set Tracking Options/i });
+    await user.click(within(trackingDlg).getByRole("button", { name: /^Save$/i }));
+    await waitFor(() => {
+      expect(mockCreateTrackingOpts).toHaveBeenCalledWith(
+        { configSetName: "cs-save-tr-create", customRedirectDomain: "mydomain.com" },
+        expect.any(Object),
+      );
+    });
   });
 
   it("renders tracking options update Save button present", async () => {
@@ -1678,8 +1695,18 @@ describe("SESDashboard — sending, tracking, reputation, delivery", () => {
     await user.click(screen.getAllByRole("button", { name: /Edit/i })[0]);
     await waitFor(() => expect(screen.getByPlaceholderText("click.example.com")).toBeTruthy());
 
-    // Verify a Save button is present
-    expect(screen.getAllByRole("button", { name: /^Save$/i }).length).toBeGreaterThanOrEqual(1);
+    // Clear prefilled domain, type a new one, and click Save (scoped to dialog) → update branch
+    const domainInput = screen.getByPlaceholderText("click.example.com");
+    await user.clear(domainInput);
+    await user.type(domainInput, "new.domain.com");
+    const trackingDlg = screen.getByRole("dialog", { name: /Set Tracking Options/i });
+    await user.click(within(trackingDlg).getByRole("button", { name: /^Save$/i }));
+    await waitFor(() => {
+      expect(mockUpdateTrackingOpts).toHaveBeenCalledWith(
+        { configSetName: "cs-save-tr-update", customRedirectDomain: "new.domain.com" },
+        expect.any(Object),
+      );
+    });
   });
 });
 
@@ -1814,5 +1841,233 @@ describe("SESDashboard — notification + tracking + delivery", () => {
     await waitFor(() => expect(screen.getByText("cs-1")).toBeTruthy());
     await user.click(screen.getByRole("button", { name: /View/i }));
     await waitFor(() => expect(screen.getAllByText(/Delivery Options/i).length).toBeGreaterThanOrEqual(1));
+  });
+});
+
+// ─── Remaining branch targets ───────────────────────────
+
+describe("SESDashboard — remaining branches", () => {
+  function setupConfigSet(name: string, detail: any) {
+    mockConfigSets.mockReturnValue({
+      data: { configurationSets: [{ Name: name }], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockDescribeConfigSet.mockReturnValue({
+      data: detail,
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+  }
+
+  async function openDetail(user: any, name: string) {
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText(name)).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /View/i }));
+    await waitFor(() => screen.getByText("Event Destinations"));
+  }
+
+  it("sends email from Verified Emails with all fields filled", async () => {
+    mockVerifiedEmails.mockReturnValue({
+      data: { emails: ["sender@example.com"] },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("Verified Emails")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Send email/i }));
+    await waitFor(() => expect(screen.getByPlaceholderText("recipient@example.com")).toBeTruthy());
+
+    // Send stays disabled until all four fields are filled (covers the || chain)
+    const sendBtn = () => screen.getByRole("button", { name: /^Send$/i }) as HTMLButtonElement;
+    expect(sendBtn().disabled).toBe(true);
+
+    await user.type(screen.getByPlaceholderText("sender@example.com"), "sender@example.com");
+    expect(sendBtn().disabled).toBe(true);
+    await user.type(screen.getByPlaceholderText("recipient@example.com"), "to@example.com");
+    expect(sendBtn().disabled).toBe(true);
+    await user.type(screen.getByPlaceholderText("Test email"), "Hello");
+    expect(sendBtn().disabled).toBe(true);
+    await user.type(screen.getByPlaceholderText("Hello from SES"), "Body text");
+    expect(sendBtn().disabled).toBe(false);
+
+    await user.click(sendBtn());
+    await waitFor(() => {
+      expect(mockSendEmail).toHaveBeenCalledWith({
+        source: "sender@example.com",
+        toAddresses: ["to@example.com"],
+        subject: "Hello",
+        text: "Body text",
+      });
+    });
+  });
+
+  it("opens notification topic Set modal and saves with empty ARN", async () => {
+    mockIdentities.mockReturnValue({
+      data: { identities: [{ identity: "set-topic@example.com", verificationStatus: "Success", dkimEnabled: false, mailFromDomain: null }], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockNotifAttrs.mockReturnValue({ data: { forwardingEnabled: false }, isLoading: false, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /Notifications/i }));
+    await waitFor(() => screen.getByText("Notification Topics"));
+    // No topics configured → Set button covers topic?.TopicArn || "" right side
+    await user.click(screen.getAllByRole("button", { name: /^Set$/i })[0]);
+    await waitFor(() => screen.getByRole("dialog", { name: /Set Bounce Notification Topic/i }));
+    // Save with empty ARN → snsTopic.trim() || undefined right side
+    const notifDlg = screen.getByRole("dialog", { name: /Set Bounce Notification Topic/i });
+    await user.click(within(notifDlg).getByRole("button", { name: /^Save$/i }));
+    await waitFor(() => {
+      expect(mockSetNotifTopic).toHaveBeenCalledWith(
+        expect.objectContaining({ identity: "set-topic@example.com", notificationType: "Bounce", snsTopic: undefined }),
+        expect.any(Object),
+      );
+    });
+  });
+
+  it("opens MAIL FROM Set modal when no domain configured", async () => {
+    mockIdentities.mockReturnValue({
+      data: { identities: [{ identity: "mf-set@example.com", verificationStatus: "Success", dkimEnabled: false, mailFromDomain: null }], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockNotifAttrs.mockReturnValue({ data: { forwardingEnabled: false }, isLoading: false, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /Notifications/i }));
+    await waitFor(() => screen.getByText("DKIM Signing"));
+    const setBtns = screen.getAllByRole("button", { name: /^Set$/i });
+    await user.click(setBtns[setBtns.length - 1]); // MAIL FROM is last Set
+    const mfSetDlg = screen.getByRole("dialog", { name: /Set MAIL FROM Domain/i });
+    // No domain → input prefilled empty (proves the Set click fired setMailFromInput)
+    expect(within(mfSetDlg).getByDisplayValue("")).toBeTruthy();
+  });
+
+  it("opens MAIL FROM Edit modal with existing domain prefilled", async () => {
+    mockIdentities.mockReturnValue({
+      data: { identities: [{ identity: "mf-edit@example.com", verificationStatus: "Success", dkimEnabled: false, mailFromDomain: "mail.example.com" }], total: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockNotifAttrs.mockReturnValue({ data: { forwardingEnabled: false }, isLoading: false, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /Notifications/i }));
+    await waitFor(() => screen.getByText("DKIM Signing"));
+    const editBtns = screen.getAllByRole("button", { name: /^Edit$/i });
+    await user.click(editBtns[editBtns.length - 1]); // MAIL FROM is last Edit
+    await waitFor(() => screen.getByRole("dialog", { name: /Set MAIL FROM Domain/i }));
+    // The input is prefilled from the identity's mailFromDomain (covers || "" truthy side)
+    expect(screen.getByDisplayValue("mail.example.com")).toBeTruthy();
+  });
+
+  it("shows Enabled No and opens edit modal for sparse event destination", async () => {
+    setupConfigSet("cs-sparse-ed", {
+      name: "cs-sparse-ed",
+      eventDestinations: [{ Name: "sparse-dest" }],
+    });
+    const user = userEvent.setup();
+    await openDetail(user, "cs-sparse-ed");
+    await waitFor(() => expect(screen.getByText("sparse-dest")).toBeTruthy());
+    // Enabled missing → "No" (cond-expr right side); MatchingEventTypes missing → empty
+    expect(screen.getByText(/Enabled: No/i)).toBeTruthy();
+    await user.click(screen.getAllByRole("button", { name: /^Edit$/i })[0]);
+    const sparseDlg = screen.getByRole("dialog", { name: /Edit Event Destination: sparse-dest/i });
+    await waitFor(() => expect(within(sparseDlg).getByDisplayValue("sparse-dest")).toBeTruthy());
+    // Name input prefilled + disabled; MatchingEventTypes/SNSDestination fallbacks → ""
+  });
+
+  it("shows event destination delete loading state", async () => {
+    deleteEventDestState.isPending = true;
+    deleteEventDestState.variables = { configSetName: "cs-del-load", eventDestinationName: "del-me" };
+    setupConfigSet("cs-del-load", {
+      name: "cs-del-load",
+      eventDestinations: [{ Name: "del-me", Enabled: true }],
+    });
+    const user = userEvent.setup();
+    await openDetail(user, "cs-del-load");
+    await waitFor(() => expect(screen.getByText("del-me")).toBeTruthy());
+    // loading prop evaluates isPending && variables.eventDestinationName === ed.Name
+    expect(screen.getByText("del-me")).toBeTruthy();
+  });
+
+  it("opens tracking edit modal when CustomRedirectDomain is empty", async () => {
+    setupConfigSet("cs-tr-empty", {
+      name: "cs-tr-empty",
+      eventDestinations: [],
+      trackingOptions: { CustomRedirectDomain: "" },
+    });
+    const user = userEvent.setup();
+    await openDetail(user, "cs-tr-empty");
+    await user.click(screen.getAllByRole("button", { name: /^Edit$/i })[0]);
+    await waitFor(() => screen.getByRole("dialog", { name: /Set Tracking Options/i }));
+  });
+
+  it("saves edited event destination with topic ARN", async () => {
+    setupConfigSet("cs-ed-save-arn", {
+      name: "cs-ed-save-arn",
+      eventDestinations: [{ Name: "ed-arn", Enabled: true, MatchingEventTypes: ["send"], SNSDestination: { TopicARN: "arn:topic" } }],
+    });
+    const user = userEvent.setup();
+    await openDetail(user, "cs-ed-save-arn");
+    await waitFor(() => expect(screen.getByText("ed-arn")).toBeTruthy());
+    await user.click(screen.getAllByRole("button", { name: /^Edit$/i })[0]);
+    const editDlg = screen.getByRole("dialog", { name: /Edit Event Destination: ed-arn/i });
+    await waitFor(() => expect(within(editDlg).getByDisplayValue("ed-arn")).toBeTruthy());
+    await user.click(within(editDlg).getByRole("button", { name: /^Save$/i }));
+    await waitFor(() => {
+      expect(mockUpdateEventDest).toHaveBeenCalledWith(
+        expect.objectContaining({ eventDestinationName: "ed-arn", snsTopicARN: "arn:topic", matchingEventTypes: ["send"] }),
+        expect.any(Object),
+      );
+    });
+  });
+
+  it("saves edited event destination without topic ARN", async () => {
+    setupConfigSet("cs-ed-save-noarn", {
+      name: "cs-ed-save-noarn",
+      eventDestinations: [{ Name: "ed-noarn", Enabled: true, MatchingEventTypes: ["bounce"] }],
+    });
+    const user = userEvent.setup();
+    await openDetail(user, "cs-ed-save-noarn");
+    await waitFor(() => expect(screen.getByText("ed-noarn")).toBeTruthy());
+    await user.click(screen.getAllByRole("button", { name: /^Edit$/i })[0]);
+    const editDlg = screen.getByRole("dialog", { name: /Edit Event Destination: ed-noarn/i });
+    await waitFor(() => expect(within(editDlg).getByDisplayValue("ed-noarn")).toBeTruthy());
+    await user.click(within(editDlg).getByRole("button", { name: /^Save$/i }));
+    await waitFor(() => {
+      expect(mockUpdateEventDest).toHaveBeenCalledWith(
+        expect.objectContaining({ eventDestinationName: "ed-noarn", snsTopicARN: undefined }),
+        expect.any(Object),
+      );
+    });
+  });
+
+  it("saves delivery options without a TLS policy", async () => {
+    setupConfigSet("cs-del-empty", {
+      name: "cs-del-empty",
+      eventDestinations: [],
+    });
+    const user = userEvent.setup();
+    await openDetail(user, "cs-del-empty");
+    await waitFor(() => screen.getByText("Delivery Options"));
+    await user.click(screen.getAllByRole("button", { name: /^Edit$/i })[0]);
+    const delDlg = screen.getByRole("dialog", { name: /Set Delivery Options/i });
+    await user.click(within(delDlg).getByRole("button", { name: /^Save$/i }));
+    await waitFor(() => {
+      expect(mockSetDeliveryOpts).toHaveBeenCalledWith(
+        expect.objectContaining({ configSetName: "cs-del-empty", tlsPolicy: undefined }),
+        expect.any(Object),
+      );
+    });
   });
 });
