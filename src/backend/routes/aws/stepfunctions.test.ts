@@ -77,6 +77,11 @@ describe("Step Functions Routes", () => {
     expect(res.status).toBe(400);
   });
 
+  it("POST /state-machines — 400 if definition missing", async () => {
+    const res = await post("/state-machines", { name: "sm", roleArn: "arn:r" });
+    expect(res.status).toBe(400);
+  });
+
   it("DELETE /state-machines/:arn — deletes SM", async () => {
     mockSend.mockResolvedValueOnce({});
     const res = await del(`/state-machines/${ARN_ENC}`);
@@ -90,6 +95,14 @@ describe("Step Functions Routes", () => {
     const res = await get(`/state-machines/${ARN_ENC}/executions`);
     const body = await res.json();
     expect(body.total).toBe(1);
+  });
+
+  it("GET /state-machines/:arn/executions — empty when executions key missing", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get(`/state-machines/${ARN_ENC}/executions`);
+    const body = await res.json();
+    expect(body.executions).toEqual([]);
+    expect(body.total).toBe(0);
   });
 
   it("GET /executions/:arn — describes execution", async () => {
@@ -117,11 +130,27 @@ describe("Step Functions Routes", () => {
     expect(body.total).toBe(1);
   });
 
+  it("GET /executions/:arn/history — empty when events key missing", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get(`/executions/${encodeURIComponent("arn:...:exec")}/history`);
+    const body = await res.json();
+    expect(body.events).toEqual([]);
+    expect(body.total).toBe(0);
+  });
+
   it("GET /activities — lists activities", async () => {
     mockSend.mockResolvedValueOnce({ activities: [{ activityArn: "arn:...:act", name: "my-act" }] });
     const res = await get("/activities");
     const body = await res.json();
     expect(body.total).toBe(1);
+  });
+
+  it("GET /activities — empty when activities key missing", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/activities");
+    const body = await res.json();
+    expect(body.activities).toEqual([]);
+    expect(body.total).toBe(0);
   });
 
   // ── Versions ────────────────────────────────────────

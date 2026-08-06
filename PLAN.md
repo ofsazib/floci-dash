@@ -1640,6 +1640,13 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 | 25.25 | bedrockruntime.test.ts — add invoke test for sparse response (no body → `body: null` ternary fallback on line 43) | Done | 2026-08-06 |
 | 25.26 | Verify: bedrockruntime.ts 75%→**100% branch**, 4 route tests pass, full suite 7611/7611 (269 files), typecheck clean | Done | 2026-08-06 |
 
+**Batch 8 — Step Functions route branch coverage** (2026-08-06)
+
+| # | Task | Status | Date |
+|---|------|--------|------|
+| 25.27 | stepfunctions.test.ts — add 4 tests: 400 when definition missing, sparse responses for executions/events/activities (`\|\| []` fallbacks) | Done | 2026-08-06 |
+| 25.28 | Verify: stepfunctions.ts 75%→**100% branch**, 21 route tests pass, full suite 7615/7615 (269 files), typecheck clean | Done | 2026-08-06 |
+
 
 ---
 
