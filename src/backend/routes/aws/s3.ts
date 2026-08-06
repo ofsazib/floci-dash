@@ -47,8 +47,8 @@ router.post("/buckets", async (c: Context) => {
 
 // Delete bucket
 router.delete("/buckets/:name", async (c: Context) => {
-  const name = c.req.param("name");
-  const cleanName = sanitizeBucketName(name || "");
+  const name = c.req.param("name")!;
+  const cleanName = sanitizeBucketName(name);
   if (!cleanName) return c.json({ error: "Invalid bucket name" }, 400);
   await s3().send(new DeleteBucketCommand({ Bucket: cleanName }));
   return c.json({ name: cleanName, deleted: true });
@@ -63,7 +63,7 @@ router.get("/buckets/:name/objects", async (c: Context) => {
     new ListObjectsV2Command({
       Bucket: name,
       Prefix: prefix || undefined,
-      Delimiter: delimiter || undefined,
+      Delimiter: delimiter,
     })
   );
   const objects = (result.Contents || [])
@@ -84,7 +84,7 @@ router.get("/buckets/:name/objects", async (c: Context) => {
 // Stream raw object content with correct Content-Type — used for "Open in browser"
 // Must be defined BEFORE the catch-all /* route.
 router.get("/buckets/:name/objects/*/raw", async (c: Context) => {
-  const bucket = sanitizeBucketName(c.req.param("name") || "");
+  const bucket = sanitizeBucketName(c.req.param("name")!);
   const path = new URL(c.req.url).pathname;
   const key = sanitizeS3Key(decodeURIComponent(path.split("/objects/")[1]?.replace(/\/raw$/, "") || ""));
   if (!key) return c.json({ error: "Object key is required" }, 400);
@@ -169,7 +169,7 @@ router.put("/buckets/:name/objects/*", async (c: Context, next) => {
 
 // Get object metadata + content (supports keys with slashes)
 router.get("/buckets/:name/objects/*", async (c: Context) => {
-  const bucket = sanitizeBucketName(c.req.param("name") || "");
+  const bucket = sanitizeBucketName(c.req.param("name")!);
   const path = new URL(c.req.url).pathname;
   const key = sanitizeS3Key(decodeURIComponent(path.split("/objects/")[1] || ""));
   if (!key) return c.json({ error: "Object key is required" }, 400);
@@ -213,10 +213,12 @@ router.get("/buckets/:name/objects/*", async (c: Context) => {
 
 // Upload one or more files via multipart/form-data.
 // Field name is "files" (one or many). Optional ?prefix=... is prepended to each filename.
+// { all: true } keeps every repeated "files" field instead of overwriting with the last one,
+// so multi-file uploads from the frontend (which appends each file under the same name) work.
 router.post("/buckets/:name/objects/upload", async (c: Context) => {
   const bucket = c.req.param("name");
   const prefix = sanitizeS3Key(c.req.query("prefix") || "");
-  const body = await c.req.parseBody();
+  const body = await c.req.parseBody({ all: true });
   const raw = body["files"];
   const fileList: File[] = Array.isArray(raw)
     ? raw.filter((f): f is File => f instanceof File)

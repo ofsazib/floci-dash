@@ -535,3 +535,212 @@ describe("S3 Routes", () => {
     });
   });
 });
+
+
+// ─── Sparse data / remaining branch targets ────────────
+
+describe("S3 Sparse Data Branches", () => {
+  beforeEach(() => { mockSend.mockReset(); });
+
+  it("GET /buckets — returns empty when Buckets key missing", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/buckets");
+    const body = await res.json();
+    expect(body.total).toBe(0);
+    expect(body.buckets).toEqual([]);
+  });
+
+  it("GET /buckets — bucket without CreationDate", async () => {
+    mockSend.mockResolvedValueOnce({ Buckets: [{ Name: "no-date" }] });
+    const res = await get("/buckets");
+    const body = await res.json();
+    expect(body.buckets[0].createdAt).toBeNull();
+  });
+
+  it("DELETE /buckets/:name — 400 when name sanitizes to empty", async () => {
+    const res = await del("/buckets/%25%25%25");
+    expect(res.status).toBe(400);
+  });
+
+  it("GET objects — empty delimiter and missing Contents key", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/buckets/b/objects?delimiter=");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.objects).toEqual([]);
+    expect(body.folders).toEqual([]);
+    expect(mockSend.mock.calls[0][0].Delimiter).toBe("/");
+  });
+
+  it("GET objects — maps CommonPrefixes folders and sparse objects", async () => {
+    mockSend.mockResolvedValueOnce({
+      Contents: [{ Key: "file.txt", Size: 10 }], // no LastModified
+      CommonPrefixes: [{ Prefix: "folder/" }, {}], // with and without Prefix
+    });
+    const res = await get("/buckets/b/objects");
+    const body = await res.json();
+    expect(body.folders).toHaveLength(2);
+    expect(body.folders[0].name).toBe("folder");
+    expect(body.folders[1].name).toBe("");
+    expect(body.objects[0].lastModified).toBeNull();
+  });
+
+  it("GET raw — sparse response falls back to octet-stream and empty body", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/buckets/b/objects/file.txt/raw");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("application/octet-stream");
+  });
+
+  it("GET raw — 400 when key is empty", async () => {
+    // %2F decodes to "/", which sanitizeS3Key strips to an empty key —
+    // the only way the raw route (which needs a non-empty segment) hits its 400 guard.
+    const res = await get("/buckets/b/objects/%2F/raw");
+    expect(res.status).toBe(400);
+  });
+
+  it("GET object — sparse response falls back to octet-stream binary", async () => {
+    mockSend.mockResolvedValueOnce({
+      Body: { transformToByteArray: () => Promise.resolve(new Uint8Array([0x01])) },
+    });
+    const res = await get("/buckets/b/objects/file.bin");
+    const data = await res.json();
+    expect(data.contentType).toBe("application/octet-stream");
+    expect(data.bodyEncoding).toBe("base64");
+  });
+
+  it("GET ACL — returns nulls when Owner and Grants missing", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/buckets/b/objects/f.txt/acl");
+    const body = await res.json();
+    expect(body.owner).toBeNull();
+    expect(body.grants).toEqual([]);
+    expect(body.totalGrants).toBe(0);
+  });
+
+  it("GET ACL — grant without Grantee maps to null", async () => {
+    mockSend.mockResolvedValueOnce({ Grants: [{ Permission: "READ" }] });
+    const res = await get("/buckets/b/objects/f.txt/acl");
+    const body = await res.json();
+    expect(body.grants[0].grantee).toBeNull();
+    expect(body.grants[0].permission).toBe("READ");
+  });
+
+  it("PUT ACL — non-acl path falls through", async () => {
+    const res = await put("/buckets/b/objects/f.txt", { cannedAcl: "private" });
+    expect(res.status).toBe(404);
+  });
+
+  it("PUT ACL — 400 when key is empty", async () => {
+    const res = await put("/buckets/b/objects//acl", { cannedAcl: "private" });
+    expect(res.status).toBe(400);
+  });
+
+  it("PUT ACL — grants without owner", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put("/buckets/b/objects/f.txt/acl", {
+      grants: [{ Grantee: { Type: "CanonicalUser", ID: "u1" }, Permission: "READ" }],
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.updated).toBe(true);
+    expect(mockSend.mock.calls[0][0].AccessControlPolicy.Owner).toBeUndefined();
+  });
+
+  describe("Upload", () => {
+    async function uploadMultipart(path: string, files: File[]) {
+      const form = new FormData();
+      for (const f of files) form.append("files", f);
+      return router.request(path, { method: "POST", body: form });
+    }
+
+    it("POST upload — uploads multiple files", async () => {
+      mockSend.mockResolvedValueOnce({});
+      mockSend.mockResolvedValueOnce({});
+      const f1 = new File(["a"], "a.txt", { type: "text/plain" });
+      const f2 = new File(["b"], "b.txt", { type: "text/plain" });
+      const res = await uploadMultipart("/buckets/b/objects/upload", [f1, f2]);
+      const body = await res.json();
+      expect(body.uploaded).toBe(2);
+      expect(mockSend).toHaveBeenCalledTimes(2);
+    });
+
+    it("POST upload — file without type falls back to octet-stream", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const file = new File(["x"], "x.bin", { type: "" });
+      const res = await uploadMultipart("/buckets/b/objects/upload", [file]);
+      const body = await res.json();
+      expect(body.results[0].status).toBe("uploaded");
+      expect(mockSend.mock.calls[0][0].ContentType).toBe("application/octet-stream");
+    });
+  });
+
+  describe("Batch delete", () => {
+    it("POST batch-delete — folder prefix expanding to nothing returns empty", async () => {
+      mockSend.mockResolvedValueOnce({}); // list returns no Contents
+      const res = await post("/buckets/b/objects/batch-delete", { keys: ["empty/"] });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deleted).toEqual([]);
+      expect(body.errors).toEqual([]);
+      expect(mockSend).toHaveBeenCalledTimes(1);
+    });
+
+    it("POST batch-delete — paginates folder listing", async () => {
+      mockSend.mockResolvedValueOnce({
+        Contents: [{ Key: "f/1.txt" }],
+        IsTruncated: true,
+        NextContinuationToken: "tok2",
+      });
+      mockSend.mockResolvedValueOnce({ Contents: [{ Key: "f/2.txt" }], IsTruncated: false });
+      mockSend.mockResolvedValueOnce({ Deleted: [{ Key: "f/1.txt" }, { Key: "f/2.txt" }], Errors: [] });
+      const res = await post("/buckets/b/objects/batch-delete", { keys: ["f/"] });
+      const body = await res.json();
+      expect(body.totalDeleted).toBe(2);
+      expect(mockSend).toHaveBeenCalledTimes(3);
+      expect(mockSend.mock.calls[1][0].ContinuationToken).toBe("tok2");
+    });
+
+    it("POST batch-delete — sparse DeleteObjects response", async () => {
+      mockSend.mockResolvedValueOnce({}); // no Deleted / no Errors
+      const res = await post("/buckets/b/objects/batch-delete", { keys: ["f1.txt"] });
+      const body = await res.json();
+      expect(body.totalDeleted).toBe(0);
+      expect(body.deleted).toEqual([]);
+      expect(body.errors).toEqual([]);
+    });
+  });
+
+  describe("Folder delete", () => {
+    it("POST folders/delete — list returns no Contents key", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/buckets/b/folders/delete", { prefix: "empty/" });
+      const body = await res.json();
+      expect(body.totalDeleted).toBe(0);
+      expect(body.deleted).toEqual([]);
+    });
+
+    it("POST folders/delete — paginates listing", async () => {
+      mockSend.mockResolvedValueOnce({
+        Contents: [{ Key: "f/1.txt" }],
+        IsTruncated: true,
+        NextContinuationToken: "tok2",
+      });
+      mockSend.mockResolvedValueOnce({ Contents: [{ Key: "f/2.txt" }], IsTruncated: false });
+      mockSend.mockResolvedValueOnce({ Deleted: [{ Key: "f/1.txt" }, { Key: "f/2.txt" }], Errors: [] });
+      const res = await post("/buckets/b/folders/delete", { prefix: "f/" });
+      const body = await res.json();
+      expect(body.totalDeleted).toBe(2);
+      expect(mockSend.mock.calls[1][0].ContinuationToken).toBe("tok2");
+    });
+
+    it("POST folders/delete — sparse DeleteObjects response", async () => {
+      mockSend.mockResolvedValueOnce({ Contents: [{ Key: "f/1.txt" }], IsTruncated: false });
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/buckets/b/folders/delete", { prefix: "f/" });
+      const body = await res.json();
+      expect(body.totalDeleted).toBe(0);
+      expect(body.errors).toEqual([]);
+    });
+  });
+});

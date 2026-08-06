@@ -1604,6 +1604,15 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 | 25.12 | EventsDashboard — no separate component exists (rendered inline in EventsPage.tsx) | Skipped | 2026-07-07 |
 | 25.13 | Verify: 38 tests pass (9+14+15), typecheck clean, full suite 701 tests | Done | 2026-07-07 |
 
+**Batch 4 — S3 backend sparse-data coverage + upload bug fix** (2026-08-06)
+
+| # | Task | Status | Date |
+|---|------|--------|------|
+| 25.14 | s3.ts — fix multi-file upload: `parseBody({ all: true })` so repeated `files` fields aren't collapsed to the last file (frontend uploads multiple files under one field name) | Done | 2026-08-06 |
+| 25.15 | s3.test.ts — add 17 sparse-data/branch tests (missing Buckets/Contents/CommonPrefixes keys, empty delimiter, octet-stream fallbacks, sparse ACLs, batch-delete/folder-delete pagination, multi-file upload, empty-type fallback) | Done | 2026-08-06 |
+| 25.16 | s3.ts — replace unreachable `\|\| ''` fallbacks with `param()!` non-null assertions (codebase convention, keeps branch coverage clean, fixes typecheck) | Done | 2026-08-06 |
+| 25.17 | Verify: 62 S3 route tests pass, typecheck clean, full suite 7300 passed (1 integration failure — Floci not running, expected) | Done | 2026-08-06 |
+
 
 ---
 
