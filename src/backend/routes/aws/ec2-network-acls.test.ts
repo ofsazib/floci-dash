@@ -122,6 +122,42 @@ describe("EC2 Network ACLs Routes", () => {
       const cmd = mockSend.mock.calls[0][0];
       expect(cmd.Filters).toEqual([{ Name: "vpc-id", Values: ["vpc-123"] }]);
     });
+
+    it("GET /network-acls — returns empty when NetworkAcls key missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/network-acls");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+    });
+
+    it("GET /network-acls — handles sparse ACLs and port ranges", async () => {
+      mockSend.mockResolvedValueOnce({
+        NetworkAcls: [
+          { NetworkAclId: "acl-sparse", VpcId: "vpc-1" },
+          {
+            NetworkAclId: "acl-port",
+            VpcId: "vpc-2",
+            Entries: [
+              {
+                RuleNumber: 300,
+                Protocol: "6",
+                RuleAction: "allow",
+                Egress: false,
+                CidrBlock: "10.0.0.0/16",
+                PortRange: { From: 443, To: 443 },
+              },
+            ],
+          },
+        ],
+      });
+      const res = await get("/network-acls");
+      const body = await res.json();
+      expect(body.total).toBe(2);
+      expect(body.networkAcls[0].entries).toEqual([]);
+      expect(body.networkAcls[0].associations).toEqual([]);
+      expect(body.networkAcls[0].tags).toEqual([]);
+      expect(body.networkAcls[1].entries[0].portRange).toEqual({ from: 443, to: 443 });
+    });
   });
 
   describe("Create Network ACL", () => {
@@ -178,6 +214,19 @@ describe("EC2 Network ACLs Routes", () => {
       const res = await post("/network-acls/acl-abc/entries", {});
       expect(res.status).toBe(400);
     });
+
+    it("POST /network-acls/:id/entries — applies defaults when ruleNumber/egress omitted", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/network-acls/acl-abc/entries", {
+        protocol: "6",
+        ruleAction: "allow",
+        cidrBlock: "10.0.0.0/16",
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.RuleNumber).toBe(100);
+      expect(cmd.Egress).toBe(false);
+    });
   });
 
   describe("Replace Network ACL Entry", () => {
@@ -198,6 +247,22 @@ describe("EC2 Network ACLs Routes", () => {
     it("PUT /network-acls/:id/entries/:ruleNumber — 400 when missing", async () => {
       const res = await put("/network-acls/acl-abc/entries/100", {});
       expect(res.status).toBe(400);
+    });
+
+    it("PUT /network-acls/:id/entries/:ruleNumber — with port range and default egress", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/network-acls/acl-abc/entries/120", {
+        protocol: "17",
+        ruleAction: "deny",
+        cidrBlock: "0.0.0.0/0",
+        portRangeFrom: 80,
+        portRangeTo: 90,
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.RuleNumber).toBe(120);
+      expect(cmd.Egress).toBe(false);
+      expect(cmd.PortRange).toEqual({ From: 80, To: 90 });
     });
   });
 

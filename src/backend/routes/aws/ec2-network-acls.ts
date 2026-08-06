@@ -121,7 +121,7 @@ router.post("/network-acls/:id/entries", async (c: Context) => {
 
 router.put("/network-acls/:id/entries/:ruleNumber", async (c: Context) => {
   const networkAclId = c.req.param("id");
-  const ruleNumber = parseInt(c.req.param("ruleNumber") || "");
+  const ruleNumber = parseInt(c.req.param("ruleNumber")!);
   const body = await c.req.json<{
     protocol: string;
     ruleAction: string;
@@ -160,7 +160,7 @@ router.delete(
   "/network-acls/:id/entries/:ruleNumber",
   async (c: Context) => {
     const networkAclId = c.req.param("id");
-    const ruleNumber = parseInt(c.req.param("ruleNumber") || "");
+    const ruleNumber = parseInt(c.req.param("ruleNumber")!);
     const egress = c.req.query("egress") === "true";
 
     await ec2().send(
