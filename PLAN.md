@@ -1633,6 +1633,13 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 | 25.23 | ses.test.ts — add 7 tests: missing Identities key, detail-route DKIM/MailFrom fallbacks, describe without EventDestinations, event-destination 400s (missing matchingEventTypes) + cloudWatch/firehose/SNS destination combinations for POST and PUT | Done | 2026-08-06 |
 | 25.24 | Verify: ses.ts 74.41%→**100% branch**, 56 route tests pass, full suite 7610/7610 (269 files), typecheck clean | Done | 2026-08-06 |
 
+**Batch 7 — Bedrock Runtime route branch coverage** (2026-08-06)
+
+| # | Task | Status | Date |
+|---|------|--------|------|
+| 25.25 | bedrockruntime.test.ts — add invoke test for sparse response (no body → `body: null` ternary fallback on line 43) | Done | 2026-08-06 |
+| 25.26 | Verify: bedrockruntime.ts 75%→**100% branch**, 4 route tests pass, full suite 7611/7611 (269 files), typecheck clean | Done | 2026-08-06 |
+
 
 ---
 

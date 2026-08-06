@@ -55,4 +55,13 @@ describe("Bedrock Runtime Routes", () => {
     const body = await res.json();
     expect(body.contentType).toBe("application/json");
   });
+
+  it("POST /models/:modelId/invoke — returns null body when response has no body", async () => {
+    mockSend.mockResolvedValueOnce({ contentType: "application/json" });
+    const res = await post("/models/test-model/invoke", { prompt: "Hello" });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.body).toBeNull();
+    expect(body.contentType).toBe("application/json");
+  });
 });
