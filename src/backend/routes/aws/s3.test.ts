@@ -288,6 +288,7 @@ describe("S3 Routes", () => {
       expect(body.results[0].key).toBe("hello.txt");
       expect(mockSend.mock.calls[0][0].Bucket).toBe("my-bucket");
       expect(mockSend.mock.calls[0][0].Key).toBe("hello.txt");
+      expect(mockSend.mock.calls[0][0].ContentType).toBe("text/plain");
     });
 
     it("POST upload — applies prefix query param", async () => {
@@ -665,7 +666,9 @@ describe("S3 Sparse Data Branches", () => {
       expect(mockSend).toHaveBeenCalledTimes(2);
     });
 
-    it("POST upload — file without type falls back to octet-stream", async () => {
+    it("POST upload — empty-type file is normalized to octet-stream by the multipart parser", async () => {
+      // busboy assigns "application/octet-stream" to parts without a Content-Type,
+      // so file.type is always truthy after parseBody — the route needs no fallback.
       mockSend.mockResolvedValueOnce({});
       const file = new File(["x"], "x.bin", { type: "" });
       const res = await uploadMultipart("/buckets/b/objects/upload", [file]);
@@ -741,6 +744,19 @@ describe("S3 Sparse Data Branches", () => {
       const body = await res.json();
       expect(body.totalDeleted).toBe(0);
       expect(body.errors).toEqual([]);
+    });
+
+    it("POST folders/delete — maps DeleteObjects Errors entries", async () => {
+      mockSend.mockResolvedValueOnce({ Contents: [{ Key: "f/1.txt" }], IsTruncated: false });
+      mockSend.mockResolvedValueOnce({
+        Deleted: [{ Key: "f/1.txt" }],
+        Errors: [{ Key: "f/2.txt", Code: "AccessDenied", Message: "Permission denied" }],
+      });
+      const res = await post("/buckets/b/folders/delete", { prefix: "f/" });
+      const body = await res.json();
+      expect(body.totalDeleted).toBe(1);
+      expect(body.deleted).toEqual(["f/1.txt"]);
+      expect(body.errors).toEqual([{ key: "f/2.txt", code: "AccessDenied", message: "Permission denied" }]);
     });
   });
 });

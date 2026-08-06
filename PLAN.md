@@ -1612,6 +1612,9 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 | 25.15 | s3.test.ts — add 17 sparse-data/branch tests (missing Buckets/Contents/CommonPrefixes keys, empty delimiter, octet-stream fallbacks, sparse ACLs, batch-delete/folder-delete pagination, multi-file upload, empty-type fallback) | Done | 2026-08-06 |
 | 25.16 | s3.ts — replace unreachable `\|\| ''` fallbacks with `param()!` non-null assertions (codebase convention, keeps branch coverage clean, fixes typecheck) | Done | 2026-08-06 |
 | 25.17 | Verify: 62 S3 route tests pass, typecheck clean, full suite 7300 passed (1 integration failure — Floci not running, expected) | Done | 2026-08-06 |
+| 25.18 | s3.ts — remove unreachable `file.type \|\| "application/octet-stream"` fallback: busboy always assigns a MIME type (empty types normalize to octet-stream), so the branch is dead code — confirmed empirically via FormData round-trip probe, not a v8 coverage artifact | Done | 2026-08-06 |
+| 25.19 | s3.test.ts — add folder-delete DeleteObjects Errors mapping test (last uncovered function); rename octet-stream test to reflect parser normalization | Done | 2026-08-06 |
+| 25.20 | Verify: s3.ts reaches **100% stmts/branch/funcs/lines (138/138 branches)**, 63 tests pass, typecheck clean, full suite 7603 passed with Floci up | Done | 2026-08-06 |
 
 **Batch 5 — RGT route branch coverage + RDS integration timeout** (2026-08-06)
 

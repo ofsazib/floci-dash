@@ -86,7 +86,7 @@ router.get("/buckets/:name/objects", async (c: Context) => {
 router.get("/buckets/:name/objects/*/raw", async (c: Context) => {
   const bucket = sanitizeBucketName(c.req.param("name")!);
   const path = new URL(c.req.url).pathname;
-  const key = sanitizeS3Key(decodeURIComponent(path.split("/objects/")[1]?.replace(/\/raw$/, "") || ""));
+  const key = sanitizeS3Key(decodeURIComponent(path.split("/objects/")[1]!.replace(/\/raw$/, "")));
   if (!key) return c.json({ error: "Object key is required" }, 400);
   const result = await s3().send(new GetObjectCommand({ Bucket: bucket, Key: key }));
   const contentType = result.ContentType || "application/octet-stream";
@@ -245,12 +245,14 @@ router.post("/buckets/:name/objects/upload", async (c: Context) => {
         // required by SigV4. Passing a streaming `File` directly fails with
         // "Unable to calculate hash for flowing readable stream".
         const body = Buffer.from(await file.arrayBuffer());
+        // Hono's multipart parser (busboy) always assigns a MIME type — empty types
+        // are normalized to "application/octet-stream" — so no fallback is needed.
         await client.send(
           new PutObjectCommand({
             Bucket: bucket,
             Key: key,
             Body: body,
-            ContentType: file.type || "application/octet-stream",
+            ContentType: file.type,
           })
         );
         return { key, size: file.size, status: "uploaded" as const };
