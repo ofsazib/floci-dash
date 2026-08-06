@@ -22,7 +22,7 @@ export function useCreatePipeline() {
 export function usePipeline(name: string | null) {
   return useQuery({
     queryKey: ["aws", "codepipeline", "pipelines", name],
-    queryFn: () => api<{ pipeline: any; metadata: any }>(`/aws/codepipeline/pipelines/${encodeURIComponent(name || "")}`),
+    queryFn: () => api<{ pipeline: any; metadata: any }>(`/aws/codepipeline/pipelines/${encodeURIComponent(name!)}`),
     enabled: !!name,
   });
 }
@@ -30,7 +30,7 @@ export function usePipeline(name: string | null) {
 export function usePipelineState(name: string | null) {
   return useQuery({
     queryKey: ["aws", "codepipeline", "pipelines", name, "state"],
-    queryFn: () => api<{ state: any }>(`/aws/codepipeline/pipelines/${encodeURIComponent(name || "")}/state`),
+    queryFn: () => api<{ state: any }>(`/aws/codepipeline/pipelines/${encodeURIComponent(name!)}/state`),
     enabled: !!name,
   });
 }
@@ -59,7 +59,7 @@ export function usePipelineExecutions(name: string | null) {
   return useQuery({
     queryKey: ["aws", "codepipeline", "pipelines", name, "executions"],
     queryFn: () => api<{ executions: any[]; total: number; nextToken?: string }>(
-      `/aws/codepipeline/pipelines/${encodeURIComponent(name || "")}/executions`
+      `/aws/codepipeline/pipelines/${encodeURIComponent(name!)}/executions`
     ),
     enabled: !!name,
   });
@@ -148,7 +148,7 @@ export function useActionExecutions(name: string | null, executionId?: string | 
   return useQuery({
     queryKey: ["aws", "codepipeline", "pipelines", name, "actions", executionId],
     queryFn: () => api<{ actions: any[]; total: number }>(
-      `/aws/codepipeline/pipelines/${encodeURIComponent(name || "")}/actions${searchParams}`
+      `/aws/codepipeline/pipelines/${encodeURIComponent(name!)}/actions${searchParams}`
     ),
     enabled: !!name,
   });
@@ -258,7 +258,7 @@ export function useRuleExecutions(name: string | null) {
     queryKey: ["aws", "codepipeline", "pipelines", name, "rules"],
     queryFn: () =>
       api<{ ruleExecutionDetails: any[]; total: number }>(
-        `/aws/codepipeline/pipelines/${encodeURIComponent(name || "")}/rules`
+        `/aws/codepipeline/pipelines/${encodeURIComponent(name!)}/rules`
       ),
     enabled: !!name,
   });
@@ -334,7 +334,7 @@ export function useAcknowledgeJob() {
 export function useJobDetails(jobId: string | null) {
   return useQuery({
     queryKey: ["aws", "codepipeline", "jobs", jobId],
-    queryFn: () => api<{ jobDetails: any }>(`/aws/codepipeline/jobs/${encodeURIComponent(jobId || "")}`),
+    queryFn: () => api<{ jobDetails: any }>(`/aws/codepipeline/jobs/${encodeURIComponent(jobId!)}`),
     enabled: !!jobId,
   });
 }
