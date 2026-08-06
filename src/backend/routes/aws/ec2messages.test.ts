@@ -56,6 +56,45 @@ describe("EC2 Messages Routes", () => {
       const body = await res.json();
       expect(body.Messages).toEqual([]);
     });
+
+    it("returns {} when the Floci response body is empty", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: () => Promise.resolve(""),
+      });
+      const res = await post("/messages/get", { Destination: "i-789" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body).toEqual({});
+    });
+
+    it("returns 500 when Floci responds with an error body", async () => {
+      const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        statusText: "Service Unavailable",
+        text: () => Promise.resolve("oops"),
+      });
+      const res = await post("/messages/get", { Destination: "i-err" });
+      expect(res.status).toBe(500);
+      expect(errSpy).toHaveBeenCalledWith(expect.objectContaining({ message: "EC2 Messages error 503: oops" }));
+      errSpy.mockRestore();
+    });
+
+    it("falls back to statusText when the error body is unavailable", async () => {
+      const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        statusText: "Internal Server Error",
+        text: () => Promise.reject(new Error("read failed")),
+      });
+      const res = await post("/messages/get", { Destination: "i-err2" });
+      expect(res.status).toBe(500);
+      expect(errSpy).toHaveBeenCalledWith(expect.objectContaining({ message: "EC2 Messages error 500: Internal Server Error" }));
+      errSpy.mockRestore();
+    });
   });
 
   describe("POST /messages/acknowledge", () => {
@@ -109,6 +148,18 @@ describe("EC2 Messages Routes", () => {
     it("returns 400 when MessageId missing", async () => {
       const res = await post("/messages/fail", { FailureType: "Timeout" });
       expect(res.status).toBe(400);
+    });
+
+    it("defaults FailureType to Unknown when omitted", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: () => Promise.resolve("{}"),
+      });
+      const res = await post("/messages/fail", { MessageId: "m-1" });
+      expect(res.status).toBe(200);
+      const [url, init] = mockFetch.mock.calls[0];
+      expect(url).toContain("localhost");
+      expect(JSON.parse(init.body).FailureType).toBe("Unknown");
     });
   });
 
