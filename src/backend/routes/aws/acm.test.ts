@@ -90,4 +90,12 @@ describe("ACM Routes", () => {
     const body = await res.json();
     expect(body.tags.length).toBe(1);
   });
+
+  it("GET /certificates/:arn/tags — sparse response defaults to []", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get(`/certificates/${ARN_ENCODED}/tags`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.tags).toEqual([]);
+  });
 });

@@ -24,7 +24,7 @@ router.get("/certificates", async (c: Context) => {
 });
 
 router.get("/certificates/:arn", async (c: Context) => {
-  const arn = decodeURIComponent(c.req.param("arn")!!);
+  const arn = decodeURIComponent(c.req.param("arn")!);
   const client = getClient();
   const result = await client.send(new DescribeCertificateCommand({ CertificateArn: arn }));
   return c.json({ certificate: result.Certificate });
