@@ -162,6 +162,7 @@ describe("EC2 Routes", () => {
                 Monitoring: { State: "disabled" },
                 EbsOptimized: false,
                 SourceDestCheck: true,
+                BlockDeviceMappings: [{ DeviceName: "/dev/sda1", Ebs: { VolumeId: "vol-123", Status: "attached" } }],
               },
             ],
           },
@@ -176,6 +177,8 @@ describe("EC2 Routes", () => {
       expect(body.instances[0].state).toBe("running");
       expect(body.instances[0].instanceType).toBe("t3.micro");
       expect(body.instances[0].tags).toEqual([{ key: "Name", value: "web-server" }]);
+      expect(body.instances[0].securityGroups).toEqual([{ id: "sg-123", name: "default" }]);
+      expect(body.instances[0].blockDevices).toEqual([{ deviceName: "/dev/sda1", volumeId: "vol-123", status: "attached" }]);
     });
 
     it("GET /instances — empty list when no reservations", async () => {
@@ -258,10 +261,11 @@ describe("EC2 Routes", () => {
                 SubnetId: "subnet-1",
                 KeyName: "k",
                 LaunchTime: new Date("2025-01-01T00:00:00Z"),
-                SecurityGroups: [],
-                Tags: [],
+                SecurityGroups: [{ GroupId: "sg-1", GroupName: "default" }],
+                Tags: [{ Key: "Env", Value: "prod" }],
                 Placement: { AvailabilityZone: "us-east-1a" },
                 Architecture: "x86_64",
+                BlockDeviceMappings: [{ DeviceName: "/dev/sda1", Ebs: { VolumeId: "vol-1", Status: "attached" } }],
               },
             ],
           },
@@ -273,6 +277,9 @@ describe("EC2 Routes", () => {
       const body = await res.json();
       expect(body.id).toBe("i-001");
       expect(body.state).toBe("running");
+      expect(body.securityGroups).toEqual([{ id: "sg-1", name: "default" }]);
+      expect(body.tags).toEqual([{ key: "Env", value: "prod" }]);
+      expect(body.blockDevices).toEqual([{ deviceName: "/dev/sda1", volumeId: "vol-1", status: "attached" }]);
     });
 
     it("GET /instances/:id — 404 when not found", async () => {
@@ -417,6 +424,7 @@ describe("EC2 Routes", () => {
             CidrBlock: "10.0.0.0/16",
             IsDefault: true,
             InstanceTenancy: "default",
+            CidrBlockAssociationSet: [{ AssociationId: "vpc-cidr-assoc-001", CidrBlock: "10.1.0.0/16", CidrBlockState: { State: "associated" } }],
             Tags: [{ Key: "Name", Value: "default" }],
           },
         ],
@@ -426,6 +434,8 @@ describe("EC2 Routes", () => {
       expect(body.total).toBe(1);
       expect(body.vpcs[0].id).toBe("vpc-001");
       expect(body.vpcs[0].isDefault).toBe(true);
+      expect(body.vpcs[0].cidrBlockAssociations).toEqual([{ id: "vpc-cidr-assoc-001", cidrBlock: "10.1.0.0/16", state: "associated" }]);
+      expect(body.vpcs[0].tags).toEqual([{ key: "Name", value: "default" }]);
     });
 
     it("POST /vpcs — creates a VPC", async () => {
@@ -450,7 +460,7 @@ describe("EC2 Routes", () => {
 
     it("GET /vpcs/:id — returns VPC detail", async () => {
       mockSend.mockResolvedValueOnce({
-        Vpcs: [{ VpcId: "vpc-001", State: "available", CidrBlock: "10.0.0.0/16", IsDefault: false, InstanceTenancy: "default", Tags: [] }],
+        Vpcs: [{ VpcId: "vpc-001", State: "available", CidrBlock: "10.0.0.0/16", IsDefault: false, InstanceTenancy: "default", Tags: [{ Key: "Name", Value: "vpc-detail" }] }],
       });
       const res = await get("/vpcs/vpc-001");
       const body = await res.json();
@@ -502,7 +512,7 @@ describe("EC2 Routes", () => {
     it("GET /vpc-endpoints — lists VPC endpoints", async () => {
       mockSend.mockResolvedValueOnce({
         VpcEndpoints: [
-          { VpcEndpointId: "vpce-001", VpcId: "vpc-001", ServiceName: "com.amazonaws.vpce.s3", State: "available", VpcEndpointType: "Gateway", SubnetIds: [], Tags: [] },
+          { VpcEndpointId: "vpce-001", VpcId: "vpc-001", ServiceName: "com.amazonaws.vpce.s3", State: "available", VpcEndpointType: "Gateway", SubnetIds: [], Tags: [{ Key: "Name", Value: "s3-endpoint" }] },
         ],
       });
       const res = await get("/vpc-endpoints");
@@ -550,7 +560,7 @@ describe("EC2 Routes", () => {
             AvailableIpAddressCount: 251,
             MapPublicIpOnLaunch: false,
             DefaultForAz: false,
-            Tags: [],
+            Tags: [{ Key: "Name", Value: "subnet-a" }],
           },
         ],
       });
@@ -611,9 +621,13 @@ describe("EC2 Routes", () => {
             Description: "Default SG",
             VpcId: "vpc-001",
             OwnerId: "123456789012",
-            IpPermissions: [{ IpProtocol: "tcp", FromPort: 22, ToPort: 22, IpRanges: [{ CidrIp: "0.0.0.0/0" }] }],
-            IpPermissionsEgress: [],
-            Tags: [],
+            IpPermissions: [
+              { IpProtocol: "tcp", FromPort: 22, ToPort: 22, IpRanges: [{ CidrIp: "0.0.0.0/0" }], Ipv6Ranges: [{ CidrIpv6: "::/0" }], UserIdGroupPairs: [{ GroupId: "sg-other" }] },
+            ],
+            IpPermissionsEgress: [
+              { IpProtocol: "-1", IpRanges: [{ CidrIp: "0.0.0.0/0" }], Ipv6Ranges: [{ CidrIpv6: "::/0" }], UserIdGroupPairs: [{ GroupId: "sg-peer" }] },
+            ],
+            Tags: [{ Key: "Name", Value: "default" }],
           },
         ],
       });
@@ -622,6 +636,14 @@ describe("EC2 Routes", () => {
       expect(body.total).toBe(1);
       expect(body.securityGroups[0].id).toBe("sg-001");
       expect(body.securityGroups[0].inboundRules).toHaveLength(1);
+      expect(body.securityGroups[0].inboundRules[0].cidrIpv4).toEqual(["0.0.0.0/0"]);
+      expect(body.securityGroups[0].inboundRules[0].cidrIpv6).toEqual(["::/0"]);
+      expect(body.securityGroups[0].inboundRules[0].securityGroupPairs).toEqual(["sg-other"]);
+      expect(body.securityGroups[0].outboundRules).toHaveLength(1);
+      expect(body.securityGroups[0].outboundRules[0].cidrIpv4).toEqual(["0.0.0.0/0"]);
+      expect(body.securityGroups[0].outboundRules[0].cidrIpv6).toEqual(["::/0"]);
+      expect(body.securityGroups[0].outboundRules[0].securityGroupPairs).toEqual(["sg-peer"]);
+      expect(body.securityGroups[0].tags).toEqual([{ key: "Name", value: "default" }]);
     });
 
     it("POST /security-groups — creates group", async () => {
@@ -764,7 +786,7 @@ describe("EC2 Routes", () => {
   describe("Key Pairs", () => {
     it("GET /key-pairs — lists keys", async () => {
       mockSend.mockResolvedValueOnce({
-        KeyPairs: [{ KeyName: "my-key", KeyFingerprint: "12:34:56", KeyType: "rsa", Tags: [] }],
+        KeyPairs: [{ KeyName: "my-key", KeyFingerprint: "12:34:56", KeyType: "rsa", Tags: [{ Key: "Name", Value: "my-key" }] }],
       });
       const res = await get("/key-pairs");
       const body = await res.json();
@@ -842,7 +864,7 @@ describe("EC2 Routes", () => {
             CreationDate: "2025-01-01T00:00:00.000Z",
             RootDeviceType: "ebs",
             VirtualizationType: "hvm",
-            Tags: [],
+            Tags: [{ Key: "Name", Value: "My Image" }],
           },
         ],
       });
@@ -918,7 +940,7 @@ describe("EC2 Routes", () => {
           {
             InternetGatewayId: "igw-001",
             Attachments: [{ VpcId: "vpc-001", State: "available" }],
-            Tags: [],
+            Tags: [{ Key: "Name", Value: "igw" }],
             OwnerId: "123456789012",
           },
         ],
@@ -927,6 +949,8 @@ describe("EC2 Routes", () => {
       const body = await res.json();
       expect(body.total).toBe(1);
       expect(body.internetGateways[0].id).toBe("igw-001");
+      expect(body.internetGateways[0].attachments).toEqual([{ vpcId: "vpc-001", state: "available" }]);
+      expect(body.internetGateways[0].tags).toEqual([{ key: "Name", value: "igw" }]);
     });
 
     it("POST /internet-gateways — creates IGW", async () => {
@@ -981,7 +1005,7 @@ describe("EC2 Routes", () => {
             VpcId: "vpc-001",
             Associations: [{ RouteTableAssociationId: "rtbassoc-001", SubnetId: "subnet-001", Main: true, AssociationState: { State: "associated" } }],
             Routes: [{ DestinationCidrBlock: "10.0.0.0/16", GatewayId: "local", State: "active", Origin: "CreateRouteTable" }],
-            Tags: [],
+            Tags: [{ Key: "Name", Value: "rtb" }],
           },
         ],
       });
@@ -989,6 +1013,9 @@ describe("EC2 Routes", () => {
       const body = await res.json();
       expect(body.total).toBe(1);
       expect(body.routeTables[0].id).toBe("rtb-001");
+      expect(body.routeTables[0].associations).toEqual([{ id: "rtbassoc-001", subnetId: "subnet-001", main: true, state: "associated" }]);
+      expect(body.routeTables[0].routes).toEqual([{ destinationCidrBlock: "10.0.0.0/16", gatewayId: "local", natGatewayId: undefined, state: "active", origin: "CreateRouteTable" }]);
+      expect(body.routeTables[0].tags).toEqual([{ key: "Name", value: "rtb" }]);
     });
 
     it("POST /route-tables — creates route table", async () => {
@@ -1065,7 +1092,7 @@ describe("EC2 Routes", () => {
             State: "available",
             NatGatewayAddresses: [{ PublicIp: "54.0.0.1", PrivateIp: "10.0.0.5", AllocationId: "eipalloc-001" }],
             CreateTime: new Date("2025-01-01T00:00:00Z"),
-            Tags: [],
+            Tags: [{ Key: "Name", Value: "nat" }],
           },
         ],
       });
@@ -1115,7 +1142,7 @@ describe("EC2 Routes", () => {
             AssociationId: "eipassoc-001",
             InstanceId: "i-001",
             Domain: "vpc",
-            Tags: [],
+            Tags: [{ Key: "Name", Value: "eip" }],
           },
         ],
       });
@@ -1191,12 +1218,13 @@ describe("EC2 Routes", () => {
 
     it("GET /availability-zones — lists AZs", async () => {
       mockSend.mockResolvedValueOnce({
-        AvailabilityZones: [{ ZoneName: "us-east-1a", ZoneId: "use1-az1", State: "available", RegionName: "us-east-1", Messages: [] }],
+        AvailabilityZones: [{ ZoneName: "us-east-1a", ZoneId: "use1-az1", State: "available", RegionName: "us-east-1", Messages: [{ Message: "Zone is available" }] }],
       });
       const res = await get("/availability-zones");
       const body = await res.json();
       expect(body.total).toBe(1);
       expect(body.availabilityZones[0].name).toBe("us-east-1a");
+      expect(body.availabilityZones[0].messages).toEqual(["Zone is available"]);
     });
 
     it("GET /account-attributes — lists account attributes", async () => {
@@ -1248,7 +1276,7 @@ describe("EC2 Routes", () => {
             LatestVersionNumber: 2,
             CreatedBy: "test-user",
             CreateTime: new Date("2025-01-01T00:00:00Z"),
-            Tags: [],
+            Tags: [{ Key: "Name", Value: "web-template" }],
           },
         ],
       });
@@ -1286,7 +1314,7 @@ describe("EC2 Routes", () => {
 
     it("GET /launch-templates/:id — returns template detail", async () => {
       mockSend.mockResolvedValueOnce({
-        LaunchTemplates: [{ LaunchTemplateId: "lt-001", LaunchTemplateName: "web", DefaultVersionNumber: 1, LatestVersionNumber: 1, CreatedBy: "user", CreateTime: new Date(), Tags: [] }],
+        LaunchTemplates: [{ LaunchTemplateId: "lt-001", LaunchTemplateName: "web", DefaultVersionNumber: 1, LatestVersionNumber: 1, CreatedBy: "user", CreateTime: new Date(), Tags: [{ Key: "Name", Value: "web" }] }],
       });
       const res = await get("/launch-templates/lt-001");
       const body = await res.json();
@@ -1348,9 +1376,9 @@ describe("EC2 Routes", () => {
             AvailabilityZone: "us-east-1a",
             Iops: 100,
             Encrypted: false,
-            Attachments: [],
+            Attachments: [{ InstanceId: "i-001", Device: "/dev/sdf", State: "attached", AttachTime: new Date("2025-01-01T00:00:00Z") }],
             CreateTime: new Date("2025-01-01T00:00:00Z"),
-            Tags: [],
+            Tags: [{ Key: "Name", Value: "vol" }],
           },
         ],
       });
@@ -1358,6 +1386,9 @@ describe("EC2 Routes", () => {
       const body = await res.json();
       expect(body.total).toBe(1);
       expect(body.volumes[0].id).toBe("vol-001");
+      expect(body.volumes[0].attachments).toEqual([{ instanceId: "i-001", device: "/dev/sdf", state: "attached", attachedTime: new Date("2025-01-01T00:00:00Z").toISOString() }]);
+      expect(body.volumes[0].createdAt).toBe("2025-01-01T00:00:00.000Z");
+      expect(body.volumes[0].tags).toEqual([{ key: "Name", value: "vol" }]);
     });
 
     it("POST /volumes — creates volume", async () => {
@@ -1425,7 +1456,7 @@ describe("EC2 Routes", () => {
             Status: "in-use",
             Attachment: { InstanceId: "i-001" },
             Groups: [{ GroupId: "sg-001", GroupName: "default" }],
-            TagSet: [],
+            TagSet: [{ Key: "Name", Value: "eni" }],
           },
         ],
       });
@@ -1433,6 +1464,9 @@ describe("EC2 Routes", () => {
       const body = await res.json();
       expect(body.total).toBe(1);
       expect(body.networkInterfaces[0].id).toBe("eni-001");
+      expect(body.networkInterfaces[0].instanceId).toBe("i-001");
+      expect(body.networkInterfaces[0].securityGroups).toEqual([{ id: "sg-001", name: "default" }]);
+      expect(body.networkInterfaces[0].tagSet).toEqual([{ key: "Name", value: "eni" }]);
     });
   });
 
@@ -1571,6 +1605,357 @@ describe("EC2 Routes", () => {
       expect(body.instanceStatus).toBe("ok");
       expect(body.systemStatus).toBe("ok");
       expect(body.events).toEqual([]);
+    });
+  });
+
+  // ── Sparse responses (missing keys → fallbacks) ──
+
+  describe("Sparse Responses", () => {
+    it("GET /instances — empty when Reservations missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/instances");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.instances).toEqual([]);
+    });
+
+    it("GET /instances — reservation without Instances and instance without SGs/Tags", async () => {
+      mockSend.mockResolvedValueOnce({
+        Reservations: [{}, { Instances: [{ InstanceId: "i-sparse" }] }],
+      });
+      const res = await get("/instances");
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(body.instances[0].securityGroups).toEqual([]);
+      expect(body.instances[0].tags).toEqual([]);
+      expect(body.instances[0].blockDevices).toEqual([]);
+    });
+
+    it("POST /instances — sparse response without Instances", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/instances", { imageId: "ami-001" });
+      const body = await res.json();
+      expect(body.created).toBe(true);
+      expect(body.instances).toEqual([]);
+    });
+
+    it("GET /instances/:id — sparse instance without SGs/Tags/blockDevices", async () => {
+      mockSend.mockResolvedValueOnce({
+        Reservations: [{ Instances: [{ InstanceId: "i-sparse" }] }],
+      });
+      const res = await get("/instances/i-sparse");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.securityGroups).toEqual([]);
+      expect(body.tags).toEqual([]);
+      expect(body.blockDevices).toEqual([]);
+    });
+
+    it("GET /vpcs — empty when Vpcs missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/vpcs");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.vpcs).toEqual([]);
+    });
+
+    it("GET /vpcs — sparse VPC without Tags", async () => {
+      mockSend.mockResolvedValueOnce({ Vpcs: [{ VpcId: "vpc-sparse" }] });
+      const res = await get("/vpcs");
+      const body = await res.json();
+      expect(body.vpcs[0].tags).toEqual([]);
+      expect(body.vpcs[0].cidrBlockAssociations).toEqual([]);
+    });
+
+    it("GET /vpcs/:id — sparse VPC without Tags", async () => {
+      mockSend.mockResolvedValueOnce({ Vpcs: [{ VpcId: "vpc-sparse" }] });
+      const res = await get("/vpcs/vpc-sparse");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.tags).toEqual([]);
+    });
+
+    it("PATCH /vpcs/:id — only enableDnsSupport (hostnames skipped)", async () => {
+      mockSend.mockResolvedValue({});
+      const res = await patch("/vpcs/vpc-001", { enableDnsSupport: true });
+      expect((await res.json()).modified).toBe(true);
+      expect(mockSend).toHaveBeenCalledTimes(1);
+      expect(mockSend.mock.calls[0][0].EnableDnsSupport).toEqual({ Value: true });
+    });
+
+    it("PATCH /vpcs/:id — only enableDnsHostnames (dnsSupport skipped)", async () => {
+      mockSend.mockResolvedValue({});
+      const res = await patch("/vpcs/vpc-001", { enableDnsHostnames: true });
+      expect((await res.json()).modified).toBe(true);
+      expect(mockSend).toHaveBeenCalledTimes(1);
+      expect(mockSend.mock.calls[0][0].EnableDnsHostnames).toEqual({ Value: true });
+    });
+
+    it("GET /vpc-endpoints — empty when VpcEndpoints missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/vpc-endpoints");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+    });
+
+    it("GET /vpc-endpoints — sparse endpoint without Tags", async () => {
+      mockSend.mockResolvedValueOnce({ VpcEndpoints: [{ VpcEndpointId: "vpce-sparse" }] });
+      const res = await get("/vpc-endpoints");
+      const body = await res.json();
+      expect(body.endpoints[0].tags).toEqual([]);
+    });
+
+    it("GET /subnets — empty when Subnets missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/subnets");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+    });
+
+    it("GET /subnets — sparse subnet without Tags", async () => {
+      mockSend.mockResolvedValueOnce({ Subnets: [{ SubnetId: "subnet-sparse" }] });
+      const res = await get("/subnets");
+      const body = await res.json();
+      expect(body.subnets[0].tags).toEqual([]);
+    });
+
+    it("PATCH /subnets/:id — no attribute given (skips send)", async () => {
+      mockSend.mockResolvedValue({});
+      const res = await patch("/subnets/subnet-001", {});
+      expect((await res.json()).modified).toBe(true);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("GET /security-groups — empty when SecurityGroups missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/security-groups");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+    });
+
+    it("GET /security-groups — sparse group without rules/tags", async () => {
+      mockSend.mockResolvedValueOnce({ SecurityGroups: [{ GroupId: "sg-sparse" }] });
+      const res = await get("/security-groups");
+      const body = await res.json();
+      expect(body.securityGroups[0].inboundRules).toEqual([]);
+      expect(body.securityGroups[0].outboundRules).toEqual([]);
+      expect(body.securityGroups[0].tags).toEqual([]);
+    });
+
+    it("POST /security-groups — default empty description when omitted", async () => {
+      mockSend.mockResolvedValueOnce({ GroupId: "sg-nodesc" });
+      const res = await post("/security-groups", { groupName: "nodesc" });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].Description).toBe("");
+    });
+
+    it("GET /key-pairs — empty when KeyPairs missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/key-pairs");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+    });
+
+    it("GET /key-pairs — sparse key without Tags", async () => {
+      mockSend.mockResolvedValueOnce({ KeyPairs: [{ KeyName: "sparse" }] });
+      const res = await get("/key-pairs");
+      const body = await res.json();
+      expect(body.keyPairs[0].tags).toEqual([]);
+    });
+
+    it("POST /key-pairs/import — 400 when keyName missing but material present", async () => {
+      const res = await post("/key-pairs/import", { publicKeyMaterial: "ssh-rsa AAAA" });
+      expect(res.status).toBe(400);
+    });
+
+    it("GET /amis — empty when Images missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/amis");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+    });
+
+    it("GET /amis — sparse image without Tags", async () => {
+      mockSend.mockResolvedValueOnce({ Images: [{ ImageId: "ami-sparse" }] });
+      const res = await get("/amis");
+      const body = await res.json();
+      expect(body.images[0].tags).toEqual([]);
+    });
+
+    it("GET /tags — empty when Tags missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/tags");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+    });
+
+    it("GET /internet-gateways — empty when InternetGateways missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/internet-gateways");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+    });
+
+    it("GET /internet-gateways — sparse IGW without attachments/tags", async () => {
+      mockSend.mockResolvedValueOnce({ InternetGateways: [{ InternetGatewayId: "igw-sparse" }] });
+      const res = await get("/internet-gateways");
+      const body = await res.json();
+      expect(body.internetGateways[0].attachments).toEqual([]);
+      expect(body.internetGateways[0].tags).toEqual([]);
+    });
+
+    it("GET /route-tables — empty when RouteTables missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/route-tables");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+    });
+
+    it("GET /route-tables — sparse RT without associations/routes/tags", async () => {
+      mockSend.mockResolvedValueOnce({ RouteTables: [{ RouteTableId: "rtb-sparse" }] });
+      const res = await get("/route-tables");
+      const body = await res.json();
+      expect(body.routeTables[0].associations).toEqual([]);
+      expect(body.routeTables[0].routes).toEqual([]);
+      expect(body.routeTables[0].tags).toEqual([]);
+    });
+
+    it("GET /nat-gateways — empty when NatGateways missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/nat-gateways");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+    });
+
+    it("GET /nat-gateways — sparse NGW without addresses/tags", async () => {
+      mockSend.mockResolvedValueOnce({ NatGateways: [{ NatGatewayId: "nat-sparse" }] });
+      const res = await get("/nat-gateways");
+      const body = await res.json();
+      expect(body.natGateways[0].natGatewayAddresses).toEqual([]);
+      expect(body.natGateways[0].tags).toEqual([]);
+    });
+
+    it("GET /elastic-ips — empty when Addresses missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/elastic-ips");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+    });
+
+    it("GET /elastic-ips — sparse address without Tags", async () => {
+      mockSend.mockResolvedValueOnce({ Addresses: [{ AllocationId: "eip-sparse" }] });
+      const res = await get("/elastic-ips");
+      const body = await res.json();
+      expect(body.addresses[0].tags).toEqual([]);
+    });
+
+    it("GET /regions — empty when Regions missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/regions");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+    });
+
+    it("GET /availability-zones — empty when AvailabilityZones missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/availability-zones");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+    });
+
+    it("GET /availability-zones — sparse AZ without Messages", async () => {
+      mockSend.mockResolvedValueOnce({ AvailabilityZones: [{ ZoneName: "us-east-1b" }] });
+      const res = await get("/availability-zones");
+      const body = await res.json();
+      expect(body.availabilityZones[0].messages).toEqual([]);
+    });
+
+    it("GET /account-attributes — empty when AccountAttributes missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/account-attributes");
+      const body = await res.json();
+      expect(body.accountAttributes).toEqual([]);
+    });
+
+    it("GET /account-attributes — sparse attribute without values", async () => {
+      mockSend.mockResolvedValueOnce({ AccountAttributes: [{ AttributeName: "max-instances" }] });
+      const res = await get("/account-attributes");
+      const body = await res.json();
+      expect(body.accountAttributes[0].values).toEqual([]);
+    });
+
+    it("GET /instance-types — empty when InstanceTypes missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/instance-types");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+    });
+
+    it("GET /launch-templates — empty when LaunchTemplates missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/launch-templates");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+    });
+
+    it("GET /launch-templates — sparse template without Tags", async () => {
+      mockSend.mockResolvedValueOnce({ LaunchTemplates: [{ LaunchTemplateId: "lt-sparse" }] });
+      const res = await get("/launch-templates");
+      const body = await res.json();
+      expect(body.launchTemplates[0].tags).toEqual([]);
+    });
+
+    it("POST /launch-templates — uses default imageId and instanceType when omitted", async () => {
+      mockSend.mockResolvedValueOnce({ LaunchTemplate: { LaunchTemplateId: "lt-default" } });
+      const res = await post("/launch-templates", { launchTemplateName: "defaults" });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].LaunchTemplateData.ImageId).toBeTruthy();
+      expect(mockSend.mock.calls[0][0].LaunchTemplateData.InstanceType).toBe("t3.micro");
+    });
+
+    it("GET /launch-templates/:id — sparse template without Tags", async () => {
+      mockSend.mockResolvedValueOnce({ LaunchTemplates: [{ LaunchTemplateId: "lt-sparse" }] });
+      const res = await get("/launch-templates/lt-sparse");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.tags).toEqual([]);
+    });
+
+    it("GET /launch-templates/:id/versions — empty when versions missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/launch-templates/lt-001/versions");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+    });
+
+    it("GET /volumes — empty when Volumes missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/volumes");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+    });
+
+    it("GET /volumes — sparse volume without attachments/tags", async () => {
+      mockSend.mockResolvedValueOnce({ Volumes: [{ VolumeId: "vol-sparse" }] });
+      const res = await get("/volumes");
+      const body = await res.json();
+      expect(body.volumes[0].attachments).toEqual([]);
+      expect(body.volumes[0].tags).toEqual([]);
+    });
+
+    it("GET /network-interfaces — empty when NetworkInterfaces missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/network-interfaces");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+    });
+
+    it("GET /network-interfaces — sparse ENI without groups/tagSet", async () => {
+      mockSend.mockResolvedValueOnce({ NetworkInterfaces: [{ NetworkInterfaceId: "eni-sparse" }] });
+      const res = await get("/network-interfaces");
+      const body = await res.json();
+      expect(body.networkInterfaces[0].securityGroups).toEqual([]);
+      expect(body.networkInterfaces[0].tagSet).toEqual([]);
     });
   });
 

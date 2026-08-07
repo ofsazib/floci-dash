@@ -1691,6 +1691,12 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 | # | Task | Status | Date |
 |---|------|--------|------|
 | 25.38 | codebuild.test.ts — convert 3 empty-list mocks to sparse (projects/ids missing) + add 3 sparse batch-get tests (projects/builds keys missing) (76.92%->100%) | Done | 2026-08-07 |
+
+**Batch 16 — EC2 route branch coverage** (2026-08-07)
+
+| # | Task | Status | Date |
+|---|------|--------|------|
+| 25.39 | ec2.test.ts — enrich 17 happy-path mocks with nested arrays (tags/attachments/rules/associations/etc. to fire map callbacks) + add 46 sparse/edge tests (missing top-level keys, sparse elements without tags/rules, PATCH no-op guards, defaults when omitted) (77.16%->100%) | Done | 2026-08-07 |
 | 25.34 | Verify: ec2-flow-logs.ts 75.75%→**100% branch**, 17 route tests pass, full suite 7623/7623 (269 files), typecheck clean | Done | 2026-08-06 |
 
 
