@@ -102,6 +102,25 @@ describe("CodeDeploy Routes", () => {
       expect(json.applications).toEqual([]);
     });
 
+    it("GET /applications — sparse response defaults to empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/applications");
+      const json = await res.json();
+      expect(json.total).toBe(0);
+      expect(json.applications).toEqual([]);
+      expect(mockSend).toHaveBeenCalledTimes(1);
+    });
+
+    it("GET /applications — sparse batch response defaults to empty list", async () => {
+      mockSend
+        .mockResolvedValueOnce({ applications: ["app1"] })
+        .mockResolvedValueOnce({});
+      const res = await get("/applications");
+      const json = await res.json();
+      expect(json.total).toBe(0);
+      expect(json.applications).toEqual([]);
+    });
+
     it("POST /applications — creates an application", async () => {
       mockSend.mockResolvedValueOnce({ applicationId: "app-id-1" });
       const res = await post("/applications", { applicationName: "my-app" });
@@ -127,6 +146,14 @@ describe("CodeDeploy Routes", () => {
       const json = await res.json();
       expect(json.application.applicationName).toBe("my-app");
       expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetApplicationCommand");
+    });
+
+    it("GET /applications/:name — sparse response defaults to null", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/applications/my-app");
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.application).toBeNull();
     });
 
     it("PUT /applications/:name — updates an application", async () => {
@@ -173,6 +200,25 @@ describe("CodeDeploy Routes", () => {
       expect(json.deploymentGroups).toEqual([]);
     });
 
+    it("GET /applications/:name/deployment-groups — sparse response defaults to empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/applications/my-app/deployment-groups");
+      const json = await res.json();
+      expect(json.total).toBe(0);
+      expect(json.deploymentGroups).toEqual([]);
+      expect(mockSend).toHaveBeenCalledTimes(1);
+    });
+
+    it("GET /applications/:name/deployment-groups — sparse batch response defaults to empty list", async () => {
+      mockSend
+        .mockResolvedValueOnce({ deploymentGroups: ["grp1"] })
+        .mockResolvedValueOnce({});
+      const res = await get("/applications/my-app/deployment-groups");
+      const json = await res.json();
+      expect(json.total).toBe(0);
+      expect(json.deploymentGroups).toEqual([]);
+    });
+
     it("POST /applications/:name/deployment-groups — creates a group", async () => {
       mockSend.mockResolvedValueOnce({ deploymentGroupId: "grp-id-1" });
       const res = await post("/applications/my-app/deployment-groups", {
@@ -200,6 +246,14 @@ describe("CodeDeploy Routes", () => {
       expect(res.status).toBe(200);
       const json = await res.json();
       expect(json.deploymentGroup.deploymentGroupName).toBe("my-group");
+    });
+
+    it("GET /deployment-groups/:groupName — sparse response defaults to null", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/deployment-groups/my-group?applicationName=my-app");
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.deploymentGroup).toBeNull();
     });
 
     it("GET /deployment-groups/:groupName — 400 without applicationName", async () => {
@@ -268,6 +322,14 @@ describe("CodeDeploy Routes", () => {
       expect(json.deploymentConfig.deploymentConfigName).toBe("MyConfig");
     });
 
+    it("GET /deployment-configs/:name — sparse response defaults to null", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/deployment-configs/MyConfig");
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.deploymentConfig).toBeNull();
+    });
+
     it("DELETE /deployment-configs/:name — deletes a config", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await del("/deployment-configs/MyConfig");
@@ -315,6 +377,15 @@ describe("CodeDeploy Routes", () => {
       const json = await res.json();
       expect(json.total).toBe(0);
       expect(json.deployments).toEqual([]);
+    });
+
+    it("GET /applications/:name/deployments — sparse response defaults to empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/applications/my-app/deployments");
+      const json = await res.json();
+      expect(json.total).toBe(0);
+      expect(json.deployments).toEqual([]);
+      expect(mockSend).toHaveBeenCalledTimes(1);
     });
 
     it("GET /applications/:name/deployments — handles undefined deploymentsInfo (|| [] fallback)", async () => {
