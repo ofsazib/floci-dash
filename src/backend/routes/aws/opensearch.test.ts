@@ -75,4 +75,12 @@ describe("OpenSearch Routes", () => {
     const body = await res.json();
     expect(body.total).toBe(2);
   });
+
+  it("GET /versions — sparse response defaults to empty array", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/versions");
+    const body = await res.json();
+    expect(body.versions).toEqual([]);
+    expect(body.total).toBe(0);
+  });
 });
