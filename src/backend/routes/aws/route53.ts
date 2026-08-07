@@ -28,7 +28,6 @@ router.get("/hosted-zones", async (c: Context) => {
 
 router.get("/hosted-zones/:id", async (c: Context) => {
   const id = c.req.param("id");
-  if (!id) return c.json({ error: "id param required" }, 400);
   const client = getClient();
   const result = await client.send(
     new GetHostedZoneCommand({ Id: id })
@@ -65,7 +64,6 @@ router.post("/hosted-zones", async (c: Context) => {
 
 router.delete("/hosted-zones/:id", async (c: Context) => {
   const id = c.req.param("id");
-  if (!id) return c.json({ error: "id param required" }, 400);
   const client = getClient();
   const result = await client.send(
     new DeleteHostedZoneCommand({ Id: id })
@@ -77,7 +75,6 @@ router.delete("/hosted-zones/:id", async (c: Context) => {
 
 router.get("/hosted-zones/:id/record-sets", async (c: Context) => {
   const id = c.req.param("id");
-  if (!id) return c.json({ error: "id param required" }, 400);
   const client = getClient();
   const result = await client.send(
     new ListResourceRecordSetsCommand({ HostedZoneId: id })
@@ -90,7 +87,6 @@ router.get("/hosted-zones/:id/record-sets", async (c: Context) => {
 
 router.post("/hosted-zones/:id/record-sets", async (c: Context) => {
   const id = c.req.param("id");
-  if (!id) return c.json({ error: "id param required" }, 400);
   const body = await c.req.json();
   const client = getClient();
   const result = await client.send(
@@ -116,7 +112,6 @@ router.post("/hosted-zones/:id/record-sets", async (c: Context) => {
 
 router.delete("/hosted-zones/:id/record-sets", async (c: Context) => {
   const id = c.req.param("id");
-  if (!id) return c.json({ error: "id param required" }, 400);
   const name = c.req.query("name");
   const type = c.req.query("type");
   if (!name || !type)

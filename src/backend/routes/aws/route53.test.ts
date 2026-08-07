@@ -181,6 +181,20 @@ describe("Route53 routes — Record Sets", () => {
     const res = await del("/hosted-zones/Z1/record-sets?name=www.example.com.");
     expect(res.status).toBe(400);
   });
+
+  it("POST /hosted-zones/:id/record-sets — defaults action and TTL", async () => {
+    mockSend.mockResolvedValueOnce({ ChangeInfo: { Status: "PENDING" } });
+    const res = await post("/hosted-zones/Z1/record-sets", {
+      name: "www.example.com.",
+      type: "A",
+      resourceRecords: [{ Value: "1.2.3.4" }],
+    });
+    expect(res.status).toBe(201);
+    const cmd = mockSend.mock.calls[0][0];
+    const change = cmd.ChangeBatch.Changes[0];
+    expect(change.Action).toBe("CREATE");
+    expect(change.ResourceRecordSet.TTL).toBe(300);
+  });
 });
 
 // ── Health Checks ────────────────────────────────────────
