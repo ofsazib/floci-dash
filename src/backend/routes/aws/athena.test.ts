@@ -106,6 +106,14 @@ describe("Athena Routes", () => {
     expect(body.total).toBe(1);
   });
 
+  it("GET /data-catalogs — sparse response", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/data-catalogs");
+    const body = await res.json();
+    expect(body.dataCatalogs).toEqual([]);
+    expect(body.total).toBe(0);
+  });
+
   it("GET /data-catalogs/:name — gets catalog", async () => {
     mockSend.mockResolvedValueOnce({ DataCatalog: { Name: "AwsDataCatalog", Type: "GLUE" } });
     const res = await get("/data-catalogs/AwsDataCatalog");
@@ -119,11 +127,33 @@ describe("Athena Routes", () => {
     expect(body.total).toBe(1);
   });
 
+  it("GET /databases — sparse response", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/databases");
+    const body = await res.json();
+    expect(body.databases).toEqual([]);
+    expect(body.total).toBe(0);
+  });
+
+  it("GET /databases — passes catalogName query param", async () => {
+    mockSend.mockResolvedValueOnce({ DatabaseList: [] });
+    await get("/databases?catalogName=MyCatalog");
+    expect(mockSend.mock.calls[0][0].CatalogName).toBe("MyCatalog");
+  });
+
   it("GET /databases/:dbName/tables — lists tables", async () => {
     mockSend.mockResolvedValueOnce({ TableMetadataList: [{ Name: "my_table" }] });
     const res = await get("/databases/default/tables");
     const body = await res.json();
     expect(body.total).toBe(1);
+  });
+
+  it("GET /databases/:dbName/tables — sparse response", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/databases/default/tables");
+    const body = await res.json();
+    expect(body.tables).toEqual([]);
+    expect(body.total).toBe(0);
   });
 
   it("GET /query-executions/:id/results — returns parsed rows with headers", async () => {
@@ -150,6 +180,34 @@ describe("Athena Routes", () => {
     const body = await res.json();
     expect(body.rows).toEqual([]);
     expect(body.headers).toEqual([]);
+  });
+
+  it("GET /query-executions/:id/results — sparse response without ResultSet", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/query-executions/q-123/results");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.rows).toEqual([]);
+    expect(body.headers).toEqual([]);
+    expect(body.nextToken).toBeNull();
+    expect(body.totalRows).toBe(0);
+  });
+
+  it("GET /query-executions/:id/results — passes maxResults/nextToken and maps sparse cells", async () => {
+    mockSend.mockResolvedValueOnce({
+      ResultSet: {
+        Rows: [{ Data: [{ VarCharValue: "a" }] }, { Data: [{}] }, {}],
+      },
+      NextToken: "tok2",
+    });
+    const res = await get("/query-executions/q-123/results?maxResults=5&nextToken=tok1");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.rows).toEqual([["a"], [""], []]);
+    expect(body.nextToken).toBe("tok2");
+    const input = mockSend.mock.calls[0][0];
+    expect(input.MaxResults).toBe(5);
+    expect(input.NextToken).toBe("tok1");
   });
 
   it("GET /work-groups/:name — returns work group detail", async () => {

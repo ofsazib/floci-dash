@@ -1679,6 +1679,12 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 | # | Task | Status | Date |
 |---|------|--------|------|
 | 25.36 | appsync.ts — remove 20 dead `if (!apiId)` / `if (!apiId || !name/functionId/id)` param guards (routes with :name/:functionId/:id segments can never match empty) (76.47%->100%) | Done | 2026-08-07 |
+
+**Batch 14 — Athena route branch coverage** (2026-08-07)
+
+| # | Task | Status | Date |
+|---|------|--------|------|
+| 25.37 | athena.test.ts — add 6 sparse/optional tests (results without ResultSet, nextToken/maxResults passthrough + sparse cells, sparse data-catalogs/databases/tables, catalogName query param) (76.66%->100%) | Done | 2026-08-07 |
 | 25.34 | Verify: ec2-flow-logs.ts 75.75%→**100% branch**, 17 route tests pass, full suite 7623/7623 (269 files), typecheck clean | Done | 2026-08-06 |
 
 
