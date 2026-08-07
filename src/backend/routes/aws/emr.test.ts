@@ -136,6 +136,13 @@ describe("EMR — Clusters", () => {
     expect(json.updated).toBe(true);
   });
 
+  it("POST /clusters/:id/termination-protection — defaults TerminationProtected to true", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/clusters/j-123/termination-protection", {});
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].TerminationProtected).toBe(true);
+  });
+
   it("PATCH /clusters/:id — modifies cluster", async () => {
     mockSend.mockResolvedValueOnce({ StepConcurrencyLevel: 2 });
     const res = await patch("/clusters/j-123", { StepConcurrencyLevel: 2 });
@@ -174,11 +181,24 @@ describe("EMR — Steps", () => {
     expect(json.stepIds).toEqual(["s-1"]);
   });
 
+  it("POST /clusters/:id/steps — sparse response falls back to empty stepIds", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/clusters/j-123/steps", { Steps: [{ Name: "step1" }] });
+    expect(res.status).toBe(201);
+    expect((await res.json()).stepIds).toEqual([]);
+  });
+
   it("GET /clusters/:clusterId/steps/:stepId — returns single step", async () => {
     mockSend.mockResolvedValueOnce({ Step: { Id: "s-1", Name: "step1" } });
     const res = await get("/clusters/j-123/steps/s-1");
     const json = await res.json();
     expect(json.step).toEqual({ Id: "s-1", Name: "step1" });
+  });
+
+  it("GET /clusters/:clusterId/steps/:stepId — null when Step missing", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/clusters/j-123/steps/s-missing");
+    expect((await res.json()).step).toBeNull();
   });
 
   it("POST /clusters/:id/steps/cancel — 400 when StepIds missing", async () => {
@@ -193,6 +213,12 @@ describe("EMR — Steps", () => {
     const json = await res.json();
     expect(json.cancelStepsInfoList).toHaveLength(1);
   });
+
+  it("POST /clusters/:id/steps/cancel — sparse response falls back to empty list", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/clusters/j-123/steps/cancel", { StepIds: ["s-1"] });
+    expect((await res.json()).cancelStepsInfoList).toEqual([]);
+  });
 });
 
 describe("EMR — Instance Groups & Fleets", () => {
@@ -201,6 +227,14 @@ describe("EMR — Instance Groups & Fleets", () => {
     const res = await get("/clusters/j-123/instance-groups");
     const json = await res.json();
     expect(json.instanceGroups).toHaveLength(1);
+  });
+
+  it("GET /clusters/:id/instance-groups — empty when InstanceGroups key missing", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/clusters/j-123/instance-groups");
+    const json = await res.json();
+    expect(json.instanceGroups).toEqual([]);
+    expect(json.total).toBe(0);
   });
 
   it("POST /clusters/:id/instance-groups — 400 when InstanceGroups missing", async () => {
@@ -214,11 +248,26 @@ describe("EMR — Instance Groups & Fleets", () => {
     expect(res.status).toBe(201);
   });
 
+  it("POST /clusters/:id/instance-groups — sparse response falls back to empty ids", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/clusters/j-123/instance-groups", { InstanceGroups: [{ InstanceRole: "CORE" }] });
+    expect(res.status).toBe(201);
+    expect((await res.json()).instanceGroupIds).toEqual([]);
+  });
+
   it("GET /clusters/:id/instance-fleets — returns list", async () => {
     mockSend.mockResolvedValueOnce({ InstanceFleets: [{ InstanceFleetId: "if-1" }] });
     const res = await get("/clusters/j-123/instance-fleets");
     const json = await res.json();
     expect(json.instanceFleets).toHaveLength(1);
+  });
+
+  it("GET /clusters/:id/instance-fleets — empty when InstanceFleets key missing", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/clusters/j-123/instance-fleets");
+    const json = await res.json();
+    expect(json.instanceFleets).toEqual([]);
+    expect(json.total).toBe(0);
   });
 
   it("POST /clusters/:id/instance-fleets — 400 when InstanceFleet missing", async () => {
@@ -237,6 +286,14 @@ describe("EMR — Instance Groups & Fleets", () => {
     const res = await get("/clusters/j-123/instances");
     const json = await res.json();
     expect(json.instances).toHaveLength(1);
+  });
+
+  it("GET /clusters/:id/instances — empty when Instances key missing", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/clusters/j-123/instances");
+    const json = await res.json();
+    expect(json.instances).toEqual([]);
+    expect(json.total).toBe(0);
   });
 });
 
@@ -279,6 +336,12 @@ describe("EMR — Security Configurations", () => {
     const res = await get("/security-configurations/sc1");
     const json = await res.json();
     expect(json.securityConfiguration.Name).toBe("sc1");
+  });
+
+  it("GET /security-configurations/:name — null when response empty", async () => {
+    mockSend.mockResolvedValueOnce(undefined as any);
+    const res = await get("/security-configurations/sc-missing");
+    expect((await res.json()).securityConfiguration).toBeNull();
   });
 
   it("DELETE /security-configurations/:name — deletes", async () => {
