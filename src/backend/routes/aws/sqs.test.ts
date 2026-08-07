@@ -115,6 +115,12 @@ describe("SQS Routes", () => {
       expect(body.queueUrls).toEqual([]);
     });
 
+    it("GET /queues — empty when QueueUrls key missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/queues");
+      expect((await res.json()).queueUrls).toEqual([]);
+    });
+
     it("POST /queues — creates a queue", async () => {
       mockSend.mockResolvedValueOnce({
         QueueUrl: "http://localhost:4566/000000000000/new-queue",
@@ -184,6 +190,12 @@ describe("SQS Routes", () => {
       expect(res.status).toBe(400);
     });
 
+    it("GET /queues/attributes — empty when Attributes key missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/queues/attributes?queueUrl=http://localhost:4566/000000000000/my-queue");
+      expect((await res.json()).attributes).toEqual({});
+    });
+
     it("PUT /queues/attributes — updates attributes", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await put(
@@ -194,6 +206,11 @@ describe("SQS Routes", () => {
       expect((await res.json()).updated).toBe(true);
     });
 
+    it("PUT /queues/attributes — 400 when queueUrl missing", async () => {
+      const res = await put("/queues/attributes", { attributes: {} });
+      expect(res.status).toBe(400);
+    });
+
     it("PURGE /queues/purge — purges a queue", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await post(
@@ -201,6 +218,11 @@ describe("SQS Routes", () => {
       );
       expect(res.status).toBe(200);
       expect((await res.json()).purged).toBe(true);
+    });
+
+    it("PURGE /queues/purge — 400 when queueUrl missing", async () => {
+      const res = await post("/queues/purge");
+      expect(res.status).toBe(400);
     });
   });
 
@@ -224,6 +246,12 @@ describe("SQS Routes", () => {
       );
       expect(res.status).toBe(200);
       expect((await res.json()).cleared).toBe(true);
+    });
+
+    it("DELETE /queues/messages — 400 when queueUrl missing", async () => {
+      const res = await del("/queues/messages");
+      expect(res.status).toBe(400);
+      expect(mockFlociFetch).not.toHaveBeenCalled();
     });
 
     it("GET /queues/messages — 400 when queueUrl missing", async () => {
@@ -255,6 +283,16 @@ describe("SQS Routes", () => {
       expect(res.status).toBe(400);
     });
 
+    it("POST /queues/messages — empty message body falls back to empty string", async () => {
+      mockSend.mockResolvedValueOnce({ MessageId: "msg-002" });
+      const res = await post(
+        "/queues/messages?queueUrl=http://localhost:4566/000000000000/my-queue",
+        {}
+      );
+      expect(res.status).toBe(201);
+      expect(mockSend.mock.calls[0][0].MessageBody).toBe("");
+    });
+
     it("GET /queues/tags — lists queue tags", async () => {
       mockSend.mockResolvedValueOnce({
         Tags: { env: "test", project: "floci" },
@@ -272,6 +310,12 @@ describe("SQS Routes", () => {
       expect(res.status).toBe(400);
     });
 
+    it("GET /queues/tags — empty when Tags key missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/queues/tags?queueUrl=http://localhost:4566/000000000000/my-queue");
+      expect((await res.json()).tags).toEqual({});
+    });
+
     it("POST /queues/tags — tags a queue", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await post(
@@ -281,6 +325,11 @@ describe("SQS Routes", () => {
       expect(res.status).toBe(200);
       expect((await res.json()).tagged).toBe(true);
       expect(mockSend.mock.calls[0][0].Tags).toEqual({ env: "prod" });
+    });
+
+    it("POST /queues/tags — 400 when queueUrl missing", async () => {
+      const res = await post("/queues/tags", { tags: {} });
+      expect(res.status).toBe(400);
     });
 
     it("DELETE /queues/tags — untags a queue", async () => {
@@ -299,6 +348,11 @@ describe("SQS Routes", () => {
       expect(res.status).toBe(400);
     });
 
+    it("DELETE /queues/tags — 400 when queueUrl missing", async () => {
+      const res = await del("/queues/tags?tagKeys=env");
+      expect(res.status).toBe(400);
+    });
+
     it("GET /queues/dlq-sources — lists DLQ sources", async () => {
       mockSend.mockResolvedValueOnce({
         queueUrls: ["http://localhost:4566/000000000000/source-queue"],
@@ -309,6 +363,19 @@ describe("SQS Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.queueUrls).toHaveLength(1);
+    });
+
+    it("GET /queues/dlq-sources — 400 when queueUrl missing", async () => {
+      const res = await get("/queues/dlq-sources");
+      expect(res.status).toBe(400);
+    });
+
+    it("GET /queues/dlq-sources — empty when queueUrls key missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get(
+        "/queues/dlq-sources?queueUrl=http://localhost:4566/000000000000/dlq"
+      );
+      expect((await res.json()).queueUrls).toEqual([]);
     });
 
     it("DELETE /queues/messages/item — deletes a message", async () => {
@@ -338,6 +405,17 @@ describe("SQS Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.successful).toHaveLength(1);
+    });
+
+    it("POST /queues/messages/batch — sparse response falls back to empty arrays", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post(
+        "/queues/messages/batch?queueUrl=http://localhost:4566/000000000000/my-queue",
+        { entries: [{ Id: "1", MessageBody: "hi" }] }
+      );
+      const body = await res.json();
+      expect(body.successful).toEqual([]);
+      expect(body.failed).toEqual([]);
     });
 
     it("POST /queues/messages/batch — 400 when queueUrl missing", async () => {
@@ -375,6 +453,17 @@ describe("SQS Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.successful).toHaveLength(1);
+    });
+
+    it("POST /queues/messages/visibility-batch — sparse response falls back to empty arrays", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post(
+        "/queues/messages/visibility-batch?queueUrl=http://localhost:4566/000000000000/my-queue",
+        { entries: [{ Id: "1" }] }
+      );
+      const body = await res.json();
+      expect(body.successful).toEqual([]);
+      expect(body.failed).toEqual([]);
     });
 
     it("POST /queues/messages/visibility-batch — 400 when queueUrl missing", async () => {
@@ -436,7 +525,7 @@ describe("SQS Routes", () => {
     });
 
     it("POST /queues/dlq/move-tasks — handles empty DLQ (no messages)", async () => {
-      mockSend.mockResolvedValueOnce({ Messages: [] });
+      mockSend.mockResolvedValueOnce({});
 
       const res = await post("/queues/dlq/move-tasks", {
         dlqUrl: "http://localhost:4566/000000000000/dlq",
@@ -449,6 +538,25 @@ describe("SQS Routes", () => {
       expect(body.movedMessages).toEqual([]);
     });
 
+    it("POST /queues/dlq/move-tasks — message without Body or MessageId falls back to empty strings", async () => {
+      mockSend.mockResolvedValueOnce({
+        Messages: [{ ReceiptHandle: "rh-sparse" }],
+      });
+      mockSend.mockResolvedValueOnce({ MessageId: "moved-sparse" });
+      mockSend.mockResolvedValueOnce({});
+
+      const res = await post("/queues/dlq/move-tasks", {
+        dlqUrl: "http://localhost:4566/000000000000/dlq",
+        sourceUrl: "http://localhost:4566/000000000000/source",
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.moved).toBe(1);
+      expect(body.movedMessages[0].messageId).toBe("");
+      expect(body.movedMessages[0].body).toBe("");
+      expect(mockSend.mock.calls[1][0].MessageBody).toBe("");
+    });
+
     it("POST /queues/dlq/move-tasks — handles send failure for one message", async () => {
       mockSend.mockResolvedValueOnce({
         Messages: [
@@ -459,7 +567,7 @@ describe("SQS Routes", () => {
             MessageAttributes: {},
           },
           {
-            MessageId: "msg-bad",
+            // Intentionally no MessageId — exercises the `msg.MessageId || ""` fallback in failed.push
             Body: "Bad message",
             ReceiptHandle: "rh-bad",
             MessageAttributes: {},
@@ -482,7 +590,7 @@ describe("SQS Routes", () => {
       expect(body.movedMessages).toHaveLength(1);
       expect(body.movedMessages[0].messageId).toBe("msg-good");
       expect(body.failedMessages).toHaveLength(1);
-      expect(body.failedMessages[0].messageId).toBe("msg-bad");
+      expect(body.failedMessages[0].messageId).toBe("");
       expect(body.failedMessages[0].error).toBe("Send failed");
     });
   });
