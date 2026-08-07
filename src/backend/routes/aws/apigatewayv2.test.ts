@@ -87,6 +87,13 @@ describe("API Gateway V2 Routes", () => {
     expect(body.total).toBe(1);
   });
 
+  it("GET /apis/:apiId/routes — sparse response defaults to []", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/apis/api-1/routes");
+    const body = await res.json();
+    expect(body).toEqual({ routes: [], total: 0 });
+  });
+
   it("POST /apis/:apiId/routes — creates route (201)", async () => {
     mockSend.mockResolvedValueOnce({ RouteId: "r1" });
     const res = await post("/apis/api-1/routes", { routeKey: "GET /hello" });
@@ -111,6 +118,23 @@ describe("API Gateway V2 Routes", () => {
     expect(body.total).toBe(1);
   });
 
+  it("GET /apis/:apiId/integrations — sparse response defaults to []", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/apis/api-1/integrations");
+    const body = await res.json();
+    expect(body).toEqual({ integrations: [], total: 0 });
+  });
+
+  it("DELETE /apis/:apiId/integrations/:integrationId — deletes integration", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await del("/apis/api-1/integrations/i1");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.deleted).toBe(true);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteIntegrationCommand");
+    expect(mockSend.mock.calls[0][0].IntegrationId).toBe("i1");
+  });
+
   it("POST /apis/:apiId/integrations — creates integration (201)", async () => {
     mockSend.mockResolvedValueOnce({ IntegrationId: "i1" });
     const res = await post("/apis/api-1/integrations", { integrationType: "HTTP_PROXY", integrationUri: "http://example.com" });
@@ -129,10 +153,32 @@ describe("API Gateway V2 Routes", () => {
     expect(body.total).toBe(1);
   });
 
+  it("GET /apis/:apiId/stages — sparse response defaults to []", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/apis/api-1/stages");
+    const body = await res.json();
+    expect(body).toEqual({ stages: [], total: 0 });
+  });
+
   it("POST /apis/:apiId/stages — creates stage (201)", async () => {
     mockSend.mockResolvedValueOnce({ StageName: "prod" });
     const res = await post("/apis/api-1/stages", { stageName: "prod" });
     expect(res.status).toBe(201);
+  });
+
+  it("POST /apis/:apiId/stages — 400 if stageName missing", async () => {
+    const res = await post("/apis/api-1/stages", {});
+    expect(res.status).toBe(400);
+  });
+
+  it("DELETE /apis/:apiId/stages/:stageName — deletes stage", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await del("/apis/api-1/stages/prod");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.deleted).toBe(true);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteStageCommand");
+    expect(mockSend.mock.calls[0][0].StageName).toBe("prod");
   });
 
   it("GET /apis/:apiId/deployments — lists deployments", async () => {
@@ -142,10 +188,27 @@ describe("API Gateway V2 Routes", () => {
     expect(body.total).toBe(1);
   });
 
+  it("GET /apis/:apiId/deployments — sparse response defaults to []", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/apis/api-1/deployments");
+    const body = await res.json();
+    expect(body).toEqual({ deployments: [], total: 0 });
+  });
+
   it("POST /apis/:apiId/deployments — creates deployment (201)", async () => {
     mockSend.mockResolvedValueOnce({ DeploymentId: "d1" });
     const res = await post("/apis/api-1/deployments", {});
     expect(res.status).toBe(201);
+  });
+
+  it("DELETE /apis/:apiId/deployments/:deploymentId — deletes deployment", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await del("/apis/api-1/deployments/d1");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.deleted).toBe(true);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteDeploymentCommand");
+    expect(mockSend.mock.calls[0][0].DeploymentId).toBe("d1");
   });
 });
 
@@ -225,6 +288,22 @@ describe("API Gateway V2 WebSocket", () => {
     expect(body.routes[1].integrationId).toBe("missing");
     expect(body.routes[1].integration).toBe(null);
     expect(body.routes[1].isWellKnown).toBe(true);
+  });
+
+  it("GET /apis/:apiId/websocket-routes — skips integration without IntegrationId", async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Items: [{ RouteId: "r-1", RouteKey: "$connect", Target: "integrations/ghost" }],
+      })
+      .mockResolvedValueOnce({
+        Items: [{ IntegrationType: "AWS_PROXY", IntegrationUri: "arn:lambda:connect" }],
+      });
+    const res = await get("/apis/api-1/websocket-routes");
+    const body = await res.json();
+    expect(body.total).toBe(1);
+    expect(body.routes[0].integrationId).toBe("ghost");
+    expect(body.routes[0].integration).toBe(null);
+    expect(mockSend.mock.calls[1][0].__cmdName).toBe("GetIntegrationsCommand");
   });
 
   it("GET /apis/:apiId/websocket-routes — empty list", async () => {
