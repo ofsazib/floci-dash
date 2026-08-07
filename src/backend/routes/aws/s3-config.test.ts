@@ -84,6 +84,13 @@ const unexpectedError = vi.hoisted(() => {
   return err;
 });
 
+const notFoundByStatus = vi.hoisted(() => {
+  const err = new Error("Not found");
+  err.name = "S3ServiceException"; // name does NOT match the NoSuch* names — exercises the $metadata 404 branch
+  (err as any).$metadata = { httpStatusCode: 404 };
+  return err;
+});
+
 beforeEach(() => {
   mockSend.mockReset();
   mockSend.mockResolvedValue({});
@@ -165,6 +172,29 @@ describe("S3 Config", () => {
       expect(body.total).toBe(0);
     });
 
+    it("GET /buckets/:name/tags — sparse response falls back to empty tags", async () => {
+      const res = await get("/buckets/my-bucket/tags");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.tags).toEqual([]);
+      expect(body.total).toBe(0);
+    });
+
+    it("GET /buckets/:name/tags — returns empty on 404 via metadata status", async () => {
+      mockSend.mockRejectedValueOnce(notFoundByStatus);
+      const res = await get("/buckets/my-bucket/tags");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.tags).toEqual([]);
+      expect(body.total).toBe(0);
+    });
+
+    it("GET /buckets/:name/tags — throws on unexpected error", async () => {
+      mockSend.mockRejectedValueOnce(unexpectedError);
+      const res = await get("/buckets/my-bucket/tags");
+      expect(res.status).toBe(500);
+    });
+
     it("PUT /buckets/:name/tags — sets tags", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await put("/buckets/my-bucket/tags", {
@@ -208,6 +238,29 @@ describe("S3 Config", () => {
       expect(body.hasPolicy).toBe(false);
     });
 
+    it("GET /buckets/:name/policy — sparse response falls back to null policy", async () => {
+      const res = await get("/buckets/my-bucket/policy");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.policy).toBeNull();
+      expect(body.hasPolicy).toBe(false);
+    });
+
+    it("GET /buckets/:name/policy — returns null on 404 via metadata status", async () => {
+      mockSend.mockRejectedValueOnce(notFoundByStatus);
+      const res = await get("/buckets/my-bucket/policy");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.policy).toBeNull();
+      expect(body.hasPolicy).toBe(false);
+    });
+
+    it("GET /buckets/:name/policy — throws on unexpected error", async () => {
+      mockSend.mockRejectedValueOnce(unexpectedError);
+      const res = await get("/buckets/my-bucket/policy");
+      expect(res.status).toBe(500);
+    });
+
     it("PUT /buckets/:name/policy — sets policy as string", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await put("/buckets/my-bucket/policy", {
@@ -231,6 +284,11 @@ describe("S3 Config", () => {
 
     it("PUT /buckets/:name/policy — 400 when policy missing", async () => {
       const res = await put("/buckets/my-bucket/policy", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("PUT /buckets/:name/policy — 400 on invalid JSON policy", async () => {
+      const res = await put("/buckets/my-bucket/policy", { policy: "not-json" });
       expect(res.status).toBe(400);
     });
 
@@ -260,6 +318,28 @@ describe("S3 Config", () => {
       const body = await res.json();
       expect(body.rules).toEqual([]);
       expect(body.total).toBe(0);
+    });
+
+    it("GET /buckets/:name/lifecycle — sparse response falls back to empty rules", async () => {
+      const res = await get("/buckets/my-bucket/lifecycle");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.rules).toEqual([]);
+      expect(body.total).toBe(0);
+    });
+
+    it("GET /buckets/:name/lifecycle — returns empty on 404 via metadata status", async () => {
+      mockSend.mockRejectedValueOnce(notFoundByStatus);
+      const res = await get("/buckets/my-bucket/lifecycle");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.rules).toEqual([]);
+    });
+
+    it("GET /buckets/:name/lifecycle — throws on unexpected error", async () => {
+      mockSend.mockRejectedValueOnce(unexpectedError);
+      const res = await get("/buckets/my-bucket/lifecycle");
+      expect(res.status).toBe(500);
     });
 
     it("PUT /buckets/:name/lifecycle — sets rules", async () => {
@@ -313,6 +393,14 @@ describe("S3 Config", () => {
       expect(body.rules).toEqual([]);
     });
 
+    it("GET /buckets/:name/cors — sparse response falls back to empty rules", async () => {
+      const res = await get("/buckets/my-bucket/cors");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.rules).toEqual([]);
+      expect(body.total).toBe(0);
+    });
+
     it("GET /buckets/:name/cors — throws on unexpected error", async () => {
       mockSend.mockRejectedValueOnce(unexpectedError);
       const res = await get("/buckets/my-bucket/cors");
@@ -362,6 +450,16 @@ describe("S3 Config", () => {
       expect(body.configured).toBe(false);
     });
 
+    it("GET /buckets/:name/website — sparse response falls back to nulls", async () => {
+      const res = await get("/buckets/my-bucket/website");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.indexDocument).toBeNull();
+      expect(body.errorDocument).toBeNull();
+      expect(body.redirectAllRequestsTo).toBeNull();
+      expect(body.routingRules).toEqual([]);
+    });
+
     it("GET /buckets/:name/website — throws on unexpected error", async () => {
       mockSend.mockRejectedValueOnce(unexpectedError);
       const res = await get("/buckets/my-bucket/website");
@@ -383,6 +481,20 @@ describe("S3 Config", () => {
     it("PUT /buckets/:name/website — 400 when missing indexDocument and redirect", async () => {
       const res = await put("/buckets/my-bucket/website", { errorDocument: "e.html" });
       expect(res.status).toBe(400);
+    });
+
+    it("PUT /buckets/:name/website — sets redirectAllRequestsTo only", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/buckets/my-bucket/website", {
+        redirectAllRequestsTo: { Protocol: "https", HostName: "example.com" },
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.WebsiteConfiguration.RedirectAllRequestsTo.HostName).toBe("example.com");
+      expect(cmd.WebsiteConfiguration.IndexDocument).toBeUndefined();
+      expect(cmd.WebsiteConfiguration.ErrorDocument).toBeUndefined();
     });
 
     it("DELETE /buckets/:name/website — deletes website config", async () => {
@@ -415,6 +527,14 @@ describe("S3 Config", () => {
       const body = await res.json();
       expect(body.configured).toBe(false);
       expect(body.rules).toEqual([]);
+    });
+
+    it("GET /buckets/:name/encryption — sparse response falls back to empty rules", async () => {
+      const res = await get("/buckets/my-bucket/encryption");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.rules).toEqual([]);
+      expect(body.configured).toBe(true);
     });
 
     it("PUT /buckets/:name/encryption — sets encryption", async () => {
@@ -473,6 +593,19 @@ describe("S3 Config", () => {
       const body = await res.json();
       expect(body.updated).toBe(true);
     });
+
+    it("PUT /buckets/:name/notifications — fills empty config arrays", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/buckets/my-bucket/notifications", {
+        lambdaNotifications: [{ LambdaFunctionArn: "arn:aws:lambda:us-east-1:123:function:f", Events: ["s3:ObjectCreated:*"] }],
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.NotificationConfiguration.QueueConfigurations).toEqual([]);
+      expect(cmd.NotificationConfiguration.TopicConfigurations).toEqual([]);
+    });
   });
 
   describe("Public Access Block", () => {
@@ -495,6 +628,17 @@ describe("S3 Config", () => {
       expect(body.configured).toBe(false);
     });
 
+    it("GET /buckets/:name/public-access-block — sparse response falls back to all false", async () => {
+      const res = await get("/buckets/my-bucket/public-access-block");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.configured).toBe(true);
+      expect(body.blockPublicAcls).toBe(false);
+      expect(body.ignorePublicAcls).toBe(false);
+      expect(body.blockPublicPolicy).toBe(false);
+      expect(body.restrictPublicBuckets).toBe(false);
+    });
+
     it("PUT /buckets/:name/public-access-block — sets config", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await put("/buckets/my-bucket/public-access-block", {
@@ -504,6 +648,17 @@ describe("S3 Config", () => {
       const body = await res.json();
       expect(body.updated).toBe(true);
       expect(mockSend.mock.calls[0][0].PublicAccessBlockConfiguration.BlockPublicAcls).toBe(true);
+    });
+
+    it("PUT /buckets/:name/public-access-block — defaults missing flags to false", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/buckets/my-bucket/public-access-block", {});
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.PublicAccessBlockConfiguration.BlockPublicAcls).toBe(false);
+      expect(cmd.PublicAccessBlockConfiguration.IgnorePublicAcls).toBe(false);
+      expect(cmd.PublicAccessBlockConfiguration.BlockPublicPolicy).toBe(false);
+      expect(cmd.PublicAccessBlockConfiguration.RestrictPublicBuckets).toBe(false);
     });
 
     it("GET /buckets/:name/public-access-block — throws on unexpected error", async () => {
@@ -559,6 +714,15 @@ describe("S3 Config", () => {
       const res = await put("/buckets/my-bucket/logging", {});
       expect(res.status).toBe(400);
     });
+
+    it("PUT /buckets/:name/logging — defaults targetPrefix to empty", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/buckets/my-bucket/logging", { targetBucket: "logs-bucket" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.targetPrefix).toBe("");
+      expect(mockSend.mock.calls[0][0].BucketLoggingStatus.LoggingEnabled.TargetPrefix).toBe("");
+    });
   });
 
   describe("Bucket ACL", () => {
@@ -587,6 +751,24 @@ describe("S3 Config", () => {
       const body = await res.json();
       expect(body.grants).toEqual([]);
       expect(body.totalGrants).toBe(0);
+    });
+
+    it("GET /buckets/:name/acl — sparse response falls back to empty grants", async () => {
+      const res = await get("/buckets/my-bucket/acl");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.grants).toEqual([]);
+      expect(body.totalGrants).toBe(0);
+      expect(body.owner).toBeNull();
+    });
+
+    it("GET /buckets/:name/acl — grant without Grantee maps to null", async () => {
+      mockSend.mockResolvedValueOnce({ Grants: [{ Permission: "READ" }] });
+      const res = await get("/buckets/my-bucket/acl");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.grants[0].grantee).toBeNull();
+      expect(body.grants[0].permission).toBe("READ");
     });
 
     it("PUT /buckets/:name/acl — sets canned ACL", async () => {
