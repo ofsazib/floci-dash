@@ -74,11 +74,21 @@ describe("CodeBuild Routes", () => {
     });
 
     it("GET /projects — returns empty list", async () => {
-      mockSend.mockResolvedValueOnce({ projects: [] });
+      mockSend.mockResolvedValueOnce({});
       const res = await get("/projects");
       const json = await res.json();
       expect(json.total).toBe(0);
       expect(json.projects).toEqual([]);
+    });
+
+    it("GET /projects — sparse batch-get response", async () => {
+      mockSend.mockResolvedValueOnce({ projects: ["proj1"] }).mockResolvedValueOnce({});
+      const res = await get("/projects");
+      const json = await res.json();
+      expect(json.total).toBe(0);
+      expect(json.projects).toEqual([]);
+      expect(mockSend).toHaveBeenCalledTimes(2);
+      expect(mockSend.mock.calls[1][0].__cmdName).toBe("BatchGetProjectsCommand");
     });
 
     it("POST /projects — creates a project", async () => {
@@ -144,11 +154,21 @@ describe("CodeBuild Routes", () => {
     });
 
     it("GET /projects/:name/builds — returns empty list", async () => {
-      mockSend.mockResolvedValueOnce({ ids: [] });
+      mockSend.mockResolvedValueOnce({});
       const res = await get("/projects/proj1/builds");
       const json = await res.json();
       expect(json.total).toBe(0);
       expect(json.builds).toEqual([]);
+    });
+
+    it("GET /projects/:name/builds — sparse batch-get response", async () => {
+      mockSend.mockResolvedValueOnce({ ids: ["build-1"] }).mockResolvedValueOnce({});
+      const res = await get("/projects/proj1/builds");
+      const json = await res.json();
+      expect(json.total).toBe(0);
+      expect(json.builds).toEqual([]);
+      expect(mockSend).toHaveBeenCalledTimes(2);
+      expect(mockSend.mock.calls[1][0].__cmdName).toBe("BatchGetBuildsCommand");
     });
 
     it("GET /builds — lists all builds", async () => {
@@ -162,10 +182,20 @@ describe("CodeBuild Routes", () => {
     });
 
     it("GET /builds — returns empty list", async () => {
-      mockSend.mockResolvedValueOnce({ ids: [] });
+      mockSend.mockResolvedValueOnce({});
       const res = await get("/builds");
       const json = await res.json();
       expect(json.total).toBe(0);
+    });
+
+    it("GET /builds — sparse batch-get response", async () => {
+      mockSend.mockResolvedValueOnce({ ids: ["build-1"] }).mockResolvedValueOnce({});
+      const res = await get("/builds");
+      const json = await res.json();
+      expect(json.total).toBe(0);
+      expect(json.builds).toEqual([]);
+      expect(mockSend).toHaveBeenCalledTimes(2);
+      expect(mockSend.mock.calls[1][0].__cmdName).toBe("BatchGetBuildsCommand");
     });
 
     it("GET /builds/:id — gets build", async () => {
