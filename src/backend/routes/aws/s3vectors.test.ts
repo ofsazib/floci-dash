@@ -61,6 +61,16 @@ describe("S3 Vector Search - buckets", () => {
     expect(body.total).toBe(0);
   });
 
+  it("GET /buckets - forwards maxResults/nextToken/prefix params", async () => {
+    mockFlociFetch.mockResolvedValueOnce({ vectorBuckets: [], nextToken: "tok" });
+    const res = await get("/buckets?maxResults=10&nextToken=tok&prefix=pre");
+    expect(res.status).toBe(200);
+    const body = JSON.parse(mockFlociFetch.mock.calls[0][1].body);
+    expect(body.maxResults).toBe(10);
+    expect(body.nextToken).toBe("tok");
+    expect(body.prefix).toBe("pre");
+  });
+
   it("GET /buckets/:name - gets single bucket", async () => {
     mockFlociFetch.mockResolvedValueOnce({
       vectorBucket: { vectorBucketName: "bucket1", vectorBucketArn: "arn:aws:s3vectors:bucket1" },
@@ -112,6 +122,23 @@ describe("S3 Vector Search - indexes", () => {
     expect(body.total).toBe(1);
   });
 
+  it("GET /buckets/:name/indexes - sparse response falls back to empty", async () => {
+    mockFlociFetch.mockResolvedValueOnce({});
+    const res = await get("/buckets/b1/indexes");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.indexes).toEqual([]);
+    expect(body.total).toBe(0);
+  });
+
+  it("GET /buckets/:name/indexes - forwards maxResults param", async () => {
+    mockFlociFetch.mockResolvedValueOnce({ indexes: [] });
+    const res = await get("/buckets/b1/indexes?maxResults=5");
+    expect(res.status).toBe(200);
+    const body = JSON.parse(mockFlociFetch.mock.calls[0][1].body);
+    expect(body.maxResults).toBe(5);
+  });
+
   it("GET /buckets/:name/indexes/:indexName - gets single index", async () => {
     mockFlociFetch.mockResolvedValueOnce({
       index: { indexName: "idx1", dimension: 128 },
@@ -119,6 +146,14 @@ describe("S3 Vector Search - indexes", () => {
     const res = await get("/buckets/b1/indexes/idx1");
     const body = await res.json();
     expect(body.index.indexName).toBe("idx1");
+  });
+
+  it("GET /buckets/:name/indexes/:indexName - sparse response falls back to null", async () => {
+    mockFlociFetch.mockResolvedValueOnce({});
+    const res = await get("/buckets/b1/indexes/idx1");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.index).toBeNull();
   });
 
   it("POST /buckets/:name/indexes - creates an index", async () => {
@@ -177,6 +212,15 @@ describe("S3 Vector Search - vectors", () => {
     expect(body.total).toBe(0);
   });
 
+  it("GET /buckets/:name/indexes/:indexName/vectors - sparse response falls back to empty", async () => {
+    mockFlociFetch.mockResolvedValueOnce({});
+    const res = await get("/buckets/b1/indexes/idx1/vectors?keys=v1");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.vectors).toEqual([]);
+    expect(body.total).toBe(0);
+  });
+
   it("DELETE /buckets/:name/indexes/:indexName/vectors - deletes vectors", async () => {
     mockFlociFetch.mockResolvedValueOnce({});
     const res = await del("/buckets/b1/indexes/idx1/vectors", { keys: ["v1", "v2"] });
@@ -205,6 +249,18 @@ describe("S3 Vector Search - query", () => {
     const body = await res.json();
     expect(body.vectors).toHaveLength(1);
     expect(body.distanceMetric).toBe("cosine");
+  });
+
+  it("POST /buckets/:name/indexes/:indexName/query - sparse response falls back to empty", async () => {
+    mockFlociFetch.mockResolvedValueOnce({});
+    const res = await post("/buckets/b1/indexes/idx1/query", {
+      queryVector: [0.1, 0.2, 0.3],
+      topK: 10,
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.vectors).toEqual([]);
+    expect(body.distanceMetric).toBeUndefined();
   });
 
   it("POST /buckets/:name/indexes/:indexName/query - rejects missing fields", async () => {
