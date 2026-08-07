@@ -29,8 +29,7 @@ router.get("/parameters", async (c: Context) => {
 });
 
 router.get("/parameters/:name", async (c: Context) => {
-  const name = decodeURIComponent(c.req.param("name") || "");
-  if (!name) return c.json({ error: "name param required" }, 400);
+  const name = decodeURIComponent(c.req.param("name")!);
   const client = getClient();
   const result = await client.send(
     new GetParameterCommand({ Name: name, WithDecryption: true })
@@ -58,8 +57,7 @@ router.post("/parameters", async (c: Context) => {
 });
 
 router.delete("/parameters/:name", async (c: Context) => {
-  const name = decodeURIComponent(c.req.param("name") || "");
-  if (!name) return c.json({ error: "name param required" }, 400);
+  const name = decodeURIComponent(c.req.param("name")!);
   const client = getClient();
   await client.send(new DeleteParameterCommand({ Name: name }));
   return c.json({ deleted: true });
@@ -68,8 +66,7 @@ router.delete("/parameters/:name", async (c: Context) => {
 // ── Parameter History ────────────────────────────────────
 
 router.get("/parameters/:name/history", async (c: Context) => {
-  const name = decodeURIComponent(c.req.param("name") || "");
-  if (!name) return c.json({ error: "name param required" }, 400);
+  const name = decodeURIComponent(c.req.param("name")!);
   const client = getClient();
   const result = await client.send(
     new GetParameterHistoryCommand({ Name: name })

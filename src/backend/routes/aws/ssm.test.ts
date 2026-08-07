@@ -206,6 +206,19 @@ describe("SSM routes — Tags", () => {
     expect(json.untagged).toBe(true);
   });
 
+  it("DELETE /tags — defaults to empty tagKeys when omitted", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await del("/tags?resourceId=/app/config");
+    const json = await res.json();
+    expect(json.untagged).toBe(true);
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        __cmdName: "RemoveTagsFromResourceCommand",
+        TagKeys: [],
+      })
+    );
+  });
+
   it("DELETE /tags — 400 when no resourceId", async () => {
     const res = await del("/tags?tagKeys=env");
     expect(res.status).toBe(400);
