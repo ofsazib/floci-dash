@@ -27,7 +27,6 @@ router.get("/rest-apis", async (c: Context) => {
 
 router.get("/rest-apis/:apiId", async (c: Context) => {
   const apiId = c.req.param("apiId");
-  if (!apiId) return c.json({ error: "apiId param required" }, 400);
   const client = getClient();
   const result = await client.send(new GetRestApiCommand({ restApiId: apiId }));
   return c.json({ api: result });
@@ -51,7 +50,6 @@ router.post("/rest-apis", async (c: Context) => {
 
 router.delete("/rest-apis/:apiId", async (c: Context) => {
   const apiId = c.req.param("apiId");
-  if (!apiId) return c.json({ error: "apiId param required" }, 400);
   const client = getClient();
   await client.send(new DeleteRestApiCommand({ restApiId: apiId }));
   return c.json({ deleted: true });
@@ -61,7 +59,6 @@ router.delete("/rest-apis/:apiId", async (c: Context) => {
 
 router.get("/rest-apis/:apiId/resources", async (c: Context) => {
   const apiId = c.req.param("apiId");
-  if (!apiId) return c.json({ error: "apiId param required" }, 400);
   const client = getClient();
   const result = await client.send(
     new GetResourcesCommand({ restApiId: apiId })
@@ -76,7 +73,6 @@ router.get("/rest-apis/:apiId/resources", async (c: Context) => {
 
 router.get("/rest-apis/:apiId/deployments", async (c: Context) => {
   const apiId = c.req.param("apiId");
-  if (!apiId) return c.json({ error: "apiId param required" }, 400);
   const client = getClient();
   const result = await client.send(
     new GetDeploymentsCommand({ restApiId: apiId })
