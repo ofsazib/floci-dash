@@ -130,6 +130,11 @@ describe("CloudFront Routes", () => {
       expect(body.eTag).toBe("NEWETAG");
     });
 
+    it("PUT /distributions/:id — 400 if config missing", async () => {
+      const res = await put("/distributions/E123", {});
+      expect(res.status).toBe(400);
+    });
+
     it("DELETE /distributions/:id — deletes with If-Match", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await del("/distributions/E123", { "If-Match": "ETAG123" });
@@ -223,6 +228,13 @@ describe("CloudFront Routes", () => {
       const body = await res.json();
       expect(body.total).toBe(1);
     });
+
+    it("GET /origin-access-controls — sparse response defaults to []", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/origin-access-controls");
+      const body = await res.json();
+      expect(body).toEqual({ originAccessControls: [], total: 0 });
+    });
   });
 
   describe("Functions", () => {
@@ -235,6 +247,13 @@ describe("CloudFront Routes", () => {
       const res = await get("/functions");
       const body = await res.json();
       expect(body.total).toBe(1);
+    });
+
+    it("GET /functions — sparse response defaults to []", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/functions");
+      const body = await res.json();
+      expect(body).toEqual({ functions: [], total: 0 });
     });
   });
 
@@ -252,6 +271,14 @@ describe("CloudFront Routes", () => {
     it("GET /tags — 400 if resource missing", async () => {
       const res = await get("/tags");
       expect(res.status).toBe(400);
+    });
+
+    it("GET /tags — sparse response defaults to []", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/tags?resource=arn:aws:cloudfront::123:distribution/E123");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.tags).toEqual([]);
     });
   });
 });
