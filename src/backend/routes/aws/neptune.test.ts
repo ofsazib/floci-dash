@@ -70,6 +70,14 @@ describe("Neptune Routes", () => {
       expect(body.total).toBe(0);
     });
 
+    it("GET /clusters — sparse response defaults to empty array", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/clusters");
+      const body = await res.json();
+      expect(body.clusters).toEqual([]);
+      expect(body.total).toBe(0);
+    });
+
     it("GET /clusters/:id — describes cluster", async () => {
       mockSend.mockResolvedValueOnce({
         DBClusters: [{ DBClusterIdentifier: "cluster-1", Status: "available" }],
@@ -115,6 +123,14 @@ describe("Neptune Routes", () => {
       mockSend.mockResolvedValueOnce({ DBInstances: [] });
       const res = await get("/instances");
       const body = await res.json();
+      expect(body.total).toBe(0);
+    });
+
+    it("GET /instances — sparse response defaults to empty array", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/instances");
+      const body = await res.json();
+      expect(body.instances).toEqual([]);
       expect(body.total).toBe(0);
     });
 

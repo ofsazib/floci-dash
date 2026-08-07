@@ -1722,6 +1722,7 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 | 25.57 | cloudmap.ts — add 2 sparse {} tests (GET /services and GET /services/:id/instances -> Services/Instances || [] fallbacks; existing filtered test passed { X: [] } so fallback never fired) (83.33%->100%) | Done | 2026-08-07 |
 | 25.58 | cloudfront.ts — add 4 tests: PUT /distributions/:id 400 when distributionConfig missing, sparse {} fallbacks for GET /origin-access-controls, GET /functions, GET /tags (OriginAccessControlList/FunctionList/Tags ?.Items || [] fallbacks) (83.33%->100% branch, 98.71%->100% stmts) | Done | 2026-08-07 |
 | 25.59 | cloudtrail.ts — add 3 tests: lookup-events endTime/nextToken/eventCategory forwarding (fires all three if-guard truthy sides), sparse {} lookup-events -> Events || [] fallback, sparse {} PUT event-selectors response -> EventSelectors || [] fallback (83.33%->100% branch, 95.83%->100% stmts) | Done | 2026-08-07 |
+| 25.60 | neptune.ts — add 2 sparse {} tests: GET /clusters and GET /instances with no DBClusters/DBInstances key -> DBClusters/DBInstances || [] fallbacks (the prior empty tests passed { X: [] } which is truthy so the fallbacks never fired) (83.33%->100% branch) | Done | 2026-08-07 |
 | 25.34 | Verify: ec2-flow-logs.ts 75.75%→**100% branch**, 17 route tests pass, full suite 7623/7623 (269 files), typecheck clean | Done | 2026-08-06 |
 
 
