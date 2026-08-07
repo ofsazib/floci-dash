@@ -1707,6 +1707,7 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 | 25.42 | sqs.test.ts — add 14 tests (sparse QueueUrls/Attributes/Tags/queueUrls/Successful/Failed/Messages fallbacks, missing queueUrl 400s for PUT attributes/POST tags/DELETE tags/purge/DELETE messages/dlq-sources, empty messageBody default, move-tasks sparse message Body/MessageId fallbacks) (77.64%->100%) | Done | 2026-08-07 |
 | 25.43 | rds.test.ts — add 19 tests (sparse instances/clusters/parameter-groups/subnet-groups/orderable-options lists, endpoint/vpcSecurityGroups/tags/clusterMembers map firing, create defaults for clusters/parameter-groups/subnet-groups, applyMethod immediate default + missing-parameters 400 for both parameter-group patches) (77.96%->100%) | Done | 2026-08-07 |
 | 25.44 | emr.test.ts — add 10 tests (sparse clusters/instances/security-configurations list fallbacks, TerminationProtected ?? true default, cluster-detail resolve undefined->null instead of truthy {}, steps map fallbacks) (78.57%->100%) | Done | 2026-08-07 |
+| 25.45 | firehose.test.ts — add 3 sparse tests (no DeliveryStreamNames key -> [] + empty list, batch response without RequestResponses -> [], tags without Tags key -> []) — converts the empty-list truthy-trap mock to {} (78.57%->100%) | Done | 2026-08-07 |
 | 25.34 | Verify: ec2-flow-logs.ts 75.75%→**100% branch**, 17 route tests pass, full suite 7623/7623 (269 files), typecheck clean | Done | 2026-08-06 |
 
 

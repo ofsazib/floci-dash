@@ -44,7 +44,7 @@ describe("Firehose Routes", () => {
   });
 
   it("GET /streams — returns empty list", async () => {
-    mockSend.mockResolvedValueOnce({ DeliveryStreamNames: [] });
+    mockSend.mockResolvedValueOnce({}); // no DeliveryStreamNames key -> || [] fallback
     const res = await get("/streams");
     const body = await res.json();
     expect(body.total).toBe(0);
@@ -108,11 +108,29 @@ describe("Firehose Routes", () => {
     expect(res.status).toBe(400);
   });
 
+  it("POST /streams/:name/records/batch — sparse response falls back to empty requestResponses", async () => {
+    mockSend.mockResolvedValueOnce({}); // no FailedPutCount / RequestResponses
+    const res = await post("/streams/stream-1/records/batch", { records: [{ data: "a" }] });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.failedPutCount).toBeUndefined();
+    expect(body.requestResponses).toEqual([]);
+  });
+
   it("GET /streams/:name/tags — lists tags", async () => {
     mockSend.mockResolvedValueOnce({ Tags: [{ Key: "env", Value: "prod" }], HasMoreTags: false });
     const res = await get("/streams/stream-1/tags");
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.tags.length).toBe(1);
+  });
+
+  it("GET /streams/:name/tags — sparse response falls back to empty tags", async () => {
+    mockSend.mockResolvedValueOnce({}); // no Tags / HasMoreTags
+    const res = await get("/streams/stream-1/tags");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.tags).toEqual([]);
+    expect(body.hasMoreTags).toBeUndefined();
   });
 });
