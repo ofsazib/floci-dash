@@ -1673,6 +1673,12 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 |---|------|--------|------|
 | 25.34 | ce.test.ts — convert 8 empty-result mocks to sparse responses (ResultsByTime/DimensionValues/Tags/CoveragesByTime/UtilizationsByTime/SavingsPlansCoverages/SavingsPlansUtilizationsByTime/CostCategoryNames missing) + add timePeriod-missing 400 tests for /dimension-values and /reservation-coverage (76.31%->100%) | Done | 2026-08-07 |
 | 25.35 | scheduler.ts — remove 4 dead param guards + add 2 PUT /schedules/:name tests (defaults + explicit group/flexibleTimeWindow/state) (76.31%->100%) | Done | 2026-08-07 |
+
+**Batch 13 — AppSync route branch coverage** (2026-08-07)
+
+| # | Task | Status | Date |
+|---|------|--------|------|
+| 25.36 | appsync.ts — remove 20 dead `if (!apiId)` / `if (!apiId || !name/functionId/id)` param guards (routes with :name/:functionId/:id segments can never match empty) (76.47%->100%) | Done | 2026-08-07 |
 | 25.34 | Verify: ec2-flow-logs.ts 75.75%→**100% branch**, 17 route tests pass, full suite 7623/7623 (269 files), typecheck clean | Done | 2026-08-06 |
 
 
