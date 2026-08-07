@@ -56,7 +56,7 @@ describe("Pricing Routes", () => {
     });
 
     it("returns empty list", async () => {
-      mockSend.mockResolvedValueOnce({ Services: [], FormatVersion: "aws_v1" });
+      mockSend.mockResolvedValueOnce({}); // no Services key -> || [] fallback
       const res = await get("/services");
       const body = await res.json();
       expect(body.services).toEqual([]);
@@ -75,6 +75,15 @@ describe("Pricing Routes", () => {
       expect(body.attributeValues).toHaveLength(1);
       expect(body.total).toBe(1);
     });
+
+    it("returns empty list when AttributeValues key missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/services/AmazonEC2/attributes");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.attributeValues).toEqual([]);
+      expect(body.total).toBe(0);
+    });
   });
 
   describe("GET /products", () => {
@@ -90,6 +99,15 @@ describe("Pricing Routes", () => {
       expect(body.total).toBe(1);
     });
 
+    it("parses filters query param into the command", async () => {
+      mockSend.mockResolvedValueOnce({ PriceList: [], FormatVersion: "aws_v1" });
+      const filters = encodeURIComponent(JSON.stringify([{ type: "TERM_MATCH", field: "location" }]));
+      const res = await get(`/products?serviceCode=AmazonEC2&filters=${filters}`);
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.Filters).toEqual([{ type: "TERM_MATCH", field: "location" }]);
+    });
+
     it("returns 400 when serviceCode is missing", async () => {
       const res = await get("/products");
       expect(res.status).toBe(400);
@@ -98,7 +116,7 @@ describe("Pricing Routes", () => {
     });
 
     it("returns empty list", async () => {
-      mockSend.mockResolvedValueOnce({ PriceList: [], FormatVersion: "aws_v1" });
+      mockSend.mockResolvedValueOnce({}); // no PriceList key -> || [] fallback
       const res = await get("/products?serviceCode=AmazonEC2");
       const body = await res.json();
       expect(body.priceList).toEqual([]);
@@ -118,6 +136,14 @@ describe("Pricing Routes", () => {
       expect(body.total).toBe(1);
     });
 
+    it("parses effectiveDate query param into a Date", async () => {
+      mockSend.mockResolvedValueOnce({ PriceLists: [] });
+      const res = await get("/price-lists?serviceCode=AmazonEC2&effectiveDate=2026-01-01T00:00:00Z");
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.EffectiveDate).toBeInstanceOf(Date);
+    });
+
     it("returns 400 when serviceCode is missing", async () => {
       const res = await get("/price-lists");
       expect(res.status).toBe(400);
@@ -126,7 +152,7 @@ describe("Pricing Routes", () => {
     });
 
     it("returns empty list", async () => {
-      mockSend.mockResolvedValueOnce({ PriceLists: [] });
+      mockSend.mockResolvedValueOnce({}); // no PriceLists key -> || [] fallback
       const res = await get("/price-lists?serviceCode=AmazonEC2");
       const body = await res.json();
       expect(body.priceLists).toEqual([]);
