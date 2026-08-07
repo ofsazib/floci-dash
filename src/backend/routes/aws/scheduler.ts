@@ -40,7 +40,6 @@ router.post("/groups", async (c: Context) => {
 
 router.delete("/groups/:name", async (c: Context) => {
   const name = c.req.param("name");
-  if (!name) return c.json({ error: "name param required" }, 400);
   const client = getClient();
   await client.send(new DeleteScheduleGroupCommand({ Name: name }));
   return c.json({ deleted: true });
@@ -61,7 +60,6 @@ router.get("/schedules", async (c: Context) => {
 router.get("/schedules/:name", async (c: Context) => {
   const name = c.req.param("name");
   const groupName = c.req.query("group");
-  if (!name) return c.json({ error: "name param required" }, 400);
   const client = getClient();
   const result = await client.send(
     new GetScheduleCommand({ Name: name, GroupName: groupName || "default" })
@@ -93,7 +91,6 @@ router.put("/schedules/:name", async (c: Context) => {
   const name = c.req.param("name");
   const groupName = c.req.query("group");
   const body = await c.req.json();
-  if (!name) return c.json({ error: "name param required" }, 400);
   const client = getClient();
   const result = await client.send(
     new UpdateScheduleCommand({
@@ -112,7 +109,6 @@ router.put("/schedules/:name", async (c: Context) => {
 router.delete("/schedules/:name", async (c: Context) => {
   const name = c.req.param("name");
   const groupName = c.req.query("group");
-  if (!name) return c.json({ error: "name param required" }, 400);
   const client = getClient();
   await client.send(
     new DeleteScheduleCommand({ Name: name, GroupName: groupName || "default" })

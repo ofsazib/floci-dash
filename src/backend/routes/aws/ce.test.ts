@@ -68,8 +68,8 @@ describe("CE Routes", () => {
       expect(body.total).toBe(1);
     });
 
-    it("returns empty results", async () => {
-      mockSend.mockResolvedValueOnce({ ResultsByTime: [] });
+    it("returns empty results when ResultsByTime is missing", async () => {
+      mockSend.mockResolvedValueOnce({});
       const res = await post("/cost-and-usage", validBody);
       const body = await res.json();
       expect(body.resultsByTime).toEqual([]);
@@ -115,8 +115,8 @@ describe("CE Routes", () => {
       expect(body.total).toBe(1);
     });
 
-    it("returns empty results", async () => {
-      mockSend.mockResolvedValueOnce({ DimensionValues: [] });
+    it("returns empty results when DimensionValues is missing", async () => {
+      mockSend.mockResolvedValueOnce({});
       const res = await post("/dimension-values", validBody);
       const body = await res.json();
       expect(body.dimensionValues).toEqual([]);
@@ -127,6 +127,11 @@ describe("CE Routes", () => {
       const res = await post("/dimension-values", {
         timePeriod: { start: "2025-01-01", end: "2025-02-01" },
       });
+      expect(res.status).toBe(400);
+    });
+
+    it("returns 400 when timePeriod is missing", async () => {
+      const res = await post("/dimension-values", { dimension: "SERVICE" });
       expect(res.status).toBe(400);
     });
   });
@@ -145,8 +150,8 @@ describe("CE Routes", () => {
       expect(body.total).toBe(2);
     });
 
-    it("returns empty results", async () => {
-      mockSend.mockResolvedValueOnce({ Tags: [] });
+    it("returns empty results when Tags is missing", async () => {
+      mockSend.mockResolvedValueOnce({});
       const res = await post("/tags", validBody);
       const body = await res.json();
       expect(body.tags).toEqual([]);
@@ -176,8 +181,8 @@ describe("CE Routes", () => {
       expect(body.total).toBe(1);
     });
 
-    it("returns empty results", async () => {
-      mockSend.mockResolvedValueOnce({ CoveragesByTime: [] });
+    it("returns empty results when CoveragesByTime is missing", async () => {
+      mockSend.mockResolvedValueOnce({});
       const res = await post("/reservation-coverage", validBody);
       const body = await res.json();
       expect(body.coveragesByTime).toEqual([]);
@@ -188,6 +193,11 @@ describe("CE Routes", () => {
       const res = await post("/reservation-coverage", {
         timePeriod: { start: "2025-01-01", end: "2025-02-01" },
       });
+      expect(res.status).toBe(400);
+    });
+
+    it("returns 400 when timePeriod is missing", async () => {
+      const res = await post("/reservation-coverage", { granularity: "DAILY" });
       expect(res.status).toBe(400);
     });
   });
@@ -209,8 +219,8 @@ describe("CE Routes", () => {
       expect(body.total).toBe(1);
     });
 
-    it("returns empty results", async () => {
-      mockSend.mockResolvedValueOnce({ UtilizationsByTime: [] });
+    it("returns empty results when UtilizationsByTime is missing", async () => {
+      mockSend.mockResolvedValueOnce({});
       const res = await post("/reservation-utilization", validBody);
       const body = await res.json();
       expect(body.utilizationsByTime).toEqual([]);
@@ -247,8 +257,8 @@ describe("CE Routes", () => {
       expect(body.total).toBe(1);
     });
 
-    it("returns empty results", async () => {
-      mockSend.mockResolvedValueOnce({ SavingsPlansCoverages: [] });
+    it("returns empty results when SavingsPlansCoverages is missing", async () => {
+      mockSend.mockResolvedValueOnce({});
       const res = await post("/savings-plans-coverage", validBody);
       const body = await res.json();
       expect(body.savingsPlansCoverages).toEqual([]);
@@ -285,8 +295,8 @@ describe("CE Routes", () => {
       expect(body.total).toBe(1);
     });
 
-    it("returns empty results", async () => {
-      mockSend.mockResolvedValueOnce({ SavingsPlansUtilizationsByTime: [] });
+    it("returns empty results when SavingsPlansUtilizationsByTime is missing", async () => {
+      mockSend.mockResolvedValueOnce({});
       const res = await post("/savings-plans-utilization", validBody);
       const body = await res.json();
       expect(body.savingsPlansUtilizationsByTime).toEqual([]);
@@ -318,8 +328,8 @@ describe("CE Routes", () => {
       expect(body.total).toBe(2);
     });
 
-    it("returns empty results", async () => {
-      mockSend.mockResolvedValueOnce({ CostCategoryNames: [] });
+    it("returns empty results when CostCategoryNames is missing", async () => {
+      mockSend.mockResolvedValueOnce({});
       const res = await post("/cost-categories", {});
       const body = await res.json();
       expect(body.costCategories).toEqual([]);

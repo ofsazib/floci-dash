@@ -179,6 +179,44 @@ describe("POST /api/aws/scheduler/schedules", () => {
   });
 });
 
+describe("PUT /api/aws/scheduler/schedules/:name", () => {
+  it("updates a schedule with defaults", async () => {
+    mockSend.mockResolvedValue({ ScheduleArn: "arn:aws:scheduler:us-east-1:123:schedule/default/my-schedule" });
+    const res = await app.request("/api/aws/scheduler/schedules/my-schedule", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scheduleExpression: "rate(1 minute)" }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.scheduleArn).toContain("my-schedule");
+    const cmd = mockSend.mock.calls[0][0];
+    expect(cmd.__cmdName).toBe("UpdateScheduleCommand");
+    expect(cmd.GroupName).toBe("default");
+    expect(cmd.FlexibleTimeWindow).toEqual({ Mode: "OFF" });
+    expect(cmd.State).toBeUndefined();
+  });
+
+  it("updates a schedule with explicit group, flexible time window, and state", async () => {
+    mockSend.mockResolvedValue({ ScheduleArn: "arn:aws:scheduler:us-east-1:123:schedule/g/my-schedule" });
+    const res = await app.request("/api/aws/scheduler/schedules/my-schedule?group=g", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        scheduleExpression: "rate(5 minutes)",
+        flexibleTimeWindow: { Mode: "FLEXIBLE", MaximumWindowInMinutes: 10 },
+        state: "DISABLED",
+      }),
+    });
+    expect(res.status).toBe(200);
+    const cmd = mockSend.mock.calls[0][0];
+    expect(cmd.__cmdName).toBe("UpdateScheduleCommand");
+    expect(cmd.GroupName).toBe("g");
+    expect(cmd.FlexibleTimeWindow).toEqual({ Mode: "FLEXIBLE", MaximumWindowInMinutes: 10 });
+    expect(cmd.State).toBe("DISABLED");
+  });
+});
+
 describe("DELETE /api/aws/scheduler/schedules/:name", () => {
   it("deletes a schedule", async () => {
     mockSend.mockResolvedValue({});
