@@ -84,6 +84,15 @@ describe("Kinesis Routes", () => {
       expect(body.streams).toEqual([]);
     });
 
+    it("GET /streams — sparse response defaults to empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/streams");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.streams).toEqual([]);
+      expect(mockSend).toHaveBeenCalledTimes(1);
+    });
+
     it("GET /streams/:name — describes stream", async () => {
       mockSend.mockResolvedValueOnce({
         StreamDescription: { StreamName: "stream-1", StreamStatus: "ACTIVE" },
@@ -144,6 +153,14 @@ describe("Kinesis Routes", () => {
       const body = await res.json();
       expect(body.total).toBe(0);
     });
+
+    it("GET /streams/:name/shards — sparse response defaults to empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/streams/stream-1/shards");
+      const body = await res.json();
+      expect(body.shards).toEqual([]);
+      expect(body.total).toBe(0);
+    });
   });
 
   describe("Consumers", () => {
@@ -165,6 +182,18 @@ describe("Kinesis Routes", () => {
       mockSend.mockResolvedValueOnce({ StreamDescription: {} });
       const res = await get("/streams/stream-1/consumers");
       const body = await res.json();
+      expect(body.total).toBe(0);
+    });
+
+    it("GET /streams/:name/consumers — sparse consumers response defaults to empty list", async () => {
+      mockSend
+        .mockResolvedValueOnce({
+          StreamDescription: { StreamARN: "arn:aws:kinesis:us-east-1:123:stream/stream-1" },
+        })
+        .mockResolvedValueOnce({});
+      const res = await get("/streams/stream-1/consumers");
+      const body = await res.json();
+      expect(body.consumers).toEqual([]);
       expect(body.total).toBe(0);
     });
 
@@ -283,6 +312,41 @@ describe("Kinesis Routes", () => {
       expect(body.total).toBe(0);
       expect(body.events).toEqual([]);
     });
+
+    it("POST /streams/:name/subscribe-to-shard — skips events without records", async () => {
+      const mockEventStream = (async function* () {
+        yield {};
+      })();
+      mockSend.mockResolvedValueOnce({ EventStream: mockEventStream });
+      const res = await post("/streams/stream-1/subscribe-to-shard", {
+        consumerARN: "arn:...",
+        shardId: "shard-1",
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.events).toEqual([]);
+    });
+
+    it("POST /streams/:name/subscribe-to-shard — record without data maps to null", async () => {
+      const mockEventStream = (async function* () {
+        yield {
+          SubscribeToShardEvent: {
+            Records: [{ SequenceNumber: "456", PartitionKey: "key2" }],
+          },
+        };
+      })();
+      mockSend.mockResolvedValueOnce({ EventStream: mockEventStream });
+      const res = await post("/streams/stream-1/subscribe-to-shard", {
+        consumerARN: "arn:...",
+        shardId: "shard-1",
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(body.events[0].data).toBeNull();
+      expect(body.events[0].sequenceNumber).toBe("456");
+    });
   });
 
   describe("Records", () => {
@@ -329,6 +393,17 @@ describe("Kinesis Routes", () => {
       expect(res.status).toBe(400);
     });
 
+    it("POST /streams/:name/records/batch — sparse response defaults to empty records", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/streams/stream-1/records/batch", {
+        records: [{ data: "hello", partitionKey: "key1" }],
+      });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.records).toEqual([]);
+      expect(body.failedRecordCount).toBeUndefined();
+    });
+
     it("GET /streams/:name/shards/:shardId/records — gets records", async () => {
       mockSend
         .mockResolvedValueOnce({ ShardIterator: "iterator-123" })
@@ -350,6 +425,17 @@ describe("Kinesis Routes", () => {
       const body = await res.json();
       expect(body.records).toEqual([]);
     });
+
+    it("GET /streams/:name/shards/:shardId/records — sparse records response defaults to empty", async () => {
+      mockSend
+        .mockResolvedValueOnce({ ShardIterator: "iterator-123" })
+        .mockResolvedValueOnce({});
+      const res = await get("/streams/stream-1/shards/shard-1/records?type=TRIM_HORIZON");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.records).toEqual([]);
+      expect(body.nextShardIterator).toBeUndefined();
+    });
   });
 
   describe("Tags", () => {
@@ -365,6 +451,13 @@ describe("Kinesis Routes", () => {
 
     it("GET /streams/:name/tags — returns empty list", async () => {
       mockSend.mockResolvedValueOnce({ Tags: [] });
+      const res = await get("/streams/stream-1/tags");
+      const body = await res.json();
+      expect(body.tags).toEqual([]);
+    });
+
+    it("GET /streams/:name/tags — sparse response defaults to empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
       const res = await get("/streams/stream-1/tags");
       const body = await res.json();
       expect(body.tags).toEqual([]);
