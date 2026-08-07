@@ -89,6 +89,13 @@ describe("Cloud Map Routes", () => {
     expect(body.total).toBe(0);
   });
 
+  it("GET /services — sparse response defaults to []", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/services");
+    const body = await res.json();
+    expect(body).toEqual({ services: [], total: 0 });
+  });
+
   it("GET /services/:id — gets service", async () => {
     mockSend.mockResolvedValueOnce({ Service: { Id: "svc-1", Name: "my-svc" } });
     const res = await get("/services/svc-1");
@@ -119,5 +126,12 @@ describe("Cloud Map Routes", () => {
     const res = await get("/services/svc-1/instances");
     const body = await res.json();
     expect(body.total).toBe(1);
+  });
+
+  it("GET /services/:id/instances — sparse response defaults to []", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/services/svc-1/instances");
+    const body = await res.json();
+    expect(body).toEqual({ instances: [], total: 0 });
   });
 });
