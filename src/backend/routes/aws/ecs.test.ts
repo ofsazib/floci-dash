@@ -121,6 +121,15 @@ describe("ECS routes — Clusters", () => {
     expect(json.total).toBe(2);
   });
 
+  it("GET /clusters — sparse DescribeClusters response", async () => {
+    mockSend
+      .mockResolvedValueOnce({ clusterArns: ["arn:cluster1"] })
+      .mockResolvedValueOnce({});
+    const res = await get("/clusters");
+    const json = await res.json();
+    expect(json).toEqual({ clusters: [], total: 0 });
+  });
+
   it("GET /clusters/:clusterName — returns single cluster", async () => {
     mockSend.mockResolvedValueOnce({ clusters: [{ clusterName: "my-cluster" }] });
     const res = await get("/clusters/my-cluster");
@@ -204,6 +213,13 @@ describe("ECS routes — Task Definitions", () => {
     expect(json.families).toHaveLength(2);
   });
 
+  it("GET /task-definition-families — sparse response", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/task-definition-families");
+    const json = await res.json();
+    expect(json.families).toEqual([]);
+  });
+
   it("GET /task-definitions/:taskDefinition — describes task def", async () => {
     mockSend.mockResolvedValueOnce({
       taskDefinition: { family: "myfamily" },
@@ -213,6 +229,13 @@ describe("ECS routes — Task Definitions", () => {
     const json = await res.json();
     expect(json.taskDefinition.family).toBe("myfamily");
     expect(json.tags).toHaveLength(1);
+  });
+
+  it("GET /task-definitions/:taskDefinition — sparse response defaults tags", async () => {
+    mockSend.mockResolvedValueOnce({ taskDefinition: { family: "myfamily" } });
+    const res = await get("/task-definitions/myfamily:1");
+    const json = await res.json();
+    expect(json.tags).toEqual([]);
   });
 
   it("GET /task-definitions/:taskDefinition — handles encoded names", async () => {
@@ -264,6 +287,15 @@ describe("ECS routes — Services", () => {
     expect(json.total).toBe(1);
   });
 
+  it("GET /services — sparse DescribeServices response", async () => {
+    mockSend
+      .mockResolvedValueOnce({ serviceArns: ["arn:svc1"] })
+      .mockResolvedValueOnce({});
+    const res = await get("/services?cluster=my-cluster");
+    const json = await res.json();
+    expect(json).toEqual({ services: [], total: 0 });
+  });
+
   it("GET /services — 400 when no cluster param", async () => {
     const res = await get("/services");
     expect(res.status).toBe(400);
@@ -280,6 +312,17 @@ describe("ECS routes — Services", () => {
     const json = await res.json();
     expect(json.service.serviceName).toBe("newsvc");
     expect(res.status).toBe(201);
+  });
+
+  it("POST /services — defaults desiredCount to 0", async () => {
+    mockSend.mockResolvedValueOnce({ service: { serviceName: "newsvc" } });
+    const res = await post("/services", {
+      cluster: "my-cluster",
+      serviceName: "newsvc",
+      taskDefinition: "myfamily:1",
+    });
+    expect(res.status).toBe(201);
+    expect(mockSend.mock.calls[0][0].desiredCount).toBe(0);
   });
 
   it("PUT /services — updates service", async () => {
@@ -329,6 +372,15 @@ describe("ECS routes — Tasks", () => {
     expect(json.total).toBe(2);
   });
 
+  it("GET /tasks — sparse DescribeTasks response", async () => {
+    mockSend
+      .mockResolvedValueOnce({ taskArns: ["arn:task1"] })
+      .mockResolvedValueOnce({});
+    const res = await get("/tasks?cluster=my-cluster");
+    const json = await res.json();
+    expect(json).toEqual({ tasks: [], total: 0 });
+  });
+
   it("GET /tasks — 400 when no cluster param", async () => {
     const res = await get("/tasks");
     expect(res.status).toBe(400);
@@ -352,6 +404,26 @@ describe("ECS routes — Tasks", () => {
     const json = await res.json();
     expect(json.tasks).toHaveLength(1);
     expect(res.status).toBe(201);
+  });
+
+  it("POST /tasks/run — defaults count to 1", async () => {
+    mockSend.mockResolvedValueOnce({ tasks: [] });
+    const res = await post("/tasks/run", {
+      cluster: "my-cluster",
+      taskDefinition: "myfamily:1",
+    });
+    expect(res.status).toBe(201);
+    expect(mockSend.mock.calls[0][0].count).toBe(1);
+  });
+
+  it("POST /tasks/run — sparse response defaults tasks to []", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/tasks/run", {
+      cluster: "my-cluster",
+      taskDefinition: "myfamily:1",
+    });
+    const json = await res.json();
+    expect(json.tasks).toEqual([]);
   });
 
   it("POST /tasks/run — 400 when cluster or taskDefinition missing", async () => {
@@ -389,6 +461,15 @@ describe("ECS routes — Container Instances", () => {
     const json = await res.json();
     expect(json.containerInstances).toHaveLength(1);
     expect(json.total).toBe(1);
+  });
+
+  it("GET /container-instances — sparse Describe response", async () => {
+    mockSend
+      .mockResolvedValueOnce({ containerInstanceArns: ["arn:ci1"] })
+      .mockResolvedValueOnce({});
+    const res = await get("/container-instances?cluster=my-cluster");
+    const json = await res.json();
+    expect(json).toEqual({ containerInstances: [], total: 0 });
   });
 
   it("GET /container-instances — 400 when no cluster", async () => {
@@ -434,6 +515,14 @@ describe("ECS routes — Tags", () => {
     const res = await del("/tags?resourceArn=arn:cluster1&tagKeys=env,team");
     const json = await res.json();
     expect(json.untagged).toBe(true);
+  });
+
+  it("DELETE /tags — defaults tagKeys to empty array", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await del("/tags?resourceArn=arn:cluster1");
+    const json = await res.json();
+    expect(json.untagged).toBe(true);
+    expect(mockSend.mock.calls[0][0].tagKeys).toEqual([]);
   });
 
   it("DELETE /tags — 400 when no resourceArn", async () => {
@@ -497,6 +586,14 @@ describe("ECS routes — Account Settings", () => {
     expect(json.deleted).toBe(true);
   });
 
+  it("DELETE /account-settings — sparse response defaults setting to null", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await del("/account-settings?name=containerInsights");
+    const json = await res.json();
+    expect(json.setting).toBeNull();
+    expect(json.deleted).toBe(true);
+  });
+
   it("DELETE /account-settings — 400 when no name", async () => {
     const res = await del("/account-settings");
     expect(res.status).toBe(400);
@@ -515,6 +612,13 @@ describe("ECS routes — Attributes", () => {
     expect(json.total).toBe(1);
   });
 
+  it("GET /attributes — sparse response", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/attributes?cluster=c1");
+    const json = await res.json();
+    expect(json).toEqual({ attributes: [], total: 0 });
+  });
+
   it("GET /attributes — defaults targetType to container-instance", async () => {
     mockSend.mockResolvedValueOnce({ attributes: [] });
     await get("/attributes?cluster=c1");
@@ -531,6 +635,16 @@ describe("ECS routes — Attributes", () => {
     });
     const json = await res.json();
     expect(json.attributes).toHaveLength(1);
+  });
+
+  it("POST /attributes — sparse response defaults to []", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/attributes", {
+      cluster: "c1",
+      attributes: [{ name: "stack", targetId: "arn:ci" }],
+    });
+    const json = await res.json();
+    expect(json.attributes).toEqual([]);
   });
 
   it("POST /attributes — 400 when no attributes", async () => {
@@ -564,6 +678,13 @@ describe("ECS routes — Task Sets", () => {
     const res = await get("/task-sets?cluster=c1&service=svc1");
     const json = await res.json();
     expect(json.total).toBe(1);
+  });
+
+  it("GET /task-sets — sparse response", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/task-sets?cluster=c1&service=svc1");
+    const json = await res.json();
+    expect(json).toEqual({ taskSets: [], total: 0 });
   });
 
   it("GET /task-sets — 400 when missing cluster/service", async () => {
@@ -637,6 +758,14 @@ describe("ECS routes — Task Sets", () => {
     expect(mockSend.mock.calls[0][0].force).toBe(true);
   });
 
+  it("DELETE /task-sets — sparse response defaults taskSet to null", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await del("/task-sets?cluster=c1&service=svc1&taskSet=ts-1");
+    const json = await res.json();
+    expect(json.taskSet).toBeNull();
+    expect(json.deleted).toBe(true);
+  });
+
   it("DELETE /task-sets — 400 when missing params", async () => {
     const res = await del("/task-sets?cluster=c1&service=svc1");
     expect(res.status).toBe(400);
@@ -655,6 +784,13 @@ describe("ECS routes — Service Deployments & Revisions", () => {
     expect(json.total).toBe(1);
   });
 
+  it("GET /service-deployments — sparse response", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/service-deployments?service=svc1&cluster=c1");
+    const json = await res.json();
+    expect(json).toEqual({ serviceDeployments: [], total: 0 });
+  });
+
   it("GET /service-deployments — 400 when no service", async () => {
     const res = await get("/service-deployments");
     expect(res.status).toBe(400);
@@ -670,6 +806,13 @@ describe("ECS routes — Service Deployments & Revisions", () => {
     expect(mockSend.mock.calls[0][0].serviceDeploymentArns).toEqual(["arn:sd-1", "arn:sd-2"]);
   });
 
+  it("GET /service-deployments/detail — sparse response defaults to []", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/service-deployments/detail?arns=arn:sd-1");
+    const json = await res.json();
+    expect(json.serviceDeployments).toEqual([]);
+  });
+
   it("GET /service-deployments/detail — 400 when no arns", async () => {
     const res = await get("/service-deployments/detail");
     expect(res.status).toBe(400);
@@ -682,6 +825,13 @@ describe("ECS routes — Service Deployments & Revisions", () => {
     const res = await get("/service-revisions?arns=arn:sr-1");
     const json = await res.json();
     expect(json.serviceRevisions).toHaveLength(1);
+  });
+
+  it("GET /service-revisions — sparse response defaults to []", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/service-revisions?arns=arn:sr-1");
+    const json = await res.json();
+    expect(json.serviceRevisions).toEqual([]);
   });
 
   it("GET /service-revisions — 400 when no arns", async () => {

@@ -62,9 +62,8 @@ router.get("/clusters", async (c: Context) => {
 router.get("/clusters/:clusterName", async (c: Context) => {
   const client = getClient();
   const clusterName = c.req.param("clusterName");
-  if (!clusterName) return c.json({ error: "clusterName param required" }, 400);
   const result = await client.send(
-    new DescribeClustersCommand({ clusters: [clusterName] })
+    new DescribeClustersCommand({ clusters: [clusterName!] })
   );
   return c.json({ cluster: result.clusters?.[0] || null });
 });
@@ -121,7 +120,7 @@ router.get("/task-definition-families", async (c: Context) => {
 
 router.get("/task-definitions/:taskDefinition", async (c: Context) => {
   const client = getClient();
-  const taskDefinition = decodeURIComponent(c.req.param("taskDefinition") || "");
+  const taskDefinition = decodeURIComponent(c.req.param("taskDefinition")!);
   const result = await client.send(
     new DescribeTaskDefinitionCommand({ taskDefinition })
   );
@@ -150,7 +149,7 @@ router.post("/task-definitions", async (c: Context) => {
 });
 
 router.delete("/task-definitions/:taskDefinition", async (c: Context) => {
-  const taskDefinition = decodeURIComponent(c.req.param("taskDefinition") || "");
+  const taskDefinition = decodeURIComponent(c.req.param("taskDefinition")!);
   const client = getClient();
   await client.send(new DeregisterTaskDefinitionCommand({ taskDefinition }));
   return c.json({ deregistered: true });
