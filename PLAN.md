@@ -1705,6 +1705,7 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 | 25.40 | iam.test.ts — add 18 tests (sparse list/detail fallbacks for users/roles/groups/policies/instance-profiles, attachedPolicies/tags map callback firing, missing name 400s for roles/groups/policies/inline-policies, valid trust doc + default path/version branches) (77.45%->100%) | Done | 2026-08-07 |
 | 25.41 | cloudformation.test.ts — add 10 tests (sparse parameters falling back to empty key/value on stack/change-set/stackset creates, templateUrl-only change-set/stackset, ResourceChange without Details, sparse exports/stacksets lists, sparse stackset detail) (77.56%->100%) | Done | 2026-08-07 |
 | 25.42 | sqs.test.ts — add 14 tests (sparse QueueUrls/Attributes/Tags/queueUrls/Successful/Failed/Messages fallbacks, missing queueUrl 400s for PUT attributes/POST tags/DELETE tags/purge/DELETE messages/dlq-sources, empty messageBody default, move-tasks sparse message Body/MessageId fallbacks) (77.64%->100%) | Done | 2026-08-07 |
+| 25.43 | rds.test.ts — add 19 tests (sparse instances/clusters/parameter-groups/subnet-groups/orderable-options lists, endpoint/vpcSecurityGroups/tags/clusterMembers map firing, create defaults for clusters/parameter-groups/subnet-groups, applyMethod immediate default + missing-parameters 400 for both parameter-group patches) (77.96%->100%) | Done | 2026-08-07 |
 | 25.34 | Verify: ec2-flow-logs.ts 75.75%→**100% branch**, 17 route tests pass, full suite 7623/7623 (269 files), typecheck clean | Done | 2026-08-06 |
 
 

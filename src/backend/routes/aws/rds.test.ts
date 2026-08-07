@@ -117,10 +117,19 @@ describe("RDS Routes", () => {
     });
 
     it("GET /db-instances — empty list", async () => {
-      mockSend.mockResolvedValueOnce({ DBInstances: [] });
+      mockSend.mockResolvedValueOnce({});
       const res = await get("/db-instances");
       const body = await res.json();
       expect(body.total).toBe(0);
+    });
+
+    it("GET /db-instances — sparse instance maps optional fields to undefined/empty", async () => {
+      mockSend.mockResolvedValueOnce({ DBInstances: [{ DBInstanceIdentifier: "db-sparse" }] });
+      const res = await get("/db-instances");
+      const body = await res.json();
+      expect(body.instances[0].endpoint).toBeUndefined();
+      expect(body.instances[0].vpcSecurityGroups).toEqual([]);
+      expect(body.instances[0].tags).toEqual([]);
     });
 
     it("POST /db-instances — creates instance", async () => {
@@ -169,6 +178,33 @@ describe("RDS Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.id).toBe("db-001");
+    });
+
+    it("GET /db-instances/:id — maps endpoint and vpc security groups", async () => {
+      mockSend.mockResolvedValueOnce({
+        DBInstances: [{
+          DBInstanceIdentifier: "db-002",
+          DBInstanceClass: "db.t3.micro",
+          Engine: "postgres",
+          DBInstanceStatus: "available",
+          AllocatedStorage: 20,
+          MasterUsername: "admin",
+          Endpoint: { Address: "db-002.xxx.rds.amazonaws.com", Port: 5432 },
+          VpcSecurityGroups: [{ VpcSecurityGroupId: "sg-002", Status: "active" }],
+        }],
+      });
+      const res = await get("/db-instances/db-002");
+      const body = await res.json();
+      expect(body.endpoint).toEqual({ address: "db-002.xxx.rds.amazonaws.com", port: 5432 });
+      expect(body.vpcSecurityGroups).toEqual(["sg-002"]);
+    });
+
+    it("GET /db-instances/:id — sparse instance maps vpcSecurityGroups to empty", async () => {
+      mockSend.mockResolvedValueOnce({
+        DBInstances: [{ DBInstanceIdentifier: "db-sparse" }],
+      });
+      const res = await get("/db-instances/db-sparse");
+      expect((await res.json()).vpcSecurityGroups).toEqual([]);
     });
 
     it("GET /db-instances/:id — 404 when not found", async () => {
@@ -231,6 +267,7 @@ describe("RDS Routes", () => {
             DeletionProtection: false,
             ClusterCreateTime: new Date(),
             TagList: [],
+            DBClusterMembers: [{ DBInstanceIdentifier: "db-001" }],
           },
         ],
       });
@@ -239,6 +276,19 @@ describe("RDS Routes", () => {
       const body = await res.json();
       expect(body.total).toBe(1);
       expect(body.clusters[0].id).toBe("cluster-001");
+      expect(body.clusters[0].clusterMembers).toEqual(["db-001"]);
+    });
+
+    it("GET /db-clusters — empty when DBClusters key missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/db-clusters");
+      expect((await res.json()).total).toBe(0);
+    });
+
+    it("GET /db-clusters — cluster without DBClusterMembers maps to empty", async () => {
+      mockSend.mockResolvedValueOnce({ DBClusters: [{ DBClusterIdentifier: "cluster-sparse" }] });
+      const res = await get("/db-clusters");
+      expect((await res.json()).clusters[0].clusterMembers).toEqual([]);
     });
 
     it("POST /db-clusters — creates cluster", async () => {
@@ -264,20 +314,39 @@ describe("RDS Routes", () => {
       expect(res.status).toBe(400);
     });
 
+    it("POST /db-clusters — uses defaults when fields omitted", async () => {
+      mockSend.mockResolvedValueOnce({
+        DBCluster: { DBClusterIdentifier: "cluster-default", Status: "creating" },
+      });
+      const res = await post("/db-clusters", { dbClusterIdentifier: "cluster-default" });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.Engine).toBe("aurora-postgresql");
+      expect(cmd.MasterUsername).toBe("admin");
+      expect(cmd.MasterUserPassword).toBe("password");
+    });
+
     it("GET /db-clusters/:id — returns detail", async () => {
       mockSend.mockResolvedValueOnce({
-        DBClusters: [{ DBClusterIdentifier: "cluster-001", Engine: "aurora-postgresql", Status: "available", MasterUsername: "admin", DatabaseName: "mydb", AllocatedStorage: 1, EngineVersion: "", VpcSecurityGroups: [], StorageEncrypted: false, DeletionProtection: false, ClusterCreateTime: new Date(), TagList: [] }],
+        DBClusters: [{ DBClusterIdentifier: "cluster-001", Engine: "aurora-postgresql", Status: "available", MasterUsername: "admin", DatabaseName: "mydb", AllocatedStorage: 1, EngineVersion: "", VpcSecurityGroups: [], StorageEncrypted: false, DeletionProtection: false, ClusterCreateTime: new Date(), TagList: [], DBClusterMembers: [{ DBInstanceIdentifier: "db-001" }] }],
       });
       const res = await get("/db-clusters/cluster-001");
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.id).toBe("cluster-001");
+      expect(body.clusterMembers).toEqual(["db-001"]);
     });
 
     it("GET /db-clusters/:id — 404 when not found", async () => {
       mockSend.mockResolvedValueOnce({ DBClusters: [] });
       const res = await get("/db-clusters/cluster-missing");
       expect(res.status).toBe(404);
+    });
+
+    it("GET /db-clusters/:id — sparse cluster maps clusterMembers to empty", async () => {
+      mockSend.mockResolvedValueOnce({ DBClusters: [{ DBClusterIdentifier: "cluster-sparse" }] });
+      const res = await get("/db-clusters/cluster-sparse");
+      expect((await res.json()).clusterMembers).toEqual([]);
     });
 
     it("DELETE /db-clusters/:id — deletes cluster", async () => {
@@ -345,6 +414,15 @@ describe("RDS Routes", () => {
       expect(res.status).toBe(400);
     });
 
+    it("POST /parameter-groups — uses defaults when family and description omitted", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/parameter-groups", { dbParameterGroupName: "pg-default" });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.DBParameterGroupFamily).toBe("postgres16");
+      expect(cmd.Description).toBe("Parameter group pg-default");
+    });
+
     it("DELETE /parameter-groups/:name — deletes group", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await del("/parameter-groups/pg-001");
@@ -364,6 +442,14 @@ describe("RDS Routes", () => {
       expect(body.parameters[0].name).toBe("max_connections");
     });
 
+    it("GET /parameter-groups/:name/parameters — empty when Parameters key missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/parameter-groups/pg-001/parameters");
+      const body = await res.json();
+      expect(body.parameters).toEqual([]);
+      expect(body.total).toBe(0);
+    });
+
     it("PATCH /parameter-groups/:name/parameters — modifies parameters", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await patch("/parameter-groups/pg-001/parameters", {
@@ -376,6 +462,27 @@ describe("RDS Routes", () => {
       expect(cmd.DBParameterGroupName).toBe("pg-001");
       expect(cmd.Parameters[0].ParameterName).toBe("max_connections");
       expect(cmd.Parameters[0].ParameterValue).toBe("200");
+    });
+
+    it("PATCH /parameter-groups/:name/parameters — defaults applyMethod to immediate", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await patch("/parameter-groups/pg-001/parameters", {
+        parameters: [{ parameterName: "max_connections", parameterValue: "300" }],
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].Parameters[0].ApplyMethod).toBe("immediate");
+    });
+
+    it("PATCH /parameter-groups/:name/parameters — 400 when parameters missing", async () => {
+      const res = await patch("/parameter-groups/pg-001/parameters", {});
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("GET /parameter-groups — empty when DBParameterGroups key missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/parameter-groups");
+      expect((await res.json()).total).toBe(0);
     });
   });
 
@@ -418,6 +525,15 @@ describe("RDS Routes", () => {
       expect(res.status).toBe(400);
     });
 
+    it("POST /cluster-parameter-groups — uses defaults when family and description omitted", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/cluster-parameter-groups", { dbClusterParameterGroupName: "cpg-default" });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.DBParameterGroupFamily).toBe("aurora-postgresql16");
+      expect(cmd.Description).toBe("Cluster parameter group cpg-default");
+    });
+
     it("DELETE /cluster-parameter-groups/:name — deletes group", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await del("/cluster-parameter-groups/cpg-001");
@@ -436,6 +552,14 @@ describe("RDS Routes", () => {
       expect(body.total).toBe(1);
     });
 
+    it("GET /cluster-parameter-groups/:name/parameters — empty when Parameters key missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/cluster-parameter-groups/cpg-001/parameters");
+      const body = await res.json();
+      expect(body.parameters).toEqual([]);
+      expect(body.total).toBe(0);
+    });
+
     it("PATCH /cluster-parameter-groups/:name/parameters — modifies parameters", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await patch("/cluster-parameter-groups/cpg-001/parameters", {
@@ -447,6 +571,27 @@ describe("RDS Routes", () => {
       const cmd = mockSend.mock.calls[0][0];
       expect(cmd.DBClusterParameterGroupName).toBe("cpg-001");
       expect(cmd.Parameters[0].ParameterName).toBe("timezone");
+    });
+
+    it("PATCH /cluster-parameter-groups/:name/parameters — defaults applyMethod to immediate", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await patch("/cluster-parameter-groups/cpg-001/parameters", {
+        parameters: [{ parameterName: "timezone", parameterValue: "EST" }],
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].Parameters[0].ApplyMethod).toBe("immediate");
+    });
+
+    it("PATCH /cluster-parameter-groups/:name/parameters — 400 when parameters missing", async () => {
+      const res = await patch("/cluster-parameter-groups/cpg-001/parameters", {});
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("GET /cluster-parameter-groups — empty when DBClusterParameterGroups key missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/cluster-parameter-groups");
+      expect((await res.json()).total).toBe(0);
     });
   });
 
@@ -471,10 +616,19 @@ describe("RDS Routes", () => {
     });
 
     it("GET /db-subnet-groups — empty list", async () => {
-      mockSend.mockResolvedValueOnce({ DBSubnetGroups: [] });
+      mockSend.mockResolvedValueOnce({});
       const res = await get("/db-subnet-groups");
       const body = await res.json();
       expect(body.total).toBe(0);
+    });
+
+    it("GET /db-subnet-groups — subnet group without Subnets maps to empty", async () => {
+      mockSend.mockResolvedValueOnce({
+        DBSubnetGroups: [{ DBSubnetGroupName: "sg-sparse", DBSubnetGroupDescription: "d", VpcId: "vpc-001", SubnetGroupStatus: "Complete" }],
+      });
+      const res = await get("/db-subnet-groups");
+      const body = await res.json();
+      expect(body.subnetGroups[0].subnets).toEqual([]);
     });
 
     it("POST /db-subnet-groups — creates subnet group", async () => {
@@ -492,6 +646,18 @@ describe("RDS Routes", () => {
       const cmd = mockSend.mock.calls[0][0];
       expect(cmd.DBSubnetGroupName).toBe("sg-new");
       expect(cmd.SubnetIds).toEqual(["subnet-abc", "subnet-def"]);
+    });
+
+    it("POST /db-subnet-groups — uses default description when omitted", async () => {
+      mockSend.mockResolvedValueOnce({
+        DBSubnetGroup: { DBSubnetGroupName: "sg-default", DBSubnetGroupArn: "arn:..." },
+      });
+      const res = await post("/db-subnet-groups", {
+        dbSubnetGroupName: "sg-default",
+        subnetIds: ["subnet-abc"],
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].DBSubnetGroupDescription).toBe("Subnet group for sg-default");
     });
 
     it("POST /db-subnet-groups — 400 when name missing", async () => {
@@ -541,11 +707,24 @@ describe("RDS Routes", () => {
       expect(body.engine).toBe("postgres");
     });
 
+    it("GET /orderable-db-instance-options — sparse option falls back to false booleans", async () => {
+      mockSend.mockResolvedValueOnce({
+        OrderableDBInstanceOptions: [{ EngineVersion: "16.4", DBInstanceClass: "db.t3.micro" }],
+      });
+      const res = await get("/orderable-db-instance-options");
+      const body = await res.json();
+      expect(body.options[0].vpc).toBe(false);
+      expect(body.options[0].multiAZCapable).toBe(false);
+      expect(body.options[0].supportsIamAuth).toBe(false);
+      expect(body.options[0].supportsEncryption).toBe(false);
+    });
+
     it("GET /orderable-db-instance-options — defaults to postgres", async () => {
-      mockSend.mockResolvedValueOnce({ OrderableDBInstanceOptions: [] });
+      mockSend.mockResolvedValueOnce({});
       const res = await get("/orderable-db-instance-options");
       const body = await res.json();
       expect(body.engine).toBe("postgres");
+      expect(body.options).toEqual([]);
       const cmd = mockSend.mock.calls[0][0];
       expect(cmd.Engine).toBe("postgres");
     });
