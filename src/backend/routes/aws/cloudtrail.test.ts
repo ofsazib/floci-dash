@@ -147,6 +147,31 @@ describe("CloudTrail Routes", () => {
     expect(cmd.LookupAttributes).toEqual([{ AttributeKey: "EventName", AttributeValue: "CreateBucket" }]);
   });
 
+  it("POST /trails/lookup-events — passes endTime, nextToken, and eventCategory", async () => {
+    mockSend.mockResolvedValueOnce({ Events: [] });
+    await post("/trails/lookup-events", {
+      endTime: "2024-01-02T00:00:00Z",
+      nextToken: "tok-2",
+      eventCategory: "Management",
+    });
+    const cmd = mockSend.mock.calls[0][0];
+    expect(cmd.EndTime).toBeInstanceOf(Date);
+    expect(cmd.NextToken).toBe("tok-2");
+    expect(cmd.EventCategory).toBe("Management");
+    expect(cmd.StartTime).toBeUndefined();
+    expect(cmd.MaxResults).toBeUndefined();
+  });
+
+  it("POST /trails/lookup-events — sparse response defaults to empty events", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/trails/lookup-events", {});
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.events).toEqual([]);
+    expect(body.total).toBe(0);
+    expect(body.nextToken).toBeNull();
+  });
+
   // ── Event Selectors ──────────────────────────────────
 
   it("GET /trails/:name/event-selectors — returns selectors", async () => {
@@ -181,6 +206,18 @@ describe("CloudTrail Routes", () => {
     const body = await res.json();
     expect(body.updated).toBe(true);
     expect(body.eventSelectors[0].ReadWriteType).toBe("ReadOnly");
+  });
+
+  it("PUT /trails/:name/event-selectors — sparse response defaults to empty selectors", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put("/trails/trail-1/event-selectors", {
+      eventSelectors: [{ ReadWriteType: "All", IncludeManagementEvents: true }],
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.updated).toBe(true);
+    expect(body.eventSelectors).toEqual([]);
+    expect(body.advancedEventSelectors).toEqual([]);
   });
 
   it("PUT /trails/:name/event-selectors — 400 when nothing provided", async () => {
