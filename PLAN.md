@@ -1697,6 +1697,12 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 | # | Task | Status | Date |
 |---|------|--------|------|
 | 25.39 | ec2.test.ts — enrich 17 happy-path mocks with nested arrays (tags/attachments/rules/associations/etc. to fire map callbacks) + add 46 sparse/edge tests (missing top-level keys, sparse elements without tags/rules, PATCH no-op guards, defaults when omitted) (77.16%->100%) | Done | 2026-08-07 |
+
+**Batch 17 — IAM route branch coverage** (2026-08-07)
+
+| # | Task | Status | Date |
+|---|------|--------|------|
+| 25.40 | iam.test.ts — add 18 tests (sparse list/detail fallbacks for users/roles/groups/policies/instance-profiles, attachedPolicies/tags map callback firing, missing name 400s for roles/groups/policies/inline-policies, valid trust doc + default path/version branches) (77.45%->100%) | Done | 2026-08-07 |
 | 25.34 | Verify: ec2-flow-logs.ts 75.75%→**100% branch**, 17 route tests pass, full suite 7623/7623 (269 files), typecheck clean | Done | 2026-08-06 |
 
 

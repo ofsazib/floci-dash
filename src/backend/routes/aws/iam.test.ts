@@ -132,6 +132,14 @@ describe("IAM Routes", () => {
       expect(body.total).toBe(0);
     });
 
+    it("GET /users — empty when Users key missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/users");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.users).toEqual([]);
+    });
+
     it("GET /users/:name/tags — lists user tags", async () => {
       mockSend.mockResolvedValueOnce({
         Tags: [
@@ -146,6 +154,13 @@ describe("IAM Routes", () => {
       expect(mockSend.mock.calls[0][0].UserName).toBe("admin");
     });
 
+    it("GET /users/:name/tags — empty tags when Tags key missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/users/admin/tags");
+      const body = await res.json();
+      expect(body.tags).toEqual({});
+    });
+
     it("POST /users — creates a user", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await post("/users", { name: "new-user", path: "/" });
@@ -154,6 +169,14 @@ describe("IAM Routes", () => {
       expect(body.created).toBe(true);
       expect(body.name).toBe("new-user");
       expect(mockSend.mock.calls[0][0].UserName).toBe("new-user");
+    });
+
+    it("POST /users — default empty path when path omitted", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/users", { name: "no-path-user" });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].UserName).toBe("no-path-user");
+      expect(mockSend.mock.calls[0][0].Path).toBe("");
     });
 
     it("POST /users — 400 when name is missing", async () => {
@@ -227,6 +250,40 @@ describe("IAM Routes", () => {
       expect(mockSend).toHaveBeenCalledTimes(5);
     });
 
+    it("GET /users/:name — sparse responses (all keys missing)", async () => {
+      mockSend
+        .mockResolvedValueOnce({
+          User: { UserName: "admin", Arn: "arn:x", UserId: "A1", Path: "/", CreateDate: new Date("2025-01-01") },
+        })
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({});
+      const res = await get("/users/admin");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.groups).toEqual([]);
+      expect(body.attachedPolicies).toEqual([]);
+      expect(body.accessKeys).toEqual([]);
+      expect(body.inlinePolicies).toEqual([]);
+    });
+
+    it("GET /users/:name — maps attached policies, access keys, and inline policies", async () => {
+      mockSend
+        .mockResolvedValueOnce({
+          User: { UserName: "admin", Arn: "arn:x", UserId: "A1", Path: "/", CreateDate: new Date("2025-01-01") },
+        })
+        .mockResolvedValueOnce({ Groups: [] })
+        .mockResolvedValueOnce({ AttachedPolicies: [{ PolicyName: "AdminPolicy", PolicyArn: "arn:aws:iam::...:policy/AdminPolicy" }] })
+        .mockResolvedValueOnce({ AccessKeyMetadata: [{ AccessKeyId: "AKIA789", UserName: "admin", Status: "Active", CreateDate: new Date() }] })
+        .mockResolvedValueOnce({ PolicyNames: ["p1", "p2"] });
+      const res = await get("/users/admin");
+      const body = await res.json();
+      expect(body.attachedPolicies).toEqual([{ name: "AdminPolicy", arn: "arn:aws:iam::...:policy/AdminPolicy" }]);
+      expect(body.accessKeys[0].accessKeyId).toBe("AKIA789");
+      expect(body.inlinePolicies).toEqual(["p1", "p2"]);
+    });
+
     it("POST /users/:name/access-keys — creates access key", async () => {
       mockSend.mockResolvedValueOnce({
         AccessKey: {
@@ -290,6 +347,19 @@ describe("IAM Routes", () => {
       expect(mockSend.mock.calls[0][0].PolicyName).toBe("my-policy");
     });
 
+    it("PUT /users/:name/inline-policies — 400 when policyName missing", async () => {
+      const res = await put("/users/admin/inline-policies", { document: '{"Version":"2012-10-17"}' });
+      expect(res.status).toBe(400);
+    });
+
+    it("PUT /users/:name/inline-policies — puts inline policy without document", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/users/admin/inline-policies", { policyName: "no-doc" });
+      expect(res.status).toBe(200);
+      expect((await res.json()).put).toBe(true);
+      expect(mockSend.mock.calls[0][0].PolicyDocument).toBeUndefined();
+    });
+
     it("PUT /users/:name/inline-policies — 400 when document is invalid JSON", async () => {
       const res = await put("/users/admin/inline-policies", {
         policyName: "bad-policy",
@@ -333,6 +403,19 @@ describe("IAM Routes", () => {
       const body = await res.json();
       expect(body.created).toBe(true);
       expect(mockSend.mock.calls[0][0].RoleName).toBe("lambda-role");
+    });
+
+    it("POST /roles — 400 when name missing", async () => {
+      const res = await post("/roles", { description: "no name" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /roles — uses provided valid trust policy document", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const doc = JSON.stringify({ Version: "2012-10-17", Statement: [{ Effect: "Allow", Principal: { Service: "lambda.amazonaws.com" }, Action: "sts:AssumeRole" }] });
+      const res = await post("/roles", { name: "custom-trust", assumeRolePolicyDocument: doc });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].AssumeRolePolicyDocument).toBe(doc);
     });
 
     it("POST /roles — validates trust policy document", async () => {
@@ -384,7 +467,7 @@ describe("IAM Routes", () => {
       expect(body.role.assumeRolePolicyDocument).toBeDefined();
     });
 
-    it("GET /roles/:name — undefined attached policies (|| [] fallback)", async () => {
+    it("GET /roles/:name — undefined attached policies and tags (|| [] fallbacks)", async () => {
       mockSend
         .mockResolvedValueOnce({
           Role: {
@@ -396,10 +479,33 @@ describe("IAM Routes", () => {
           },
         })
         .mockResolvedValueOnce({}) // undefined AttachedPolicies → || []
-        .mockResolvedValueOnce({ Tags: [] });
+        .mockResolvedValueOnce({}); // undefined Tags → || []
       const res = await get("/roles/no-policy-role");
       const body = await res.json();
       expect(body.attachedPolicies).toEqual([]);
+      expect(body.tags).toEqual({});
+    });
+
+    it("GET /roles — empty when Roles key missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/roles");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.roles).toEqual([]);
+    });
+
+    it("GET /roles/:name — maps attached policies and tags", async () => {
+      mockSend
+        .mockResolvedValueOnce({
+          Role: { RoleName: "full-role", Arn: "arn:x", RoleId: "R3", Path: "/", CreateDate: new Date(), AssumeRolePolicyDocument: null },
+        })
+        .mockResolvedValueOnce({ AttachedPolicies: [{ PolicyName: "RolePolicy", PolicyArn: "arn:aws:iam::...:policy/RolePolicy" }] })
+        .mockResolvedValueOnce({ Tags: [{ Key: "env", Value: "staging" }] });
+      const res = await get("/roles/full-role");
+      const body = await res.json();
+      expect(body.attachedPolicies).toEqual([{ name: "RolePolicy", arn: "arn:aws:iam::...:policy/RolePolicy" }]);
+      expect(body.tags).toEqual({ env: "staging" });
+      expect(body.role.assumeRolePolicyDocument).toBeNull();
     });
   });
 
@@ -421,6 +527,19 @@ describe("IAM Routes", () => {
       const body = await res.json();
       expect(body.total).toBe(1);
       expect(body.groups[0].name).toBe("admins");
+    });
+
+    it("GET /groups — empty when Groups key missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/groups");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.groups).toEqual([]);
+    });
+
+    it("POST /groups — 400 when name missing", async () => {
+      const res = await post("/groups", { path: "/" });
+      expect(res.status).toBe(400);
     });
 
     it("POST /groups — creates a group", async () => {
@@ -460,6 +579,19 @@ describe("IAM Routes", () => {
       const body = await res.json();
       expect(body.total).toBe(1);
       expect(body.policies[0].name).toBe("AdminPolicy");
+    });
+
+    it("GET /policies — empty when Policies key missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/policies");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.policies).toEqual([]);
+    });
+
+    it("POST /policies — 400 when name missing", async () => {
+      const res = await post("/policies", { description: "no name" });
+      expect(res.status).toBe(400);
     });
 
     it("POST /policies — creates a policy", async () => {
@@ -532,6 +664,15 @@ describe("IAM Routes", () => {
       const res = await get("/policies/detail?arn=missing");
       const body = await res.json();
       expect(body.policy).toBeNull();
+    });
+
+    it("GET /policies/detail — empty versions when Versions key missing", async () => {
+      mockSend
+        .mockResolvedValueOnce({ Policy: { PolicyName: "P" } })
+        .mockResolvedValueOnce({});
+      const res = await get("/policies/detail?arn=arn-x");
+      const body = await res.json();
+      expect(body.versions).toEqual([]);
     });
 
     it("GET /policies/version — returns decoded document", async () => {
@@ -657,6 +798,23 @@ describe("IAM Routes", () => {
       const body = await res.json();
       expect(body.total).toBe(1);
       expect(body.instanceProfiles[0].name).toBe("web-profile");
+    });
+
+    it("GET /instance-profiles — empty when InstanceProfiles key missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/instance-profiles");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.instanceProfiles).toEqual([]);
+    });
+
+    it("GET /instance-profiles — sparse profile without Roles key", async () => {
+      mockSend.mockResolvedValueOnce({
+        InstanceProfiles: [{ InstanceProfileName: "no-roles", Arn: "arn:x", InstanceProfileId: "IP3", Path: "/", CreateDate: new Date() }],
+      });
+      const res = await get("/instance-profiles");
+      const body = await res.json();
+      expect(body.instanceProfiles[0].roles).toEqual([]);
     });
 
     it("POST /instance-profiles — creates instance profile", async () => {
