@@ -129,6 +129,13 @@ describe("Functions", () => {
           Version: "$LATEST",
           State: "Active",
           Architectures: ["arm64"],
+          Layers: [{ Arn: "arn:aws:lambda:us-east-1::layer:my-layer:1", CodeSize: 1024 }],
+          Environment: { Variables: { NODE_ENV: "prod" } },
+          TracingConfig: { Mode: "PassThrough" },
+          EphemeralStorage: { Size: 512 },
+          RevisionId: "rev-1",
+          PackageType: "Zip",
+          StateReason: "Functions is active",
         },
       ],
     });
@@ -138,6 +145,18 @@ describe("Functions", () => {
     expect(body.functions[0].name).toBe("my-func");
     expect(body.functions[0].runtime).toBe("nodejs22.x");
     expect(body.functions[0].architectures).toEqual(["arm64"]);
+    expect(body.functions[0].layers).toEqual([{ arn: "arn:aws:lambda:us-east-1::layer:my-layer:1", codeSize: 1024 }]);
+    expect(body.functions[0].environment).toEqual({ NODE_ENV: "prod" });
+    expect(body.functions[0].tracingConfig).toBe("PassThrough");
+    expect(body.functions[0].ephemeralStorage).toBe(512);
+    expect(body.functions[0].revisionId).toBe("rev-1");
+  });
+
+  it("GET /functions — sparse response defaults to empty list", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/functions");
+    const body = await res.json();
+    expect(body).toEqual({ functions: [], total: 0 });
   });
 
   it("POST /functions — creates function with zipFile", async () => {
@@ -178,6 +197,29 @@ describe("Functions", () => {
     expect(mockSend.mock.calls[0][0].Code.S3Bucket).toBe("my-bucket");
   });
 
+  it("POST /functions — defaults empty handler/s3 bucket/key and omits environment", async () => {
+    mockSend.mockResolvedValueOnce({ FunctionName: "bare-func" });
+    const res = await post("/functions", { name: "bare-func", runtime: "nodejs22.x" });
+    expect(res.status).toBe(200);
+    const cmd = mockSend.mock.calls[0][0];
+    expect(cmd.Handler).toBe("");
+    expect(cmd.Code).toEqual({ S3Bucket: "", S3Key: "" });
+    expect(cmd.Environment).toBeUndefined();
+  });
+
+  it("POST /functions — forwards environment variables", async () => {
+    mockSend.mockResolvedValueOnce({ FunctionName: "env-func" });
+    const res = await post("/functions", {
+      name: "env-func",
+      runtime: "nodejs22.x",
+      handler: "index.handler",
+      zipFile: Buffer.from("UEsDBBQAAAAAA").toString("base64"),
+      environment: { FOO: "bar" },
+    });
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].Environment).toEqual({ Variables: { FOO: "bar" } });
+  });
+
   it("POST /functions — 400 when name is empty", async () => {
     const res = await post("/functions", { name: "", runtime: "nodejs22.x" });
     expect(res.status).toBe(400);
@@ -202,6 +244,16 @@ describe("Functions", () => {
     expect(body.code.repositoryType).toBe("S3");
   });
 
+  it("GET /functions/:name — omits code when absent", async () => {
+    mockSend.mockResolvedValueOnce({
+      Configuration: { FunctionName: "my-func", Runtime: "nodejs22.x" },
+    });
+    const res = await get("/functions/my-func");
+    const body = await res.json();
+    expect(body.configuration.name).toBe("my-func");
+    expect(body.code).toBeUndefined();
+  });
+
   it("PUT /functions/:name/configuration — updates config", async () => {
     mockSend.mockResolvedValueOnce({
       FunctionName: "my-func",
@@ -221,6 +273,19 @@ describe("Functions", () => {
     expect(mockSend.mock.calls[0][0].Timeout).toBe(10);
   });
 
+  it("PUT /functions/:name/configuration — forwards environment and defaults description", async () => {
+    mockSend.mockResolvedValueOnce({ FunctionName: "my-func" });
+    const res = await put("/functions/my-func/configuration", {
+      timeout: 10,
+      memorySize: 512,
+      environment: { FOO: "bar" },
+    });
+    expect(res.status).toBe(200);
+    const cmd = mockSend.mock.calls[0][0];
+    expect(cmd.Environment).toEqual({ Variables: { FOO: "bar" } });
+    expect(cmd.Description).toBe("");
+  });
+
   it("PUT /functions/:name/code — updates code", async () => {
     mockSend.mockResolvedValueOnce({ FunctionName: "my-func" });
     const res = await put("/functions/my-func/code", {
@@ -230,6 +295,15 @@ describe("Functions", () => {
     const body = await res.json();
     expect(body.updated).toBe(true);
     expect(mockSend.mock.calls[0][0].__cmdName).toBe("UpdateFunctionCodeCommand");
+  });
+
+  it("PUT /functions/:name/code — omits ZipFile when not provided", async () => {
+    mockSend.mockResolvedValueOnce({ FunctionName: "my-func" });
+    const res = await put("/functions/my-func/code", { s3Bucket: "b", s3Key: "k.zip" });
+    expect(res.status).toBe(200);
+    const cmd = mockSend.mock.calls[0][0];
+    expect(cmd.ZipFile).toBeUndefined();
+    expect(cmd.S3Bucket).toBe("b");
   });
 
   it("DELETE /functions/:name — deletes function", async () => {
@@ -280,6 +354,19 @@ describe("Invoke", () => {
     const body = await res.json();
     expect(body.functionError).toBe("Unhandled");
   });
+
+  it("POST /functions/:name/invocations — omits payload when absent", async () => {
+    mockSend.mockResolvedValueOnce({
+      StatusCode: 202,
+      ExecutedVersion: "$LATEST",
+      $metadata: { requestId: "req-456" },
+    });
+    const res = await post("/functions/my-func/invocations", {});
+    const body = await res.json();
+    expect(body.statusCode).toBe(202);
+    expect(body.requestId).toBe("req-456");
+    expect(body.payload).toBeUndefined();
+  });
 });
 
 // ─── Versions ────────────────────────────────────────────
@@ -298,6 +385,19 @@ describe("Versions", () => {
     const body = await res.json();
     expect(body.published).toBe(true);
     expect(body.version.version).toBe("1");
+  });
+
+  it("POST /functions/:name/versions — tolerates invalid JSON body", async () => {
+    mockSend.mockResolvedValueOnce({ FunctionName: "my-func", Version: "2" });
+    const res = await router.request("/functions/my-func/versions", {
+      method: "POST",
+      body: "not-json",
+      headers: { "content-type": "application/json" },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.published).toBe(true);
+    expect(mockSend.mock.calls[0][0].Description).toBeUndefined();
   });
 
   it("GET /functions/:name/versions — lists versions", async () => {
@@ -448,6 +548,13 @@ describe("Layers", () => {
     expect(body.versions[0].version).toBe(1);
   });
 
+  it("GET /layers/:name/versions — sparse response defaults to empty list", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/layers/my-layer/versions");
+    const body = await res.json();
+    expect(body).toEqual({ versions: [], total: 0 });
+  });
+
   it("DELETE /layers/:name/versions/:version — deletes layer version", async () => {
     mockSend.mockResolvedValueOnce({});
     const res = await del("/layers/my-layer/versions/1");
@@ -518,6 +625,15 @@ describe("Tags", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.untagged).toBe(true);
+  });
+
+  it("DELETE /tags/:arn — defaults tagKeys to empty array", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await del("/tags/arn:aws:lambda:us-east-1::function:my-func");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.untagged).toBe(true);
+    expect(mockSend.mock.calls[0][0].TagKeys).toEqual([]);
   });
 });
 
