@@ -93,12 +93,28 @@ describe("CloudFormation Routes", () => {
   describe("Stacks", () => {
     it("GET /stacks — lists stacks", async () => {
       mockSend.mockResolvedValueOnce({
-        StackSummaries: [{ StackName: "my-stack", StackStatus: "CREATE_COMPLETE", CreationTime: new Date("2025-01-01") }],
+        StackSummaries: [{
+          StackName: "my-stack",
+          StackStatus: "CREATE_COMPLETE",
+          CreationTime: new Date("2025-01-01"),
+          Parameters: [{ ParameterKey: "Env", ParameterValue: "prod" }],
+          Outputs: [{ OutputKey: "BucketName", OutputValue: "my-bucket", Description: "Bucket", ExportName: "ExportBucket" }],
+          Tags: [{ Key: "team", Value: "infra" }],
+        }],
       });
       const res = await get("/stacks");
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.total).toBe(1);
+      expect(body.stacks[0].parameters).toEqual([{ key: "Env", value: "prod", usePreviousValue: undefined }]);
+      expect(body.stacks[0].outputs).toEqual([{ key: "BucketName", value: "my-bucket", description: "Bucket", exportName: "ExportBucket" }]);
+      expect(body.stacks[0].tags).toEqual([{ key: "team", value: "infra" }]);
+    });
+
+    it("GET /stacks — empty when StackSummaries key missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/stacks");
+      expect((await res.json()).total).toBe(0);
     });
 
     it("GET /stacks — returns empty list", async () => {
@@ -112,6 +128,36 @@ describe("CloudFormation Routes", () => {
       const res = await post("/stacks", { name: "new-stack", templateBody: "{}" });
       expect((await res.json()).created).toBe(true);
       expect(mockSend.mock.calls[0][0].__cmdName).toBe("CreateStackCommand");
+    });
+
+    it("POST /stacks — with parameters and custom capabilities", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/stacks", {
+        name: "param-stack",
+        templateBody: "{}",
+        parameters: [{ key: "Env", value: "prod" }],
+        capabilities: ["CAPABILITY_IAM"],
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].Parameters).toEqual([{ ParameterKey: "Env", ParameterValue: "prod" }]);
+      expect(mockSend.mock.calls[0][0].Capabilities).toEqual(["CAPABILITY_IAM"]);
+    });
+
+    it("POST /stacks — parameter without key or value falls back to empty strings", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/stacks", {
+        name: "sparse-param",
+        templateBody: "{}",
+        parameters: [{ usePreviousValue: true }],
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].Parameters).toEqual([{ ParameterKey: "", ParameterValue: "" }]);
+    });
+
+    it("POST /stacks — 400 when templateBody is invalid JSON", async () => {
+      const res = await post("/stacks", { name: "bad-stack", templateBody: "not json" });
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
     });
 
     it("POST /stacks — creates with templateUrl instead of templateBody", async () => {
@@ -130,6 +176,34 @@ describe("CloudFormation Routes", () => {
       const res = await put("/stacks/my-stack", { templateBody: '{"Resources":{}}' });
       expect((await res.json()).updated).toBe(true);
       expect(mockSend.mock.calls[0][0].__cmdName).toBe("UpdateStackCommand");
+    });
+
+    it("PUT /stacks/:name — updates without templateBody (templateUrl only)", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/stacks/my-stack", { templateUrl: "https://example.com/t.yaml" });
+      expect(res.status).toBe(200);
+      expect((await res.json()).updated).toBe(true);
+      expect(mockSend.mock.calls[0][0].TemplateBody).toBeUndefined();
+    });
+
+    it("PUT /stacks/:name — with parameters", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/stacks/my-stack", {
+        templateBody: "{}",
+        parameters: [{ key: "Env", value: "prod" }],
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].Parameters).toEqual([{ ParameterKey: "Env", ParameterValue: "prod" }]);
+    });
+
+    it("PUT /stacks/:name — parameter without key or value falls back to empty strings", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/stacks/my-stack", {
+        templateBody: "{}",
+        parameters: [{ usePreviousValue: true }],
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].Parameters).toEqual([{ ParameterKey: "", ParameterValue: "" }]);
     });
 
     it("PUT /stacks/:name — 400 when templateBody is invalid JSON", async () => {
@@ -151,6 +225,31 @@ describe("CloudFormation Routes", () => {
         .mockResolvedValueOnce({ StackEvents: [] });
       const res = await get("/stacks/my-stack");
       expect((await res.json()).stack.name).toBe("my-stack");
+    });
+
+    it("GET /stacks/:name — maps resources and events", async () => {
+      mockSend
+        .mockResolvedValueOnce({ Stacks: [{ StackName: "my-stack", StackStatus: "CREATE_COMPLETE" }] })
+        .mockResolvedValueOnce({ StackResourceSummaries: [{ LogicalResourceId: "MyBucket", PhysicalResourceId: "my-bucket", ResourceType: "AWS::S3::Bucket", ResourceStatus: "CREATE_COMPLETE" }] })
+        .mockResolvedValueOnce({ StackEvents: [{ EventId: "evt-1", LogicalResourceId: "MyBucket", ResourceType: "AWS::S3::Bucket", ResourceStatus: "CREATE_COMPLETE" }] });
+      const res = await get("/stacks/my-stack");
+      const body = await res.json();
+      expect(body.resources).toHaveLength(1);
+      expect(body.resources[0].logicalId).toBe("MyBucket");
+      expect(body.resources[0].type).toBe("AWS::S3::Bucket");
+      expect(body.events).toHaveLength(1);
+      expect(body.events[0].eventId).toBe("evt-1");
+    });
+
+    it("GET /stacks/:name — sparse responses (all keys missing)", async () => {
+      mockSend
+        .mockResolvedValueOnce({ Stacks: [{ StackName: "my-stack", StackStatus: "CREATE_COMPLETE" }] })
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({});
+      const res = await get("/stacks/my-stack");
+      const body = await res.json();
+      expect(body.resources).toEqual([]);
+      expect(body.events).toEqual([]);
     });
 
     it("GET /stacks/:name — returns null stack when stack not found", async () => {
@@ -188,6 +287,16 @@ describe("CloudFormation Routes", () => {
       mockSend.mockResolvedValueOnce({ Parameters: [] });
       const res = await post("/validate-template", { templateBody: "{}" });
       expect((await res.json()).valid).toBe(true);
+    });
+
+    it("POST /validate-template — maps parameters and sparse fallback", async () => {
+      mockSend.mockResolvedValueOnce({ Parameters: [{ ParameterKey: "Env", DefaultValue: "dev", Description: "Env", NoEcho: false }] });
+      const res = await post("/validate-template", { templateBody: "{}" });
+      const body = await res.json();
+      expect(body.parameters).toEqual([{ key: "Env", defaultValue: "dev", description: "Env", noEcho: false }]);
+      mockSend.mockResolvedValueOnce({});
+      const res2 = await post("/validate-template", { templateBody: "{}" });
+      expect((await res2.json()).parameters).toEqual([]);
     });
   });
 
@@ -243,10 +352,28 @@ describe("CloudFormation Routes", () => {
       expect((await res.json()).total).toBe(1);
     });
 
+    it("GET /stacks/:name/change-sets — empty when Summaries key missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/stacks/my-stack/change-sets");
+      expect((await res.json()).total).toBe(0);
+    });
+
     it("POST /change-sets — creates", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await post("/change-sets", { stackName: "s", changeSetName: "cs", templateBody: "{}" });
       expect((await res.json()).created).toBe(true);
+    });
+
+    it("POST /change-sets — with parameters and description", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/change-sets", {
+        stackName: "s", changeSetName: "cs", templateBody: "{}",
+        parameters: [{ key: "Env", value: "prod" }],
+        description: "My change set",
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].Parameters).toEqual([{ ParameterKey: "Env", ParameterValue: "prod" }]);
+      expect(mockSend.mock.calls[0][0].Description).toBe("My change set");
     });
 
     it("POST /change-sets — with explicit changeSetType", async () => {
@@ -263,6 +390,27 @@ describe("CloudFormation Routes", () => {
       const res = await post("/change-sets", { stackName: "s", changeSetName: "cs", templateBody: "not json" });
       expect(res.status).toBe(400);
       expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("POST /change-sets — templateUrl only (no templateBody, stackName, or changeSetName)", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/change-sets", { templateUrl: "https://example.com/template.yaml" });
+      expect(res.status).toBe(200);
+      const input = mockSend.mock.calls[0][0];
+      expect(input.StackName).toBe("");
+      expect(input.ChangeSetName).toBe("");
+      expect(input.TemplateBody).toBeUndefined();
+      expect(input.TemplateURL).toBe("https://example.com/template.yaml");
+    });
+
+    it("POST /change-sets — parameter without key or value falls back to empty strings", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/change-sets", {
+        stackName: "s", changeSetName: "cs", templateBody: "{}",
+        parameters: [{ usePreviousValue: true }],
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].Parameters).toEqual([{ ParameterKey: "", ParameterValue: "" }]);
     });
 
     it("POST /change-sets/execute — executes", async () => {
@@ -283,6 +431,14 @@ describe("CloudFormation Routes", () => {
       });
       const res = await get("/stacks/s/change-sets/my-cs");
       expect((await res.json()).changeSet.name).toBe("my-cs");
+    });
+
+    it("GET /stacks/:name/change-sets/:csName — sparse response (Parameters/Changes missing)", async () => {
+      mockSend.mockResolvedValueOnce({ ChangeSetName: "my-cs" });
+      const res = await get("/stacks/s/change-sets/my-cs");
+      const body = await res.json();
+      expect(body.changeSet.parameters).toEqual([]);
+      expect(body.changeSet.changes).toEqual([]);
     });
 
     it("GET /stacks/:name/change-sets/:csName — 404", async () => {
@@ -331,6 +487,20 @@ describe("CloudFormation Routes", () => {
       expect(body.changeSet.changes[0].resourceChange.details[0].evaluation).toBe("Static");
     });
 
+    it("GET /stacks/:name/change-sets/:csName — ResourceChange without Details maps to empty details", async () => {
+      mockSend.mockResolvedValueOnce({
+        ChangeSetName: "my-cs",
+        ExecutionStatus: "AVAILABLE",
+        Parameters: [],
+        Changes: [
+          { Type: "Resource", ResourceChange: { Action: "Modify", LogicalResourceId: "X", Replacement: "False", Scope: ["Properties"] } },
+        ],
+      });
+      const res = await get("/stacks/s/change-sets/my-cs");
+      const body = await res.json();
+      expect(body.changeSet.changes[0].resourceChange.details).toEqual([]);
+    });
+
     it("GET /stacks/:name/change-sets/:csName — with null ResourceChange and null Target", async () => {
       mockSend.mockResolvedValueOnce({
         ChangeSetName: "my-cs",
@@ -367,6 +537,14 @@ describe("CloudFormation Routes", () => {
       const res = await get("/exports");
       expect((await res.json()).total).toBe(1);
     });
+
+    it("GET /exports — empty when Exports key missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/exports");
+      const body = await res.json();
+      expect(body.exports).toEqual([]);
+      expect(body.total).toBe(0);
+    });
   });
 
   describe("Stack Sets", () => {
@@ -397,6 +575,15 @@ describe("CloudFormation Routes", () => {
       expect(mockSend).not.toHaveBeenCalled();
     });
 
+    it("POST /stacksets — templateUrl only (no templateBody)", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/stacksets", { name: "url-ss", templateUrl: "https://example.com/template.yaml" });
+      expect(res.status).toBe(200);
+      const input = mockSend.mock.calls[0][0];
+      expect(input.StackSetName).toBe("url-ss");
+      expect(input.TemplateBody).toBeUndefined();
+    });
+
     it("POST /stacksets — uses default permission model", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await post("/stacksets", { name: "my-ss", templateBody: "{}" });
@@ -404,16 +591,61 @@ describe("CloudFormation Routes", () => {
       expect(mockSend.mock.calls[0][0].PermissionModel).toBe("SELF_MANAGED");
     });
 
+    it("POST /stacksets — with parameters and description", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/stacksets", {
+        name: "my-ss", templateBody: "{}",
+        parameters: [{ key: "Env", value: "prod" }],
+        description: "My stack set",
+        permissionModel: "SERVICE_MANAGED",
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].Parameters).toEqual([{ ParameterKey: "Env", ParameterValue: "prod" }]);
+      expect(mockSend.mock.calls[0][0].Description).toBe("My stack set");
+      expect(mockSend.mock.calls[0][0].PermissionModel).toBe("SERVICE_MANAGED");
+    });
+
+    it("POST /stacksets — parameter without key or value falls back to empty strings", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/stacksets", {
+        name: "my-ss", templateBody: "{}",
+        parameters: [{ usePreviousValue: true }],
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].Parameters).toEqual([{ ParameterKey: "", ParameterValue: "" }]);
+    });
+
     it("GET /stacksets/:name — returns stack set with instances and operations", async () => {
       mockSend
-        .mockResolvedValueOnce({ StackSet: { StackSetName: "my-ss", Status: "ACTIVE" } })
+        .mockResolvedValueOnce({ StackSet: { StackSetName: "my-ss", Status: "ACTIVE", Parameters: [{ ParameterKey: "Env", ParameterValue: "prod" }] } })
         .mockResolvedValueOnce({ Summaries: [{ Account: "123", Region: "us-east-1" }] })
         .mockResolvedValueOnce({ Summaries: [{ OperationId: "op-1", Action: "CREATE", Status: "SUCCEEDED" }] });
       const res = await get("/stacksets/my-ss");
       const body = await res.json();
       expect(body.stackSet.name).toBe("my-ss");
+      expect(body.stackSet.parameters).toEqual([{ key: "Env", value: "prod" }]);
       expect(body.instances).toHaveLength(1);
       expect(body.operations).toHaveLength(1);
+    });
+
+    it("GET /stacksets — empty when Summaries key missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/stacksets");
+      const body = await res.json();
+      expect(body.stackSets).toEqual([]);
+      expect(body.total).toBe(0);
+    });
+
+    it("GET /stacksets/:name — sparse detail (no Parameters, instances, or operations)", async () => {
+      mockSend
+        .mockResolvedValueOnce({ StackSet: { StackSetName: "my-ss", Status: "ACTIVE" } })
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({});
+      const res = await get("/stacksets/my-ss");
+      const body = await res.json();
+      expect(body.stackSet.parameters).toEqual([]);
+      expect(body.instances).toEqual([]);
+      expect(body.operations).toEqual([]);
     });
 
     it("DELETE /stacksets/:name — deletes a stack set", async () => {
@@ -440,6 +672,12 @@ describe("CloudFormation Routes", () => {
         accounts: ["123"], regions: ["us-east-1"],
       });
       expect((await res.json()).instancesDeleted).toBe(true);
+    });
+
+    it("DELETE /stacksets/:name/instances — 400 when regions missing", async () => {
+      const res = await del("/stacksets/my-ss/instances", { accounts: ["123"] });
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
     });
 
     it("DELETE /stacksets/:name/instances — defaults retainStacks to false", async () => {
