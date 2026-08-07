@@ -152,7 +152,7 @@ describe("IoT Core Routes", () => {
     });
 
     it("GET /things — returns empty list", async () => {
-      mockSend.mockResolvedValueOnce({ things: [] });
+      mockSend.mockResolvedValueOnce({}); // no things key -> || [] fallback
       const res = await get("/things");
       const body = await res.json();
       expect(body.total).toBe(0);
@@ -226,6 +226,18 @@ describe("IoT Core Routes", () => {
       expect(mockSend.mock.calls[0][0].attributePayload).toBeUndefined();
     });
 
+    it("POST /things — with attributes builds attributePayload", async () => {
+      mockSend.mockResolvedValueOnce({ thingName: "tagged-device", thingArn: "arn:...", thingId: "id-789" });
+      const res = await post("/things", {
+        thingName: "tagged-device",
+        attributes: { firmware: "1.0" },
+        mergeAttributes: true,
+      });
+      expect(res.status).toBe(201);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.attributePayload).toEqual({ attributes: { firmware: "1.0" }, merge: true });
+    });
+
     it("DELETE /things/:thingName — deletes a thing", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await del("/things/my-device");
@@ -262,12 +274,32 @@ describe("IoT Core Routes", () => {
       expect(body.total).toBe(1);
     });
 
+    it("GET /thing-types — sparse response falls back to empty", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/thing-types");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.thingTypes).toEqual([]);
+      expect(body.total).toBe(0);
+    });
+
     it("POST /thing-types — creates thing type", async () => {
       mockSend.mockResolvedValueOnce({ thingTypeName: "Sensor", thingTypeArn: "arn:...", thingTypeId: "id-1" });
       const res = await post("/thing-types", { thingTypeName: "Sensor" });
       expect(res.status).toBe(201);
       const body = await res.json();
       expect(body.created).toBe(true);
+    });
+
+    it("POST /thing-types — with thingTypeProperties", async () => {
+      mockSend.mockResolvedValueOnce({ thingTypeName: "Sensor", thingTypeArn: "arn:...", thingTypeId: "id-2" });
+      const res = await post("/thing-types", {
+        thingTypeName: "Sensor",
+        thingTypeProperties: { thingTypeDescription: "A sensor", searchableAttributes: ["manufacturer"] },
+      });
+      expect(res.status).toBe(201);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.thingTypeProperties).toEqual({ thingTypeDescription: "A sensor", searchableAttributes: ["manufacturer"] });
     });
 
     it("POST /thing-types — requires thingTypeName", async () => {
@@ -321,7 +353,7 @@ describe("IoT Core Routes", () => {
     });
 
     it("GET /certificates — returns empty list", async () => {
-      mockSend.mockResolvedValueOnce({ certificates: [] });
+      mockSend.mockResolvedValueOnce({}); // no certificates key -> || [] fallback
       const res = await get("/certificates");
       const body = await res.json();
       expect(body.total).toBe(0);
@@ -423,7 +455,7 @@ describe("IoT Core Routes", () => {
     });
 
     it("GET /policies — returns empty list", async () => {
-      mockSend.mockResolvedValueOnce({ policies: [] });
+      mockSend.mockResolvedValueOnce({}); // no policies key -> || [] fallback
       const res = await get("/policies");
       const body = await res.json();
       expect(body.total).toBe(0);
@@ -468,12 +500,31 @@ describe("IoT Core Routes", () => {
       expect(body.total).toBe(1);
     });
 
+    it("GET /policies/:policyName/versions — sparse response falls back to empty", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/policies/MyPolicy/versions");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.policyVersions).toEqual([]);
+      expect(body.total).toBe(0);
+    });
+
     it("POST /policies/:policyName/versions — creates version", async () => {
       mockSend.mockResolvedValueOnce({ policyVersion: { versionId: "2" } });
       const res = await post("/policies/MyPolicy/versions", { policyDocument: "{}", setAsDefault: true });
       expect(res.status).toBe(201);
       const body = await res.json();
       expect(body.created).toBe(true);
+    });
+
+    it("POST /policies/:policyName/versions — accepts object policyDocument", async () => {
+      mockSend.mockResolvedValueOnce({ policyVersion: { versionId: "3" } });
+      const doc = { Version: "2012-10-17", Statement: [{ Effect: "Allow", Action: "iot:*", Resource: "*" }] };
+      const res = await post("/policies/MyPolicy/versions", { policyDocument: doc, setAsDefault: false });
+      expect(res.status).toBe(201);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.policyDocument).toBe(JSON.stringify(doc));
+      expect(cmd.setAsDefault).toBe(false);
     });
 
     it("POST /policies/:policyName/versions — requires policyDocument", async () => {
@@ -530,7 +581,7 @@ describe("IoT Core Routes", () => {
     });
 
     it("GET /topic-rules — returns empty list", async () => {
-      mockSend.mockResolvedValueOnce({ rules: [] });
+      mockSend.mockResolvedValueOnce({}); // no rules key -> || [] fallback
       const res = await get("/topic-rules");
       const body = await res.json();
       expect(body.total).toBe(0);
@@ -605,6 +656,15 @@ describe("IoT Core Routes", () => {
       const body = await res.json();
       expect(body.rule.ruleName).toBe("my_rule");
       expect(body.ruleArn).toContain("arn:");
+    });
+
+    it("GET /topic-rules/:ruleName — sparse response falls back to null rule", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/topic-rules/my_rule");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.rule).toBeNull();
+      expect(body.ruleArn).toBeUndefined();
     });
 
     it("PUT /topic-rules/:ruleName — replaces a rule", async () => {
@@ -708,6 +768,13 @@ describe("IoT Core Routes", () => {
       const body = await res.json();
       expect(body.results).toEqual([]);
     });
+
+    it("GET /things/:thingName/named-shadows — passes pageSize param", async () => {
+      mockSend.mockResolvedValueOnce({ results: [] });
+      const res = await get("/things/my-device/named-shadows?pageSize=10");
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].pageSize).toBe(10);
+    });
   });
 
   describe("MQTT Broker", () => {
@@ -738,6 +805,13 @@ describe("IoT Core Routes", () => {
       expect(body.subscriptions).toEqual([]);
     });
 
+    it("GET /connections/:clientId/subscriptions — passes maxResults param", async () => {
+      mockSend.mockResolvedValueOnce({ subscriptions: [] });
+      const res = await get("/connections/dev-1/subscriptions?maxResults=5");
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].maxResults).toBe(5);
+    });
+
     it("DELETE /connections/:clientId — disconnects client", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await del("/connections/dev-1?cleanSession=true");
@@ -746,6 +820,15 @@ describe("IoT Core Routes", () => {
       expect(body.disconnected).toBe(true);
       expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteConnectionCommand");
       expect(mockSend.mock.calls[0][0].cleanSession).toBe(true);
+    });
+
+    it("DELETE /connections/:clientId — without cleanSession leaves flags undefined", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/connections/dev-1");
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.cleanSession).toBeUndefined();
+      expect(cmd.preventWillMessage).toBeUndefined();
     });
 
     it("POST /connections/:clientId/messages — sends direct message", async () => {
@@ -762,6 +845,14 @@ describe("IoT Core Routes", () => {
       expect(res.status).toBe(400);
     });
 
+    it("POST /connections/:clientId/messages — defaults empty payload", async () => {
+      mockSend.mockResolvedValueOnce({ message: "OK" });
+      const res = await post("/connections/dev-1/messages", { topic: "cmd/reboot" });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(new TextDecoder().decode(cmd.payload)).toBe("");
+    });
+
     it("POST /publish — publishes to a topic", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await post("/publish", { topic: "sensors/temp", payload: "25", qos: 1, retain: true });
@@ -776,6 +867,16 @@ describe("IoT Core Routes", () => {
       const res = await post("/publish", { payload: "x" });
       expect(res.status).toBe(400);
     });
+
+    it("POST /publish — defaults payload, qos, and retain", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/publish", { topic: "sensors/temp" });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(new TextDecoder().decode(cmd.payload)).toBe("");
+      expect(cmd.qos).toBeUndefined();
+      expect(cmd.retain).toBeUndefined();
+    });
   });
 
   describe("Retained Messages", () => {
@@ -788,6 +889,21 @@ describe("IoT Core Routes", () => {
       expect(mockSend.mock.calls[0][0].__cmdName).toBe("ListRetainedMessagesCommand");
     });
 
+    it("GET /retained-messages — passes maxResults param", async () => {
+      mockSend.mockResolvedValueOnce({ retainedTopics: [] });
+      const res = await get("/retained-messages?maxResults=5");
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].maxResults).toBe(5);
+    });
+
+    it("GET /retained-messages — sparse response falls back to empty", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/retained-messages");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.retainedTopics).toEqual([]);
+    });
+
     it("GET /retained-messages/:topic — returns a retained message", async () => {
       const encoded = new TextEncoder().encode("25.5");
       mockSend.mockResolvedValueOnce({ topic: "sensors/temp", payload: encoded, qos: 1, lastModifiedTime: 123 });
@@ -798,6 +914,14 @@ describe("IoT Core Routes", () => {
       expect(body.payload).toBe("25.5");
       expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetRetainedMessageCommand");
       expect(mockSend.mock.calls[0][0].topic).toBe("sensors/temp");
+    });
+
+    it("GET /retained-messages/:topic — sparse response falls back to null payload", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/retained-messages/sensors/temp");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.payload).toBeNull();
     });
   });
 
@@ -828,6 +952,14 @@ describe("IoT Core Routes", () => {
       expect(res.status).toBe(400);
     });
 
+    it("GET /tags — sparse response falls back to empty tags", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/tags?resourceArn=arn:aws:iot:us-east-1::thing/my-device");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.tags).toEqual([]);
+    });
+
     it("DELETE /tags — untags a resource", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await del("/tags?resourceArn=arn:aws:iot:us-east-1::thing/my-device&tagKeys=env,team");
@@ -852,6 +984,14 @@ describe("IoT Core Routes", () => {
       expect(mockSend.mock.calls[0][0].__cmdName).toBe("ListTargetsForPolicyCommand");
     });
 
+    it("GET /policies/:policyName/targets — sparse response falls back to empty", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/policies/MyPolicy/targets");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.targets).toEqual([]);
+    });
+
     it("GET /targets/:target/attached-policies — lists attached policies", async () => {
       mockSend.mockResolvedValueOnce({ policies: [{ policyName: "MyPolicy", policyArn: "arn:..." }] });
       const target = encodeURIComponent("arn:aws:iot:us-east-1:123456789012:cert/cert-123");
@@ -860,6 +1000,14 @@ describe("IoT Core Routes", () => {
       const body = await res.json();
       expect(body.policies).toHaveLength(1);
       expect(mockSend.mock.calls[0][0].__cmdName).toBe("ListAttachedPoliciesCommand");
+    });
+
+    it("GET /targets/:target/attached-policies — sparse response falls back to empty", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/targets/cert-123/attached-policies");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.policies).toEqual([]);
     });
 
     it("POST /policies/:policyName/attach — attaches policy to target", async () => {
@@ -898,6 +1046,14 @@ describe("IoT Core Routes", () => {
       expect(body.principals).toHaveLength(1);
     });
 
+    it("GET /things/:thingName/principals — sparse response falls back to empty", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/things/my-device/principals");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.principals).toEqual([]);
+    });
+
     it("POST /things/:thingName/principals — attaches principal", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await post("/things/my-device/principals", { principal: "arn:aws:iot:...:cert/cert-123" });
@@ -933,6 +1089,14 @@ describe("IoT Core Routes", () => {
       const body = await res.json();
       expect(body.executionSummaries).toHaveLength(1);
       expect(mockSend.mock.calls[0][0].__cmdName).toBe("ListJobExecutionsForThingCommand");
+    });
+
+    it("GET /things/:thingName/jobs — sparse response falls back to empty", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/things/my-device/jobs");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.executionSummaries).toEqual([]);
     });
 
     it("GET /things/:thingName/jobs/:jobId — returns job execution detail", async () => {

@@ -1713,6 +1713,7 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 | 25.48 | pricing.test.ts — add 3 tests + convert 3 truthy-trap empty mocks to {} (Services/AttributeValues/PriceList/PriceLists || [] fallbacks), filters query param parsed into GetProductsCommand.Filters, effectiveDate query param into ListPriceListsCommand.EffectiveDate Date (81.48%->100%) | Done | 2026-08-07 |
 | 25.49 | apigateway.ts — remove 4 dead `!apiId` 400 guards on `:apiId` route params (never empty in Hono routing) on GET/DELETE /rest-apis/:apiId, GET resources, GET deployments (81.81%->100%, stmts 90.47%->100%) | Done | 2026-08-07 |
 | 25.50 | s3vectors.test.ts — add 6 tests (maxResults/nextToken/prefix forwarded on GET buckets + maxResults on GET indexes, sparse {} fallbacks for indexes list/index detail/vectors list/query results) (81.81%->100%) | Done | 2026-08-07 |
+| 25.51 | iot.test.ts — add 19 tests + convert 4 truthy-trap empty mocks to {} (things/certificates/policies/topic-rules || [] fallbacks), sparse fallbacks for thing-types/policy versions/policy targets/attached-policies/principals/topic-rule/tags/jobs/retained messages, attributePayload + thingTypeProperties build paths, object policyDocument on versions, pageSize/maxResults param forwarding, cleanSession/payload/qos/retain defaults (82.23%->100%) | Done | 2026-08-07 |
 | 25.34 | Verify: ec2-flow-logs.ts 75.75%→**100% branch**, 17 route tests pass, full suite 7623/7623 (269 files), typecheck clean | Done | 2026-08-06 |
 
 
