@@ -114,6 +114,14 @@ describe("Events (EventBridge) Routes", () => {
       expect(res.status).toBe(400);
     });
 
+    it("POST /buses — defaults description to empty string", async () => {
+      mockSend.mockResolvedValueOnce({ EventBusArn: "arn:aws:events:...:event-bus/custom" });
+      const res = await post("/buses", { name: "custom" });
+      expect(res.status).toBe(201);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.Description).toBe("");
+    });
+
     it("DELETE /buses — deletes an event bus", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await del("/buses?name=custom");
@@ -179,6 +187,15 @@ describe("Events (EventBridge) Routes", () => {
       const cmd = mockSend.mock.calls[0][0];
       expect(cmd.Name).toBe("my-rule");
       expect(cmd.State).toBe("ENABLED");
+    });
+
+    it("POST /rules — sparse body falls back to empty name and bus", async () => {
+      mockSend.mockResolvedValueOnce({ RuleArn: "arn:aws:events:...:rule/" });
+      const res = await post("/rules", { state: "ENABLED" });
+      expect(res.status).toBe(201);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.Name).toBe("");
+      expect(cmd.EventBusName).toBe("");
     });
 
     it("DELETE /rules — deletes a rule", async () => {
@@ -361,6 +378,21 @@ describe("Events (EventBridge) Routes", () => {
       expect(body.archiveArn).toContain("my-archive");
     });
 
+    it("POST /archives — sparse body falls back to empty name and source", async () => {
+      mockSend.mockResolvedValueOnce({ ArchiveArn: "arn:aws:events:...:archive/", State: "DISABLED" });
+      const res = await post("/archives", {});
+      expect(res.status).toBe(201);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.ArchiveName).toBe("");
+      expect(cmd.EventSourceArn).toBe("");
+      expect(cmd.Description).toBe("");
+    });
+
+    it("DELETE /archives — 400 when name missing", async () => {
+      const res = await del("/archives");
+      expect(res.status).toBe(400);
+    });
+
     it("DELETE /archives — deletes an archive", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await del("/archives?name=my-archive");
@@ -419,6 +451,30 @@ describe("Events (EventBridge) Routes", () => {
       });
       expect(res.status).toBe(400);
     });
+
+    it("PUT /archives — passes description through when provided", async () => {
+      mockSend.mockResolvedValueOnce({ ArchiveArn: "arn:aws:events:...:archive/my-archive", State: "ENABLED" });
+      const res = await router.request("/archives", {
+        method: "PUT",
+        body: JSON.stringify({ archiveName: "my-archive", description: "Updated desc" }),
+        headers: { "content-type": "application/json" },
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.Description).toBe("Updated desc");
+    });
+
+    it("PUT /archives — sanitizes empty description to empty string", async () => {
+      mockSend.mockResolvedValueOnce({ ArchiveArn: "arn:aws:events:...:archive/my-archive", State: "ENABLED" });
+      const res = await router.request("/archives", {
+        method: "PUT",
+        body: JSON.stringify({ archiveName: "my-archive", description: "" }),
+        headers: { "content-type": "application/json" },
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.Description).toBe("");
+    });
   });
 
   describe("Replay start, describe, cancel", () => {
@@ -432,6 +488,34 @@ describe("Events (EventBridge) Routes", () => {
       expect(res.status).toBe(201);
       const body = await res.json();
       expect(body.replayArn).toContain("my-replay");
+    });
+
+    it("POST /replays — passes description and eventEndTime through", async () => {
+      mockSend.mockResolvedValueOnce({ ReplayArn: "arn:aws:events:...:replay/my-replay", State: "RUNNING" });
+      const res = await post("/replays", {
+        replayName: "my-replay",
+        eventSourceArn: "arn:aws:events:...:archive/my-archive",
+        eventStartTime: "2026-01-01T00:00:00Z",
+        eventEndTime: "2026-01-02T00:00:00Z",
+        description: "Replay desc",
+      });
+      expect(res.status).toBe(201);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.Description).toBe("Replay desc");
+      expect(cmd.EventEndTime).toBeInstanceOf(Date);
+    });
+
+    it("POST /replays — sanitizes empty description to empty string", async () => {
+      mockSend.mockResolvedValueOnce({ ReplayArn: "arn:aws:events:...:replay/my-replay", State: "RUNNING" });
+      const res = await post("/replays", {
+        replayName: "my-replay",
+        eventSourceArn: "arn:aws:events:...:archive/my-archive",
+        eventStartTime: "2026-01-01T00:00:00Z",
+        description: "",
+      });
+      expect(res.status).toBe(201);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.Description).toBe("");
     });
 
     it("POST /replays — 400 when required fields missing", async () => {
@@ -501,6 +585,15 @@ describe("Events (EventBridge) Routes", () => {
       const res = await del("/buses/permissions?name=custom&statementId=stmt-1");
       expect(res.status).toBe(200);
       expect((await res.json()).removed).toBe(true);
+    });
+
+    it("DELETE /buses/permissions — removes all permissions when no statementId", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/buses/permissions?name=custom");
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.StatementId).toBeUndefined();
+      expect(cmd.RemoveAllPermissions).toBe(true);
     });
 
     it("DELETE /buses/permissions — 400 when name missing", async () => {

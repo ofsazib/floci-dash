@@ -59,10 +59,10 @@ router.post("/buses/permissions", async (c: Context) => {
   const client = getClient();
   await client.send(
     new PutPermissionCommand({
-      EventBusName: sanitizeName(body.eventBusName || "", 256),
-      StatementId: sanitizeName(body.statementId || "", 256),
-      Action: sanitizeName(body.action || "", 256),
-      Principal: sanitizeName(body.principal || "", 256),
+      EventBusName: sanitizeName(body.eventBusName, 256),
+      StatementId: sanitizeName(body.statementId, 256),
+      Action: sanitizeName(body.action, 256),
+      Principal: sanitizeName(body.principal, 256),
       Condition: body.condition,
     })
   );
@@ -258,7 +258,7 @@ router.put("/archives", async (c: Context) => {
   const client = getClient();
   const result = await client.send(
     new UpdateArchiveCommand({
-      ArchiveName: sanitizeName(body.archiveName || "", 256),
+      ArchiveName: sanitizeName(body.archiveName, 256),
       Description: body.description != null ? sanitizeText(body.description || "", 1024) : undefined,
       EventPattern: body.eventPattern,
       RetentionDays: body.retentionDays,
@@ -275,8 +275,8 @@ router.post("/replays", async (c: Context) => {
   const client = getClient();
   const result = await client.send(
     new StartReplayCommand({
-      ReplayName: sanitizeName(body.replayName || "", 256),
-      EventSourceArn: sanitizeName(body.eventSourceArn || "", 2048),
+      ReplayName: sanitizeName(body.replayName, 256),
+      EventSourceArn: sanitizeName(body.eventSourceArn, 2048),
       Description: body.description != null ? sanitizeText(body.description || "", 1024) : undefined,
       EventStartTime: new Date(body.eventStartTime),
       EventEndTime: body.eventEndTime ? new Date(body.eventEndTime) : undefined,
