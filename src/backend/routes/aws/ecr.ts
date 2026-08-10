@@ -187,8 +187,7 @@ router.put("/repositories/:name/lifecycle", async (c: Context) => {
 // ── Scanning Configuration ────────────────────────────────
 
 router.get("/repositories/:name/scanning-configuration", async (c: Context) => {
-  const name = c.req.param("name");
-  if (!name) return c.json({ error: "repository name is required" }, 400);
+  const name = c.req.param("name")!;
   const client = getClient();
   const result = await client.send(
     new BatchGetRepositoryScanningConfigurationCommand({ repositoryNames: [name] })

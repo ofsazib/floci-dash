@@ -98,6 +98,14 @@ describe("ECR Routes", () => {
       expect(body.repositories).toEqual([]);
     });
 
+    it("GET /repositories — sparse response defaults to empty array", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/repositories");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.repositories).toEqual([]);
+    });
+
     it("POST /repositories — creates a repo (201)", async () => {
       mockSend.mockResolvedValueOnce({
         repository: {
@@ -269,6 +277,19 @@ describe("ECR Routes", () => {
       const body = await res.json();
       expect(body.error).toContain("imageIds");
     });
+
+    it("DELETE /repositories/:name/images — sparse response defaults to empty arrays", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await router.request("/repositories/my-repo/images", {
+        method: "DELETE",
+        body: JSON.stringify({ imageIds: [{ imageDigest: "sha256:abc123" }] }),
+        headers: { "content-type": "application/json" },
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.imageIds).toEqual([]);
+      expect(body.failures).toEqual([]);
+    });
   });
 
   describe("Repository Policy", () => {
@@ -281,6 +302,15 @@ describe("ECR Routes", () => {
       const body = await res.json();
       expect(body.repositoryName).toBe("my-repo");
       expect(body.policyText).toBe('{"Statement":[{"Effect":"Allow"}]}');
+    });
+
+    it("GET /repositories/:name/policy — sparse response defaults policyText to null", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/repositories/my-repo/policy");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.repositoryName).toBe("my-repo");
+      expect(body.policyText).toBeNull();
     });
 
     it("GET /repositories/:name/policy — catches RepositoryPolicyNotFoundException", async () => {
@@ -341,6 +371,15 @@ describe("ECR Routes", () => {
       const body = await res.json();
       expect(body.repositoryName).toBe("my-repo");
       expect(body.lifecyclePolicyText).toBe('{"rules":[{"rulePriority":1}]}');
+    });
+
+    it("GET /repositories/:name/lifecycle — sparse response defaults lifecyclePolicyText to null", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/repositories/my-repo/lifecycle");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.repositoryName).toBe("my-repo");
+      expect(body.lifecyclePolicyText).toBeNull();
     });
 
     it("GET /repositories/:name/lifecycle — catches LifecyclePolicyNotFoundException", async () => {
@@ -452,6 +491,16 @@ describe("ECR Routes", () => {
       expect(body.failure).toBeNull();
     });
 
+    it("GET /repositories/:name/scanning-configuration — sparse response defaults to nulls", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/repositories/my-repo/scanning-configuration");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.repositoryName).toBe("my-repo");
+      expect(body.scanningConfiguration).toBeNull();
+      expect(body.failure).toBeNull();
+    });
+
     it("GET /repositories/:name/scanning-configuration — surfaces failures", async () => {
       mockSend.mockResolvedValueOnce({
         scanningConfigurations: [],
@@ -507,11 +556,29 @@ describe("ECR Routes", () => {
       expect(mockSend.mock.calls[0][0].tags).toEqual([]);
     });
 
+    it("POST /repositories/:name/tags — handles missing tags field", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/repositories/my-repo/tags", {});
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].tags).toEqual([]);
+    });
+
     it("DELETE /repositories/:name/tags — handles empty tagKeys", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await router.request("/repositories/my-repo/tags", {
         method: "DELETE",
         body: JSON.stringify({ tagKeys: [] }),
+        headers: { "content-type": "application/json" },
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].tagKeys).toEqual([]);
+    });
+
+    it("DELETE /repositories/:name/tags — handles missing tagKeys field", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await router.request("/repositories/my-repo/tags", {
+        method: "DELETE",
+        body: JSON.stringify({}),
         headers: { "content-type": "application/json" },
       });
       expect(res.status).toBe(200);
