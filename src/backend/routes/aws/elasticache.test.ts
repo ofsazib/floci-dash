@@ -66,6 +66,14 @@ describe("ElastiCache Routes", () => {
       expect(body.total).toBe(0);
     });
 
+    it("GET /replication-groups — sparse response defaults to empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/replication-groups");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.replicationGroups).toEqual([]);
+    });
+
     it("POST /replication-groups — creates with required fields", async () => {
       mockSend.mockResolvedValueOnce({
         ReplicationGroup: { ReplicationGroupId: "new-rg", Status: "creating" },
@@ -121,6 +129,14 @@ describe("ElastiCache Routes", () => {
       expect(body.total).toBe(0);
     });
 
+    it("GET /cache-clusters — sparse response defaults to empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/cache-clusters");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.cacheClusters).toEqual([]);
+    });
+
     it("POST /cache-clusters — creates with required fields", async () => {
       mockSend.mockResolvedValueOnce({
         CacheCluster: { CacheClusterId: "new-cache", Engine: "memcached", CacheClusterStatus: "creating" },
@@ -167,6 +183,14 @@ describe("ElastiCache Routes", () => {
       const body = await res.json();
       expect(body.total).toBe(1);
       expect(body.users[0].UserId).toBe("user-1");
+    });
+
+    it("GET /users — sparse response defaults to empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/users");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.users).toEqual([]);
     });
 
     it("POST /users — creates with required fields", async () => {
