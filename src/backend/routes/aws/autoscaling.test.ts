@@ -109,6 +109,14 @@ describe("Auto Scaling Routes", () => {
       expect(body.groups).toEqual([]);
     });
 
+    it("GET /groups — sparse response defaults to empty array", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/groups");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.groups).toEqual([]);
+    });
+
     it("POST /groups — creates group (201)", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await post("/groups", {
@@ -218,6 +226,14 @@ describe("Auto Scaling Routes", () => {
       const body = await res.json();
       expect(body.total).toBe(0);
     });
+
+    it("GET /launch-configurations — sparse response defaults to empty array", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/launch-configurations");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.launchConfigurations).toEqual([]);
+    });
   });
 
   describe("Scaling Policies", () => {
@@ -241,6 +257,14 @@ describe("Auto Scaling Routes", () => {
       expect(body.total).toBe(0);
     });
 
+    it("GET /groups/:name/policies — sparse response defaults to empty array", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/groups/asg-1/policies");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.policies).toEqual([]);
+    });
+
     it("POST /groups/:name/policies — creates policy (201)", async () => {
       mockSend.mockResolvedValueOnce({ PolicyARN: "arn:aws:autoscaling:policy/scale-up" });
       const res = await post("/groups/asg-1/policies", { policyName: "scale-up", policyType: "SimpleScaling", adjustmentType: "ChangeInCapacity", scalingAdjustment: 1 });
@@ -249,6 +273,13 @@ describe("Auto Scaling Routes", () => {
       expect(body.created).toBe(true);
       expect(body.policyARN).toBe("arn:aws:autoscaling:policy/scale-up");
       expect(mockSend.mock.calls[0][0].__cmdName).toBe("PutScalingPolicyCommand");
+    });
+
+    it("POST /groups/:name/policies — defaults policyType to SimpleScaling", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/groups/asg-1/policies", { policyName: "scale-default", adjustmentType: "ChangeInCapacity", scalingAdjustment: 1 });
+      expect(res.status).toBe(201);
+      expect(mockSend.mock.calls[0][0].PolicyType).toBe("SimpleScaling");
     });
 
     it("POST /groups/:name/policies — 400 when policyName missing", async () => {
@@ -291,6 +322,14 @@ describe("Auto Scaling Routes", () => {
       const res = await get("/groups/asg-1/activities");
       const body = await res.json();
       expect(body.total).toBe(0);
+    });
+
+    it("GET /groups/:name/activities — sparse response defaults to empty array", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/groups/asg-1/activities");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.activities).toEqual([]);
     });
   });
 
@@ -430,6 +469,11 @@ describe("Auto Scaling Routes", () => {
       expect(body.deleted).toBe(true);
       expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteTagsCommand");
     });
+
+    it("POST /groups/:name/tags/delete — 400 when tagKeys missing", async () => {
+      const res = await post("/groups/asg-1/tags/delete", {});
+      expect(res.status).toBe(400);
+    });
   });
 
   describe("LB Target Groups", () => {
@@ -438,6 +482,14 @@ describe("Auto Scaling Routes", () => {
       const res = await get("/groups/asg-1/lb-target-groups");
       const body = await res.json();
       expect(body.targetGroups).toHaveLength(1);
+    });
+
+    it("GET /groups/:name/lb-target-groups — sparse response defaults to empty array", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/groups/asg-1/lb-target-groups");
+      const body = await res.json();
+      expect(body.targetGroups).toEqual([]);
+      expect(body.total).toBe(0);
     });
 
     it("POST /groups/:name/lb-target-groups — attaches", async () => {
@@ -472,6 +524,14 @@ describe("Auto Scaling Routes", () => {
       const res = await get("/groups/asg-1/load-balancers");
       const body = await res.json();
       expect(body.loadBalancers).toHaveLength(1);
+    });
+
+    it("GET /groups/:name/load-balancers — sparse response defaults to empty array", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/groups/asg-1/load-balancers");
+      const body = await res.json();
+      expect(body.loadBalancers).toEqual([]);
+      expect(body.total).toBe(0);
     });
 
     it("POST /groups/:name/load-balancers — attaches", async () => {
@@ -596,6 +656,14 @@ describe("Auto Scaling Routes", () => {
       expect(body.metricCollectionTypes).toHaveLength(1);
       expect(body.metricCollectionTypes[0].metric).toBe("GroupMinSize");
       expect(body.metricCollectionTypes[0].granularities).toContain("1Minute");
+    });
+
+    it("GET /metric-collection-types — metric without granularities defaults to []", async () => {
+      mockSend.mockResolvedValueOnce({ Metrics: [{ Metric: "GroupDesiredCapacity" }] });
+      const res = await get("/metric-collection-types");
+      const body = await res.json();
+      expect(body.metricCollectionTypes[0].metric).toBe("GroupDesiredCapacity");
+      expect(body.metricCollectionTypes[0].granularities).toEqual([]);
     });
 
     it("GET /metric-collection-types — returns empty", async () => {

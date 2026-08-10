@@ -199,7 +199,7 @@ router.post("/groups/:name/policies", async (c: Context) => {
 
 router.delete("/groups/:name/policies/:policyName", async (c: Context) => {
   const name = c.req.param("name");
-  const policyName = decodeURIComponent(c.req.param("policyName") || "");
+  const policyName = decodeURIComponent(c.req.param("policyName")!);
   const client = getClient();
   await client.send(
     new DeletePolicyCommand({
@@ -265,7 +265,7 @@ router.post("/groups/:name/lifecycle-hooks", async (c: Context) => {
 
 router.delete("/groups/:name/lifecycle-hooks/:hookName", async (c: Context) => {
   const name = c.req.param("name");
-  const hookName = decodeURIComponent(c.req.param("hookName") || "");
+  const hookName = decodeURIComponent(c.req.param("hookName")!);
   const client = getClient();
   await client.send(
     new DeleteLifecycleHookCommand({
