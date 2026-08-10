@@ -66,7 +66,7 @@ export function useECSTaskDefinition(taskDefinition: string | null) {
     queryKey: ["aws", "ecs", "task-definition", taskDefinition],
     queryFn: () =>
       api<{ taskDefinition: any; tags: any[] }>(
-        `/aws/ecs/task-definitions/${encodeURIComponent(taskDefinition || "")}`
+        `/aws/ecs/task-definitions/${encodeURIComponent(taskDefinition!)}`
       ),
     enabled: !!taskDefinition,
   });

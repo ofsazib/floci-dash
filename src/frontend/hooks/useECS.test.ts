@@ -485,6 +485,16 @@ describe("useDeleteECSTaskSet", () => {
       expect.objectContaining({ method: "DELETE" })
     );
   });
+
+  it("calls api with DELETE without force query param", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useDeleteECSTaskSet(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ cluster: "c1", service: "svc1", taskSet: "ts-1" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/ecs/task-sets?cluster=c1&service=svc1&taskSet=ts-1",
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
 });
 
 // ── Service Deployments ──────────────────────────────────
@@ -498,7 +508,16 @@ describe("useECSServiceDeployments", () => {
   it("calls api with service and cluster", async () => {
     mockApi.mockResolvedValueOnce({ serviceDeployments: [], total: 0 });
     const { result } = renderHook(() => useECSServiceDeployments("svc1", "c1"), { wrapper: createWrapper() });
+
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith("/aws/ecs/service-deployments?service=svc1&cluster=c1");
+  });
+
+  it("calls api with service only when cluster omitted", async () => {
+    mockApi.mockResolvedValueOnce({ serviceDeployments: [], total: 0 });
+    const { result } = renderHook(() => useECSServiceDeployments("svc1", null), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ecs/service-deployments?service=svc1");
   });
 });
