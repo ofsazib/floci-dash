@@ -205,6 +205,16 @@ describe("MemoryDB — Tags", () => {
     expect(mockSend.mock.calls[0][0].Tags).toEqual([{ Key: "env", Value: "prod" }]);
   });
 
+  it("POST /tags/:arn — sparse response defaults to empty tags", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/tags/some-arn", {
+      tags: [{ Key: "env", Value: "prod" }],
+    });
+    expect(res.status).toBe(201);
+    const json = await res.json();
+    expect(json.tags).toEqual([]);
+  });
+
   it("DELETE /tags/:arn — 400 when tagKeys missing", async () => {
     const res = await del("/tags/some-arn", {});
     expect(res.status).toBe(400);
@@ -228,5 +238,13 @@ describe("MemoryDB — Tags", () => {
     expect(mockSend.mock.calls[0][0].__cmdName).toBe("UntagResourceCommand");
     expect(mockSend.mock.calls[0][0].ResourceArn).toBe("some-arn");
     expect(mockSend.mock.calls[0][0].TagKeys).toEqual(["env"]);
+  });
+
+  it("DELETE /tags/:arn — sparse response defaults to empty tags", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await del("/tags/some-arn", { tagKeys: ["env"] });
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.tags).toEqual([]);
   });
 });

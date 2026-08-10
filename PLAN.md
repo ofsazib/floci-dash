@@ -1745,6 +1745,7 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 | 25.80 | sns.ts — remove 2 dead || "" fallbacks (Endpoint line 136 + Message line 181 — both fields are required by their routes' guards so the fallback can never fire) + add 6 tests: sparse {} for GET /topics (Topics || []), GET /topics/attributes (Attributes || {}) + 400 without topicArn (line 71 branch 0 — never taken), GET /topics/tags (Tags || []) + 400 without topicArn (line 94 branch 0 — never taken), GET /subscriptions (Subscriptions || []) (88.4%->100% branch, 98.7%->100% stmts) | Done | 2026-08-10 |
 | 25.81 | eks.ts — add 2 sparse {} tests: GET /clusters (result.clusters || [] line 24) + GET /clusters/:name/node-groups (result.nodegroups || [] line 79) — existing empty tests pass truthy [] literals so the fallbacks never fired (88.88%->100% branch) | Done | 2026-08-10 |
 | 25.82 | pipes.ts — add 1 sparse {} test: GET /pipes (result.Pipes || [] line 30) — existing empty test passes truthy [] literal (90%->100% branch) | Done | 2026-08-10 |
+| 25.83 | memorydb.ts — add 2 sparse {} response tests: POST /tags/:arn (TagList || [] line 87) + DELETE /tags/:arn (TagList || [] line 95) — existing tests mock truthy TagList values (91.66%->100% branch) | Done | 2026-08-10 |
 | 25.34 | Verify: ec2-flow-logs.ts 75.75%→**100% branch**, 17 route tests pass, full suite 7623/7623 (269 files), typecheck clean | Done | 2026-08-06 |
 
 
