@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -91,6 +91,20 @@ vi.mock("../../hooks/useTransfer", () => ({
 
 import { TransferDashboard } from "./TransferDashboard";
 
+/**
+ * Cloudscape Modal handles Escape via a React onKeyDown on the dialog element
+ * (checking `event.keyCode === 27`). user-event's `keyboard()` targets the
+ * active element (body), which never reaches the dialog in happy-dom, so we
+ * dispatch the keydown on the dialog directly.
+ */
+function dismissModalWithEscape() {
+  // Fire on every dialog: DeleteButton's ConfirmDialog keeps a hidden
+  // `.awsui_dialog` in the DOM when closed, which can precede the open modal.
+  document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+    fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27 });
+  });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   createServerState.isPending = false;
@@ -110,6 +124,19 @@ beforeEach(() => {
 
   mockServers.mockReturnValue({ data: { servers: [], total: 0 }, isLoading: false });
   mockUsers.mockReturnValue({ data: { users: [], total: 0 }, isLoading: false });
+
+  // Wire create mutations to invoke `opts.onSuccess` so the onSuccess branches
+  // in the dashboard (modal close + field reset) actually fire.
+  mockCreateServer.mockReset();
+  mockCreateServer.mockImplementation((_payload: any, opts?: any) => {
+    opts?.onSuccess?.();
+    return Promise.resolve({});
+  });
+  mockCreateUser.mockReset();
+  mockCreateUser.mockImplementation((_payload: any, opts?: any) => {
+    opts?.onSuccess?.();
+    return Promise.resolve({});
+  });
 });
 
 describe("TransferDashboard — servers", () => {
@@ -280,6 +307,121 @@ describe("TransferDashboard — servers", () => {
       expect(screen.getByText("Server creation failed")).toBeTruthy();
     });
   });
+
+  it("shows generic create server error when message is null", async () => {
+    createServerState.isError = true;
+    createServerState.error = null;
+    const user = userEvent.setup();
+    render(<TransferDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => {
+      expect(screen.getByText("Failed to create server")).toBeTruthy();
+    });
+  });
+
+  it("starts an offline server", async () => {
+    mockServers.mockReturnValue({
+      data: { servers: [{ ServerId: "s-offline", Domain: "S3", State: "OFFLINE", Protocols: ["SFTP"], IdentityProviderType: "SERVICE_MANAGED" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<TransferDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("s-offline")).toBeTruthy());
+
+    await user.click(screen.getByRole("button", { name: /Start/i }));
+    await waitFor(() => expect(mockStartServer).toHaveBeenCalledWith("s-offline"));
+  });
+
+  it("stops an online server", async () => {
+    mockServers.mockReturnValue({
+      data: { servers: [{ ServerId: "s-online", Domain: "S3", State: "ONLINE", Protocols: ["SFTP"], IdentityProviderType: "SERVICE_MANAGED" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<TransferDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("s-online")).toBeTruthy());
+
+    await user.click(screen.getByRole("button", { name: /Stop/i }));
+    await waitFor(() => expect(mockStopServer).toHaveBeenCalledWith("s-online"));
+  });
+
+  it("toggles server selection off when the selected server is clicked again", async () => {
+    mockServers.mockReturnValue({
+      data: { servers: [{ ServerId: "s-001", Domain: "S3", State: "ONLINE", Protocols: ["SFTP"], IdentityProviderType: "SERVICE_MANAGED" }], total: 1 },
+      isLoading: false,
+    });
+    mockUsers.mockReturnValue({ data: { users: [], total: 0 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<TransferDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("s-001")).toBeTruthy());
+
+    await user.click(screen.getByText("s-001"));
+    await waitFor(() => expect(screen.getByText("Users for s-001")).toBeTruthy());
+
+    await user.click(screen.getByText("s-001"));
+    await waitFor(() => expect(screen.queryByText("Users for s-001")).toBeNull());
+  });
+
+  it("handles users data without a users key", async () => {
+    mockServers.mockReturnValue({
+      data: { servers: [{ ServerId: "s-001", Domain: "S3", State: "ONLINE", Protocols: ["SFTP"], IdentityProviderType: "SERVICE_MANAGED" }], total: 1 },
+      isLoading: false,
+    });
+    mockUsers.mockReturnValue({ data: {}, isLoading: false });
+    const user = userEvent.setup();
+    render(<TransferDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("s-001"));
+    await waitFor(() => {
+      expect(screen.getByText(/No users for this server/i)).toBeTruthy();
+    });
+  });
+
+  it("creates a server with the default S3 domain", async () => {
+    const user = userEvent.setup();
+    render(<TransferDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create transfer server")).toBeTruthy());
+
+    await clickButton(user, /^Create$/, { last: true });
+    await waitFor(() => {
+      expect(mockCreateServer).toHaveBeenCalledWith(
+        { domain: "S3" },
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      );
+    });
+    // onSuccess closes the modal
+    await waitFor(() => expect(screen.queryByText("Create transfer server")).toBeNull());
+  });
+
+  it("creates a server with an EFS domain", async () => {
+    const user = userEvent.setup();
+    render(<TransferDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create transfer server")).toBeTruthy());
+
+    // Change the domain Select from S3 to EFS
+    await user.click(screen.getByRole("button", { name: /S3/i }));
+    await user.click(screen.getByRole("option", { name: /EFS/i }));
+
+    await clickButton(user, /^Create$/, { last: true });
+    await waitFor(() => {
+      expect(mockCreateServer).toHaveBeenCalledWith(
+        { domain: "EFS" },
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      );
+    });
+  });
+
+  it("dismisses create server modal with Escape key", async () => {
+    const user = userEvent.setup();
+    render(<TransferDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create transfer server")).toBeTruthy());
+
+    dismissModalWithEscape();
+    await waitFor(() => expect(screen.queryByText("Create transfer server")).toBeNull());
+    expect(mockCreateServer).not.toHaveBeenCalled();
+  });
 });
 
 describe("TransferDashboard — users", () => {
@@ -354,6 +496,138 @@ describe("TransferDashboard — users", () => {
       expect(mockDeleteUser).toHaveBeenCalledWith(
         expect.objectContaining({ serverId: "s-001", userName: "del-user" }),
       );
+    });
+  });
+
+  it("shows delete user loading state", async () => {
+    deleteUserState.isPending = true;
+    deleteUserState.variables = { userName: "del-user" };
+    mockServers.mockReturnValue({
+      data: { servers: [{ ServerId: "s-001", Domain: "S3", State: "ONLINE", Protocols: ["SFTP"], IdentityProviderType: "SERVICE_MANAGED" }], total: 1 },
+      isLoading: false,
+    });
+    mockUsers.mockReturnValue({
+      data: { users: [{ UserName: "del-user", Role: "arn:r1", HomeDirectory: "/home" }], total: 1 },
+    });
+    const user = userEvent.setup();
+    render(<TransferDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("s-001"));
+    await waitFor(() => expect(screen.getByText("del-user")).toBeTruthy());
+  });
+
+  it("creates a user with trimmed fields and resets the form", async () => {
+    mockServers.mockReturnValue({
+      data: { servers: [{ ServerId: "s-001", Domain: "S3", State: "ONLINE", Protocols: ["SFTP"], IdentityProviderType: "SERVICE_MANAGED" }], total: 1 },
+      isLoading: false,
+    });
+    mockUsers.mockReturnValue({ data: { users: [], total: 0 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<TransferDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("s-001"));
+    await waitFor(() => expect(screen.getByText("Users for s-001")).toBeTruthy());
+
+    await clickButton(user, /Create user/i);
+    await waitFor(() => expect(screen.getByText("Create transfer user")).toBeTruthy());
+
+    await user.type(screen.getByPlaceholderText("my-user"), "  my-user  ");
+    // Role still empty -> disabled
+    let createBtns = screen.getAllByRole("button", { name: /^Create$/ });
+    expect(createBtns[createBtns.length - 1]).toBeDisabled();
+
+    await user.type(screen.getByPlaceholderText("arn:aws:iam::..."), "arn:aws:iam::123:role/transfer-role");
+    createBtns = screen.getAllByRole("button", { name: /^Create$/ });
+    expect(createBtns[createBtns.length - 1]).toBeEnabled();
+
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => {
+      expect(mockCreateUser).toHaveBeenCalledWith(
+        {
+          serverId: "s-001",
+          userName: "my-user",
+          role: "arn:aws:iam::123:role/transfer-role",
+        },
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      );
+    });
+    // onSuccess closes the modal
+    await waitFor(() => expect(screen.queryByText("Create transfer user")).toBeNull());
+  });
+
+  it("cancels create user modal", async () => {
+    mockServers.mockReturnValue({
+      data: { servers: [{ ServerId: "s-001", Domain: "S3", State: "ONLINE", Protocols: ["SFTP"], IdentityProviderType: "SERVICE_MANAGED" }], total: 1 },
+      isLoading: false,
+    });
+    mockUsers.mockReturnValue({ data: { users: [], total: 0 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<TransferDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("s-001"));
+    await waitFor(() => expect(screen.getByText("Users for s-001")).toBeTruthy());
+
+    await clickButton(user, /Create user/i);
+    await waitFor(() => expect(screen.getByText("Create transfer user")).toBeTruthy());
+
+    // Last Cancel: DeleteButton's hidden ConfirmDialog also renders a Cancel
+    // button in the DOM (earlier in the tree) when a server row exists.
+    await clickButton(user, /Cancel/i, { last: true });
+    await waitFor(() => expect(screen.queryByText("Create transfer user")).toBeNull());
+    expect(mockCreateUser).not.toHaveBeenCalled();
+  });
+
+  it("dismisses create user modal with Escape key", async () => {
+    mockServers.mockReturnValue({
+      data: { servers: [{ ServerId: "s-001", Domain: "S3", State: "ONLINE", Protocols: ["SFTP"], IdentityProviderType: "SERVICE_MANAGED" }], total: 1 },
+      isLoading: false,
+    });
+    mockUsers.mockReturnValue({ data: { users: [], total: 0 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<TransferDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("s-001"));
+    await waitFor(() => expect(screen.getByText("Users for s-001")).toBeTruthy());
+
+    await clickButton(user, /Create user/i);
+    await waitFor(() => expect(screen.getByText("Create transfer user")).toBeTruthy());
+
+    dismissModalWithEscape();
+    await waitFor(() => expect(screen.queryByText("Create transfer user")).toBeNull());
+    expect(mockCreateUser).not.toHaveBeenCalled();
+  });
+
+  it("shows create user error alert with message", async () => {
+    createUserState.isError = true;
+    createUserState.error = new Error("User creation failed");
+    mockServers.mockReturnValue({
+      data: { servers: [{ ServerId: "s-001", Domain: "S3", State: "ONLINE", Protocols: ["SFTP"], IdentityProviderType: "SERVICE_MANAGED" }], total: 1 },
+      isLoading: false,
+    });
+    mockUsers.mockReturnValue({ data: { users: [], total: 0 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<TransferDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("s-001"));
+    await waitFor(() => expect(screen.getByText("Users for s-001")).toBeTruthy());
+
+    await clickButton(user, /Create user/i);
+    await waitFor(() => {
+      expect(screen.getByText("User creation failed")).toBeTruthy();
+    });
+  });
+
+  it("shows generic create user error when message is null", async () => {
+    createUserState.isError = true;
+    createUserState.error = null;
+    mockServers.mockReturnValue({
+      data: { servers: [{ ServerId: "s-001", Domain: "S3", State: "ONLINE", Protocols: ["SFTP"], IdentityProviderType: "SERVICE_MANAGED" }], total: 1 },
+      isLoading: false,
+    });
+    mockUsers.mockReturnValue({ data: { users: [], total: 0 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<TransferDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("s-001"));
+    await waitFor(() => expect(screen.getByText("Users for s-001")).toBeTruthy());
+
+    await clickButton(user, /Create user/i);
+    await waitFor(() => {
+      expect(screen.getByText("Failed to create user")).toBeTruthy();
     });
   });
 });

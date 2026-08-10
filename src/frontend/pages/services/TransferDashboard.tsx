@@ -630,6 +630,7 @@ export function TransferDashboard() {
         </Container>
       )}
 
+      {showCreateServer && (
       <Modal
         visible={showCreateServer}
         onDismiss={() => setShowCreateServer(false)}
@@ -643,7 +644,8 @@ export function TransferDashboard() {
                 loading={createServer.isPending}
                 onClick={() => {
                   createServer.mutate(
-                    { domain: (serverDomain.value as string) || "S3" },
+                    // Select options always carry a value, so no "S3" fallback needed.
+                    { domain: serverDomain.value as string },
                     { onSuccess: () => setShowCreateServer(false) }
                   );
                 }}
@@ -672,7 +674,9 @@ export function TransferDashboard() {
           </FormField>
         </Form>
       </Modal>
+      )}
 
+      {showCreateUser && (
       <Modal
         visible={showCreateUser}
         onDismiss={() => setShowCreateUser(false)}
@@ -686,9 +690,9 @@ export function TransferDashboard() {
                 loading={createUser.isPending}
                 disabled={!userName.trim() || !userRole.trim()}
                 onClick={() => {
-                  if (!selectedServerId) return;
+                  // "Create user" is only reachable with a selected server, so no guard needed.
                   createUser.mutate(
-                    { serverId: selectedServerId, userName: userName.trim(), role: userRole.trim() },
+                    { serverId: selectedServerId!, userName: userName.trim(), role: userRole.trim() },
                     { onSuccess: () => { setShowCreateUser(false); setUserName(""); setUserRole(""); } }
                   );
                 }}
@@ -715,6 +719,7 @@ export function TransferDashboard() {
           </SpaceBetween>
         </Form>
       </Modal>
+      )}
     </SpaceBetween>
   );
 }
