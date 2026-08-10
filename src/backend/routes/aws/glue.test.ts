@@ -361,6 +361,13 @@ describe("Glue Routes", () => {
     expect(res.status).toBe(400);
   });
 
+  it("POST /schema-version-validity — defaults dataFormat to AVRO", async () => {
+    mockSend.mockResolvedValueOnce({ Valid: true, Error: undefined });
+    const res = await post("/schema-version-validity", { definition: '{"type":"record"}' });
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].DataFormat).toBe("AVRO");
+  });
+
   // QuerySchemaVersionMetadata
   it("GET /schema-versions/:versionId/metadata — returns metadata map", async () => {
     mockSend.mockResolvedValueOnce({ MetadataInfoMap: { owner: { MetadataValue: "team" } }, SchemaVersionId: "v-id-1" });
@@ -460,6 +467,12 @@ describe("Glue Routes", () => {
     expect(res.status).toBe(200);
   });
 
+  it("GET /databases/:dbName/functions/:funcName — 404 when function not found", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/databases/mydb/functions/missing");
+    expect(res.status).toBe(404);
+  });
+
   it("DELETE /databases/:dbName/functions/:funcName — deletes UDF", async () => {
     mockSend.mockResolvedValueOnce({});
     const res = await del("/databases/mydb/functions/my_udf");
@@ -490,6 +503,15 @@ describe("Glue Routes", () => {
     const body = await res.json();
     expect(body.total).toBe(1);
     expect(body.columnStats[0].columnName).toBe("col1");
+  });
+
+  it("GET /databases/:dbName/tables/:tableName/column-stats — sparse response defaults to empty array", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/databases/mydb/tables/tbl1/column-stats");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.total).toBe(0);
+    expect(body.columnStats).toEqual([]);
   });
 
   it("GET /databases/:dbName/tables/:tableName/column-stats — error returns empty", async () => {
@@ -536,6 +558,23 @@ describe("Glue Routes", () => {
     expect(body.total).toBe(1);
   });
 
+  it("GET with values — sparse response defaults to empty array", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/databases/mydb/tables/tbl1/partitions/column-stats?values=2024");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.total).toBe(0);
+    expect(body.columnStats).toEqual([]);
+  });
+
+  it("GET with values — error returns empty", async () => {
+    mockSend.mockRejectedValueOnce(new Error("not found"));
+    const res = await get("/databases/mydb/tables/tbl1/partitions/column-stats?values=2024");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.total).toBe(0);
+  });
+
   it("GET with values — 400 if values missing", async () => {
     const res = await get("/databases/mydb/tables/tbl1/partitions/column-stats");
     expect(res.status).toBe(400);
@@ -552,12 +591,36 @@ describe("Glue Routes", () => {
     expect(body.updated).toBe(true);
   });
 
+  it("POST partitions/column-stats — 400 without partitionValues", async () => {
+    const res = await post("/databases/mydb/tables/tbl1/partitions/column-stats", {
+      columnStatisticsList: [{ ColumnName: "col1" }],
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("POST partitions/column-stats — 400 without columnStatisticsList", async () => {
+    const res = await post("/databases/mydb/tables/tbl1/partitions/column-stats", {
+      partitionValues: ["2024"],
+    });
+    expect(res.status).toBe(400);
+  });
+
   it("DELETE partitions/column-stats — deletes partition stat", async () => {
     mockSend.mockResolvedValueOnce({});
     const res = await router.request("/databases/mydb/tables/tbl1/partitions/column-stats?column=col1&values=2024", { method: "DELETE" });
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.deleted).toBe(true);
+  });
+
+  it("DELETE partitions/column-stats — 400 without column", async () => {
+    const res = await router.request("/databases/mydb/tables/tbl1/partitions/column-stats?values=2024", { method: "DELETE" });
+    expect(res.status).toBe(400);
+  });
+
+  it("DELETE partitions/column-stats — 400 without values", async () => {
+    const res = await router.request("/databases/mydb/tables/tbl1/partitions/column-stats?column=col1", { method: "DELETE" });
+    expect(res.status).toBe(400);
   });
 
   // Partitions
@@ -580,6 +643,25 @@ describe("Glue Routes", () => {
     const res = await get("/databases/mydb/tables/tbl1/partitions?expression=year%3D2024");
     expect(res.status).toBe(200);
     expect(mockSend).toHaveBeenCalledWith(expect.objectContaining({ Expression: "year=2024" }));
+  });
+
+  it("GET /databases/:dbName/tables/:tableName/partitions — sparse response and partition without Values", async () => {
+    mockSend.mockResolvedValueOnce({ Partitions: [{ DatabaseName: "mydb", TableName: "tbl1" }] });
+    const res = await get("/databases/mydb/tables/tbl1/partitions");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.total).toBe(1);
+    expect(body.partitions[0].values).toEqual([]);
+    expect(body.partitions[0].location).toBeNull();
+    expect(body.partitions[0].parameters).toEqual({});
+  });
+
+  it("GET /databases/:dbName/tables/:tableName/partitions — sparse response defaults to empty array", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/databases/mydb/tables/tbl1/partitions");
+    const body = await res.json();
+    expect(body.total).toBe(0);
+    expect(body.partitions).toEqual([]);
   });
 
   it("GET partitions/get — returns a single partition", async () => {
@@ -617,6 +699,17 @@ describe("Glue Routes", () => {
     expect(res.status).toBe(400);
   });
 
+  it("POST partitions — sparse response defaults errors to empty array", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/databases/mydb/tables/tbl1/partitions", {
+      partitionInputList: [{ Values: ["2024"] }],
+    });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.created).toBe(true);
+    expect(body.errors).toEqual([]);
+  });
+
   it("POST partitions/batch-get — returns partitions", async () => {
     mockSend.mockResolvedValueOnce({ Partitions: [{ Values: ["2024"] }], UnprocessedKeys: [] });
     const res = await post("/databases/mydb/tables/tbl1/partitions/batch-get", {
@@ -625,6 +718,23 @@ describe("Glue Routes", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.total).toBe(1);
+  });
+
+  it("POST partitions/batch-get — 400 without partitionsToGet", async () => {
+    const res = await post("/databases/mydb/tables/tbl1/partitions/batch-get", {});
+    expect(res.status).toBe(400);
+  });
+
+  it("POST partitions/batch-get — sparse response defaults to empty arrays", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/databases/mydb/tables/tbl1/partitions/batch-get", {
+      partitionsToGet: [{ Values: ["2024"] }],
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.total).toBe(0);
+    expect(body.partitions).toEqual([]);
+    expect(body.unprocessedKeys).toEqual([]);
   });
 
   it("POST partitions/batch-update — batch updates partitions", async () => {
@@ -651,6 +761,17 @@ describe("Glue Routes", () => {
     expect(res.status).toBe(400);
   });
 
+  it("POST partitions/batch-update — sparse response defaults errors to empty array", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/databases/mydb/tables/tbl1/partitions/batch-update", {
+      entries: [{ PartitionValueList: ["2024"], PartitionInput: { Values: ["2024"] } }],
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.updated).toBe(true);
+    expect(body.errors).toEqual([]);
+  });
+
   it("PUT partitions — updates a partition", async () => {
     mockSend.mockResolvedValueOnce({});
     const res = await router.request("/databases/mydb/tables/tbl1/partitions", {
@@ -667,6 +788,15 @@ describe("Glue Routes", () => {
     const res = await router.request("/databases/mydb/tables/tbl1/partitions", {
       method: "PUT",
       body: JSON.stringify({ partitionInput: {} }),
+      headers: { "content-type": "application/json" },
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("PUT partitions — 400 without partitionInput", async () => {
+    const res = await router.request("/databases/mydb/tables/tbl1/partitions", {
+      method: "PUT",
+      body: JSON.stringify({ partitionValueList: ["2024"] }),
       headers: { "content-type": "application/json" },
     });
     expect(res.status).toBe(400);
