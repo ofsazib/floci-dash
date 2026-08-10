@@ -1746,7 +1746,7 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 | 25.81 | eks.ts — add 2 sparse {} tests: GET /clusters (result.clusters || [] line 24) + GET /clusters/:name/node-groups (result.nodegroups || [] line 79) — existing empty tests pass truthy [] literals so the fallbacks never fired (88.88%->100% branch) | Done | 2026-08-10 |
 | 25.82 | pipes.ts — add 1 sparse {} test: GET /pipes (result.Pipes || [] line 30) — existing empty test passes truthy [] literal (90%->100% branch) | Done | 2026-08-10 |
 | 25.83 | memorydb.ts — add 2 sparse {} response tests: POST /tags/:arn (TagList || [] line 87) + DELETE /tags/:arn (TagList || [] line 95) — existing tests mock truthy TagList values (91.66%->100% branch) | Done | 2026-08-10 |
-| 25.91 | useIAM.ts (frontend hook) — remove 2 dead `arn || ""` fallbacks in useIAMPolicy + usePolicyVersion queryFns (lines 111/121 — the `enabled: !!arn` / `enabled: !!arn && !!versionId` guards guarantee the queryFn never runs with a falsy arn, so the fallbacks could never fire; same guard-imposed dead-fallback pattern as sns.ts/s3-select.ts) (75%->100% branch — first frontend hook in the drive) | Done | 2026-08-10 |
+| 25.92 | useWafV2.ts (frontend hook) — add 27 tests covering the previously untested Web ACLs / IP Sets / Rule Groups / Tags hook groups (list+get-single with scope/id gates, create/update/delete mutations with body assertions, and 4 scope-omitted invalidation fallback tests firing `(variables as any).Scope || "REGIONAL"` in onSuccess) (50.98%->100% stmts, 24%->100% branch, 50%->100% funcs) | Done | 2026-08-10 |
 | 25.34 | Verify: ec2-flow-logs.ts 75.75%→**100% branch**, 17 route tests pass, full suite 7623/7623 (269 files), typecheck clean | Done | 2026-08-06 |
 
 

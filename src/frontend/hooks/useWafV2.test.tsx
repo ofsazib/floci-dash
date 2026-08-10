@@ -10,11 +10,27 @@ vi.mock("../lib/client", () => ({
 }));
 
 import {
+  useWebACLs,
+  useCreateWebACL,
+  useWebACL,
+  useDeleteWebACL,
+  useIPSets,
+  useIPSet,
+  useCreateIPSet,
+  useUpdateIPSet,
+  useDeleteIPSet,
   useRegexPatternSets,
   useRegexPatternSet,
   useCreateRegexPatternSet,
   useUpdateRegexPatternSet,
   useDeleteRegexPatternSet,
+  useRuleGroups,
+  useRuleGroup,
+  useCreateRuleGroup,
+  useDeleteRuleGroup,
+  useWafTags,
+  useTagWafResource,
+  useUntagWafResource,
   useLoggingConfigurations,
   useLoggingConfiguration,
   usePutLoggingConfiguration,
@@ -40,6 +56,203 @@ function createWrapper() {
 beforeEach(() => {
   vi.clearAllMocks();
   mockApi.mockReset();
+});
+
+// ─── Web ACLs ───────────────────────────────────────────
+
+describe("useWebACLs", () => {
+  it("calls api with default REGIONAL scope", async () => {
+    mockApi.mockResolvedValueOnce({ webAcls: [], total: 0 });
+    const { result } = renderHook(() => useWebACLs(), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/wafv2/web-acls?scope=REGIONAL");
+  });
+
+  it("calls api with provided scope", async () => {
+    mockApi.mockResolvedValueOnce({ webAcls: [], total: 0 });
+    const { result } = renderHook(() => useWebACLs("CLOUDFRONT"), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/wafv2/web-acls?scope=CLOUDFRONT");
+  });
+});
+
+describe("useCreateWebACL", () => {
+  it("calls api with POST and body", async () => {
+    mockApi.mockResolvedValueOnce({ created: true });
+    const { result } = renderHook(() => useCreateWebACL(), {
+      wrapper: createWrapper(),
+    });
+    await result.current.mutateAsync({ Name: "acl1", Scope: "REGIONAL" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/wafv2/web-acls",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ Name: "acl1", Scope: "REGIONAL" }),
+      })
+    );
+  });
+
+  it("invalidates with REGIONAL default when scope omitted", async () => {
+    mockApi.mockResolvedValueOnce({ created: true });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      React.createElement(QueryClientProvider, { client: qc }, children);
+    const { result } = renderHook(() => useCreateWebACL(), { wrapper });
+    await result.current.mutateAsync({ Name: "acl1" });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["aws", "wafv2", "web-acls", "REGIONAL"],
+    });
+  });
+});
+
+describe("useWebACL", () => {
+  it("does not call api when id or name is null", async () => {
+    const { result } = renderHook(() => useWebACL(null, null), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.fetchStatus).toBe("idle"));
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api with encoded id, name and scope", async () => {
+    mockApi.mockResolvedValueOnce({ webAcl: { Name: "acl 1", Id: "id-1" } });
+    const { result } = renderHook(() => useWebACL("id-1", "acl 1", "REGIONAL"), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/wafv2/web-acls/id-1?name=acl%201&scope=REGIONAL");
+  });
+});
+
+describe("useDeleteWebACL", () => {
+  it("calls api with POST to delete path and body", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useDeleteWebACL(), {
+      wrapper: createWrapper(),
+    });
+    const body = { Id: "id-1", Name: "acl1", Scope: "REGIONAL", LockToken: "lock-1" };
+    await result.current.mutateAsync(body);
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/wafv2/web-acls/delete",
+      expect.objectContaining({ method: "POST", body: JSON.stringify(body) })
+    );
+  });
+});
+
+// ─── IP Sets ────────────────────────────────────────────
+
+describe("useIPSets", () => {
+  it("calls api with default REGIONAL scope", async () => {
+    mockApi.mockResolvedValueOnce({ ipSets: [], total: 0 });
+    const { result } = renderHook(() => useIPSets(), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/wafv2/ip-sets?scope=REGIONAL");
+  });
+
+  it("calls api with provided scope", async () => {
+    mockApi.mockResolvedValueOnce({ ipSets: [], total: 0 });
+    const { result } = renderHook(() => useIPSets("CLOUDFRONT"), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/wafv2/ip-sets?scope=CLOUDFRONT");
+  });
+});
+
+describe("useIPSet", () => {
+  it("does not call api when id or name is null", async () => {
+    const { result } = renderHook(() => useIPSet(null, null), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.fetchStatus).toBe("idle"));
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api with encoded id, name and scope", async () => {
+    mockApi.mockResolvedValueOnce({ ipSet: { Name: "set 1", Id: "id-1" } });
+    const { result } = renderHook(() => useIPSet("id-1", "set 1", "REGIONAL"), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/wafv2/ip-sets/id-1?name=set%201&scope=REGIONAL");
+  });
+});
+
+describe("useCreateIPSet", () => {
+  it("calls api with POST and body", async () => {
+    mockApi.mockResolvedValueOnce({ created: true });
+    const { result } = renderHook(() => useCreateIPSet(), {
+      wrapper: createWrapper(),
+    });
+    await result.current.mutateAsync({ Name: "set1", Scope: "REGIONAL" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/wafv2/ip-sets",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ Name: "set1", Scope: "REGIONAL" }),
+      })
+    );
+  });
+
+  it("invalidates with REGIONAL default when scope omitted", async () => {
+    mockApi.mockResolvedValueOnce({ created: true });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      React.createElement(QueryClientProvider, { client: qc }, children);
+    const { result } = renderHook(() => useCreateIPSet(), { wrapper });
+    await result.current.mutateAsync({ Name: "set1" });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["aws", "wafv2", "ip-sets", "REGIONAL"],
+    });
+  });
+});
+
+describe("useUpdateIPSet", () => {
+  it("calls api with PUT, encoded id URL, and body", async () => {
+    mockApi.mockResolvedValueOnce({ updated: true });
+    const { result } = renderHook(() => useUpdateIPSet(), {
+      wrapper: createWrapper(),
+    });
+    const body = {
+      Id: "id-1",
+      Name: "set1",
+      Scope: "REGIONAL",
+      LockToken: "lock-1",
+      Addresses: ["192.168.0.0/24"],
+      Description: "desc",
+    };
+    await result.current.mutateAsync(body);
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/wafv2/ip-sets/id-1",
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify(body),
+      })
+    );
+  });
+});
+
+describe("useDeleteIPSet", () => {
+  it("calls api with POST to delete path and body", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useDeleteIPSet(), {
+      wrapper: createWrapper(),
+    });
+    const body = { Id: "id-1", Name: "set1", Scope: "REGIONAL", LockToken: "lock-1" };
+    await result.current.mutateAsync(body);
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/wafv2/ip-sets/delete",
+      expect.objectContaining({ method: "POST", body: JSON.stringify(body) })
+    );
+  });
 });
 
 // ─── Regex Pattern Sets ─────────────────────────────────
@@ -98,6 +311,19 @@ describe("useCreateRegexPatternSet", () => {
       })
     );
   });
+
+  it("invalidates with REGIONAL default when scope omitted", async () => {
+    mockApi.mockResolvedValueOnce({ created: true });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      React.createElement(QueryClientProvider, { client: qc }, children);
+    const { result } = renderHook(() => useCreateRegexPatternSet(), { wrapper });
+    await result.current.mutateAsync({ Name: "rx1" });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["aws", "wafv2", "regex-pattern-sets", "REGIONAL"],
+    });
+  });
 });
 
 describe("useUpdateRegexPatternSet", () => {
@@ -135,6 +361,145 @@ describe("useDeleteRegexPatternSet", () => {
     await result.current.mutateAsync(body);
     expect(mockApi).toHaveBeenCalledWith(
       "/aws/wafv2/regex-pattern-sets/delete",
+      expect.objectContaining({ method: "POST", body: JSON.stringify(body) })
+    );
+  });
+});
+
+// ─── Rule Groups ────────────────────────────────────────
+
+describe("useRuleGroups", () => {
+  it("calls api with default REGIONAL scope", async () => {
+    mockApi.mockResolvedValueOnce({ ruleGroups: [], total: 0 });
+    const { result } = renderHook(() => useRuleGroups(), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/wafv2/rule-groups?scope=REGIONAL");
+  });
+
+  it("calls api with provided scope", async () => {
+    mockApi.mockResolvedValueOnce({ ruleGroups: [], total: 0 });
+    const { result } = renderHook(() => useRuleGroups("CLOUDFRONT"), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/wafv2/rule-groups?scope=CLOUDFRONT");
+  });
+});
+
+describe("useRuleGroup", () => {
+  it("does not call api when id or name is null", async () => {
+    const { result } = renderHook(() => useRuleGroup(null, null), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.fetchStatus).toBe("idle"));
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api with encoded id, name and scope", async () => {
+    mockApi.mockResolvedValueOnce({ ruleGroup: { Name: "rg 1", Id: "id-1" } });
+    const { result } = renderHook(() => useRuleGroup("id-1", "rg 1", "REGIONAL"), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/wafv2/rule-groups/id-1?name=rg%201&scope=REGIONAL");
+  });
+});
+
+describe("useCreateRuleGroup", () => {
+  it("calls api with POST and body", async () => {
+    mockApi.mockResolvedValueOnce({ created: true });
+    const { result } = renderHook(() => useCreateRuleGroup(), {
+      wrapper: createWrapper(),
+    });
+    await result.current.mutateAsync({ Name: "rg1", Scope: "REGIONAL" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/wafv2/rule-groups",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ Name: "rg1", Scope: "REGIONAL" }),
+      })
+    );
+  });
+
+  it("invalidates with REGIONAL default when scope omitted", async () => {
+    mockApi.mockResolvedValueOnce({ created: true });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      React.createElement(QueryClientProvider, { client: qc }, children);
+    const { result } = renderHook(() => useCreateRuleGroup(), { wrapper });
+    await result.current.mutateAsync({ Name: "rg1" });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["aws", "wafv2", "rule-groups", "REGIONAL"],
+    });
+  });
+});
+
+describe("useDeleteRuleGroup", () => {
+  it("calls api with POST to delete path and body", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useDeleteRuleGroup(), {
+      wrapper: createWrapper(),
+    });
+    const body = { Id: "id-1", Name: "rg1", Scope: "REGIONAL", LockToken: "lock-1" };
+    await result.current.mutateAsync(body);
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/wafv2/rule-groups/delete",
+      expect.objectContaining({ method: "POST", body: JSON.stringify(body) })
+    );
+  });
+});
+
+// ─── Tags ───────────────────────────────────────────────
+
+describe("useWafTags", () => {
+  it("does not call api when resourceArn is null", async () => {
+    const { result } = renderHook(() => useWafTags(null), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.fetchStatus).toBe("idle"));
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api with encoded resourceArn query param", async () => {
+    mockApi.mockResolvedValueOnce({ tagList: [{ Key: "env", Value: "prod" }] });
+    const { result } = renderHook(() => useWafTags("arn:aws:wafv2:::webacl/x"), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/wafv2/tags?resourceArn=${encodeURIComponent("arn:aws:wafv2:::webacl/x")}`
+    );
+  });
+});
+
+describe("useTagWafResource", () => {
+  it("calls api with POST and body", async () => {
+    mockApi.mockResolvedValueOnce({ tagged: true });
+    const { result } = renderHook(() => useTagWafResource(), {
+      wrapper: createWrapper(),
+    });
+    const body = { resourceArn: "arn:1", tags: [{ Key: "env", Value: "prod" }] };
+    await result.current.mutateAsync(body);
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/wafv2/tags",
+      expect.objectContaining({ method: "POST", body: JSON.stringify(body) })
+    );
+  });
+});
+
+describe("useUntagWafResource", () => {
+  it("calls api with POST to untag path", async () => {
+    mockApi.mockResolvedValueOnce({ untagged: true });
+    const { result } = renderHook(() => useUntagWafResource(), {
+      wrapper: createWrapper(),
+    });
+    const body = { resourceArn: "arn:1", tagKeys: ["env"] };
+    await result.current.mutateAsync(body);
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/wafv2/tags/untag",
       expect.objectContaining({ method: "POST", body: JSON.stringify(body) })
     );
   });
