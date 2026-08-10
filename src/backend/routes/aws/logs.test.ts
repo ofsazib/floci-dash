@@ -104,6 +104,14 @@ describe("CloudWatch Logs Routes", () => {
       expect(body.total).toBe(0);
     });
 
+    it("GET /log-groups — sparse response defaults to empty array", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/log-groups");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.logGroups).toEqual([]);
+    });
+
     it("POST /log-groups — creates a log group", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await post("/log-groups", { logGroupName: "/aws/lambda/my-func" });
@@ -182,6 +190,14 @@ describe("CloudWatch Logs Routes", () => {
       expect(mockSend.mock.calls[0][0].logStreamNamePrefix).toBe("2025");
     });
 
+    it("GET /log-groups/:name/streams — sparse response defaults to empty array", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/log-groups/%2Faws%2Flambda%2Fmy-func/streams");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.logStreams).toEqual([]);
+    });
+
     it("POST /log-groups/:name/streams — creates a stream", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await post("/log-groups/%2Faws%2Flambda%2Fmy-func/streams", { logStreamName: "stream-1" });
@@ -217,6 +233,14 @@ describe("CloudWatch Logs Routes", () => {
       expect(body.events).toHaveLength(1);
       expect(body.events[0].message).toBe("Hello");
       expect(body.nextForwardToken).toBe("fwd");
+    });
+
+    it("GET /log-groups/:name/streams/:stream/events — sparse response defaults to empty array", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/log-groups/%2Faws%2Flambda%2Fmy-func/streams/stream-1/events");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.events).toEqual([]);
     });
 
     it("GET /log-groups/:name/streams/:stream/events — with query params", async () => {
@@ -271,6 +295,16 @@ describe("CloudWatch Logs Routes", () => {
       expect(body.events[0].message).toBe("ERROR");
     });
 
+    it("POST /log-groups/:name/filter-events — sparse response defaults to empty array", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/log-groups/%2Faws%2Flambda%2Fmy-func/filter-events", {});
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.events).toEqual([]);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.filterPattern).toBeUndefined();
+    });
+
     it("POST /log-groups/:name/filter-events — with all optional params", async () => {
       mockSend.mockResolvedValueOnce({
         events: [],
@@ -305,6 +339,14 @@ describe("CloudWatch Logs Routes", () => {
       const body = await res.json();
       expect(body.total).toBe(1);
       expect(body.subscriptionFilters[0].filterName).toBe("my-filter");
+    });
+
+    it("GET /log-groups/:name/subscription-filters — sparse response defaults to empty array", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/log-groups/%2Faws%2Flambda%2Fmy-func/subscription-filters");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.subscriptionFilters).toEqual([]);
     });
 
     it("POST /log-groups/:name/subscription-filters — creates a filter", async () => {
@@ -359,12 +401,25 @@ describe("CloudWatch Logs Routes", () => {
       expect(body.tags.env).toBe("prod");
     });
 
+    it("GET /log-groups/:name/tags — sparse response defaults to empty object", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/log-groups/%2Faws%2Flambda%2Fmy-func/tags");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.tags).toEqual({});
+    });
+
     it("POST /log-groups/:name/tags — adds tags", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await post("/log-groups/%2Faws%2Flambda%2Fmy-func/tags", { tags: { env: "prod" } });
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.updated).toBe(true);
+    });
+
+    it("POST /log-groups/:name/tags — 400 when tags object missing", async () => {
+      const res = await post("/log-groups/%2Faws%2Flambda%2Fmy-func/tags", {});
+      expect(res.status).toBe(400);
     });
 
     it("DELETE /log-groups/:name/tags — removes tags", async () => {
@@ -377,6 +432,15 @@ describe("CloudWatch Logs Routes", () => {
       expect(resDel.status).toBe(200);
       const body = await resDel.json();
       expect(body.updated).toBe(true);
+    });
+
+    it("DELETE /log-groups/:name/tags — 400 when tags array missing", async () => {
+      const res = await router.request("/log-groups/%2Faws%2Flambda%2Fmy-func/tags", {
+        method: "DELETE",
+        body: JSON.stringify({}),
+        headers: { "content-type": "application/json" },
+      });
+      expect(res.status).toBe(400);
     });
   });
 });
