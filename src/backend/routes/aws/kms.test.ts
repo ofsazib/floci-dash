@@ -107,6 +107,14 @@ describe("KMS Routes", () => {
       expect(body.total).toBe(0);
     });
 
+    it("GET /keys — sparse response defaults to empty array", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/keys");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.keys).toEqual([]);
+    });
+
     it("GET /keys — falls back to basic key info when DescribeKey fails", async () => {
       mockSend
         .mockResolvedValueOnce({ Keys: [{ KeyId: "key-bad", KeyArn: "arn:aws:kms:...:key/key-bad" }] })
@@ -147,6 +155,35 @@ describe("KMS Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.rotationEnabled).toBe(false);
+    });
+
+    it("GET /keys/:id — sparse Tags/Aliases/Grants responses default to empty arrays", async () => {
+      mockSend
+        .mockResolvedValueOnce({ KeyMetadata: { KeyId: "sparse-key", KeyState: "Enabled", Origin: "AWS_KMS" } })
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({ KeyRotationEnabled: false });
+      const res = await get("/keys/sparse-key");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.tags).toEqual({});
+      expect(body.aliases).toEqual([]);
+      expect(body.grants).toEqual([]);
+      expect(body.rotationEnabled).toBe(false);
+    });
+
+    it("GET /keys/:id — grant without Operations maps to empty array", async () => {
+      mockSend
+        .mockResolvedValueOnce({ KeyMetadata: { KeyId: "grant-key", KeyState: "Enabled", Origin: "AWS_KMS" } })
+        .mockResolvedValueOnce({ Tags: [] })
+        .mockResolvedValueOnce({ Aliases: [] })
+        .mockResolvedValueOnce({ Grants: [{ GrantId: "g1", GranteePrincipal: "user" }] })
+        .mockResolvedValueOnce({ KeyRotationEnabled: false });
+      const res = await get("/keys/grant-key");
+      const body = await res.json();
+      expect(body.grants).toHaveLength(1);
+      expect(body.grants[0].operations).toEqual([]);
     });
 
     it("GET /keys/:id — returns automaticRotationEnabled as boolean", async () => {
@@ -369,6 +406,14 @@ describe("KMS Routes", () => {
       expect(body.aliases[0].name).toBe("alias/my-key");
     });
 
+    it("GET /aliases — sparse response defaults to empty array", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/aliases");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.aliases).toEqual([]);
+    });
+
     it("POST /aliases — creates an alias", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await post("/aliases", { aliasName: "my-key", targetKeyId: "1234-abcd" });
@@ -430,6 +475,13 @@ describe("KMS Routes", () => {
       expect(body.tagged).toBe(true);
     });
 
+    it("POST /keys/:id/tags — handles missing tags field", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/keys/1234-abcd/tags", {});
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].Tags).toEqual([]);
+    });
+
     it("DELETE /keys/:id/tags — removes tags", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await del("/keys/1234-abcd/tags?keys=env,project");
@@ -454,6 +506,15 @@ describe("KMS Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.plaintext).toBeTruthy();
+      expect(mockSend.mock.calls[0][0].NumberOfBytes).toBe(32);
+    });
+
+    it("POST /random — handles empty body via catch fallback", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/random");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.plaintext).toBeNull();
       expect(mockSend.mock.calls[0][0].NumberOfBytes).toBe(32);
     });
   });
