@@ -143,6 +143,13 @@ describe("Batch — Job Queues", () => {
     expect(json.jobQueue).toEqual({ jobQueueName: "my-jq" });
   });
 
+  it("GET /job-queues/:name — returns null when not found", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/job-queues/nonexistent");
+    const json = await res.json();
+    expect(json.jobQueue).toBeNull();
+  });
+
   it("POST /job-queues — 400 when name missing", async () => {
     const res = await post("/job-queues", { priority: 1 });
     expect(res.status).toBe(400);
@@ -151,6 +158,13 @@ describe("Batch — Job Queues", () => {
   it("POST /job-queues — 400 when priority missing", async () => {
     const res = await post("/job-queues", { jobQueueName: "jq1" });
     expect(res.status).toBe(400);
+  });
+
+  it("POST /job-queues — 400 when priority is null", async () => {
+    const res = await post("/job-queues", { jobQueueName: "jq1", priority: null });
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toBe("priority is required");
   });
 
   it("POST /job-queues — creates queue", async () => {
@@ -191,6 +205,13 @@ describe("Batch — Job Definitions", () => {
     expect(json.jobDefinition).toEqual({ jobDefinitionName: "my-jd" });
   });
 
+  it("GET /job-definitions/:name — returns null when not found", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/job-definitions/nonexistent");
+    const json = await res.json();
+    expect(json.jobDefinition).toBeNull();
+  });
+
   it("POST /job-definitions — 400 when name missing", async () => {
     const res = await post("/job-definitions", { type: "container", containerProperties: {} });
     expect(res.status).toBe(400);
@@ -210,6 +231,7 @@ describe("Batch — Job Definitions", () => {
     mockSend.mockResolvedValueOnce({ jobDefinitionName: "jd1", jobDefinitionArn: "arn:jd1", revision: 1 });
     const res = await post("/job-definitions", { jobDefinitionName: "jd1", type: "container", containerProperties: { image: "busybox" } });
     expect(res.status).toBe(201);
+    expect(mockSend).toHaveBeenCalledTimes(1);
   });
 
   it("DELETE /job-definitions/:name — deregisters", async () => {
@@ -274,6 +296,7 @@ describe("Batch — Jobs", () => {
     expect(res.status).toBe(201);
     const json = await res.json();
     expect(json.jobId).toBe("j1");
+    expect(mockSend).toHaveBeenCalledTimes(1);
   });
 
   it("POST /jobs/:id/terminate — terminates job", async () => {
@@ -282,5 +305,12 @@ describe("Batch — Jobs", () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.terminated).toBe(true);
+  });
+
+  it("POST /jobs/:id/terminate — uses default reason when omitted", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/jobs/j1/terminate", {});
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].reason).toBe("Terminated by user");
   });
 });
