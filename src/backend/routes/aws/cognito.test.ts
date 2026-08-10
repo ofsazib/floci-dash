@@ -111,6 +111,14 @@ describe("Cognito Routes", () => {
       expect(body.total).toBe(0);
     });
 
+    it("GET /user-pools — sparse response defaults to empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/user-pools");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.userPools).toEqual([]);
+    });
+
     it("GET /user-pools/:id — describes pool", async () => {
       mockSend.mockResolvedValueOnce({ UserPool: { Id: "us-east-1_abc", Name: "mypool" } });
       const res = await get("/user-pools/us-east-1_abc");
@@ -153,6 +161,14 @@ describe("Cognito Routes", () => {
       const res = await get("/user-pools/us-east-1_abc/users");
       const body = await res.json();
       expect(body.total).toBe(0);
+    });
+
+    it("GET /user-pools/:id/users — sparse response defaults to empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/user-pools/us-east-1_abc/users");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.users).toEqual([]);
     });
 
     it("POST /user-pools/:id/users — creates user (201)", async () => {
@@ -224,6 +240,14 @@ describe("Cognito Routes", () => {
       expect(body.total).toBe(0);
     });
 
+    it("GET /user-pools/:id/groups — sparse response defaults to empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/user-pools/us-east-1_abc/groups");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.groups).toEqual([]);
+    });
+
     it("POST /user-pools/:id/groups — creates group (201)", async () => {
       mockSend.mockResolvedValueOnce({ Group: { GroupName: "admins" } });
       const res = await post("/user-pools/us-east-1_abc/groups", { groupName: "admins" });
@@ -260,6 +284,14 @@ describe("Cognito Routes", () => {
       const res = await get("/user-pools/us-east-1_abc/clients");
       const body = await res.json();
       expect(body.total).toBe(0);
+    });
+
+    it("GET /user-pools/:id/clients — sparse response defaults to empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/user-pools/us-east-1_abc/clients");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.clients).toEqual([]);
     });
 
     it("GET /user-pools/:id/clients/:clientId — describes client", async () => {
@@ -304,6 +336,14 @@ describe("Cognito Routes", () => {
       const res = await get("/user-pools/us-east-1_abc/resource-servers");
       const body = await res.json();
       expect(body.total).toBe(0);
+    });
+
+    it("GET /user-pools/:id/resource-servers — sparse response defaults to empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/user-pools/us-east-1_abc/resource-servers");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.resourceServers).toEqual([]);
     });
 
     it("POST /user-pools/:id/resource-servers — creates resource server (201)", async () => {
@@ -365,6 +405,19 @@ describe("Cognito Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.updated).toBe(true);
+    });
+
+    it("PUT /user-pools/:id/mfa-config — with smsAuthenticationMessage and non-ON config", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/user-pools/us-east-1_abc/mfa-config", {
+        mfaConfiguration: "OPTIONAL",
+        smsAuthenticationMessage: "Your code is {####}",
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.SmsMfaConfiguration.SmsAuthenticationMessage).toBe("Your code is {####}");
+      expect(cmd.SmsMfaConfiguration.SmsConfiguration.SnsCallerArn).toBe("");
+      expect(cmd.SoftwareTokenMfaConfiguration).toBeUndefined();
     });
 
     it("PUT /user-pools/:id/mfa-config — 400 if mfaConfiguration missing", async () => {
@@ -429,6 +482,14 @@ describe("Cognito Routes", () => {
       const body = await res.json();
       expect(body.total).toBe(1);
     });
+
+    it("GET /user-pools/:id/users/:username/groups — sparse response defaults to empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/user-pools/us-east-1_abc/users/user1/groups");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.groups).toEqual([]);
+    });
   });
 
   describe("Group Members", () => {
@@ -445,6 +506,14 @@ describe("Cognito Routes", () => {
       const res = await get("/user-pools/us-east-1_abc/groups/admins/users");
       const body = await res.json();
       expect(body.total).toBe(0);
+    });
+
+    it("GET /user-pools/:id/groups/:groupName/users — sparse response defaults to empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/user-pools/us-east-1_abc/groups/admins/users");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.users).toEqual([]);
     });
   });
 
@@ -608,6 +677,14 @@ describe("Cognito Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.secrets).toHaveLength(1);
+    });
+
+    it("GET /user-pools/:id/clients/:clientId/secrets — sparse response defaults to empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/user-pools/us-east-1_abc/clients/client-1/secrets");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.secrets).toEqual([]);
     });
 
     it("POST /user-pools/:id/clients/:clientId/secrets — creates a secret", async () => {
