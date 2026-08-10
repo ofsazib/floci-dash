@@ -529,7 +529,7 @@ export function DynamoDBTables() {
   }
 
   function handleCreate() {
-    if (!name || !hashKey) return;
+    // Create button is disabled when name/hashKey are empty, so no guard needed.
     createTable.mutate(
       {
         name,

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { createWrapper } from "../../../test/helpers";
 import React from "react";
 import userEvent from "@testing-library/user-event";
@@ -27,6 +27,27 @@ vi.mock("../../components/DeleteButton", () => ({
     ),
 }));
 
+vi.mock("../../components/DynamoDBTableDetail", () => ({
+  default: ({ tableName, onBack }: any) =>
+    React.createElement(
+      "div",
+      null,
+      `Detail for ${tableName}`,
+      React.createElement("button", { onClick: onBack }, "Back"),
+    ),
+}));
+
+/**
+ * Cloudscape Modal handles Escape via a React onKeyDown on the dialog element
+ * (checking `event.keyCode === 27`). user-event's `keyboard()` targets the
+ * active element (body), which never reaches the dialog in happy-dom, so we
+ * dispatch the keydown on the dialog directly.
+ */
+function dismissModalWithEscape() {
+  const dialog = document.querySelector('[class*="awsui_dialog"]') as HTMLElement;
+  fireEvent.keyDown(dialog, { keyCode: 27 });
+}
+
 vi.mock("../../components/Toast", () => ({
   useToast: () => ({ showToast: vi.fn() }),
 }));
@@ -45,6 +66,14 @@ beforeEach(() => {
     isLoading: false,
     isError: false,
     error: null,
+  });
+
+  // Wire the create mutation to invoke `opts.onSuccess` so the onSuccess
+  // branches in the dashboard (modal close + resetForm) actually fire.
+  mockCreateTableMutate.mockReset();
+  mockCreateTableMutate.mockImplementation((_payload: any, opts?: any) => {
+    opts?.onSuccess?.();
+    return Promise.resolve({});
   });
 });
 
@@ -247,5 +276,130 @@ describe("DynamoDBTables — delete loading", () => {
     render(<DynamoDBTables />, { wrapper: createWrapper() });
     expect(screen.getByText("my-table")).toBeTruthy();
     expect(screen.getAllByTestId("delete-button")).toHaveLength(2);
+  });
+});
+
+// ─── Drill-down ─────────────────────────────────────────
+
+describe("DynamoDBTables — detail drill-down", () => {
+  it("opens table detail when a table name is clicked and goes back", async () => {
+    const user = userEvent.setup();
+    render(<DynamoDBTables />, { wrapper: createWrapper() });
+
+    const tableBtn = screen.getByRole("button", { name: "my-table" });
+    await user.click(tableBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText("Detail for my-table")).toBeTruthy();
+    });
+    // List is replaced by the detail view
+    expect(screen.queryByText("Tables")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /Back/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Tables")).toBeTruthy();
+    });
+    expect(screen.getByRole("button", { name: "my-table" })).toBeTruthy();
+  });
+});
+
+// ─── Modal close paths ──────────────────────────────────
+
+describe("DynamoDBTables — create modal close", () => {
+  it("Cancel closes the modal and resets the form without creating", async () => {
+    const user = userEvent.setup();
+    render(<DynamoDBTables />, { wrapper: createWrapper() });
+    await user.click(screen.getAllByRole("button", { name: /Create Table/i })[0]);
+    await waitFor(() => {
+      expect(screen.getByText("Create DynamoDB table")).toBeTruthy();
+    });
+
+    await user.type(screen.getByPlaceholderText("my-table"), "test-table");
+    await user.type(screen.getByPlaceholderText("pk"), "id");
+
+    const cancelBtns = screen.getAllByRole("button", { name: /Cancel/i });
+    await user.click(cancelBtns[cancelBtns.length - 1]);
+
+    expect(mockCreateTableMutate).not.toHaveBeenCalled();
+    // resetForm cleared the name field
+    expect((screen.getByPlaceholderText("my-table") as HTMLInputElement).value).toBe("");
+  });
+
+  it("dismisses the create modal with Escape and resets the form", async () => {
+    const user = userEvent.setup();
+    render(<DynamoDBTables />, { wrapper: createWrapper() });
+    await user.click(screen.getAllByRole("button", { name: /Create Table/i })[0]);
+    await waitFor(() => {
+      expect(screen.getByText("Create DynamoDB table")).toBeTruthy();
+    });
+
+    await user.type(screen.getByPlaceholderText("my-table"), "test-table");
+    await user.type(screen.getByPlaceholderText("pk"), "id");
+
+    dismissModalWithEscape();
+
+    expect(mockCreateTableMutate).not.toHaveBeenCalled();
+    expect((screen.getByPlaceholderText("my-table") as HTMLInputElement).value).toBe("");
+  });
+});
+
+// ─── Key type selects ───────────────────────────────────
+
+describe("DynamoDBTables — key type selects", () => {
+  it("changes the partition key type and submits with it", async () => {
+    const user = userEvent.setup();
+    render(<DynamoDBTables />, { wrapper: createWrapper() });
+    await user.click(screen.getAllByRole("button", { name: /Create Table/i })[0]);
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("my-table")).toBeTruthy();
+    });
+
+    // Click the partition key type Select (default "String (S)") and pick Number
+    await user.click(screen.getAllByText("String (S)")[0]);
+    await user.click(screen.getAllByText("Number (N)")[0]);
+
+    await user.type(screen.getByPlaceholderText("my-table"), "typed-table");
+    await user.type(screen.getByPlaceholderText("pk"), "id");
+    const submit = screen.getAllByRole("button", { name: /Create table/i });
+    await user.click(submit[submit.length - 1]);
+
+    await waitFor(() => {
+      expect(mockCreateTableMutate).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "typed-table", hashKey: "id", hashType: "N" }),
+        expect.any(Object),
+      );
+    });
+  });
+
+  it("shows the sort key type select after entering a range key and submits with it", async () => {
+    const user = userEvent.setup();
+    render(<DynamoDBTables />, { wrapper: createWrapper() });
+    await user.click(screen.getAllByRole("button", { name: /Create Table/i })[0]);
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("my-table")).toBeTruthy();
+    });
+
+    await user.type(screen.getByPlaceholderText("my-table"), "typed-table");
+    await user.type(screen.getByPlaceholderText("pk"), "id");
+    await user.type(screen.getByPlaceholderText("sk"), "sortKey");
+
+    // Sort key type select appears; change it to Binary
+    await user.click(screen.getAllByText("String (S)")[1]);
+    await user.click(screen.getAllByText("Binary (B)")[0]);
+
+    const submit = screen.getAllByRole("button", { name: /Create table/i });
+    await user.click(submit[submit.length - 1]);
+
+    await waitFor(() => {
+      expect(mockCreateTableMutate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "typed-table",
+          hashKey: "id",
+          rangeKey: "sortKey",
+          rangeType: "B",
+        }),
+        expect.any(Object),
+      );
+    });
   });
 });
