@@ -642,8 +642,9 @@ export function ELBDashboard() {
                   item.name.toLowerCase().includes(searchText.toLowerCase())
                 }
               />
+              {showCreateLB && (
               <Modal
-                visible={showCreateLB}
+                visible
                 onDismiss={() => setShowCreateLB(false)}
                 header="Create load balancer"
                 footer={
@@ -683,6 +684,7 @@ export function ELBDashboard() {
                   </FormField>
                 </Form>
               </Modal>
+              )}
             </>
           ),
         },
@@ -734,8 +736,9 @@ export function ELBDashboard() {
                   item.name.toLowerCase().includes(searchText.toLowerCase())
                 }
               />
+              {showCreateTG && (
               <Modal
-                visible={showCreateTG}
+                visible
                 onDismiss={() => setShowCreateTG(false)}
                 header="Create target group"
                 footer={
@@ -789,6 +792,7 @@ export function ELBDashboard() {
                   </FormField>
                 </Form>
               </Modal>
+              )}
             </>
           ),
         },
@@ -963,7 +967,7 @@ export function ELBDashboard() {
                             <Box variant="small" color="text-status-inactive">No rules found.</Box>
                           ) : (
                             <SpaceBetween size="s">
-                              {(listenerRules.data?.rules || []).map((rule: any) => (
+                              {listenerRules.data!.rules.map((rule: any) => (
                                 <Box key={rule.ruleArn}>
                                   <Box variant="small">
                                     Priority: {rule.priority} — {rule.isDefault ? "Default" : rule.ruleName}
@@ -1025,11 +1029,8 @@ export function ELBDashboard() {
               {showSgModal && (
                 <Modal visible onDismiss={() => setShowSgModal(false)} header="Set Security Groups" size="medium" footer={
                   <SpaceBetween direction="horizontal" size="xs">
-                    <Button variant="link" onClick={() => setShowSgModal(false)}>Cancel</Button>
-                    <Button variant="primary" loading={setSgs.isPending} onClick={() => {
-                      if (selectedLBArn && sgList.trim()) {
-                        setSgs.mutate({ arn: selectedLBArn, securityGroups: sgList.split(/[,\n]+/).map((s: string) => s.trim()).filter(Boolean) }, { onSuccess: () => setShowSgModal(false) });
-                      }
+                    <Button variant="link" onClick={() => setShowSgModal(false)}>Cancel</Button>                      <Button variant="primary" loading={setSgs.isPending} onClick={() => {
+                      setSgs.mutate({ arn: selectedLBArn!, securityGroups: sgList.split(/[,\n]+/).map((s: string) => s.trim()).filter(Boolean) }, { onSuccess: () => setShowSgModal(false) });
                     }} disabled={!sgList.trim()}>Save</Button>
                   </SpaceBetween>
                 }>
@@ -1041,11 +1042,8 @@ export function ELBDashboard() {
               {showSubnetModal && (
                 <Modal visible onDismiss={() => setShowSubnetModal(false)} header="Set Subnets" size="medium" footer={
                   <SpaceBetween direction="horizontal" size="xs">
-                    <Button variant="link" onClick={() => setShowSubnetModal(false)}>Cancel</Button>
-                    <Button variant="primary" loading={setSubnets.isPending} onClick={() => {
-                      if (selectedLBArn && subnetList.trim()) {
-                        setSubnets.mutate({ arn: selectedLBArn, subnets: subnetList.split(/[,\n]+/).map((s: string) => s.trim()).filter(Boolean) }, { onSuccess: () => setShowSubnetModal(false) });
-                      }
+                    <Button variant="link" onClick={() => setShowSubnetModal(false)}>Cancel</Button>                      <Button variant="primary" loading={setSubnets.isPending} onClick={() => {
+                      setSubnets.mutate({ arn: selectedLBArn!, subnets: subnetList.split(/[,\n]+/).map((s: string) => s.trim()).filter(Boolean) }, { onSuccess: () => setShowSubnetModal(false) });
                     }} disabled={!subnetList.trim()}>Save</Button>
                   </SpaceBetween>
                 }>
@@ -1059,9 +1057,7 @@ export function ELBDashboard() {
                   <SpaceBetween direction="horizontal" size="xs">
                     <Button variant="link" onClick={() => setShowCertModal(false)}>Cancel</Button>
                     <Button variant="primary" loading={addCert.isPending} onClick={() => {
-                      if (selectedListenerArn && certArn.trim()) {
-                        addCert.mutate({ listenerArn: selectedListenerArn, certificateArn: certArn.trim() }, { onSuccess: () => { setShowCertModal(false); setCertArn(""); } });
-                      }
+                      addCert.mutate({ listenerArn: selectedListenerArn!, certificateArn: certArn.trim() }, { onSuccess: () => { setShowCertModal(false); setCertArn(""); } });
                     }} disabled={!certArn.trim()}>Add</Button>
                   </SpaceBetween>
                 }>
@@ -1082,7 +1078,6 @@ export function ELBDashboard() {
                     <SpaceBetween direction="horizontal" size="xs">
                       <Button variant="link" onClick={() => setShowCreateRuleModal(false)}>Cancel</Button>
                       <Button variant="primary" loading={createRule.isPending || modifyRule.isPending} onClick={() => {
-                        if (!selectedListenerArn || !rulePriority.trim()) return;
                         setRuleFormError(null);
                         const priority = parseInt(rulePriority, 10);
                         if (Number.isNaN(priority) || priority < 1) {
@@ -1101,7 +1096,7 @@ export function ELBDashboard() {
                         if (editingRuleArn) {
                           modifyRule.mutate({ ruleArn: editingRuleArn, conditions, actions }, { onSuccess: () => { setShowCreateRuleModal(false); setEditingRuleArn(null); setRuleFormError(null); } });
                         } else {
-                          createRule.mutate({ listenerArn: selectedListenerArn, priority, conditions, actions }, { onSuccess: () => { setShowCreateRuleModal(false); setRulePriority(""); setRuleConditions(""); setRuleActions(""); setRuleFormError(null); } });
+                          createRule.mutate({ listenerArn: selectedListenerArn!, priority, conditions, actions }, { onSuccess: () => { setShowCreateRuleModal(false); setRulePriority(""); setRuleConditions(""); setRuleActions(""); setRuleFormError(null); } });
                         }
                       }} disabled={!rulePriority.trim()}>
                         {editingRuleArn ? "Save" : "Create"}
@@ -1135,7 +1130,7 @@ export function ELBDashboard() {
                     <SpaceBetween direction="horizontal" size="xs">
                       <Button variant="link" onClick={() => setShowSetPriorityModal(false)}>Cancel</Button>
                       <Button variant="primary" loading={setRulePriorities.isPending} onClick={() => {
-                        const rulePriorities = (listenerRules.data?.rules || []).map((rule: any) => ({
+                        const rulePriorities = listenerRules.data!.rules.map((rule: any) => ({
                           ruleArn: rule.ruleArn,
                           priority: parseInt(priorityInputs[rule.ruleArn] ?? String(rule.priority), 10),
                         }));
@@ -1145,10 +1140,10 @@ export function ELBDashboard() {
                   }
                 >
                   <SpaceBetween size="s">
-                    {(listenerRules.data?.rules || []).filter((rule: any) => !rule.isDefault).length === 0 ? (
+                    {listenerRules.data!.rules.filter((rule: any) => !rule.isDefault).length === 0 ? (
                       <Box variant="small" color="text-status-inactive">No non-default rules to reorder.</Box>
                     ) : (
-                      (listenerRules.data?.rules || [])
+                      listenerRules.data!.rules
                         .filter((rule: any) => !rule.isDefault)
                         .map((rule: any) => (
                           <FormField key={rule.ruleArn} label={`Priority for ${rule.ruleName}`}>
