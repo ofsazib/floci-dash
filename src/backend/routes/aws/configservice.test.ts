@@ -82,6 +82,14 @@ describe("Config Service Routes", () => {
     expect(body.total).toBe(1);
   });
 
+  it("GET /recorders — sparse response defaults to empty array", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/recorders");
+    const body = await res.json();
+    expect(body.total).toBe(0);
+    expect(body.recorders).toEqual([]);
+  });
+
   it("POST /recorders — creates recorder (201)", async () => {
     mockSend.mockResolvedValueOnce({});
     const res = await post("/recorders", { roleARN: "arn:aws:iam::123:role/config" });
@@ -116,11 +124,27 @@ describe("Config Service Routes", () => {
     expect(body.total).toBe(1);
   });
 
+  it("GET /recorders/status — sparse response defaults to empty array", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/recorders/status");
+    const body = await res.json();
+    expect(body.total).toBe(0);
+    expect(body.statuses).toEqual([]);
+  });
+
   it("GET /delivery-channels — lists channels", async () => {
     mockSend.mockResolvedValueOnce({ DeliveryChannels: [{ name: "default" }] });
     const res = await get("/delivery-channels");
     const body = await res.json();
     expect(body.total).toBe(1);
+  });
+
+  it("GET /delivery-channels — sparse response defaults to empty array", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/delivery-channels");
+    const body = await res.json();
+    expect(body.total).toBe(0);
+    expect(body.channels).toEqual([]);
   });
 
   it("POST /delivery-channels — creates channel (201)", async () => {
@@ -134,6 +158,14 @@ describe("Config Service Routes", () => {
     const res = await get("/conformance-packs");
     const body = await res.json();
     expect(body.total).toBe(1);
+  });
+
+  it("GET /conformance-packs — sparse response defaults to empty array", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/conformance-packs");
+    const body = await res.json();
+    expect(body.total).toBe(0);
+    expect(body.conformancePacks).toEqual([]);
   });
 
   it("POST /conformance-packs — creates pack (201)", async () => {
