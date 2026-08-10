@@ -1747,6 +1747,7 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 | 25.82 | pipes.ts — add 1 sparse {} test: GET /pipes (result.Pipes || [] line 30) — existing empty test passes truthy [] literal (90%->100% branch) | Done | 2026-08-10 |
 | 25.83 | memorydb.ts — add 2 sparse {} response tests: POST /tags/:arn (TagList || [] line 87) + DELETE /tags/:arn (TagList || [] line 95) — existing tests mock truthy TagList values (91.66%->100% branch) | Done | 2026-08-10 |
 | 25.93 | useECS.ts (frontend hook) — remove 1 dead `taskDefinition || ""` fallback (line 69 — guarded by `enabled: !!taskDefinition`, same pattern as useIAM) + add 2 tests: useDeleteECSTaskSet without force (fires `force ? "&force=true" : ""` falsy side line 348 — only the force:true path was tested) + useECSServiceDeployments with cluster null (fires `cluster ? ... : ""` falsy side line 362 — only the with-cluster path was tested) (85%->100% branch) | Done | 2026-08-10 |
+| 25.94 | CEDashboard.tsx (services dashboard) — add 2 sparse-data tests: cost-and-usage with data `{}` (fires `resultsByTime || []` line 538) + cost-categories with data `{}` (fires `costCategories || []` line 589) — existing "does not show" tests pass data undefined so the `&&` guard short-circuits and the fallbacks never fire (75%->100% branch) | Done | 2026-08-10 |
 | 25.34 | Verify: ec2-flow-logs.ts 75.75%→**100% branch**, 17 route tests pass, full suite 7623/7623 (269 files), typecheck clean | Done | 2026-08-06 |
 
 

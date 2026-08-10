@@ -277,6 +277,28 @@ describe("CEDashboard — result display branches", () => {
     render(<CEDashboard />, { wrapper: createWrapper() });
     expect(screen.queryByText("Categories:")).toBeNull();
   });
+
+  it("shows 0 cost and usage results when data is sparse (no resultsByTime key)", () => {
+    mockCostAndUsageHook.mockReturnValue({
+      mutate: mockCostAndUsageMutate,
+      isPending: false,
+      data: {} as any,
+    });
+    render(<CEDashboard />, { wrapper: createWrapper() });
+    // `(resultsByTime || []).length` falls back to 0 for sparse data
+    expect(screen.getByText("Results by time: 0")).toBeTruthy();
+  });
+
+  it("shows 0 cost categories when data is sparse (no costCategories key)", () => {
+    mockCostCategoriesHook.mockReturnValue({
+      mutate: mockCostCategoriesMutate,
+      isPending: false,
+      data: {} as any,
+    });
+    render(<CEDashboard />, { wrapper: createWrapper() });
+    // `(costCategories || []).length` falls back to 0 for sparse data
+    expect(screen.getByText("Categories: 0")).toBeTruthy();
+  });
 });
 
 describe("CEDashboard — disabled state", () => {
