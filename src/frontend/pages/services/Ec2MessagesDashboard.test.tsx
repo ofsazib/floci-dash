@@ -78,4 +78,68 @@ describe("Ec2MessagesDashboard", () => {
     const dashes = screen.getAllByText("-");
     expect(dashes.length).toBeGreaterThanOrEqual(1);
   });
+
+  it("falls back to empty list when data has no Messages key", () => {
+    mockEc2Messages.mockReturnValue({
+      data: {},
+      isLoading: false,
+      refetch: vi.fn(),
+    });
+    render(<Ec2MessagesDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No messages found/i)).toBeTruthy();
+  });
+
+  it("activates the lookup with the trimmed destination and refetches", async () => {
+    const refetch = vi.fn();
+    mockEc2Messages.mockReturnValue({ data: { Messages: [] }, isLoading: false, refetch });
+    const user = userEvent.setup();
+    render(<Ec2MessagesDashboard />, { wrapper: createWrapper() });
+
+    await user.type(screen.getByPlaceholderText("i-xxxxxxxx"), "  i-12345678  ");
+    await user.click(screen.getByRole("button", { name: /Get Messages/i }));
+
+    // Hook is now called with the trimmed destination (not null)
+    await waitFor(() => {
+      expect(mockEc2Messages).toHaveBeenCalledWith("i-12345678");
+    });
+    // The setTimeout(…, 100) fires refetch
+    await waitFor(() => expect(refetch).toHaveBeenCalled(), { timeout: 2000 });
+  });
+
+  it("acknowledges a message and toasts success", async () => {
+    const refetch = vi.fn();
+    mockEc2Messages.mockReturnValue({
+      data: { Messages: [{ MessageId: "msg-001", Destination: "i-123", Acknowledged: false }] },
+      isLoading: false,
+      refetch,
+    });
+    mockAcknowledge.mockResolvedValue({});
+    const user = userEvent.setup();
+    render(<Ec2MessagesDashboard />, { wrapper: createWrapper() });
+
+    await user.click(screen.getByRole("button", { name: /Acknowledge/i }));
+
+    await waitFor(() => {
+      expect(mockAcknowledge).toHaveBeenCalledWith("msg-001");
+      expect(mockShowToast).toHaveBeenCalledWith("success", "Message msg-001 acknowledged");
+      expect(refetch).toHaveBeenCalled();
+    });
+  });
+
+  it("toasts error when acknowledgement fails", async () => {
+    mockEc2Messages.mockReturnValue({
+      data: { Messages: [{ MessageId: "msg-001", Destination: "i-123", Acknowledged: false }] },
+      isLoading: false,
+      refetch: vi.fn(),
+    });
+    mockAcknowledge.mockRejectedValue(new Error("ack failed"));
+    const user = userEvent.setup();
+    render(<Ec2MessagesDashboard />, { wrapper: createWrapper() });
+
+    await user.click(screen.getByRole("button", { name: /Acknowledge/i }));
+
+    await waitFor(() => {
+      expect(mockShowToast).toHaveBeenCalledWith("error", "ack failed");
+    });
+  });
 });
