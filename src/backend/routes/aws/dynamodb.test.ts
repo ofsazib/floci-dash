@@ -101,6 +101,14 @@ describe("DynamoDB Routes", () => {
       expect(body.tables).toEqual([]);
     });
 
+    it("GET /tables — sparse response defaults to empty array", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/tables");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.tables).toEqual([]);
+    });
+
     it("POST /tables — creates a table", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await post("/tables", {
@@ -132,6 +140,18 @@ describe("DynamoDB Routes", () => {
       expect(cmd.KeySchema[1].AttributeName).toBe("createdAt");
       expect(cmd.KeySchema[1].KeyType).toBe("RANGE");
       expect(cmd.AttributeDefinitions[1].AttributeType).toBe("N");
+    });
+
+    it("POST /tables — range key defaults rangeType to S", async () => {
+      mockSend.mockResolvedValueOnce({});
+      await post("/tables", {
+        name: "orders2",
+        hashKey: "orderId",
+        rangeKey: "createdAt",
+      });
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.KeySchema).toHaveLength(2);
+      expect(cmd.AttributeDefinitions[1].AttributeType).toBe("S");
     });
 
     it("POST /tables — 400 when name or hashKey missing", async () => {
@@ -174,6 +194,47 @@ describe("DynamoDB Routes", () => {
       expect(body.globalSecondaryIndexes[0].indexName).toBe("email-index");
     });
 
+    it("GET /tables/:name — sparse Table without index keys defaults to empty arrays", async () => {
+      mockSend.mockResolvedValueOnce({
+        Table: {
+          TableName: "users",
+          TableStatus: "ACTIVE",
+          ItemCount: 10,
+          TableSizeBytes: 512,
+          KeySchema: [{ AttributeName: "id", KeyType: "HASH" }],
+          TableArn: "arn:aws:dynamodb:...",
+          CreationDateTime: new Date("2025-01-01"),
+        },
+      });
+      const res = await get("/tables/users");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.globalSecondaryIndexes).toEqual([]);
+      expect(body.localSecondaryIndexes).toEqual([]);
+    });
+
+    it("GET /tables/:name — maps LocalSecondaryIndexes", async () => {
+      mockSend.mockResolvedValueOnce({
+        Table: {
+          TableName: "users",
+          TableStatus: "ACTIVE",
+          KeySchema: [{ AttributeName: "id", KeyType: "HASH" }],
+          LocalSecondaryIndexes: [
+            {
+              IndexName: "createdAt-index",
+              KeySchema: [{ AttributeName: "id", KeyType: "HASH" }],
+              Projection: { ProjectionType: "ALL" },
+            },
+          ],
+        },
+      });
+      const res = await get("/tables/users");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.localSecondaryIndexes).toHaveLength(1);
+      expect(body.localSecondaryIndexes[0].indexName).toBe("createdAt-index");
+    });
+
     it("GET /tables/:name — returns 404 when table not found", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await get("/tables/missing");
@@ -210,6 +271,26 @@ describe("DynamoDB Routes", () => {
       const res = await get("/tables/users/items");
       const body = await res.json();
       expect(body.count).toBe(0);
+    });
+
+    it("GET /tables/:name/items — sparse response defaults to empty array", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/tables/users/items");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.items).toEqual([]);
+    });
+
+    it("GET /tables/:name/items — returns lastEvaluatedKey when present", async () => {
+      mockSend.mockResolvedValueOnce({
+        Items: [{ id: { S: "1" } }],
+        Count: 1,
+        ScannedCount: 1,
+        LastEvaluatedKey: { id: { S: "1" } },
+      });
+      const res = await get("/tables/users/items");
+      const body = await res.json();
+      expect(body.lastEvaluatedKey).toBeDefined();
     });
 
     it("POST /tables/:name/items/get — gets an item", async () => {
@@ -438,6 +519,14 @@ describe("DynamoDB Routes", () => {
       const body = await res.json();
       expect(body.lastEvaluatedKey).toBeDefined();
     });
+
+    it("POST query — sparse response defaults to empty array", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/tables/users/items/query", {});
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.items).toEqual([]);
+    });
   });
 
   describe("Kinesis Streaming", () => {
@@ -461,6 +550,14 @@ describe("DynamoDB Routes", () => {
 
     it("GET /tables/:name/kinesis-streaming — returns empty list", async () => {
       mockSend.mockResolvedValueOnce({ KinesisDataStreamDestinations: [] });
+      const res = await get("/tables/users/kinesis-streaming");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.destinations).toEqual([]);
+    });
+
+    it("GET /tables/:name/kinesis-streaming — sparse response defaults to empty array", async () => {
+      mockSend.mockResolvedValueOnce({});
       const res = await get("/tables/users/kinesis-streaming");
       const body = await res.json();
       expect(body.total).toBe(0);
