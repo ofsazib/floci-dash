@@ -373,6 +373,51 @@ describe("s3-select routes", () => {
       expect(res.status).toBe(500);
       expect(data.error).toBe("Connection refused");
     });
+
+    it("handles Floci error with unreadable body (text() rejection fallback)", async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        statusText: "Internal Server Error",
+        text: () => Promise.reject(new Error("stream destroyed")),
+      });
+      globalThis.fetch = mockFetch;
+
+      const res = await executeRoute("POST", "/buckets/my-bucket/select", {
+        key: "test.csv",
+        expression: "SELECT * FROM S3Object",
+      });
+      const data = await res.json();
+      expect(res.status).toBe(500);
+      expect(data.error).toContain("Floci");
+      expect(data.detail).toBe("");
+    });
+
+    it("returns 400 when bucket name sanitizes to empty", async () => {
+      const { sanitizeBucketName } = await import("../../clients/sanitize");
+      (sanitizeBucketName as any).mockReturnValueOnce("");
+
+      const res = await executeRoute("POST", "/buckets/%25%25%25/select", {
+        key: "test.csv",
+        expression: "SELECT * FROM S3Object",
+      });
+      const data = await res.json();
+      expect(res.status).toBe(400);
+      expect(data.error).toContain("Invalid bucket name");
+    });
+
+    it("returns 400 when bucket name is empty string", async () => {
+      const { sanitizeBucketName } = await import("../../clients/sanitize");
+      (sanitizeBucketName as any).mockReturnValue("");
+
+      const res = await executeRoute("POST", "/buckets/bad%20bucket/select", {
+        key: "test.csv",
+        expression: "SELECT * FROM S3Object",
+      });
+      const data = await res.json();
+      expect(res.status).toBe(400);
+      expect(data.error).toContain("Invalid bucket name");
+    });
   });
 });
 

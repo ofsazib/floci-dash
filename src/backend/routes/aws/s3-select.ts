@@ -114,7 +114,7 @@ function parseEventStream(data: Uint8Array): EventStreamMessage[] {
  *   { result, stats: { bytesScanned, bytesProcessed, bytesReturned } }
  */
 router.post("/buckets/:name/select", async (c: Context) => {
-  const bucket = sanitizeBucketName(c.req.param("name") || "");
+  const bucket = sanitizeBucketName(c.req.param("name")!);
   if (!bucket) return c.json({ error: "Invalid bucket name" }, 400);
 
   const body = await c.req.json<{
