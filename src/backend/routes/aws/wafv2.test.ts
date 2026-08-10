@@ -154,6 +154,12 @@ describe("WAFv2 Routes — Web ACLs", () => {
     expect(mockSend.mock.calls[0][0].Scope).toBe("REGIONAL");
   });
 
+  it("GET /web-acls/:id — defaults to REGIONAL scope", async () => {
+    mockSend.mockResolvedValueOnce({ WebACL: { Name: "acl1", Id: "id-1" } });
+    await get("/web-acls/id-1?name=acl1");
+    expect(mockSend.mock.calls[0][0].Scope).toBe("REGIONAL");
+  });
+
   it("GET /web-acls/:id — 400 when name missing", async () => {
     const res = await get("/web-acls/id-1?scope=REGIONAL");
     expect(res.status).toBe(400);
@@ -185,6 +191,13 @@ describe("WAFv2 Routes — IP Sets", () => {
     expect(res.status).toBe(201);
     expect(mockSend.mock.calls[0][0].__cmdName).toBe("CreateIPSetCommand");
     expect(mockSend.mock.calls[0][0].IPAddressVersion).toBe("IPV4");
+  });
+
+  it("POST /ip-sets — creates IP set without addresses", async () => {
+    mockSend.mockResolvedValueOnce({ Summary: { Name: "new-set" } });
+    const res = await post("/ip-sets", { Name: "new-set", Scope: "REGIONAL" });
+    expect(res.status).toBe(201);
+    expect(mockSend.mock.calls[0][0].Addresses).toEqual([]);
   });
 
   it("POST /ip-sets — 400 when Name missing", async () => {
@@ -226,6 +239,17 @@ describe("WAFv2 Routes — IP Sets", () => {
     expect(mockSend.mock.calls[0][0].Id).toBe("id-1");
     expect(mockSend.mock.calls[0][0].LockToken).toBe("lock-1");
     expect(mockSend.mock.calls[0][0].Addresses).toEqual(["192.168.1.0/24"]);
+  });
+
+  it("PUT /ip-sets/:id — updates IP set without addresses", async () => {
+    mockSend.mockResolvedValueOnce({ LockToken: "lock-2" });
+    const res = await router.request("/ip-sets/id-1", {
+      method: "PUT",
+      body: JSON.stringify({ Name: "set1", Scope: "REGIONAL", LockToken: "lock-1" }),
+      headers: { "content-type": "application/json" },
+    });
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].Addresses).toEqual([]);
   });
 
   it("PUT /ip-sets/:id — 400 when LockToken missing", async () => {
@@ -320,6 +344,17 @@ describe("WAFv2 Routes — Regex Pattern Sets", () => {
     expect(mockSend.mock.calls[0][0].RegularExpressionList).toEqual([{ RegexString: ".*foo.*" }]);
   });
 
+  it("PUT /regex-pattern-sets/:id — updates without regex list", async () => {
+    mockSend.mockResolvedValueOnce({ NextLockToken: "lock-2" });
+    const res = await router.request("/regex-pattern-sets/id-1", {
+      method: "PUT",
+      body: JSON.stringify({ Name: "rx1", Scope: "REGIONAL", LockToken: "lock-1" }),
+      headers: { "content-type": "application/json" },
+    });
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].RegularExpressionList).toEqual([]);
+  });
+
   it("PUT /regex-pattern-sets/:id — 400 when LockToken missing", async () => {
     const res = await router.request("/regex-pattern-sets/id-1", {
       method: "PUT",
@@ -338,6 +373,11 @@ describe("WAFv2 Routes — Regex Pattern Sets", () => {
 
   it("POST /regex-pattern-sets/delete — 400 when missing params", async () => {
     const res = await post("/regex-pattern-sets/delete", {});
+    expect(res.status).toBe(400);
+  });
+
+  it("POST /regex-pattern-sets/delete — 400 when LockToken missing", async () => {
+    const res = await post("/regex-pattern-sets/delete", { Id: "id-1", Name: "rx1", Scope: "REGIONAL" });
     expect(res.status).toBe(400);
   });
 });
@@ -425,6 +465,11 @@ describe("WAFv2 Routes — Rule Groups", () => {
 
   it("POST /rule-groups/delete — 400 when missing params", async () => {
     const res = await post("/rule-groups/delete", {});
+    expect(res.status).toBe(400);
+  });
+
+  it("POST /rule-groups/delete — 400 when LockToken missing", async () => {
+    const res = await post("/rule-groups/delete", { Id: "id-1", Name: "rg1", Scope: "REGIONAL" });
     expect(res.status).toBe(400);
   });
 });
@@ -516,6 +561,13 @@ describe("WAFv2 Routes — Logging Configuration", () => {
     expect(json.loggingConfiguration).toBeDefined();
     expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetLoggingConfigurationCommand");
     expect(mockSend.mock.calls[0][0].ResourceArn).toBe("arn:1");
+  });
+
+  it("GET /logging-config/:resourceArn — returns null when not configured", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/logging-config/arn%3A1");
+    const json = await res.json();
+    expect(json.loggingConfiguration).toBeNull();
   });
 
   it("PUT /logging-config — creates logging config", async () => {
