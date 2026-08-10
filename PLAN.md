@@ -1746,7 +1746,7 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 | 25.81 | eks.ts — add 2 sparse {} tests: GET /clusters (result.clusters || [] line 24) + GET /clusters/:name/node-groups (result.nodegroups || [] line 79) — existing empty tests pass truthy [] literals so the fallbacks never fired (88.88%->100% branch) | Done | 2026-08-10 |
 | 25.82 | pipes.ts — add 1 sparse {} test: GET /pipes (result.Pipes || [] line 30) — existing empty test passes truthy [] literal (90%->100% branch) | Done | 2026-08-10 |
 | 25.83 | memorydb.ts — add 2 sparse {} response tests: POST /tags/:arn (TagList || [] line 87) + DELETE /tags/:arn (TagList || [] line 95) — existing tests mock truthy TagList values (91.66%->100% branch) | Done | 2026-08-10 |
-| 25.89 | s3-select.ts — add 3 tests + remove 1 dead fallback: Floci error with text() rejection (fires `res.text().catch(() => "")` fallback line 159 — only the text()-resolves error path was tested) + bucket name sanitizing to empty/empty-string (fires lines 117/118 — sanitize is mocked as identity so the 400 never fired) + removed `c.req.param("name") || ""` dead fallback (route guarantees non-empty segment; precedent: `param("name")!` elsewhere) (96.07%->100% branch, 75%->100% funcs, 97.43%->100% stmts) | Done | 2026-08-10 |
+| 25.90 | bcmdataexports.ts — add 1 test: GET /tags sparse {} response defaults tags to [] (fires `result.ResourceTags || []` line 75 — the existing GET /tags test mocks a populated truthy ResourceTags so the fallback never fired) (96.42%->100% branch — ALL backend route files now at 100% branch) | Done | 2026-08-10 |
 | 25.34 | Verify: ec2-flow-logs.ts 75.75%→**100% branch**, 17 route tests pass, full suite 7623/7623 (269 files), typecheck clean | Done | 2026-08-06 |
 
 

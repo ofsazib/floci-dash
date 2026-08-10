@@ -169,6 +169,13 @@ describe("BCM Data Exports routes", () => {
       expect(json.tags).toHaveLength(1);
     });
 
+    it("GET /tags — sparse response defaults tags to empty", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/tags?resourceArn=arn:export1");
+      const json = await res.json();
+      expect(json.tags).toEqual([]);
+    });
+
     it("GET /tags — 400 when no resourceArn", async () => {
       const res = await get("/tags");
       expect(res.status).toBe(400);
