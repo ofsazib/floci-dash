@@ -615,7 +615,6 @@ function RDSDBInstanceList({ onSelect }: { onSelect: (id: string) => void }) {
   }
 
   function handleCreate() {
-    if (!form.dbInstanceIdentifier) return;
     createInstance.mutate(
       {
         dbInstanceIdentifier: form.dbInstanceIdentifier,
@@ -986,7 +985,6 @@ function RDSDBClusterList({ onSelect }: { onSelect: (id: string) => void }) {
   }
 
   function handleCreate() {
-    if (!form.dbClusterIdentifier) return;
     createCluster.mutate(
       {
         dbClusterIdentifier: form.dbClusterIdentifier,
@@ -1281,7 +1279,6 @@ function RDSParameterGroupList() {
   }
 
   function handleCreate() {
-    if (!form.name) return;
     createPG.mutate(
       {
         dbParameterGroupName: form.name,
@@ -1571,15 +1568,14 @@ function RDSParameterGroupParametersView({
                 variant="primary"
                 loading={isCluster ? modifyClusterParams.isPending : modifyParams.isPending}
                 onClick={() => {
-                  if (!editParam) return;
                   if (isCluster) {
                     modifyClusterParams.mutate(
-                      { name, parameters: [editParam] },
+                      { name, parameters: [editParam!] },
                       { onSuccess: () => setEditParam(null) }
                     );
                   } else {
                     modifyParams.mutate(
-                      { name, parameters: [editParam] },
+                      { name, parameters: [editParam!] },
                       { onSuccess: () => setEditParam(null) }
                     );
                   }
@@ -1597,9 +1593,7 @@ function RDSParameterGroupParametersView({
               <Input
                 value={editParam?.parameterValue || ""}
                 onChange={({ detail }) =>
-                  setEditParam((p) =>
-                    p ? { ...p, parameterValue: detail.value } : null
-                  )
+                  setEditParam({ ...editParam!, parameterValue: detail.value })
                 }
               />
             </FormField>
@@ -1638,7 +1632,6 @@ function RDSSubnetGroupList() {
   }
 
   function handleCreate() {
-    if (!form.dbSubnetGroupName || !form.subnetIds.trim()) return;
     createSG.mutate(
       {
         dbSubnetGroupName: form.dbSubnetGroupName,
@@ -1844,7 +1837,6 @@ function RDSClusterParameterGroupList() {
   }
 
   function handleCreate() {
-    if (!form.name) return;
     createCPG.mutate(
       {
         dbClusterParameterGroupName: form.name,
