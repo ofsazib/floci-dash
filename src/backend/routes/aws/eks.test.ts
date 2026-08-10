@@ -77,6 +77,14 @@ describe("EKS Routes", () => {
       expect(body.clusters).toEqual([]);
     });
 
+    it("GET /clusters — sparse response defaults to empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/clusters");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.clusters).toEqual([]);
+    });
+
     it("POST /clusters — creates cluster (201)", async () => {
       mockSend.mockResolvedValueOnce({
         cluster: { name: "new-cluster", arn: "arn:aws:eks:us-east-1:123456789:cluster/new-cluster", status: "CREATING" },
@@ -150,6 +158,14 @@ describe("EKS Routes", () => {
 
     it("GET /clusters/:name/node-groups — returns empty list", async () => {
       mockSend.mockResolvedValueOnce({ nodegroups: [] });
+      const res = await get("/clusters/my-cluster/node-groups");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.nodegroups).toEqual([]);
+    });
+
+    it("GET /clusters/:name/node-groups — sparse response defaults to empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
       const res = await get("/clusters/my-cluster/node-groups");
       const body = await res.json();
       expect(body.total).toBe(0);
