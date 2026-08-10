@@ -91,6 +91,14 @@ describe("CUR Routes", () => {
       expect(body.total).toBe(0);
       expect(body.reportDefinitions).toEqual([]);
     });
+
+    it("sparse response defaults to empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/report-definitions");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.reportDefinitions).toEqual([]);
+    });
   });
 
   describe("POST /report-definitions", () => {
@@ -151,6 +159,25 @@ describe("CUR Routes", () => {
       const body = await res.json();
       expect(body.error).toContain("reportName");
     });
+
+    it("returns 400 when timeUnit is missing", async () => {
+      const res = await put("/report-definitions", { reportName: "test-report" });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("timeUnit");
+    });
+
+    it("modifies with defaults when s3Bucket missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/report-definitions", {
+        reportName: "test-report",
+        timeUnit: "HOURLY",
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].ReportDefinition.S3Bucket).toBe("");
+      expect(mockSend.mock.calls[0][0].ReportDefinition.S3Prefix).toBe("");
+      expect(mockSend.mock.calls[0][0].ReportDefinition.S3Region).toBe("us-east-1");
+    });
   });
 
   describe("DELETE /report-definitions", () => {
@@ -163,6 +190,13 @@ describe("CUR Routes", () => {
       expect(body.reportName).toBe("test-report");
       expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteReportDefinitionCommand");
       expect(mockSend.mock.calls[0][0].ReportName).toBe("test-report");
+    });
+
+    it("returns 400 when reportName is missing", async () => {
+      const res = await post("/report-definitions/delete", {});
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("reportName");
     });
   });
 
@@ -184,6 +218,14 @@ describe("CUR Routes", () => {
       expect(res.status).toBe(400);
       const body = await res.json();
       expect(body.error).toContain("reportName");
+    });
+
+    it("sparse response defaults to empty tags", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/tags?reportName=test-report");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.tags).toEqual([]);
     });
   });
 
