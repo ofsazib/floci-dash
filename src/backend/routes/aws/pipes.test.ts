@@ -77,6 +77,14 @@ describe("Pipes Routes", () => {
       expect(body.total).toBe(0);
     });
 
+    it("GET /pipes — sparse response defaults to empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/pipes");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.pipes).toEqual([]);
+    });
+
     it("GET /pipes?namePrefix=abc — passes namePrefix", async () => {
       mockSend.mockResolvedValueOnce({ Pipes: [] });
       await get("/pipes?namePrefix=abc");
