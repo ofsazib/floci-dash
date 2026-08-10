@@ -165,6 +165,13 @@ describe("DocDB — Instances", () => {
     expect(json.instance.DBInstanceIdentifier).toBe("i1");
   });
 
+  it("GET /instances/:id — returns null when not found", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/instances/nonexistent");
+    const json = await res.json();
+    expect(json.instance).toBeNull();
+  });
+
   it("DELETE /instances/:id — deletes instance", async () => {
     mockSend.mockResolvedValueOnce({ DBInstance: {} });
     const res = await del("/instances/my-inst");

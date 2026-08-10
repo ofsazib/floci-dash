@@ -1746,7 +1746,7 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 | 25.81 | eks.ts — add 2 sparse {} tests: GET /clusters (result.clusters || [] line 24) + GET /clusters/:name/node-groups (result.nodegroups || [] line 79) — existing empty tests pass truthy [] literals so the fallbacks never fired (88.88%->100% branch) | Done | 2026-08-10 |
 | 25.82 | pipes.ts — add 1 sparse {} test: GET /pipes (result.Pipes || [] line 30) — existing empty test passes truthy [] literal (90%->100% branch) | Done | 2026-08-10 |
 | 25.83 | memorydb.ts — add 2 sparse {} response tests: POST /tags/:arn (TagList || [] line 87) + DELETE /tags/:arn (TagList || [] line 95) — existing tests mock truthy TagList values (91.66%->100% branch) | Done | 2026-08-10 |
-| 25.85 | batch.ts — add 4 tests: GET /job-queues/:name + GET /job-definitions/:name returns null when not found (fires `?.[0] || null` falsy fallback lines 89/130 — only the truthy single tests existed) + POST /jobs/:id/terminate uses default reason when omitted (fires `body.reason || "Terminated by user"` line 177 — only the reason-provided path was tested) + 400 when priority is null (93.75%->100% branch) | Done | 2026-08-10 |
+| 25.86 | docdb.ts — add 1 test: GET /instances/:id returns null when not found (fires `DBInstances?.[0] || null` falsy fallback line 94 — only the clusters get-single had a not-found test, instances only had the truthy single test) (95.45%->100% branch) | Done | 2026-08-10 |
 | 25.34 | Verify: ec2-flow-logs.ts 75.75%→**100% branch**, 17 route tests pass, full suite 7623/7623 (269 files), typecheck clean | Done | 2026-08-06 |
 
 
