@@ -108,7 +108,7 @@ export function useIAMPolicies(scope?: string) {
 export function useIAMPolicy(arn: string | null) {
   return useQuery({
     queryKey: ["aws", "iam", "policies", arn],
-    queryFn: () => api<{ policy: any; versions: any[] }>(`/aws/iam/policies/detail?arn=${encodeURIComponent(arn || "")}`),
+    queryFn: () =>      api<{ policy: any; versions: any[] }>(`/aws/iam/policies/detail?arn=${encodeURIComponent(arn!)}`),
     enabled: !!arn,
   });
 }
@@ -118,7 +118,7 @@ export function usePolicyVersion(arn: string | null, versionId: string | null) {
     queryKey: ["aws", "iam", "policies", arn, "versions", versionId],
     queryFn: () =>
       api<{ versionId: string; document: string; isDefaultVersion: boolean }>(
-        `/aws/iam/policies/version?arn=${encodeURIComponent(arn || "")}&versionId=${versionId}`
+        `/aws/iam/policies/version?arn=${encodeURIComponent(arn!)}&versionId=${versionId}`
       ),
     enabled: !!arn && !!versionId,
   });
