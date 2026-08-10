@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -66,6 +66,17 @@ vi.mock("../../hooks/useEKS", () => ({
 
 import { EKSDashboard, NodegroupsPanel } from "./EKSDashboard";
 
+/**
+ * Cloudscape Modal handles Escape via a React onKeyDown on the dialog element
+ * (checking `event.keyCode === 27`). user-event's `keyboard()` targets the
+ * active element (body), which never reaches the dialog in happy-dom, so we
+ * dispatch the keydown on the dialog directly.
+ */
+function dismissModalWithEscape() {
+  const dialog = document.querySelector('[class*="awsui_dialog"]') as HTMLElement;
+  fireEvent.keyDown(dialog, { keyCode: 27 });
+}
+
 // ─── Helper to create a basic NodegroupsPanel set of props ──
 function ngPanelProps(overrides: Record<string, any> = {}) {
   return {
@@ -106,6 +117,19 @@ beforeEach(() => {
   mockNodegroups.mockReturnValue({
     data: { nodegroups: [], total: 0 },
     isLoading: false,
+  });
+
+  // Wire mutations to invoke `opts.onSuccess` so the onSuccess branches in
+  // the dashboard (modal close + field reset) actually fire.
+  mockCreateCluster.mockReset();
+  mockCreateCluster.mockImplementation((_payload: any, opts?: any) => {
+    opts?.onSuccess?.();
+    return Promise.resolve({});
+  });
+  mockCreateNodegroup.mockReset();
+  mockCreateNodegroup.mockImplementation((_payload: any, opts?: any) => {
+    opts?.onSuccess?.();
+    return Promise.resolve({});
   });
 });
 
@@ -593,5 +617,300 @@ describe("EKSDashboard — cluster list", () => {
     await waitFor(() => {
       expect(deleteMutate).toHaveBeenCalledWith("delete-ng");
     });
+  });
+
+  it("filters clusters by name", async () => {
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [
+          {
+            name: "my-cluster",
+            status: "ACTIVE",
+            version: "1.27",
+            createdAt: "2025-01-15T00:00:00Z",
+          },
+          {
+            name: "other-cluster",
+            status: "ACTIVE",
+            version: "1.27",
+            createdAt: "2025-01-15T00:00:00Z",
+          },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<EKSDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-cluster")).toBeTruthy());
+    expect(screen.getByText("other-cluster")).toBeTruthy();
+
+    const filterInput = screen.getByPlaceholderText("Find clusters by name");
+    await user.type(filterInput, "my");
+
+    await waitFor(() => expect(screen.queryByText("other-cluster")).toBeNull());
+    expect(screen.getByText("my-cluster")).toBeTruthy();
+  });
+
+  it("creates a cluster with a version and resets the form", async () => {
+    const user = userEvent.setup();
+    render(<EKSDashboard />, { wrapper: createWrapper() });
+
+    await clickButton(user, /Create cluster/i);
+    await waitFor(() => expect(screen.getByText("Create EKS cluster")).toBeTruthy());
+
+    // Create stays disabled until both name and role ARN are filled
+    await user.type(screen.getByPlaceholderText("my-cluster"), "new-cluster");
+    let createBtns = screen.getAllByRole("button", { name: /^Create$/ });
+    expect(createBtns[createBtns.length - 1]).toBeDisabled();
+
+    await user.type(
+      screen.getByPlaceholderText("arn:aws:iam::123456789012:role/eks-role"),
+      "arn:aws:iam::123456789012:role/eks-role",
+    );
+    await user.type(screen.getByPlaceholderText("1.27"), "1.27");
+
+    createBtns = screen.getAllByRole("button", { name: /^Create$/ });
+    expect(createBtns[createBtns.length - 1]).toBeEnabled();
+
+    await user.click(createBtns[createBtns.length - 1]);
+
+    await waitFor(() => {
+      expect(mockCreateCluster).toHaveBeenCalledWith(
+        {
+          name: "new-cluster",
+          roleArn: "arn:aws:iam::123456789012:role/eks-role",
+          version: "1.27",
+        },
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      );
+    });
+    // onSuccess closes the modal
+    await waitFor(() => {
+      expect(screen.queryByText("Create EKS cluster")).toBeNull();
+    });
+  });
+
+  it("creates a cluster without a version (falsy fallback)", async () => {
+    const user = userEvent.setup();
+    render(<EKSDashboard />, { wrapper: createWrapper() });
+
+    await clickButton(user, /Create cluster/i);
+    await waitFor(() => expect(screen.getByText("Create EKS cluster")).toBeTruthy());
+
+    await user.type(screen.getByPlaceholderText("my-cluster"), "no-version");
+    await user.type(
+      screen.getByPlaceholderText("arn:aws:iam::123456789012:role/eks-role"),
+      "arn:aws:iam::123456789012:role/eks-role",
+    );
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/ });
+    await user.click(createBtns[createBtns.length - 1]);
+
+    await waitFor(() => {
+      expect(mockCreateCluster).toHaveBeenCalledWith(
+        {
+          name: "no-version",
+          roleArn: "arn:aws:iam::123456789012:role/eks-role",
+          version: undefined,
+        },
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      );
+    });
+  });
+
+  it("dismisses create cluster modal with Escape key", async () => {
+    const user = userEvent.setup();
+    render(<EKSDashboard />, { wrapper: createWrapper() });
+
+    await clickButton(user, /Create cluster/i);
+    await waitFor(() => expect(screen.getByText("Create EKS cluster")).toBeTruthy());
+
+    dismissModalWithEscape();
+    await waitFor(() => {
+      expect(screen.queryByText("Create EKS cluster")).toBeNull();
+    });
+    // Modal did not create anything
+    expect(mockCreateCluster).not.toHaveBeenCalled();
+  });
+
+  it("opens the node group create modal from the drill-down view", async () => {
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [{ name: "drill-cluster", status: "ACTIVE" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    mockNodegroups.mockReturnValue({
+      data: { nodegroups: [], total: 0 },
+      isLoading: false,
+    });
+
+    const user = userEvent.setup();
+    render(<EKSDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("drill-cluster")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "drill-cluster" }));
+    await waitFor(() => expect(screen.getByText("Node Groups — drill-cluster")).toBeTruthy());
+
+    await clickButton(user, /Create node group/i);
+    await waitFor(() => expect(screen.getByText("Create node group")).toBeTruthy());
+    expect(screen.getByPlaceholderText("my-nodegroup")).toBeTruthy();
+    expect(screen.getByPlaceholderText("arn:aws:iam::123456789012:role/eks-node-role")).toBeTruthy();
+    expect(screen.getByPlaceholderText("subnet-12345678, subnet-87654321")).toBeTruthy();
+  });
+
+  it("creates a node group with parsed subnets and resets the form", async () => {
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [{ name: "drill-cluster", status: "ACTIVE" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    mockNodegroups.mockReturnValue({
+      data: { nodegroups: [], total: 0 },
+      isLoading: false,
+    });
+
+    const user = userEvent.setup();
+    render(<EKSDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("drill-cluster")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "drill-cluster" }));
+    await waitFor(() => expect(screen.getByText("Node Groups — drill-cluster")).toBeTruthy());
+
+    await clickButton(user, /Create node group/i);
+    await waitFor(() => expect(screen.getByText("Create node group")).toBeTruthy());
+
+    await user.type(screen.getByPlaceholderText("my-nodegroup"), "my-ng");
+    await user.type(
+      screen.getByPlaceholderText("arn:aws:iam::123456789012:role/eks-node-role"),
+      "arn:aws:iam::123456789012:role/eks-node-role",
+    );
+    // Trailing comma + spacey segments exercise split/trim/filter(Boolean)
+    await user.type(screen.getByPlaceholderText("subnet-12345678, subnet-87654321"), "subnet-a, ,subnet-b, ");
+
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/ });
+    expect(createBtns[createBtns.length - 1]).toBeEnabled();
+    await user.click(createBtns[createBtns.length - 1]);
+
+    await waitFor(() => {
+      expect(mockCreateNodegroup).toHaveBeenCalledWith(
+        {
+          nodegroupName: "my-ng",
+          nodeRole: "arn:aws:iam::123456789012:role/eks-node-role",
+          subnets: ["subnet-a", "subnet-b"],
+        },
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      );
+    });
+    // onSuccess closes the modal
+    await waitFor(() => {
+      expect(screen.queryByText("Create node group")).toBeNull();
+    });
+  });
+
+  it("keeps node group Create disabled until all fields are filled", async () => {
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [{ name: "drill-cluster", status: "ACTIVE" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    mockNodegroups.mockReturnValue({
+      data: { nodegroups: [], total: 0 },
+      isLoading: false,
+    });
+
+    const user = userEvent.setup();
+    render(<EKSDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("drill-cluster")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "drill-cluster" }));
+    await waitFor(() => expect(screen.getByText("Node Groups — drill-cluster")).toBeTruthy());
+
+    await clickButton(user, /Create node group/i);
+    await waitFor(() => expect(screen.getByText("Create node group")).toBeTruthy());
+
+    // Name filled, role + subnets empty -> still disabled
+    await user.type(screen.getByPlaceholderText("my-nodegroup"), "partial-ng");
+    let createBtns = screen.getAllByRole("button", { name: /^Create$/ });
+    expect(createBtns[createBtns.length - 1]).toBeDisabled();
+
+    // Name + role filled, subnets empty -> still disabled
+    await user.type(
+      screen.getByPlaceholderText("arn:aws:iam::123456789012:role/eks-node-role"),
+      "arn:aws:iam::123456789012:role/eks-node-role",
+    );
+    createBtns = screen.getAllByRole("button", { name: /^Create$/ });
+    expect(createBtns[createBtns.length - 1]).toBeDisabled();
+
+    // All filled -> enabled
+    await user.type(screen.getByPlaceholderText("subnet-12345678, subnet-87654321"), "subnet-1");
+    createBtns = screen.getAllByRole("button", { name: /^Create$/ });
+    expect(createBtns[createBtns.length - 1]).toBeEnabled();
+  });
+
+  it("dismisses create node group modal with Escape key", async () => {
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [{ name: "drill-cluster", status: "ACTIVE" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    mockNodegroups.mockReturnValue({
+      data: { nodegroups: [], total: 0 },
+      isLoading: false,
+    });
+
+    const user = userEvent.setup();
+    render(<EKSDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("drill-cluster")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "drill-cluster" }));
+    await waitFor(() => expect(screen.getByText("Node Groups — drill-cluster")).toBeTruthy());
+
+    await clickButton(user, /Create node group/i);
+    await waitFor(() => expect(screen.getByText("Create node group")).toBeTruthy());
+
+    dismissModalWithEscape();
+    await waitFor(() => {
+      expect(screen.queryByText("Create node group")).toBeNull();
+    });
+    expect(mockCreateNodegroup).not.toHaveBeenCalled();
+  });
+
+  it("filters node groups by name", async () => {
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [{ name: "drill-cluster", status: "ACTIVE" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    mockNodegroups.mockReturnValue({
+      data: {
+        nodegroups: [
+          { nodegroupName: "web-ng", status: "ACTIVE" },
+          { nodegroupName: "db-ng", status: "ACTIVE" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+
+    const user = userEvent.setup();
+    render(<EKSDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("drill-cluster")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "drill-cluster" }));
+    await waitFor(() => expect(screen.getByText("web-ng")).toBeTruthy());
+    expect(screen.getByText("db-ng")).toBeTruthy();
+
+    const filterInput = screen.getByPlaceholderText("Find node groups by name");
+    await user.type(filterInput, "web");
+
+    await waitFor(() => expect(screen.queryByText("db-ng")).toBeNull());
+    expect(screen.getByText("web-ng")).toBeTruthy();
   });
 });

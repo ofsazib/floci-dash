@@ -603,6 +603,7 @@ export function EKSDashboard() {
           item.name.toLowerCase().includes(searchText.toLowerCase())
         }
       />
+      {showCreateCluster && (
       <Modal
         visible={showCreateCluster}
         onDismiss={() => setShowCreateCluster(false)}
@@ -665,6 +666,7 @@ export function EKSDashboard() {
           </FormField>
         </Form>
       </Modal>
+      )}
     </>
   );
 }
@@ -746,6 +748,7 @@ export function NodegroupsPanel({
           item.name.toLowerCase().includes(searchText.toLowerCase())
         }
       />
+      {showCreateNodegroup && (
       <Modal
         visible={showCreateNodegroup}
         onDismiss={() => setShowCreateNodegroup(false)}
@@ -808,6 +811,7 @@ export function NodegroupsPanel({
           </FormField>
         </Form>
       </Modal>
+      )}
     </>
   );
 }
