@@ -1746,6 +1746,7 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 | 25.81 | eks.ts — add 2 sparse {} tests: GET /clusters (result.clusters || [] line 24) + GET /clusters/:name/node-groups (result.nodegroups || [] line 79) — existing empty tests pass truthy [] literals so the fallbacks never fired (88.88%->100% branch) | Done | 2026-08-10 |
 | 25.82 | pipes.ts — add 1 sparse {} test: GET /pipes (result.Pipes || [] line 30) — existing empty test passes truthy [] literal (90%->100% branch) | Done | 2026-08-10 |
 | 25.83 | memorydb.ts — add 2 sparse {} response tests: POST /tags/:arn (TagList || [] line 87) + DELETE /tags/:arn (TagList || [] line 95) — existing tests mock truthy TagList values (91.66%->100% branch) | Done | 2026-08-10 |
+| 25.84 | backup.ts — add 2 tests: POST /jobs 400 when backupVaultName missing (line 165 branch 0 + statement 166 — never taken) + 400 when iamRoleArn missing (line 171 branch 0 + statement 172 — never taken; only the resourceArn 400 was tested) (92.3%->100% branch, 98.13%->100% stmts) | Done | 2026-08-10 |
 | 25.34 | Verify: ec2-flow-logs.ts 75.75%→**100% branch**, 17 route tests pass, full suite 7623/7623 (269 files), typecheck clean | Done | 2026-08-06 |
 
 

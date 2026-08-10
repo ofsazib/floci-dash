@@ -300,6 +300,26 @@ describe("Backup routes — Jobs", () => {
     expect(res.status).toBe(400);
   });
 
+  it("POST /jobs — 400 when backupVaultName missing", async () => {
+    const res = await post("/jobs", {
+      resourceArn: "arn:aws:dynamodb:us-east-1::table/my-table",
+      iamRoleArn: "arn:aws:iam::123:role/backup",
+    });
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toBe("backupVaultName is required");
+  });
+
+  it("POST /jobs — 400 when iamRoleArn missing", async () => {
+    const res = await post("/jobs", {
+      backupVaultName: "my-vault",
+      resourceArn: "arn:aws:dynamodb:us-east-1::table/my-table",
+    });
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toBe("iamRoleArn is required");
+  });
+
   it("GET /jobs/:jobId — returns job detail", async () => {
     mockSend.mockResolvedValueOnce({
       BackupJobId: "job-1",
