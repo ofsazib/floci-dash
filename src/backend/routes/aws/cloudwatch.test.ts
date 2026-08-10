@@ -105,6 +105,14 @@ describe("CloudWatch Routes", () => {
       expect(body.total).toBe(0);
     });
 
+    it("GET /metrics — sparse response defaults to empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/metrics");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.metrics).toEqual([]);
+    });
+
     it("POST /metrics/data — puts metric data", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await post("/metrics/data", {
@@ -167,6 +175,19 @@ describe("CloudWatch Routes", () => {
       expect(body.metrics[0].dimensions).toEqual([]);
     });
 
+    it("GET /metrics — maps metric with populated Dimensions", async () => {
+      mockSend.mockResolvedValueOnce({
+        Metrics: [{
+          Namespace: "AWS/Lambda",
+          MetricName: "Invocations",
+          Dimensions: [{ Name: "FunctionName", Value: "my-fn" }],
+        }],
+      });
+      const res = await get("/metrics");
+      const body = await res.json();
+      expect(body.metrics[0].dimensions).toEqual([{ name: "FunctionName", value: "my-fn" }]);
+    });
+
     it("POST /metrics/data — with statisticValues, timestamps, dimensions", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await post("/metrics/data", {
@@ -192,6 +213,13 @@ describe("CloudWatch Routes", () => {
     it("POST /metrics/data — with empty metricData", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await post("/metrics/data", { namespace: "Test", metricData: [] });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].MetricData).toEqual([]);
+    });
+
+    it("POST /metrics/data — without metricData (falls back to empty)", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/metrics/data", { namespace: "Test" });
       expect(res.status).toBe(200);
       expect(mockSend.mock.calls[0][0].MetricData).toEqual([]);
     });
@@ -373,6 +401,14 @@ describe("CloudWatch Routes", () => {
       expect(body.tags.env).toBe("prod");
     });
 
+    it("GET /tags/:arn — sparse response defaults to empty tags", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/tags/my-alarm-arn");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.tags).toEqual({});
+    });
+
     it("POST /tags/:arn — tags a resource", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await post("/tags/my-alarm-arn", { tags: { env: "prod" } });
@@ -425,6 +461,14 @@ describe("CloudWatch Routes", () => {
       expect(body.total).toBe(0);
       expect(body.alarms).toEqual([]);
     });
+
+    it("GET /alarms — sparse response defaults to empty alarms", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/alarms");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.alarms).toEqual([]);
+    });
   });
 
   describe("Metrics — additional edge cases", () => {
@@ -463,6 +507,45 @@ describe("CloudWatch Routes", () => {
       const body = await res.json();
       expect(body.datapoints).toHaveLength(1);
       expect(mockSend.mock.calls[0][0].Dimensions).toEqual([]);
+    });
+
+    it("GET /metrics/statistics — sparse response defaults to empty datapoints", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/metrics/statistics?namespace=AWS/EC2&metricName=CPUUtilization");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.datapoints).toEqual([]);
+    });
+
+    it("GET /metrics/statistics — parses valid JSON dimensions", async () => {
+      mockSend.mockResolvedValueOnce({
+        Label: "CPUUtilization",
+        Datapoints: [{ Timestamp: new Date(), Average: 50, Unit: "Percent" }],
+      });
+      const dims = encodeURIComponent(JSON.stringify([{ name: "InstanceId", value: "i-001" }]));
+      const res = await get(`/metrics/statistics?namespace=AWS/EC2&metricName=CPUUtilization&dimensions=${dims}`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.datapoints).toHaveLength(1);
+      expect(mockSend.mock.calls[0][0].Dimensions).toEqual([{ Name: "InstanceId", Value: "i-001" }]);
+    });
+
+    it("GET /metrics/statistics — sorts datapoints with and without timestamps", async () => {
+      mockSend.mockResolvedValueOnce({
+        Label: "CPUUtilization",
+        Datapoints: [
+          { Timestamp: new Date("2025-01-01T00:00:00Z"), Average: 1 },
+          { Average: 2 },
+          { Timestamp: new Date("2025-01-02T00:00:00Z"), Average: 3 },
+          { Average: 4 },
+        ],
+      });
+      const res = await get("/metrics/statistics?namespace=AWS/EC2&metricName=CPUUtilization");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.datapoints).toHaveLength(4);
+      expect(body.datapoints[0].timestamp).toBeUndefined();
+      expect(body.datapoints[3].timestamp).toBe(new Date("2025-01-02T00:00:00Z").getTime());
     });
   });
 
@@ -505,6 +588,23 @@ describe("CloudWatch Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.results[0].values).toEqual([]);
+    });
+
+    it("POST /metrics/data/query — without queries (falls back to empty)", async () => {
+      mockSend.mockResolvedValueOnce({ MetricDataResults: [] });
+      const res = await post("/metrics/data/query", {});
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.results).toEqual([]);
+      expect(mockSend.mock.calls[0][0].MetricDataQueries).toEqual([]);
+    });
+
+    it("POST /metrics/data/query — sparse response defaults to empty results", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/metrics/data/query", { queries: [{ id: "m1", expression: "SELECT 1" }] });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.results).toEqual([]);
     });
   });
 });
