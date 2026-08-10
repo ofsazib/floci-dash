@@ -505,6 +505,16 @@ describe("Secrets Manager Routes", () => {
       expect(mockSend.mock.calls[0][0].PasswordLength).toBe(32);
     });
 
+    it("POST /random-password — empty request body falls back via catch", async () => {
+      mockSend.mockResolvedValueOnce({ RandomPassword: "fallback-pass" });
+      // No body and no content-type -> c.req.json() rejects -> catch(() => ({})) fires
+      const res = await post("/random-password");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.randomPassword).toBe("fallback-pass");
+      expect(mockSend.mock.calls[0][0].PasswordLength).toBe(32);
+    });
+
     it("POST /random-password — with all exclusion options and requireEachIncludedType: false", async () => {
       mockSend.mockResolvedValueOnce({ RandomPassword: "custom-pass" });
       const res = await post("/random-password", {
