@@ -105,6 +105,13 @@ describe("SNS Routes", () => {
       expect(body.topics).toEqual([]);
     });
 
+    it("GET /topics — sparse response defaults to empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/topics");
+      const body = await res.json();
+      expect(body.topics).toEqual([]);
+    });
+
     it("POST /topics — creates a topic", async () => {
       mockSend.mockResolvedValueOnce({
         TopicArn: "arn:aws:sns:us-east-1:000000000000:new-topic",
@@ -169,6 +176,23 @@ describe("SNS Routes", () => {
       expect(body.error).toBe("topicArn query parameter required");
     });
 
+    it("GET /topics/attributes — 400 when topicArn missing", async () => {
+      const res = await get("/topics/attributes");
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe("topicArn query parameter required");
+    });
+
+    it("GET /topics/attributes — sparse response defaults to empty attributes", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get(
+        "/topics/attributes?topicArn=arn:aws:sns:us-east-1:000000000000:my-topic"
+      );
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.attributes).toEqual({});
+    });
+
     it("GET /topics/tags — lists topic tags", async () => {
       mockSend.mockResolvedValueOnce({
         Tags: [{ Key: "env", Value: "test" }],
@@ -196,6 +220,23 @@ describe("SNS Routes", () => {
       expect(res.status).toBe(400);
       const body = await res.json();
       expect(body.error).toBe("topicArn query parameter required");
+    });
+
+    it("GET /topics/tags — 400 when topicArn missing", async () => {
+      const res = await get("/topics/tags");
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe("topicArn query parameter required");
+    });
+
+    it("GET /topics/tags — sparse response defaults to empty tags", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get(
+        "/topics/tags?topicArn=arn:aws:sns:us-east-1:000000000000:my-topic"
+      );
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.tags).toEqual([]);
     });
 
     it("DELETE /topics/tags — untags a topic", async () => {
@@ -298,6 +339,14 @@ describe("SNS Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.subscriptions).toHaveLength(1);
+    });
+
+    it("GET /subscriptions — sparse response defaults to empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/subscriptions");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.subscriptions).toEqual([]);
     });
 
     it("GET /subscriptions?topicArn= — filters by topic", async () => {

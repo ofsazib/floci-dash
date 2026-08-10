@@ -133,7 +133,7 @@ router.post("/subscriptions", async (c: Context) => {
     new SubscribeCommand({
       TopicArn: body.topicArn,
       Protocol: body.protocol,
-      Endpoint: sanitizeText(body.endpoint || "", 2048),
+      Endpoint: sanitizeText(body.endpoint, 2048),
       Attributes: body.attributes,
     })
   );
@@ -178,7 +178,7 @@ router.post("/topics/publish", async (c: Context) => {
   const result = await client.send(
     new PublishCommand({
       TopicArn: body.topicArn,
-      Message: sanitizeText(body.message || "", 262144),
+      Message: sanitizeText(body.message, 262144),
       Subject: sanitizeName(body.subject || "", 100),
       MessageAttributes: body.messageAttributes,
       MessageStructure: body.messageStructure,
