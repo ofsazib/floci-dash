@@ -147,6 +147,18 @@ describe("EC2 Terminal WebSocket", () => {
     expect(ws.close).toHaveBeenCalledWith(4000, "Invalid path");
   });
 
+  it("falls back to defaults when url and host headers are missing", () => {
+    const server = createMockHttpServer();
+    setupTerminalWebSocket(server);
+
+    const ws = createMockWs();
+    // No req.url and empty headers → req.url || "" and req.headers.host || "localhost"
+    // both fire; path "/" doesn't match the terminal regex → invalid path
+    _wsMock.state.connectionHandler!(ws, { headers: {} });
+
+    expect(ws.close).toHaveBeenCalledWith(4000, "Invalid path");
+  });
+
   it("handles dockerHttpPost failure (no exec ID)", async () => {
     const server = createMockHttpServer();
     setupTerminalWebSocket(server);
@@ -718,6 +730,50 @@ describe("EC2 Terminal WebSocket", () => {
     // Kill again — should no-op
     ws._trigger("close");
     expect(mockSocket.destroy).not.toHaveBeenCalled();
+  });
+
+  it("handles resize message after close — no-op", async () => {
+    const server = createMockHttpServer();
+    setupTerminalWebSocket(server);
+
+    const createRes = createMockRes(JSON.stringify({ Id: "exec-123" }));
+    const createReq = createMockReq();
+    _nodeMock.mockHttpRequest.mockImplementation((_opts: any, cb: (res: any) => void) => {
+      cb(createRes);
+      return createReq;
+    });
+
+    const mockSocket = createMockSocket();
+    _nodeMock.mockNetConnect.mockImplementation((_path: string, cb?: () => void) => {
+      if (cb) setTimeout(cb, 0);
+      return mockSocket;
+    });
+
+    const ws = createMockWs();
+    const req = { url: validUrl, headers: { host: "localhost" } };
+    _wsMock.state.connectionHandler!(ws, req);
+
+    createRes._emit();
+
+    await vi.waitFor(() => {
+      expect(mockSocket.write).toHaveBeenCalled();
+    });
+
+    mockSocket._emitData(Buffer.from("HTTP/1.1 200 OK\r\n\r\n"));
+
+    await vi.waitFor(() => {
+      expect(ws.send).toHaveBeenCalled();
+    });
+
+    // Close the connection first — kill() marks the docker exec as closed
+    ws._trigger("close");
+    expect(mockSocket.destroy).toHaveBeenCalled();
+    _nodeMock.mockHttpRequest.mockClear();
+
+    // Resize JSON after close → proc?.resize → if (closed) return → no resize POST
+    ws._handlers.message?.(Buffer.from(JSON.stringify({ type: "resize", cols: 120, rows: 40 })));
+    await vi.waitFor(() => Promise.resolve());
+    expect(_nodeMock.mockHttpRequest).not.toHaveBeenCalled();
   });
 
   it("handles dockerExecTty promise rejection catch path", async () => {

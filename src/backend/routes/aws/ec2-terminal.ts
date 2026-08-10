@@ -156,16 +156,12 @@ export function setupTerminalWebSocket(server: HttpServer): void {
         } catch { /* ignore */ }
       },
       () => {
-        if (!closed) {
-          try { ws.send("\r\n\x1b[33mSession ended.\x1b[0m\r\n"); } catch { /* ignore */ }
-          close();
-        }
+        try { ws.send("\r\n\x1b[33mSession ended.\x1b[0m\r\n"); } catch { /* ignore */ }
+        close();
       },
       (err: Error) => {
-        if (!closed) {
-          try { ws.send(`\r\n\x1b[31mError: ${err.message}\x1b[0m\r\n`); } catch { /* ignore */ }
-          close();
-        }
+        try { ws.send(`\r\n\x1b[31mError: ${err.message}\x1b[0m\r\n`); } catch { /* ignore */ }
+        close();
       }
     )
       .then((p) => {
@@ -211,10 +207,8 @@ export function setupTerminalWebSocket(server: HttpServer): void {
         );
       })
       .catch((err) => {
-        if (!closed) {
-          try { ws.send(`\r\n\x1b[31mError: ${err.message}\x1b[0m\r\n`); } catch { /* ignore */ }
-          close();
-        }
+        try { ws.send(`\r\n\x1b[31mError: ${err.message}\x1b[0m\r\n`); } catch { /* ignore */ }
+        close();
       });
   });
 
