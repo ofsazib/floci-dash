@@ -68,6 +68,14 @@ describe("RDS Data API — Execute", () => {
     expect(json.columnMetadata).toEqual([{ name: "col1" }]);
     expect(json.numberOfRecordsUpdated).toBe(0);
   });
+
+  it("POST /execute — sparse response defaults records to empty", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/execute", { sql: "SELECT 1", resourceArn: "arn:rds:cluster", secretArn: "arn:secret" });
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.records).toEqual([]);
+  });
 });
 
 describe("RDS Data API — Transactions", () => {
