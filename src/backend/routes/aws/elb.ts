@@ -101,14 +101,14 @@ router.post("/load-balancers", async (c: Context) => {
 });
 
 router.delete("/load-balancers/:arn", async (c: Context) => {
-  const arn = decodeURIComponent(c.req.param("arn") || "");
+  const arn = decodeURIComponent(c.req.param("arn")!);
   const client = getClient();
   await client.send(new DeleteLoadBalancerCommand({ LoadBalancerArn: arn }));
   return c.json({ loadBalancerArn: arn, deleted: true });
 });
 
 router.get("/load-balancers/:arn/attributes", async (c: Context) => {
-  const arn = decodeURIComponent(c.req.param("arn") || "");
+  const arn = decodeURIComponent(c.req.param("arn")!);
   const client = getClient();
   const result = await client.send(
     new DescribeLoadBalancerAttributesCommand({ LoadBalancerArn: arn })
@@ -121,7 +121,7 @@ router.get("/load-balancers/:arn/attributes", async (c: Context) => {
 });
 
 router.put("/load-balancers/:arn/attributes", async (c: Context) => {
-  const arn = decodeURIComponent(c.req.param("arn") || "");
+  const arn = decodeURIComponent(c.req.param("arn")!);
   const body = await c.req.json<{ attributes: Record<string, string> }>();
   const client = getClient();
   const attributes = Object.entries(body.attributes || {}).map(([Key, Value]) => ({ Key, Value }));
@@ -186,14 +186,14 @@ router.post("/target-groups", async (c: Context) => {
 });
 
 router.delete("/target-groups/:arn", async (c: Context) => {
-  const arn = decodeURIComponent(c.req.param("arn") || "");
+  const arn = decodeURIComponent(c.req.param("arn")!);
   const client = getClient();
   await client.send(new DeleteTargetGroupCommand({ TargetGroupArn: arn }));
   return c.json({ targetGroupArn: arn, deleted: true });
 });
 
 router.get("/target-groups/:arn/attributes", async (c: Context) => {
-  const arn = decodeURIComponent(c.req.param("arn") || "");
+  const arn = decodeURIComponent(c.req.param("arn")!);
   const client = getClient();
   const result = await client.send(
     new DescribeTargetGroupAttributesCommand({ TargetGroupArn: arn })
@@ -206,7 +206,7 @@ router.get("/target-groups/:arn/attributes", async (c: Context) => {
 });
 
 router.get("/target-groups/:arn/health", async (c: Context) => {
-  const arn = decodeURIComponent(c.req.param("arn") || "");
+  const arn = decodeURIComponent(c.req.param("arn")!);
   const client = getClient();
   const result = await client.send(
     new DescribeTargetHealthCommand({ TargetGroupArn: arn })
@@ -224,7 +224,7 @@ router.get("/target-groups/:arn/health", async (c: Context) => {
 // ── Listeners ─────────────────────────────────────────────
 
 router.get("/load-balancers/:arn/listeners", async (c: Context) => {
-  const lbArn = decodeURIComponent(c.req.param("arn") || "");
+  const lbArn = decodeURIComponent(c.req.param("arn")!);
   const client = getClient();
   const result = await client.send(
     new DescribeListenersCommand({ LoadBalancerArn: lbArn })
@@ -241,7 +241,7 @@ router.get("/load-balancers/:arn/listeners", async (c: Context) => {
 });
 
 router.post("/load-balancers/:arn/listeners", async (c: Context) => {
-  const lbArn = decodeURIComponent(c.req.param("arn") || "");
+  const lbArn = decodeURIComponent(c.req.param("arn")!);
   const body = await c.req.json<{
     protocol: string;
     port: number;
@@ -265,14 +265,14 @@ router.post("/load-balancers/:arn/listeners", async (c: Context) => {
 });
 
 router.delete("/listeners/:arn", async (c: Context) => {
-  const arn = decodeURIComponent(c.req.param("arn") || "");
+  const arn = decodeURIComponent(c.req.param("arn")!);
   const client = getClient();
   await client.send(new DeleteListenerCommand({ ListenerArn: arn }));
   return c.json({ listenerArn: arn, deleted: true });
 });
 
 router.get("/listeners/:arn/attributes", async (c: Context) => {
-  const arn = decodeURIComponent(c.req.param("arn") || "");
+  const arn = decodeURIComponent(c.req.param("arn")!);
   const client = getClient();
   const result = await client.send(
     new DescribeListenerAttributesCommand({ ListenerArn: arn })
@@ -287,7 +287,7 @@ router.get("/listeners/:arn/attributes", async (c: Context) => {
 // ── Listener Rules ───────────────────────────────────────
 
 router.get("/listeners/:arn/rules", async (c: Context) => {
-  const arn = decodeURIComponent(c.req.param("arn") || "");
+  const arn = decodeURIComponent(c.req.param("arn")!);
   const client = getClient();
   const result = await client.send(new DescribeRulesCommand({ ListenerArn: arn }));
   const rules = (result.Rules || []).map((r) => ({
@@ -302,7 +302,7 @@ router.get("/listeners/:arn/rules", async (c: Context) => {
 });
 
 router.post("/listeners/:arn/rules", async (c: Context) => {
-  const arn = decodeURIComponent(c.req.param("arn") || "");
+  const arn = decodeURIComponent(c.req.param("arn")!);
   const body = await c.req.json<{
     priority: number;
     conditions: any[];
@@ -338,7 +338,7 @@ router.put("/rules/set-priorities", async (c: Context) => {
 });
 
 router.put("/rules/:arn", async (c: Context) => {
-  const arn = decodeURIComponent(c.req.param("arn") || "");
+  const arn = decodeURIComponent(c.req.param("arn")!);
   const body = await c.req.json<{ conditions?: any[]; actions?: any[] }>();
   if (!body.conditions?.length && !body.actions?.length) {
     return c.json({ error: "conditions or actions are required" }, 400);
@@ -355,7 +355,7 @@ router.put("/rules/:arn", async (c: Context) => {
 });
 
 router.delete("/rules/:arn", async (c: Context) => {
-  const arn = decodeURIComponent(c.req.param("arn") || "");
+  const arn = decodeURIComponent(c.req.param("arn")!);
   const client = getClient();
   await client.send(new DeleteRuleCommand({ RuleArn: arn }));
   return c.json({ ruleArn: arn, deleted: true });
@@ -364,7 +364,7 @@ router.delete("/rules/:arn", async (c: Context) => {
 // ── Target Registration ───────────────────────────────────
 
 router.post("/target-groups/:arn/register", async (c: Context) => {
-  const tgArn = decodeURIComponent(c.req.param("arn") || "");
+  const tgArn = decodeURIComponent(c.req.param("arn")!);
   const body = await c.req.json<{ targets: Array<{ id: string; port?: number }> }>();
   if (!body.targets?.length) return c.json({ error: "targets are required" }, 400);
   const client = getClient();
@@ -378,7 +378,7 @@ router.post("/target-groups/:arn/register", async (c: Context) => {
 });
 
 router.post("/target-groups/:arn/deregister", async (c: Context) => {
-  const tgArn = decodeURIComponent(c.req.param("arn") || "");
+  const tgArn = decodeURIComponent(c.req.param("arn")!);
   const body = await c.req.json<{ targets: Array<{ id: string; port?: number }> }>();
   if (!body.targets?.length) return c.json({ error: "targets are required" }, 400);
   const client = getClient();
@@ -394,7 +394,7 @@ router.post("/target-groups/:arn/deregister", async (c: Context) => {
 // ── Advanced LB Settings ──────────────────────────────────
 
 router.put("/load-balancers/:arn/security-groups", async (c: Context) => {
-  const arn = decodeURIComponent(c.req.param("arn") || "");
+  const arn = decodeURIComponent(c.req.param("arn")!);
   const body = await c.req.json<{ securityGroups: string[] }>();
   if (!body.securityGroups?.length) return c.json({ error: "securityGroups is required" }, 400);
   const client = getClient();
@@ -403,7 +403,7 @@ router.put("/load-balancers/:arn/security-groups", async (c: Context) => {
 });
 
 router.put("/load-balancers/:arn/subnets", async (c: Context) => {
-  const arn = decodeURIComponent(c.req.param("arn") || "");
+  const arn = decodeURIComponent(c.req.param("arn")!);
   const body = await c.req.json<{ subnets: string[] }>();
   if (!body.subnets?.length) return c.json({ error: "subnets is required" }, 400);
   const client = getClient();
@@ -412,7 +412,7 @@ router.put("/load-balancers/:arn/subnets", async (c: Context) => {
 });
 
 router.put("/load-balancers/:arn/ip-address-type", async (c: Context) => {
-  const arn = decodeURIComponent(c.req.param("arn") || "");
+  const arn = decodeURIComponent(c.req.param("arn")!);
   const body = await c.req.json<{ ipAddressType: string }>();
   if (!body.ipAddressType) return c.json({ error: "ipAddressType is required" }, 400);
   const client = getClient();
@@ -436,14 +436,14 @@ router.get("/ssl-policies", async (c: Context) => {
 // ── Listener Certificates ─────────────────────────────────
 
 router.get("/listeners/:arn/certificates", async (c: Context) => {
-  const arn = decodeURIComponent(c.req.param("arn") || "");
+  const arn = decodeURIComponent(c.req.param("arn")!);
   const client = getClient();
   const result = await client.send(new DescribeListenerCertificatesCommand({ ListenerArn: arn }));
   return c.json({ certificates: result.Certificates || [], total: result.Certificates?.length || 0 });
 });
 
 router.post("/listeners/:arn/certificates", async (c: Context) => {
-  const arn = decodeURIComponent(c.req.param("arn") || "");
+  const arn = decodeURIComponent(c.req.param("arn")!);
   const body = await c.req.json<{ certificateArn: string }>();
   if (!body.certificateArn) return c.json({ error: "certificateArn is required" }, 400);
   const client = getClient();
@@ -457,7 +457,7 @@ router.post("/listeners/:arn/certificates", async (c: Context) => {
 });
 
 router.post("/listeners/:arn/certificates/remove", async (c: Context) => {
-  const arn = decodeURIComponent(c.req.param("arn") || "");
+  const arn = decodeURIComponent(c.req.param("arn")!);
   const body = await c.req.json<{ certificateArn: string }>();
   if (!body.certificateArn) return c.json({ error: "certificateArn is required" }, 400);
   const client = getClient();
@@ -473,7 +473,7 @@ router.post("/listeners/:arn/certificates/remove", async (c: Context) => {
 // ── Listener Attributes ───────────────────────────────────
 
 router.put("/listeners/:arn/attributes", async (c: Context) => {
-  const arn = decodeURIComponent(c.req.param("arn") || "");
+  const arn = decodeURIComponent(c.req.param("arn")!);
   const body = await c.req.json<{ attributes: Record<string, string> }>();
   if (!body.attributes || !Object.keys(body.attributes).length) {
     return c.json({ error: "attributes are required" }, 400);
@@ -487,7 +487,7 @@ router.put("/listeners/:arn/attributes", async (c: Context) => {
 // ── Target Group Attributes ───────────────────────────────
 
 router.put("/target-groups/:arn/attributes", async (c: Context) => {
-  const arn = decodeURIComponent(c.req.param("arn") || "");
+  const arn = decodeURIComponent(c.req.param("arn")!);
   const body = await c.req.json<{ attributes: Record<string, string> }>();
   if (!body.attributes || !Object.keys(body.attributes).length) {
     return c.json({ error: "attributes are required" }, 400);
