@@ -65,6 +65,18 @@ vi.mock("../../hooks/useEMR", () => ({
 
 import { EMRDashboard } from "./EMRDashboard";
 
+/**
+ * Cloudscape Modal handles Escape via a React onKeyDown on the dialog element
+ * (checking `event.keyCode === 27`). user-event's `keyboard()` targets the
+ * active element (body), which never reaches the dialog in happy-dom, so we
+ * dispatch the keydown on the dialog directly.
+ */
+function dismissModalWithEscape() {
+  document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+    fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27 });
+  });
+}
+
 // ─── Setup ──────────────────────────────────────────────
 
 beforeEach(() => {
@@ -330,6 +342,99 @@ describe("EMRDashboard — clusters", () => {
       expect(mockRunJobFlow).not.toHaveBeenCalled();
     });
   });
+
+  it("filters clusters by name", async () => {
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [
+          { Id: "j-1", Name: "alpha-cluster", Status: { State: "RUNNING" } },
+          { Id: "j-2", Name: "beta-cluster", Status: { State: "RUNNING" } },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<EMRDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("alpha-cluster")).toBeTruthy());
+
+    // First "Find by name" input belongs to the clusters table
+    const filterInputs = screen.getAllByPlaceholderText("Find by name");
+    await user.type(filterInputs[0], "beta");
+    await waitFor(() => expect(screen.queryByText("alpha-cluster")).toBeNull());
+  });
+
+  it("creates a cluster with a release label", async () => {
+    mockRunJobFlow.mockImplementation((_body: any, opts: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    render(<EMRDashboard />, { wrapper: createWrapper() });
+
+    await clickButton(user, /Create cluster/i);
+    await waitFor(() => expect(screen.getByText("Run Job Flow")).toBeTruthy());
+
+    await user.type(screen.getByRole("textbox", { name: /Cluster name/ }), "  test-cluster  ");
+    await user.type(screen.getByRole("textbox", { name: /Release label/ }), "emr-7.1.0");
+    await clickButton(user, /^Create$/);
+
+    await waitFor(() => {
+      expect(mockRunJobFlow).toHaveBeenCalledWith(
+        { Name: "test-cluster", ReleaseLabel: "emr-7.1.0", Instances: { KeepJobFlowAliveWhenNoSteps: true } },
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      );
+      expect(screen.queryByText("Run Job Flow")).toBeNull();
+    });
+  });
+
+  it("creates a cluster without a release label", async () => {
+    mockRunJobFlow.mockImplementation((_body: any, opts: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    render(<EMRDashboard />, { wrapper: createWrapper() });
+
+    await clickButton(user, /Create cluster/i);
+    await waitFor(() => expect(screen.getByText("Run Job Flow")).toBeTruthy());
+
+    await user.type(screen.getByRole("textbox", { name: /Cluster name/ }), "bare-cluster");
+    await clickButton(user, /^Create$/);
+
+    await waitFor(() => {
+      expect(mockRunJobFlow).toHaveBeenCalledWith(
+        { Name: "bare-cluster", ReleaseLabel: undefined, Instances: { KeepJobFlowAliveWhenNoSteps: true } },
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      );
+    });
+  });
+
+  it("dismisses the Run Job Flow modal with Escape", async () => {
+    const user = userEvent.setup();
+    render(<EMRDashboard />, { wrapper: createWrapper() });
+
+    await clickButton(user, /Create cluster/i);
+    await waitFor(() => expect(screen.getByText("Run Job Flow")).toBeTruthy());
+
+    dismissModalWithEscape();
+    await waitFor(() => expect(screen.queryByText("Run Job Flow")).toBeNull());
+    expect(mockRunJobFlow).not.toHaveBeenCalled();
+  });
+
+  it("shows the Failed fallback alert when runJobFlow fails without a message", async () => {
+    mockRunJobFlowHook.mockReturnValue({
+      mutate: mockRunJobFlow,
+      isPending: false,
+      isError: true,
+      error: new Error("") as any,
+      reset: vi.fn(),
+    });
+    const user = userEvent.setup();
+    render(<EMRDashboard />, { wrapper: createWrapper() });
+
+    await clickButton(user, /Create cluster/i);
+    await waitFor(() => {
+      expect(screen.getByText("Run Job Flow")).toBeTruthy();
+      expect(screen.getByText("Failed")).toBeTruthy();
+    });
+  });
 });
 
 describe("EMRDashboard — security configurations", () => {
@@ -447,6 +552,7 @@ describe("EMRDashboard — security configurations", () => {
   });
 
   it("creates a security configuration by submitting the form", async () => {
+    mockCreateSecConfig.mockImplementation((_body: any, opts: any) => opts?.onSuccess?.());
     const user = userEvent.setup();
     render(<EMRDashboard />, { wrapper: createWrapper() });
 
@@ -457,23 +563,106 @@ describe("EMRDashboard — security configurations", () => {
 
     // Type into name input (use role textbox with name "Name")
     const nameInput = screen.getByRole("textbox", { name: /^Name$/ });
-    await user.type(nameInput, "test-sec-config");
+    await user.type(nameInput, "  test-sec-config  ");
 
     // Paste JSON into the security configuration textarea (avoids KeyboardEvent parsing of { })
     const jsonTextarea = screen.getByPlaceholderText(/EncryptionConfiguration/);
     await user.click(jsonTextarea);
     await user.paste('{"EncryptionConfiguration":{"EnableAtRest":true}}');
 
-    // Click Create button (last one — inside the modal)
-    const createBtns = screen.getAllByRole("button", { name: /^Create$/ });
-    await user.click(createBtns[createBtns.length - 1]);
+    // Click Create button (the modal is conditionally mounted, so this is the only one)
+    await clickButton(user, /^Create$/);
 
     await waitFor(() => {
       expect(mockCreateSecConfig).toHaveBeenCalledWith(
-        expect.objectContaining({ Name: "test-sec-config" }),
-        expect.any(Object),
+        {
+          Name: "test-sec-config",
+          SecurityConfiguration: '{"EncryptionConfiguration":{"EnableAtRest":true}}',
+        },
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
       );
+      // The modal's JSON label is unique to the modal (the table's Create button
+      // keeps the "Create Security Configuration" text in the DOM)
+      expect(screen.queryByText("Security Configuration (JSON)")).toBeNull();
     });
+  });
+
+  it("filters security configurations by name", async () => {
+    mockSecConfigs.mockReturnValue({
+      data: {
+        securityConfigurations: [
+          { Name: "alpha-sec", CreationDateTime: 1700000000 },
+          { Name: "beta-sec", CreationDateTime: 1700000000 },
+        ],
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<EMRDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("alpha-sec")).toBeTruthy());
+
+    // Second "Find by name" input belongs to the security configurations table
+    const filterInputs = screen.getAllByPlaceholderText("Find by name");
+    await user.type(filterInputs[1], "beta");
+    await waitFor(() => expect(screen.queryByText("alpha-sec")).toBeNull());
+  });
+
+  it("renders empty security configurations when the key is missing", () => {
+    mockSecConfigs.mockReturnValue({ data: {}, isLoading: false });
+    render(<EMRDashboard />, { wrapper: createWrapper() });
+    expect(screen.getAllByText(/No security/i).length).toBeGreaterThan(0);
+  });
+
+  it("dismisses the Create Security Configuration modal with Escape", async () => {
+    const user = userEvent.setup();
+    render(<EMRDashboard />, { wrapper: createWrapper() });
+
+    await clickButton(user, /Create security configuration/i);
+    await waitFor(() => {
+      expect(screen.getAllByText("Create Security Configuration").length).toBeGreaterThan(0);
+    });
+
+    dismissModalWithEscape();
+    await waitFor(() => expect(screen.queryByText("Security Configuration (JSON)")).toBeNull());
+    expect(mockCreateSecConfig).not.toHaveBeenCalled();
+  });
+
+  it("shows the Failed fallback alert when createSecConfig fails without a message", async () => {
+    mockCreateSecConfigHook.mockReturnValue({
+      mutate: mockCreateSecConfig,
+      isPending: false,
+      isError: true,
+      error: new Error("") as any,
+      reset: vi.fn(),
+    });
+    const user = userEvent.setup();
+    render(<EMRDashboard />, { wrapper: createWrapper() });
+
+    await clickButton(user, /Create security configuration/i);
+    await waitFor(() => {
+      expect(screen.getAllByText("Create Security Configuration").length).toBeGreaterThan(0);
+      expect(screen.getByText("Failed")).toBeTruthy();
+    });
+  });
+
+  it("does not submit a security configuration with invalid JSON", async () => {
+    const user = userEvent.setup();
+    render(<EMRDashboard />, { wrapper: createWrapper() });
+
+    await clickButton(user, /Create security configuration/i);
+    await waitFor(() => {
+      expect(screen.getAllByText("Create Security Configuration").length).toBeGreaterThan(0);
+    });
+
+    await user.type(screen.getByRole("textbox", { name: /^Name$/ }), "bad-json");
+    await user.type(screen.getByPlaceholderText(/EncryptionConfiguration/), "not-json");
+
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/ });
+    expect(createBtns[createBtns.length - 1]).toBeEnabled();
+    await user.click(createBtns[createBtns.length - 1]);
+
+    // JSON.parse throws -> the catch guard returns without mutating
+    expect(mockCreateSecConfig).not.toHaveBeenCalled();
   });
 });
 

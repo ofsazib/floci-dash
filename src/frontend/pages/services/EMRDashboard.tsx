@@ -569,7 +569,7 @@ export function EMRDashboard() {
         onCreate={() => setShowCreateSecConfig(true)}
       />
 
-      <Modal visible={showCreateCluster} onDismiss={() => setShowCreateCluster(false)} header="Run Job Flow"
+      {showCreateCluster && <Modal visible onDismiss={() => setShowCreateCluster(false)} header="Run Job Flow"
         footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
           <Button variant="link" onClick={() => setShowCreateCluster(false)}>Cancel</Button>
           <Button variant="primary" loading={runJobFlow.isPending} disabled={!clusterName.trim()} onClick={() => {
@@ -584,9 +584,9 @@ export function EMRDashboard() {
             <FormField label="Release label"><Input value={releaseLabel} onChange={({ detail }) => setReleaseLabel(detail.value)} placeholder="emr-7.1.0" /></FormField>
           </SpaceBetween>
         </Form>
-      </Modal>
+      </Modal>}
 
-      <Modal visible={showCreateSecConfig} onDismiss={() => setShowCreateSecConfig(false)} header="Create Security Configuration"
+      {showCreateSecConfig && <Modal visible onDismiss={() => setShowCreateSecConfig(false)} header="Create Security Configuration"
         footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
           <Button variant="link" onClick={() => setShowCreateSecConfig(false)}>Cancel</Button>
           <Button variant="primary" loading={createSecConfig.isPending} disabled={!secName.trim() || !secConfigJson.trim()} onClick={() => {
@@ -604,7 +604,7 @@ export function EMRDashboard() {
             </FormField>
           </SpaceBetween>
         </Form>
-      </Modal>
+      </Modal>}
     </SpaceBetween>
   );
 }
