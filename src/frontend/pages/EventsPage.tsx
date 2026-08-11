@@ -182,9 +182,7 @@ function RulesTab({
           loading={isLoading}
           loadingText="Loading rules..."
           trackBy="Name"
-          onRowClick={({ detail }) => {
-            if (detail.item) setSelectedRule(detail.item.Name);
-          }}
+          onRowClick={({ detail }) => setSelectedRule(detail.item.Name)}
           columnDefinitions={[
             {
               id: "name",
@@ -322,7 +320,6 @@ function TargetsSection({
   const targets = data?.targets || [];
 
   const handleAddTarget = () => {
-    if (!newTargetArn.trim() || !newTargetId.trim()) return;
     putTargets.mutate(
       { rule, targets: [{ Id: newTargetId, Arn: newTargetArn }] },
       {
@@ -422,7 +419,6 @@ function CreateRuleModal({
   const putRule = usePutEventRule();
 
   const handleSubmit = () => {
-    if (!name.trim()) return;
     if (!eventPattern.trim() && !scheduleExpr.trim()) {
       showToast("warning", "Either event pattern or schedule expression is required");
       return;
@@ -1057,7 +1053,6 @@ function CreateReplayModal({
   const startReplay = useStartEventReplay();
 
   const handleSubmit = () => {
-    if (!name.trim() || !sourceArn.trim() || !startTime.trim()) return;
     startReplay.mutate(
       {
         replayName: name.trim(),
@@ -1255,7 +1250,6 @@ function CreatePermissionModal({
   const putPermission = usePutEventBusPermission();
 
   const handleSubmit = () => {
-    if (!statementId.trim() || !principal.trim() || !action.trim()) return;
     let parsedCondition: any = undefined;
     if (condition.trim()) {
       try {
