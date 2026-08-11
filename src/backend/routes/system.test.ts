@@ -116,6 +116,23 @@ describe("System Routes", () => {
       const body = await res.json();
       Object.values(body).forEach((count) => expect(count).toBe(0));
     });
+
+    it("handles EC2 reservations without Instances", async () => {
+      mockAwsSend
+        .mockResolvedValueOnce({}) // s3
+        .mockResolvedValueOnce({}) // dynamodb
+        .mockResolvedValueOnce({ Reservations: [{ Instances: [{ InstanceId: "i-1" }] }, { OtherField: "x" }] }) // ec2
+        .mockResolvedValueOnce({}) // lambda
+        .mockResolvedValueOnce({}) // rds
+        .mockResolvedValueOnce({}) // sqs
+        .mockResolvedValueOnce({}) // sns
+        .mockResolvedValueOnce({}) // kms
+        .mockResolvedValueOnce({}); // cloudwatch
+      const res = await router.request("/resource-counts", { method: "GET" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.ec2).toBe(1);
+    });
   });
 
   describe("GET /floci-endpoint", () => {
