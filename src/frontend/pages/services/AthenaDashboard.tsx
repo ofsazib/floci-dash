@@ -625,8 +625,8 @@ function WorkGroupsTab({ data, deleteWg, createWg, showToast, onSelect }: any) {
         filterPlaceholder="Find work groups"
         filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
       />
-      <Modal
-        visible={showCreate}
+      {showCreate && <Modal
+        visible
         onDismiss={() => { setShowCreate(false); setNewName(""); setNewDesc(""); }}
         header="Create Work Group"
         footer={
@@ -650,7 +650,7 @@ function WorkGroupsTab({ data, deleteWg, createWg, showToast, onSelect }: any) {
             <Input value={newDesc} onChange={({ detail }) => setNewDesc(detail.value)} placeholder="Optional description" />
           </FormField>
         </Form>
-      </Modal>
+      </Modal>}
     </>
   );
 }
@@ -737,7 +737,7 @@ function QueryExecutionsTab({ data, onSelect }: any) {
         loading={false}
         empty={<Box textAlign="center" padding={{ top: "xl" }}>No query executions.</Box>}
       />
-      <Modal visible={detailOpen} onDismiss={() => setDetailOpen(false)} header="Query Execution Detail" size="large">
+      {detailOpen && <Modal visible onDismiss={() => setDetailOpen(false)} header="Query Execution Detail" size="large">
         {detail?.queryExecution && (
           <SpaceBetween size="m">
             <ColumnLayout columns={2} variant="text-grid">
@@ -762,7 +762,7 @@ function QueryExecutionsTab({ data, onSelect }: any) {
             )}
           </SpaceBetween>
         )}
-      </Modal>
+      </Modal>}
     </>
   );
 }

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -11,6 +11,12 @@ const mockWorkGroups = vi.fn();
 const mockDeleteWg = vi.fn();
 const mockQueryExecutions = vi.fn();
 const mockCreateWg = vi.fn();
+const mockStopQuery = vi.fn();
+
+const deleteWgState = vi.hoisted(() => ({
+  isPending: false,
+  variables: null as string | null,
+}));
 
 const wgDetailState = vi.hoisted(() => ({
   data: undefined as any,
@@ -28,17 +34,17 @@ const qResultsState = vi.hoisted(() => ({
 }));
 
 const catalogsState = vi.hoisted(() => ({
-  data: { dataCatalogs: [] as any[], total: 0 },
+  data: undefined as any,
   isLoading: false,
 }));
 
 const databasesState = vi.hoisted(() => ({
-  data: { databases: [] as any[], total: 0 },
+  data: undefined as any,
   isLoading: false,
 }));
 
 const tablesState = vi.hoisted(() => ({
-  data: { tables: [] as any[], total: 0 },
+  data: undefined as any,
   isLoading: false,
 }));
 
@@ -60,8 +66,8 @@ vi.mock("../../hooks/useAthena", () => ({
   useAthenaWorkGroups: (...args: any[]) => mockWorkGroups(...args),
   useDeleteAthenaWorkGroup: () => ({
     mutateAsync: mockDeleteWg,
-    isPending: false,
-    variables: null,
+    get isPending() { return deleteWgState.isPending; },
+    get variables() { return deleteWgState.variables; },
   }),
   useAthenaQueryExecutions: (...args: any[]) => mockQueryExecutions(...args),
   useCreateAthenaWorkGroup: () => ({
@@ -85,7 +91,7 @@ vi.mock("../../hooks/useAthena", () => ({
     get isLoading() { return qResultsState.isLoading; },
   }),
   useStopAthenaQuery: () => ({
-    mutate: vi.fn(),
+    mutate: mockStopQuery,
     mutateAsync: vi.fn(),
     get isPending() { return stopQueryState.isPending; },
     get variables() { return stopQueryState.variables; },
@@ -110,11 +116,25 @@ vi.mock("../../hooks/useAthena", () => ({
 
 import { AthenaDashboard } from "./AthenaDashboard";
 
+/**
+ * Cloudscape Modal handles Escape via a React onKeyDown on the dialog element
+ * (checking `event.keyCode === 27`). user-event's `keyboard()` targets the
+ * active element (body), which never reaches the dialog in happy-dom, so we
+ * dispatch the keydown on the dialog directly.
+ */
+function dismissModalWithEscape() {
+  document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+    fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27 });
+  });
+}
+
 // ─── Setup ──────────────────────────────────────────────
 
 beforeEach(() => {
   vi.clearAllMocks();
   mockCreateWg.mockReset();
+  deleteWgState.isPending = false;
+  deleteWgState.variables = null;
   createWgState.isPending = false;
   stopQueryState.isPending = false;
   stopQueryState.variables = null;
@@ -303,6 +323,111 @@ describe("AthenaDashboard — work groups tab", () => {
     expect(mockCreateWg).toHaveBeenCalledWith({ name: "minWG", description: "" }, expect.any(Object));
   });
 
+  it("filters work groups by name", async () => {
+    mockWorkGroups.mockReturnValue({
+      data: {
+        workGroups: [
+          { Name: "alpha-wg", State: "ENABLED", Description: "A", CreationTime: 1705000000 },
+          { Name: "beta-wg", State: "ENABLED", Description: "B", CreationTime: 1705100000 },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("alpha-wg")).toBeTruthy());
+
+    await user.type(screen.getByPlaceholderText("Find work groups"), "beta");
+    await waitFor(() => expect(screen.queryByText("alpha-wg")).toBeNull());
+  });
+
+  it("renders work groups when the key is missing", () => {
+    mockWorkGroups.mockReturnValue({ data: { total: 0 }, isLoading: false });
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No work groups/i)).toBeTruthy();
+  });
+
+  it("shows ENABLED fallback for missing state", () => {
+    mockWorkGroups.mockReturnValue({
+      data: {
+        workGroups: [{ Name: "wg-nostate", State: null, Description: "D", CreationTime: 1705000000 }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("wg-nostate")).toBeTruthy();
+    expect(screen.getByText("ENABLED")).toBeTruthy();
+  });
+
+  it("shows delete loading state", () => {
+    deleteWgState.isPending = true;
+    deleteWgState.variables = "wg-del";
+    mockWorkGroups.mockReturnValue({
+      data: {
+        workGroups: [{ Name: "wg-del", State: "ENABLED", Description: "D", CreationTime: 1705000000 }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("wg-del")).toBeTruthy();
+  });
+
+  it("creates a work group with description and closes the modal", async () => {
+    mockCreateWg.mockImplementation((_body: any, opts: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create Work Group/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-workgroup")).toBeTruthy());
+
+    await user.type(screen.getByPlaceholderText("my-workgroup"), "analytics");
+    await user.type(screen.getByPlaceholderText("Optional description"), "Main analytics WG");
+    await clickButton(user, /^Create$/);
+
+    await waitFor(() => {
+      expect(mockCreateWg).toHaveBeenCalledWith(
+        { name: "analytics", description: "Main analytics WG" },
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      );
+      expect(screen.queryByText(/Must be unique/i)).toBeNull();
+    });
+  });
+
+  it("shows error toast when create fails", async () => {
+    mockCreateWg.mockImplementation((_body: any, opts: any) => opts?.onError?.(new Error("create wg failed")));
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create Work Group/i);
+    await user.type(screen.getByPlaceholderText("my-workgroup"), "fail-wg");
+    await clickButton(user, /^Create$/);
+    await waitFor(() => {
+      expect(mockCreateWg).toHaveBeenCalledWith({ name: "fail-wg", description: "" }, expect.anything());
+    });
+  });
+
+  it("cancels the create work group modal", async () => {
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create Work Group/i);
+    await waitFor(() => expect(screen.getByText(/Must be unique/i)).toBeTruthy());
+    const cancelBtns = screen.getAllByRole("button", { name: /Cancel/i });
+    await user.click(cancelBtns[cancelBtns.length - 1]);
+    await waitFor(() => expect(screen.queryByText(/Must be unique/i)).toBeNull());
+  });
+
+  it("dismisses the create work group modal with Escape", async () => {
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create Work Group/i);
+    await waitFor(() => expect(screen.getByText(/Must be unique/i)).toBeTruthy());
+
+    dismissModalWithEscape();
+    await waitFor(() => expect(screen.queryByText(/Must be unique/i)).toBeNull());
+    expect(mockCreateWg).not.toHaveBeenCalled();
+  });
+
   // ── Work Group Detail ──
 
   it("opens work group detail tab via Details button", async () => {
@@ -423,6 +548,70 @@ describe("AthenaDashboard — work groups tab", () => {
       expect(screen.getByRole("tab", { name: /work groups/i, selected: true })).toBeTruthy();
     });
   });
+
+  it("shows spinner while loading work group detail", async () => {
+    wgDetailState.isLoading = true;
+    mockWorkGroups.mockReturnValue({
+      data: {
+        workGroups: [{ Name: "wg-loading", State: "ENABLED", Description: "L", CreationTime: 1705000000 }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /^Details$/);
+    await waitFor(() => {
+      expect(document.querySelectorAll('[class*="awsui_circle"]').length).toBeGreaterThan(0);
+    });
+  });
+
+  it("shows dash for missing work group state", async () => {
+    mockWorkGroups.mockReturnValue({
+      data: {
+        workGroups: [{ Name: "wg-nostate2", State: null, Description: "D", CreationTime: 1705000000 }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    wgDetailState.data = { workGroup: { Name: "wg-nostate2", State: null, Description: "D", CreationTime: 1705000000 } };
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /^Details$/);
+    await waitFor(() => {
+      expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it("shows configuration defaults when fields are false or missing", async () => {
+    mockWorkGroups.mockReturnValue({
+      data: {
+        workGroups: [{ Name: "wg-defaults", State: "ENABLED", Description: "D", CreationTime: 1705000000 }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    wgDetailState.data = {
+      workGroup: {
+        Name: "wg-defaults",
+        State: "ENABLED",
+        Description: "D",
+        CreationTime: 1705000000,
+        Configuration: {
+          ResultConfiguration: null,
+          EnforceWorkGroupConfiguration: false,
+          PublishCloudWatchMetricsEnabled: false,
+        },
+      },
+    };
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /^Details$/);
+    await waitFor(() => {
+      expect(screen.getAllByText("No").length).toBeGreaterThanOrEqual(2);
+      expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(1);
+    });
+  });
 });
 
 describe("AthenaDashboard — query executions tab", () => {
@@ -521,6 +710,91 @@ describe("AthenaDashboard — query executions tab", () => {
       const dashes = screen.getAllByText("—");
       expect(dashes.length).toBeGreaterThanOrEqual(1);
     });
+  });
+
+  it("stops a query execution", async () => {
+    mockQueryExecutions.mockReturnValue({
+      data: { queryExecutionIds: ["exec-stop"], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /query executions/i }));
+    await waitFor(() => expect(screen.getByText("exec-stop")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /^Stop$/ }));
+    await waitFor(() => expect(mockStopQuery).toHaveBeenCalledWith("exec-stop"));
+  });
+
+  it("shows stop loading state", async () => {
+    stopQueryState.isPending = true;
+    stopQueryState.variables = "exec-stop";
+    mockQueryExecutions.mockReturnValue({
+      data: { queryExecutionIds: ["exec-stop"], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /query executions/i }));
+    await waitFor(() => expect(screen.getByText("exec-stop")).toBeTruthy());
+  });
+
+  it("renders executions when the key is missing", async () => {
+    mockQueryExecutions.mockReturnValue({ data: {}, isLoading: false });
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /query executions/i }));
+    await waitFor(() => expect(screen.getByText(/No query executions/i)).toBeTruthy());
+  });
+
+  it("dismisses the detail modal with Escape", async () => {
+    mockQueryExecutions.mockReturnValue({
+      data: { queryExecutionIds: ["exec-esc"], total: 1 },
+      isLoading: false,
+    });
+    qeDetailState.data = { queryExecution: { QueryExecutionId: "exec-esc", Status: { State: "SUCCEEDED" } } };
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /query executions/i }));
+    await clickButton(user, /^Detail$/);
+    await waitFor(() => expect(screen.getByText("Query Execution Detail")).toBeTruthy());
+
+    dismissModalWithEscape();
+    await waitFor(() => expect(screen.queryByText("Query Execution Detail")).toBeNull());
+  });
+
+  it("shows dash for missing status state", async () => {
+    mockQueryExecutions.mockReturnValue({
+      data: { queryExecutionIds: ["exec-nostatus"], total: 1 },
+      isLoading: false,
+    });
+    qeDetailState.data = {
+      queryExecution: { QueryExecutionId: "exec-nostatus", Status: {}, Query: "SELECT 1" },
+    };
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /query executions/i }));
+    await clickButton(user, /^Detail$/);
+    await waitFor(() => {
+      expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it("shows info alert for non-failed state reason", async () => {
+    mockQueryExecutions.mockReturnValue({
+      data: { queryExecutionIds: ["exec-info"], total: 1 },
+      isLoading: false,
+    });
+    qeDetailState.data = {
+      queryExecution: {
+        QueryExecutionId: "exec-info",
+        Status: { State: "QUEUED", StateChangeReason: "Still waiting for resources" },
+      },
+    };
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /query executions/i }));
+    await clickButton(user, /^Detail$/);
+    await waitFor(() => expect(screen.getByText("Still waiting for resources")).toBeTruthy());
   });
 });
 
@@ -632,6 +906,47 @@ describe("AthenaDashboard — query results", () => {
     await waitFor(() => {
       expect(screen.getByRole("tab", { name: /query executions/i, selected: true })).toBeTruthy();
     });
+  });
+
+  it("shows spinner while loading results", async () => {
+    qResultsState.isLoading = true;
+    mockQueryExecutions.mockReturnValue({
+      data: { queryExecutionIds: ["exec-spin"], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /query executions/i }));
+    await clickButton(user, /View Results/i);
+    await waitFor(() => {
+      expect(document.querySelectorAll('[class*="awsui_circle"]').length).toBeGreaterThan(0);
+    });
+  });
+
+  it("shows empty state when results data is missing", async () => {
+    qResultsState.data = undefined;
+    mockQueryExecutions.mockReturnValue({
+      data: { queryExecutionIds: ["exec-nodata"], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /query executions/i }));
+    await clickButton(user, /View Results/i);
+    await waitFor(() => expect(screen.getByText(/No results available/i)).toBeTruthy());
+  });
+
+  it("falls back to Col N header and empty cell", async () => {
+    qResultsState.data = { headers: [{ type: "string" }], rows: [[null]], totalRows: 1 };
+    mockQueryExecutions.mockReturnValue({
+      data: { queryExecutionIds: ["exec-coln"], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /query executions/i }));
+    await clickButton(user, /View Results/i);
+    await waitFor(() => expect(screen.getByText("Col 1")).toBeTruthy());
   });
 });
 
@@ -753,6 +1068,59 @@ describe("AthenaDashboard — catalogs tab", () => {
     // The table should no longer be highlighted as selected
     await waitFor(() => {
       expect(screen.getByText("t1")).toBeTruthy();
+    });
+  });
+
+  it("renders empty catalogs tab when data is missing", async () => {
+    catalogsState.data = undefined;
+    databasesState.data = undefined;
+    tablesState.data = undefined;
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Catalogs & Databases/i }));
+    await waitFor(() => expect(screen.getByText(/Select a database/i)).toBeTruthy());
+  });
+
+  it("renders tables container without table data", async () => {
+    catalogsState.data = {
+      dataCatalogs: [{ CatalogName: "AwsDataCatalog" }],
+      total: 1,
+    };
+    databasesState.data = {
+      databases: [{ Name: "my_db" }],
+      total: 1,
+    };
+    tablesState.data = undefined;
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Catalogs & Databases/i }));
+    await clickButton(user, /^my_db$/);
+    await waitFor(() => expect(screen.getByText(/Tables in my_db/i)).toBeTruthy());
+  });
+
+  it("shows table metadata without columns", async () => {
+    catalogsState.data = {
+      dataCatalogs: [{ CatalogName: "AwsDataCatalog" }],
+      total: 1,
+    };
+    databasesState.data = {
+      databases: [{ Name: "my_db" }],
+      total: 1,
+    };
+    tablesState.data = {
+      tables: [{ Name: "users" }],
+      total: 1,
+    };
+    tableMetaState.data = { tableMetadata: { Name: "users" } };
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Catalogs & Databases/i }));
+    await clickButton(user, /^my_db$/);
+    await clickButton(user, /^users$/);
+    await waitFor(() => {
+      // Columns and Partition Keys counts render 0; no Columns table is shown
+      expect(screen.getAllByText("0").length).toBeGreaterThanOrEqual(2);
+      expect(screen.queryByText("Primary key")).toBeNull();
     });
   });
 });
