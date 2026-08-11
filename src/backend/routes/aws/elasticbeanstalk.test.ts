@@ -91,6 +91,14 @@ describe("Elastic Beanstalk Routes", () => {
       expect(body.total).toBe(0);
     });
 
+    it("GET /applications — falls back to [] when Applications missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/applications");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.applications).toEqual([]);
+    });
+
     it("GET /applications/:name — returns app detail", async () => {
       mockSend.mockResolvedValueOnce({
         Applications: [{ ApplicationName: "my-app", Description: "Test app" }],
@@ -135,6 +143,15 @@ describe("Elastic Beanstalk Routes", () => {
       expect(body.updated).toBe(true);
     });
 
+    it("PUT /applications/:name — returns null application when response has none", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/applications/my-app", { description: "Updated" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.application).toBeNull();
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("UpdateApplicationCommand");
+    });
+
     it("DELETE /applications/:name — deletes an application", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await del("/applications/my-app");
@@ -163,6 +180,14 @@ describe("Elastic Beanstalk Routes", () => {
       const res = await get("/applications/my-app/versions");
       const body = await res.json();
       expect(body.total).toBe(0);
+    });
+
+    it("GET /applications/:name/versions — falls back to [] when ApplicationVersions missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/applications/my-app/versions");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.versions).toEqual([]);
     });
 
     it("POST /applications/:name/versions — creates version", async () => {
@@ -211,6 +236,14 @@ describe("Elastic Beanstalk Routes", () => {
       const res = await get("/applications/my-app/environments");
       const body = await res.json();
       expect(body.total).toBe(0);
+    });
+
+    it("GET /applications/:name/environments — falls back to [] when Environments missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/applications/my-app/environments");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.environments).toEqual([]);
     });
 
     it("GET /environments/:envName — returns env detail", async () => {
@@ -264,6 +297,29 @@ describe("Elastic Beanstalk Routes", () => {
       expect(body.terminated).toBe(true);
       expect(body.environmentId).toBe("e-123");
     });
+
+    it("PUT /applications/:name/environments/:envName — updates an environment", async () => {
+      mockSend.mockResolvedValueOnce({
+        EnvironmentName: "my-env",
+        EnvironmentId: "e-123",
+        ApplicationName: "my-app",
+        Status: "Updating",
+        Health: "Green",
+        DateCreated: new Date(),
+        DateUpdated: new Date(),
+      });
+      const res = await put("/applications/my-app/environments/my-env", {
+        description: "Updated",
+        versionLabel: "v2",
+        optionSettings: [{ Namespace: "aws:autoscaling:asg", OptionName: "MinSize", Value: "2" }],
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+      expect(body.environment.environmentName).toBe("my-env");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("UpdateEnvironmentCommand");
+      expect(mockSend.mock.calls[0][0].VersionLabel).toBe("v2");
+    });
   });
 
   describe("Configuration", () => {
@@ -284,6 +340,13 @@ describe("Elastic Beanstalk Routes", () => {
       const body = await res.json();
       expect(body.configurationSettings).toEqual([]);
     });
+
+    it("GET /applications/:name/environments/:envName/configuration — falls back to [] when ConfigurationSettings missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/applications/my-app/environments/my-env/configuration");
+      const body = await res.json();
+      expect(body.configurationSettings).toEqual([]);
+    });
   });
 
   describe("Utility", () => {
@@ -296,6 +359,14 @@ describe("Elastic Beanstalk Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.solutionStacks).toHaveLength(1);
+    });
+
+    it("GET /solution-stacks — falls back to [] when both result keys missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/solution-stacks");
+      const body = await res.json();
+      expect(body.solutionStacks).toEqual([]);
+      expect(body.solutionStackDetails).toEqual([]);
     });
 
     it("GET /check-dns-availability/:cnamePrefix — checks DNS availability", async () => {
