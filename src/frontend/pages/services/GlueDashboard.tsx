@@ -924,10 +924,10 @@ function CreateSchemaModal({
       <SpaceBetween size="m">
         <FormField label="Schema name"><Input value={name} onChange={({ detail }) => setName(detail.value)} placeholder="my-schema" /></FormField>
         <FormField label="Data format">
-          <Select selectedOption={{ label: dataFormat, value: dataFormat }} onChange={({ detail }) => setDataFormat(detail.selectedOption.value || "AVRO")} options={[{ label: "AVRO", value: "AVRO" }, { label: "JSON", value: "JSON" }]} />
+          <Select selectedOption={{ label: dataFormat, value: dataFormat }} onChange={({ detail }) => setDataFormat(detail.selectedOption.value!)} options={[{ label: "AVRO", value: "AVRO" }, { label: "JSON", value: "JSON" }]} />
         </FormField>
         <FormField label="Compatibility mode">
-          <Select selectedOption={{ label: compatibility, value: compatibility }} onChange={({ detail }) => setCompatibility(detail.selectedOption.value || "NONE")} options={["NONE", "DISABLED", "BACKWARD", "FORWARD", "FULL"].map(v => ({ label: v, value: v }))} />
+          <Select selectedOption={{ label: compatibility, value: compatibility }} onChange={({ detail }) => setCompatibility(detail.selectedOption.value!)} options={["NONE", "DISABLED", "BACKWARD", "FORWARD", "FULL"].map(v => ({ label: v, value: v }))} />
         </FormField>
         <FormField label="Description (optional)"><Input value={description} onChange={({ detail }) => setDescription(detail.value)} placeholder="Schema description" /></FormField>
       </SpaceBetween>
@@ -997,7 +997,7 @@ function UDFsTab() {
                 },
               ]}
               loading={udfsQuery.isLoading}
-              emptyMessage={selectedDb ? "No UDFs found" : "Select a database"}
+              emptyMessage="No UDFs found"
               onCreate={() => setShowCreate(true)}
             />
           )}
@@ -1290,7 +1290,7 @@ function ColumnStatsTab() {
           <SpaceBetween size="m">
             <FormField label="Column name"><Input value={updateColName} onChange={({ detail }) => setUpdateColName(detail.value)} placeholder="column_name" /></FormField>
             <FormField label="Column type">
-              <Select selectedOption={{ label: updateColType, value: updateColType }} onChange={({ detail }) => setUpdateColType(detail.selectedOption.value || "string")} options={["string", "integer", "long", "double", "boolean", "date", "binary"].map(v => ({ label: v, value: v }))} />
+              <Select selectedOption={{ label: updateColType, value: updateColType }} onChange={({ detail }) => setUpdateColType(detail.selectedOption.value!)} options={["string", "integer", "long", "double", "boolean", "date", "binary"].map(v => ({ label: v, value: v }))} />
             </FormField>
             <FormField label="Number of nulls">
               <Input type="number" value={String(updateNumNull)} onChange={({ detail }) => setUpdateNumNull(Number(detail.value) || 0)} />
