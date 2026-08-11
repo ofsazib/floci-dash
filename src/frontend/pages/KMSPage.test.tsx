@@ -22,6 +22,17 @@ const mockDecrypt = vi.fn();
 let mockEncryptMutateAsync = vi.fn().mockResolvedValue({ ciphertextBlob: "ZW5jcnlwdGVk" });
 let mockDecryptMutateAsync = vi.fn().mockResolvedValue({ plaintext: "cGxhaW50ZXh0" });
 
+const mockNavigate = vi.hoisted(() => vi.fn());
+
+const healthState = vi.hoisted(() => ({
+  data: undefined as any,
+  isLoading: false,
+}));
+
+vi.mock("../hooks/useSystem", () => ({
+  useHealth: () => ({ get data() { return healthState.data; }, isLoading: false }),
+}));
+
 vi.mock("../hooks/useKMS", () => ({
   useKMSKeys: (...args: any[]) => mockKeys(...args),
   useKMSKey: (...args: any[]) => mockKeyDetail(...args),
@@ -33,7 +44,7 @@ vi.mock("../hooks/useKMS", () => ({
   useUpdateKeyDescription: () => ({ mutate: mockUpdateKeyDescription, isPending: false }),
   useKMSAliases: (...args: any[]) => mockAliases(...args),
   useCreateAlias: () => ({ mutate: mockCreateAlias, isPending: false }),
-  useDeleteAlias: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useDeleteAlias: () => ({ mutateAsync: mockDeleteAlias, isPending: false }),
   useEncrypt: () => ({ mutate: mockEncrypt, mutateAsync: mockEncryptMutateAsync, isPending: false, data: null }),
   useDecrypt: () => ({ mutate: mockDecrypt, mutateAsync: mockDecryptMutateAsync, isPending: false, data: null }),
 }));
@@ -49,7 +60,7 @@ vi.mock("react-router-dom", async () => {
   const actual = await import("react-router-dom");
   return {
     ...actual,
-    useNavigate: () => vi.fn(),
+    useNavigate: () => mockNavigate,
     useSearchParams: () => [new URLSearchParams(), vi.fn()],
   };
 });
@@ -71,6 +82,7 @@ describe("KMSPage", () => {
     mockEncryptMutateAsync = vi.fn().mockResolvedValue({ ciphertextBlob: "ZW5jcnlwdGVk" });
     mockDecryptMutateAsync = vi.fn().mockResolvedValue({ plaintext: "cGxhaW50ZXh0" });
     mockShowToast = vi.fn();
+    healthState.data = undefined;
     mockKeys.mockReturnValue({
       data: { keys: [{ keyId: "1234-abcd", arn: "arn:aws:kms:us-east-1::key/1234-abcd", keyManager: "CUSTOMER", keyState: "Enabled", description: "My key", keySpec: "SYMMETRIC_DEFAULT" }], total: 1 },
       isLoading: false, isError: false, error: null,
@@ -78,6 +90,7 @@ describe("KMSPage", () => {
     mockKeyDetail.mockReturnValue({
       data: { key: { keyId: "1234-abcd", keyState: "Enabled" }, tags: {}, aliases: [], grants: [], rotationEnabled: false },
       isLoading: false, isError: false, error: null,
+      refetch: vi.fn(),
     });
     mockAliases.mockReturnValue({
       data: { aliases: [{ name: "alias/my-key", targetKeyId: "1234-abcd" }], total: 1 },
@@ -139,6 +152,79 @@ describe("KMSPage", () => {
     await waitFor(() => {
       expect(screen.getAllByPlaceholderText("My encryption key").length).toBeGreaterThan(0);
     });
+  });
+
+  it("renders state fallbacks and dash placeholders in key table", () => {
+    mockKeys.mockReturnValue({
+      data: {
+        keys: [
+          // no keyState/enabled/keyManager/description/usage/spec/deletion -> "Disabled" + dashes
+          { keyId: "k1" },
+          // no keyState but enabled flag -> "Enabled"
+          { keyId: "k2", enabled: true, keyManager: "CUSTOMER" },
+          // explicit Disabled state -> grey badge branch
+          { keyId: "k3", keyState: "Disabled", keyManager: "CUSTOMER" },
+          // with deletion date -> formatted date in the Deletion column
+          { keyId: "k4", keyState: "Enabled", keyManager: "CUSTOMER", deletionDate: "2025-06-15" },
+        ],
+        total: 4,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    expect(screen.getAllByText("Disabled").length).toBeGreaterThanOrEqual(1);
+    // "Enabled" appears for the k2 fallback badge and k4's explicit state
+    expect(screen.getAllByText("Enabled").length).toBeGreaterThanOrEqual(2);
+    // k1 and k2 render dashes for description/usage/spec/deletion; k1's manager falls back to CUSTOMER
+    expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(6);
+    expect(screen.getByText("6/15/2025")).toBeTruthy();
+  });
+
+  it("creates a key with description, usage, and spec", async () => {
+    const user = userEvent.setup();
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /Create key/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("My encryption key")).toBeTruthy());
+
+    await user.type(screen.getByPlaceholderText("My encryption key"), "My new key");
+    // Key usage -> SIGN_VERIFY
+    await user.click(screen.getByRole("button", { name: /Encrypt and decrypt/i }));
+    await user.click(screen.getByRole("option", { name: /Sign and verify/i }));
+    // Key spec -> RSA_2048
+    await user.click(screen.getByRole("button", { name: /SYMMETRIC_DEFAULT/i }));
+    await user.click(screen.getByRole("option", { name: /RSA_2048/i }));
+
+    await clickButton(user, /^Create$/);
+    await waitFor(() => {
+      expect(mockCreateKey).toHaveBeenCalledWith({
+        description: "My new key",
+        keyUsage: "SIGN_VERIFY",
+        keySpec: "RSA_2048",
+      });
+      expect(mockShowToast).toHaveBeenCalledWith("success", "Key created");
+      expect(screen.queryByPlaceholderText("My encryption key")).toBeNull();
+    });
+  });
+
+  it("shows error toast when create key fails", async () => {
+    mockCreateKey.mockRejectedValueOnce(new Error("key creation failed"));
+    const user = userEvent.setup();
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /Create key/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("My encryption key")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("My encryption key"), "fail-key");
+    await clickButton(user, /^Create$/);
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "key creation failed"));
+  });
+
+  it("cancels the create key modal", async () => {
+    const user = userEvent.setup();
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /Create key/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("My encryption key")).toBeTruthy());
+    await clickButton(user, /Cancel/i);
+    await waitFor(() => expect(screen.queryByPlaceholderText("My encryption key")).toBeNull());
+    expect(mockCreateKey).not.toHaveBeenCalled();
   });
 
   it("shows enable action button for a disabled key in detail modal", async () => {
@@ -217,6 +303,284 @@ describe("KMSPage", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /Edit description/i })).toBeTruthy();
     });
+  });
+
+  it("edits the key description and saves", async () => {
+    mockUpdateKeyDescription.mockImplementation((_body: any, opts: any) => opts?.onSuccess?.());
+    mockKeyDetail.mockReturnValue({
+      data: { key: { keyId: "1234-abcd", keyState: "Enabled", description: "My key" }, tags: {}, aliases: [], grants: [], rotationEnabled: false },
+      isLoading: false, isError: false, error: null,
+      refetch: vi.fn(),
+    });
+    const user = userEvent.setup();
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText(/KMS Key:/i)).toBeTruthy());
+
+    await user.click(screen.getByRole("button", { name: /Edit description/i }));
+    const input = screen.getAllByRole("textbox")[0];
+    await user.clear(input);
+    await user.type(input, "Updated description");
+    await user.click(screen.getByRole("button", { name: /^Save$/i }));
+
+    await waitFor(() => {
+      expect(mockUpdateKeyDescription).toHaveBeenCalledWith(
+        { id: "1234-abcd", description: "Updated description" },
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      );
+      expect(mockShowToast).toHaveBeenCalledWith("success", "Description updated");
+      // Edit mode closes
+      expect(screen.queryByRole("textbox")).toBeNull();
+    });
+  });
+
+  it("cancels editing the key description", async () => {
+    const user = userEvent.setup();
+    mockKeyDetail.mockReturnValue({
+      data: { key: { keyId: "1234-abcd", keyState: "Enabled", description: "My key" }, tags: {}, aliases: [], grants: [], rotationEnabled: false },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText(/KMS Key:/i)).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Edit description/i }));
+    await waitFor(() => expect(screen.getAllByRole("textbox").length).toBeGreaterThan(0));
+    await user.click(screen.getByRole("button", { name: /Cancel/i }));
+    await waitFor(() => expect(screen.queryByRole("textbox")).toBeNull());
+    expect(mockUpdateKeyDescription).not.toHaveBeenCalled();
+  });
+
+  it("enables rotation", async () => {
+    mockToggleRotation.mockImplementation((_body: any, opts: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("button", { name: /Enable rotation/i })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Enable rotation/i }));
+    await waitFor(() => {
+      expect(mockToggleRotation).toHaveBeenCalledWith(
+        { id: "1234-abcd", enable: true },
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      );
+      expect(mockShowToast).toHaveBeenCalledWith("success", "Rotation enabled");
+    });
+  });
+
+  it("disables rotation", async () => {
+    mockToggleRotation.mockImplementation((_body: any, opts: any) => opts?.onSuccess?.());
+    mockKeyDetail.mockReturnValue({
+      data: { key: { keyId: "1234-abcd", keyState: "Enabled", description: "My key" }, tags: {}, aliases: [], grants: [], rotationEnabled: true },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("button", { name: /Disable rotation/i })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Disable rotation/i }));
+    await waitFor(() => {
+      expect(mockToggleRotation).toHaveBeenCalledWith(
+        { id: "1234-abcd", enable: false },
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      );
+      expect(mockShowToast).toHaveBeenCalledWith("success", "Rotation disabled");
+    });
+  });
+
+  it("disables an enabled key", async () => {
+    mockToggleKey.mockImplementation((_body: any, opts: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("button", { name: /^Disable$/i })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /^Disable$/i }));
+    await waitFor(() => {
+      expect(mockToggleKey).toHaveBeenCalledWith(
+        { id: "1234-abcd", enable: false },
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      );
+      expect(mockShowToast).toHaveBeenCalledWith("success", "Key disabled");
+    });
+  });
+
+  it("enables a disabled key", async () => {
+    mockToggleKey.mockImplementation((_body: any, opts: any) => opts?.onSuccess?.());
+    mockKeyDetail.mockReturnValue({
+      data: { key: { keyId: "1234-abcd", keyState: "Disabled", description: "My key" }, tags: {}, aliases: [], grants: [], rotationEnabled: false },
+      isLoading: false, isError: false, error: null,
+      refetch: vi.fn(),
+    });
+    const user = userEvent.setup();
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("button", { name: /^Enable$/i })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /^Enable$/i }));
+    await waitFor(() => {
+      expect(mockToggleKey).toHaveBeenCalledWith(
+        { id: "1234-abcd", enable: true },
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      );
+      expect(mockShowToast).toHaveBeenCalledWith("success", "Key enabled");
+    });
+  });
+
+  it("schedules key deletion", async () => {
+    mockScheduleKeyDeletion.mockImplementation((_body: any, opts: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("button", { name: /Schedule deletion/i })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Schedule deletion/i }));
+    await waitFor(() => {
+      expect(mockScheduleKeyDeletion).toHaveBeenCalledWith(
+        { id: "1234-abcd" },
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      );
+      expect(mockShowToast).toHaveBeenCalledWith("success", "Deletion scheduled");
+    });
+  });
+
+  it("cancels key deletion", async () => {
+    mockCancelKeyDeletion.mockImplementation((_body: any, opts: any) => opts?.onSuccess?.());
+    mockKeyDetail.mockReturnValue({
+      data: { key: { keyId: "1234-abcd", keyState: "PendingDeletion", description: "My key" }, tags: {}, aliases: [], grants: [], rotationEnabled: false },
+      isLoading: false, isError: false, error: null,
+      refetch: vi.fn(),
+    });
+    const user = userEvent.setup();
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("button", { name: /Cancel deletion/i })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Cancel deletion/i }));
+    await waitFor(() => {
+      expect(mockCancelKeyDeletion).toHaveBeenCalledWith(
+        "1234-abcd",
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      );
+      expect(mockShowToast).toHaveBeenCalledWith("success", "Deletion cancelled");
+    });
+  });
+
+  it("closes the key detail modal", async () => {
+    const user = userEvent.setup();
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText(/KMS Key:/i)).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Close/i }));
+    await waitFor(() => expect(screen.queryByText(/KMS Key:/i)).toBeNull());
+  });
+
+  it("edits a key with no description (empty fallback)", async () => {
+    mockUpdateKeyDescription.mockImplementation((_body: any, opts: any) => opts?.onSuccess?.());
+    mockKeyDetail.mockReturnValue({
+      data: { key: { keyId: "1234-abcd", keyState: "Enabled", description: "" }, tags: {}, aliases: [], grants: [], rotationEnabled: false },
+      isLoading: false, isError: false, error: null,
+      refetch: vi.fn(),
+    });
+    const user = userEvent.setup();
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText(/KMS Key:/i)).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Edit description/i }));
+    const input = screen.getAllByRole("textbox")[0];
+    // Pre-filled with the empty description fallback
+    expect((input as HTMLInputElement).value).toBe("");
+    await user.type(input, "New desc");
+    await user.click(screen.getByRole("button", { name: /^Save$/i }));
+    await waitFor(() => {
+      expect(mockUpdateKeyDescription).toHaveBeenCalledWith(
+        { id: "1234-abcd", description: "New desc" },
+        expect.anything(),
+      );
+    });
+  });
+
+  it("shows error toast when updating description fails", async () => {
+    mockUpdateKeyDescription.mockImplementation((_body: any, opts: any) => opts?.onError?.(new Error("desc failed")));
+    mockKeyDetail.mockReturnValue({
+      data: { key: { keyId: "1234-abcd", keyState: "Enabled", description: "My key" }, tags: {}, aliases: [], grants: [], rotationEnabled: false },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText(/KMS Key:/i)).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Edit description/i }));
+    const input = screen.getAllByRole("textbox")[0];
+    await user.type(input, "changed");
+    await user.click(screen.getByRole("button", { name: /^Save$/i }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "desc failed"));
+  });
+
+  it("shows error toast when enabling rotation fails", async () => {
+    mockToggleRotation.mockImplementation((_body: any, opts: any) => opts?.onError?.(new Error("rotation failed")));
+    const user = userEvent.setup();
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("button", { name: /Enable rotation/i })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Enable rotation/i }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "rotation failed"));
+  });
+
+  it("shows error toast when disabling rotation fails", async () => {
+    mockToggleRotation.mockImplementation((_body: any, opts: any) => opts?.onError?.(new Error("rotation failed")));
+    mockKeyDetail.mockReturnValue({
+      data: { key: { keyId: "1234-abcd", keyState: "Enabled", description: "My key" }, tags: {}, aliases: [], grants: [], rotationEnabled: true },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("button", { name: /Disable rotation/i })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Disable rotation/i }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "rotation failed"));
+  });
+
+  it("shows error toast when disabling a key fails", async () => {
+    mockToggleKey.mockImplementation((_body: any, opts: any) => opts?.onError?.(new Error("toggle failed")));
+    const user = userEvent.setup();
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("button", { name: /^Disable$/i })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /^Disable$/i }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "toggle failed"));
+  });
+
+  it("shows error toast when enabling a key fails", async () => {
+    mockToggleKey.mockImplementation((_body: any, opts: any) => opts?.onError?.(new Error("toggle failed")));
+    mockKeyDetail.mockReturnValue({
+      data: { key: { keyId: "1234-abcd", keyState: "Disabled", description: "My key" }, tags: {}, aliases: [], grants: [], rotationEnabled: false },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("button", { name: /^Enable$/i })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /^Enable$/i }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "toggle failed"));
+  });
+
+  it("shows error toast when scheduling deletion fails", async () => {
+    mockScheduleKeyDeletion.mockImplementation((_body: any, opts: any) => opts?.onError?.(new Error("schedule failed")));
+    const user = userEvent.setup();
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("button", { name: /Schedule deletion/i })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Schedule deletion/i }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "schedule failed"));
+  });
+
+  it("shows error toast when cancelling deletion fails", async () => {
+    mockCancelKeyDeletion.mockImplementation((_body: any, opts: any) => opts?.onError?.(new Error("cancel failed")));
+    mockKeyDetail.mockReturnValue({
+      data: { key: { keyId: "1234-abcd", keyState: "PendingDeletion", description: "My key" }, tags: {}, aliases: [], grants: [], rotationEnabled: false },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("button", { name: /Cancel deletion/i })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Cancel deletion/i }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "cancel failed"));
   });
 
   it("shows Aliases, Grants, and Encrypt/Decrypt tabs in detail modal", async () => {
@@ -390,7 +754,7 @@ describe("KMSPage", () => {
     const user = userEvent.setup();
     mockKeyDetail.mockReturnValue({
       data: {
-        key: { keyId: "1234-abcd", arn: "arn:aws:kms:key/1234-abcd", keyState: "Enabled", keyUsage: "ENCRYPT_DECRYPT", keySpec: "SYMMETRIC_DEFAULT", origin: "AWS_KMS", keyManager: "CUSTOMER", creationDate: "2025-01-15T10:00:00Z", deletionDate: "2026-01-15T10:00:00Z", multiRegion: false, description: "With dates" },
+        key: { keyId: "1234-abcd", arn: "arn:aws:kms:key/1234-abcd", keyState: "Enabled", keyUsage: "ENCRYPT_DECRYPT", keySpec: "SYMMETRIC_DEFAULT", origin: "AWS_KMS", keyManager: "AWS", creationDate: "2025-01-15T10:00:00Z", deletionDate: "2026-01-15T10:00:00Z", multiRegion: true, description: "With dates" },
         tags: {},
         aliases: [],
         grants: [],
@@ -404,6 +768,9 @@ describe("KMSPage", () => {
       expect(screen.getByText(/KMS Key:/i)).toBeTruthy();
     });
     expect(screen.getByText(/Deletion date/i)).toBeTruthy();
+    // AWS manager badge + multi-region Yes
+    expect(screen.getAllByText("AWS").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Yes")).toBeTruthy();
   });
 
   it("shows description placeholder when no description", async () => {
@@ -520,5 +887,208 @@ describe("KMSPage", () => {
       expect(getInModal.getAllByText(/Plaintext/i).length).toBeGreaterThan(0);
       expect(getInModal.getByText("cGxhaW50ZXh0")).toBeTruthy();
     });
+  });
+
+  it("shows error toast when encrypt fails", async () => {
+    mockEncryptMutateAsync.mockRejectedValueOnce(new Error("encrypt failed"));
+    mockKeyDetail.mockReturnValue({
+      data: { key: { keyId: "1234-abcd", keyState: "Enabled", description: "My key" }, tags: {}, aliases: [], grants: [], rotationEnabled: false },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText(/KMS Key:/i)).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /Encrypt \/ Decrypt/i }));
+    await waitFor(() => expect(screen.getByPlaceholderText("SGVsbG8gV29ybGQ=")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("SGVsbG8gV29ybGQ="), "SGVsbG8=");
+    await user.click(screen.getByRole("button", { name: /^Encrypt$/i }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "encrypt failed"));
+  });
+
+  it("shows error toast when decrypt fails", async () => {
+    mockDecryptMutateAsync.mockRejectedValueOnce(new Error("decrypt failed"));
+    mockKeyDetail.mockReturnValue({
+      data: { key: { keyId: "1234-abcd", keyState: "Enabled", description: "My key" }, tags: {}, aliases: [], grants: [], rotationEnabled: false },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText(/KMS Key:/i)).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /Encrypt \/ Decrypt/i }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /Decrypt$/i })).toBeTruthy());
+    await user.type(screen.getAllByRole("textbox")[1], "ZW5jcnlwdGVk");
+    await user.click(screen.getByRole("button", { name: /^Decrypt$/i }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "decrypt failed"));
+  });
+
+  it("renders aliases and grants tables with data in the detail modal", async () => {
+    mockKeyDetail.mockReturnValue({
+      data: {
+        key: { keyId: "1234-abcd", keyState: "Enabled", description: "My key" },
+        tags: {},
+        aliases: [
+          { name: "alias/a", arn: "arn:aws:kms:alias/a", creationDate: "2025-01-01" },
+          { name: "alias/b" },
+        ],
+        grants: [
+          { grantId: "g1", name: "gr", granteePrincipal: "user", operations: ["Encrypt"], creationDate: "2025-01-01" },
+          // sparse grant -> dash name, no operations badges, dash created
+          { grantId: "g2", granteePrincipal: "user2" },
+        ],
+        rotationEnabled: false,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText(/KMS Key:/i)).toBeTruthy());
+    const dialog = screen.getByRole("dialog");
+    const getInModal = within(dialog);
+
+    await user.click(getInModal.getByRole("tab", { name: /Aliases/i }));
+    await waitFor(() => {
+      expect(getInModal.getByText("alias/a")).toBeTruthy();
+      expect(getInModal.getByText("arn:aws:kms:alias/a")).toBeTruthy();
+      expect(getInModal.getByText("alias/b")).toBeTruthy();
+      // alias/b has no creationDate -> dash
+      expect(getInModal.getAllByText("-").length).toBeGreaterThanOrEqual(1);
+    });
+
+    await user.click(getInModal.getByRole("tab", { name: /Grants/i }));
+    await waitFor(() => {
+      expect(getInModal.getByText("g1")).toBeTruthy();
+      expect(getInModal.getByText("gr")).toBeTruthy();
+      expect(getInModal.getByText("user")).toBeTruthy();
+      expect(getInModal.getByText("Encrypt")).toBeTruthy();
+      // sparse grant renders dash name + dash created
+      expect(getInModal.getByText("g2")).toBeTruthy();
+      expect(getInModal.getByText("user2")).toBeTruthy();
+      expect(getInModal.getAllByText("-").length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  it("renders aliases when data lacks the array", async () => {
+    mockAliases.mockReturnValue({ data: {}, isLoading: false, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Aliases/i }));
+    await waitFor(() => expect(screen.getByText("No aliases")).toBeTruthy());
+  });
+
+  it("renders alias creation date when present", async () => {
+    mockAliases.mockReturnValue({
+      data: { aliases: [{ name: "alias/x", targetKeyId: "k1", creationDate: "2025-06-15" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Aliases/i }));
+    await waitFor(() => {
+      expect(screen.getByText("alias/x")).toBeTruthy();
+      expect(screen.getByText("6/15/2025")).toBeTruthy();
+    });
+  });
+
+  it("deletes an alias", async () => {
+    mockDeleteAlias.mockResolvedValue(undefined);
+    mockAliases.mockReturnValue({
+      data: { aliases: [{ name: "alias/my-key", targetKeyId: "1234-abcd" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Aliases/i }));
+    await waitFor(() => expect(screen.getByText("alias/my-key")).toBeTruthy());
+
+    await clickButton(user, /Delete alias\/my-key/i);
+    await waitFor(() => expect(screen.getByText(/Are you sure/i)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() => {
+      expect(mockDeleteAlias).toHaveBeenCalledWith("alias/my-key");
+      expect(mockShowToast).toHaveBeenCalledWith("success", "Alias alias/my-key deleted");
+    });
+  });
+
+  it("shows error toast when deleting an alias fails", async () => {
+    mockDeleteAlias.mockRejectedValueOnce(new Error("delete failed"));
+    mockAliases.mockReturnValue({
+      data: { aliases: [{ name: "alias/my-key", targetKeyId: "1234-abcd" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Aliases/i }));
+    await waitFor(() => expect(screen.getByText("alias/my-key")).toBeTruthy());
+    await clickButton(user, /Delete alias\/my-key/i);
+    await waitFor(() => expect(screen.getByText(/Are you sure/i)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "delete failed"));
+  });
+
+  it("creates an alias", async () => {
+    mockCreateAlias.mockImplementation((_body: any, opts: any) => opts?.onSuccess?.());
+    mockAliases.mockReturnValue({
+      data: { aliases: [], total: 0 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Aliases/i }));
+    await waitFor(() => expect(screen.getByText("No aliases")).toBeTruthy());
+
+    await user.click(screen.getByRole("button", { name: /Create alias/i }));
+    await waitFor(() => expect(screen.getByPlaceholderText("my-key")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-key"), "alias/foo");
+    await user.type(screen.getByPlaceholderText("1234abcd-..."), "k1");
+    await clickButton(user, /^Create$/);
+
+    await waitFor(() => {
+      expect(mockCreateAlias).toHaveBeenCalledWith(
+        { aliasName: "alias/foo", targetKeyId: "k1" },
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      );
+      expect(mockShowToast).toHaveBeenCalledWith("success", "Alias created");
+      expect(screen.queryByPlaceholderText("my-key")).toBeNull();
+    });
+  });
+
+  it("shows error toast when creating an alias fails", async () => {
+    mockCreateAlias.mockImplementation((_body: any, opts: any) => opts?.onError?.(new Error("alias failed")));
+    mockAliases.mockReturnValue({
+      data: { aliases: [], total: 0 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Aliases/i }));
+    await waitFor(() => expect(screen.getByText("No aliases")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Create alias/i }));
+    await waitFor(() => expect(screen.getByPlaceholderText("my-key")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-key"), "alias/foo");
+    await user.type(screen.getByPlaceholderText("1234abcd-..."), "k1");
+    await clickButton(user, /^Create$/);
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "alias failed"));
+  });
+
+  it("navigates when the breadcrumb is clicked", async () => {
+    const user = userEvent.setup();
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getAllByText("Dashboard")[0]);
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith("/"));
+  });
+
+  it("shows Running status badge when kms is running", () => {
+    healthState.data = { services: { kms: "running" } };
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    expect(screen.getByText("Running")).toBeTruthy();
+  });
+
+  it("shows Available status badge when kms is available", () => {
+    healthState.data = { services: { kms: "available" } };
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    expect(screen.getByText("Available")).toBeTruthy();
   });
 });
