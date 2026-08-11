@@ -201,6 +201,76 @@ describe("DynamoDB Advanced", () => {
       expect(cmd.GlobalSecondaryIndexUpdates[0].Create.Projection.ProjectionType).toBe("ALL");
       expect(cmd.GlobalSecondaryIndexUpdates[0].Create.ProvisionedThroughput).toBeUndefined();
     });
+
+    it("PUT /tables/:name/update — 400 when ProvisionedThroughput with PAY_PER_REQUEST", async () => {
+      const res = await put("/tables/my-table/update", {
+        BillingMode: "PAY_PER_REQUEST",
+        ProvisionedThroughput: { ReadCapacityUnits: 10, WriteCapacityUnits: 5 },
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("ProvisionedThroughput");
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("PUT /tables/:name/update — SSE without SSEType or KMS key", async () => {
+      mockSend.mockResolvedValueOnce({ TableDescription: { TableStatus: "UPDATING" } });
+      const res = await put("/tables/my-table/update", {
+        SSESpecification: { Enabled: true },
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.SSESpecification.Enabled).toBe(true);
+      expect(cmd.SSESpecification.SSEType).toBeUndefined();
+      expect(cmd.SSESpecification.KMSMasterKeyId).toBeUndefined();
+    });
+
+    it("PUT /tables/:name/update — GSI create with empty Projection defaults type to ALL", async () => {
+      mockSend.mockResolvedValueOnce({ TableDescription: { TableStatus: "UPDATING" } });
+      const res = await put("/tables/my-table/update", {
+        GlobalSecondaryIndexUpdates: [
+          {
+            Create: {
+              IndexName: "proj-gsi",
+              KeySchema: [{ AttributeName: "pk", KeyType: "HASH" }],
+              Projection: {},
+            },
+          },
+        ],
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.GlobalSecondaryIndexUpdates[0].Create.Projection.ProjectionType).toBe("ALL");
+    });
+
+    it("PUT /tables/:name/update — GSI create with NonKeyAttributes", async () => {
+      mockSend.mockResolvedValueOnce({ TableDescription: { TableStatus: "UPDATING" } });
+      const res = await put("/tables/my-table/update", {
+        GlobalSecondaryIndexUpdates: [
+          {
+            Create: {
+              IndexName: "nka-gsi",
+              KeySchema: [{ AttributeName: "pk", KeyType: "HASH" }],
+              Projection: { ProjectionType: "INCLUDE", NonKeyAttributes: ["name", "email"] },
+            },
+          },
+        ],
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.GlobalSecondaryIndexUpdates[0].Create.Projection.ProjectionType).toBe("INCLUDE");
+      expect(cmd.GlobalSecondaryIndexUpdates[0].Create.Projection.NonKeyAttributes).toEqual(["name", "email"]);
+    });
+
+    it("PUT /tables/:name/update — defaults status to UPDATING without TableDescription", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/tables/my-table/update", { BillingMode: "PAY_PER_REQUEST" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.tableStatus).toBe("UPDATING");
+      expect(body.billingMode).toBe("PAY_PER_REQUEST");
+      expect(body.streamSpecification).toBeNull();
+    });
   });
 
   describe("Update Item", () => {
@@ -239,6 +309,17 @@ describe("DynamoDB Advanced", () => {
     it("POST /tables/:name/items/update — 400 when updates missing", async () => {
       const res = await post("/tables/my-table/items/update", { key: { pk: "1" } });
       expect(res.status).toBe(400);
+    });
+
+    it("POST /tables/:name/items/update — attributes null when response has none", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/tables/my-table/items/update", {
+        key: { pk: "123" },
+        updates: { status: "active" },
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.attributes).toBeNull();
     });
   });
 
@@ -281,9 +362,92 @@ describe("DynamoDB Advanced", () => {
       expect(mockSend.mock.calls[0][0].RequestItems["my-table"][0].DeleteRequest).toBeDefined();
     });
 
+    it("POST /batch-get — empty responses when Responses missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/batch-get", {
+        requests: [{ tableName: "my-table", keys: [{ pk: "123" }] }],
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.responses).toEqual({});
+      expect(body.unprocessedKeys).toEqual({});
+    });
+
+    it("POST /batch-get — returns unprocessed keys", async () => {
+      mockSend.mockResolvedValueOnce({
+        UnprocessedKeys: { "my-table": [{ Key: { pk: { S: "999" } } }] },
+      });
+      const res = await post("/batch-get", {
+        requests: [{ tableName: "my-table", keys: [{ pk: "999" }] }],
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.unprocessedKeys["my-table"]).toHaveLength(1);
+    });
+
+    it("POST /batch-write — groups multiple requests for the same table", async () => {
+      mockSend.mockResolvedValueOnce({ UnprocessedItems: {} });
+      const res = await post("/batch-write", {
+        requests: [
+          { tableName: "my-table", type: "put", item: { pk: "1" } },
+          { tableName: "my-table", type: "put", item: { pk: "2" } },
+        ],
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.RequestItems["my-table"]).toHaveLength(2);
+    });
+
+    it("POST /batch-write — skips requests without item or key", async () => {
+      mockSend.mockResolvedValueOnce({ UnprocessedItems: {} });
+      const res = await post("/batch-write", {
+        requests: [
+          { tableName: "my-table", type: "put" },
+          { tableName: "other-table", type: "delete" },
+        ],
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      // Table buckets are created but no Put/Delete requests are pushed.
+      expect(cmd.RequestItems["my-table"]).toEqual([]);
+      expect(cmd.RequestItems["other-table"]).toEqual([]);
+      const body = await res.json();
+      expect(body.wrote).toBe(2);
+    });
+
+    it("POST /batch-write — unprocessed items reduce wrote count", async () => {
+      mockSend.mockResolvedValueOnce({
+        UnprocessedItems: { "my-table": [{ PutRequest: { Item: { pk: { S: "1" } } } }] },
+      });
+      const res = await post("/batch-write", {
+        requests: [{ tableName: "my-table", type: "put", item: { pk: "1" } }],
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.wrote).toBe(0);
+      expect(body.unprocessedItems["my-table"]).toHaveLength(1);
+    });
+
     it("POST /batch-write — 400 when requests missing", async () => {
       const res = await post("/batch-write", {});
       expect(res.status).toBe(400);
+    });
+
+    it("POST /batch-write — 400 when requests is not an array", async () => {
+      const res = await post("/batch-write", { requests: "nope" });
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("POST /batch-write — wrote count when UnprocessedItems missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/batch-write", {
+        requests: [{ tableName: "my-table", type: "put", item: { pk: "123" } }],
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.wrote).toBe(1);
+      expect(body.unprocessedItems).toEqual({});
     });
   });
 
@@ -335,9 +499,56 @@ describe("DynamoDB Advanced", () => {
       expect(mockSend.mock.calls[0][0].TransactItems[0].Update).toBeDefined();
     });
 
+    it("POST /transaction/get — empty responses when Responses missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/transaction/get", {
+        items: [{ tableName: "my-table", key: { pk: "123" } }],
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.responses).toEqual([]);
+      expect(body.total).toBe(0);
+    });
+
+    it("POST /transaction/get — null entries when Item missing", async () => {
+      mockSend.mockResolvedValueOnce({ Responses: [{}] });
+      const res = await post("/transaction/get", {
+        items: [{ tableName: "my-table", key: { pk: "123" } }],
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.responses).toEqual([null]);
+    });
+
+    it("POST /transaction/write — update without updates builds empty expression", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/transaction/write", {
+        items: [{ type: "update", tableName: "my-table", key: { pk: "123" } }],
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.TransactItems[0].Update.UpdateExpression).toBe("SET ");
+      expect(cmd.TransactItems[0].Update.ExpressionAttributeNames).toEqual({});
+    });
+
+    it("POST /transaction/write — 500 on unknown type", async () => {
+      // Hono catches the thrown error and returns a 500 response.
+      const res = await post("/transaction/write", {
+        items: [{ type: "nope", tableName: "my-table" }],
+      });
+      expect(res.status).toBe(500);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
     it("POST /transaction/write — 400 when items missing", async () => {
       const res = await post("/transaction/write", {});
       expect(res.status).toBe(400);
+    });
+
+    it("POST /transaction/write — 400 when items is not an array", async () => {
+      const res = await post("/transaction/write", { items: "nope" });
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
     });
   });
 
@@ -374,6 +585,22 @@ describe("DynamoDB Advanced", () => {
       const cmd = mockSend.mock.calls[0][0];
       expect(cmd.TimeToLiveSpecification.Enabled).toBe(false);
     });
+
+    it("GET /tables/:name/ttl — DISABLED defaults when no description", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/tables/my-table/ttl");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.enabled).toBe(false);
+      expect(body.status).toBe("DISABLED");
+      expect(body.attributeName).toBeNull();
+    });
+
+    it("PUT /tables/:name/ttl — 400 when attributeName missing", async () => {
+      const res = await put("/tables/my-table/ttl", { enabled: true });
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
   });
 
   describe("Tags", () => {
@@ -401,6 +628,21 @@ describe("DynamoDB Advanced", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.deleted).toBe(true);
+    });
+
+    it("GET /tables/:name/tags — empty when Tags missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/tables/my-table/tags");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.tags).toEqual([]);
+      expect(body.total).toBe(0);
+    });
+
+    it("POST /tables/:name/tags — 400 when tags missing", async () => {
+      const res = await post("/tables/my-table/tags", {});
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
     });
   });
 
@@ -439,6 +681,15 @@ describe("DynamoDB Advanced", () => {
       expect(res.status).toBe(200);
       const cmd = mockSend.mock.calls[0][0];
       expect(cmd.PointInTimeRecoverySpecification.PointInTimeRecoveryEnabled).toBe(false);
+    });
+
+    it("GET /tables/:name/backups — DISABLED defaults when no description", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/tables/my-table/backups");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.pointInTimeRecovery.enabled).toBe(false);
+      expect(body.pointInTimeRecovery.status).toBe("DISABLED");
     });
   });
 
@@ -489,6 +740,17 @@ describe("DynamoDB Advanced", () => {
       const body = await res.json();
       expect(body.nextToken).toBe("next-token");
     });
+
+    it("POST /partiql/execute — empty items when Items missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/partiql/execute", {
+        statement: "SELECT * FROM my-table",
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.items).toEqual([]);
+      expect(body.count).toBe(0);
+    });
   });
 
   describe("PartiQL Transaction", () => {
@@ -531,6 +793,27 @@ describe("DynamoDB Advanced", () => {
     it("POST /partiql/transaction — 400 when statements missing", async () => {
       const res = await post("/partiql/transaction", {});
       expect(res.status).toBe(400);
+    });
+
+    it("POST /partiql/transaction — empty responses when Responses missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/partiql/transaction", {
+        statements: [{ Statement: "INSERT INTO t VALUE {'pk':'1'}" }],
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.responses).toEqual([]);
+      expect(body.total).toBe(0);
+    });
+
+    it("POST /partiql/transaction — empty entries when Item missing", async () => {
+      mockSend.mockResolvedValueOnce({ Responses: [{}] });
+      const res = await post("/partiql/transaction", {
+        statements: [{ Statement: "INSERT INTO t VALUE {'pk':'1'}" }],
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.responses).toEqual([{}]);
     });
   });
 
@@ -579,6 +862,38 @@ describe("DynamoDB Advanced", () => {
     it("POST /partiql/batch — 400 when statements missing", async () => {
       const res = await post("/partiql/batch", {});
       expect(res.status).toBe(400);
+    });
+
+    it("POST /partiql/batch — with Parameters", async () => {
+      mockSend.mockResolvedValueOnce({ Responses: [] });
+      const res = await post("/partiql/batch", {
+        statements: [{ Statement: "SELECT * FROM t WHERE pk = ?", Parameters: [{ S: "val" }] }],
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.Statements[0].Parameters).toEqual([{ S: "val" }]);
+    });
+
+    it("POST /partiql/batch — empty responses when Responses missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/partiql/batch", {
+        statements: [{ Statement: "SELECT * FROM t" }],
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.responses).toEqual([]);
+      expect(body.total).toBe(0);
+    });
+
+    it("POST /partiql/batch — tableName null when missing", async () => {
+      mockSend.mockResolvedValueOnce({ Responses: [{ Item: { pk: { S: "1" } } }] });
+      const res = await post("/partiql/batch", {
+        statements: [{ Statement: "SELECT * FROM t" }],
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.responses[0].tableName).toBeNull();
+      expect(body.responses[0].item).toBeDefined();
     });
   });
 
@@ -679,6 +994,71 @@ describe("DynamoDB Advanced", () => {
     it("GET /exports — 400 when arn missing", async () => {
       const res = await get("/exports");
       expect(res.status).toBe(400);
+    });
+
+    it("GET /tables/:name/exports — empty when ExportSummaries missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/tables/my-table/exports");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.exports).toEqual([]);
+      expect(body.total).toBe(0);
+    });
+
+    it("GET /tables/:name/exports — null times when summary lacks them", async () => {
+      mockSend.mockResolvedValueOnce({
+        ExportSummaries: [
+          {
+            ExportArn: "arn:aws:dynamodb:us-east-1:000000000000:table/my-table/export/01700000000000-abc",
+            ExportStatus: "IN_PROGRESS",
+          },
+        ],
+      });
+      const res = await get("/tables/my-table/exports");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.exports[0].startTime).toBeNull();
+      expect(body.exports[0].endTime).toBeNull();
+    });
+
+    it("POST /tables/:name/exports — defaults S3Prefix and ExportFormat", async () => {
+      mockSend.mockResolvedValueOnce({ ExportDescription: {} });
+      const res = await post("/tables/my-table/exports", { s3Bucket: "my-bucket" });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.S3Prefix).toBe("");
+      expect(cmd.ExportFormat).toBe("DYNAMODB_JSON");
+    });
+
+    it("POST /tables/:name/exports — with exportType and exportTime", async () => {
+      mockSend.mockResolvedValueOnce({ ExportDescription: {} });
+      const res = await post("/tables/my-table/exports", {
+        s3Bucket: "my-bucket",
+        exportType: "INCREMENTAL_EXPORT",
+        exportTime: "2025-01-01T00:00:00Z",
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.ExportType).toBe("INCREMENTAL_EXPORT");
+      expect(cmd.ExportTime).toBeInstanceOf(Date);
+    });
+
+    it("POST /tables/:name/exports — defaults status to IN_PROGRESS without description", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/tables/my-table/exports", { s3Bucket: "my-bucket" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.exportStatus).toBe("IN_PROGRESS");
+      expect(body.startTime).toBeNull();
+    });
+
+    it("GET /exports — null times when description missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/exports?arn=arn:aws:dynamodb:us-east-1:000000000000:table/my-table/export/01700000000000-abc");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.startTime).toBeNull();
+      expect(body.endTime).toBeNull();
     });
   });
 });
