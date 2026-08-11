@@ -659,8 +659,8 @@ export function CodeDeployDashboard() {
                   </Container>
                 )}
 
-                <Modal
-                  visible={showCreateApp}
+                {showCreateApp && <Modal
+                  visible
                   onDismiss={() => setShowCreateApp(false)}
                   header="Create application"
                   footer={
@@ -694,11 +694,10 @@ export function CodeDeployDashboard() {
                       <Input value={appName} onChange={({ detail }) => setAppName(detail.value)} placeholder="my-app" />
                     </FormField>
                   </Form>
-                </Modal>
+                </Modal>}
 
-                {selectedApp && (
-                  <Modal
-                    visible={showCreateGroup}
+                {showCreateGroup && <Modal
+                    visible
                     onDismiss={() => setShowCreateGroup(false)}
                     header="Create deployment group"
                     footer={
@@ -741,12 +740,10 @@ export function CodeDeployDashboard() {
                         </FormField>
                       </SpaceBetween>
                     </Form>
-                  </Modal>
-                )}
+                  </Modal>}
 
-                {selectedApp && (
-                  <Modal
-                    visible={showCreateDeployment}
+                {showCreateDeployment && <Modal
+                    visible
                     onDismiss={() => setShowCreateDeployment(false)}
                     header="Create deployment"
                     footer={
@@ -783,8 +780,7 @@ export function CodeDeployDashboard() {
                         <Input value={deployGroupName} onChange={({ detail }) => setDeployGroupName(detail.value)} placeholder="my-group" />
                       </FormField>
                     </Form>
-                  </Modal>
-                )}
+                  </Modal>}
               </>
             ),
           },
@@ -808,8 +804,8 @@ export function CodeDeployDashboard() {
                   filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
                   onCreate={() => setShowCreateConfig(true)}
                 />
-                <Modal
-                  visible={showCreateConfig}
+                {showCreateConfig && <Modal
+                  visible
                   onDismiss={() => setShowCreateConfig(false)}
                   header="Create deployment config"
                   footer={
@@ -843,7 +839,7 @@ export function CodeDeployDashboard() {
                       <Input value={configName} onChange={({ detail }) => setConfigName(detail.value)} placeholder="MyConfig" />
                     </FormField>
                   </Form>
-                </Modal>
+                </Modal>}
               </>
             ),
           },

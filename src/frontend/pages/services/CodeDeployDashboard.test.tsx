@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -86,6 +86,18 @@ vi.mock("../../hooks/useCodeDeploy", () => ({
 
 import { CodeDeployDashboard } from "./CodeDeployDashboard";
 
+/**
+ * Cloudscape Modal handles Escape via a React onKeyDown on the dialog element
+ * (checking `event.keyCode === 27`). user-event's `keyboard()` targets the
+ * active element (body), which never reaches the dialog in happy-dom, so we
+ * dispatch the keydown on the dialog directly.
+ */
+function dismissModalWithEscape() {
+  document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+    fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27 });
+  });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   deleteAppState.isPending = false;
@@ -107,6 +119,12 @@ beforeEach(() => {
   mockDeploymentGroups.mockReturnValue({ data: { deploymentGroups: [], total: 0 }, isLoading: false });
   mockDeployments.mockReturnValue({ data: { deployments: [], total: 0 }, isLoading: false });
   mockDeploymentConfigs.mockReturnValue({ data: { deploymentConfigs: [] }, isLoading: false });
+
+  // Invoke onSuccess so the create modals' close + field-reset branches fire
+  mockCreateApp.mockImplementation((_body: any, opts: any) => opts?.onSuccess?.());
+  mockCreateGroup.mockImplementation((_body: any, opts: any) => opts?.onSuccess?.());
+  mockCreateDeployment.mockImplementation((_body: any, opts: any) => opts?.onSuccess?.());
+  mockCreateConfig.mockImplementation((_body: any, opts: any) => opts?.onSuccess?.());
 });
 
 describe("CodeDeployDashboard — applications tab", () => {
@@ -202,6 +220,17 @@ describe("CodeDeployDashboard — applications tab", () => {
     await clickButton(user, /Create/i);
     await waitFor(() => expect(screen.getByText("Create application")).toBeTruthy());
     await clickButton(user, /Cancel/i);
+    expect(mockCreateApp).not.toHaveBeenCalled();
+  });
+
+  it("dismisses the create application modal with Escape", async () => {
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create Application/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-app")).toBeTruthy());
+
+    dismissModalWithEscape();
+    await waitFor(() => expect(screen.queryByPlaceholderText("my-app")).toBeNull());
     expect(mockCreateApp).not.toHaveBeenCalled();
   });
 
@@ -342,6 +371,125 @@ describe("CodeDeployDashboard — applications tab", () => {
     await userEvent.setup().click(screen.getByText("my-app"));
     await waitFor(() => expect(screen.getByText(/Deployment Groups.*my-app/)).toBeTruthy());
   });
+
+  it("creates a deployment group with trimmed fields and closes the modal", async () => {
+    mockApps.mockReturnValue({
+      data: { applications: [{ applicationName: "my-app", createTime: "2024-01-15T00:00:00Z" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-app")).toBeTruthy());
+    await user.click(screen.getByText("my-app"));
+    await waitFor(() => expect(screen.getByText(/Deployment Groups.*my-app/)).toBeTruthy());
+
+    await user.click(screen.getByRole("button", { name: /Create group/i }));
+    await waitFor(() => expect(screen.getByText("Create deployment group")).toBeTruthy());
+
+    await user.type(screen.getByPlaceholderText("my-group"), "  grp-one  ");
+    await user.type(screen.getByPlaceholderText("arn:aws:iam::123:role/MyRole"), "  arn:role  ");
+    await clickButton(user, /^Create$/);
+
+    await waitFor(() => {
+      expect(mockCreateGroup).toHaveBeenCalledWith(
+        { appName: "my-app", deploymentGroupName: "grp-one", serviceRoleArn: "arn:role" },
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      );
+      expect(screen.queryByText("Create deployment group")).toBeNull();
+    });
+  });
+
+  it("cancels the create deployment group modal", async () => {
+    mockApps.mockReturnValue({
+      data: { applications: [{ applicationName: "my-app", createTime: "2024-01-15T00:00:00Z" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-app"));
+    await waitFor(() => expect(screen.getByText(/Deployment Groups.*my-app/)).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Create group/i }));
+    await waitFor(() => expect(screen.getByText("Create deployment group")).toBeTruthy());
+    // Last Cancel — DeleteButton's hidden ConfirmDialog renders an earlier Cancel button
+    await clickButton(user, /Cancel/i, { last: true });
+    await waitFor(() => expect(screen.queryByText("Create deployment group")).toBeNull());
+    expect(mockCreateGroup).not.toHaveBeenCalled();
+  });
+
+  it("dismisses the create deployment group modal with Escape", async () => {
+    mockApps.mockReturnValue({
+      data: { applications: [{ applicationName: "my-app", createTime: "2024-01-15T00:00:00Z" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-app"));
+    await waitFor(() => expect(screen.getByText(/Deployment Groups.*my-app/)).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Create group/i }));
+    await waitFor(() => expect(screen.getByPlaceholderText("my-group")).toBeTruthy());
+
+    dismissModalWithEscape();
+    await waitFor(() => expect(screen.queryByText("Create deployment group")).toBeNull());
+    expect(mockCreateGroup).not.toHaveBeenCalled();
+  });
+
+  it("creates a deployment with trimmed group name and closes the modal", async () => {
+    mockApps.mockReturnValue({
+      data: { applications: [{ applicationName: "my-app", createTime: "2024-01-15T00:00:00Z" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-app"));
+    await waitFor(() => expect(screen.getByText(/Deployment Groups.*my-app/)).toBeTruthy());
+
+    await user.click(screen.getByRole("button", { name: /Create deployment/i }));
+    await waitFor(() => expect(screen.getByPlaceholderText("my-group")).toBeTruthy());
+
+    await user.type(screen.getByPlaceholderText("my-group"), "  deploy-group  ");
+    await clickButton(user, /^Create$/);
+
+    await waitFor(() => {
+      expect(mockCreateDeployment).toHaveBeenCalledWith(
+        { appName: "my-app", deploymentGroupName: "deploy-group" },
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      );
+      expect(screen.queryByPlaceholderText("my-group")).toBeNull();
+    });
+  });
+
+  it("cancels the create deployment modal", async () => {
+    mockApps.mockReturnValue({
+      data: { applications: [{ applicationName: "my-app", createTime: "2024-01-15T00:00:00Z" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-app"));
+    await waitFor(() => expect(screen.getByText(/Deployment Groups.*my-app/)).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Create deployment/i }));
+    await waitFor(() => expect(screen.getByPlaceholderText("my-group")).toBeTruthy());
+    await clickButton(user, /Cancel/i, { last: true });
+    await waitFor(() => expect(screen.queryByPlaceholderText("my-group")).toBeNull());
+    expect(mockCreateDeployment).not.toHaveBeenCalled();
+  });
+
+  it("dismisses the create deployment modal with Escape", async () => {
+    mockApps.mockReturnValue({
+      data: { applications: [{ applicationName: "my-app", createTime: "2024-01-15T00:00:00Z" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-app"));
+    await waitFor(() => expect(screen.getByText(/Deployment Groups.*my-app/)).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Create deployment/i }));
+    await waitFor(() => expect(screen.getByPlaceholderText("my-group")).toBeTruthy());
+
+    dismissModalWithEscape();
+    await waitFor(() => expect(screen.queryByPlaceholderText("my-group")).toBeNull());
+    expect(mockCreateDeployment).not.toHaveBeenCalled();
+  });
 });
 
 describe("CodeDeployDashboard — deployment configs tab", () => {
@@ -411,9 +559,36 @@ describe("CodeDeployDashboard — deployment configs tab", () => {
     await waitFor(() => {
       expect(mockCreateConfig).toHaveBeenCalledWith(
         expect.objectContaining({ deploymentConfigName: "MyCustomConfig" }),
-        expect.any(Object),
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
       );
+      expect(screen.queryByPlaceholderText("MyConfig")).toBeNull();
     });
+  });
+
+  it("cancels the create deployment config modal", async () => {
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Deployment Configs/i }));
+    await waitFor(() => expect(screen.getByText(/No deployment configs/i)).toBeTruthy());
+    await clickButton(user, /Create Deployment Config/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("MyConfig")).toBeTruthy());
+
+    await clickButton(user, /Cancel/i);
+    await waitFor(() => expect(screen.queryByPlaceholderText("MyConfig")).toBeNull());
+    expect(mockCreateConfig).not.toHaveBeenCalled();
+  });
+
+  it("dismisses the create deployment config modal with Escape", async () => {
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Deployment Configs/i }));
+    await waitFor(() => expect(screen.getByText(/No deployment configs/i)).toBeTruthy());
+    await clickButton(user, /Create Deployment Config/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("MyConfig")).toBeTruthy());
+
+    dismissModalWithEscape();
+    await waitFor(() => expect(screen.queryByPlaceholderText("MyConfig")).toBeNull());
+    expect(mockCreateConfig).not.toHaveBeenCalled();
   });
 
   it("shows create config loading state", () => {
