@@ -270,7 +270,6 @@ function CreateQueueModal({
   const handleSubmit = async () => {
     let name = queueName.trim();
     if (isFifo && !name.endsWith(".fifo")) name += ".fifo";
-    if (!name) return;
 
     const attributes: Record<string, string> = {};
     if (visibilityTimeout) attributes.VisibilityTimeout = visibilityTimeout;
@@ -766,7 +765,6 @@ function SendMessageModal({
   const sendMessage = useSendSQSMessage();
 
   const handleSend = () => {
-    if (!body.trim()) return;
     sendMessage.mutate(
       {
         queueUrl,
@@ -856,7 +854,6 @@ function TagsTab({
   const tags = data?.tags || {};
 
   const handleAdd = () => {
-    if (!newKey.trim()) return;
     tag.mutate(
       { queueUrl, tags: { [newKey]: newValue } },
       {

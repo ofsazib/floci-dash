@@ -12,11 +12,16 @@ const mockSQSQueueTags = vi.fn();
 const mockSQSDLQSources = vi.fn();
 const mockCreateQueueMutate = vi.fn();
 const mockDeleteQueueMutate = vi.fn();
+const mockPurgeQueueMutate = vi.fn();
 const mockSendMessageMutate = vi.fn();
+const mockDeleteMessageMutate = vi.fn();
 const mockSetAttrsMutate = vi.fn();
 const mockTagMutate = vi.fn();
 const mockUntagMutate = vi.fn();
 const mockSearchParams = vi.fn();
+const mockSetSearchParams = vi.fn();
+const mockShowToast = vi.fn();
+const mockConfirm = vi.fn();
 
 vi.mock("../hooks/useSQS", () => ({
   useSQSQueues: (...args: any[]) => mockSQSQueues(...args),
@@ -26,9 +31,9 @@ vi.mock("../hooks/useSQS", () => ({
   useSQSDLQSources: (...args: any[]) => mockSQSDLQSources(...args),
   useCreateSQSQueue: () => ({ mutate: mockCreateQueueMutate, isPending: false }),
   useDeleteSQSQueue: () => ({ mutate: mockDeleteQueueMutate, isPending: false }),
-  usePurgeSQSQueue: () => ({ mutate: vi.fn(), isPending: false }),
+  usePurgeSQSQueue: () => ({ mutate: mockPurgeQueueMutate, isPending: false }),
   useSendSQSMessage: () => ({ mutate: mockSendMessageMutate, isPending: false }),
-  useDeleteSQSMessage: () => ({ mutate: vi.fn(), isPending: false }),
+  useDeleteSQSMessage: () => ({ mutate: mockDeleteMessageMutate, isPending: false }),
   useSetSQSAttributes: () => ({ mutate: mockSetAttrsMutate, isPending: false }),
   useSQSTags: () => ({ tag: { mutate: mockTagMutate, isPending: false }, untag: { mutate: mockUntagMutate, isPending: false } }),
   extractQueueName: (url: string) => url.split("/").pop() || url,
@@ -39,12 +44,12 @@ vi.mock("../hooks/useSystem", () => ({
 }));
 
 vi.mock("../components/Toast", () => ({
-  useToast: () => ({ showToast: vi.fn() }),
+  useToast: () => ({ showToast: mockShowToast }),
   ToastProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
 vi.mock("../components/ConfirmDialog", () => ({
-  useConfirmDialog: () => ({ confirm: vi.fn(() => Promise.resolve(true)), dialog: null }),
+  useConfirmDialog: () => ({ confirm: (...args: any[]) => mockConfirm(...args), dialog: null }),
 }));
 
 vi.mock("react-router-dom", () => ({
@@ -63,7 +68,16 @@ describe("SQSPage", () => {
     mockSQSMessages.mockReturnValue({ data: { messages: [] }, isLoading: false });
     mockSQSQueueTags.mockReturnValue({ data: { tags: {} }, isLoading: false });
     mockSQSDLQSources.mockReturnValue({ data: { queueUrls: [] }, isLoading: false });
-    mockSearchParams.mockReturnValue([new URLSearchParams(), vi.fn()]);
+    mockSearchParams.mockReturnValue([new URLSearchParams(), mockSetSearchParams]);
+    mockConfirm.mockResolvedValue(true);
+    mockCreateQueueMutate.mockImplementation((_args: any, opts: any) => opts?.onSuccess?.({}));
+    mockDeleteQueueMutate.mockImplementation((_args: any, opts: any) => opts?.onSuccess?.());
+    mockPurgeQueueMutate.mockImplementation((_args: any, opts: any) => opts?.onSuccess?.());
+    mockSendMessageMutate.mockImplementation((_args: any, opts: any) => opts?.onSuccess?.({ messageId: "abc123def456" }));
+    mockDeleteMessageMutate.mockImplementation((_args: any, opts: any) => opts?.onSuccess?.());
+    mockSetAttrsMutate.mockImplementation((_args: any, opts: any) => opts?.onSuccess?.());
+    mockTagMutate.mockImplementation((_args: any, opts: any) => opts?.onSuccess?.());
+    mockUntagMutate.mockImplementation((_args: any, opts: any) => opts?.onSuccess?.());
   });
 
   // ─── Render State Tests ─────────────────────────────────
@@ -468,6 +482,577 @@ describe("SQSPage", () => {
     await clickButton(user, "Send");
     await waitFor(() => {
       expect(mockSendMessageMutate).toHaveBeenCalled();
+    });
+  });
+
+  // ─── Page-level Navigation Tests ───────────────────────
+
+  it("selects a queue from the list", async () => {
+    const user = userEvent.setup();
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "my-queue" }));
+    await waitFor(() => {
+      expect(mockSetSearchParams).toHaveBeenCalledWith({ queueUrl: "http://localhost:4566/000000000000/my-queue" });
+    });
+  });
+
+  it("clears queueUrl when the SQS breadcrumb is clicked", async () => {
+    const user = userEvent.setup();
+    mockSearchParams.mockReturnValue([new URLSearchParams("?queueUrl=http://localhost:4566/000000000000/my-queue"), mockSetSearchParams]);
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getAllByText("SQS")[0]);
+    await waitFor(() => {
+      expect(mockSetSearchParams).toHaveBeenCalled();
+    });
+  });
+
+  it("does not clear queueUrl when the Dashboard breadcrumb is clicked", async () => {
+    const user = userEvent.setup();
+    mockSearchParams.mockReturnValue([new URLSearchParams("?queueUrl=http://localhost:4566/000000000000/my-queue"), mockSetSearchParams]);
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getAllByText("Dashboard")[0]);
+    await waitFor(() => {
+      expect(mockSetSearchParams).not.toHaveBeenCalled();
+    });
+  });
+
+  it("goes back to the queue list via the back button", async () => {
+    const user = userEvent.setup();
+    mockSearchParams.mockReturnValue([new URLSearchParams("?queueUrl=http://localhost:4566/000000000000/my-queue"), mockSetSearchParams]);
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /back to queues/i }));
+    await waitFor(() => {
+      expect(mockSetSearchParams).toHaveBeenCalled();
+    });
+  });
+
+  it("opens the create queue modal from the empty state", async () => {
+    const user = userEvent.setup();
+    mockSQSQueues.mockReturnValue({
+      data: { queueUrls: [] },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await clickButton(user, /create queue/i, { last: true });
+    await waitFor(() => {
+      expect(screen.getAllByPlaceholderText("my-queue").length).toBeGreaterThan(0);
+    });
+  });
+
+  it("shows the fallback message when the queues error has no message", () => {
+    mockSQSQueues.mockReturnValue({
+      data: undefined, isLoading: false, isError: true, error: {} as Error,
+    });
+    render(<SQSPage />, { wrapper: createWrapper() });
+    expect(screen.getByText("Failed to load queues")).toBeTruthy();
+  });
+
+  // ─── Delete Queue Variants ──────────────────────────────
+
+  it("shows a success toast after deleting a queue", async () => {
+    const user = userEvent.setup();
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await clickButton(user, /delete queue/i);
+    await waitFor(() => {
+      expect(mockShowToast).toHaveBeenCalledWith("success", 'Queue "my-queue" deleted');
+    });
+  });
+
+  it("shows an error toast when queue deletion fails", async () => {
+    const user = userEvent.setup();
+    mockDeleteQueueMutate.mockImplementation((_args: any, opts: any) => opts?.onError?.(new Error("boom")));
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await clickButton(user, /delete queue/i);
+    await waitFor(() => {
+      expect(mockShowToast).toHaveBeenCalledWith("error", "Delete failed: boom");
+    });
+  });
+
+  it("does not delete a queue when confirmation is declined", async () => {
+    const user = userEvent.setup();
+    mockConfirm.mockResolvedValue(false);
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await clickButton(user, /delete queue/i);
+    await waitFor(() => {
+      expect(mockConfirm).toHaveBeenCalled();
+    });
+    expect(mockDeleteQueueMutate).not.toHaveBeenCalled();
+  });
+
+  // ─── Create Queue Modal Variants ────────────────────────
+
+  it("submits custom attribute values from the create form", async () => {
+    const user = userEvent.setup();
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await clickButton(user, /create queue/i);
+    await waitFor(() => {
+      expect(screen.getAllByPlaceholderText("my-queue").length).toBeGreaterThan(0);
+    });
+    const inputs = screen.getAllByRole("textbox");
+    await user.type(inputs[0], "test-queue");
+    await user.clear(inputs[1]);
+    await user.type(inputs[1], "60");
+    await user.clear(inputs[2]);
+    await user.type(inputs[2], "5");
+    await user.clear(inputs[3]);
+    await user.type(inputs[3], "1000");
+    await user.clear(inputs[4]);
+    await user.type(inputs[4], "100");
+    await clickButton(user, /Create/i, { last: true });
+    await waitFor(() => {
+      expect(mockCreateQueueMutate).toHaveBeenCalled();
+    });
+    const callArgs = mockCreateQueueMutate.mock.calls[0][0];
+    expect(callArgs.queueName).toBe("test-queue");
+    expect(callArgs.attributes).toEqual({
+      VisibilityTimeout: "60",
+      DelaySeconds: "5",
+      MaximumMessageSize: "1000",
+      MessageRetentionPeriod: "100",
+    });
+  });
+
+  it("omits cleared attribute fields from the create payload", async () => {
+    const user = userEvent.setup();
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await clickButton(user, /create queue/i);
+    await waitFor(() => {
+      expect(screen.getAllByPlaceholderText("my-queue").length).toBeGreaterThan(0);
+    });
+    const inputs = screen.getAllByRole("textbox");
+    await user.type(inputs[0], "test-queue");
+    await user.clear(inputs[1]);
+    await user.clear(inputs[2]);
+    await user.clear(inputs[3]);
+    await user.clear(inputs[4]);
+    await clickButton(user, /Create/i, { last: true });
+    await waitFor(() => {
+      expect(mockCreateQueueMutate).toHaveBeenCalled();
+    });
+    expect(mockCreateQueueMutate.mock.calls[0][0].attributes).toEqual({});
+  });
+
+  it("shows a success toast and closes the modal after creating a queue", async () => {
+    const user = userEvent.setup();
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await clickButton(user, /create queue/i);
+    await waitFor(() => {
+      expect(screen.getAllByPlaceholderText("my-queue").length).toBeGreaterThan(0);
+    });
+    const inputs = screen.getAllByRole("textbox");
+    await user.type(inputs[0], "test-queue");
+    await clickButton(user, /Create/i, { last: true });
+    await waitFor(() => {
+      expect(mockShowToast).toHaveBeenCalledWith("success", 'Queue "test-queue" created');
+    });
+    await waitFor(() => {
+      expect(screen.queryByPlaceholderText("my-queue")).toBeNull();
+    });
+  });
+
+  it("shows an error toast when queue creation fails", async () => {
+    const user = userEvent.setup();
+    mockCreateQueueMutate.mockImplementation((_args: any, opts: any) => opts?.onError?.(new Error("boom")));
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await clickButton(user, /create queue/i);
+    await waitFor(() => {
+      expect(screen.getAllByPlaceholderText("my-queue").length).toBeGreaterThan(0);
+    });
+    const inputs = screen.getAllByRole("textbox");
+    await user.type(inputs[0], "test-queue");
+    await clickButton(user, /Create/i, { last: true });
+    await waitFor(() => {
+      expect(mockShowToast).toHaveBeenCalledWith("error", "Create failed: boom");
+    });
+  });
+
+  // ─── Purge Tests ────────────────────────────────────────
+
+  it("purges the queue after confirmation", async () => {
+    const user = userEvent.setup();
+    mockSearchParams.mockReturnValue([new URLSearchParams("?queueUrl=http://localhost:4566/000000000000/my-queue"), mockSetSearchParams]);
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Messages"));
+    await clickButton(user, "Purge");
+    await waitFor(() => {
+      expect(mockShowToast).toHaveBeenCalledWith("success", "Queue purged");
+    });
+    expect(mockPurgeQueueMutate).toHaveBeenCalledWith("http://localhost:4566/000000000000/my-queue", expect.anything());
+  });
+
+  it("shows an error toast when purging fails", async () => {
+    const user = userEvent.setup();
+    mockPurgeQueueMutate.mockImplementation((_args: any, opts: any) => opts?.onError?.(new Error("boom")));
+    mockSearchParams.mockReturnValue([new URLSearchParams("?queueUrl=http://localhost:4566/000000000000/my-queue"), mockSetSearchParams]);
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Messages"));
+    await clickButton(user, "Purge");
+    await waitFor(() => {
+      expect(mockShowToast).toHaveBeenCalledWith("error", "Purge failed: boom");
+    });
+  });
+
+  it("does not purge when confirmation is declined", async () => {
+    const user = userEvent.setup();
+    mockConfirm.mockResolvedValue(false);
+    mockSearchParams.mockReturnValue([new URLSearchParams("?queueUrl=http://localhost:4566/000000000000/my-queue"), mockSetSearchParams]);
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Messages"));
+    await clickButton(user, "Purge");
+    await waitFor(() => {
+      expect(mockConfirm).toHaveBeenCalled();
+    });
+    expect(mockPurgeQueueMutate).not.toHaveBeenCalled();
+  });
+
+  // ─── Attributes Variants ────────────────────────────────
+
+  it("shows FIFO for a queue with the FifoQueue attribute", () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("?queueUrl=http://localhost:4566/000000000000/my-queue.fifo"), mockSetSearchParams]);
+    mockSQSAttributes.mockReturnValue({
+      data: { attributes: { FifoQueue: "true" } },
+      isLoading: false,
+    });
+    render(<SQSPage />, { wrapper: createWrapper() });
+    expect(screen.getByText("FIFO")).toBeTruthy();
+  });
+
+  it("formats created and last modified timestamps", () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("?queueUrl=http://localhost:4566/000000000000/my-queue"), mockSetSearchParams]);
+    mockSQSAttributes.mockReturnValue({
+      data: { attributes: { CreatedTimestamp: "1700000000", LastModifiedTimestamp: "1700000100" } },
+      isLoading: false,
+    });
+    render(<SQSPage />, { wrapper: createWrapper() });
+    expect(screen.getByText(new Date(1700000000000).toLocaleString())).toBeTruthy();
+    expect(screen.getByText(new Date(1700000100000).toLocaleString())).toBeTruthy();
+  });
+
+  it("shows a success toast and exits edit mode after saving attributes", async () => {
+    const user = userEvent.setup();
+    mockSearchParams.mockReturnValue([new URLSearchParams("?queueUrl=http://localhost:4566/000000000000/my-queue"), mockSetSearchParams]);
+    mockSQSAttributes.mockReturnValue({
+      data: { attributes: { VisibilityTimeout: "30", DelaySeconds: "0", MessageRetentionPeriod: "345600" } },
+      isLoading: false,
+    });
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await clickButton(user, "Edit");
+    await clickButton(user, "Save");
+    await waitFor(() => {
+      expect(mockShowToast).toHaveBeenCalledWith("success", "Attributes updated");
+    });
+  });
+
+  it("shows an error toast when saving attributes fails", async () => {
+    const user = userEvent.setup();
+    mockSetAttrsMutate.mockImplementation((_args: any, opts: any) => opts?.onError?.(new Error("boom")));
+    mockSearchParams.mockReturnValue([new URLSearchParams("?queueUrl=http://localhost:4566/000000000000/my-queue"), mockSetSearchParams]);
+    mockSQSAttributes.mockReturnValue({
+      data: { attributes: { VisibilityTimeout: "30" } },
+      isLoading: false,
+    });
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await clickButton(user, "Edit");
+    await clickButton(user, "Save");
+    await waitFor(() => {
+      expect(mockShowToast).toHaveBeenCalledWith("error", "Update failed: boom");
+    });
+  });
+
+  it("saves edited attribute values", async () => {
+    const user = userEvent.setup();
+    mockSearchParams.mockReturnValue([new URLSearchParams("?queueUrl=http://localhost:4566/000000000000/my-queue"), mockSetSearchParams]);
+    mockSQSAttributes.mockReturnValue({
+      data: { attributes: { VisibilityTimeout: "30", DelaySeconds: "0", MessageRetentionPeriod: "345600" } },
+      isLoading: false,
+    });
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await clickButton(user, "Edit");
+    const inputs = screen.getAllByRole("textbox");
+    await user.clear(inputs[0]);
+    await user.type(inputs[0], "60");
+    await user.clear(inputs[1]);
+    await user.type(inputs[1], "5");
+    await user.clear(inputs[2]);
+    await user.type(inputs[2], "100");
+    await clickButton(user, "Save");
+    await waitFor(() => {
+      expect(mockSetAttrsMutate).toHaveBeenCalled();
+    });
+    expect(mockSetAttrsMutate.mock.calls[0][0].attributes).toEqual({
+      VisibilityTimeout: "60",
+      DelaySeconds: "5",
+      MessageRetentionPeriod: "100",
+    });
+  });
+
+  // ─── Messages Variants ──────────────────────────────────
+
+  it("shows empty state when messages data is missing", async () => {
+    const user = userEvent.setup();
+    mockSearchParams.mockReturnValue([new URLSearchParams("?queueUrl=http://localhost:4566/000000000000/my-queue"), mockSetSearchParams]);
+    mockSQSMessages.mockReturnValue({ data: {}, isLoading: false });
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Messages"));
+    await waitFor(() => {
+      expect(screen.getByText("No messages in queue")).toBeTruthy();
+    });
+  });
+
+  it("renders truncated bodies and sparse message fallbacks", async () => {
+    const user = userEvent.setup();
+    mockSearchParams.mockReturnValue([new URLSearchParams("?queueUrl=http://localhost:4566/000000000000/my-queue"), mockSetSearchParams]);
+    mockSQSMessages.mockReturnValue({
+      data: {
+        messages: [
+          { MessageId: "a".repeat(8), Body: "x".repeat(150), MD5OfBody: "m", ReceiptHandle: "rh", Attributes: {} },
+          { MessageId: "b".repeat(8), Body: "short", MD5OfBody: "m" },
+        ],
+      },
+      isLoading: false,
+    });
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Messages"));
+    await waitFor(() => {
+      expect(screen.getByText("x".repeat(100) + "…")).toBeTruthy();
+      expect(screen.getByText("short")).toBeTruthy();
+    });
+    // Only the message with a ReceiptHandle renders a delete button
+    expect(screen.getAllByLabelText("Delete message").length).toBe(1);
+  });
+
+  it("shows message group IDs for FIFO messages", async () => {
+    const user = userEvent.setup();
+    mockSearchParams.mockReturnValue([new URLSearchParams("?queueUrl=http://localhost:4566/000000000000/my-queue.fifo"), mockSetSearchParams]);
+    mockSQSMessages.mockReturnValue({
+      data: {
+        messages: [
+          { MessageId: "abc123def456", Body: "Hello", MD5OfBody: "m", ReceiptHandle: "rh", Attributes: { MessageGroupId: "group-1" } },
+          { MessageId: "aaaabbbbcccc", Body: "Two", MD5OfBody: "m", ReceiptHandle: "rh2" },
+        ],
+      },
+      isLoading: false,
+    });
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Messages"));
+    await waitFor(() => {
+      expect(screen.getByText("group-1")).toBeTruthy();
+      expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  it("deletes a message after confirmation", async () => {
+    const user = userEvent.setup();
+    mockSearchParams.mockReturnValue([new URLSearchParams("?queueUrl=http://localhost:4566/000000000000/my-queue"), mockSetSearchParams]);
+    mockSQSMessages.mockReturnValue({
+      data: { messages: [{ MessageId: "abc123def456", Body: "Hello", MD5OfBody: "m", ReceiptHandle: "handle123" }] },
+      isLoading: false,
+    });
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Messages"));
+    await waitFor(() => {
+      expect(screen.getByText("Hello")).toBeTruthy();
+    });
+    await clickButton(user, /delete message/i);
+    await waitFor(() => {
+      expect(mockShowToast).toHaveBeenCalledWith("success", "Message deleted");
+    });
+    expect(mockDeleteMessageMutate).toHaveBeenCalledWith(
+      { queueUrl: "http://localhost:4566/000000000000/my-queue", receiptHandle: "handle123" },
+      expect.anything()
+    );
+  });
+
+  it("shows an error toast when message deletion fails", async () => {
+    const user = userEvent.setup();
+    mockDeleteMessageMutate.mockImplementation((_args: any, opts: any) => opts?.onError?.(new Error("boom")));
+    mockSearchParams.mockReturnValue([new URLSearchParams("?queueUrl=http://localhost:4566/000000000000/my-queue"), mockSetSearchParams]);
+    mockSQSMessages.mockReturnValue({
+      data: { messages: [{ MessageId: "abc123def456", Body: "Hello", MD5OfBody: "m", ReceiptHandle: "handle123" }] },
+      isLoading: false,
+    });
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Messages"));
+    await waitFor(() => {
+      expect(screen.getByText("Hello")).toBeTruthy();
+    });
+    await clickButton(user, /delete message/i);
+    await waitFor(() => {
+      expect(mockShowToast).toHaveBeenCalledWith("error", "Delete failed: boom");
+    });
+  });
+
+  it("does not delete a message when confirmation is declined", async () => {
+    const user = userEvent.setup();
+    mockConfirm.mockResolvedValue(false);
+    mockSearchParams.mockReturnValue([new URLSearchParams("?queueUrl=http://localhost:4566/000000000000/my-queue"), mockSetSearchParams]);
+    mockSQSMessages.mockReturnValue({
+      data: { messages: [{ MessageId: "abc123def456", Body: "Hello", MD5OfBody: "m", ReceiptHandle: "handle123" }] },
+      isLoading: false,
+    });
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Messages"));
+    await waitFor(() => {
+      expect(screen.getByText("Hello")).toBeTruthy();
+    });
+    await clickButton(user, /delete message/i);
+    await waitFor(() => {
+      expect(mockConfirm).toHaveBeenCalled();
+    });
+    expect(mockDeleteMessageMutate).not.toHaveBeenCalled();
+  });
+
+  it("shows a success toast and closes the send message modal", async () => {
+    const user = userEvent.setup();
+    mockSearchParams.mockReturnValue([new URLSearchParams("?queueUrl=http://localhost:4566/000000000000/my-queue"), mockSetSearchParams]);
+    mockSQSMessages.mockReturnValue({ data: { messages: [] }, isLoading: false });
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Messages"));
+    await clickButton(user, /send message/i);
+    const textarea = screen.getByPlaceholderText("Enter message content...");
+    await user.type(textarea, "Test message body");
+    await clickButton(user, "Send");
+    await waitFor(() => {
+      expect(mockShowToast).toHaveBeenCalledWith("success", "Message sent: abc123de…");
+    });
+    await waitFor(() => {
+      expect(screen.queryByPlaceholderText("Enter message content...")).toBeNull();
+    });
+  });
+
+  it("shows an error toast when sending a message fails", async () => {
+    const user = userEvent.setup();
+    mockSendMessageMutate.mockImplementation((_args: any, opts: any) => opts?.onError?.(new Error("boom")));
+    mockSearchParams.mockReturnValue([new URLSearchParams("?queueUrl=http://localhost:4566/000000000000/my-queue"), mockSetSearchParams]);
+    mockSQSMessages.mockReturnValue({ data: { messages: [] }, isLoading: false });
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Messages"));
+    await clickButton(user, /send message/i);
+    const textarea = screen.getByPlaceholderText("Enter message content...");
+    await user.type(textarea, "Test message body");
+    await clickButton(user, "Send");
+    await waitFor(() => {
+      expect(mockShowToast).toHaveBeenCalledWith("error", "Send failed: boom");
+    });
+  });
+
+  it("sends a message with a custom delay", async () => {
+    const user = userEvent.setup();
+    mockSearchParams.mockReturnValue([new URLSearchParams("?queueUrl=http://localhost:4566/000000000000/my-queue"), mockSetSearchParams]);
+    mockSQSMessages.mockReturnValue({ data: { messages: [] }, isLoading: false });
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Messages"));
+    await clickButton(user, /send message/i);
+    const textarea = screen.getByPlaceholderText("Enter message content...");
+    await user.type(textarea, "Test message body");
+    const inputs = screen.getAllByRole("textbox");
+    await user.clear(inputs[1]);
+    await user.type(inputs[1], "5");
+    await clickButton(user, "Send");
+    await waitFor(() => {
+      expect(mockSendMessageMutate).toHaveBeenCalled();
+    });
+    expect(mockSendMessageMutate.mock.calls[0][0].delaySeconds).toBe(5);
+  });
+
+  it("sends a FIFO message with group and deduplication IDs", async () => {
+    const user = userEvent.setup();
+    mockSearchParams.mockReturnValue([new URLSearchParams("?queueUrl=http://localhost:4566/000000000000/my-queue.fifo"), mockSetSearchParams]);
+    mockSQSMessages.mockReturnValue({ data: { messages: [] }, isLoading: false });
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Messages"));
+    await clickButton(user, /send message/i);
+    await waitFor(() => {
+      expect(screen.getByText("Message group ID")).toBeTruthy();
+    });
+    const textarea = screen.getByPlaceholderText("Enter message content...");
+    await user.type(textarea, "FIFO message");
+    const inputs = screen.getAllByRole("textbox");
+    await user.type(inputs[2], "group-1");
+    await user.type(inputs[3], "dedup-1");
+    await clickButton(user, "Send");
+    await waitFor(() => {
+      expect(mockSendMessageMutate).toHaveBeenCalled();
+    });
+    expect(mockSendMessageMutate.mock.calls[0][0].messageGroupId).toBe("group-1");
+    expect(mockSendMessageMutate.mock.calls[0][0].messageDeduplicationId).toBe("dedup-1");
+  });
+
+  // ─── Tags Variants ──────────────────────────────────────
+
+  it("shows a success toast and clears inputs after adding a tag", async () => {
+    const user = userEvent.setup();
+    mockSearchParams.mockReturnValue([new URLSearchParams("?queueUrl=http://localhost:4566/000000000000/my-queue"), mockSetSearchParams]);
+    mockSQSQueueTags.mockReturnValue({ data: { tags: { Existing: "tag" } }, isLoading: false });
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Tags"));
+    await waitFor(() => {
+      expect(screen.getByText("Existing")).toBeTruthy();
+    });
+    const inputs = screen.getAllByRole("textbox");
+    await user.type(inputs[0], "Team");
+    await user.type(inputs[1], "backend");
+    await clickButton(user, /add tag/i);
+    await waitFor(() => {
+      expect(mockShowToast).toHaveBeenCalledWith("success", "Tag added");
+    });
+    expect(mockTagMutate).toHaveBeenCalledWith(
+      { queueUrl: "http://localhost:4566/000000000000/my-queue", tags: { Team: "backend" } },
+      expect.anything()
+    );
+  });
+
+  it("shows an error toast when adding a tag fails", async () => {
+    const user = userEvent.setup();
+    mockTagMutate.mockImplementation((_args: any, opts: any) => opts?.onError?.(new Error("boom")));
+    mockSearchParams.mockReturnValue([new URLSearchParams("?queueUrl=http://localhost:4566/000000000000/my-queue"), mockSetSearchParams]);
+    mockSQSQueueTags.mockReturnValue({ data: { tags: { Existing: "tag" } }, isLoading: false });
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Tags"));
+    await waitFor(() => {
+      expect(screen.getByText("Existing")).toBeTruthy();
+    });
+    const inputs = screen.getAllByRole("textbox");
+    await user.type(inputs[0], "Team");
+    await user.type(inputs[1], "backend");
+    await clickButton(user, /add tag/i);
+    await waitFor(() => {
+      expect(mockShowToast).toHaveBeenCalledWith("error", "Tag failed: boom");
+    });
+  });
+
+  it("shows a success toast after removing a tag", async () => {
+    const user = userEvent.setup();
+    mockSearchParams.mockReturnValue([new URLSearchParams("?queueUrl=http://localhost:4566/000000000000/my-queue"), mockSetSearchParams]);
+    mockSQSQueueTags.mockReturnValue({ data: { tags: { Environment: "production" } }, isLoading: false });
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Tags"));
+    await waitFor(() => {
+      expect(screen.getByText("Environment")).toBeTruthy();
+    });
+    await clickButton(user, /remove tag/i);
+    await waitFor(() => {
+      expect(mockShowToast).toHaveBeenCalledWith("success", "Tag removed");
+    });
+    expect(mockUntagMutate).toHaveBeenCalledWith(
+      { queueUrl: "http://localhost:4566/000000000000/my-queue", tagKeys: ["Environment"] },
+      expect.anything()
+    );
+  });
+
+  it("shows an error toast when removing a tag fails", async () => {
+    const user = userEvent.setup();
+    mockUntagMutate.mockImplementation((_args: any, opts: any) => opts?.onError?.(new Error("boom")));
+    mockSearchParams.mockReturnValue([new URLSearchParams("?queueUrl=http://localhost:4566/000000000000/my-queue"), mockSetSearchParams]);
+    mockSQSQueueTags.mockReturnValue({ data: { tags: { Environment: "production" } }, isLoading: false });
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Tags"));
+    await waitFor(() => {
+      expect(screen.getByText("Environment")).toBeTruthy();
+    });
+    await clickButton(user, /remove tag/i);
+    await waitFor(() => {
+      expect(mockShowToast).toHaveBeenCalledWith("error", "Remove failed: boom");
     });
   });
 });
