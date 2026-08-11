@@ -25,10 +25,23 @@ vi.mock("./routes/aws/ec2-terminal", () => ({
 
 vi.mock("@hono/node-server", () => ({
   createAdaptorServer: vi.fn(({ fetch }: any) => ({
-    listen: (...args: any[]) => { listenMock(...args); },
+    // Invoke the listen callback so the startup log line is exercised.
+    listen: (...args: any[]) => {
+      listenMock(...args);
+      const cb = args[1];
+      if (typeof cb === "function") cb();
+    },
     on: vi.fn(),
     close: vi.fn(),
   })),
+}));
+
+vi.mock("@hono/node-server/serve-static", () => ({
+  serveStatic: vi.fn(() => async (c: any, next: any) => next()),
+}));
+
+vi.mock("node:fs/promises", () => ({
+  readFile: vi.fn(async () => "<html><body>Floci Dash</body></html>"),
 }));
 
 import app from "./index";
@@ -168,6 +181,19 @@ describe("backend/index.ts — production mode", () => {
     vi.resetModules();
     await import("./index");
     expect(listenMock.mock.calls.at(-1)?.[0]).toBe(4000);
+  });
+
+  it("serves the SPA fallback for non-API routes in production", async () => {
+    process.env.NODE_ENV = "production";
+    vi.resetModules();
+    const { default: prodApp } = await import("./index");
+
+    // serveStatic is mocked to call next(), so the /* fallback handler runs
+    // and serves the mocked index.html via readFile.
+    const res = await prodApp.request("/some/spa/route");
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain("Floci Dash");
   });
 });
 
