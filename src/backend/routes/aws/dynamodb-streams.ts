@@ -34,7 +34,7 @@ router.get("/streams", async (c: Context) => {
 // ─── Describe Stream ──────────────────────────────────────────────
 
 router.get("/streams/:arn", async (c: Context) => {
-  const streamArn = decodeURIComponent(c.req.param("arn") || "");
+  const streamArn = decodeURIComponent(c.req.param("arn")!);
   const result = await streams().send(
     new DescribeStreamCommand({ StreamArn: streamArn })
   );
@@ -72,7 +72,7 @@ router.get("/streams/:arn", async (c: Context) => {
 // ─── Get Shard Iterator ───────────────────────────────────────────
 
 router.post("/streams/:arn/shard-iterator", async (c: Context) => {
-  const streamArn = decodeURIComponent(c.req.param("arn") || "");
+  const streamArn = decodeURIComponent(c.req.param("arn")!);
   const { shardId, shardIteratorType, sequenceNumber } = await c.req.json<{
     shardId: string;
     shardIteratorType: string;

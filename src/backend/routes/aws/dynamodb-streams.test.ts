@@ -93,6 +93,14 @@ describe("DynamoDB Streams Routes", () => {
       const cmd = mockSend.mock.calls[0][0];
       expect(cmd.TableName).toBeUndefined();
     });
+
+    it("GET /streams — falls back to [] when Streams missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/streams");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.streams).toEqual([]);
+    });
   });
 
   describe("Describe Stream", () => {
@@ -174,6 +182,43 @@ describe("DynamoDB Streams Routes", () => {
       expect(body.shards[0].adjacentParentShardId).toBe("shardId-000000000");
       expect(body.shards[0].sequenceNumberRange.endingSequenceNumber).toBe("200");
       expect(body.lastEvaluatedShardId).toBe("shardId-000000001");
+    });
+
+    it("GET /streams/:arn — falls back to empty arrays when KeySchema/Shards missing", async () => {
+      mockSend.mockResolvedValueOnce({
+        StreamDescription: {
+          StreamArn: streamArn,
+          StreamLabel: "2025-01-01",
+          StreamStatus: "ENABLED",
+          StreamViewType: "KEYS_ONLY",
+          TableName: "users",
+          CreationRequestDateTime: new Date("2025-01-01"),
+        },
+      });
+      const res = await get(`/streams/${encodeURIComponent(streamArn)}`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.keySchema).toEqual([]);
+      expect(body.shards).toEqual([]);
+      expect(body.lastEvaluatedShardId).toBeNull();
+    });
+
+    it("GET /streams/:arn — shard without SequenceNumberRange maps to null", async () => {
+      mockSend.mockResolvedValueOnce({
+        StreamDescription: {
+          StreamArn: streamArn,
+          StreamLabel: "2025-01-01",
+          StreamStatus: "ENABLED",
+          StreamViewType: "KEYS_ONLY",
+          TableName: "users",
+          CreationRequestDateTime: new Date("2025-01-01"),
+          Shards: [{ ShardId: "shardId-000000002" }],
+        },
+      });
+      const res = await get(`/streams/${encodeURIComponent(streamArn)}`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.shards[0].sequenceNumberRange).toBeNull();
     });
   });
 
@@ -377,6 +422,46 @@ describe("DynamoDB Streams Routes", () => {
       await post("/streams/records", { shardIterator: "iter" });
       const cmd = mockSend.mock.calls[0][0];
       expect(cmd.Limit).toBeUndefined();
+    });
+
+    it("POST /streams/records — falls back to [] when Records missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/streams/records", { shardIterator: "iter" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(body.records).toEqual([]);
+      expect(body.nextShardIterator).toBeNull();
+      expect(body.millisBehindLatest).toBe(0);
+    });
+
+    it("POST /streams/records — dynamodb record without Keys/NewImage/OldImage", async () => {
+      mockSend.mockResolvedValueOnce({
+        Records: [
+          {
+            eventID: "evt2",
+            eventName: "INSERT",
+            eventVersion: "1.1",
+            eventSource: "aws:dynamodb",
+            awsRegion: "us-east-1",
+            dynamodb: {
+              ApproximateCreationDateTime: 1700000003,
+              SequenceNumber: "000000000004",
+              SizeBytes: 20,
+              StreamViewType: "KEYS_ONLY",
+            },
+          },
+        ],
+        NextShardIterator: null,
+        MillisBehindLatest: 0,
+      });
+      const res = await post("/streams/records", { shardIterator: "iter" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.records[0].dynamodb.keys).toEqual({});
+      expect(body.records[0].dynamodb.newImage).toEqual({});
+      expect(body.records[0].dynamodb.oldImage).toEqual({});
+      expect(body.records[0].userIdentity).toBeNull();
     });
   });
 });
