@@ -214,4 +214,60 @@ describe("DashboardHome", () => {
     const bullets = screen.getAllByText("\u2022");
     expect(bullets.length).toBeGreaterThanOrEqual(1);
   });
+
+  it("navigates from every quick action button", async () => {
+    const user = userEvent.setup();
+    render(<DashboardHome />, { wrapper: createWrapper() });
+    const actions: Array<[string, string]> = [
+      ["Open DynamoDB", "/services/dynamodb"],
+      ["Open EC2", "/services/ec2"],
+      ["Open Lambda", "/services/lambda"],
+      ["Open RDS", "/services/rds"],
+      ["Open SQS", "/services/sqs"],
+      ["Open SNS", "/services/sns"],
+      ["Open KMS", "/services/kms"],
+    ];
+    for (const [label, path] of actions) {
+      await user.click(screen.getByText(label));
+      expect(mockNavigate).toHaveBeenCalledWith(path);
+    }
+  });
+
+  it("shows the fallback title when the health error has no message", () => {
+    mockHealth.mockReturnValue({ isLoading: false, isError: true, data: undefined, error: {} as Error });
+    mockActive.mockReturnValue({ data: { activeCount: 0, activeServices: [] } });
+    mockResourceCounts.mockReturnValue({ data: undefined });
+    render(<DashboardHome />, { wrapper: createWrapper() });
+    expect(screen.getByText("Failed to connect to Floci")).toBeTruthy();
+  });
+
+  it("renders nothing when health data is falsy without loading or error", () => {
+    mockHealth.mockReturnValue({ isLoading: false, isError: false, data: null, error: null });
+    mockActive.mockReturnValue({ data: { activeCount: 0, activeServices: [] } });
+    mockResourceCounts.mockReturnValue({ data: undefined });
+    const { container } = render(<DashboardHome />, { wrapper: createWrapper() });
+    expect(screen.queryByText("Floci Dash")).toBeNull();
+    expect(container.querySelectorAll(".fd-container-responsive").length).toBe(1);
+  });
+
+  it("formats older activity timestamps and renders entry resources", async () => {
+    const user = userEvent.setup();
+    const now = Date.now();
+    const oldEntries = [
+      { id: "m-ago", timestamp: now - 5 * 60000 - 30000, action: "navigate", service: "s3", resource: "my-bucket", description: "Old bucket activity" },
+      { id: "h-ago", timestamp: now - 5 * 3600000 - 1800000, action: "navigate", service: "ec2", description: "Old instance activity" },
+      { id: "days-ago", timestamp: now - 5 * 86400000, action: "navigate", service: "rds", description: "Old db activity" },
+    ];
+    localStorage.setItem("floci-activity-feed", JSON.stringify(oldEntries));
+    render(<DashboardHome />, { wrapper: createWrapper() });
+    // Clicking a quick action triggers addActivity -> emitChange, which re-reads
+    // the seeded localStorage entries into the feed.
+    await user.click(screen.getByText("Open S3"));
+    expect(screen.getByText("5m ago")).toBeTruthy();
+    expect(screen.getByText("5h ago")).toBeTruthy();
+    expect(screen.getByText(new Date(now - 5 * 86400000).toLocaleDateString())).toBeTruthy();
+    expect(screen.getByText("— my-bucket")).toBeTruthy();
+    expect(screen.getByText("Old bucket activity")).toBeTruthy();
+    expect(screen.getByText("Old instance activity")).toBeTruthy();
+  });
 });
