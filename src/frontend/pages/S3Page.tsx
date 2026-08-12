@@ -68,7 +68,6 @@ export default function S3Page() {
   const [newBucketName, setNewBucketName] = useState("");
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [uploadPrefix, setUploadPrefix] = useState("");
-  const [currentPrefix, setCurrentPrefix] = useState("");
   const [uploadResults, setUploadResults] = useState<S3UploadResult[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
@@ -104,7 +103,8 @@ export default function S3Page() {
   }
 
   async function handleUpload() {
-    if (!selectedBucket || uploadFiles.length === 0) return;
+    // The Upload button is disabled until files are selected and the modal only
+    // opens with a bucket selected, so no guard is needed here.
     setIsUploading(true);
     setUploadResults([]);
     try {
@@ -145,8 +145,7 @@ export default function S3Page() {
               selectedObject={selectedObject}
               onSelectObject={selectObject}
               onBack={() => selectBucket(null)}
-              onUploadClick={() => { setUploadPrefix(currentPrefix); setShowUploadObject(true); }}
-              onPrefixChange={setCurrentPrefix}
+              onUploadClick={() => { setUploadPrefix(""); setShowUploadObject(true); }}
             />
           ),
         },
@@ -192,11 +191,8 @@ export default function S3Page() {
             onFollow={(e) => {
               e.preventDefault();
               const path = e.detail.href.replace("/#", "");
-              if (path === "/services/s3" || path.startsWith("/services/s3?")) {
-                const url = new URL(`http://x${path}`);
-                const b = url.searchParams.get("bucket");
-                if (!b) selectBucket(null);
-                else navigate(path);
+              if (path === "/services/s3") {
+                selectBucket(null);
               } else {
                 navigate(path);
               }
@@ -469,8 +465,8 @@ function S3BucketList({ onSelectBucket, onCreateClick }: { onSelectBucket: (name
   );
 }
 
-function S3ObjectBrowser({ bucket, selectedObject, onSelectObject, onBack, onUploadClick, onPrefixChange }: {
-  bucket: string; selectedObject: string | null; onSelectObject: (key: string | null) => void; onBack: () => void; onUploadClick: () => void; onPrefixChange?: (prefix: string) => void;
+function S3ObjectBrowser({ bucket, selectedObject, onSelectObject, onBack, onUploadClick }: {
+  bucket: string; selectedObject: string | null; onSelectObject: (key: string | null) => void; onBack: () => void; onUploadClick: () => void;
 }) {
   const [prefix, setPrefix] = useState("");
   const { data, isLoading } = useS3Objects(bucket, prefix);
@@ -502,11 +498,6 @@ function S3ObjectBrowser({ bucket, selectedObject, onSelectObject, onBack, onUpl
     const parent = parts.length > 0 ? parts.join("/") + "/" : "";
     setPrefix(parent);
     setSearchTerm("");
-  }
-
-  function handlePrefixChange(newPrefix: string) {
-    setPrefix(newPrefix);
-    onPrefixChange?.(newPrefix);
   }
 
   const breadcrumbItems: Array<{ text: string; href: string; prefix?: string }> = [
@@ -1099,11 +1090,9 @@ function ObjectChecksumView({ bucket, objectKey }: { bucket: string; objectKey: 
   const hasAnyChecksum = checksum && CHECKSUM_ALGORITHMS.some((a) => checksum[a.key]);
 
   function handleVerify() {
-    if (!checksum || !verifyValue.trim()) {
-      setMatchResult(null);
-      return;
-    }
-    const stored = checksum[verifyAlgo as keyof typeof checksum];
+    // The Verify button is disabled while the input is empty and this view only
+    // renders when checksum data exists, so no early-return guard is needed.
+    const stored = checksum![verifyAlgo as keyof typeof checksum];
     if (!stored) {
       setMatchResult(null);
       return;
@@ -1250,7 +1239,7 @@ function S3SelectQueryEditor({ bucket }: { bucket: string }) {
   const [stats, setStats] = useState<{ bytesScanned: number; bytesProcessed: number; bytesReturned: number } | null>(null);
 
   function handleRunQuery() {
-    if (!objectKey.trim() || !expression.trim()) return;
+    // The Run query button is disabled while either input is empty.
     setResult(null);
     setStats(null);
     selectMutation.mutate(
@@ -1341,14 +1330,6 @@ function S3SelectQueryEditor({ bucket }: { bucket: string }) {
                     outline: "none",
                     background: "var(--color-background-input-default, #fff)",
                     color: "var(--color-text-body-default, #16191f)",
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.borderColor = "var(--color-border-control-focus, #0972d3)";
-                    e.target.style.boxShadow = "0 0 0 2px rgba(9, 114, 211, 0.3)";
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = "var(--color-border-control-default, #aab7b8)";
-                    e.target.style.boxShadow = "none";
                   }}
                 />
               </div>
