@@ -476,7 +476,6 @@ import {
   useS3VectorsCreateIndex,
   useS3VectorsDeleteIndex,
   useS3VectorsPutVectors,
-  useS3VectorsGetVectors,
   useS3VectorsDeleteVectors,
   useS3VectorsQuery,
 } from "../../hooks/useS3Vectors";
@@ -503,12 +502,6 @@ export function S3VectorsDashboard() {
   const [distanceMetric, setDistanceMetric] = useState("cosine");
 
   // Vector data state
-  const [vectorsQueryKeys, setVectorsQueryKeys] = useState<string[]>([]);
-  const { data: vectorsData, isLoading: vectorsLoading } = useS3VectorsGetVectors(
-    selectedBucket,
-    selectedIndex,
-    vectorsQueryKeys
-  );
   const putVectors = useS3VectorsPutVectors();
   const queryVectors = useS3VectorsQuery();
 
@@ -598,7 +591,6 @@ export function S3VectorsDashboard() {
                   iconName="folder"
                   onClick={() => {
                     setSelectedIndex(i.name);
-                    setVectorsQueryKeys([]);
                     setQueryResults(null);
                   }}
                 >
@@ -653,25 +645,6 @@ export function S3VectorsDashboard() {
           >
             Vector Data
           </Header>
-
-          {vectorsQueryKeys.length > 0 && (
-            <ResourceTable
-              resourceName="Vector"
-              headerTitle="Vectors"
-              headerCounter={(vectorsData?.vectors || []).length}
-              items={(vectorsData?.vectors || []).map((v: any) => ({
-                key: v.key,
-                dataPreview: v.data?.float32?.slice(0, 5).join(", ") + (v.data?.float32?.length > 5 ? "..." : "") || "-",
-                metadataCount: v.metadata ? Object.keys(v.metadata).length : 0,
-              }))}
-              columns={[
-                { id: "key", header: "Key", cell: (i: any) => i.key, isRowHeader: true },
-                { id: "data", header: "Data (preview)", cell: (i: any) => i.dataPreview },
-                { id: "metadata", header: "Metadata fields", cell: (i: any) => i.metadataCount },
-              ]}
-              loading={vectorsLoading}
-            />
-          )}
 
           {queryResults && (
             <ResourceTable

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -87,6 +87,26 @@ vi.mock("../../hooks/useAppSync", () => ({
 }));
 
 import { AppSyncDashboard } from "./AppSyncDashboard";
+
+// ─── Modal helpers ───────────────────────────────────────
+
+/** Fire Escape on every mounted Cloudscape dialog (they stay mounted when hidden). */
+function dismissModalWithEscape() {
+  document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+    fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27 });
+  });
+}
+
+/** Locate a modal dialog by its header text. */
+function dialogOf(headerText: string): HTMLElement {
+  const header = screen.getAllByText(headerText).find((h) => h.closest('[role="dialog"]'));
+  return header!.closest('[role="dialog"]') as HTMLElement;
+}
+
+/** Assert the modal with the given header is hidden (Cloudscape uses display:none). */
+function expectModalHidden(headerText: string) {
+  expect(dialogOf(headerText).className).toContain("hidden");
+}
 
 const toastMock = vi.fn();
 vi.mock("../../components/Toast", () => ({
@@ -818,6 +838,173 @@ describe("AppSyncDashboard — remaining branches", () => {
       expect(mockCreateFunc).toHaveBeenCalledWith(
         { apiId: "abc123", name: "fn-x", dataSourceName: "my-ds", code: "" },
         expect.objectContaining({ onSuccess: expect.any(Function) })
+      )
+    );
+  });
+
+  it("dismisses the create data source modal with Escape", async () => {
+    const user = userEvent.setup();
+    mockApis.mockReturnValue({
+      data: { apis: [{ name: "my-api", apiId: "abc123", authenticationType: "API_KEY" }], total: 1 },
+      isLoading: false,
+    });
+    mockApi.mockReturnValue({ data: { api: { name: "my-api", apiId: "abc123", authenticationType: "API_KEY" } }, isLoading: false });
+    render(<AppSyncDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("button", { name: /Back to GraphQL APIs/i })).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create data source")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create data source"));
+  });
+
+  it("creates a data source with a description and closes on success", async () => {
+    mockCreateDS.mockImplementation((_payload: unknown, opts?: { onSuccess?: () => void }) => {
+      opts?.onSuccess?.();
+    });
+    const user = userEvent.setup();
+    mockApis.mockReturnValue({
+      data: { apis: [{ name: "my-api", apiId: "abc123", authenticationType: "API_KEY" }], total: 1 },
+      isLoading: false,
+    });
+    mockApi.mockReturnValue({ data: { api: { name: "my-api", apiId: "abc123", authenticationType: "API_KEY" } }, isLoading: false });
+    render(<AppSyncDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("button", { name: /Back to GraphQL APIs/i })).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create data source")).toBeTruthy());
+    const dialog = dialogOf("Create data source");
+    await user.type(within(dialog).getByPlaceholderText("my-datasource"), "new-ds");
+    await user.type(within(dialog).getByLabelText(/Description/), "my description");
+    await user.click(within(dialog).getByRole("button", { name: /^Create$/ }));
+    await waitFor(() => expectModalHidden("Create data source"));
+    expect(mockCreateDS).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "new-ds", description: "my description" }),
+      expect.any(Object),
+    );
+  });
+
+  it("dismisses and cancels the create function modal", async () => {
+    const user = userEvent.setup();
+    mockApis.mockReturnValue({
+      data: { apis: [{ name: "my-api", apiId: "abc123", authenticationType: "API_KEY" }], total: 1 },
+      isLoading: false,
+    });
+    mockApi.mockReturnValue({ data: { api: { name: "my-api", apiId: "abc123", authenticationType: "API_KEY" } }, isLoading: false });
+    render(<AppSyncDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("button", { name: /Back to GraphQL APIs/i })).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /Functions/i }));
+    await waitFor(() => expect(screen.getByText("Create function")).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create function")).toBeTruthy());
+    await user.click(within(dialogOf("Create function")).getByRole("button", { name: /Cancel/i }));
+    expect(mockCreateFunc).not.toHaveBeenCalled();
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create function")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create function"));
+  });
+
+  it("shows an error toast when API key creation fails", async () => {
+    toastMock.mockClear();
+    mockCreateKey.mockImplementation((_args: unknown, opts?: any) => opts?.onError?.(new Error("key boom")));
+    const user = userEvent.setup();
+    mockApis.mockReturnValue({
+      data: { apis: [{ name: "my-api", apiId: "abc123", authenticationType: "API_KEY" }], total: 1 },
+      isLoading: false,
+    });
+    mockApi.mockReturnValue({ data: { api: { name: "my-api", apiId: "abc123", authenticationType: "API_KEY" } }, isLoading: false });
+    render(<AppSyncDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("button", { name: /Back to GraphQL APIs/i })).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /api keys/i }));
+    await waitFor(() => expect(screen.getByText("No API keys.")).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("error", "key boom"));
+  });
+
+  it("closes the API Key Created modal with Done and Escape", async () => {
+    const user = userEvent.setup();
+    mockCreateKey.mockImplementation((_args: unknown, opts?: any) => opts?.onSuccess?.({ apiKey: "ak-123" }));
+    mockApis.mockReturnValue({
+      data: { apis: [{ name: "my-api", apiId: "abc123", authenticationType: "API_KEY" }], total: 1 },
+      isLoading: false,
+    });
+    mockApi.mockReturnValue({ data: { api: { name: "my-api", apiId: "abc123", authenticationType: "API_KEY" } }, isLoading: false });
+    render(<AppSyncDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("button", { name: /Back to GraphQL APIs/i })).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /api keys/i }));
+    await waitFor(() => expect(screen.getByText("No API keys.")).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("API Key Created")).toBeTruthy());
+    await user.click(within(dialogOf("API Key Created")).getByRole("button", { name: /Done/i }));
+    await waitFor(() => expectModalHidden("API Key Created"));
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("API Key Created")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("API Key Created"));
+  });
+});
+
+describe("AppSyncDashboard — create flows", () => {
+  async function openDetail(user: any) {
+    mockApis.mockReturnValue({
+      data: { apis: [{ name: "my-api", apiId: "abc123", authenticationType: "API_KEY" }], total: 1 },
+      isLoading: false,
+    });
+    mockApi.mockReturnValue({
+      data: { api: { name: "my-api", apiId: "abc123", authenticationType: "API_KEY" } },
+      isLoading: false,
+    });
+    mockDataSources.mockReturnValue({
+      data: { dataSources: [{ name: "my-ds", type: "NONE" }], total: 1 },
+      isLoading: false,
+    });
+    render(<AppSyncDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("tab", { name: /data sources/i })).toBeTruthy());
+  }
+
+  it("submits a data source and shows error toast on failure", async () => {
+    mockCreateDS.mockImplementation((_body: any, opts: any) => opts?.onError?.(new Error("DS failed")));
+    const user = userEvent.setup();
+    await openDetail(user);
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-datasource")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-datasource"), "new-ds");
+    const dsDialog = dialogOf("Create data source");
+    const modalCreate = within(dsDialog).getByRole("button", { name: /^Create$/i });
+    await user.click(modalCreate);
+    await waitFor(() =>
+      expect(mockCreateDS).toHaveBeenCalledWith(
+        expect.objectContaining({ apiId: "abc123", name: "new-ds" }),
+        expect.any(Object)
+      )
+    );
+  });
+
+  it("types function code and submits a function with error toast on failure", async () => {
+    mockCreateFunc.mockImplementation((_body: any, opts: any) => opts?.onError?.(new Error("Fn failed")));
+    const user = userEvent.setup();
+    await openDetail(user);
+    await user.click(screen.getByRole("tab", { name: /functions/i }));
+    await waitFor(() => expect(screen.getByText("No functions.")).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-function")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-function"), "my-fn");
+    const codeInput = screen.getByPlaceholderText("export function request(ctx) { return {}; }");
+    fireEvent.change(codeInput, { target: { value: "export function request(ctx) { return ctx; }" } });
+    // Pick the data source from the Select
+    await user.click(screen.getByText("Select data source"));
+    await user.click(screen.getAllByRole("option", { name: /my-ds/i })[0]);
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() =>
+      expect(mockCreateFunc).toHaveBeenCalledWith(
+        expect.objectContaining({ apiId: "abc123", name: "my-fn", dataSourceName: "my-ds" }),
+        expect.any(Object)
       )
     );
   });

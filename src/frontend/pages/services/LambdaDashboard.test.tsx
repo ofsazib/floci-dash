@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -111,6 +111,26 @@ vi.mock("../../hooks/useLambda", () => ({
 }));
 
 import { LambdaDashboard } from "./LambdaDashboard";
+
+// ─── Modal helpers ───────────────────────────────────────
+
+/** Fire Escape on every mounted Cloudscape dialog (they stay mounted when hidden). */
+function dismissModalWithEscape() {
+  document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+    fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27 });
+  });
+}
+
+/** Locate a modal dialog by its header text. */
+function dialogOf(headerText: string): HTMLElement {
+  const header = screen.getAllByText(headerText).find((h) => h.closest('[role="dialog"]'));
+  return header!.closest('[role="dialog"]') as HTMLElement;
+}
+
+/** Assert the modal with the given header is hidden (Cloudscape uses display:none). */
+function expectModalHidden(headerText: string) {
+  expect(dialogOf(headerText).className).toContain("hidden");
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -953,5 +973,130 @@ describe("LambdaDashboard — remaining branches", () => {
         expect.any(Object),
       );
     });
+  });
+
+  it("types handler and description in create function modal", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(container.textContent).toContain("Create Function"));
+    await user.type(screen.getByPlaceholderText("my-function"), "cfg-fn");
+    const handlerInput = screen.getByPlaceholderText("index.handler");
+    await user.clear(handlerInput);
+    await user.type(handlerInput, "app.handler");
+    await user.type(screen.getByPlaceholderText("Optional description"), "My function");
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => {
+      expect(mockCreateFn).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "cfg-fn", handler: "app.handler", description: "My function" }),
+        expect.any(Object),
+      );
+    });
+  });
+
+  it("dismisses create function modal with Escape", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(container.textContent).toContain("Create Function"));
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create function"));
+  });
+
+  it("closes create function modal on success", async () => {
+    mockCreateFn.mockImplementation((_body: any, opts: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    const { container } = render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(container.textContent).toContain("Create Function"));
+    await user.type(screen.getByPlaceholderText("my-function"), "ok-fn");
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => expectModalHidden("Create function"));
+  });
+
+  it("invokes a function with a typed payload", async () => {
+    mockFunctions.mockReturnValue({
+      data: { functions: [{ name: "my-fn", state: "Active" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockFnDetail.mockReturnValue({
+      data: { configuration: { runtime: "nodejs22.x", handler: "index.handler", state: "Active" } },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-fn"));
+    await user.click(screen.getByRole("tab", { name: /Test/ }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /Invoke/i })).toBeTruthy());
+    const textarea = screen.getByRole("textbox");
+    fireEvent.change(textarea, { target: { value: '{"hello":"world"}' } });
+    await user.click(screen.getByRole("button", { name: /Invoke/i }));
+    await waitFor(() =>
+      expect(mockInvokeFn).toHaveBeenCalledWith({ name: "my-fn", payload: '{"hello":"world"}' })
+    );
+  });
+
+  it("publishes a function version", async () => {
+    mockFunctions.mockReturnValue({
+      data: { functions: [{ name: "my-fn", state: "Active" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockFnDetail.mockReturnValue({
+      data: { configuration: { runtime: "nodejs22.x", handler: "index.handler", state: "Active" } },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-fn"));
+    await waitFor(() => expect(screen.getByRole("button", { name: /Publish version/i })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Publish version/i }));
+    await waitFor(() => expect(mockPublishVersion).toHaveBeenCalledWith({ name: "my-fn" }));
+  });
+
+  it("deletes a layer version after confirmation", async () => {
+    mockLayers.mockReturnValue({
+      data: { layers: [{ name: "my-layer", arn: "arn:...", latestVersion: { version: 2, description: "L", codeSize: 512, compatibleRuntimes: ["nodejs22.x"] } }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Layers/i }));
+    await waitFor(() => expect(screen.getByText("my-layer")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Delete my-layer:2/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() =>
+      expect(mockDeleteLayer).toHaveBeenCalledWith({ name: "my-layer", version: 2 })
+    );
+  });
+
+  it("dismisses create layer modal with Escape", async () => {
+    const user = userEvent.setup();
+    render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Layers/i }));
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-layer")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create layer version"));
+  });
+
+  it("cancels create layer modal and closes on success", async () => {
+    mockCreateLayer.mockImplementation((_body: any, opts: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    render(<LambdaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Layers/i }));
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-layer")).toBeTruthy());
+    await clickButton(user, /Cancel/i, { last: true });
+    await waitFor(() => expectModalHidden("Create layer version"));
+    // Reopen and submit with onSuccess
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-layer")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-layer"), "ok-layer");
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => expectModalHidden("Create layer version"));
   });
 });

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -115,6 +115,26 @@ vi.mock("../../hooks/useBatch", () => ({
 }));
 
 import { BatchDashboard } from "./BatchDashboard";
+
+// ─── Modal helpers ───────────────────────────────────────
+
+/** Fire Escape on every mounted Cloudscape dialog (they stay mounted when hidden). */
+function dismissModalWithEscape() {
+  document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+    fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27 });
+  });
+}
+
+/** Locate a modal dialog by its header text. */
+function dialogOf(headerText: string): HTMLElement {
+  const header = screen.getAllByText(headerText).find((h) => h.closest('[role="dialog"]'));
+  return header!.closest('[role="dialog"]') as HTMLElement;
+}
+
+/** Assert the modal with the given header is hidden (Cloudscape uses display:none). */
+function expectModalHidden(headerText: string) {
+  expect(dialogOf(headerText).className).toContain("hidden");
+}
 
 // ─── Setup ──────────────────────────────────────────────
 
@@ -1081,5 +1101,104 @@ describe("BatchDashboard — submit disabled jobName", () => {
     fireEvent.change(screen.getByLabelText(/Job definition ARN/), { target: { value: "arn:aws:batch:..." } });
     const submitBtn = screen.getByRole("button", { name: /^Submit$/i });
     expect(submitBtn.getAttribute("disabled")).not.toBeNull();
+  });
+
+  it("cancels the create compute environment modal with the dialog-scoped Cancel", async () => {
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create compute environment/i);
+    await waitFor(() => expect(screen.getAllByText("Create Compute Environment").length).toBeGreaterThan(0));
+    await user.click(within(dialogOf("Create Compute Environment")).getByRole("button", { name: /Cancel/i }));
+    expect(mockCreateCE).not.toHaveBeenCalled();
+  });
+
+  it("dismisses the create compute environment modal with Escape", async () => {
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create compute environment/i);
+    await waitFor(() => expect(screen.getAllByText("Create Compute Environment").length).toBeGreaterThan(0));
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create Compute Environment"));
+  });
+
+  it("creates a compute environment and closes on success", async () => {
+    mockCreateCE.mockImplementation((_payload: unknown, opts?: { onSuccess?: () => void }) => {
+      opts?.onSuccess?.();
+    });
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create compute environment/i);
+    await waitFor(() => expect(screen.getAllByText("Create Compute Environment").length).toBeGreaterThan(0));
+    await user.type(within(dialogOf("Create Compute Environment")).getByLabelText(/Name/), "my-ce");
+    await user.click(within(dialogOf("Create Compute Environment")).getByRole("button", { name: /^Create$/ }));
+    await waitFor(() => expectModalHidden("Create Compute Environment"));
+    expect(mockCreateCE).toHaveBeenCalledWith(
+      expect.objectContaining({ computeEnvironmentName: "my-ce" }),
+      expect.any(Object),
+    );
+  });
+
+  it("cancels the create job queue modal with the dialog-scoped Cancel", async () => {
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create job queue/i);
+    await waitFor(() => expect(screen.getAllByText("Create Job Queue").length).toBeGreaterThan(0));
+    await user.click(within(dialogOf("Create Job Queue")).getByRole("button", { name: /Cancel/i }));
+    expect(mockCreateJQ).not.toHaveBeenCalled();
+  });
+
+  it("dismisses the create job queue modal with Escape", async () => {
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create job queue/i);
+    await waitFor(() => expect(screen.getAllByText("Create Job Queue").length).toBeGreaterThan(0));
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create Job Queue"));
+  });
+
+  it("creates a job queue and closes on success", async () => {
+    mockCreateJQ.mockImplementation((_payload: unknown, opts?: { onSuccess?: () => void }) => {
+      opts?.onSuccess?.();
+    });
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create job queue/i);
+    await waitFor(() => expect(screen.getAllByText("Create Job Queue").length).toBeGreaterThan(0));
+    const dialog = dialogOf("Create Job Queue");
+    await user.type(within(dialog).getByLabelText(/Queue name/), "my-jq");
+    await user.type(within(dialog).getByLabelText(/Priority/), "3");
+    await user.click(within(dialog).getByRole("button", { name: /^Create$/ }));
+    await waitFor(() => expectModalHidden("Create Job Queue"));
+    expect(mockCreateJQ).toHaveBeenCalledWith(
+      expect.objectContaining({ jobQueueName: "my-jq", priority: 3 }),
+      expect.any(Object),
+    );
+  });
+
+  it("cancels the register job definition modal with the dialog-scoped Cancel", async () => {
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create job definition/i);
+    await waitFor(() => expect(screen.getAllByText("Register Job Definition").length).toBeGreaterThan(0));
+    await user.click(within(dialogOf("Register Job Definition")).getByRole("button", { name: /Cancel/i }));
+    expect(mockRegisterJD).not.toHaveBeenCalled();
+  });
+
+  it("dismisses the register job definition modal with Escape", async () => {
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create job definition/i);
+    await waitFor(() => expect(screen.getAllByText("Register Job Definition").length).toBeGreaterThan(0));
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Register Job Definition"));
+  });
+
+  it("dismisses the submit job modal with Escape", async () => {
+    const user = userEvent.setup();
+    render(<BatchDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Submit Job/i);
+    await waitFor(() => expect(screen.getAllByText("Submit Job").length).toBeGreaterThan(0));
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Submit Job"));
   });
 });

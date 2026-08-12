@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -69,6 +69,26 @@ vi.mock("../../hooks/useElasticBeanstalk", () => ({
 }));
 
 import { ElasticBeanstalkDashboard } from "./ElasticBeanstalkDashboard";
+
+// ─── Modal helpers ───────────────────────────────────────
+
+/** Fire Escape on every mounted Cloudscape dialog (they stay mounted when hidden). */
+function dismissModalWithEscape() {
+  document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+    fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27 });
+  });
+}
+
+/** Locate a modal dialog by its header text. */
+function dialogOf(headerText: string): HTMLElement {
+  const header = screen.getAllByText(headerText).find((h) => h.closest('[role="dialog"]'));
+  return header!.closest('[role="dialog"]') as HTMLElement;
+}
+
+/** Assert the modal with the given header is hidden (Cloudscape uses display:none). */
+function expectModalHidden(headerText: string) {
+  expect(dialogOf(headerText).className).toContain("hidden");
+}
 
 // ─── Setup ──────────────────────────────────────────────
 
@@ -1048,5 +1068,128 @@ describe("ElasticBeanstalkDashboard — fallbacks and variants", () => {
     await waitFor(() => expect(screen.getByText("no-desc-env")).toBeTruthy());
     // The empty description becomes ""; just verify env table rendered
     expect(screen.getByText("Ready")).toBeTruthy();
+  });
+
+  it("dismisses the create application modal with Escape", async () => {
+    const user = userEvent.setup();
+    render(<ElasticBeanstalkDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create application/i);
+    await waitFor(() => expect(screen.getByText("Create application")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create application"));
+  });
+
+  it("creates an application and closes on success", async () => {
+    mockCreateApp.mockImplementation((_payload: unknown, opts?: { onSuccess?: () => void }) => {
+      opts?.onSuccess?.();
+    });
+    const user = userEvent.setup();
+    render(<ElasticBeanstalkDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create application/i);
+    await waitFor(() => expect(screen.getByText("Create application")).toBeTruthy());
+    const dialog = dialogOf("Create application");
+    await user.type(within(dialog).getByPlaceholderText("my-app"), "new-app");
+    await user.click(within(dialog).getByRole("button", { name: /^Create$/ }));
+    await waitFor(() => expectModalHidden("Create application"));
+    expect(mockCreateApp).toHaveBeenCalledWith(
+      expect.objectContaining({ applicationName: "new-app" }),
+      expect.any(Object),
+    );
+  });
+
+  it("cancels and escapes the create version modal", async () => {
+    const user = userEvent.setup();
+    mockApplications.mockReturnValue({
+      data: {
+        applications: [{ applicationName: "my-app", description: "Test", versions: 1, configurationTemplates: 0, dateCreated: "2024-01-01T00:00:00Z" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<ElasticBeanstalkDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /my-app/i);
+    await waitFor(() => expect(screen.getByText(/Create version: my-app/)).toBeTruthy());
+    await clickButton(user, /Create version/i);
+    await waitFor(() => expect(screen.getByText(/Create version: my-app/)).toBeTruthy());
+    await user.click(within(dialogOf("Create version: my-app")).getByRole("button", { name: /Cancel/i }));
+    expect(mockCreateVersion).not.toHaveBeenCalled();
+    await clickButton(user, /Create version/i);
+    await waitFor(() => expect(screen.getByText(/Create version: my-app/)).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create version: my-app"));
+  });
+
+  it("creates a version and closes on success", async () => {
+    mockCreateVersion.mockImplementation((_payload: unknown, opts?: { onSuccess?: () => void }) => {
+      opts?.onSuccess?.();
+    });
+    const user = userEvent.setup();
+    mockApplications.mockReturnValue({
+      data: {
+        applications: [{ applicationName: "my-app", description: "Test", versions: 1, configurationTemplates: 0, dateCreated: "2024-01-01T00:00:00Z" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<ElasticBeanstalkDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /my-app/i);
+    await clickButton(user, /Create version/i);
+    await waitFor(() => expect(screen.getByText(/Create version: my-app/)).toBeTruthy());
+    const dialog = dialogOf("Create version: my-app");
+    await user.type(within(dialog).getByPlaceholderText("v1.0.0"), "v2.0.0");
+    await user.click(within(dialog).getByRole("button", { name: /^Create$/ }));
+    await waitFor(() => expectModalHidden("Create version: my-app"));
+    expect(mockCreateVersion).toHaveBeenCalledWith(
+      expect.objectContaining({ appName: "my-app", versionLabel: "v2.0.0" }),
+      expect.any(Object),
+    );
+  });
+
+  it("cancels and escapes the create environment modal", async () => {
+    const user = userEvent.setup();
+    mockApplications.mockReturnValue({
+      data: {
+        applications: [{ applicationName: "my-app", description: "Test", versions: 1, configurationTemplates: 0, dateCreated: "2024-01-01T00:00:00Z" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<ElasticBeanstalkDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /my-app/i);
+    await waitFor(() => expect(screen.getByText(/Create environment: my-app/)).toBeTruthy());
+    await clickButton(user, /Create environment/i);
+    await waitFor(() => expect(screen.getByText(/Create environment: my-app/)).toBeTruthy());
+    await user.click(within(dialogOf("Create environment: my-app")).getByRole("button", { name: /Cancel/i }));
+    expect(mockCreateEnv).not.toHaveBeenCalled();
+    await clickButton(user, /Create environment/i);
+    await waitFor(() => expect(screen.getByText(/Create environment: my-app/)).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create environment: my-app"));
+  });
+
+  it("creates an environment and closes on success", async () => {
+    mockCreateEnv.mockImplementation((_payload: unknown, opts?: { onSuccess?: () => void }) => {
+      opts?.onSuccess?.();
+    });
+    const user = userEvent.setup();
+    mockApplications.mockReturnValue({
+      data: {
+        applications: [{ applicationName: "my-app", description: "Test", versions: 1, configurationTemplates: 0, dateCreated: "2024-01-01T00:00:00Z" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<ElasticBeanstalkDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /my-app/i);
+    await clickButton(user, /Create environment/i);
+    await waitFor(() => expect(screen.getByText(/Create environment: my-app/)).toBeTruthy());
+    const dialog = dialogOf("Create environment: my-app");
+    await user.type(within(dialog).getByLabelText(/Environment name/), "my-env");
+    await user.click(within(dialog).getByRole("button", { name: /^Create$/ }));
+    await waitFor(() => expectModalHidden("Create environment: my-app"));
+    expect(mockCreateEnv).toHaveBeenCalledWith(
+      expect.objectContaining({ appName: "my-app", environmentName: "my-env" }),
+      expect.any(Object),
+    );
   });
 });

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -85,6 +85,26 @@ vi.mock("../../components/Toast", () => ({
 }));
 
 import { S3VectorsDashboard } from "./S3VectorsDashboard";
+
+// ─── Modal helpers ───────────────────────────────────────
+
+/** Fire Escape on every mounted Cloudscape dialog (they stay mounted when hidden). */
+function dismissModalWithEscape() {
+  document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+    fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27 });
+  });
+}
+
+/** Locate a modal dialog by its header text. */
+function dialogOf(headerText: string): HTMLElement {
+  const header = screen.getAllByText(headerText).find((h) => h.closest('[role="dialog"]'));
+  return header!.closest('[role="dialog"]') as HTMLElement;
+}
+
+/** Assert the modal with the given header is hidden (Cloudscape uses display:none). */
+function expectModalHidden(headerText: string) {
+  expect(dialogOf(headerText).className).toContain("hidden");
+}
 
 // ─── Setup ──────────────────────────────────────────────
 
@@ -937,9 +957,10 @@ describe("S3VectorsDashboard — vector operations", () => {
     await user.click(screen.getByRole("button", { name: /Vectors/i }));
     await waitFor(() => expect(screen.getByText(/Vector Data/i)).toBeTruthy());
 
-    // Click the last Query button (header actions, not filter)
+    // Click the header Query button (actions, not filter) — hidden modals stay in the DOM,
+    // so the LAST "Query" button may be a hidden modal's submit. Use the first (header) one.
     const headerQueryBtns = screen.getAllByRole("button", { name: /^Query$/i });
-    await user.click(headerQueryBtns[headerQueryBtns.length - 1]);
+    await user.click(headerQueryBtns[0]);
     await waitFor(() => {
       const modalTexts = screen.getAllByText("Query Vectors");
       expect(modalTexts.length).toBeGreaterThanOrEqual(1);
@@ -1206,5 +1227,62 @@ describe("S3VectorsDashboard — fallback rendering", () => {
     });
     render(<S3VectorsDashboard />, { wrapper: createWrapper() });
     expect(screen.getByText("no-arn-bucket")).toBeTruthy();
+  });
+});
+
+describe("S3VectorsDashboard — modal dismissals", () => {
+  it("dismisses create index modal with Escape and Cancel", async () => {
+    mockBuckets.mockReturnValue({
+      data: {
+        buckets: [{ vectorBucketName: "bucket-dismiss", vectorBucketArn: "arn:aws:s3vectors:bucket/bucket-dismiss" }],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<S3VectorsDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("bucket-dismiss")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Indexes/i }));
+    await waitFor(() => expect(screen.getByText(/Indexes in bucket-dismiss/i)).toBeTruthy());
+    await clickButton(user, /create/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-index")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create Index"));
+    await clickButton(user, /create/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-index")).toBeTruthy());
+    await user.click(within(dialogOf("Create Index")).getByRole("button", { name: /Cancel/i }));
+    await waitFor(() => expectModalHidden("Create Index"));
+  });
+
+  it("dismisses put vectors modal with Escape and Cancel", async () => {
+    const user = userEvent.setup();
+    await navToVectorOps(user, "bucket-pvd", "pvd-index");
+    await user.click(screen.getByRole("button", { name: /Put Vectors/i }));
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText('[{"key":"v1","data":{"float32":[0.1,0.2]},"metadata":{"label":"test"}}]')).toBeTruthy()
+    );
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Put Vectors"));
+    await user.click(screen.getByRole("button", { name: /Put Vectors/i }));
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText('[{"key":"v1","data":{"float32":[0.1,0.2]},"metadata":{"label":"test"}}]')).toBeTruthy()
+    );
+    await user.click(within(dialogOf("Put Vectors")).getByRole("button", { name: /Cancel/i }));
+    await waitFor(() => expectModalHidden("Put Vectors"));
+  });
+
+  it("dismisses query modal with Escape and Cancel", async () => {
+    const user = userEvent.setup();
+    await navToVectorOps(user, "bucket-qd", "qd-index");
+    await user.click(screen.getAllByRole("button", { name: /^Query$/i })[0]);
+    await waitFor(() => expect(screen.getByPlaceholderText("[0.1, 0.2, 0.3]")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Query Vectors"));
+    await user.click(screen.getAllByRole("button", { name: /^Query$/i })[0]);
+    await waitFor(() => expect(screen.getByPlaceholderText("[0.1, 0.2, 0.3]")).toBeTruthy());
+    await user.click(within(dialogOf("Query Vectors")).getByRole("button", { name: /Cancel/i }));
+    await waitFor(() => expectModalHidden("Query Vectors"));
   });
 });

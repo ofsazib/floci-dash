@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -66,6 +66,26 @@ vi.mock("../../hooks/useRoute53", () => ({
 }));
 
 import { Route53Dashboard } from "./Route53Dashboard";
+
+// ─── Modal helpers ───────────────────────────────────────
+
+/** Fire Escape on every mounted Cloudscape dialog (they stay mounted when hidden). */
+function dismissModalWithEscape() {
+  document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+    fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27 });
+  });
+}
+
+/** Locate a modal dialog by its header text. */
+function dialogOf(headerText: string): HTMLElement {
+  const header = screen.getAllByText(headerText).find((h) => h.closest('[role="dialog"]'));
+  return header!.closest('[role="dialog"]') as HTMLElement;
+}
+
+/** Assert the modal with the given header is hidden (Cloudscape uses display:none). */
+function expectModalHidden(headerText: string) {
+  expect(dialogOf(headerText).className).toContain("hidden");
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -493,5 +513,97 @@ describe("Route53Dashboard", () => {
         expect.any(Object),
       );
     });
+  });
+
+  it("dismisses create hosted zone modal with Escape and types comment", async () => {
+    const user = userEvent.setup();
+    render(<Route53Dashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create hosted zone")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("example.com."), "new-example.com.");
+    const commentInput = screen.getByLabelText("Comment (optional)");
+    await user.type(commentInput, "My comment");
+    const createBtns = screen.getAllByRole("button", { name: /Create/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => {
+      expect(mockCreateZone).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "new-example.com.", comment: "My comment" }),
+        expect.any(Object),
+      );
+    });
+    // Reopen and Escape-dismiss
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create hosted zone")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create hosted zone"));
+  });
+
+  it("closes create hosted zone modal on success", async () => {
+    mockCreateZone.mockImplementation((_body: any, opts: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    render(<Route53Dashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create hosted zone")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("example.com."), "ok-example.com.");
+    const createBtns = screen.getAllByRole("button", { name: /Create/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => expectModalHidden("Create hosted zone"));
+  });
+
+  it("deletes a record set after confirmation", async () => {
+    const user = userEvent.setup();
+    mockZones.mockReturnValue({
+      data: { hostedZones: [{ Id: "/hostedzone/Z456", Name: "test.com.", ResourceRecordSetCount: 2 }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockRecordSets.mockReturnValue({
+      data: {
+        recordSets: [
+          { Name: "test.com.", Type: "NS", TTL: 172800, ResourceRecords: [{ Value: "ns-1.awsdns.com." }] },
+          { Name: "www.test.com.", Type: "A", TTL: 300, ResourceRecords: [{ Value: "192.168.1.1" }] },
+        ],
+        total: 2,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<Route53Dashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("test.com."));
+    await user.click(screen.getByText("View"));
+    await waitFor(() => expect(screen.getByText(/www.test.com./)).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Delete www.test.com./i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() =>
+      expect(mockDeleteRecord).toHaveBeenCalledWith({ zoneId: "Z456", name: "www.test.com.", type: "A" })
+    );
+  });
+
+  it("dismisses create record modal with Escape and Cancel", async () => {
+    const user = userEvent.setup();
+    await openRecordModal(user);
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create record"));
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create record")).toBeTruthy());
+    await clickButton(user, /Cancel/i, { last: true });
+    await waitFor(() => expectModalHidden("Create record"));
+  });
+
+  it("changes TTL and closes create record modal on success", async () => {
+    mockCreateRecord.mockImplementation((_body: any, opts: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    await openRecordModal(user);
+    await user.type(screen.getByPlaceholderText("www.example.com."), "www.test.com.");
+    await user.type(screen.getByPlaceholderText("192.168.1.1"), "10.0.0.1");
+    fireEvent.change(screen.getByLabelText("TTL (seconds)"), { target: { value: "600" } });
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => {
+      expect(mockCreateRecord).toHaveBeenCalledWith(
+        expect.objectContaining({ ttl: 600, name: "www.test.com.", resourceRecords: [{ Value: "10.0.0.1" }] }),
+        expect.any(Object),
+      );
+    });
+    await waitFor(() => expectModalHidden("Create record"));
   });
 });

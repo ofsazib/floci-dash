@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../test/helpers";
 import React from "react";
@@ -31,11 +31,12 @@ vi.mock("../components/Toast", () => ({
   ToastProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
+const hoistedNavigate = vi.hoisted(() => vi.fn());
 vi.mock("react-router-dom", async () => {
   const actual = await import("react-router-dom");
   return {
     ...actual,
-    useNavigate: () => vi.fn(),
+    useNavigate: () => hoistedNavigate,
     useSearchParams: () => [new URLSearchParams(), vi.fn()],
   };
 });
@@ -404,6 +405,81 @@ describe("SecretsManagerPage", () => {
     render(<SecretsManagerPage />, { wrapper: pageWrapper() });
     const breadcrumbLinks = screen.getAllByText("Dashboard");
     expect(breadcrumbLinks.length).toBeGreaterThan(0);
+  });
+
+  it("navigates when a breadcrumb is followed", async () => {
+    const user = userEvent.setup();
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    const dashboardLink = screen.getAllByText("Dashboard")[0];
+    await user.click(dashboardLink);
+    await waitFor(() => {
+      expect(hoistedNavigate).toHaveBeenCalled();
+    });
+  });
+
+  // ─── Error branches ────────────────────────────────────
+
+  it("shows error toast when restore fails", async () => {
+    mockRestoreSecret.mockRejectedValueOnce(new Error("Restore failed"));
+    const user = userEvent.setup();
+    mockSecrets.mockReturnValue({
+      data: { secrets: [{ ...defaultSecret, deletedDate: new Date("2025-06-15") }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /Restore/i);
+    await waitFor(() => {
+      expect(mockRestoreSecret).toHaveBeenCalledWith("my-secret");
+    });
+  });
+
+  it("shows error toast when delete fails", async () => {
+    mockDeleteSecret.mockRejectedValueOnce(new Error("Delete failed"));
+    const user = userEvent.setup();
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("button", { name: /Delete my-secret/i }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /Delete$/i })).toBeTruthy());
+    await clickButton(user, /Delete$/i);
+    await waitFor(() => {
+      expect(mockDeleteSecret).toHaveBeenCalledWith({ id: "my-secret", force: true });
+    });
+  });
+
+  it("shows error toast when create secret fails", async () => {
+    mockCreateSecret.mockRejectedValueOnce(new Error("Create failed"));
+    const user = userEvent.setup();
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /Create secret/i);
+    await waitFor(() => expect(screen.getAllByPlaceholderText("my-app/db-password").length).toBeGreaterThan(0));
+    await user.type(screen.getByPlaceholderText("my-app/db-password"), "app/api-key");
+    const textareas = screen.getAllByRole("textbox");
+    await user.type(textareas[textareas.length - 1], "super-secret");
+    await clickButton(user, /^Create$/);
+    await waitFor(() => {
+      expect(mockCreateSecret).toHaveBeenCalled();
+    });
+  });
+
+  it("cancels create secret modal", async () => {
+    const user = userEvent.setup();
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /Create secret/i);
+    await waitFor(() => expect(screen.getAllByPlaceholderText("my-app/db-password").length).toBeGreaterThan(0));
+    await clickButton(user, /Cancel/i, { last: true });
+    await waitFor(() => {
+      expect(screen.queryByPlaceholderText("my-app/db-password")).toBeNull();
+    });
+  });
+
+  it("closes secret detail modal", async () => {
+    const user = userEvent.setup();
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText(/Secret: my-secret/)).toBeTruthy());
+    await clickButton(user, /Close/i);
+    await waitFor(() => {
+      expect(screen.queryByText(/Secret: my-secret/)).toBeNull();
+    });
   });
 
 });

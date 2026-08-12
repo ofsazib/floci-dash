@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -63,6 +63,26 @@ vi.mock("../../hooks/useBackup", () => ({
 }));
 
 import { BackupDashboard } from "./BackupDashboard";
+
+// ─── Modal helpers ───────────────────────────────────────
+
+/** Fire Escape on every mounted Cloudscape dialog (they stay mounted when hidden). */
+function dismissModalWithEscape() {
+  document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+    fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27 });
+  });
+}
+
+/** Locate a modal dialog by its header text. */
+function dialogOf(headerText: string): HTMLElement {
+  const header = screen.getAllByText(headerText).find((h) => h.closest('[role="dialog"]'));
+  return header!.closest('[role="dialog"]') as HTMLElement;
+}
+
+/** Assert the modal with the given header is hidden (Cloudscape uses display:none). */
+function expectModalHidden(headerText: string) {
+  expect(dialogOf(headerText).className).toContain("hidden");
+}
 
 // ─── Setup ──────────────────────────────────────────────
 
@@ -144,7 +164,8 @@ describe("BackupDashboard — backup plans", () => {
     expect(screen.getByText("v1")).toBeTruthy();
   });
 
-  it("opens create plan modal and submits", async () => {
+  it("opens create plan modal and submits with onSuccess", async () => {
+    mockCreatePlan.mockImplementation((_params: any, opts: any) => opts?.onSuccess?.());
     const user = userEvent.setup();
     render(<BackupDashboard />, { wrapper: createWrapper() });
 
@@ -154,12 +175,58 @@ describe("BackupDashboard — backup plans", () => {
       expect(screen.getByText("Create backup plan")).toBeTruthy();
     });
 
-    // Cloudscape Input onChange in happy-dom may not fire reliably via userEvent.type;
-    // use fireEvent.change to directly set the value and verify the modal structure
-    expect(screen.getByPlaceholderText("my-backup-plan")).toBeTruthy();
-    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
-    expect(createBtns.length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByRole("button", { name: /Cancel/i }).length).toBeGreaterThanOrEqual(1);
+    const nameInput = screen.getByPlaceholderText("my-backup-plan");
+    fireEvent.change(nameInput, { target: { value: "my-plan-1" } });
+    await waitFor(() => expect((nameInput as HTMLInputElement).value).toBe("my-plan-1"));
+
+    await clickButton(user, /^Create$/i);
+
+    await waitFor(() => {
+      expect(mockCreatePlan).toHaveBeenCalledWith(
+        { BackupPlan: { BackupPlanName: "my-plan-1" } },
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      );
+      // onSuccess clears the form and closes the modal
+      expectModalHidden("Create backup plan");
+    });
+  });
+
+  it("cancels create plan modal with Escape", async () => {
+    const user = userEvent.setup();
+    render(<BackupDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create plan/i);
+    await waitFor(() => expect(screen.getByText("Create backup plan")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create backup plan"));
+  });
+
+  it("cancels create plan modal with the Cancel button", async () => {
+    const user = userEvent.setup();
+    render(<BackupDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create plan/i);
+    await waitFor(() => expect(screen.getByText("Create backup plan")).toBeTruthy());
+    const dialog = dialogOf("Create backup plan");
+    await user.click(within(dialog).getByRole("button", { name: /^Cancel$/i }));
+    await waitFor(() => expectModalHidden("Create backup plan"));
+  });
+
+  it("filters plans by name", async () => {
+    mockPlans.mockReturnValue({
+      data: {
+        plans: [
+          { BackupPlanId: "p1", BackupPlanName: "alpha-plan", BackupPlan: { BackupPlanName: "alpha-plan" } },
+          { BackupPlanId: "p2", BackupPlanName: "beta-plan", BackupPlan: { BackupPlanName: "beta-plan" } },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<BackupDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("alpha-plan")).toBeTruthy());
+    const filterInput = screen.getByPlaceholderText("Find plans");
+    await user.type(filterInput, "beta");
+    await waitFor(() => expect(screen.queryByText("alpha-plan")).toBeNull());
   });
 
   it("deletes a plan", async () => {
@@ -265,7 +332,8 @@ describe("BackupDashboard — backup vaults", () => {
     expect(screen.getByText("Yes")).toBeTruthy();
   });
 
-  it("opens create vault modal and submits", async () => {
+  it("opens create vault modal and submits with onSuccess", async () => {
+    mockCreateVault.mockImplementation((_params: any, opts: any) => opts?.onSuccess?.());
     const user = userEvent.setup();
     render(<BackupDashboard />, { wrapper: createWrapper() });
 
@@ -284,9 +352,48 @@ describe("BackupDashboard — backup vaults", () => {
     await waitFor(() => {
       expect(mockCreateVault).toHaveBeenCalledWith(
         expect.objectContaining({ backupVaultName: "test-vault" }),
-        expect.any(Object),
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
       );
+      expectModalHidden("Create backup vault");
     });
+  });
+
+  it("cancels create vault modal with Escape", async () => {
+    const user = userEvent.setup();
+    render(<BackupDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create vault/i);
+    await waitFor(() => expect(screen.getByText("Create backup vault")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create backup vault"));
+  });
+
+  it("cancels create vault modal with the Cancel button", async () => {
+    const user = userEvent.setup();
+    render(<BackupDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create vault/i);
+    await waitFor(() => expect(screen.getByText("Create backup vault")).toBeTruthy());
+    const dialog = dialogOf("Create backup vault");
+    await user.click(within(dialog).getByRole("button", { name: /^Cancel$/i }));
+    await waitFor(() => expectModalHidden("Create backup vault"));
+  });
+
+  it("filters vaults by name", async () => {
+    mockVaults.mockReturnValue({
+      data: {
+        backupVaults: [
+          { BackupVaultName: "vault-alpha", BackupVaultArn: "arn:a" },
+          { BackupVaultName: "vault-beta", BackupVaultArn: "arn:b" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<BackupDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("vault-alpha")).toBeTruthy());
+    const filterInput = screen.getByPlaceholderText("Find vaults");
+    await user.type(filterInput, "beta");
+    await waitFor(() => expect(screen.queryByText("vault-alpha")).toBeNull());
   });
 
   it("deletes a vault", async () => {
@@ -437,5 +544,24 @@ describe("BackupDashboard — backup jobs", () => {
     expect(screen.getByText(/minimal-job/)).toBeTruthy();
     // vault and resource should show "-"
     expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("filters jobs by resource", async () => {
+    mockJobs.mockReturnValue({
+      data: {
+        backupJobs: [
+          { BackupJobId: "j1", ResourceArn: "arn:aws:ec2:us-east-1:1:volume/alpha", State: "COMPLETED" },
+          { BackupJobId: "j2", ResourceArn: "arn:aws:ec2:us-east-1:1:volume/beta", State: "RUNNING" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<BackupDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("alpha")).toBeTruthy());
+    const filterInput = screen.getByPlaceholderText("Find jobs");
+    await user.type(filterInput, "beta");
+    await waitFor(() => expect(screen.queryByText("alpha")).toBeNull());
   });
 });

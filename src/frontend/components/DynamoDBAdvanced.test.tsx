@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createWrapper } from "../../test/helpers";
 import React from "react";
@@ -23,6 +23,26 @@ vi.mock("../hooks/useDynamoDBAdvanced", () => mockHooks);
 vi.mock("../lib/utils", () => ({ formatItemValue: (v: any) => String(v) }));
 
 import DynamoDBAdvanced from "./DynamoDBAdvanced";
+
+// ─── Modal helpers ───────────────────────────────────────
+
+/** Fire Escape on every mounted Cloudscape dialog (they stay mounted when hidden). */
+function dismissModalWithEscape() {
+  document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+    fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27 });
+  });
+}
+
+/** Locate a modal dialog by its header text. */
+function dialogOf(headerText: string): HTMLElement {
+  const header = screen.getAllByText(headerText).find((h) => h.closest('[role="dialog"]'));
+  return header!.closest('[role="dialog"]') as HTMLElement;
+}
+
+/** Assert the modal with the given header is hidden (Cloudscape uses display:none). */
+function expectModalHidden(headerText: string) {
+  expect(dialogOf(headerText).className).toContain("hidden");
+}
 
 function setupDefaultMocks() {
   mockHooks.useDynamoDBTTL.mockReturnValue({ data: { enabled: false, attributeName: "", status: "DISABLED" }, isLoading: false });
@@ -563,6 +583,102 @@ describe("DynamoDBAdvanced", () => {
     await user.click(screen.getByText("PartiQL"));
     await user.click(screen.getByText("Batch"));
     expect(screen.getByText("Batch execution failed")).toBeTruthy();
+  });
+
+  it("TTL tab enables the toggle, types an attribute, and saves", async () => {
+    const mockUpdate = vi.fn();
+    mockHooks.useDynamoDBUpdateTTL.mockReturnValue({ mutate: mockUpdate, isPending: false, isError: false });
+    const user = userEvent.setup();
+    render(<DynamoDBAdvanced tableName="t" tableDetail={{ name: "t", status: "ACTIVE", keySchema: [] }} />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("TTL"));
+    await user.click(screen.getByText("TTL disabled"));
+    await waitFor(() => expect(screen.getByText("TTL enabled")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("e.g., expires_at"), "expires");
+    await user.click(screen.getByText("Save TTL configuration"));
+    expect(mockUpdate).toHaveBeenCalledWith({ enabled: true, attributeName: "expires" });
+  });
+
+  it("removes a tag row on the Tags tab", async () => {
+    mockHooks.useDynamoDBTableTags.mockReturnValue({
+      data: { tags: [{ Key: "env", Value: "prod" }, { Key: "team", Value: "core" }] },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<DynamoDBAdvanced tableName="t" tableDetail={{ name: "t", status: "ACTIVE", keySchema: [] }} />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Tags"));
+    await waitFor(() => expect(screen.getByDisplayValue("env")).toBeTruthy());
+    await user.click(screen.getAllByRole("button", { name: /Remove tag/i })[0]);
+    await waitFor(() => expect(screen.queryByDisplayValue("env")).toBeNull());
+    expect(screen.getByDisplayValue("team")).toBeTruthy();
+  });
+
+  it("Backups tab toggles point-in-time recovery", async () => {
+    const mockUpdate = vi.fn();
+    mockHooks.useDynamoDBUpdateContinuousBackups.mockReturnValue({ mutate: mockUpdate, isError: false });
+    const user = userEvent.setup();
+    render(<DynamoDBAdvanced tableName="t" tableDetail={{ name: "t", status: "ACTIVE", keySchema: [] }} />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Backups"));
+    await user.click(screen.getByText("PITR disabled"));
+    expect(mockUpdate).toHaveBeenCalledWith(true);
+  });
+
+  it("Single Statement types a query and toggles consistent read", async () => {
+    const mockMutate = vi.fn((_args: any, opts?: any) => opts?.onSuccess?.({ items: [], count: 0 }));
+    mockHooks.useDynamoDBPartiQL.mockReturnValue({ mutate: mockMutate, isPending: false, isError: false });
+    const user = userEvent.setup();
+    render(<DynamoDBAdvanced tableName="t" tableDetail={{ name: "t", status: "ACTIVE", keySchema: [] }} />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("PartiQL"));
+    const stmtInput = screen.getByPlaceholderText("SELECT * FROM my-table WHERE pk = ?");
+    await user.clear(stmtInput);
+    await user.type(stmtInput, "SELECT * FROM t WHERE pk = '1'");
+    await user.click(screen.getByRole("checkbox", { name: /Consistent read/i }));
+    await user.click(screen.getByText("Run query"));
+    expect(mockMutate).toHaveBeenCalledWith(
+      { statement: "SELECT * FROM t WHERE pk = '1'", consistentRead: true },
+      expect.anything(),
+    );
+  });
+
+  it("Single Statement clears the result when the mutation fails", async () => {
+    const mockMutate = vi.fn((_args: any, opts?: any) => opts?.onError?.(new Error("boom")));
+    mockHooks.useDynamoDBPartiQL.mockReturnValue({ mutate: mockMutate, isPending: false, isError: false });
+    const user = userEvent.setup();
+    render(<DynamoDBAdvanced tableName="t" tableDetail={{ name: "t", status: "ACTIVE", keySchema: [] }} />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("PartiQL"));
+    await user.click(screen.getByText("Run query"));
+    expect(mockMutate).toHaveBeenCalled();
+  });
+
+  it("Transaction editor types statements and shows error on failure", async () => {
+    const mockMutate = vi.fn((_stmts: any, opts?: any) => opts?.onError?.(new Error("txn boom")));
+    mockHooks.useDynamoDBPartiQLTransaction.mockReturnValue({ mutate: mockMutate, isPending: false, isError: false });
+    const user = userEvent.setup();
+    render(<DynamoDBAdvanced tableName="t" tableDetail={{ name: "t", status: "ACTIVE", keySchema: [] }} />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("PartiQL"));
+    await user.click(screen.getByText("Transaction"));
+    const textarea = screen.getByPlaceholderText(/INSERT INTO my-table/);
+    fireEvent.change(textarea, { target: { value: "INSERT INTO t VALUE {'pk':'1'}" } });
+    await user.click(screen.getByText("Execute transaction"));
+    expect(mockMutate).toHaveBeenCalledWith(
+      [{ Statement: "INSERT INTO t VALUE {'pk':'1'}" }],
+      expect.anything(),
+    );
+  });
+
+  it("Batch editor types statements and shows error on failure", async () => {
+    const mockMutate = vi.fn((_stmts: any, opts?: any) => opts?.onError?.(new Error("batch boom")));
+    mockHooks.useDynamoDBPartiQLBatch.mockReturnValue({ mutate: mockMutate, isPending: false, isError: false });
+    const user = userEvent.setup();
+    render(<DynamoDBAdvanced tableName="t" tableDetail={{ name: "t", status: "ACTIVE", keySchema: [] }} />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("PartiQL"));
+    await user.click(screen.getByText("Batch"));
+    const textarea = screen.getByPlaceholderText(/SELECT \* FROM my-table WHERE pk = '1'/);
+    fireEvent.change(textarea, { target: { value: "SELECT * FROM t WHERE pk = '2'" } });
+    await user.click(screen.getByText("Execute batch"));
+    expect(mockMutate).toHaveBeenCalledWith(
+      [{ Statement: "SELECT * FROM t WHERE pk = '2'" }],
+      expect.anything(),
+    );
   });
 
 });

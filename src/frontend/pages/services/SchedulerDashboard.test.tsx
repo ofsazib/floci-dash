@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -90,6 +90,26 @@ vi.mock("../../hooks/useScheduler", () => ({
 }));
 
 import { SchedulerDashboard } from "./SchedulerDashboard";
+
+// ─── Modal helpers ───────────────────────────────────────
+
+/** Fire Escape on every mounted Cloudscape dialog (they stay mounted when hidden). */
+function dismissModalWithEscape() {
+  document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+    fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27, key: "Escape" });
+  });
+}
+
+/** Locate a modal dialog by its header text. */
+function dialogOf(headerText: string): HTMLElement {
+  const header = screen.getAllByText(headerText).find((h) => h.closest('[role="dialog"]'));
+  return header!.closest('[role="dialog"]') as HTMLElement;
+}
+
+/** Assert the modal with the given header is hidden (Cloudscape uses display:none). */
+function expectModalHidden(headerText: string) {
+  expect(dialogOf(headerText).className).toContain("hidden");
+}
 
 // ─── Setup ──────────────────────────────────────────────
 
@@ -970,5 +990,136 @@ describe("SchedulerDashboard — data edge cases", () => {
         expect.any(Object),
       );
     });
+  });
+
+  it("dismisses edit schedule modal with Escape", async () => {
+    mockGroups.mockReturnValue({
+      data: { groups: [{ Name: "my-group", State: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    mockSchedules.mockReturnValue({
+      data: {
+        schedules: [{ Name: "edit-me", ScheduleExpression: "rate(1 hour)", State: "ENABLED", Target: { Arn: "arn:aws:lambda:us-east-1:123:function:my-fn" } }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<SchedulerDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-group")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-group" }));
+    await waitFor(() => expect(screen.getByText("edit-me")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Edit edit-me/i }));
+    await waitFor(() => expect(screen.getByText(/Edit schedule: edit-me/)).toBeTruthy());
+    dismissModalWithEscape();
+    // After Escape the header reverts to the generic "Edit schedule" (editing is null)
+    await waitFor(() => expectModalHidden("Edit schedule"));
+  });
+
+  it("updates target ARN and role ARN in edit modal and closes on success", async () => {
+    mockUpdateSchedule.mockImplementation((_body: any, opts: any) => opts?.onSuccess?.());
+    mockGroups.mockReturnValue({
+      data: { groups: [{ Name: "my-group", State: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    mockSchedules.mockReturnValue({
+      data: {
+        schedules: [{ Name: "edit-me", ScheduleExpression: "rate(1 hour)", State: "ENABLED", Target: { Arn: "arn:aws:lambda:us-east-1:123:function:my-fn" } }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<SchedulerDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-group")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-group" }));
+    await waitFor(() => expect(screen.getByText("edit-me")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Edit edit-me/i }));
+    await waitFor(() => expect(screen.getByText(/Edit schedule: edit-me/)).toBeTruthy());
+    const editDialog = dialogOf("Edit schedule: edit-me");
+    const arnInput = within(editDialog).getByDisplayValue("arn:aws:lambda:us-east-1:123:function:my-fn");
+    await user.clear(arnInput);
+    await user.type(arnInput, "arn:aws:lambda:us-east-1:123:function:new-fn");
+    const roleInput = within(editDialog).getByLabelText("Role ARN (optional)");
+    await user.type(roleInput, "arn:aws:iam::123:role/my-role");
+    await user.click(screen.getByRole("button", { name: /Save changes/i }));
+    await waitFor(() => {
+      expect(mockUpdateSchedule).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "edit-me",
+          target: expect.objectContaining({ Arn: "arn:aws:lambda:us-east-1:123:function:new-fn", RoleArn: "arn:aws:iam::123:role/my-role" }),
+        }),
+        expect.any(Object),
+      );
+    });
+    await waitFor(() => expectModalHidden("Edit schedule"));
+  });
+});
+
+describe("SchedulerDashboard — modal completions", () => {
+  it("dismisses create schedule group modal with Escape and closes on success", async () => {
+    mockCreateGroup.mockImplementation((_body: any, opts: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    render(<SchedulerDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText(/No schedule groups found/)).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-schedule-group")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create schedule group"));
+    // Reopen and submit with onSuccess
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-schedule-group")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-schedule-group"), "ok-group");
+    const createBtns = screen.getAllByRole("button", { name: /Create/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() =>
+      expect(mockCreateGroup).toHaveBeenCalledWith({ name: "ok-group" }, expect.any(Object))
+    );
+    await waitFor(() => expectModalHidden("Create schedule group"));
+  });
+
+  it("dismisses create schedule modal with Escape and Cancel", async () => {
+    mockGroups.mockReturnValue({ data: { groups: [{ Name: "my-group", State: "ACTIVE" }], total: 1 }, isLoading: false });
+    mockSchedules.mockReturnValue({ data: { schedules: [], total: 0 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<SchedulerDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-group")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-group" }));
+    await waitFor(() => expect(screen.getByText(/Back to Schedule Groups/)).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Schedule name")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create schedule"));
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Schedule name")).toBeTruthy());
+    await user.click(within(dialogOf("Create schedule")).getByRole("button", { name: /Cancel/i }));
+    await waitFor(() => expectModalHidden("Create schedule"));
+  });
+
+  it("types schedule expression and closes create schedule on success", async () => {
+    mockCreateSchedule.mockImplementation((_body: any, opts: any) => opts?.onSuccess?.());
+    mockGroups.mockReturnValue({ data: { groups: [{ Name: "my-group", State: "ACTIVE" }], total: 1 }, isLoading: false });
+    mockSchedules.mockReturnValue({ data: { schedules: [], total: 0 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<SchedulerDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-group")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-group" }));
+    await waitFor(() => expect(screen.getByText(/Back to Schedule Groups/)).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Schedule name")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-schedule"), "expr-schedule");
+    const exprInput = screen.getByPlaceholderText("rate(5 minutes)");
+    await user.clear(exprInput);
+    await user.type(exprInput, "cron(0 12 * * ? *)");
+    await user.type(screen.getByPlaceholderText(/arn:aws:lambda/), "arn:aws:lambda:us-east-1:123:function:expr-fn");
+    const createBtns = screen.getAllByRole("button", { name: /Create/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() =>
+      expect(mockCreateSchedule).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "expr-schedule", scheduleExpression: "cron(0 12 * * ? *)" }),
+        expect.any(Object)
+      )
+    );
+    await waitFor(() => expectModalHidden("Create schedule"));
   });
 });

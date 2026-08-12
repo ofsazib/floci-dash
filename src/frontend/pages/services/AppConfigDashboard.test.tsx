@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -66,6 +66,26 @@ vi.mock("../../hooks/useAppConfig", () => ({
 }));
 
 import { AppConfigDashboard } from "./AppConfigDashboard";
+
+// ─── Modal helpers ───────────────────────────────────────
+
+/** Fire Escape on every mounted Cloudscape dialog (they stay mounted when hidden). */
+function dismissModalWithEscape() {
+  document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+    fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27 });
+  });
+}
+
+/** Locate a modal dialog by its header text. */
+function dialogOf(headerText: string): HTMLElement {
+  const header = screen.getAllByText(headerText).find((h) => h.closest('[role="dialog"]'));
+  return header!.closest('[role="dialog"]') as HTMLElement;
+}
+
+/** Assert the modal with the given header is hidden (Cloudscape uses display:none). */
+function expectModalHidden(headerText: string) {
+  expect(dialogOf(headerText).className).toContain("hidden");
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -432,5 +452,113 @@ describe("AppConfigDashboard — profiles", () => {
     const filterInput = screen.getByPlaceholderText("Find profiles");
     await user.type(filterInput, "ui");
     await waitFor(() => expect(screen.queryByText("feature-flags")).toBeNull());
+  });
+
+  it("goes back to the applications list from the detail view", async () => {
+    mockApps.mockReturnValue({
+      data: { applications: [{ Id: "app-1", Name: "my-app" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<AppConfigDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("my-app"));
+    await user.click(screen.getByText("my-app"));
+    await waitFor(() => expect(screen.getByText(/Back to applications/i)).toBeTruthy());
+    await user.click(screen.getByText(/Back to applications/i));
+    await waitFor(() => expect(screen.getByText("AppConfig Applications")).toBeTruthy());
+  });
+
+  it("dismisses and cancels the create environment modal", async () => {
+    mockApps.mockReturnValue({
+      data: { applications: [{ Id: "app-1", Name: "my-app" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<AppConfigDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("my-app"));
+    await user.click(screen.getByText("my-app"));
+    await waitFor(() => expect(screen.getByRole("tab", { name: /Environments/i })).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create environment")).toBeTruthy());
+    await user.click(within(dialogOf("Create environment")).getByRole("button", { name: /Cancel/i }));
+    expect(mockCreateEnv).not.toHaveBeenCalled();
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create environment")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create environment"));
+  });
+
+  it("creates an environment with name and description and closes on success", async () => {
+    mockCreateEnv.mockImplementation((_payload: unknown, opts?: { onSuccess?: () => void }) => {
+      opts?.onSuccess?.();
+    });
+    mockApps.mockReturnValue({
+      data: { applications: [{ Id: "app-1", Name: "my-app" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<AppConfigDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("my-app"));
+    await user.click(screen.getByText("my-app"));
+    await waitFor(() => expect(screen.getByRole("tab", { name: /Environments/i })).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create environment")).toBeTruthy());
+    const dialog = dialogOf("Create environment");
+    await user.type(within(dialog).getByPlaceholderText("production"), "prod");
+    await user.type(within(dialog).getByLabelText(/Description/), "Production env");
+    await user.click(within(dialog).getByRole("button", { name: /^Create$/ }));
+    await waitFor(() => expectModalHidden("Create environment"));
+    expect(mockCreateEnv).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "prod", description: "Production env" }),
+      expect.any(Object),
+    );
+  });
+
+  it("dismisses and cancels the create profile modal", async () => {
+    mockApps.mockReturnValue({
+      data: { applications: [{ Id: "app-1", Name: "my-app" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<AppConfigDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("my-app"));
+    await user.click(screen.getByText("my-app"));
+    await waitFor(() => screen.getByRole("tab", { name: /Configuration Profiles/i }));
+    await user.click(screen.getByRole("tab", { name: /Configuration Profiles/i }));
+    await clickButton(user, /Create$/i);
+    await waitFor(() => expect(screen.getByText("Create configuration profile")).toBeTruthy());
+    await user.click(within(dialogOf("Create configuration profile")).getByRole("button", { name: /Cancel/i }));
+    expect(mockCreateProfile).not.toHaveBeenCalled();
+    await clickButton(user, /Create$/i);
+    await waitFor(() => expect(screen.getByText("Create configuration profile")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create configuration profile"));
+  });
+
+  it("creates a profile with a description and closes on success", async () => {
+    mockCreateProfile.mockImplementation((_payload: unknown, opts?: { onSuccess?: () => void }) => {
+      opts?.onSuccess?.();
+    });
+    mockApps.mockReturnValue({
+      data: { applications: [{ Id: "app-1", Name: "my-app" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<AppConfigDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("my-app"));
+    await user.click(screen.getByText("my-app"));
+    await waitFor(() => screen.getByRole("tab", { name: /Configuration Profiles/i }));
+    await user.click(screen.getByRole("tab", { name: /Configuration Profiles/i }));
+    await clickButton(user, /Create$/i);
+    await waitFor(() => expect(screen.getByText("Create configuration profile")).toBeTruthy());
+    const dialog = dialogOf("Create configuration profile");
+    await user.type(within(dialog).getByPlaceholderText("my-config"), "app-cfg");
+    await user.type(within(dialog).getByLabelText(/Description/), "Profile description");
+    await user.click(within(dialog).getByRole("button", { name: /^Create$/ }));
+    await waitFor(() => expectModalHidden("Create configuration profile"));
+    expect(mockCreateProfile).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "app-cfg", description: "Profile description" }),
+      expect.any(Object),
+    );
   });
 });

@@ -506,7 +506,6 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
 ];
 
 export function CloudWatchLogsDashboard() {
-  const [selectedTab, setSelectedTab] = useState("log-groups");
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
 
   if (selectedGroup) {
@@ -526,13 +525,7 @@ export function CloudWatchLogsDashboard() {
     },
   ];
 
-  return (
-    <Tabs
-      activeTabId={selectedTab}
-      onChange={({ detail }) => setSelectedTab(detail.activeTabId)}
-      tabs={tabs}
-    />
-  );
+  return <Tabs tabs={tabs} />;
 }
 
 // ─── Log Group List ────────────────────────────────────

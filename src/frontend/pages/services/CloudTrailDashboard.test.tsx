@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -58,6 +58,26 @@ vi.mock("../../hooks/useCloudTrail", () => ({
 }));
 
 import { CloudTrailDashboard } from "./CloudTrailDashboard";
+
+// ─── Modal helpers ───────────────────────────────────────
+
+/** Fire Escape on every mounted Cloudscape dialog (they stay mounted when hidden). */
+function dismissModalWithEscape() {
+  document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+    fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27 });
+  });
+}
+
+/** Locate a modal dialog by its header text. */
+function dialogOf(headerText: string): HTMLElement {
+  const header = screen.getAllByText(headerText).find((h) => h.closest('[role="dialog"]'));
+  return header!.closest('[role="dialog"]') as HTMLElement;
+}
+
+/** Assert the modal with the given header is hidden (Cloudscape uses display:none). */
+function expectModalHidden(headerText: string) {
+  expect(dialogOf(headerText).className).toContain("hidden");
+}
 
 // ─── Setup ──────────────────────────────────────────────
 
@@ -728,5 +748,129 @@ describe("CloudTrailDashboard — event selectors edge cases", () => {
       }),
       expect.anything(),
     );
+  });
+});
+
+describe("CloudTrailDashboard — coverage completion", () => {
+  function trailsWithOne() {
+    mockTrails.mockReturnValue({
+      data: {
+        trails: [
+          { Name: "my-trail", TrailARN: "arn:aws:cloudtrail:us-east-1::trail/my-trail", S3BucketName: "b", IsMultiRegionTrail: true, IncludeGlobalServiceEvents: true, HomeRegion: "us-east-1", CreationDate: 1700000000 },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    mockEventSelectors.mockReturnValue({
+      data: { trailName: "my-trail", eventSelectors: [], advancedEventSelectors: [] },
+      isLoading: false,
+    });
+  }
+
+  it("passes custom max results on search", async () => {
+    mockLookupEvents.mockImplementation((_params, opts) => {
+      opts?.onSuccess?.({ events: [], nextToken: null, total: 0 });
+    });
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /lookup events/i }));
+    const maxResults = screen.getByRole("spinbutton");
+    fireEvent.change(maxResults, { target: { value: "10" } });
+    await clickButton(user, /search events/i);
+    expect(mockLookupEvents).toHaveBeenCalledWith(
+      expect.objectContaining({ maxResults: 10 }),
+      expect.anything(),
+    );
+  });
+
+  it("includes lookup attributes when loading more results", async () => {
+    mockLookupEvents.mockImplementation((_params, opts) => {
+      opts?.onSuccess?.({
+        events: [
+          { eventId: "e-1", eventName: "CreateBucket", eventTime: "2024-01-01T00:00:00Z", eventSource: "s3.amazonaws.com", username: "alice" },
+        ],
+        nextToken: "next-token",
+        total: 2,
+      });
+    });
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /lookup events/i }));
+    await user.type(screen.getByPlaceholderText("Filter value..."), "CreateBucket");
+    await clickButton(user, /search events/i);
+    await waitFor(() => expect(screen.getByText(/More results available/i)).toBeTruthy());
+    await clickButton(user, /Load more/i);
+    expect(mockLookupEvents).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        lookupAttributes: [{ AttributeKey: "EventId", AttributeValue: "CreateBucket" }],
+        nextToken: "next-token",
+      }),
+      expect.anything(),
+    );
+  });
+
+  it("dismisses event detail modal with Escape", async () => {
+    mockLookupEvents.mockImplementation((_params, opts) => {
+      opts?.onSuccess?.({
+        events: [{ eventId: "e-1", eventName: "CreateBucket", eventTime: "2024-01-01T00:00:00Z", eventSource: "s3.amazonaws.com", username: "alice" }],
+        nextToken: null,
+        total: 1,
+      });
+    });
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /lookup events/i }));
+    await clickButton(user, /search events/i);
+    await waitFor(() => expect(screen.getByText("CreateBucket")).toBeTruthy());
+    await clickButton(user, /Details/i);
+    await waitFor(() => expect(screen.getByText("Event Detail")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Event Detail"));
+  });
+
+  it("shows success toast when event selectors are saved", async () => {
+    mockPutEventSelectors.mockImplementation((_params: any, opts: any) => opts?.onSuccess?.());
+    trailsWithOne();
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-trail")).toBeTruthy());
+    await clickButton(user, /event selectors/i);
+    await clickButton(user, /save event selectors/i);
+    await waitFor(() => expect(mockPutEventSelectors).toHaveBeenCalled());
+  });
+
+  it("shows error toast when saving event selectors fails", async () => {
+    mockPutEventSelectors.mockImplementation((_params: any, opts: any) => opts?.onError?.(new Error("Save failed")));
+    trailsWithOne();
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-trail")).toBeTruthy());
+    await clickButton(user, /event selectors/i);
+    await clickButton(user, /save event selectors/i);
+    await waitFor(() => expect(mockPutEventSelectors).toHaveBeenCalled());
+  });
+
+  it("edits and removes an advanced field", async () => {
+    trailsWithOne();
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-trail")).toBeTruthy());
+    await clickButton(user, /event selectors/i);
+    await waitFor(() => expect(screen.getByText("Event Selectors for my-trail")).toBeTruthy());
+    const advCheckbox = screen.getByRole("checkbox", { name: /Enable advanced event selectors/i });
+    await user.click(advCheckbox);
+    await clickButton(user, /Add field/i);
+    // Change the field select from eventCategory to eventName
+    const fieldTrigger = screen.getByText("eventCategory");
+    await user.click(fieldTrigger);
+    await waitFor(() => expect(screen.getByText("eventName")).toBeTruthy());
+    await user.click(screen.getByText("eventName"));
+    // Type into the equals input
+    const equalsInput = screen.getByPlaceholderText("Value to match...");
+    await user.type(equalsInput, "CreateBucket");
+    // Remove the field
+    await clickButton(user, /Remove field/i);
+    await waitFor(() => expect(screen.queryByPlaceholderText("Value to match...")).toBeNull());
   });
 });

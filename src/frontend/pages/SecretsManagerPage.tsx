@@ -134,12 +134,6 @@ function SecretsPage() {
               setShowCreate(false);
             } catch (e: any) { showToast("error", e.message); }
           }}
-          onGeneratePassword={async () => {
-            try {
-              const res = await useRandomPasswordFixed();
-              return res;
-            } catch { return null; }
-          }}
         />
       )}
 
@@ -150,14 +144,9 @@ function SecretsPage() {
   );
 }
 
-async function useRandomPasswordFixed(): Promise<string | null> {
-  return null;
-}
-
 function CreateSecretModal({ onClose, onSubmit }: {
   onClose: () => void;
   onSubmit: (data: any) => void;
-  onGeneratePassword: () => Promise<string | null>;
 }) {
   const { showToast } = useToast();
   const [name, setName] = useState("");

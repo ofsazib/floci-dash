@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -136,6 +136,26 @@ vi.mock("../../hooks/useLogs", () => ({
 }));
 
 import { CloudWatchLogsDashboard } from "./CloudWatchLogsDashboard";
+
+// ─── Modal helpers ───────────────────────────────────────
+
+/** Fire Escape on every mounted Cloudscape dialog (they stay mounted when hidden). */
+function dismissModalWithEscape() {
+  document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+    fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27 });
+  });
+}
+
+/** Locate a modal dialog by its header text. */
+function dialogOf(headerText: string): HTMLElement {
+  const header = screen.getAllByText(headerText).find((h) => h.closest('[role="dialog"]'));
+  return header!.closest('[role="dialog"]') as HTMLElement;
+}
+
+/** Assert the modal with the given header is hidden (Cloudscape uses display:none). */
+function expectModalHidden(headerText: string) {
+  expect(dialogOf(headerText).className).toContain("hidden");
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -1421,5 +1441,157 @@ describe("CloudWatchLogsDashboard", () => {
     await waitFor(() =>
       expect(mockUntagGroup).toHaveBeenCalledWith({ logGroupName: "/aws/lambda/test", tags: ["Environment"] })
     );
+  });
+
+  // ── Flow completions ────────────────────────────────────
+
+  it("dismisses create log group modal with Escape", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(container.textContent).toContain("Create Log Group"));
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create Log Group"));
+  });
+
+  it("dismisses create log stream modal with Escape", async () => {
+    mockLogGroups.mockReturnValue({
+      data: { logGroups: [{ logGroupName: "/aws/lambda/test" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("/aws/lambda/test"));
+    await waitFor(() => expect(screen.getByText(/Back to Log Groups/i)).toBeTruthy());
+    await clickButton(user, /Create log stream/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-stream")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create Log Stream"));
+  });
+
+  it("cancels create log stream modal", async () => {
+    mockLogGroups.mockReturnValue({
+      data: { logGroups: [{ logGroupName: "/aws/lambda/test" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("/aws/lambda/test"));
+    await waitFor(() => expect(screen.getByText(/Back to Log Groups/i)).toBeTruthy());
+    await clickButton(user, /Create log stream/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-stream")).toBeTruthy());
+    await clickButton(user, /Cancel/i, { last: true });
+    await waitFor(() => expectModalHidden("Create Log Stream"));
+  });
+
+  it("dismisses create subscription filter modal with Escape", async () => {
+    mockLogGroups.mockReturnValue({
+      data: { logGroups: [{ logGroupName: "/aws/lambda/test" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("/aws/lambda/test"));
+    await waitFor(() => expect(screen.getByText(/Back to Log Groups/i)).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /Subscription Filters/i }));
+    await clickButton(user, /Create subscription filter/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-filter")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create Subscription Filter"));
+  });
+
+  it("goes back from stream detail to streams list", async () => {
+    mockLogGroups.mockReturnValue({
+      data: { logGroups: [{ logGroupName: "/aws/lambda/test" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockLogStreams.mockReturnValue({
+      data: { logStreams: [{ logStreamName: "my-stream", storedBytes: 512 }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockLogEvents.mockReturnValue({
+      data: { events: [{ eventId: "e1", timestamp: 1705000000000, message: "Hello" }] },
+      isLoading: false, isError: false, error: null, refetch: vi.fn(),
+    });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("/aws/lambda/test"));
+    await waitFor(() => expect(screen.getByText("my-stream")).toBeTruthy());
+    await user.click(screen.getByText("my-stream"));
+    await waitFor(() => expect(screen.getByText("Hello")).toBeTruthy());
+    await clickButton(user, /Back to Log Streams/i);
+    await waitFor(() => expect(screen.getByText("my-stream")).toBeTruthy());
+    expect(screen.queryByText("Hello")).toBeNull();
+  });
+
+  it("changes events limit via select", async () => {
+    mockLogGroups.mockReturnValue({
+      data: { logGroups: [{ logGroupName: "/aws/lambda/test" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockLogStreams.mockReturnValue({
+      data: { logStreams: [{ logStreamName: "my-stream", storedBytes: 512 }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockLogEvents.mockReturnValue({
+      data: { events: [{ eventId: "e1", timestamp: 1705000000000, message: "Hello" }] },
+      isLoading: false, isError: false, error: null, refetch: vi.fn(),
+    });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("/aws/lambda/test"));
+    await waitFor(() => expect(screen.getByText("my-stream")).toBeTruthy());
+    await user.click(screen.getByText("my-stream"));
+    await waitFor(() => expect(screen.getByRole("button", { name: /Events limit/i })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Events limit/i }));
+    await user.click(screen.getAllByRole("option", { name: /1000/i })[0]);
+    await waitFor(() => expect(screen.getByRole("button", { name: /1000/i })).toBeTruthy());
+  });
+
+  it("deletes a log stream from detail and goes back", async () => {
+    mockDeleteStream.mockResolvedValue(undefined);
+    mockLogGroups.mockReturnValue({
+      data: { logGroups: [{ logGroupName: "/aws/lambda/test" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockLogStreams.mockReturnValue({
+      data: { logStreams: [{ logStreamName: "my-stream", storedBytes: 512 }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockLogEvents.mockReturnValue({
+      data: { events: [{ eventId: "e1", timestamp: 1705000000000, message: "Hello" }] },
+      isLoading: false, isError: false, error: null, refetch: vi.fn(),
+    });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("/aws/lambda/test"));
+    await waitFor(() => expect(screen.getByText("my-stream")).toBeTruthy());
+    await user.click(screen.getByText("my-stream"));
+    await waitFor(() => expect(screen.getByText("Hello")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Delete my-stream/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() =>
+      expect(mockDeleteStream).toHaveBeenCalledWith({ logGroupName: "/aws/lambda/test", logStreamName: "my-stream" })
+    );
+    await waitFor(() => expect(screen.getByText("my-stream")).toBeTruthy());
+  });
+
+  it("removes retention policy by choosing Never expire", async () => {
+    mockLogGroups.mockReturnValue({
+      data: { logGroups: [{ logGroupName: "/aws/lambda/test", retentionInDays: 7 }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("/aws/lambda/test"));
+    await user.click(screen.getByText("/aws/lambda/test"));
+    await waitFor(() => expect(screen.getByText(/Back to Log Groups/i)).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /Retention/i }));
+    await waitFor(() => expect(screen.getAllByText("7 days").length).toBeGreaterThanOrEqual(1));
+    await user.click(screen.getByRole("button", { name: /7 days/i }));
+    await user.click(screen.getAllByRole("option", { name: /Never expire/i })[0]);
+    await clickButton(user, /Save retention/i);
+    await waitFor(() => expect(mockDeleteRetention).toHaveBeenCalledWith("/aws/lambda/test"));
   });
 });
