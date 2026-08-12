@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor, within, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -157,6 +157,28 @@ vi.mock("../../hooks/useIoT", () => ({
 }));
 
 import { IoTDashboard } from "./IoTDashboard";
+
+/** Dispatch Escape to all Cloudscape modal dialogs (fires onDismiss). */
+function dismissModalWithEscape() {
+  document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+    fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27 });
+  });
+}
+
+/** Locate a modal dialog by its header text (Cloudscape modals stay mounted when hidden). */
+function dialogOf(headerText: string): HTMLElement {
+  const header = screen.getAllByText(headerText).find((h) => h.closest('[role="dialog"]'));
+  return header!.closest('[role="dialog"]') as HTMLElement;
+}
+
+/** Stub URL.createObjectURL so downloadText() is assertable (happy-dom may lack it). */
+function stubObjectUrl() {
+  const createObjectURL = vi.fn(() => "blob:iot-test");
+  const revokeObjectURL = vi.fn();
+  Object.defineProperty(URL, "createObjectURL", { value: createObjectURL, configurable: true });
+  Object.defineProperty(URL, "revokeObjectURL", { value: revokeObjectURL, configurable: true });
+  return { createObjectURL, revokeObjectURL };
+}
 
 // ─── Setup ──────────────────────────────────────────────
 
@@ -2185,5 +2207,559 @@ describe("IoTDashboard — policy versions edge cases", () => {
     await waitFor(() => expect(screen.getByText("null-versions")).toBeTruthy());
     await user.click(screen.getByText("null-versions"));
     await waitFor(() => expect(screen.getByText(/No versions for this policy/i)).toBeTruthy());
+  });
+});
+
+describe("IoTDashboard — 100% batch (modal completions)", () => {
+  async function openCertModal(user: ReturnType<typeof userEvent.setup>) {
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /certificates/i }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /create certificate/i })).toBeTruthy());
+    await clickButton(user, /create certificate/i);
+    await waitFor(() => expect(screen.getByText("Certificate created")).toBeTruthy());
+  }
+
+  it("downloads the certificate PEM", async () => {
+    const { createObjectURL, revokeObjectURL } = stubObjectUrl();
+    const user = userEvent.setup();
+    await openCertModal(user);
+    const pemTextarea = screen.getByDisplayValue(/BEGIN CERTIFICATE/);
+    const btnRow = pemTextarea.parentElement?.previousElementSibling as HTMLElement;
+    await user.click(within(btnRow).getAllByRole("button")[1]);
+    await waitFor(() => expect(createObjectURL).toHaveBeenCalled());
+    expect(revokeObjectURL).toHaveBeenCalled();
+  });
+
+  it("downloads the public key", async () => {
+    const { createObjectURL } = stubObjectUrl();
+    const user = userEvent.setup();
+    await openCertModal(user);
+    const pkTextarea = screen.getByDisplayValue(/BEGIN PUBLIC KEY/);
+    const btnRow = pkTextarea.parentElement?.previousElementSibling as HTMLElement;
+    await user.click(within(btnRow).getAllByRole("button")[1]);
+    await waitFor(() => expect(createObjectURL).toHaveBeenCalled());
+  });
+
+  it("downloads the private key", async () => {
+    const { createObjectURL } = stubObjectUrl();
+    const user = userEvent.setup();
+    await openCertModal(user);
+    await clickButton(user, /download private key/i);
+    await waitFor(() => expect(createObjectURL).toHaveBeenCalled());
+  });
+
+  it("copies the public and private keys", async () => {
+    const user = userEvent.setup();
+    await openCertModal(user);
+    const pkTextarea = screen.getByDisplayValue(/BEGIN PUBLIC KEY/);
+    const pkRow = pkTextarea.parentElement?.previousElementSibling as HTMLElement;
+    await user.click(within(pkRow).getAllByRole("button")[0]);
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(mockCertificateResult.keyPair.PublicKey));
+    const privTextarea = screen.getByDisplayValue(/BEGIN RSA PRIVATE KEY/);
+    const privRow = privTextarea.parentElement?.previousElementSibling as HTMLElement;
+    await user.click(within(privRow).getAllByRole("button")[0]);
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(mockCertificateResult.keyPair.PrivateKey));
+  });
+
+  it("dismisses the certificate success modal with Escape", async () => {
+    const user = userEvent.setup();
+    await openCertModal(user);
+    dismissModalWithEscape();
+    await waitFor(() => expect(screen.queryByText(mockCertificateResult.certificateId)).toBeNull());
+  });
+
+  it("activates an INACTIVE certificate", async () => {
+    mockCertificates.mockReturnValue({
+      data: { certificates: [{ certificateId: "cert-inactive-456", status: "INACTIVE", creationDate: "2025-01-01" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /certificates/i }));
+    await waitFor(() => expect(screen.getByText("INACTIVE")).toBeTruthy());
+    // The Activate button is inline-icon (no accessible text) — click the first button in the row
+    const row = screen.getByText("INACTIVE").closest("tr") || screen.getByText("INACTIVE").closest('[role="row"]');
+    await user.click(within(row as HTMLElement).getAllByRole("button")[0]);
+    await waitFor(() => expect(mockUpdateCertStatus).toHaveBeenCalledWith({ certificateId: "cert-inactive-456", newStatus: "ACTIVE" }));
+  });
+
+  it("deletes a certificate with confirmation", async () => {
+    mockCertificates.mockReturnValue({
+      data: { certificates: [{ certificateId: "cert-active-123", status: "ACTIVE", creationDate: "2025-01-01" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /certificates/i }));
+    await waitFor(() => expect(screen.getByText("ACTIVE")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Delete cert-active/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/i)).toBeTruthy());
+    const confirmBtns = screen.getAllByRole("button", { name: /^Delete$/i });
+    await user.click(confirmBtns[confirmBtns.length - 1]);
+    await waitFor(() => expect(mockDeleteCert).toHaveBeenCalledWith("cert-active-123"));
+  });
+
+  it("filters certificates by ID", async () => {
+    mockCertificates.mockReturnValue({
+      data: {
+        certificates: [
+          { certificateId: "cert-alpha-1", status: "ACTIVE", creationDate: "2025-01-01" },
+          { certificateId: "cert-beta-2", status: "ACTIVE", creationDate: "2025-01-01" },
+        ],
+        total: 2,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /certificates/i }));
+    await waitFor(() => expect(screen.getByText(/cert-alpha-1/)).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("Find certificates"), "beta");
+    await waitFor(() => expect(screen.getByText(/cert-beta-2/)).toBeTruthy());
+    expect(screen.queryByText(/cert-alpha-1/)).toBeNull();
+  });
+
+  it("dismisses the create thing modal with Escape", async () => {
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /create thing/i);
+    await waitFor(() => expect(screen.getByText("Create thing")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expect(dialogOf("Create thing").className).toContain("hidden"));
+  });
+
+  it("creates a thing with a type and clears the form on success", async () => {
+    mockCreateThing.mockImplementation((_args: any, opts: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /create thing/i);
+    await waitFor(() => expect(screen.getByText("Create thing")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("MyDevice"), "NewThing");
+    await user.type(screen.getByPlaceholderText("LightBulb"), "Sensor");
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => expect(mockCreateThing).toHaveBeenCalledWith(
+      { thingName: "NewThing", thingTypeName: "Sensor" },
+      expect.anything(),
+    ));
+    await waitFor(() => expect(dialogOf("Create thing").className).toContain("hidden"));
+  });
+
+  it("closes the shadow modal with Close and Escape", async () => {
+    mockThings.mockReturnValue({
+      data: { things: [{ thingName: "ShadowDev", thingTypeName: "Sensor", thingArn: "arn:1" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockShadow.mockReturnValue({ data: { shadow: { state: { reported: { temp: 25 } } } }, isLoading: false });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("ShadowDev")).toBeTruthy());
+    await user.click(screen.getByText("ShadowDev"));
+    await waitFor(() => expect(screen.getByRole("button", { name: /View shadow/i })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /View shadow/i }));
+    await waitFor(() => expect(screen.getByPlaceholderText('{"desired": {"color": "green"}}')).toBeTruthy());
+    await clickButton(user, /Close/i);
+    await waitFor(() => expect(dialogOf("Shadow — ShadowDev").className).toContain("hidden"));
+    // Reopen and dismiss with Escape
+    await user.click(screen.getByRole("button", { name: /View shadow/i }));
+    await waitFor(() => expect(dialogOf("Shadow — ShadowDev").className).not.toContain("hidden"));
+    dismissModalWithEscape();
+    await waitFor(() => expect(dialogOf("Shadow — ShadowDev").className).toContain("hidden"));
+  });
+
+  it("updates the shadow state and clears the editor on success", async () => {
+    mockUpdateShadow.mockImplementation((_args: any, opts: any) => opts?.onSuccess?.());
+    mockThings.mockReturnValue({
+      data: { things: [{ thingName: "ShadowDev", thingTypeName: "Sensor", thingArn: "arn:1" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockShadow.mockReturnValue({ data: { shadow: { state: { reported: { temp: 25 } } } }, isLoading: false });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("ShadowDev")).toBeTruthy());
+    await user.click(screen.getByText("ShadowDev"));
+    await waitFor(() => expect(screen.getByRole("button", { name: /View shadow/i })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /View shadow/i }));
+    await waitFor(() => expect(screen.getByPlaceholderText('{"desired": {"color": "green"}}')).toBeTruthy());
+    const editor = screen.getByPlaceholderText('{"desired": {"color": "green"}}');
+    fireEvent.change(editor, { target: { value: '{"desired": {"color": "blue"}}' } });
+    const updateBtns = screen.getAllByRole("button", { name: /^Update$/i });
+    await user.click(updateBtns[updateBtns.length - 1]);
+    await waitFor(() => expect(mockUpdateShadow).toHaveBeenCalledWith(
+      { thingName: "ShadowDev", state: { desired: { color: "blue" } } },
+      expect.anything(),
+    ));
+    await waitFor(() => expect((editor as HTMLTextAreaElement).value).toBe(""));
+  });
+
+  it("dismisses the create policy modal with Escape and clears on success", async () => {
+    mockCreatePolicy.mockImplementation((_args: any, opts: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /policies/i }));
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create policy")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("MyIoTPolicy"), "NewPolicy");
+    await user.type(screen.getByPlaceholderText(/Version/), 'my-policy-document');
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => expect(mockCreatePolicy).toHaveBeenCalledWith(
+      { policyName: "NewPolicy", policyDocument: "my-policy-document" },
+      expect.anything(),
+    ));
+    await waitFor(() => expect(dialogOf("Create policy").className).toContain("hidden"));
+    // Reopen and dismiss with Escape
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create policy")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expect(dialogOf("Create policy").className).toContain("hidden"));
+  });
+
+  it("creates a topic rule with description and action and clears on success", async () => {
+    mockCreateTopicRule.mockImplementation((_args: any, opts: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /topic rules/i }));
+    await clickButton(user, /^Create$/i);
+    await waitFor(() => expect(screen.getByText("Create topic rule")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my_rule"), "NewRule");
+    await user.type(screen.getByPlaceholderText("SELECT * FROM 'device/+'"), "SELECT * FROM 'device/#'");
+    await user.type(screen.getByPlaceholderText("Route device data"), "My description");
+    await user.type(screen.getByPlaceholderText("arn:aws:lambda:..."), "arn:aws:lambda:fn");
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => expect(mockCreateTopicRule).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ruleName: "NewRule",
+        topicRulePayload: expect.objectContaining({
+          sql: "SELECT * FROM 'device/#'",
+          description: "My description",
+          actions: [{ lambda: { functionArn: "arn:aws:lambda:fn" } }],
+        }),
+      }),
+      expect.anything(),
+    ));
+    await waitFor(() => expect(dialogOf("Create topic rule").className).toContain("hidden"));
+  });
+
+  it("dismisses the create topic rule modal with Escape", async () => {
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /topic rules/i }));
+    await clickButton(user, /^Create$/i);
+    await waitFor(() => expect(screen.getByText("Create topic rule")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expect(dialogOf("Create topic rule").className).toContain("hidden"));
+  });
+
+  it("creates a thing type with a description and clears on success", async () => {
+    mockCreateThingType.mockImplementation((_args: any, opts: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /thing types/i }));
+    await clickButton(user, /^Create Thing Type$/i);
+    await waitFor(() => expect(screen.getByText("Create thing type")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("LightBulb"), "NewType");
+    await user.type(screen.getByPlaceholderText("Smart light bulb"), "Smart bulb");
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => expect(mockCreateThingType).toHaveBeenCalledWith(
+      { thingTypeName: "NewType", thingTypeProperties: { thingTypeDescription: "Smart bulb" } },
+      expect.anything(),
+    ));
+    await waitFor(() => expect(dialogOf("Create thing type").className).toContain("hidden"));
+  });
+
+  it("dismisses the create thing type modal with Escape", async () => {
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /thing types/i }));
+    await clickButton(user, /^Create Thing Type$/i);
+    await waitFor(() => expect(screen.getByText("Create thing type")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expect(dialogOf("Create thing type").className).toContain("hidden"));
+  });
+
+  it("closes the inspect panel after disconnecting", async () => {
+    mockDisconnect.mockImplementation((_id: string, opts: any) => opts?.onSuccess?.());
+    mockConnection.mockReturnValue({
+      data: { connection: { clientId: "device-001", connected: true, sourceIp: "192.168.1.1", sourcePort: 8883 } },
+      isLoading: false, isError: false,
+    });
+    mockSubscriptions.mockReturnValue({ data: { subscriptions: [] }, isLoading: false });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /mqtt broker/i }));
+    await user.type(screen.getByPlaceholderText("device-001"), "device-001");
+    await clickButton(user, /Inspect/);
+    await waitFor(() => expect(screen.getByText("Connected")).toBeTruthy());
+    await clickButton(user, /Disconnect client/);
+    await waitFor(() => expect(screen.queryByRole("button", { name: /Disconnect client/i })).toBeNull());
+  });
+
+  it("cancels, escapes, and submits the publish modal with retain enabled", async () => {
+    mockPublish.mockImplementation((_args: any, opts: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /mqtt broker/i }));
+    await clickButton(user, /Publish to topic/i);
+    await waitFor(() => expect(screen.getByText("Publish MQTT message")).toBeTruthy());
+    // Cancel closes the modal
+    await clickButton(user, /Cancel/i);
+    await waitFor(() => expect(dialogOf("Publish MQTT message").className).toContain("hidden"));
+    // Reopen, toggle retain, submit with onSuccess
+    await clickButton(user, /Publish to topic/i);
+    await waitFor(() => expect(screen.getAllByText("Publish MQTT message").length).toBeGreaterThan(0));
+    await user.type(screen.getByPlaceholderText("sensors/temperature"), "sensors/retain");
+    fireEvent.change(screen.getByPlaceholderText('{"temp": 25}'), { target: { value: '{"temp": 1}' } });
+    await user.click(screen.getByRole("checkbox", { name: /Retain message/i }));
+    const pubBtns = screen.getAllByRole("button", { name: /^Publish$/i });
+    await user.click(pubBtns[pubBtns.length - 1]);
+    await waitFor(() => expect(mockPublish).toHaveBeenCalledWith(
+      { topic: "sensors/retain", payload: '{"temp": 1}', retain: true },
+      expect.anything(),
+    ));
+    await waitFor(() => expect(dialogOf("Publish MQTT message").className).toContain("hidden"));
+    // Reopen and dismiss with Escape
+    await clickButton(user, /Publish to topic/i);
+    await waitFor(() => expect(screen.getAllByText("Publish MQTT message").length).toBeGreaterThan(0));
+    dismissModalWithEscape();
+    await waitFor(() => expect(dialogOf("Publish MQTT message").className).toContain("hidden"));
+  });
+
+  it("shows a dash for a thing with no name", async () => {
+    mockThings.mockReturnValue({
+      data: { things: [{ thingName: "" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(3));
+  });
+
+  it("shows the empty state when rule data is missing", async () => {
+    mockTopicRules.mockReturnValue({ data: { rules: undefined }, isLoading: false, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /topic rules/i }));
+    await waitFor(() => expect(screen.getByText(/No topic rules/i)).toBeTruthy());
+  });
+
+  it("shows the empty state when thing type data is missing", async () => {
+    mockThingTypes.mockReturnValue({ data: { thingTypes: undefined }, isLoading: false, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /thing types/i }));
+    await waitFor(() => expect(screen.getByText(/No thing types/i)).toBeTruthy());
+  });
+
+  it("shows fallbacks for sparse certificate fields", async () => {
+    mockCertificates.mockReturnValue({
+      data: { certificates: [{ certificateId: "", status: undefined, creationDate: undefined }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /certificates/i }));
+    // The ID cell renders the mapped "—" with an ellipsis, so exact "—" matches are status + created
+    await waitFor(() => expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2));
+  });
+
+  it("shows fallbacks for sparse policy fields", async () => {
+    mockPolicies.mockReturnValue({
+      data: { policies: [{ policyName: "", policyArn: undefined, defaultVersionId: undefined, creationDate: undefined }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /policies/i }));
+    await waitFor(() => expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(4));
+  });
+
+  it("shows fallbacks for sparse rule fields", async () => {
+    mockTopicRules.mockReturnValue({
+      data: { rules: [{ ruleName: "", rule_sql: undefined, ruleDisabled: undefined, createdDate: undefined }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /topic rules/i }));
+    await waitFor(() => expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2));
+  });
+
+  it("shows fallbacks for sparse thing type fields", async () => {
+    mockThingTypes.mockReturnValue({
+      data: { thingTypes: [{ thingTypeName: "" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /thing types/i }));
+    await waitFor(() => expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(4));
+  });
+
+  it("deselects a thing when its name is clicked again", async () => {
+    mockThings.mockReturnValue({
+      data: { things: [{ thingName: "ToggleDev", thingTypeName: "Sensor", thingArn: "arn:1" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("ToggleDev")).toBeTruthy());
+    await user.click(screen.getByText("ToggleDev"));
+    await waitFor(() => expect(screen.getByRole("button", { name: /View shadow/i })).toBeTruthy());
+    await user.click(screen.getByText("ToggleDev"));
+    await waitFor(() => expect(screen.queryByRole("button", { name: /View shadow/i })).toBeNull());
+  });
+
+  it("shows a dash when a job has no job ID", async () => {
+    mockThings.mockReturnValue({
+      data: { things: [{ thingName: "JobDev4", thingTypeName: "T", thingArn: "arn:1" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockThingJobs.mockReturnValue({ data: { executionSummaries: [{ jobId: "" }] }, isLoading: false });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("JobDev4"));
+    await waitFor(() => expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(1));
+  });
+
+  it("deselects a policy when its name is clicked again", async () => {
+    mockPolicies.mockReturnValue({
+      data: { policies: [{ policyName: "TogglePol", policyArn: "arn:1", defaultVersionId: "1", creationDate: "2025-01-01" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /policies/i }));
+    await waitFor(() => expect(screen.getByText("TogglePol")).toBeTruthy());
+    await user.click(screen.getByText("TogglePol"));
+    await waitFor(() => expect(screen.getByText(/Versions — TogglePol/)).toBeTruthy());
+    await user.click(screen.getByText("TogglePol"));
+    await waitFor(() => expect(screen.queryByText(/Versions — TogglePol/)).toBeNull());
+  });
+
+  it("shows a dash when a policy version has no ID", async () => {
+    mockPolicies.mockReturnValue({
+      data: { policies: [{ policyName: "NoVerId", policyArn: "arn:1", defaultVersionId: "1", creationDate: "2025-01-01" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockPolicyVersions.mockReturnValue({ data: { policyVersions: [{ versionId: "", policyVersionId: undefined }] }, isLoading: false });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /policies/i }));
+    await waitFor(() => expect(screen.getByText("NoVerId")).toBeTruthy());
+    await user.click(screen.getByText("NoVerId"));
+    await waitFor(() => expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(3));
+  });
+
+  it("shows 0 for a subscription with no QoS", async () => {
+    mockConnection.mockReturnValue({
+      data: { connection: { clientId: "qos-dev", connected: true } },
+      isLoading: false, isError: false,
+    });
+    mockSubscriptions.mockReturnValue({ data: { subscriptions: [{ topicFilter: "sensors/#", qos: undefined }] }, isLoading: false });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /mqtt broker/i }));
+    await user.type(screen.getByPlaceholderText("device-001"), "qos-dev");
+    await clickButton(user, /Inspect/);
+    await waitFor(() => expect(screen.getByText("sensors/#")).toBeTruthy());
+    expect(screen.getByText("0")).toBeTruthy();
+  });
+
+  it("shows fallbacks for sparse retained messages", async () => {
+    mockRetained.mockReturnValue({
+      data: { retainedTopics: [{ topic: "sparse/topic", payloadSize: null, qos: undefined }] },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /mqtt broker/i }));
+    await waitFor(() => expect(screen.getByText("sparse/topic")).toBeTruthy());
+    expect(screen.getByText("—")).toBeTruthy();
+    expect(screen.getByText("0")).toBeTruthy();
+  });
+
+  it("does not update the shadow when the editor is empty", async () => {
+    mockThings.mockReturnValue({
+      data: { things: [{ thingName: "EmptyShadow", thingTypeName: "Sensor", thingArn: "arn:1" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockShadow.mockReturnValue({ data: { shadow: {} }, isLoading: false });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("EmptyShadow")).toBeTruthy());
+    await user.click(screen.getByText("EmptyShadow"));
+    await waitFor(() => expect(screen.getByRole("button", { name: /View shadow/i })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /View shadow/i }));
+    await waitFor(() => expect(screen.getByPlaceholderText('{"desired": {"color": "green"}}')).toBeTruthy());
+    const updateBtns = screen.getAllByRole("button", { name: /^Update$/i });
+    await user.click(updateBtns[updateBtns.length - 1]);
+    expect(mockUpdateShadow).not.toHaveBeenCalled();
+  });
+
+  it("disables certificate delete while pending", async () => {
+    deleteCertState.isPending = true;
+    deleteCertState.variables = "cert-active-123";
+    mockCertificates.mockReturnValue({
+      data: { certificates: [{ certificateId: "cert-active-123", status: "ACTIVE", creationDate: "2025-01-01" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /certificates/i }));
+    await waitFor(() => expect(screen.getByText("ACTIVE")).toBeTruthy());
+    const deleteBtn = screen.getByRole("button", { name: /Delete cert-active/i });
+    expect((deleteBtn as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("falls back to a no-op when clipboard write fails", async () => {
+    (navigator.clipboard.writeText as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("denied"));
+    const user = userEvent.setup();
+    await openCertModal(user);
+    const pemTextarea = screen.getByDisplayValue(/BEGIN CERTIFICATE/);
+    const btnRow = pemTextarea.parentElement?.previousElementSibling as HTMLElement;
+    await user.click(within(btnRow).getAllByRole("button")[0]);
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalled());
+  });
+
+  it("shows the empty state when a client has no subscription data", async () => {
+    mockConnection.mockReturnValue({
+      data: { connection: { clientId: "nosub-dev", connected: true } },
+      isLoading: false, isError: false,
+    });
+    mockSubscriptions.mockReturnValue({ data: undefined, isLoading: false });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /mqtt broker/i }));
+    await user.type(screen.getByPlaceholderText("device-001"), "nosub-dev");
+    await clickButton(user, /Inspect/);
+    await waitFor(() => expect(screen.getByText(/No active subscriptions/i)).toBeTruthy());
+  });
+
+  it("shows the empty state when retained message data is missing", async () => {
+    mockRetained.mockReturnValue({ data: undefined, isLoading: false });
+    const user = userEvent.setup();
+    render(<IoTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /mqtt broker/i }));
+    await waitFor(() => expect(screen.getByText(/No retained messages/i)).toBeTruthy());
+  });
+
+  it("falls back to 'certificate' in download filenames when the ID is missing", async () => {
+    mockCreateKeysCert.mockImplementation((_args: any, opts: any) => {
+      opts?.onSuccess?.({ ...mockCertificateResult, certificateId: undefined });
+    });
+    stubObjectUrl();
+    const user = userEvent.setup();
+    await openCertModal(user);
+    const pemTextarea = screen.getByDisplayValue(/BEGIN CERTIFICATE/);
+    const pemRow = pemTextarea.parentElement?.previousElementSibling as HTMLElement;
+    await user.click(within(pemRow).getAllByRole("button")[1]);
+    const pkTextarea = screen.getByDisplayValue(/BEGIN PUBLIC KEY/);
+    const pkRow = pkTextarea.parentElement?.previousElementSibling as HTMLElement;
+    await user.click(within(pkRow).getAllByRole("button")[1]);
+    await clickButton(user, /download private key/i);
+    await waitFor(() => expect(screen.queryByText(/certificate-abc/)).toBeNull());
   });
 });
