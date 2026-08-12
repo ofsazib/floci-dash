@@ -168,7 +168,6 @@ import {
 import {
   useSESIdentities,
   useSESVerifyEmail,
-  useSESVerifyDomain,
   useSESDeleteIdentity,
   useSESSendEmail,
   useSESVerifiedEmails,
@@ -527,15 +526,12 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
 export function SESDashboard() {
   const { data, isLoading } = useSESIdentities();
   const verifyEmail = useSESVerifyEmail();
-  const verifyDomain = useSESVerifyDomain();
   const deleteIdentity = useSESDeleteIdentity();
   const sendEmail = useSESSendEmail();
   const { data: verifiedEmails } = useSESVerifiedEmails();
   const [showVerifyEmail, setShowVerifyEmail] = useState(false);
-  const [showVerifyDomain, setShowVerifyDomain] = useState(false);
   const [showSendEmail, setShowSendEmail] = useState(false);
   const [emailAddress, setEmailAddress] = useState("");
-  const [domain, setDomain] = useState("");
   const [sendFrom, setSendFrom] = useState("");
   const [sendTo, setSendTo] = useState("");
   const [sendSubject, setSendSubject] = useState("");
@@ -830,42 +826,6 @@ export function SESDashboard() {
               value={emailAddress}
               onChange={({ detail }) => setEmailAddress(detail.value)}
               placeholder="user@example.com"
-            />
-          </FormField>
-        </Form>
-      </Modal>
-      <Modal
-        visible={showVerifyDomain}
-        onDismiss={() => setShowVerifyDomain(false)}
-        header="Verify domain"
-        footer={
-          <Box float="right">
-            <SpaceBetween direction="horizontal" size="xs">
-              <Button variant="link" onClick={() => setShowVerifyDomain(false)}>
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                onClick={() => {
-                  verifyDomain.mutate(domain);
-                  setShowVerifyDomain(false);
-                  setDomain("");
-                }}
-                disabled={!domain}
-                loading={verifyDomain.isPending}
-              >
-                Verify
-              </Button>
-            </SpaceBetween>
-          </Box>
-        }
-      >
-        <Form>
-          <FormField label="Domain name">
-            <Input
-              value={domain}
-              onChange={({ detail }) => setDomain(detail.value)}
-              placeholder="example.com"
             />
           </FormField>
         </Form>
