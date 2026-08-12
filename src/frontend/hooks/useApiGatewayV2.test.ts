@@ -20,6 +20,9 @@ import {
   useApiGatewayV2Deployments,
   useCreateApiGatewayV2Deployment,
   useDeleteApiGatewayV2Route,
+  useCreateApiGatewayV2Route,
+  useDeleteApiGatewayV2Stage,
+  useDeleteApiGatewayV2Deployment,
 } from "./useApiGatewayV2";
 
 beforeEach(() => mockApi.mockReset());
@@ -97,6 +100,34 @@ describe("useApiGatewayV2 hooks", () => {
     const { result } = renderHook(() => useDeleteApiGatewayV2Route("api-1"), { wrapper: createWrapper() });
     await result.current.mutateAsync("route-1");
     expect(mockApi).toHaveBeenCalledWith("/aws/apigatewayv2/apis/api-1/routes/route-1", {
+      method: "DELETE",
+    });
+  });
+
+  it("useCreateApiGatewayV2Route calls POST", async () => {
+    mockApi.mockResolvedValueOnce({ route: {} });
+    const { result } = renderHook(() => useCreateApiGatewayV2Route("api-1"), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ routeKey: "$default", target: "integrations/int-1" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/apigatewayv2/apis/api-1/routes", {
+      method: "POST",
+      body: JSON.stringify({ routeKey: "$default", target: "integrations/int-1" }),
+    });
+  });
+
+  it("useDeleteApiGatewayV2Stage calls DELETE with encoded stage name", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useDeleteApiGatewayV2Stage("api-1"), { wrapper: createWrapper() });
+    await result.current.mutateAsync("prod stage");
+    expect(mockApi).toHaveBeenCalledWith("/aws/apigatewayv2/apis/api-1/stages/prod%20stage", {
+      method: "DELETE",
+    });
+  });
+
+  it("useDeleteApiGatewayV2Deployment calls DELETE", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useDeleteApiGatewayV2Deployment("api-1"), { wrapper: createWrapper() });
+    await result.current.mutateAsync("dep-1");
+    expect(mockApi).toHaveBeenCalledWith("/aws/apigatewayv2/apis/api-1/deployments/dep-1", {
       method: "DELETE",
     });
   });
