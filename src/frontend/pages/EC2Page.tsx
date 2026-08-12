@@ -40,7 +40,6 @@ import {
   useEC2CreateSecurityGroup,
   useEC2DeleteSecurityGroup,
   useEC2AuthorizeIngress,
-  useEC2RevokeIngress,
   useEC2KeyPairs,
   useEC2CreateKeyPair,
   useEC2ImportKeyPair,
@@ -618,10 +617,9 @@ function EC2SecurityGroupList() {
   const createSG = useEC2CreateSecurityGroup();
   const deleteSG = useEC2DeleteSecurityGroup();
   const authorizeIngress = useEC2AuthorizeIngress();
-  const revokeIngress = useEC2RevokeIngress();
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ groupName: "", description: "", vpcId: "" });
-  const [showRule, setShowRule] = useState<{ groupId: string; action: "add" | "remove" } | null>(null);
+  const [showRule, setShowRule] = useState<{ groupId: string } | null>(null);
   const [ruleForm, setRuleForm] = useState({ ipProtocol: "tcp", fromPort: "22", toPort: "22", cidrIp: "0.0.0.0/0" });
   const { data: vpcs } = useEC2Vpcs();
 
@@ -645,7 +643,7 @@ function EC2SecurityGroupList() {
           { id: "rules", header: "Inbound Rules", cell: (item: any) => item.rules },
           { id: "actions", header: "", cell: (item: any) => (
             <SpaceBetween direction="horizontal" size="xs">
-              <Button variant="icon" iconName="add-plus" ariaLabel="Add rule" onClick={() => { setShowRule({ groupId: item.id, action: "add" }); setRuleForm({ ipProtocol: "tcp", fromPort: "22", toPort: "22", cidrIp: "0.0.0.0/0" }); }} />
+              <Button variant="icon" iconName="add-plus" ariaLabel="Add rule" onClick={() => { setShowRule({ groupId: item.id }); setRuleForm({ ipProtocol: "tcp", fromPort: "22", toPort: "22", cidrIp: "0.0.0.0/0" }); }} />
               <DeleteButton itemName={item.name} resourceType="security group" loading={deleteSG.isPending && deleteSG.variables === item.id} onDelete={() => deleteSG.mutateAsync(item.id)} />
             </SpaceBetween>
           )},
@@ -675,15 +673,14 @@ function EC2SecurityGroupList() {
         </SpaceBetween></Form>
       </Modal>
 
-      <Modal visible={showRule !== null} onDismiss={() => setShowRule(null)} header={`${showRule?.action === "add" ? "Add" : "Remove"} Inbound Rule`} size="medium"
+      <Modal visible={showRule !== null} onDismiss={() => setShowRule(null)} header="Add Inbound Rule" size="medium"
         footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
           <Button variant="link" onClick={() => setShowRule(null)}>Cancel</Button>
           <Button variant="primary" onClick={() => {
             if (!showRule) return;
             const data = { groupId: showRule.groupId, ipProtocol: ruleForm.ipProtocol, fromPort: parseInt(ruleForm.fromPort), toPort: parseInt(ruleForm.toPort), cidrIp: ruleForm.cidrIp };
-            if (showRule.action === "add") authorizeIngress.mutate(data, { onSuccess: () => setShowRule(null) });
-            else revokeIngress.mutate(data, { onSuccess: () => setShowRule(null) });
-          }}>{showRule?.action === "add" ? "Add" : "Remove"}</Button>
+            authorizeIngress.mutate(data, { onSuccess: () => setShowRule(null) });
+          }}>Add</Button>
         </SpaceBetween></Box>}
       >
         <Form><SpaceBetween size="m">

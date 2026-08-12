@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent, { type UserEvent } from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { clickButton, createWrapper } from "../../test/helpers";
@@ -37,7 +37,6 @@ const mockCreateVpc = vi.fn();
 const mockCreateSubnet = vi.fn();
 const mockCreateSecurityGroup = vi.fn();
 const mockAuthorizeIngress = vi.fn();
-const mockRevokeIngress = vi.fn();
 const mockCreateKeyPair = vi.fn();
 const mockImportKeyPair = vi.fn();
 const mockCreateInternetGateway = vi.fn();
@@ -110,7 +109,6 @@ vi.mock("../hooks/useEC2", () => ({
   useEC2CreateSecurityGroup: () => ({ mutate: mockCreateSecurityGroup, isPending: false }),
   useEC2DeleteSecurityGroup: () => ({ mutateAsync: mockDeleteSecurityGroup, ...deleteSgState }),
   useEC2AuthorizeIngress: () => ({ mutate: mockAuthorizeIngress, isPending: false }),
-  useEC2RevokeIngress: () => ({ mutate: mockRevokeIngress, isPending: false }),
   useEC2CreateKeyPair: () => ({ mutate: mockCreateKeyPair, isPending: false }),
   useEC2ImportKeyPair: () => ({ mutate: mockImportKeyPair, isPending: false }),
   useEC2DeleteKeyPair: () => ({ mutateAsync: mockDeleteKeyPair, ...deleteKeyPairState }),
@@ -167,6 +165,15 @@ vi.mock("../hooks/useEC2NetworkAcls", () => ({
     reset: vi.fn(),
   }),
   useEC2DeleteNetworkAclEntry: () => ({ mutate: mockDeleteAclEntry, isPending: false }),
+}));
+
+vi.mock("../components/EC2Terminal", () => ({
+  default: (props: any) => (
+    <div>
+      Mocked Terminal
+      <button onClick={props.onClose}>Close Terminal</button>
+    </div>
+  ),
 }));
 
 // ─── Static imports (after mock) ───────────────────────
@@ -546,6 +553,24 @@ async function pickSelectOption(user: UserEvent, triggerText: RegExp, optionText
   const option = (await screen.findAllByRole("option")).find((o) => optionText.test(o.textContent || ""));
   if (!option) throw new Error(`Select option matching ${optionText} not found`);
   await user.click(option);
+}
+
+/** Dispatch Escape to all Cloudscape modal dialogs (fires onDismiss). */
+function dismissModalWithEscape() {
+  document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+    fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27 });
+  });
+}
+
+/** Locate a modal dialog by its header text (Cloudscape modals stay mounted when hidden). */
+function dialogOf(headerText: string): HTMLElement {
+  const header = screen.getAllByText(headerText).find((h) => h.closest('[role="dialog"]'));
+  return header!.closest('[role="dialog"]') as HTMLElement;
+}
+
+/** Click a button inside the modal dialog with the given header. */
+async function clickInDialog(user: UserEvent, headerText: string, name: RegExp | string) {
+  await user.click(within(dialogOf(headerText)).getByRole("button", { name }));
 }
 
 /** Set every query hook to a safe empty/default return value. */
@@ -2500,5 +2525,1008 @@ describe("EC2Page — volumes create", () => {
         expect.any(Object)
       );
     });
+  });
+});
+
+// ─── Shell Navigation ───────────────────────────────────
+
+describe("EC2Page — shell navigation", () => {
+  beforeEach(() => { vi.clearAllMocks(); setupDefaults(); });
+
+  it("navigates via breadcrumb", async () => {
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("link", { name: "Dashboard" }));
+    expect(screen.getAllByText("EC2").length).toBeGreaterThan(0);
+  });
+
+  it("goes back from instance detail to the list", async () => {
+    const user = userEvent.setup();
+    mockInstances.mockReturnValue({ data: { instances: [{ id: "i-back", state: "running", instanceType: "t2.micro" }], total: 1 }, isLoading: false, isError: false, error: null });
+    mockInstanceDetail.mockReturnValue({ data: { id: "i-back", state: "running", instanceType: "t2.micro" }, isLoading: false, isError: false, error: null });
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Instances/i);
+    await clickButton(user, /i-back/i);
+    await waitFor(() => expect(screen.getByText("Back to Instances")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Back to Instances/i }));
+    await waitFor(() => expect(screen.getByText("Create Instance")).toBeTruthy());
+  });
+
+  it("goes back from VPC detail to the list", async () => {
+    const user = userEvent.setup();
+    mockVpcs.mockReturnValue({ data: { vpcs: [{ id: "vpc-back", state: "available", cidrBlock: "10.0.0.0/16", isDefault: false, instanceTenancy: "default" }], total: 1 }, isLoading: false, isError: false, error: null });
+    mockVpc.mockReturnValue({ data: { id: "vpc-back", state: "available", cidrBlock: "10.0.0.0/16", isDefault: false, instanceTenancy: "default" }, isLoading: false, isError: false, error: null });
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /VPCs/i);
+    await clickButton(user, /vpc-back/i);
+    await waitFor(() => expect(screen.getByText("Back to VPCs")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Back to VPCs/i }));
+    await waitFor(() => expect(screen.queryByText("Back to VPCs")).toBeNull());
+  });
+});
+
+// ─── Instance List — row actions ───────────────────────
+
+describe("EC2InstanceList — row actions", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
+    mockSubnets.mockReturnValue({ data: { subnets: [] } });
+    mockSecurityGroups.mockReturnValue({ data: { securityGroups: [] } });
+    mockAmis.mockReturnValue({ data: { images: [] }, isLoading: false });
+  });
+
+  it("starts a stopped instance from the list", async () => {
+    const user = userEvent.setup();
+    mockInstances.mockReturnValue({ data: { instances: [{ id: "i-start", state: "stopped", instanceType: "t2.micro" }], total: 1 }, isLoading: false, isError: false, error: null });
+    render(<EC2InstanceList onSelect={vi.fn()} />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /Start i-start/i }));
+    await waitFor(() => expect(mockStartInstance).toHaveBeenCalledWith("i-start"));
+  });
+
+  it("stops and reboots a running instance from the list", async () => {
+    const user = userEvent.setup();
+    mockInstances.mockReturnValue({ data: { instances: [{ id: "i-stop", state: "running", instanceType: "t2.micro" }], total: 1 }, isLoading: false, isError: false, error: null });
+    render(<EC2InstanceList onSelect={vi.fn()} />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /Stop i-stop/i }));
+    await user.click(screen.getByRole("button", { name: /Reboot i-stop/i }));
+    await waitFor(() => expect(mockStopInstance).toHaveBeenCalledWith("i-stop"));
+    expect(mockRebootInstance).toHaveBeenCalledWith("i-stop");
+  });
+
+  it("terminates an instance from the list", async () => {
+    const user = userEvent.setup();
+    mockInstances.mockReturnValue({ data: { instances: [{ id: "i-term", state: "running", instanceType: "t2.micro" }], total: 1 }, isLoading: false, isError: false, error: null });
+    render(<EC2InstanceList onSelect={vi.fn()} />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /Delete i-term/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickLastButton(user, /^Delete$/i);
+    await waitFor(() => expect(mockTerminateInstance).toHaveBeenCalledWith("i-term"));
+  });
+
+  it("filters instances by ID", async () => {
+    mockInstances.mockReturnValue({ data: { instances: [{ id: "i-alpha", state: "running", instanceType: "t2.micro" }, { id: "i-beta", state: "stopped", instanceType: "t2.micro" }], total: 2 }, isLoading: false, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<EC2InstanceList onSelect={vi.fn()} />, { wrapper: createWrapper() });
+    const filterInput = screen.getByPlaceholderText("Find instances by ID");
+    await user.type(filterInput, "i-alpha");
+    await waitFor(() => expect(screen.queryByText("i-beta")).toBeNull());
+    expect(screen.getByText("i-alpha")).toBeTruthy();
+  });
+
+  it("cancels and escapes the launch modal", async () => {
+    const user = userEvent.setup();
+    mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
+    render(<EC2InstanceList onSelect={vi.fn()} />, { wrapper: createWrapper() });
+    await clickButton(user, /Create Instance/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("ami-xxx")).toBeTruthy());
+    await clickInDialog(user, "Launch Instance", /^Cancel$/i);
+    expect(mockRunInstance).not.toHaveBeenCalled();
+    await clickButton(user, /Create Instance/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("ami-xxx")).toBeTruthy());
+    dismissModalWithEscape();
+    expect(mockRunInstance).not.toHaveBeenCalled();
+  });
+
+  it("closes the launch modal on success", async () => {
+    const user = userEvent.setup();
+    let onSuccessRan = false;
+    mockRunInstance.mockImplementation((_args: any, opts: any) => { if (opts?.onSuccess) { onSuccessRan = true; opts.onSuccess(); } });
+    mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
+    render(<EC2InstanceList onSelect={vi.fn()} />, { wrapper: createWrapper() });
+    await clickButton(user, /Create Instance/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("ami-xxx")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("ami-xxx"), "ami-custom");
+    await clickLastButton(user, /^Launch$/i);
+    await waitFor(() => expect(onSuccessRan).toBe(true));
+  });
+
+  it("changes the AMI via the Select in the launch modal", async () => {
+    const user = userEvent.setup();
+    mockAmis.mockReturnValue({ data: { images: [{ id: "ami-0abc", name: "A", platform: "Linux", architecture: "x86_64" }, { id: "ami-0def", name: "B", platform: "Linux", architecture: "x86_64" }], total: 2 }, isLoading: false });
+    mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
+    render(<EC2InstanceList onSelect={vi.fn()} />, { wrapper: createWrapper() });
+    await clickButton(user, /Create Instance/i);
+    await waitFor(() => expect(screen.getAllByText(/ami-0abc/).length).toBeGreaterThan(0));
+    await pickSelectOption(user, /ami-0abc/, /ami-0def/);
+    await clickLastButton(user, /^Launch$/i);
+    await waitFor(() => expect(mockRunInstance).toHaveBeenCalled());
+    expect((mockRunInstance.mock.calls[0][0] as any).imageId).toBe("ami-0def");
+  });
+
+  it("types an AMI id in the fallback input", async () => {
+    const user = userEvent.setup();
+    mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
+    render(<EC2InstanceList onSelect={vi.fn()} />, { wrapper: createWrapper() });
+    await clickButton(user, /Create Instance/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("ami-xxx")).toBeTruthy());
+    const amiInput = screen.getByPlaceholderText("ami-xxx");
+    await user.clear(amiInput);
+    await user.type(amiInput, "ami-custom");
+    await clickLastButton(user, /^Launch$/i);
+    await waitFor(() => expect(mockRunInstance).toHaveBeenCalled());
+    expect((mockRunInstance.mock.calls[0][0] as any).imageId).toBe("ami-custom");
+  });
+
+  it("types the instance type in the launch modal", async () => {
+    const user = userEvent.setup();
+    mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
+    render(<EC2InstanceList onSelect={vi.fn()} />, { wrapper: createWrapper() });
+    await clickButton(user, /Create Instance/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("t3.micro")).toBeTruthy());
+    const typeInput = screen.getByDisplayValue("t3.micro");
+    await user.clear(typeInput);
+    await user.type(typeInput, "t2.large");
+    await clickLastButton(user, /^Launch$/i);
+    await waitFor(() => expect(mockRunInstance).toHaveBeenCalled());
+    expect((mockRunInstance.mock.calls[0][0] as any).instanceType).toBe("t2.large");
+  });
+});
+
+// ─── Instance Detail — actions ─────────────────────────
+
+describe("EC2InstanceDetail — actions", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setupDefaults();
+    mockInstances.mockReturnValue({ data: { instances: [{ id: "i-det", state: "running", instanceType: "t2.micro" }], total: 1 }, isLoading: false, isError: false, error: null });
+    mockInstanceDetail.mockReturnValue({ data: { id: "i-det", state: "running", instanceType: "t2.micro", privateIp: "10.0.0.1", publicIp: "54.0.0.1", vpcId: "vpc-1", subnetId: "subnet-1", keyName: "my-key", imageId: "ami-0abc", availabilityZone: "us-east-1a", architecture: "x86_64", platform: "Linux", launchTime: "2024-01-01T00:00:00Z", iamInstanceProfile: null, ebsOptimized: false, monitoring: "disabled", rootDeviceName: "/dev/xvda", rootDeviceType: "ebs" }, isLoading: false, isError: false, error: null });
+  });
+
+  it("opens the terminal modal via Connect and dismisses with Escape", async () => {
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Instances/i);
+    await clickButton(user, /i-det/i);
+    await waitFor(() => expect(screen.getByText("Connect")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /^Connect$/i }));
+    await waitFor(() => expect(screen.getByText("Mocked Terminal")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Close Terminal/i }));
+    await waitFor(() => {
+      const dialog = dialogOf("Terminal — i-det").closest('[role="dialog"]') as HTMLElement;
+      expect(dialog.className).toContain("hidden");
+    });
+    // Reopen and dismiss with Escape to cover the modal onDismiss arrow
+    await user.click(screen.getByRole("button", { name: /^Connect$/i }));
+    await waitFor(() => expect(screen.getByText("Mocked Terminal")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => {
+      const dialog = dialogOf("Terminal — i-det").closest('[role="dialog"]') as HTMLElement;
+      expect(dialog.className).toContain("hidden");
+    });
+  });
+
+  it("starts a stopped instance from the detail view", async () => {
+    const user = userEvent.setup();
+    mockInstanceDetail.mockReturnValue({ data: { id: "i-det-s", state: "stopped", instanceType: "t2.micro" }, isLoading: false, isError: false, error: null });
+    mockInstances.mockReturnValue({ data: { instances: [{ id: "i-det-s", state: "stopped", instanceType: "t2.micro" }], total: 1 }, isLoading: false, isError: false, error: null });
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Instances/i);
+    await clickButton(user, /i-det-s/i);
+    await waitFor(() => expect(screen.getByText("Start")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /^Start$/i }));
+    await waitFor(() => expect(mockStartInstance).toHaveBeenCalledWith("i-det-s"));
+  });
+
+  it("stops and reboots a running instance from the detail view", async () => {
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Instances/i);
+    await clickButton(user, /i-det/i);
+    await waitFor(() => expect(screen.getByText("Stop")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /^Stop$/i }));
+    await user.click(screen.getByRole("button", { name: /^Reboot$/i }));
+    await waitFor(() => expect(mockStopInstance).toHaveBeenCalledWith("i-det"));
+    expect(mockRebootInstance).toHaveBeenCalledWith("i-det");
+  });
+
+  it("terminates an instance from the detail view and returns to the list", async () => {
+    const user = userEvent.setup();
+    mockTerminateInstance.mockResolvedValue(undefined);
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Instances/i);
+    await clickButton(user, /i-det/i);
+    await waitFor(() => expect(screen.getByText("Connect")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Delete i-det/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickLastButton(user, /^Delete$/i);
+    await waitFor(() => expect(mockTerminateInstance).toHaveBeenCalledWith("i-det"));
+    await waitFor(() => expect(screen.getByText("Create Instance")).toBeTruthy());
+  });
+});
+
+// ─── VPC Extras ────────────────────────────────────────
+
+describe("EC2VpcList/Detail — extras", () => {
+  beforeEach(() => { vi.clearAllMocks(); setupDefaults(); });
+
+  it("filters VPCs by ID", async () => {
+    mockVpcs.mockReturnValue({ data: { vpcs: [{ id: "vpc-a", state: "available", cidrBlock: "10.0.0.0/16", isDefault: false, instanceTenancy: "default" }, { id: "vpc-b", state: "available", cidrBlock: "10.1.0.0/16", isDefault: false, instanceTenancy: "default" }], total: 2 }, isLoading: false, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /VPCs/i);
+    await waitFor(() => expect(screen.getByText("vpc-a")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("Find VPCs by ID"), "vpc-b");
+    await waitFor(() => expect(screen.queryByText("vpc-a")).toBeNull());
+  });
+
+  it("creates a VPC with a custom CIDR and closes on success", async () => {
+    const user = userEvent.setup();
+    let onSuccessRan = false;
+    mockCreateVpc.mockImplementation((_args: any, opts: any) => { if (opts?.onSuccess) { onSuccessRan = true; opts.onSuccess(); } });
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /VPCs/i);
+    await clickButton(user, /Create VPC/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("10.0.0.0/16")).toBeTruthy());
+    const cidrInput = screen.getByDisplayValue("10.0.0.0/16");
+    await user.clear(cidrInput);
+    await user.type(cidrInput, "172.16.0.0/16");
+    await clickLastButton(user, /^Create$/i);
+    await waitFor(() => expect(onSuccessRan).toBe(true));
+    expect(mockCreateVpc.mock.calls[0][0]).toEqual({ cidrBlock: "172.16.0.0/16" });
+  });
+
+  it("cancels and escapes the create VPC modal", async () => {
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /VPCs/i);
+    await clickButton(user, /Create VPC/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("10.0.0.0/16")).toBeTruthy());
+    await clickInDialog(user, "Create VPC", /^Cancel$/i);
+    expect(mockCreateVpc).not.toHaveBeenCalled();
+    await clickButton(user, /Create VPC/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("10.0.0.0/16")).toBeTruthy());
+    dismissModalWithEscape();
+    expect(mockCreateVpc).not.toHaveBeenCalled();
+  });
+
+  it("deletes a non-default VPC from the detail view and returns to the list", async () => {
+    const user = userEvent.setup();
+    mockVpcs.mockReturnValue({ data: { vpcs: [{ id: "vpc-del-d", state: "available", cidrBlock: "10.0.0.0/16", isDefault: false, instanceTenancy: "default" }], total: 1 }, isLoading: false, isError: false, error: null });
+    mockVpc.mockReturnValue({ data: { id: "vpc-del-d", state: "available", cidrBlock: "10.0.0.0/16", isDefault: false, instanceTenancy: "default" }, isLoading: false, isError: false, error: null });
+    mockDeleteVpc.mockResolvedValue(undefined);
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /VPCs/i);
+    await clickButton(user, /vpc-del-d/i);
+    await waitFor(() => expect(screen.getByText("Back to VPCs")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Delete vpc-del-d/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickLastButton(user, /^Delete$/i);
+    await waitFor(() => expect(mockDeleteVpc).toHaveBeenCalledWith("vpc-del-d"));
+    await waitFor(() => expect(screen.queryByText("Back to VPCs")).toBeNull());
+  });
+});
+
+// ─── Subnet Extras ─────────────────────────────────────
+
+describe("EC2SubnetList — extras", () => {
+  beforeEach(() => { vi.clearAllMocks(); setupDefaults(); });
+
+  it("filters subnets by ID", async () => {
+    mockSubnets.mockReturnValue({ data: { subnets: [{ id: "subnet-a", vpcId: "vpc-1", cidrBlock: "10.0.1.0/24", availabilityZone: "us-east-1a", state: "available", availableIpCount: 10, mapPublicIpOnLaunch: false }, { id: "subnet-b", vpcId: "vpc-1", cidrBlock: "10.0.2.0/24", availabilityZone: "us-east-1b", state: "available", availableIpCount: 10, mapPublicIpOnLaunch: false }], total: 2 }, isLoading: false, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Subnets/i);
+    await waitFor(() => expect(screen.getByText("subnet-a")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("Find subnets by ID"), "subnet-b");
+    await waitFor(() => expect(screen.queryByText("subnet-a")).toBeNull());
+  });
+
+  it("creates a subnet with CIDR and AZ and closes on success", async () => {
+    const user = userEvent.setup();
+    let onSuccessRan = false;
+    mockCreateSubnet.mockImplementation((_args: any, opts: any) => { if (opts?.onSuccess) { onSuccessRan = true; opts.onSuccess(); } });
+    mockVpcs.mockReturnValue({ data: { vpcs: [{ id: "vpc-1", cidrBlock: "10.0.0.0/16" }], total: 1 }, isLoading: false });
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Subnets/i);
+    await clickButton(user, /Create Subnet/i);
+    await waitFor(() => expect(screen.getByText(/Select a VPC/)).toBeTruthy());
+    await pickSelectOption(user, /Select a VPC/, /vpc-1/);
+    const cidrInput = screen.getByDisplayValue("10.0.1.0/24");
+    await user.clear(cidrInput);
+    await user.type(cidrInput, "10.0.5.0/24");
+    await user.type(screen.getByPlaceholderText("us-east-1a"), "us-east-1c");
+    await clickLastButton(user, /^Create$/i);
+    await waitFor(() => expect(onSuccessRan).toBe(true));
+    expect(mockCreateSubnet.mock.calls[0][0]).toMatchObject({ vpcId: "vpc-1", cidrBlock: "10.0.5.0/24", availabilityZone: "us-east-1c" });
+  });
+
+  it("cancels and escapes the create subnet modal", async () => {
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Subnets/i);
+    await clickButton(user, /Create Subnet/i);
+    await waitFor(() => expect(screen.getByText(/Select a VPC/)).toBeTruthy());
+    await clickInDialog(user, "Create Subnet", /^Cancel$/i);
+    expect(mockCreateSubnet).not.toHaveBeenCalled();
+    await clickButton(user, /Create Subnet/i);
+    await waitFor(() => expect(screen.getByText(/Select a VPC/)).toBeTruthy());
+    dismissModalWithEscape();
+    expect(mockCreateSubnet).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Security Group Extras ─────────────────────────────
+
+describe("EC2SecurityGroupList — extras", () => {
+  beforeEach(() => { vi.clearAllMocks(); setupDefaults(); });
+
+  it("filters security groups by name", async () => {
+    mockSecurityGroups.mockReturnValue({ data: { securityGroups: [{ id: "sg-a", name: "alpha", description: "d", vpcId: "vpc-1", inboundRules: [] }, { id: "sg-b", name: "beta", description: "d", vpcId: "vpc-1", inboundRules: [] }], total: 2 }, isLoading: false, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Security Groups/i);
+    await waitFor(() => expect(screen.getByText("alpha")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("Find groups by name"), "beta");
+    await waitFor(() => expect(screen.queryByText("alpha")).toBeNull());
+  });
+
+  it("creates a security group with description and VPC and closes on success", async () => {
+    const user = userEvent.setup();
+    let onSuccessRan = false;
+    mockCreateSecurityGroup.mockImplementation((_args: any, opts: any) => { if (opts?.onSuccess) { onSuccessRan = true; opts.onSuccess(); } });
+    mockVpcs.mockReturnValue({ data: { vpcs: [{ id: "vpc-sg", cidrBlock: "10.0.0.0/16" }], total: 1 }, isLoading: false });
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Security Groups/i);
+    await clickButton(user, /Create Security Group/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-sg")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-sg"), "web-sg");
+    await user.type(screen.getByPlaceholderText("Security group description"), "Web servers");
+    await pickSelectOption(user, /Default VPC/, /vpc-sg/);
+    await clickLastButton(user, /^Create$/i);
+    await waitFor(() => expect(onSuccessRan).toBe(true));
+    expect(mockCreateSecurityGroup.mock.calls[0][0]).toEqual({ groupName: "web-sg", description: "Web servers", vpcId: "vpc-sg" });
+  });
+
+  it("cancels and escapes the create security group modal", async () => {
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Security Groups/i);
+    await clickButton(user, /Create Security Group/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-sg")).toBeTruthy());
+    await clickInDialog(user, "Create Security Group", /^Cancel$/i);
+    expect(mockCreateSecurityGroup).not.toHaveBeenCalled();
+    await clickButton(user, /Create Security Group/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-sg")).toBeTruthy());
+    dismissModalWithEscape();
+    expect(mockCreateSecurityGroup).not.toHaveBeenCalled();
+  });
+
+  it("cancels and escapes the inbound rule modal", async () => {
+    const user = userEvent.setup();
+    mockSecurityGroups.mockReturnValue({ data: { securityGroups: [{ id: "sg-1", name: "my-sg", description: "desc", vpcId: "vpc-1", inboundRules: [] }], total: 1 }, isLoading: false, isError: false, error: null });
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Security Groups/i);
+    await waitFor(() => expect(screen.getByText("my-sg")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "Add rule" }));
+    await waitFor(() => expect(screen.getByText("Add Inbound Rule")).toBeTruthy());
+    await clickInDialog(user, "Add Inbound Rule", /^Cancel$/i);
+    expect(mockAuthorizeIngress).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Add rule" }));
+    await waitFor(() => expect(screen.getByText("Add Inbound Rule")).toBeTruthy());
+    dismissModalWithEscape();
+    expect(mockAuthorizeIngress).not.toHaveBeenCalled();
+  });
+
+  it("types rule fields and submits the add rule form", async () => {
+    const user = userEvent.setup();
+    mockSecurityGroups.mockReturnValue({ data: { securityGroups: [{ id: "sg-2", name: "my-sg", description: "desc", vpcId: "vpc-1", inboundRules: [] }], total: 1 }, isLoading: false, isError: false, error: null });
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Security Groups/i);
+    await waitFor(() => expect(screen.getByText("my-sg")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "Add rule" }));
+    await waitFor(() => expect(screen.getByText("Add Inbound Rule")).toBeTruthy());
+    mockAuthorizeIngress.mockImplementation((_args: any, opts: any) => opts?.onSuccess?.());
+    const dialog = dialogOf("Add Inbound Rule");
+    const protocol = within(dialog).getByPlaceholderText("tcp");
+    await user.clear(protocol);
+    await user.type(protocol, "udp");
+    const ports = within(dialog).getAllByRole("spinbutton");
+    await user.clear(ports[0]);
+    await user.type(ports[0], "80");
+    await user.clear(ports[1]);
+    await user.type(ports[1], "443");
+    const cidr = within(dialog).getByPlaceholderText("0.0.0.0/0");
+    await user.clear(cidr);
+    await user.type(cidr, "10.0.0.0/8");
+    await clickLastButton(user, /^Add$/i);
+    await waitFor(() => expect(mockAuthorizeIngress).toHaveBeenCalled());
+    expect(mockAuthorizeIngress.mock.calls[0][0]).toEqual({ groupId: "sg-2", ipProtocol: "udp", fromPort: 80, toPort: 443, cidrIp: "10.0.0.0/8" });
+  });
+});
+
+// ─── Key Pair Extras ───────────────────────────────────
+
+describe("EC2KeyPairList — extras", () => {
+  beforeEach(() => { vi.clearAllMocks(); setupDefaults(); });
+
+  it("filters key pairs by name", async () => {
+    mockKeyPairs.mockReturnValue({ data: { keyPairs: [{ name: "alpha", fingerprint: "fp", type: "rsa" }, { name: "beta", fingerprint: "fp", type: "rsa" }], total: 2 }, isLoading: false, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Key Pairs/i);
+    await waitFor(() => expect(screen.getByText("alpha")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("Find key pairs by name"), "beta");
+    await waitFor(() => expect(screen.queryByText("alpha")).toBeNull());
+  });
+
+  it("cancels and escapes the create key pair modal", async () => {
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Key Pairs/i);
+    await clickButton(user, /Create Key Pair/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-key")).toBeTruthy());
+    await clickInDialog(user, "Create Key Pair", /^Cancel$/i);
+    expect(mockCreateKeyPair).not.toHaveBeenCalled();
+    await clickButton(user, /Create Key Pair/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-key")).toBeTruthy());
+    dismissModalWithEscape();
+    expect(mockCreateKeyPair).not.toHaveBeenCalled();
+  });
+
+  it("selects the ED25519 key type when creating", async () => {
+    const user = userEvent.setup();
+    mockCreateKeyPair.mockReturnValue({ keyMaterial: "PEM" });
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Key Pairs/i);
+    await clickButton(user, /Create Key Pair/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-key")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-key"), "kp-ed");
+    await pickSelectOption(user, /^RSA$/, /ED25519/);
+    await clickLastButton(user, /^Create$/i);
+    await waitFor(() => expect(mockCreateKeyPair).toHaveBeenCalled());
+    expect(mockCreateKeyPair.mock.calls[0][0]).toEqual({ keyName: "kp-ed", keyType: "ed25519" });
+  });
+
+  it("dismisses the key material modal with Escape", async () => {
+    const user = userEvent.setup();
+    mockCreateKeyPair.mockImplementation((_d: any, opts: any) => opts?.onSuccess?.({ keyMaterial: "PEM-ESC" }));
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Key Pairs/i);
+    await clickButton(user, /Create Key Pair/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-key")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-key"), "kp-esc");
+    await clickLastButton(user, /^Create$/i);
+    await waitFor(() => expect(screen.getByText("Key Pair Created")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => {
+      const dialog = dialogOf("Key Pair Created").closest('[role="dialog"]') as HTMLElement;
+      expect(dialog.className).toContain("hidden");
+    });
+  });
+
+  it("cancels and escapes the import key pair modal", async () => {
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Key Pairs/i);
+    await clickButton(user, /Import Key Pair/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-imported-key")).toBeTruthy());
+    await clickInDialog(user, "Import Key Pair", /^Cancel$/i);
+    expect(mockImportKeyPair).not.toHaveBeenCalled();
+    await clickButton(user, /Import Key Pair/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-imported-key")).toBeTruthy());
+    dismissModalWithEscape();
+    expect(mockImportKeyPair).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Elastic IP Extras ─────────────────────────────────
+
+describe("EC2ElasticIpList — extras", () => {
+  beforeEach(() => { vi.clearAllMocks(); setupDefaults(); });
+
+  it("filters elastic IPs by address", async () => {
+    mockElasticIps.mockReturnValue({ data: { addresses: [{ allocationId: "eipalloc-1", publicIp: "1.2.3.4", privateIp: null, instanceId: null, domain: "vpc" }, { allocationId: "eipalloc-2", publicIp: "5.6.7.8", privateIp: null, instanceId: null, domain: "vpc" }], total: 2 }, isLoading: false, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Elastic IPs/i);
+    await waitFor(() => expect(screen.getByText("1.2.3.4")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("Find by IP"), "5.6.7.8");
+    await waitFor(() => expect(screen.queryByText("1.2.3.4")).toBeNull());
+  });
+
+  it("cancels and escapes the allocate elastic IP modal", async () => {
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Elastic IPs/i);
+    await clickButton(user, /Create Elastic IP/i);
+    await waitFor(() => expect(screen.getByText(/Allocate a new Elastic IP/)).toBeTruthy());
+    await clickInDialog(user, "Allocate Elastic IP", /^Cancel$/i);
+    expect(mockAllocateElasticIp).not.toHaveBeenCalled();
+    await clickButton(user, /Create Elastic IP/i);
+    await waitFor(() => expect(screen.getByText(/Allocate a new Elastic IP/)).toBeTruthy());
+    dismissModalWithEscape();
+    expect(mockAllocateElasticIp).not.toHaveBeenCalled();
+  });
+
+  it("allocates an elastic IP and closes on success", async () => {
+    const user = userEvent.setup();
+    let onSuccessRan = false;
+    mockAllocateElasticIp.mockImplementation((_args: any, opts: any) => { if (opts?.onSuccess) { onSuccessRan = true; opts.onSuccess(); } });
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Elastic IPs/i);
+    await clickButton(user, /Create Elastic IP/i);
+    await waitFor(() => expect(screen.getByText(/Allocate a new Elastic IP/)).toBeTruthy());
+    await clickInDialog(user, "Allocate Elastic IP", /^Allocate$/i);
+    await waitFor(() => expect(onSuccessRan).toBe(true));
+  });
+});
+
+// ─── Internet Gateway / Route Table / NAT Gateway Extras ─
+
+describe("EC2InternetGatewayList — extras", () => {
+  beforeEach(() => { vi.clearAllMocks(); setupDefaults(); });
+
+  it("cancels and escapes the create internet gateway modal", async () => {
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Internet Gateways/i);
+    await clickButton(user, /Create Internet Gateway/i);
+    await waitFor(() => expect(screen.getByText(/Creates an internet gateway/)).toBeTruthy());
+    await clickInDialog(user, "Create Internet Gateway", /^Cancel$/i);
+    expect(mockCreateInternetGateway).not.toHaveBeenCalled();
+    await clickButton(user, /Create Internet Gateway/i);
+    await waitFor(() => expect(screen.getByText(/Creates an internet gateway/)).toBeTruthy());
+    dismissModalWithEscape();
+    expect(mockCreateInternetGateway).not.toHaveBeenCalled();
+  });
+
+  it("creates an internet gateway and closes on success", async () => {
+    const user = userEvent.setup();
+    let onSuccessRan = false;
+    mockCreateInternetGateway.mockImplementation((_args: any, opts: any) => { if (opts?.onSuccess) { onSuccessRan = true; opts.onSuccess(); } });
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Internet Gateways/i);
+    await clickButton(user, /Create Internet Gateway/i);
+    await waitFor(() => expect(screen.getByText(/Creates an internet gateway/)).toBeTruthy());
+    await clickInDialog(user, "Create Internet Gateway", /^Create$/i);
+    await waitFor(() => expect(onSuccessRan).toBe(true));
+  });
+
+  it("cancels and escapes the attach internet gateway modal", async () => {
+    const user = userEvent.setup();
+    mockInternetGateways.mockReturnValue({ data: { internetGateways: [{ id: "igw-1", attachments: [], ownerId: "123" }], total: 1 }, isLoading: false, isError: false, error: null });
+    const user2 = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user2, /Internet Gateways/i);
+    await waitFor(() => expect(screen.getByText("igw-1")).toBeTruthy());
+    await user2.click(screen.getByRole("button", { name: "Attach to VPC" }));
+    await waitFor(() => expect(screen.getByText("Attach to VPC")).toBeTruthy());
+    await clickInDialog(user2, "Attach to VPC", /^Cancel$/i);
+    expect(mockAttachInternetGateway).not.toHaveBeenCalled();
+    await user2.click(screen.getByRole("button", { name: "Attach to VPC" }));
+    await waitFor(() => expect(screen.getByText("Attach to VPC")).toBeTruthy());
+    dismissModalWithEscape();
+    expect(mockAttachInternetGateway).not.toHaveBeenCalled();
+  });
+
+  it("attaches an internet gateway to a VPC and closes on success", async () => {
+    const user = userEvent.setup();
+    let onSuccessRan = false;
+    mockAttachInternetGateway.mockImplementation((_args: any, opts: any) => { if (opts?.onSuccess) { onSuccessRan = true; opts.onSuccess(); } });
+    mockInternetGateways.mockReturnValue({ data: { internetGateways: [{ id: "igw-att", attachments: [], ownerId: "123" }], total: 1 }, isLoading: false, isError: false, error: null });
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Internet Gateways/i);
+    await waitFor(() => expect(screen.getByText("igw-att")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "Attach to VPC" }));
+    await waitFor(() => expect(screen.getByText("Attach to VPC")).toBeTruthy());
+    await user.type(within(dialogOf("Attach to VPC")).getByPlaceholderText("vpc-xxx"), "vpc-9");
+    await clickInDialog(user, "Attach to VPC", /^Attach$/i);
+    await waitFor(() => expect(onSuccessRan).toBe(true));
+    expect(mockAttachInternetGateway.mock.calls[0][0]).toEqual({ id: "igw-att", vpcId: "vpc-9" });
+  });
+});
+
+describe("EC2RouteTableList — extras", () => {
+  beforeEach(() => { vi.clearAllMocks(); setupDefaults(); });
+
+  it("cancels and escapes the create route table modal", async () => {
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Route Tables/i);
+    await clickButton(user, /Create Route Table/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("vpc-xxx")).toBeTruthy());
+    await clickInDialog(user, "Create Route Table", /^Cancel$/i);
+    expect(mockCreateRouteTable).not.toHaveBeenCalled();
+    await clickButton(user, /Create Route Table/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("vpc-xxx")).toBeTruthy());
+    dismissModalWithEscape();
+    expect(mockCreateRouteTable).not.toHaveBeenCalled();
+  });
+
+  it("creates a route table and closes on success", async () => {
+    const user = userEvent.setup();
+    let onSuccessRan = false;
+    mockCreateRouteTable.mockImplementation((_args: any, opts: any) => { if (opts?.onSuccess) { onSuccessRan = true; opts.onSuccess(); } });
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Route Tables/i);
+    await clickButton(user, /Create Route Table/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("vpc-xxx")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("vpc-xxx"), "vpc-7");
+    await clickInDialog(user, "Create Route Table", /^Create$/i);
+    await waitFor(() => expect(onSuccessRan).toBe(true));
+    expect(mockCreateRouteTable.mock.calls[0][0]).toEqual({ vpcId: "vpc-7" });
+  });
+});
+
+describe("EC2NatGatewayList — extras", () => {
+  beforeEach(() => { vi.clearAllMocks(); setupDefaults(); });
+
+  it("cancels and escapes the create NAT gateway modal", async () => {
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /NAT Gateways/i);
+    await clickButton(user, /Create NAT Gateway/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("subnet-xxx")).toBeTruthy());
+    await clickInDialog(user, "Create NAT Gateway", /^Cancel$/i);
+    expect(mockCreateNatGateway).not.toHaveBeenCalled();
+    await clickButton(user, /Create NAT Gateway/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("subnet-xxx")).toBeTruthy());
+    dismissModalWithEscape();
+    expect(mockCreateNatGateway).not.toHaveBeenCalled();
+  });
+
+  it("creates a NAT gateway and closes on success", async () => {
+    const user = userEvent.setup();
+    let onSuccessRan = false;
+    mockCreateNatGateway.mockImplementation((_args: any, opts: any) => { if (opts?.onSuccess) { onSuccessRan = true; opts.onSuccess(); } });
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /NAT Gateways/i);
+    await clickButton(user, /Create NAT Gateway/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("subnet-xxx")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("subnet-xxx"), "subnet-3");
+    await user.type(screen.getByPlaceholderText("eipalloc-xxx"), "eipalloc-5");
+    await clickInDialog(user, "Create NAT Gateway", /^Create$/i);
+    await waitFor(() => expect(onSuccessRan).toBe(true));
+    expect(mockCreateNatGateway.mock.calls[0][0]).toEqual({ subnetId: "subnet-3", allocationId: "eipalloc-5" });
+  });
+});
+
+// ─── Volume Extras ─────────────────────────────────────
+
+describe("EC2VolumeList — extras", () => {
+  beforeEach(() => { vi.clearAllMocks(); setupDefaults(); });
+
+  it("cancels and escapes the create volume modal", async () => {
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Volumes/i);
+    await clickButton(user, /Create Volume/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("us-east-1a")).toBeTruthy());
+    await clickInDialog(user, "Create Volume", /^Cancel$/i);
+    expect(mockCreateVolume).not.toHaveBeenCalled();
+    await clickButton(user, /Create Volume/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("us-east-1a")).toBeTruthy());
+    dismissModalWithEscape();
+    expect(mockCreateVolume).not.toHaveBeenCalled();
+  });
+
+  it("selects a volume type when creating", async () => {
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Volumes/i);
+    await clickButton(user, /Create Volume/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("us-east-1a")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("us-east-1a"), "us-east-1a");
+    await pickSelectOption(user, /^GP2$/, /GP3/);
+    await clickLastButton(user, /^Create$/i);
+    await waitFor(() => expect(mockCreateVolume).toHaveBeenCalled());
+    expect(mockCreateVolume.mock.calls[0][0]).toMatchObject({ volumeType: "gp3" });
+  });
+
+  it("creates a volume and closes on success", async () => {
+    const user = userEvent.setup();
+    let onSuccessRan = false;
+    mockCreateVolume.mockImplementation((_args: any, opts: any) => { if (opts?.onSuccess) { onSuccessRan = true; opts.onSuccess(); } });
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Volumes/i);
+    await clickButton(user, /Create Volume/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("us-east-1a")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("us-east-1a"), "us-east-1a");
+    await clickLastButton(user, /^Create$/i);
+    await waitFor(() => expect(onSuccessRan).toBe(true));
+  });
+});
+
+// ─── Launch Template Extras ────────────────────────────
+
+describe("EC2LaunchTemplateList — create flow", () => {
+  beforeEach(() => { vi.clearAllMocks(); setupDefaults(); });
+
+  it("creates a launch template with all fields and closes on success", async () => {
+    const user = userEvent.setup();
+    let onSuccessRan = false;
+    mockCreateLaunchTemplate.mockImplementation((_args: any, opts: any) => { if (opts?.onSuccess) { onSuccessRan = true; opts.onSuccess(); } });
+    mockAmis.mockReturnValue({ data: { images: [{ id: "ami-lt0", name: "A", platform: "Linux", architecture: "x86_64" }, { id: "ami-lt1", name: "B", platform: "Linux", architecture: "x86_64" }], total: 2 }, isLoading: false });
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Launch Templates/i);
+    await clickButton(user, /Create Launch Template/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-template")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-template"), "web-template");
+    await pickSelectOption(user, /ami-lt0/, /ami-lt1/);
+    const typeInput = screen.getByDisplayValue("t3.micro");
+    await user.clear(typeInput);
+    await user.type(typeInput, "t2.large");
+    await user.type(screen.getByPlaceholderText("my-key"), "deploy-key");
+    await clickLastButton(user, /^Create$/i);
+    await waitFor(() => expect(onSuccessRan).toBe(true));
+    expect(mockCreateLaunchTemplate.mock.calls[0][0]).toMatchObject({ launchTemplateName: "web-template", imageId: "ami-lt1", instanceType: "t2.large", keyName: "deploy-key" });
+  });
+
+  it("types an AMI id in the fallback input when catalog is empty", async () => {
+    const user = userEvent.setup();
+    mockCreateLaunchTemplate.mockReturnValue({});
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Launch Templates/i);
+    await clickButton(user, /Create Launch Template/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("ami-xxx")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-template"), "tpl");
+    const amiInput = screen.getByPlaceholderText("ami-xxx");
+    await user.clear(amiInput);
+    await user.type(amiInput, "ami-custom");
+    await clickLastButton(user, /^Create$/i);
+    await waitFor(() => expect(mockCreateLaunchTemplate).toHaveBeenCalled());
+    expect(mockCreateLaunchTemplate.mock.calls[0][0]).toMatchObject({ imageId: "ami-custom" });
+  });
+
+  it("cancels and escapes the create launch template modal", async () => {
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Launch Templates/i);
+    await clickButton(user, /Create Launch Template/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-template")).toBeTruthy());
+    await clickInDialog(user, "Create Launch Template", /^Cancel$/i);
+    expect(mockCreateLaunchTemplate).not.toHaveBeenCalled();
+    await clickButton(user, /Create Launch Template/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-template")).toBeTruthy());
+    dismissModalWithEscape();
+    expect(mockCreateLaunchTemplate).not.toHaveBeenCalled();
+  });
+
+  it("deletes a launch template from the list", async () => {
+    const user = userEvent.setup();
+    mockLaunchTemplates.mockReturnValue({ data: { launchTemplates: [{ id: "lt-1", name: "web-template", defaultVersion: 1, latestVersion: 2, createdAt: "2024-01-01" }], total: 1 }, isLoading: false, isError: false, error: null });
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Launch Templates/i);
+    await waitFor(() => expect(screen.getByText("web-template")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Delete web-template/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickLastButton(user, /^Delete$/i);
+    await waitFor(() => expect(mockDeleteLaunchTemplate).toHaveBeenCalledWith("lt-1"));
+  });
+});
+
+// ─── Read-only list filters ────────────────────────────
+
+describe("read-only lists — filters", () => {
+  beforeEach(() => { vi.clearAllMocks(); setupDefaults(); });
+
+  it("filters AMIs by ID or name", async () => {
+    mockAmis.mockReturnValue({ data: { images: [{ id: "ami-1", name: "alpha", description: "d", architecture: "x86_64", state: "available" }, { id: "ami-2", name: "beta", description: "d", architecture: "x86_64", state: "available" }], total: 2 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /AMIs/i);
+    await waitFor(() => expect(screen.getByText("alpha")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("Find AMIs by ID or name"), "beta");
+    await waitFor(() => expect(screen.queryByText("alpha")).toBeNull());
+  });
+
+  it("filters network interfaces by ID", async () => {
+    mockNetworkInterfaces.mockReturnValue({ data: { networkInterfaces: [{ id: "eni-1", vpcId: "vpc-1", subnetId: "subnet-1", privateIp: "10.0.0.1", status: "in-use", instanceId: null, description: null }, { id: "eni-2", vpcId: "vpc-1", subnetId: "subnet-1", privateIp: "10.0.0.2", status: "in-use", instanceId: null, description: null }], total: 2 }, isLoading: false, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Network Interfaces/i);
+    await waitFor(() => expect(screen.getByText("eni-1")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("Find by ID"), "eni-2");
+    await waitFor(() => expect(screen.queryByText("eni-1")).toBeNull());
+  });
+
+  it("filters flow logs by resource ID", async () => {
+    mockFlowLogs.mockReturnValue({ data: { flowLogs: [{ flowLogId: "fl-1", resourceId: "vpc-1", resourceType: "VPC", trafficType: "ALL", logDestinationType: "s3", flowLogStatus: "ACTIVE" }, { flowLogId: "fl-2", resourceId: "vpc-2", resourceType: "VPC", trafficType: "ALL", logDestinationType: "s3", flowLogStatus: "ACTIVE" }], total: 2 }, isLoading: false, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Flow Logs/i);
+    await waitFor(() => expect(screen.getByText("fl-1")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("Find by resource ID"), "fl-2");
+    await waitFor(() => expect(screen.queryByText("fl-1")).toBeNull());
+  });
+
+  it("filters network ACLs by ID", async () => {
+    mockNetworkAcls.mockReturnValue({ data: { networkAcls: [{ networkAclId: "acl-1", vpcId: "vpc-1", isDefault: false, entries: [], associations: [] }, { networkAclId: "acl-2", vpcId: "vpc-1", isDefault: false, entries: [], associations: [] }], total: 2 }, isLoading: false, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Network ACLs/i);
+    await waitFor(() => expect(screen.getByText("acl-1")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("Find by ACL ID"), "acl-2");
+    await waitFor(() => expect(screen.queryByText("acl-1")).toBeNull());
+  });
+});
+
+// ─── Flow Log Extras ───────────────────────────────────
+
+describe("EC2FlowLogList — extras", () => {
+  beforeEach(() => { vi.clearAllMocks(); setupDefaults(); });
+
+  it("cancels and escapes the create flow log modal", async () => {
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Flow Logs/i);
+    await clickButton(user, /Create Flow Log/i);
+    await waitFor(() => expect(screen.getByText(/Select resource/)).toBeTruthy());
+    await clickInDialog(user, "Create Flow Log", /^Cancel$/i);
+    expect(mockCreateFlowLog).not.toHaveBeenCalled();
+    await clickButton(user, /Create Flow Log/i);
+    await waitFor(() => expect(screen.getByText(/Select resource/)).toBeTruthy());
+    dismissModalWithEscape();
+    expect(mockCreateFlowLog).not.toHaveBeenCalled();
+  });
+
+  it("creates a flow log with all selects and closes on success", async () => {
+    const user = userEvent.setup();
+    let onSuccessRan = false;
+    mockCreateFlowLog.mockImplementation((_args: any, opts: any) => { if (opts?.onSuccess) { onSuccessRan = true; opts.onSuccess(); } });
+    mockVpcs.mockReturnValue({ data: { vpcs: [{ id: "vpc-fl3", cidrBlock: "10.0.0.0/16" }], total: 1 }, isLoading: false });
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Flow Logs/i);
+    await clickButton(user, /Create Flow Log/i);
+    await waitFor(() => expect(screen.getByText(/Select resource/)).toBeTruthy());
+    await pickSelectOption(user, /Select resource/, /vpc-fl3/);
+    await pickSelectOption(user, /^VPC$/, /Subnet/);
+    await pickSelectOption(user, /^ALL$/, /ACCEPT/);
+    fireEvent.change(screen.getByPlaceholderText(/\$\{version\}/), { target: { value: "${version} ${account-id}" } });
+    await pickSelectOption(user, /600s/, /60s/);
+    await clickLastButton(user, /^Create$/i);
+    await waitFor(() => expect(onSuccessRan).toBe(true));
+    expect(mockCreateFlowLog.mock.calls[0][0]).toMatchObject({
+      resourceId: "vpc-fl3",
+      resourceType: "Subnet",
+      trafficType: "ACCEPT",
+      logFormat: "${version} ${account-id}",
+      maxAggregationInterval: 60,
+    });
+  });
+});
+
+// ─── Network ACL Extras ────────────────────────────────
+
+describe("EC2NetworkAclList — extras", () => {
+  beforeEach(() => { vi.clearAllMocks(); setupDefaults(); });
+
+  it("cancels and escapes the create network ACL modal", async () => {
+    const user = userEvent.setup();
+    mockVpcs.mockReturnValue({ data: { vpcs: [{ id: "vpc-1", cidrBlock: "10.0.0.0/16" }], total: 1 }, isLoading: false });
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Network ACLs/i);
+    await clickButton(user, /Create Network ACL/i);
+    await waitFor(() => expect(screen.getByText(/Select a VPC/)).toBeTruthy());
+    await clickInDialog(user, "Create Network ACL", /^Cancel$/i);
+    expect(mockCreateNetworkAcl).not.toHaveBeenCalled();
+    await clickButton(user, /Create Network ACL/i);
+    await waitFor(() => expect(screen.getByText(/Select a VPC/)).toBeTruthy());
+    dismissModalWithEscape();
+    expect(mockCreateNetworkAcl).not.toHaveBeenCalled();
+  });
+
+  it("creates a network ACL and closes on success", async () => {
+    const user = userEvent.setup();
+    let onSuccessRan = false;
+    mockCreateNetworkAcl.mockImplementation((_args: any, opts: any) => { if (opts?.onSuccess) { onSuccessRan = true; opts.onSuccess(); } });
+    mockVpcs.mockReturnValue({ data: { vpcs: [{ id: "vpc-acl", cidrBlock: "10.0.0.0/16" }], total: 1 }, isLoading: false });
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Network ACLs/i);
+    await clickButton(user, /Create Network ACL/i);
+    await waitFor(() => expect(screen.getByText(/Select a VPC/)).toBeTruthy());
+    await pickSelectOption(user, /Select a VPC/, /vpc-acl/);
+    await clickInDialog(user, "Create Network ACL", /^Create$/i);
+    await waitFor(() => expect(onSuccessRan).toBe(true));
+    expect(mockCreateNetworkAcl.mock.calls[0][0]).toEqual({ vpcId: "vpc-acl" });
+  });
+
+  it("cancels and escapes the add rule modal", async () => {
+    const user = userEvent.setup();
+    mockNetworkAcls.mockReturnValue({ data: { networkAcls: [{ networkAclId: "acl-c", id: "acl-c", vpcId: "vpc-1", isDefault: false, entries: [], associations: [] }], total: 1 }, isLoading: false, isError: false, error: null });
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Network ACLs/i);
+    await waitFor(() => expect(screen.getByText("vpc-1")).toBeTruthy());
+    await clickButton(user, /View rules for acl-c/i);
+    await clickButton(user, /Add Inbound Rule/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("100")).toBeTruthy());
+    await clickInDialog(user, "Add Inbound Rule", /^Cancel$/i);
+    expect(mockCreateAclEntry).not.toHaveBeenCalled();
+    await clickButton(user, /Add Inbound Rule/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("100")).toBeTruthy());
+    dismissModalWithEscape();
+    expect(mockCreateAclEntry).not.toHaveBeenCalled();
+  });
+
+  it("selects a protocol in the add rule modal", async () => {
+    const user = userEvent.setup();
+    mockCreateAclEntry.mockImplementation((_params: any, opts?: any) => opts?.onSuccess?.());
+    mockNetworkAcls.mockReturnValue({ data: { networkAcls: [{ networkAclId: "acl-proto2", id: "acl-proto2", vpcId: "vpc-1", isDefault: false, entries: [], associations: [] }], total: 1 }, isLoading: false, isError: false, error: null });
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Network ACLs/i);
+    await waitFor(() => expect(screen.getByText("vpc-1")).toBeTruthy());
+    await clickButton(user, /View rules for acl-proto2/i);
+    await clickButton(user, /Add Inbound Rule/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("100")).toBeTruthy());
+    await pickSelectOption(user, /^TCP$/, /UDP/);
+    await clickButton(user, /Add Rule/i);
+    await waitFor(() => {
+      expect(mockCreateAclEntry).toHaveBeenCalledWith(
+        expect.objectContaining({ aclId: "acl-proto2", protocol: "17" }),
+        expect.any(Object)
+      );
+    });
+  });
+
+  it("deletes a non-default network ACL", async () => {
+    const user = userEvent.setup();
+    mockNetworkAcls.mockReturnValue({ data: { networkAcls: [{ networkAclId: "acl-del", id: "acl-del", vpcId: "vpc-1", isDefault: false, entries: [], associations: [] }], total: 1 }, isLoading: false, isError: false, error: null });
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Network ACLs/i);
+    await waitFor(() => expect(screen.getByText("acl-del")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Delete acl-del/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickLastButton(user, /^Delete$/i);
+    await waitFor(() => expect(mockDeleteNetworkAcl).toHaveBeenCalledWith("acl-del"));
+  });
+});
+
+// ─── CommandBox fallbacks ──────────────────────────────
+
+describe("EC2InstanceDetail — CommandBox fallbacks", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setupDefaults();
+    mockInstances.mockReturnValue({
+      data: { instances: [{ id: "i-fb", state: "running", instanceType: "t2.micro" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockInstanceDetail.mockReturnValue({
+      data: { id: "i-fb", state: "running", instanceType: "t2.micro", privateIp: "10.0.0.1", publicIp: "54.0.0.1", vpcId: "vpc-1", subnetId: "subnet-1", keyName: "my-key", imageId: "ami-0abc", availabilityZone: "us-east-1a", architecture: "x86_64", platform: "Linux", launchTime: "2024-01-01T00:00:00Z", iamInstanceProfile: null, ebsOptimized: false, monitoring: "disabled", rootDeviceName: "/dev/xvda", rootDeviceType: "ebs" },
+      isLoading: false, isError: false, error: null,
+    });
+  });
+
+  it("selects the input text when clipboard access is denied", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(new Error("denied"));
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Instances/i);
+    await clickButton(user, /i-fb/i);
+    await waitFor(() => expect(screen.getByText("Docker Exec")).toBeTruthy());
+    await user.click(screen.getAllByRole("button", { name: /Copy to clipboard/i })[0]);
+    await waitFor(() => expect(screen.getAllByRole("button", { name: /Copy to clipboard/i }).length).toBeGreaterThan(0));
+  });
+
+  it("selects the input text on focus", async () => {
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await goToTab(user, /Instances/i);
+    await clickButton(user, /i-fb/i);
+    await waitFor(() => expect(screen.getByText("Docker Exec")).toBeTruthy());
+    const input = screen.getAllByDisplayValue(/ssh/)[0];
+    await user.click(input);
+    expect(input).toBeTruthy();
   });
 });
