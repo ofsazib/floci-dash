@@ -138,7 +138,6 @@ function LambdaFunctionList({ onSelect }: { onSelect: (name: string) => void }) 
   }));
 
   function handleCreate() {
-    if (!form.name || !form.handler) return;
     createFunction.mutate(
       {
         name: form.name,
@@ -208,7 +207,7 @@ function LambdaFunctionList({ onSelect }: { onSelect: (name: string) => void }) 
             <FormField label="Runtime">
               <Select
                 selectedOption={{ label: form.runtime, value: form.runtime }}
-                onChange={({ detail }) => setForm(p => ({ ...p, runtime: detail.selectedOption.value || "nodejs22.x" }))}
+                onChange={({ detail }) => setForm(p => ({ ...p, runtime: detail.selectedOption.value! }))}
                 options={RUNTIMES}
               />
             </FormField>
@@ -407,7 +406,7 @@ function LambdaFunctionDetail({ name, onBack }: { name: string; onBack: () => vo
                 <span style={{ wordBreak: "break-all" }}>{codeSigningConfig.codeSigningConfigArn}</span>
               </Box>
               <Button variant="inline-icon" iconName="edit" onClick={() => {
-                  setCodeSigningArn(codeSigningConfig.codeSigningConfigArn || "");
+                  setCodeSigningArn(codeSigningConfig.codeSigningConfigArn!);
                   setShowCodeSigningModal(true);
                 }} />
                 <Button variant="inline-icon" iconName="remove" onClick={() => detachCodeSigningConfig.mutate(name)} />
@@ -505,7 +504,7 @@ function LambdaFunctionDetail({ name, onBack }: { name: string; onBack: () => vo
                 </Box>
                 <SpaceBetween direction="horizontal" size="xs">
                   <Button variant="normal" onClick={() => {
-                    setCodeSigningArn(codeSigningConfig.codeSigningConfigArn || "");
+                    setCodeSigningArn(codeSigningConfig.codeSigningConfigArn!);
                     setShowCodeSigningModal(true);
                   }}>
                     Attach different config
@@ -742,7 +741,7 @@ function LambdaFunctionDetail({ name, onBack }: { name: string; onBack: () => vo
             <FormField label="Auth type">
               <Select
                 selectedOption={{ label: urlForm.authType, value: urlForm.authType }}
-                onChange={({ detail }) => setUrlForm(p => ({ ...p, authType: detail.selectedOption.value || "NONE" }))}
+                onChange={({ detail }) => setUrlForm(p => ({ ...p, authType: detail.selectedOption.value! }))}
                 options={[
                   { label: "NONE", value: "NONE" },
                   { label: "AWS_IAM", value: "AWS_IAM" },
@@ -920,7 +919,6 @@ function LambdaLayerList() {
   }));
 
   function handleCreate() {
-    if (!form.name) return;
     createLayerVersion.mutate(
       {
         name: form.name,
@@ -989,7 +987,7 @@ function LambdaLayerList() {
             <FormField label="Compatible runtime">
               <Select
                 selectedOption={{ label: form.compatibleRuntimes, value: form.compatibleRuntimes }}
-                onChange={({ detail }) => setForm(p => ({ ...p, compatibleRuntimes: detail.selectedOption.value || "nodejs22.x" }))}
+                onChange={({ detail }) => setForm(p => ({ ...p, compatibleRuntimes: detail.selectedOption.value! }))}
                 options={RUNTIMES}
               />
             </FormField>

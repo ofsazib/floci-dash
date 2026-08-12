@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../test/helpers";
 import React from "react";
@@ -21,6 +21,7 @@ const mockFunctionUrl = vi.fn();
 const mockFunctionConcurrency = vi.fn();
 const mockCodeSigningConfig = vi.fn();
 const mockEventInvokeConfig = vi.fn();
+const mockDeleteFunctionUrlMutateAsync = vi.fn();
 
 /* ---- Mutable mock state for mutation error/loading control ---- */
 let mockCreateFunctionIsError = false;
@@ -69,7 +70,7 @@ vi.mock("../hooks/useLambda", () => ({
   useCreateLayerVersion: () => ({ mutate: mockCreateLayerVersionMutate, isPending: false, isError: mockCreateLayerVersionIsError, error: mockCreateLayerVersionError }),
   useCreateFunctionUrl: () => ({ mutate: mockCreateFunctionUrlMutate, isPending: false, isError: mockCreateFunctionUrlIsError, error: mockCreateFunctionUrlError }),
   useUpdateFunctionUrl: () => ({ mutate: mockUpdateFunctionUrlMutate, isPending: false, isError: false, error: null }),
-  useDeleteFunctionUrl: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useDeleteFunctionUrl: () => ({ mutateAsync: mockDeleteFunctionUrlMutateAsync, isPending: false }),
   useSetFunctionConcurrency: () => ({ mutate: mockSetConcurrencyMutate, isPending: false, isError: mockSetConcurrencyIsError, error: mockSetConcurrencyError }),
   useDeleteFunctionConcurrency: () => ({ mutate: mockDeleteConcurrencyMutate, isPending: false }),
   usePutEventInvokeConfig: () => ({ mutate: mockPutEventInvokeConfigMutate, isPending: false, isError: mockPutEventInvokeConfigIsError, error: mockPutEventInvokeConfigError }),
@@ -77,6 +78,33 @@ vi.mock("../hooks/useLambda", () => ({
 }));
 
 import LambdaPage from "./LambdaPage";
+
+/** Dispatch Escape to all Cloudscape modal dialogs (fires onDismiss). */
+function dismissModalWithEscape() {
+  document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+    fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27 });
+  });
+}
+
+/** Locate a modal dialog by its header text (Cloudscape modals stay mounted when hidden). */
+function dialogOf(headerText: string): HTMLElement {
+  const header = screen.getAllByText(headerText).find((h) => h.closest('[role="dialog"]'));
+  return header!.closest('[role="dialog"]') as HTMLElement;
+}
+
+/** Click a button inside the modal dialog with the given header. */
+async function clickInDialog(user: ReturnType<typeof userEvent.setup>, headerText: string, name: RegExp | string) {
+  await user.click(within(dialogOf(headerText)).getByRole("button", { name }));
+}
+
+/** Find the row-level buttons for a Config-tab section label (inline-icon buttons). */
+function rowButtons(labelText: string): NodeListOf<HTMLButtonElement> {
+  let node = screen.getByText(labelText) as HTMLElement;
+  while (node && !node.querySelector("button")) {
+    node = node.parentElement as HTMLElement;
+  }
+  return node.querySelectorAll("button");
+}
 
 describe("LambdaPage", () => {
   beforeEach(() => {
@@ -1067,7 +1095,9 @@ describe("LambdaPage", () => {
       expect(screen.getByText(/Are you sure/)).toBeTruthy();
     });
     await clickButton(user, /^Delete$/i);
-    // Verify mutation was attempted (the mock just returns a resolved promise)
+    await waitFor(() => {
+      expect(mockDeleteFunctionUrlMutateAsync).toHaveBeenCalledWith("my-function");
+    });
   });
 
   it("updates function URL from config tab edit icon", async () => {
@@ -1463,6 +1493,580 @@ describe("LambdaPage", () => {
     await clickButton(user, /^Create$/i, { last: true });
     // mutate should not be called since name is empty
     expect(mockCreateLayerVersionMutate).not.toHaveBeenCalled();
+  });
+
+  // ─── Breadcrumb & Table Branches ────────────────────────
+
+  it("navigates via breadcrumb", async () => {
+    const user = userEvent.setup();
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("link", { name: "Dashboard" }));
+    expect(window.location.hash).toContain("/");
+  });
+
+  it("formats last modified date in function table", () => {
+    mockFunctions.mockReturnValue({
+      data: { functions: [{ name: "dated-fn", runtime: "nodejs22.x", handler: "index.handler", state: "Active", timeout: 3, memorySize: 128, lastModified: "2024-01-01T00:00:00Z" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    expect(screen.getByText(/2024/)).toBeTruthy();
+  });
+
+  // ─── Create Function Modal Extras ───────────────────────
+
+  it("cancels and dismisses the create function modal", async () => {
+    const user = userEvent.setup();
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-function")).toBeTruthy());
+    await clickInDialog(user, "Create function", /Cancel/i);
+    expect(mockCreateFunctionMutate).not.toHaveBeenCalled();
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-function")).toBeTruthy());
+    dismissModalWithEscape();
+    expect(mockCreateFunctionMutate).not.toHaveBeenCalled();
+  });
+
+  it("creates function with description and cleared timeout/memory", async () => {
+    const user = userEvent.setup();
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-function")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-function"), "test-fn");
+    await user.type(screen.getByPlaceholderText("Optional description"), "My cool function");
+    await user.clear(screen.getByDisplayValue("3"));
+    await user.clear(screen.getByDisplayValue("128"));
+    await clickButton(user, /Create/i, { last: true });
+    expect(mockCreateFunctionMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "test-fn", description: "My cool function", timeout: 3, memorySize: 128 }),
+      expect.anything()
+    );
+  });
+
+  it("selects runtime in create function modal", async () => {
+    const user = userEvent.setup();
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-function")).toBeTruthy());
+    await user.click(within(dialogOf("Create function")).getByRole("button", { name: /nodejs22\.x/ }));
+    await user.click(screen.getByRole("option", { name: /nodejs20\.x/ }));
+    await user.type(screen.getByPlaceholderText("my-function"), "test-fn");
+    await clickButton(user, /Create/i, { last: true });
+    expect(mockCreateFunctionMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ runtime: "nodejs20.x" }),
+      expect.anything()
+    );
+  });
+
+  it("closes create function modal on success", async () => {
+    const user = userEvent.setup();
+    let onSuccessRan = false;
+    mockCreateFunctionMutate.mockImplementation((_args: any, opts: any) => {
+      if (opts?.onSuccess) { onSuccessRan = true; opts.onSuccess(); }
+    });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-function")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-function"), "test-fn");
+    await clickButton(user, /Create/i, { last: true });
+    expect(onSuccessRan).toBe(true);
+  });
+
+  // ─── Detail Config Fallbacks ────────────────────────────
+
+  it("shows N/A fallbacks when detail config fields are missing", async () => {
+    const user = userEvent.setup();
+    mockFunctionDetail.mockReturnValue({ data: { configuration: {} }, isLoading: false, isError: false, error: null });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getAllByText("N/A").length).toBeGreaterThanOrEqual(2);
+      expect(screen.getByText("Active")).toBeTruthy();
+    });
+  });
+
+  it("shows Failed state in detail config", async () => {
+    const user = userEvent.setup();
+    mockFunctionDetail.mockReturnValue({ data: { configuration: { state: "Failed" } }, isLoading: false, isError: false, error: null });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => expect(screen.getByText("Failed")).toBeTruthy());
+  });
+
+  it("shows invoke mode in Advanced tab", async () => {
+    const user = userEvent.setup();
+    mockFunctionUrl.mockReturnValue({ data: { url: "https://example.com/fn", authType: "NONE", invokeMode: "BUFFERED" } });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => expect(screen.getByText("Back to Functions")).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => expect(screen.getByText(/Invoke mode: BUFFERED/)).toBeTruthy());
+  });
+
+  it("updates function URL authType fallback from Advanced tab", async () => {
+    const user = userEvent.setup();
+    mockFunctionUrl.mockReturnValue({ data: { url: "https://example.com/adv" } });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => expect(screen.getByText("Back to Functions")).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => expect(screen.getByText(/Update URL config/i)).toBeTruthy());
+    await clickButton(user, /Update URL config/i);
+    await waitFor(() => expect(screen.getByText("Update function URL config")).toBeTruthy());
+    await clickButton(user, /^Update$/i, { last: true });
+    expect(mockUpdateFunctionUrlMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ authType: "NONE" }),
+      expect.anything()
+    );
+  });
+
+  it("deletes function from detail header", async () => {
+    const user = userEvent.setup();
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => expect(screen.getByText("Publish version")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Delete my-function/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() => {
+      expect(screen.queryByText("Publish version")).toBeNull();
+      expect(screen.getAllByText("Functions").length).toBeGreaterThan(0);
+    });
+  });
+
+  // ─── Sparse Tab Data ────────────────────────────────────
+
+  it("shows empty versions when data lacks the versions key", async () => {
+    const user = userEvent.setup();
+    mockLambdaVersions.mockReturnValue({ data: {}, isLoading: false });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => expect(screen.getByRole("tab", { name: /Versions/ })).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /Versions/ }));
+    await waitFor(() => expect(screen.getByText("No published versions")).toBeTruthy());
+  });
+
+  it("shows empty aliases when data lacks the aliases key", async () => {
+    const user = userEvent.setup();
+    mockLambdaAliases.mockReturnValue({ data: {}, isLoading: false });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => expect(screen.getByRole("tab", { name: /Aliases/ })).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /Aliases/ }));
+    await waitFor(() => expect(screen.getByText("No aliases")).toBeTruthy());
+  });
+
+  it("shows empty triggers when data lacks the eventSourceMappings key", async () => {
+    const user = userEvent.setup();
+    mockEventSourceMappings.mockReturnValue({ data: {}, isLoading: false });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => expect(screen.getByRole("tab", { name: /Triggers/ })).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /Triggers/ }));
+    await waitFor(() => expect(screen.getByText("No event source mappings")).toBeTruthy());
+  });
+
+  // ─── Invoke Payload ─────────────────────────────────────
+
+  it("invokes function with custom payload", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => expect(screen.getByRole("tab", { name: /Test/i })).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /Test/i }));
+    await waitFor(() => expect(screen.getByText("Invoke")).toBeTruthy());
+    const textarea = container.querySelector("textarea")!;
+    fireEvent.change(textarea, { target: { value: '{"key":"value"}' } });
+    await clickButton(user, /Invoke/i);
+    expect(mockInvokeFunctionMutate).toHaveBeenCalledWith({ name: "my-function", payload: '{"key":"value"}' });
+  });
+
+  // ─── Config Tab Inline Controls ─────────────────────────
+
+  it("edits and sets reserved concurrency from config tab", async () => {
+    const user = userEvent.setup();
+    mockFunctionConcurrency.mockReturnValue({ data: { reservedConcurrentExecutions: 5 } });
+    let onSuccessRan = false;
+    mockSetConcurrencyMutate.mockImplementation((_args: any, opts: any) => {
+      if (opts?.onSuccess) { onSuccessRan = true; opts.onSuccess(); }
+    });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => expect(screen.getByText("Back to Functions")).toBeTruthy());
+    await user.click(rowButtons("Reserved concurrency")[0]);
+    await waitFor(() => expect(within(dialogOf("Set reserved concurrency")).getByDisplayValue("5")).toBeTruthy());
+    await clickInDialog(user, "Set reserved concurrency", /^Set$/i);
+    expect(mockSetConcurrencyMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "my-function", reservedConcurrentExecutions: 5 }),
+      expect.anything()
+    );
+    expect(onSuccessRan).toBe(true);
+  });
+
+  it("removes reserved concurrency from config tab", async () => {
+    const user = userEvent.setup();
+    mockFunctionConcurrency.mockReturnValue({ data: { reservedConcurrentExecutions: 5 } });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => expect(screen.getByText("Back to Functions")).toBeTruthy());
+    await user.click(rowButtons("Reserved concurrency")[1]);
+    expect(mockDeleteConcurrencyMutate).toHaveBeenCalledWith("my-function");
+  });
+
+  it("cancels and dismisses the concurrency modal", async () => {
+    const user = userEvent.setup();
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => expect(screen.getByText("Back to Functions")).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await clickButton(user, /Set concurrency/i);
+    await waitFor(() => expect(screen.getByPlaceholderText(/e\.g\. 10/)).toBeTruthy());
+    await clickInDialog(user, "Set reserved concurrency", /Cancel/i);
+    expect(mockSetConcurrencyMutate).not.toHaveBeenCalled();
+    await clickButton(user, /Set concurrency/i);
+    await waitFor(() => expect(screen.getByPlaceholderText(/e\.g\. 10/)).toBeTruthy());
+    dismissModalWithEscape();
+    expect(mockSetConcurrencyMutate).not.toHaveBeenCalled();
+  });
+
+  it("creates function URL from config tab", async () => {
+    const user = userEvent.setup();
+    let onSuccessRan = false;
+    mockCreateFunctionUrlMutate.mockImplementation((_args: any, opts: any) => {
+      if (opts?.onSuccess) { onSuccessRan = true; opts.onSuccess(); }
+    });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => expect(screen.getByText("No URL configured")).toBeTruthy());
+    await user.click(rowButtons("Function URL")[0]);
+    await waitFor(() => expect(screen.getByText("Create function URL config")).toBeTruthy());
+    await clickInDialog(user, "Create function URL config", /^Create$/i);
+    expect(mockCreateFunctionUrlMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "my-function", authType: "NONE" }),
+      expect.anything()
+    );
+    expect(onSuccessRan).toBe(true);
+  });
+
+  it("updates function URL from config tab with fallbacks", async () => {
+    const user = userEvent.setup();
+    let onSuccessRan = false;
+    mockUpdateFunctionUrlMutate.mockImplementation((_args: any, opts: any) => {
+      if (opts?.onSuccess) { onSuccessRan = true; opts.onSuccess(); }
+    });
+    mockFunctionUrl.mockReturnValue({ data: { url: "https://example.com/fn" } });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => expect(screen.getByText("https://example.com/fn")).toBeTruthy());
+    await user.click(rowButtons("Function URL")[0]);
+    await waitFor(() => expect(screen.getByText("Update function URL config")).toBeTruthy());
+    await clickInDialog(user, "Update function URL config", /^Update$/i);
+    expect(mockUpdateFunctionUrlMutate).toHaveBeenCalledWith(
+      { name: "my-function", authType: "NONE", cors: { AllowMethods: ["*"] } },
+      expect.anything()
+    );
+    expect(onSuccessRan).toBe(true);
+  });
+
+  it("deletes function URL from the detail view button", async () => {
+    const user = userEvent.setup();
+    mockFunctionUrl.mockReturnValue({ data: { url: "https://example.com/fn" } });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => expect(screen.getByRole("tab", { name: /Advanced/i })).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => expect(screen.getByText("Update URL config")).toBeTruthy());
+    const deleteButtons = screen.getAllByRole("button", { name: /Delete my-function/i });
+    await user.click(deleteButtons[deleteButtons.length - 1]);
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() => expect(mockDeleteFunctionUrlMutateAsync).toHaveBeenCalledWith("my-function"));
+  });
+
+  it("changes auth type and CORS in URL modal", async () => {
+    const user = userEvent.setup();
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => expect(screen.getByText("No URL configured")).toBeTruthy());
+    await user.click(rowButtons("Function URL")[0]);
+    await waitFor(() => expect(screen.getByText("Create function URL config")).toBeTruthy());
+    const urlDialog = dialogOf("Create function URL config");
+    await user.click(within(urlDialog).getByRole("button", { name: /Auth type/ }));
+    await user.click(screen.getByRole("option", { name: /AWS_IAM/ }));
+    const corsInput = within(urlDialog).getByDisplayValue("*");
+    await user.clear(corsInput);
+    await user.type(corsInput, "GET, POST");
+    await clickInDialog(user, "Create function URL config", /^Create$/i);
+    expect(mockCreateFunctionUrlMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ authType: "AWS_IAM", cors: { AllowMethods: ["GET", "POST"] } }),
+      expect.anything()
+    );
+  });
+
+  it("creates URL without cors when CORS field is cleared", async () => {
+    const user = userEvent.setup();
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => expect(screen.getByText("No URL configured")).toBeTruthy());
+    await user.click(rowButtons("Function URL")[0]);
+    await waitFor(() => expect(screen.getByText("Create function URL config")).toBeTruthy());
+    await user.clear(within(dialogOf("Create function URL config")).getByDisplayValue("*"));
+    await clickInDialog(user, "Create function URL config", /^Create$/i);
+    expect((mockCreateFunctionUrlMutate.mock.calls[0][0] as any).cors).toBeUndefined();
+  });
+
+  it("cancels and dismisses the URL modal", async () => {
+    const user = userEvent.setup();
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => expect(screen.getByText("No URL configured")).toBeTruthy());
+    await user.click(rowButtons("Function URL")[0]);
+    await waitFor(() => expect(screen.getByText("Create function URL config")).toBeTruthy());
+    await clickInDialog(user, "Create function URL config", /Cancel/i);
+    expect(mockCreateFunctionUrlMutate).not.toHaveBeenCalled();
+    await user.click(rowButtons("Function URL")[0]);
+    await waitFor(() => expect(screen.getByText("Create function URL config")).toBeTruthy());
+    dismissModalWithEscape();
+    expect(mockCreateFunctionUrlMutate).not.toHaveBeenCalled();
+  });
+
+  it("edits event invoke config from config tab", async () => {
+    const user = userEvent.setup();
+    mockEventInvokeConfig.mockReturnValue({ data: { maximumRetryAttempts: 2, maximumEventAgeInSeconds: 3600 } });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => expect(screen.getByText("Back to Functions")).toBeTruthy());
+    await user.click(rowButtons("Event invoke config")[0]);
+    const eicDialog = dialogOf("Configure event invoke config");
+    expect(within(eicDialog).getByDisplayValue("2")).toBeTruthy();
+    expect(within(eicDialog).getByDisplayValue("3600")).toBeTruthy();
+  });
+
+  it("edits event invoke config with zero values from config tab", async () => {
+    const user = userEvent.setup();
+    mockEventInvokeConfig.mockReturnValue({ data: { maximumRetryAttempts: 0, maximumEventAgeInSeconds: 0 } });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => expect(screen.getByText("Back to Functions")).toBeTruthy());
+    await user.click(rowButtons("Event invoke config")[0]);
+    expect(within(dialogOf("Configure event invoke config")).getAllByDisplayValue("").length).toBe(2);
+  });
+
+  it("removes event invoke config from config tab", async () => {
+    const user = userEvent.setup();
+    mockEventInvokeConfig.mockReturnValue({ data: { maximumRetryAttempts: 2, maximumEventAgeInSeconds: 3600 } });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => expect(screen.getByText("Back to Functions")).toBeTruthy());
+    await user.click(rowButtons("Event invoke config")[1]);
+    expect(mockDeleteEventInvokeConfigMutate).toHaveBeenCalledWith("my-function");
+  });
+
+  it("adds event invoke config from config tab and saves", async () => {
+    const user = userEvent.setup();
+    let onSuccessRan = false;
+    mockPutEventInvokeConfigMutate.mockImplementation((_args: any, opts: any) => {
+      if (opts?.onSuccess) { onSuccessRan = true; opts.onSuccess(); }
+    });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => expect(screen.getByText("Back to Functions")).toBeTruthy());
+    await user.click(rowButtons("Event invoke config")[0]);
+    const eicDialog = dialogOf("Configure event invoke config");
+    const retryInput = within(eicDialog).getByDisplayValue("2");
+    await user.clear(retryInput);
+    await user.type(retryInput, "5");
+    const ageInput = within(eicDialog).getByDisplayValue("3600");
+    await user.clear(ageInput);
+    await user.type(ageInput, "7200");
+    await clickInDialog(user, "Configure event invoke config", /Save/i);
+    expect(mockPutEventInvokeConfigMutate).toHaveBeenCalledWith(
+      { name: "my-function", maximumRetryAttempts: 5, maximumEventAgeInSeconds: 7200 },
+      expect.anything()
+    );
+    expect(onSuccessRan).toBe(true);
+  });
+
+  it("cancels and dismisses the event invoke config modal", async () => {
+    const user = userEvent.setup();
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => expect(screen.getByText("Back to Functions")).toBeTruthy());
+    await user.click(rowButtons("Event invoke config")[0]);
+    await clickInDialog(user, "Configure event invoke config", /Cancel/i);
+    expect(mockPutEventInvokeConfigMutate).not.toHaveBeenCalled();
+    await user.click(rowButtons("Event invoke config")[0]);
+    dismissModalWithEscape();
+    expect(mockPutEventInvokeConfigMutate).not.toHaveBeenCalled();
+  });
+
+  it("edits event invoke config with zero values from Advanced tab", async () => {
+    const user = userEvent.setup();
+    mockEventInvokeConfig.mockReturnValue({ data: { maximumRetryAttempts: 0, maximumEventAgeInSeconds: 0 } });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => expect(screen.getByText("Back to Functions")).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => expect(screen.getByText(/Edit config/i)).toBeTruthy());
+    await clickButton(user, /Edit config/i);
+    expect(within(dialogOf("Configure event invoke config")).getAllByDisplayValue("").length).toBe(2);
+  });
+
+  it("attaches code signing config from config tab edit", async () => {
+    const user = userEvent.setup();
+    const arn = "arn:aws:lambda:us-east-1:000000000000:code-signing-config:csc-existing";
+    mockCodeSigningConfig.mockReturnValue({ data: { codeSigningConfigArn: arn } });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => expect(screen.getByText("Back to Functions")).toBeTruthy());
+    await user.click(rowButtons("Code signing config")[0]);
+    expect(within(dialogOf("Attach code signing config")).getByDisplayValue(arn)).toBeTruthy();
+  });
+
+  it("detaches code signing config from config tab", async () => {
+    const user = userEvent.setup();
+    mockCodeSigningConfig.mockReturnValue({ data: { codeSigningConfigArn: "arn:aws:lambda:us-east-1:000000000000:code-signing-config:csc-existing" } });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => expect(screen.getByText("Back to Functions")).toBeTruthy());
+    await user.click(rowButtons("Code signing config")[1]);
+    expect(mockDetachCodeSigningConfigMutate).toHaveBeenCalledWith("my-function");
+  });
+
+  it("attaches code signing config from config tab add and closes on success", async () => {
+    const user = userEvent.setup();
+    let onSuccessRan = false;
+    mockAttachCodeSigningConfigMutate.mockImplementation((_args: any, opts: any) => {
+      if (opts?.onSuccess) { onSuccessRan = true; opts.onSuccess(); }
+    });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => expect(screen.getByText("Back to Functions")).toBeTruthy());
+    await user.click(rowButtons("Code signing config")[0]);
+    await waitFor(() => expect(screen.getByPlaceholderText(/code-signing-config:csc/)).toBeTruthy());
+    await user.type(screen.getByPlaceholderText(/code-signing-config:csc/), "arn:aws:lambda:us-east-1:000000000000:code-signing-config:csc-001");
+    await clickInDialog(user, "Attach code signing config", /^Attach$/i);
+    expect(mockAttachCodeSigningConfigMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "my-function", codeSigningConfigArn: "arn:aws:lambda:us-east-1:000000000000:code-signing-config:csc-001" }),
+      expect.anything()
+    );
+    expect(onSuccessRan).toBe(true);
+  });
+
+  it("cancels and dismisses the code signing config modal", async () => {
+    const user = userEvent.setup();
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => expect(screen.getByText("Back to Functions")).toBeTruthy());
+    await user.click(rowButtons("Code signing config")[0]);
+    await clickInDialog(user, "Attach code signing config", /Cancel/i);
+    expect(mockAttachCodeSigningConfigMutate).not.toHaveBeenCalled();
+    await user.click(rowButtons("Code signing config")[0]);
+    dismissModalWithEscape();
+    expect(mockAttachCodeSigningConfigMutate).not.toHaveBeenCalled();
+  });
+
+  // ─── Layer Extras ───────────────────────────────────────
+
+  it("selects compatible runtime when creating a layer", async () => {
+    const user = userEvent.setup();
+    mockLambdaLayers.mockReturnValue({
+      data: { layers: [{ name: "my-layer", arn: "arn:aws:lambda::layer:my-layer:1", latestVersion: { version: 1 } }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Layers/i }));
+    await waitFor(() => expect(screen.getByText("my-layer")).toBeTruthy());
+    await clickButton(user, /^Create layer$/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-layer")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-layer"), "test-layer");
+    await user.click(within(dialogOf("Create layer version")).getByRole("button", { name: /nodejs22\.x/ }));
+    await user.click(screen.getByRole("option", { name: /nodejs20\.x/ }));
+    await clickButton(user, /^Create$/i, { last: true });
+    expect(mockCreateLayerVersionMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ compatibleRuntimes: ["nodejs20.x"] }),
+      expect.anything()
+    );
+  });
+
+  it("creates layer with empty description and license", async () => {
+    const user = userEvent.setup();
+    mockLambdaLayers.mockReturnValue({
+      data: { layers: [{ name: "my-layer", arn: "arn:aws:lambda::layer:my-layer:1", latestVersion: { version: 1 } }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Layers/i }));
+    await waitFor(() => expect(screen.getByText("my-layer")).toBeTruthy());
+    await clickButton(user, /^Create layer$/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-layer")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-layer"), "test-layer");
+    await clickButton(user, /^Create$/i, { last: true });
+    expect(mockCreateLayerVersionMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "test-layer", description: undefined, licenseInfo: undefined }),
+      expect.anything()
+    );
+  });
+
+  it("cancels and dismisses the create layer modal", async () => {
+    const user = userEvent.setup();
+    mockLambdaLayers.mockReturnValue({
+      data: { layers: [{ name: "my-layer", arn: "arn:aws:lambda::layer:my-layer:1", latestVersion: { version: 1 } }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Layers/i }));
+    await waitFor(() => expect(screen.getByText("my-layer")).toBeTruthy());
+    await clickButton(user, /^Create layer$/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-layer")).toBeTruthy());
+    await clickInDialog(user, "Create layer version", /Cancel/i);
+    expect(mockCreateLayerVersionMutate).not.toHaveBeenCalled();
+    await clickButton(user, /^Create layer$/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-layer")).toBeTruthy());
+    dismissModalWithEscape();
+    expect(mockCreateLayerVersionMutate).not.toHaveBeenCalled();
+  });
+
+  it("closes create layer modal on success", async () => {
+    const user = userEvent.setup();
+    let onSuccessRan = false;
+    mockCreateLayerVersionMutate.mockImplementation((_args: any, opts: any) => {
+      if (opts?.onSuccess) { onSuccessRan = true; opts.onSuccess(); }
+    });
+    mockLambdaLayers.mockReturnValue({
+      data: { layers: [{ name: "my-layer", arn: "arn:aws:lambda::layer:my-layer:1", latestVersion: { version: 1 } }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Layers/i }));
+    await waitFor(() => expect(screen.getByText("my-layer")).toBeTruthy());
+    await clickButton(user, /^Create layer$/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-layer")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-layer"), "test-layer");
+    await clickButton(user, /^Create$/i, { last: true });
+    expect(onSuccessRan).toBe(true);
+  });
+
+  it("filters layers by name", async () => {
+    const user = userEvent.setup();
+    mockLambdaLayers.mockReturnValue({
+      data: {
+        layers: [
+          { name: "alpha-layer", arn: "arn:aws:lambda::layer:alpha:1", latestVersion: { version: 1 } },
+          { name: "beta-layer", arn: "arn:aws:lambda::layer:beta:1", latestVersion: { version: 1 } },
+        ],
+        total: 2,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Layers/i }));
+    await waitFor(() => expect(screen.getByText("alpha-layer")).toBeTruthy());
+    const filterInput = screen.getByPlaceholderText("Find layers by name");
+    await user.type(filterInput, "alpha");
+    await waitFor(() => expect(screen.queryByText("beta-layer")).toBeNull());
+    expect(screen.getByText("alpha-layer")).toBeTruthy();
   });
 
 });
