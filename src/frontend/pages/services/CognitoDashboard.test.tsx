@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -172,6 +172,26 @@ vi.mock("../../hooks/useCognito", () => ({
 }));
 
 import { CognitoDashboard } from "./CognitoDashboard";
+
+// ─── Modal helpers ───────────────────────────────────────
+
+/** Fire Escape on every mounted Cloudscape dialog (they stay mounted when hidden). */
+function dismissModalWithEscape() {
+  document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+    fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27 });
+  });
+}
+
+/** Locate a modal dialog by its header text. */
+function dialogOf(headerText: string): HTMLElement {
+  const header = screen.getAllByText(headerText).find((h) => h.closest('[role="dialog"]'));
+  return header!.closest('[role="dialog"]') as HTMLElement;
+}
+
+/** Assert the modal with the given header is hidden (Cloudscape uses display:none). */
+function expectModalHidden(headerText: string) {
+  expect(dialogOf(headerText).className).toContain("hidden");
+}
 
 // ─── Setup ──────────────────────────────────────────────
 
@@ -1617,5 +1637,68 @@ describe("CognitoDashboard — undefined query data", () => {
     const { user } = await navToPool();
     await user.click(screen.getByRole("tab", { name: /App Clients/i }));
     await waitFor(() => expect(screen.getByText(/No app clients/i)).toBeTruthy());
+  });
+
+  it("picks a challenge name and session in Admin Respond to Challenge", async () => {
+    mockPools.mockReturnValue({
+      data: { userPools: [{ Id: "p1", Name: "pool", Status: "Enabled" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CognitoDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("pool"));
+    await user.click(screen.getByText("pool"));
+    await user.click(screen.getByRole("tab", { name: /Auth Flows/i }));
+    await waitFor(() => expect(screen.getByText("Authentication Flow Tester")).toBeTruthy());
+    await user.click(screen.getAllByText("initiate")[0]);
+    await waitFor(() => expect(screen.getAllByText("Admin Respond to Challenge").length).toBeGreaterThan(0));
+    await user.click(screen.getAllByText("Admin Respond to Challenge")[0]);
+    await user.type(screen.getByPlaceholderText("Client ID"), "client-1");
+    // Challenge name Select — pick SMS_MFA
+    await user.click(screen.getAllByText("NEW_PASSWORD_REQUIRED")[0]);
+    await waitFor(() => expect(screen.getAllByText("SMS_MFA").length).toBeGreaterThan(0));
+    await user.click(screen.getAllByText("SMS_MFA")[0]);
+    // Session input
+    await user.type(screen.getByPlaceholderText("Session string from previous challenge"), "sesh-123");
+    await user.click(screen.getByRole("button", { name: /Run Flow/i }));
+    await waitFor(() =>
+      expect(mockAdminRespondChallenge).toHaveBeenCalledWith(
+        expect.objectContaining({ challengeName: "SMS_MFA", session: "sesh-123" }),
+      ),
+    );
+  });
+
+  it("dismisses the Create Resource Server modal with Escape", async () => {
+    mockPools.mockReturnValue({
+      data: { userPools: [{ Id: "p1", Name: "pool", Status: "Enabled" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CognitoDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("pool"));
+    await user.click(screen.getByText("pool"));
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => expect(screen.getByText("Resource Servers")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Create Resource Server/i }));
+    await waitFor(() => expect(screen.getAllByText("Create Resource Server").length).toBeGreaterThanOrEqual(1));
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create Resource Server"));
+  });
+
+  it("dismisses the Add Custom Attributes modal with Escape", async () => {
+    mockPools.mockReturnValue({
+      data: { userPools: [{ Id: "p1", Name: "pool", Status: "Enabled" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CognitoDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("pool"));
+    await user.click(screen.getByText("pool"));
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => expect(screen.getByText("Resource Servers")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Add Custom Attribute/i }));
+    await waitFor(() => expect(screen.getAllByText("Add Custom Attributes").length).toBeGreaterThanOrEqual(1));
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Add Custom Attributes"));
   });
 });

@@ -142,6 +142,35 @@ describe("DynamoDBStreams", () => {
     });
   });
 
+  it("changes the shard iterator type", async () => {
+    mockStreams.mockReturnValue({
+      streams: [{
+        streamArn: "arn:aws:dynamodb:us-east-1:123:table/test-table/stream/abc",
+        tableName: "test-table",
+        streamLabel: "latest",
+      }],
+      total: 1,
+    });
+    detailState.data = {
+      streamArn: "arn:...",
+      streamStatus: "ENABLED",
+      streamViewType: "NEW_AND_OLD_IMAGES",
+      creationRequestDateTime: 1705000000,
+      keySchema: [{ attributeName: "id", keyType: "HASH" }],
+      shards: [{ shardId: "shard-1", sequenceNumberRange: { startingSequenceNumber: "100", endingSequenceNumber: "200" } }],
+    };
+    const user = userEvent.setup();
+    render(<DynamoDBStreams tableName="test-table" />, { wrapper: createWrapper() });
+    await clickButton(user, /View details/);
+    await waitFor(() => expect(screen.getByText("Poll Records")).toBeTruthy());
+    // The iterator-type select is the second raw <select> in the polling panel
+    const selects = document.querySelectorAll("select");
+    const iterSelect = selects[1] as HTMLSelectElement;
+    expect(iterSelect.value).toBe("TRIM_HORIZON");
+    fireEvent.change(iterSelect, { target: { value: "LATEST" } });
+    expect(iterSelect.value).toBe("LATEST");
+  });
+
   it("shows dash for missing stream detail fields", async () => {
     mockStreams.mockReturnValue({
       streams: [{

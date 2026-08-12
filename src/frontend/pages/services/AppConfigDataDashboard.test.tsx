@@ -149,4 +149,29 @@ describe("AppConfigDataDashboard", () => {
       expect(screen.getByText("(empty)")).toBeTruthy();
     });
   });
+
+  it("shows an error toast when starting a session fails", async () => {
+    mockStartSession.mockRejectedValue(new Error("Start boom"));
+    const user = userEvent.setup();
+    render(<AppConfigDataDashboard />, { wrapper: createWrapper() });
+    await user.type(screen.getByPlaceholderText("my-app"), "test-app");
+    await user.type(screen.getByPlaceholderText("prod"), "production");
+    await user.type(screen.getByPlaceholderText("profile-1"), "config-1");
+    await user.click(screen.getByRole("button", { name: /Start Session/i }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "Start boom"));
+  });
+
+  it("shows an error toast when fetching the latest configuration fails", async () => {
+    mockStartSession.mockResolvedValue({ initialConfigurationToken: "token-x" });
+    mockGetLatest.mockRejectedValue(new Error("Get boom"));
+    const user = userEvent.setup();
+    render(<AppConfigDataDashboard />, { wrapper: createWrapper() });
+    await user.type(screen.getByPlaceholderText("my-app"), "app");
+    await user.type(screen.getByPlaceholderText("prod"), "env");
+    await user.type(screen.getByPlaceholderText("profile-1"), "prof");
+    await user.click(screen.getByRole("button", { name: /Start Session/i }));
+    await waitFor(() => expect(screen.getByText("Get Latest Configuration")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Get Latest Configuration/i }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "Get boom"));
+  });
 });

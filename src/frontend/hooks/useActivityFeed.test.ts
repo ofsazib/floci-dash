@@ -74,6 +74,20 @@ describe("useActivityFeed", () => {
     expect(result.current.entries).toHaveLength(50);
   });
 
+  it("returns empty and recovers when stored data is invalid JSON", () => {
+    localStorage.setItem("floci-activity-feed", "{not-valid-json");
+    const { result } = renderHook(() => useActivityFeed());
+    act(() => {
+      result.current.addActivity({
+        action: "navigate",
+        service: "s3",
+        description: "Recovered from corrupt storage",
+      });
+    });
+    expect(result.current.entries).toHaveLength(1);
+    expect(result.current.entries[0].description).toBe("Recovered from corrupt storage");
+  });
+
   it("supports static addActivity/clearActivity", () => {
     addActivity({ action: "delete", service: "s3", resource: "bucket-1", description: "Deleted bucket" });
     const { result } = renderHook(() => useActivityFeed());

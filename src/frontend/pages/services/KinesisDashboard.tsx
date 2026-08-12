@@ -557,16 +557,6 @@ export function KinesisDashboard() {
           label: "Streams",
           content: (
             <>
-              {selectedStream && (
-                <Box margin={{ bottom: "s" }}>
-                  <Button iconName="arrow-left" onClick={() => {
-                    setSelectedStream(null);
-                    setActiveTab("streams");
-                  }}>
-                    Back to streams
-                  </Button>
-                </Box>
-              )}
               <ResourceTable
                 resourceName="Stream"
                 headerTitle="Kinesis Streams"

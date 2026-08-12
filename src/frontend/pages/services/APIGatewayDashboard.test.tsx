@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -46,6 +46,26 @@ vi.mock("../../hooks/useAPIGateway", () => ({
 }));
 
 import { APIGatewayDashboard } from "./APIGatewayDashboard";
+
+// ─── Modal helpers ───────────────────────────────────────
+
+/** Fire Escape on every mounted Cloudscape dialog (they stay mounted when hidden). */
+function dismissModalWithEscape() {
+  document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+    fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27 });
+  });
+}
+
+/** Locate a modal dialog by its header text. */
+function dialogOf(headerText: string): HTMLElement {
+  const header = screen.getAllByText(headerText).find((h) => h.closest('[role="dialog"]'));
+  return header!.closest('[role="dialog"]') as HTMLElement;
+}
+
+/** Assert the modal with the given header is hidden (Cloudscape uses display:none). */
+function expectModalHidden(headerText: string) {
+  expect(dialogOf(headerText).className).toContain("hidden");
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -328,5 +348,34 @@ describe("APIGatewayDashboard", () => {
     await waitFor(() => expect(screen.getByText(/Back to REST APIs/i)).toBeTruthy());
     await user.click(screen.getByText(/Back to REST APIs/i));
     await waitFor(() => expect(screen.getByText("my-api")).toBeTruthy());
+  });
+
+  it("dismisses the create modal with Escape", async () => {
+    const user = userEvent.setup();
+    render(<APIGatewayDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getAllByText("Create REST API").length).toBeGreaterThanOrEqual(1));
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create REST API"));
+  });
+
+  it("submits create with a description and closes on success", async () => {
+    mockCreateApi.mockImplementation((_payload: unknown, opts?: { onSuccess?: () => void }) => {
+      opts?.onSuccess?.();
+    });
+    const user = userEvent.setup();
+    render(<APIGatewayDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getAllByText("Create REST API").length).toBeGreaterThanOrEqual(1));
+    await user.type(screen.getByPlaceholderText("my-api"), "new-api");
+    await user.type(screen.getByLabelText(/Description/), "my description");
+    await clickButton(user, /^Create$/i, { last: true });
+    await waitFor(() => {
+      expect(mockCreateApi).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "new-api", description: "my description" }),
+        expect.any(Object),
+      );
+    });
+    await waitFor(() => expectModalHidden("Create REST API"));
   });
 });

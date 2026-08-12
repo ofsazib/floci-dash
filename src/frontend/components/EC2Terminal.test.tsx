@@ -155,4 +155,54 @@ describe("EC2Terminal", () => {
     });
     expect(lastWs).not.toBe(firstWs);
   });
+
+  it("sends a resize message when the window resizes", () => {
+    renderTerminal();
+    fireEvent(window, new Event("resize"));
+    expect(lastWs.send).toHaveBeenCalledWith(
+      JSON.stringify({ type: "resize", cols: 80, rows: 24 }),
+    );
+  });
+
+  it("handles resize through the ResizeObserver callback", () => {
+    renderTerminal();
+    const ResizeObserverCtor = (globalThis as any).ResizeObserver;
+    const cb = ResizeObserverCtor.mock.calls[0][0];
+    cb([{ contentRect: { width: 100, height: 50 } }]);
+    expect(lastWs.send).toHaveBeenCalledWith(
+      JSON.stringify({ type: "resize", cols: 80, rows: 24 }),
+    );
+  });
+
+  it("runs the post-connect fit and focus timers", async () => {
+    renderTerminal();
+    await act(async () => {
+      if (lastWs && lastWs.onopen) lastWs.onopen({});
+    });
+    await new Promise((r) => setTimeout(r, 250));
+  });
+
+  it("disconnects via the Disconnect button", async () => {
+    renderTerminal();
+    await act(async () => {
+      if (lastWs && lastWs.onopen) lastWs.onopen({});
+    });
+    await waitFor(() => expect(screen.getByText(/Connected —/)).toBeTruthy());
+    // Inline-icon buttons have no accessible name — first header button is Disconnect
+    const btns = screen.getAllByRole("button");
+    fireEvent.click(btns[0]);
+    expect(lastWs.close).toHaveBeenCalled();
+  });
+
+  it("closes the websocket via the connected header Close button", async () => {
+    renderTerminal();
+    await act(async () => {
+      if (lastWs && lastWs.onopen) lastWs.onopen({});
+    });
+    await waitFor(() => expect(screen.getByText(/Connected —/)).toBeTruthy());
+    // Inline-icon buttons have no accessible name — second header button is Close
+    const btns = screen.getAllByRole("button");
+    fireEvent.click(btns[1]);
+    expect(lastWs.close).toHaveBeenCalled();
+  });
 });

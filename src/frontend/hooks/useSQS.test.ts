@@ -24,6 +24,7 @@ import {
   useSendSQSBatch,
   useDeleteSQSMessage,
   useChangeSQSVisibility,
+  useSQSMoveDLQMessages,
   extractQueueName,
 } from "./useSQS";
 
@@ -289,5 +290,34 @@ describe("extractQueueName", () => {
 
   it("returns the original URL when last segment is empty", () => {
     expect(extractQueueName("http://localhost:4566/000000000000/")).toBe("http://localhost:4566/000000000000/");
+  });
+});
+
+// ─── DLQ Move ──────────────────────────────────────────────────────
+
+describe("useSQSMoveDLQMessages", () => {
+  it("posts move-tasks with the DLQ and source URLs", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useSQSMoveDLQMessages(), { wrapper: createWrapper() });
+    result.current.mutate({ dlqUrl: QUEUE_URL, sourceUrl: "http://localhost:4566/000000000000/src-queue", maxMessages: 5 });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/sqs/queues/dlq/move-tasks", {
+      method: "POST",
+      body: JSON.stringify({ dlqUrl: QUEUE_URL, sourceUrl: "http://localhost:4566/000000000000/src-queue", maxMessages: 5 }),
+    });
+  });
+
+  it("omits maxMessages when not provided", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useSQSMoveDLQMessages(), { wrapper: createWrapper() });
+    result.current.mutate({ dlqUrl: "dlq", sourceUrl: "src" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/sqs/queues/dlq/move-tasks",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ dlqUrl: "dlq", sourceUrl: "src" }),
+      }),
+    );
   });
 });

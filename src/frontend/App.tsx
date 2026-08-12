@@ -26,15 +26,23 @@ const KMSPage = lazy(() => import("./pages/KMSPage"));
 const Settings = lazy(() => import("./pages/Settings"));
 
 // TanStack Query DevTools — lazy-loaded via dynamic import in dev mode only.
-// In production builds, Vite tree-shakes the entire import since the ternary
-// evaluates to () => null at compile time.
-const ReactQueryDevtoolsProduction = import.meta.env.DEV
-  ? lazy(() =>
-      import("@tanstack/react-query-devtools").then((m) => ({
-        default: m.ReactQueryDevtools,
-      })),
-    )
-  : () => null;
+// In production builds, Vite tree-shakes the entire import since the condition
+// evaluates to false at compile time. The dev-mode check is evaluated at render
+// time (vitest bakes import.meta.env.DEV to true), and the globalThis flag lets
+// tests exercise the production fallback path.
+const LazyDevTools = lazy(() =>
+  import("@tanstack/react-query-devtools").then((m) => ({
+    default: m.ReactQueryDevtools,
+  })),
+);
+
+function DevTools() {
+  const forceProd =
+    (globalThis as { __FORCE_PROD_DEVTOOLS__?: boolean }).__FORCE_PROD_DEVTOOLS__ === true;
+  return import.meta.env.DEV && !forceProd ? (
+    <LazyDevTools buttonPosition="bottom-right" />
+  ) : null;
+}
 
 // Errors are reported globally via the enhanced api() client, so TanStack Query
 // defaultOptions don't need an onError handler here. Toast integration happens
@@ -68,11 +76,11 @@ function ToastProviderWithErrorReporter({ children }: { children: React.ReactNod
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      {/* TanStack Query DevTools — only visible in dev mode. In production,
-          ReactQueryDevtoolsProduction is () => null and fully tree-shaken.
-          Wrapped in Suspense because dev mode uses a lazy() component. */}
+      {/* TanStack Query DevTools — only visible in dev mode. In production this
+          renders null and the import is fully tree-shaken. Wrapped in Suspense
+          because dev mode uses a lazy() component. */}
       <Suspense fallback={null}>
-        <ReactQueryDevtoolsProduction buttonPosition="bottom-right" />
+        <DevTools />
       </Suspense>
       <ToastProvider>
         <ToastProviderWithErrorReporter>

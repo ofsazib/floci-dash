@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -262,6 +262,18 @@ describe("CodeBuildDashboard — create project modal", () => {
     expect(createBtns.length).toBeGreaterThanOrEqual(1);
   });
 
+  it("dismisses create project modal with Escape", async () => {
+    const user = userEvent.setup();
+    render(<CodeBuildDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create project/i);
+    await waitFor(() => expect(screen.getByText("Create CodeBuild project")).toBeTruthy());
+    document.querySelectorAll('[class*="awsui_dialog"]').forEach((d) => fireEvent.keyDown(d as HTMLElement, { keyCode: 27 }));
+    await waitFor(() => {
+      const header = screen.getAllByText("Create CodeBuild project").find((h) => h.closest('[role="dialog"]'));
+      expect(header!.closest('[role="dialog"]')!.className).toContain("hidden");
+    });
+  });
+
   it("submits create project form with name and description", async () => {
     const user = userEvent.setup();
     render(<CodeBuildDashboard />, { wrapper: createWrapper() });
@@ -281,6 +293,24 @@ describe("CodeBuildDashboard — create project modal", () => {
         { name: "new-proj", description: "A new project" },
         expect.objectContaining({ onSuccess: expect.any(Function) }),
       );
+    });
+  });
+
+  it("invokes onSuccess after creating a project, clearing the form", async () => {
+    mockCreateProject.mockImplementation((_payload: unknown, opts?: { onSuccess?: () => void }) => {
+      opts?.onSuccess?.();
+    });
+    const user = userEvent.setup();
+    render(<CodeBuildDashboard />, { wrapper: createWrapper() });
+
+    await clickButton(user, /Create project/i);
+    await waitFor(() => expect(screen.getByText("Create CodeBuild project")).toBeTruthy());
+
+    await user.type(screen.getByLabelText(/Project name/), "new-proj");
+    await clickButton(user, /^Create$/i);
+
+    await waitFor(() => {
+      expect((screen.getByLabelText(/Project name/) as HTMLInputElement).value).toBe("");
     });
   });
 

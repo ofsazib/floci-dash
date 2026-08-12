@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -72,6 +72,26 @@ vi.mock("../../hooks/useDocDB", () => ({
 }));
 
 import { DocDBDashboard } from "./DocDBDashboard";
+
+// ─── Modal helpers ───────────────────────────────────────
+
+/** Fire Escape on every mounted Cloudscape dialog (they stay mounted when hidden). */
+function dismissModalWithEscape() {
+  document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+    fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27 });
+  });
+}
+
+/** Locate a modal dialog by its header text. */
+function dialogOf(headerText: string): HTMLElement {
+  const header = screen.getAllByText(headerText).find((h) => h.closest('[role="dialog"]'));
+  return header!.closest('[role="dialog"]') as HTMLElement;
+}
+
+/** Assert the modal with the given header is hidden (Cloudscape uses display:none). */
+function expectModalHidden(headerText: string) {
+  expect(dialogOf(headerText).className).toContain("hidden");
+}
 
 // ─── Setup ──────────────────────────────────────────────
 
@@ -442,5 +462,112 @@ describe("DocDBDashboard — delete loading states", () => {
     render(<DocDBDashboard />, { wrapper: createWrapper() });
     const deleteBtn = screen.getByRole("button", { name: /Delete my-instance/i });
     expect(deleteBtn).toHaveProperty("disabled", true);
+  });
+
+  it("filters clusters by identifier", async () => {
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [
+          { DBClusterIdentifier: "alpha-cluster", Engine: "docdb", Status: "available" },
+          { DBClusterIdentifier: "beta-cluster", Engine: "docdb", Status: "available" },
+        ],
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<DocDBDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("alpha-cluster")).toBeTruthy());
+    await user.type(screen.getAllByPlaceholderText("Find by identifier")[0], "beta");
+    await waitFor(() => expect(screen.getByText("beta-cluster")).toBeTruthy());
+    expect(screen.queryByText("alpha-cluster")).toBeNull();
+  });
+
+  it("filters instances by identifier", async () => {
+    mockClusters.mockReturnValue({ data: { clusters: [] }, isLoading: false });
+    mockInstances.mockReturnValue({
+      data: {
+        instances: [
+          { DBInstanceIdentifier: "alpha-instance", DBClusterIdentifier: "c1", Status: "available" },
+          { DBInstanceIdentifier: "beta-instance", DBClusterIdentifier: "c1", Status: "available" },
+        ],
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<DocDBDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("alpha-instance")).toBeTruthy());
+    await user.type(screen.getAllByPlaceholderText("Find by identifier")[1], "beta");
+    await waitFor(() => expect(screen.getByText("beta-instance")).toBeTruthy());
+    expect(screen.queryByText("alpha-instance")).toBeNull();
+  });
+
+  it("cancels the create cluster modal without submitting", async () => {
+    const user = userEvent.setup();
+    render(<DocDBDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create cluster/i);
+    await waitFor(() => expect(screen.getByText("Create DB Cluster")).toBeTruthy());
+    await user.click(within(dialogOf("Create DB Cluster")).getByRole("button", { name: /Cancel/i }));
+    expect(mockCreateCluster).not.toHaveBeenCalled();
+  });
+
+  it("dismisses the create cluster modal with Escape", async () => {
+    const user = userEvent.setup();
+    render(<DocDBDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create cluster/i);
+    await waitFor(() => expect(screen.getByText("Create DB Cluster")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create DB Cluster"));
+  });
+
+  it("creates a cluster and closes the modal on success", async () => {
+    mockCreateCluster.mockImplementation((_payload: unknown, opts?: { onSuccess?: () => void }) => {
+      opts?.onSuccess?.();
+    });
+    const user = userEvent.setup();
+    render(<DocDBDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create cluster/i);
+    await waitFor(() => expect(screen.getByText("Create DB Cluster")).toBeTruthy());
+    await user.type(screen.getAllByLabelText(/Cluster identifier/)[0], "new-cluster");
+    await clickButton(user, /^Create$/i, { index: 0 });
+    await waitFor(() => expectModalHidden("Create DB Cluster"));
+  });
+
+  it("cancels the create instance modal without submitting", async () => {
+    const user = userEvent.setup();
+    render(<DocDBDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create instance/i);
+    await waitFor(() => expect(screen.getByText("Create DB Instance")).toBeTruthy());
+    await user.click(within(dialogOf("Create DB Instance")).getByRole("button", { name: /Cancel/i }));
+    expect(mockCreateInstance).not.toHaveBeenCalled();
+  });
+
+  it("dismisses the create instance modal with Escape", async () => {
+    const user = userEvent.setup();
+    render(<DocDBDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create instance/i);
+    await waitFor(() => expect(screen.getByText("Create DB Instance")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create DB Instance"));
+  });
+
+  it("creates an instance with a class and closes on success", async () => {
+    mockCreateInstance.mockImplementation((_payload: unknown, opts?: { onSuccess?: () => void }) => {
+      opts?.onSuccess?.();
+    });
+    const user = userEvent.setup();
+    render(<DocDBDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create instance/i);
+    await waitFor(() => expect(screen.getByText("Create DB Instance")).toBeTruthy());
+    await user.type(screen.getByLabelText(/Instance identifier/), "test-instance");
+    await user.type(screen.getAllByLabelText(/Cluster identifier/)[1], "my-cluster");
+    await user.type(screen.getByLabelText(/Instance class/), "db.t3.medium");
+    await clickButton(user, /^Create$/i, { last: true });
+    await waitFor(() => {
+      expect(mockCreateInstance).toHaveBeenCalledWith(
+        expect.objectContaining({ DBInstanceClass: "db.t3.medium" }),
+        expect.any(Object),
+      );
+    });
+    await waitFor(() => expectModalHidden("Create DB Instance"));
   });
 });

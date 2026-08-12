@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -693,5 +693,104 @@ describe("ConfigServiceDashboard — advanced edge cases", () => {
       // Two dashes for null lastStartTime and null lastStopTime
       expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(2);
     });
+  });
+
+  it("filters rules on the Rules tab", async () => {
+    mockRules.mockReturnValue({
+      data: {
+        rules: [
+          { ConfigRuleName: "alpha-rule", ConfigRuleState: "ACTIVE", Source: { Owner: "AWS" } },
+          { ConfigRuleName: "beta-rule", ConfigRuleState: "ACTIVE", Source: { Owner: "AWS" } },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("alpha-rule")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("Find rules"), "beta");
+    await waitFor(() => expect(screen.getByText("beta-rule")).toBeTruthy());
+    expect(screen.queryByText("alpha-rule")).toBeNull();
+  });
+
+  it("filters conformance packs on the Conformance Packs tab", async () => {
+    mockPacks.mockReturnValue({
+      data: {
+        conformancePacks: [
+          { ConformancePackName: "alpha-pack", ConformancePackId: "p1", ConformancePackArn: "arn:1" },
+          { ConformancePackName: "beta-pack", ConformancePackId: "p2", ConformancePackArn: "arn:2" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /conformance packs/i }));
+    await waitFor(() => expect(screen.getByText("alpha-pack")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("Find packs"), "beta");
+    await waitFor(() => expect(screen.getByText("beta-pack")).toBeTruthy());
+    expect(screen.queryByText("alpha-pack")).toBeNull();
+  });
+
+  it("filters compliance items on the Advanced tab", async () => {
+    mockCompliance.mockReturnValue({
+      data: {
+        compliance: [
+          { ConfigRuleName: "alpha-rule", Compliance: { ComplianceType: "COMPLIANT" } },
+          { ConfigRuleName: "beta-rule", Compliance: { ComplianceType: "NON_COMPLIANT" } },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+    await waitFor(() => expect(screen.getByText("alpha-rule")).toBeTruthy());
+    await user.type(screen.getAllByPlaceholderText("Find rules")[0], "beta");
+    await waitFor(() => expect(screen.getByText("beta-rule")).toBeTruthy());
+    expect(screen.queryByText("alpha-rule")).toBeNull();
+  });
+
+  it("filters evaluation status on the Advanced tab", async () => {
+    mockEvalStatus.mockReturnValue({
+      data: {
+        statuses: [
+          { ConfigRuleName: "eval-alpha", LastStatus: "SUCCEEDED", LastErrorMessage: "" },
+          { ConfigRuleName: "eval-beta", LastStatus: "FAILED", LastErrorMessage: "err" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+    await waitFor(() => expect(screen.getByText("eval-alpha")).toBeTruthy());
+    await user.type(screen.getAllByPlaceholderText("Find rules")[1], "beta");
+    await waitFor(() => expect(screen.getByText("eval-beta")).toBeTruthy());
+    expect(screen.queryByText("eval-alpha")).toBeNull();
+  });
+
+  it("filters pack status on the Advanced tab", async () => {
+    mockPackStatuses.mockReturnValue({
+      data: {
+        statuses: [
+          { ConformancePackName: "status-alpha", ConformancePackState: "CREATE_COMPLETE" },
+          { ConformancePackName: "status-beta", ConformancePackState: "CREATE_COMPLETE" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+    await waitFor(() => expect(screen.getByText("status-alpha")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("Find packs"), "beta");
+    await waitFor(() => expect(screen.getByText("status-beta")).toBeTruthy());
+    expect(screen.queryByText("status-alpha")).toBeNull();
   });
 });

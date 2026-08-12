@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -37,6 +37,26 @@ vi.mock("../../hooks/useBCMDataExports", () => ({
 }));
 
 import { BCMDashboard } from "./BCMDashboard";
+
+// ─── Modal helpers ───────────────────────────────────────
+
+/** Fire Escape on every mounted Cloudscape dialog (they stay mounted when hidden). */
+function dismissModalWithEscape() {
+  document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+    fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27 });
+  });
+}
+
+/** Locate a modal dialog by its header text. */
+function dialogOf(headerText: string): HTMLElement {
+  const header = screen.getAllByText(headerText).find((h) => h.closest('[role="dialog"]'));
+  return header!.closest('[role="dialog"]') as HTMLElement;
+}
+
+/** Assert the modal with the given header is hidden (Cloudscape uses display:none). */
+function expectModalHidden(headerText: string) {
+  expect(dialogOf(headerText).className).toContain("hidden");
+}
 
 const toastMock = vi.fn();
 vi.mock("../../components/Toast", () => ({
@@ -518,6 +538,51 @@ describe("BCMDashboard — edge cases", () => {
     });
     render(<BCMDashboard />, { wrapper: createWrapper() });
     expect(screen.getByText("filter-test")).toBeTruthy();
+  });
+
+  it("filters exports by name", async () => {
+    mockExports.mockReturnValue({
+      data: {
+        exports: [
+          { ExportArn: "arn:aws:bcm-data-exports:us-east-1:123:export/one", Name: "alpha-export" },
+          { ExportArn: "arn:aws:bcm-data-exports:us-east-1:123:export/two", Name: "beta-export" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<BCMDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("alpha-export")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("Find exports by name"), "beta");
+    await waitFor(() => expect(screen.getByText("beta-export")).toBeTruthy());
+    expect(screen.queryByText("alpha-export")).toBeNull();
+  });
+
+  it("dismisses the create modal with Escape", async () => {
+    const user = userEvent.setup();
+    render(<BCMDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /create/i);
+    await waitFor(() => expect(screen.getByText("Create BCM Data Export")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create BCM Data Export"));
+  });
+
+  it("submits create and clears the form on success", async () => {
+    mockCreateExport.mockImplementation((_payload: unknown, opts?: { onSuccess?: () => void }) => {
+      opts?.onSuccess?.();
+    });
+    const user = userEvent.setup();
+    render(<BCMDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /create/i);
+    await waitFor(() => expect(screen.getByText("Create BCM Data Export")).toBeTruthy());
+    const nameInput = screen.getByPlaceholderText("my-bcm-export");
+    await user.type(nameInput, "test-export");
+    await clickButton(user, /^Create$/i, { last: true });
+    await waitFor(() => expectModalHidden("Create BCM Data Export"));
+    expect(nameInput).toHaveProperty("value", "");
   });
 
 });

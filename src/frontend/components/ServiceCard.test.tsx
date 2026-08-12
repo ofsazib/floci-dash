@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
 
@@ -88,6 +88,24 @@ describe("ServiceCard", () => {
     const starBtn = screen.getByRole("button", { name: /add s3 to favorites/i });
     await user.click(starBtn);
     expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it("clears the hover transform on mouse leave", () => {
+    render(<ServiceCard serviceKey="s3" status="running" />);
+    const card = screen.getByRole("button", { name: /Open S3/i });
+    fireEvent.mouseEnter(card);
+    expect(card.style.transform).toBe("translateY(-1px)");
+    fireEvent.mouseLeave(card);
+    expect(card.style.transform).toBe("");
+  });
+
+  it("resets star opacity on mouse leave", () => {
+    render(<ServiceCard serviceKey="s3" status="running" />);
+    const starBtn = screen.getByRole("button", { name: /add s3 to favorites/i });
+    fireEvent.mouseEnter(starBtn);
+    expect(starBtn.style.opacity).toBe("1");
+    fireEvent.mouseLeave(starBtn);
+    expect(starBtn.style.opacity).toBe("0.4");
   });
 
   it("toggles favorite on star Enter keypress", async () => {

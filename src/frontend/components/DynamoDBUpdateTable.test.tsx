@@ -577,4 +577,35 @@ describe("DynamoDBUpdateTable — apply changes", () => {
     expect(names[0]).toHaveProperty("value", "first");
     expect(names[1]).toHaveProperty("value", "");
   });
+
+  it("switches billing mode to on-demand via the Select", async () => {
+    const user = userEvent.setup();
+    render(<DynamoDBUpdateTable tableName="test-table" tableDetail={defaultDetail} />, { wrapper: createWrapper() });
+    expect(screen.getByText("Read capacity units")).toBeTruthy();
+    await user.click(screen.getByText("Provisioned — you specify read/write capacity"));
+    await user.click(screen.getByRole("option", { name: "On-demand — pay per request, auto-scaling" }));
+    await waitFor(() => expect(screen.queryByText("Read capacity units")).toBeNull());
+  });
+
+  it("toggles the DynamoDB Streams switch off", async () => {
+    const user = userEvent.setup();
+    const detail = {
+      ...defaultDetail,
+      streamSpecification: { StreamEnabled: true, StreamViewType: "NEW_IMAGE" },
+    };
+    render(<DynamoDBUpdateTable tableName="test-table" tableDetail={detail} />, { wrapper: createWrapper() });
+    expect(screen.getByText("Stream view type")).toBeTruthy();
+    await user.click(screen.getByText("Stream enabled"));
+    await waitFor(() => expect(screen.getByText("Stream disabled")).toBeTruthy());
+    expect(screen.queryByText("Stream view type")).toBeNull();
+  });
+
+  it("removes a GSI from the create list", async () => {
+    const user = userEvent.setup();
+    render(<DynamoDBUpdateTable tableName="test-table" tableDetail={defaultDetail} />, { wrapper: createWrapper() });
+    await clickButton(user, /Add GSI/);
+    await waitFor(() => expect(screen.getByText("Indexes to create (1)")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /^Remove$/i }));
+    await waitFor(() => expect(screen.queryByText("Indexes to create (1)")).toBeNull());
+  });
 });

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -267,6 +267,44 @@ describe("CloudFrontDashboard — invalidations tab", () => {
     });
   });
 
+  it("submits custom invalidation paths typed in the textarea", async () => {
+    mockDistributions.mockReturnValue({
+      data: {
+        distributions: [{ Id: "E123ABC", DomainName: "d123.cloudfront.net", Status: "Deployed", Enabled: true }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    mockInvalidations.mockReturnValue({
+      data: { invalidations: [], total: 0 },
+      isLoading: false,
+    });
+
+    const user = userEvent.setup();
+    render(<CloudFrontDashboard />, { wrapper: createWrapper() });
+
+    await user.click(screen.getByText("E123ABC"));
+    await waitFor(() => expect(screen.getByText(/No invalidations/i)).toBeTruthy());
+
+    await clickButton(user, /Create/i);
+    await waitFor(() => {
+      expect(screen.getByText("Create invalidation")).toBeTruthy();
+    });
+
+    fireEvent.change(screen.getByLabelText(/Paths/), {
+      target: { value: "/images/*\n/about/*" },
+    });
+
+    const createBtns = screen.getAllByRole("button", { name: /Create/i });
+    await user.click(createBtns[createBtns.length - 1]);
+
+    await waitFor(() => {
+      expect(mockCreateInvalidation).toHaveBeenCalledWith(
+        expect.objectContaining({ paths: ["/images/*", "/about/*"] }),
+      );
+    });
+  });
+
   it("cancels create invalidation modal without submitting", async () => {
     mockDistributions.mockReturnValue({
       data: {
@@ -283,6 +321,27 @@ describe("CloudFrontDashboard — invalidations tab", () => {
     await waitFor(() => expect(screen.getByText("Create invalidation")).toBeTruthy());
     await clickButton(user, /Cancel/i);
     expect(mockCreateInvalidation).not.toHaveBeenCalled();
+  });
+
+  it("dismisses create invalidation modal with Escape", async () => {
+    mockDistributions.mockReturnValue({
+      data: {
+        distributions: [{ Id: "E1", DomainName: "d1.cloudfront.net", Status: "Deployed", Enabled: true }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CloudFrontDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("E1"));
+    await waitFor(() => expect(screen.getByText(/Invalidations for E1/i)).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create invalidation")).toBeTruthy());
+    document.querySelectorAll('[class*="awsui_dialog"]').forEach((d) => fireEvent.keyDown(d as HTMLElement, { keyCode: 27 }));
+    await waitFor(() => {
+      const header = screen.getAllByText("Create invalidation").find((h) => h.closest('[role="dialog"]'));
+      expect(header!.closest('[role="dialog"]')!.className).toContain("hidden");
+    });
   });
 
   it("shows create invalidation loading state", () => {

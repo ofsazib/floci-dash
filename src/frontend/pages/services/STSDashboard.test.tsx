@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -59,6 +59,26 @@ vi.mock("../../hooks/useSTS", () => ({
 }));
 
 import { STSDashboard } from "./STSDashboard";
+
+// ─── Modal helpers ───────────────────────────────────────
+
+/** Fire Escape on every mounted Cloudscape dialog (they stay mounted when hidden). */
+function dismissModalWithEscape() {
+  document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+    fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27 });
+  });
+}
+
+/** Locate a modal dialog by its header text. */
+function dialogOf(headerText: string): HTMLElement {
+  const header = screen.getAllByText(headerText).find((h) => h.closest('[role="dialog"]'));
+  return header!.closest('[role="dialog"]') as HTMLElement;
+}
+
+/** Assert the modal with the given header is hidden (Cloudscape uses display:none). */
+function expectModalHidden(headerText: string) {
+  expect(dialogOf(headerText).className).toContain("hidden");
+}
 
 // ─── Setup ──────────────────────────────────────────────
 
@@ -304,5 +324,63 @@ describe("STSDashboard — session token tab", () => {
         expect.any(Object),
       );
     });
+  });
+
+  it("passes a custom duration to assumeRole", async () => {
+    const user = userEvent.setup();
+    render(<STSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /assume role/i }));
+    await waitFor(() => expect(screen.getByText(/No role assumed yet/i)).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /^Assume role$/i }));
+    await user.type(screen.getByPlaceholderText(/arn:aws:iam/), "arn:aws:iam::123456789012:role/my-role");
+    await user.type(screen.getByPlaceholderText("3600"), "7200");
+    const assumeBtns = screen.getAllByRole("button", { name: /^Assume$/i });
+    await user.click(assumeBtns[assumeBtns.length - 1]);
+    await waitFor(() => {
+      expect(mockAssumeRole).toHaveBeenCalledWith(
+        expect.objectContaining({ roleArn: "arn:aws:iam::123456789012:role/my-role", durationSeconds: 7200 }),
+        expect.any(Object),
+      );
+    });
+  });
+
+  it("cancels the assume role modal without calling the mutation", async () => {
+    const user = userEvent.setup();
+    render(<STSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /assume role/i }));
+    await waitFor(() => expect(screen.getByText(/No role assumed yet/i)).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /^Assume role$/i }));
+    await user.click(within(dialogOf("Assume role")).getByRole("button", { name: /Cancel/i }));
+    expect(mockAssumeRole).not.toHaveBeenCalled();
+  });
+
+  it("dismisses the assume role modal with Escape", async () => {
+    const user = userEvent.setup();
+    render(<STSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /assume role/i }));
+    await waitFor(() => expect(screen.getByText(/No role assumed yet/i)).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /^Assume role$/i }));
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Assume role"));
+  });
+
+  it("cancels the session token modal without calling the mutation", async () => {
+    const user = userEvent.setup();
+    render(<STSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /session token/i }));
+    await waitFor(() => expect(screen.getByText(/No session token requested/i)).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Get session token/i }));
+    await user.click(within(dialogOf("Get session token")).getByRole("button", { name: /Cancel/i }));
+    expect(mockGetSessionToken).not.toHaveBeenCalled();
+  });
+
+  it("dismisses the session token modal with Escape", async () => {
+    const user = userEvent.setup();
+    render(<STSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /session token/i }));
+    await waitFor(() => expect(screen.getByText(/No session token requested/i)).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Get session token/i }));
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Get session token"));
   });
 });

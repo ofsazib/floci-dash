@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { Button } from "@cloudscape-design/components";
 import ErrorBoundary, { withErrorBoundary } from "./ErrorBoundary";
 
@@ -98,6 +98,26 @@ describe("ErrorBoundary", () => {
     // Without clicking retry, the boundary still shows the error
     expect(screen.getByText("Something went wrong")).toBeTruthy();
 
+    spy.mockRestore();
+  });
+
+  it("resets the boundary when Try again is clicked", () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { rerender } = render(
+      <ErrorBoundary>
+        <Bomb shouldThrow />
+      </ErrorBoundary>,
+    );
+    expect(screen.getByText("Something went wrong")).toBeTruthy();
+    // Clear the throw so a successful retry re-renders the children
+    rerender(
+      <ErrorBoundary>
+        <Bomb shouldThrow={false} />
+      </ErrorBoundary>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Try again/i }));
+    expect(screen.queryByText("Something went wrong")).toBeNull();
+    expect(screen.getByText("All good")).toBeTruthy();
     spy.mockRestore();
   });
 

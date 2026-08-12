@@ -721,6 +721,24 @@ describe("AppLayoutShell — category grouping", () => {
     expect(screen.getByText("Athena")).toBeTruthy();
   });
 
+  it("sorts non-implemented services alphabetically within a category", () => {
+    (useHealth as any).mockReturnValue({
+      data: {
+        services: { redshift: "running", glue: "running", athena: "running" },
+        stats: { running: 3, total: 3 },
+      },
+    });
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    const texts = screen.getAllByText(/Athena|Glue/).map((el) => el.textContent);
+    expect(texts.indexOf("Athena")).toBeGreaterThan(-1);
+    expect(texts.indexOf("Athena")).toBeLessThan(texts.indexOf("Glue"));
+  });
+
   it("renders category groups expanded after Expand all", async () => {
     (useHealth as any).mockReturnValue({
       data: {
@@ -908,10 +926,10 @@ describe("AppLayoutShell — navigation toggle", () => {
       </AppLayoutShell>,
       { wrapper: createWrapper() },
     );
-    const toggle = screen.queryByRole("button", { name: /Close navigation/i });
-    if (toggle) {
-      await user.click(toggle);
-    }
+    // The AppLayout toggle button has no aria-label unless ariaLabels is passed — find it by class
+    const toggle = document.querySelector('[class*="navigation-toggle"]') as HTMLElement;
+    expect(toggle).toBeTruthy();
+    await user.click(toggle);
     expect(screen.getByText("Dashboard")).toBeTruthy();
   });
 });

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -43,6 +43,26 @@ vi.mock("../../hooks/useSSM", () => ({
 }));
 
 import { SSMDashboard } from "./SSMDashboard";
+
+// ─── Modal helpers ───────────────────────────────────────
+
+/** Fire Escape on every mounted Cloudscape dialog (they stay mounted when hidden). */
+function dismissModalWithEscape() {
+  document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+    fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27 });
+  });
+}
+
+/** Locate a modal dialog by its header text. */
+function dialogOf(headerText: string): HTMLElement {
+  const header = screen.getAllByText(headerText).find((h) => h.closest('[role="dialog"]'));
+  return header!.closest('[role="dialog"]') as HTMLElement;
+}
+
+/** Assert the modal with the given header is hidden (Cloudscape uses display:none). */
+function expectModalHidden(headerText: string) {
+  expect(dialogOf(headerText).className).toContain("hidden");
+}
 
 const toastMock = vi.fn();
 vi.mock("../../components/Toast", () => ({
@@ -489,5 +509,74 @@ describe("SSMDashboard — parameter detail view", () => {
     expect(screen.getAllByText("Parameters").length).toBeGreaterThanOrEqual(1);
     // The parameter name should no longer be a header (it's now in the table list)
     expect(screen.getByText("/myapp/db-url")).toBeTruthy(); // still in the table
+  });
+
+  it("filters parameters by name", async () => {
+    mockParameters.mockReturnValue({
+      data: {
+        parameters: [
+          { Name: "/alpha/key", Type: "String", Value: "v1" },
+          { Name: "/beta/key", Type: "String", Value: "v2" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<SSMDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("/alpha/key")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("Find parameters by name"), "/beta");
+    await waitFor(() => expect(screen.getByText("/beta/key")).toBeTruthy());
+    expect(screen.queryByText("/alpha/key")).toBeNull();
+  });
+
+  it("dismisses the create modal with Escape", async () => {
+    const user = userEvent.setup();
+    render(<SSMDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /create/i);
+    await waitFor(() => expect(screen.getByText("Create parameter")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create parameter"));
+  });
+
+  it("submits create and resets the form on success", async () => {
+    mockPutParam.mockImplementation((_payload: unknown, opts?: { onSuccess?: () => void }) => {
+      opts?.onSuccess?.();
+    });
+    const user = userEvent.setup();
+    render(<SSMDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /create/i);
+    await waitFor(() => expect(screen.getByText("Create parameter")).toBeTruthy());
+    const nameInput = screen.getByPlaceholderText("/myapp/db-url");
+    await user.type(nameInput, "/myapp/test");
+    await user.type(screen.getByRole("textbox", { name: /value/i }), "test-value");
+    await clickButton(user, /^Create$/i, { last: true });
+    await waitFor(() => expectModalHidden("Create parameter"));
+    expect(nameInput).toHaveProperty("value", "");
+  });
+
+  it("picks SecureString type, description, and overwrite", async () => {
+    const user = userEvent.setup();
+    render(<SSMDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /create/i);
+    await waitFor(() => expect(screen.getByText("Create parameter")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("/myapp/db-url"), "/myapp/secret");
+    await user.type(screen.getByRole("textbox", { name: /value/i }), "s3cr3t");
+    await user.click(screen.getByRole("button", { name: /Type String/i }));
+    await user.click(screen.getByRole("option", { name: /SecureString/i }));
+    await user.type(screen.getByLabelText(/Description/), "my description");
+    await user.click(screen.getByRole("checkbox", { name: /Overwrite existing parameter/i }));
+    await clickButton(user, /^Create$/i, { last: true });
+    await waitFor(() => {
+      expect(mockPutParam).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "/myapp/secret",
+          type: "SecureString",
+          description: "my description",
+          overwrite: true,
+        }),
+        expect.any(Object),
+      );
+    });
   });
 });

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createWrapper } from "../../test/helpers";
 import React from "react";
@@ -124,6 +124,18 @@ describe("Settings", () => {
     await waitFor(() => {
       expect(screen.getByText(/Endpoint updated/)).toBeTruthy();
     });
+  });
+
+  it("dismisses the status alert", async () => {
+    mockApi.mockResolvedValueOnce({ endpoint: "http://my-floci:4566" });
+    const user = userEvent.setup();
+    render(<Settings />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Save endpoint"));
+    await waitFor(() => expect(screen.getByText(/Endpoint updated/)).toBeTruthy());
+    // The Alert's dismiss button has no accessible name — target it by class
+    const dismiss = document.querySelector('[class*="awsui_dismiss-button"]') as HTMLElement;
+    fireEvent.click(dismiss);
+    await waitFor(() => expect(screen.queryByText(/Endpoint updated/)).toBeNull());
   });
 
   it("shows error alert when save fails", async () => {

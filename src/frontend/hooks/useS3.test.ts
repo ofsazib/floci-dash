@@ -178,6 +178,40 @@ describe("useS3UploadFiles", () => {
     expect(res.uploaded).toBe(1);
   });
 
+  it("throws the server-provided error message when upload fails", async () => {
+    const fetchMock = global.fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      statusText: "Internal Server Error",
+      json: async () => ({ error: "Quota exceeded" }),
+    } as Response);
+    const { result } = renderHook(() => useS3UploadFiles("my-bucket"), {
+      wrapper: createWrapper(),
+    });
+    const file = new File(["hello"], "hello.txt", { type: "text/plain" });
+    await expect(result.current.mutateAsync({ files: [file] })).rejects.toThrow("Quota exceeded");
+  });
+
+  it("falls back to the status text when the upload error body is unreadable", async () => {
+    const fetchMock = global.fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      statusText: "Internal Server Error",
+      json: async () => {
+        throw new Error("bad json");
+      },
+    } as unknown as Response);
+    const { result } = renderHook(() => useS3UploadFiles("my-bucket"), {
+      wrapper: createWrapper(),
+    });
+    const file = new File(["hello"], "hello.txt", { type: "text/plain" });
+    await expect(result.current.mutateAsync({ files: [file] })).rejects.toThrow(
+      "Upload failed: Internal Server Error",
+    );
+  });
+
   it("appends prefix as encoded query string when provided", async () => {
     const fetchMock = global.fetch as unknown as ReturnType<typeof vi.fn>;
     fetchMock.mockResolvedValueOnce({

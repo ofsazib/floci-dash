@@ -875,28 +875,23 @@ export function CognitoDashboard() {
                           updateUserAttributes.isPending ||
                           deleteUserAttributes.isPending
                         }
-                        disabled={(function () {
-                          switch (activeAuthFlowType) {
-                            case "initiate":
-                            case "admin-initiate":
-                              return !authFlowClientId || !authFlowUsername || !authFlowPassword;
-                            case "confirm-sign-up":
-                              return !authFlowClientId || !authFlowUsername || !authFlowConfirmationCode;
-                            case "admin-respond-challenge":
-                              return !authFlowClientId || !authFlowChallengeName;
-                            case "forgot-password":
-                              return !authFlowClientId || !authFlowUsername;
-                            case "confirm-forgot-password":
-                              return !authFlowClientId || !authFlowUsername || !authFlowConfirmationCode || !authFlowPassword;
-                            case "get-user":
-                            case "delete-user-attributes":
-                              return !authFlowAccessToken;
-                            case "update-user-attributes":
-                              return !authFlowAccessToken || !authFlowUserAttributes;
-                            default:
-                              return true;
-                          }
-                        })()}
+                        disabled={
+                          activeAuthFlowType === "initiate" || activeAuthFlowType === "admin-initiate"
+                            ? !authFlowClientId || !authFlowUsername || !authFlowPassword
+                            : activeAuthFlowType === "confirm-sign-up"
+                              ? !authFlowClientId || !authFlowUsername || !authFlowConfirmationCode
+                              : activeAuthFlowType === "admin-respond-challenge"
+                                ? !authFlowClientId || !authFlowChallengeName
+                                : activeAuthFlowType === "forgot-password"
+                                  ? !authFlowClientId || !authFlowUsername
+                                  : activeAuthFlowType === "confirm-forgot-password"
+                                    ? !authFlowClientId || !authFlowUsername || !authFlowConfirmationCode || !authFlowPassword
+                                    : activeAuthFlowType === "get-user" || activeAuthFlowType === "delete-user-attributes"
+                                      ? !authFlowAccessToken
+                                      : activeAuthFlowType === "update-user-attributes"
+                                        ? !authFlowAccessToken || !authFlowUserAttributes
+                                        : true
+                        }
                         onClick={async () => {
                           setAuthFlowResult(null);
                           try {

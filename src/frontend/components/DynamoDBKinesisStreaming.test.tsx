@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../test/helpers";
 import React from "react";
@@ -41,6 +41,26 @@ vi.mock("../hooks/useDynamoDB", () => ({
 }));
 
 import DynamoDBKinesisStreaming from "./DynamoDBKinesisStreaming";
+
+// ─── Modal helpers ───────────────────────────────────────
+
+/** Fire Escape on every mounted Cloudscape dialog (they stay mounted when hidden). */
+function dismissModalWithEscape() {
+  document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+    fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27 });
+  });
+}
+
+/** Locate a modal dialog by its header text. */
+function dialogOf(headerText: string): HTMLElement {
+  const header = screen.getAllByText(headerText).find((h) => h.closest('[role="dialog"]'));
+  return header!.closest('[role="dialog"]') as HTMLElement;
+}
+
+/** Assert the modal with the given header is hidden (Cloudscape uses display:none). */
+function expectModalHidden(headerText: string) {
+  expect(dialogOf(headerText).className).toContain("hidden");
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -142,5 +162,54 @@ describe("DynamoDBKinesisStreaming", () => {
     const enableBtn = screen.getByRole("button", { name: /^Enable$/ });
     // Cloudscape may use native disabled or aria-disabled
     expect((enableBtn as HTMLButtonElement).disabled || enableBtn.getAttribute("aria-disabled") === "true").toBe(true);
+  });
+
+  it("cancels enable streaming modal without submitting", async () => {
+    const user = userEvent.setup();
+    render(<DynamoDBKinesisStreaming tableName="test-table" />, { wrapper: createWrapper() });
+    await clickButton(user, /Enable streaming/);
+    await waitFor(() => expect(screen.getByText(/Enable Kinesis streaming on test-table/)).toBeTruthy());
+    await clickButton(user, /Cancel/i);
+    expect(mockEnable).not.toHaveBeenCalled();
+  });
+
+  it("dismisses enable streaming modal with Escape", async () => {
+    const user = userEvent.setup();
+    render(<DynamoDBKinesisStreaming tableName="test-table" />, { wrapper: createWrapper() });
+    await clickButton(user, /Enable streaming/);
+    await waitFor(() => expect(screen.getByText(/Enable Kinesis streaming on test-table/)).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Enable Kinesis streaming on test-table"));
+  });
+
+  it("enables streaming and closes the modal on success", async () => {
+    mockEnable.mockImplementation((_payload: unknown, opts?: { onSuccess?: () => void }) => {
+      opts?.onSuccess?.();
+      return Promise.resolve({});
+    });
+    const user = userEvent.setup();
+    render(<DynamoDBKinesisStreaming tableName="test-table" />, { wrapper: createWrapper() });
+    await clickButton(user, /Enable streaming/);
+    await user.type(screen.getByPlaceholderText(/arn:aws:kinesis/), "arn:aws:kinesis:us-east-1:123:stream/my-stream");
+    await clickButton(user, /^Enable$/);
+    await waitFor(() => expectModalHidden("Enable Kinesis streaming on test-table"));
+  });
+
+  it("deletes a streaming destination via the row delete button", async () => {
+    mockStreamingData.mockReturnValue({
+      destinations: [{
+        streamArn: "arn:aws:kinesis:us-east-1:123:stream/my-stream",
+        destinationStatus: "ACTIVE",
+      }],
+      total: 1,
+    });
+    const user = userEvent.setup();
+    render(<DynamoDBKinesisStreaming tableName="test-table" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /Delete my-stream/i }));
+    await waitFor(() => expect(screen.getByText("Delete Kinesis streaming destination")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /^Delete$/i }));
+    await waitFor(() => {
+      expect(mockDisable).toHaveBeenCalledWith("arn:aws:kinesis:us-east-1:123:stream/my-stream");
+    });
   });
 });

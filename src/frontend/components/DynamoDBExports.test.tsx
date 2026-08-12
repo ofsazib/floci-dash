@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../test/helpers";
 import React from "react";
@@ -46,6 +46,26 @@ vi.mock("../hooks/useDynamoDBAdvanced", () => ({
 }));
 
 import DynamoDBExports from "./DynamoDBExports";
+
+// ─── Modal helpers ───────────────────────────────────────
+
+/** Fire Escape on every mounted Cloudscape dialog (they stay mounted when hidden). */
+function dismissModalWithEscape() {
+  document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+    fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27 });
+  });
+}
+
+/** Locate a modal dialog by its header text. */
+function dialogOf(headerText: string): HTMLElement {
+  const header = screen.getAllByText(headerText).find((h) => h.closest('[role="dialog"]'));
+  return header!.closest('[role="dialog"]') as HTMLElement;
+}
+
+/** Assert the modal with the given header is hidden (Cloudscape uses display:none). */
+function expectModalHidden(headerText: string) {
+  expect(dialogOf(headerText).className).toContain("hidden");
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -274,5 +294,71 @@ describe("DynamoDBExports", () => {
     await waitFor(() => {
       expect(screen.getByText("Export Details")).toBeTruthy();
     });
+  });
+
+  it("cancels create export modal without submitting", async () => {
+    const user = userEvent.setup();
+    render(<DynamoDBExports tableName="test-table" />, { wrapper: createWrapper() });
+    await clickButton(user, /Export to S3/i);
+    await waitFor(() => expect(screen.getByText("Export test-table to Amazon S3")).toBeTruthy());
+    await clickButton(user, /Cancel/i);
+    expect(mockExportTable).not.toHaveBeenCalled();
+  });
+
+  it("dismisses create export modal with Escape", async () => {
+    const user = userEvent.setup();
+    render(<DynamoDBExports tableName="test-table" />, { wrapper: createWrapper() });
+    await clickButton(user, /Export to S3/i);
+    await waitFor(() => expect(screen.getByText("Export test-table to Amazon S3")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Export test-table to Amazon S3"));
+  });
+
+  it("submits export and closes the modal on success", async () => {
+    mockExportTable.mockImplementation((_payload: unknown, opts?: { onSuccess?: () => void }) => {
+      opts?.onSuccess?.();
+      return Promise.resolve({});
+    });
+    const user = userEvent.setup();
+    render(<DynamoDBExports tableName="test-table" />, { wrapper: createWrapper() });
+    await clickButton(user, /Export to S3/i);
+    await user.type(screen.getByPlaceholderText("my-export-bucket"), "my-bucket");
+    await clickButton(user, /^Export$/i);
+    await waitFor(() => expectModalHidden("Export test-table to Amazon S3"));
+  });
+
+  it("changes the export format via the Select", async () => {
+    const user = userEvent.setup();
+    render(<DynamoDBExports tableName="test-table" />, { wrapper: createWrapper() });
+    await clickButton(user, /Export to S3/i);
+    await user.click(screen.getByRole("button", { name: /DynamoDB JSON/i }));
+    await user.click(screen.getByRole("option", { name: /Ion/i }));
+    expect(screen.getByRole("button", { name: /Ion/i })).toBeTruthy();
+  });
+
+  it("closes export detail modal with the Close button", async () => {
+    mockExports.mockReturnValue({
+      exports: [{ exportArn: "arn:aws:dynamodb:us-east-1:123:table/test-table/export/abc", exportStatus: "COMPLETED" }],
+      total: 1,
+    });
+    const user = userEvent.setup();
+    render(<DynamoDBExports tableName="test-table" />, { wrapper: createWrapper() });
+    await clickButton(user, /^Details$/);
+    await waitFor(() => expect(screen.getByText("Export Details")).toBeTruthy());
+    await user.click(within(dialogOf("Export Details")).getByRole("button", { name: /Close/i }));
+    await waitFor(() => expectModalHidden("Export Details"));
+  });
+
+  it("dismisses export detail modal with Escape", async () => {
+    mockExports.mockReturnValue({
+      exports: [{ exportArn: "arn:aws:dynamodb:us-east-1:123:table/test-table/export/abc", exportStatus: "COMPLETED" }],
+      total: 1,
+    });
+    const user = userEvent.setup();
+    render(<DynamoDBExports tableName="test-table" />, { wrapper: createWrapper() });
+    await clickButton(user, /^Details$/);
+    await waitFor(() => expect(screen.getByText("Export Details")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Export Details"));
   });
 });

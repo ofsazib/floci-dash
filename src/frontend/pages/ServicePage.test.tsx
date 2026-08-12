@@ -12,6 +12,7 @@ const mockSubFilters = vi.fn();
 const mockLogGroupTags = vi.fn();
 const mockCreateLogGroupMutate = vi.fn();
 const mockParams = vi.fn();
+const mockNavigate = vi.fn();
 const mockDynamoTables = vi.fn();
 const mockRDSInstances = vi.fn();
 const mockRDSClusters = vi.fn();
@@ -146,7 +147,7 @@ vi.mock("../lib/utils", () => ({
 
 vi.mock("react-router-dom", () => ({
   useParams: (...args: any[]) => mockParams(...args),
-  useNavigate: () => vi.fn(),
+  useNavigate: () => mockNavigate,
   useSearchParams: () => [new URLSearchParams(), vi.fn()],
 }));
 
@@ -1398,5 +1399,14 @@ describe("ServicePage — RGT", () => {
     mockRGTResources.mockReturnValue({ data: undefined, isLoading: true });
     render(<ServicePage />, { wrapper: createWrapper() });
     expect(screen.queryByText("arn:aws:s3:::my-bucket")).toBeNull();
+  });
+
+  it("navigates when the breadcrumb is clicked", async () => {
+    const user = userEvent.setup();
+    mockParams.mockReturnValue({ service: "bogus" });
+    render(<ServicePage />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByRole("link", { name: /Dashboard/i })).toBeTruthy());
+    await user.click(screen.getByRole("link", { name: /Dashboard/i }));
+    expect(mockNavigate).toHaveBeenCalledWith("/");
   });
 });

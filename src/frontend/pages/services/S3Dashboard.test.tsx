@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -47,6 +47,26 @@ vi.mock("../../hooks/useS3", () => ({
 }));
 
 import { S3Dashboard } from "./S3Dashboard";
+
+// ─── Modal helpers ───────────────────────────────────────
+
+/** Fire Escape on every mounted Cloudscape dialog (they stay mounted when hidden). */
+function dismissModalWithEscape() {
+  document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+    fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27 });
+  });
+}
+
+/** Locate a modal dialog by its header text. */
+function dialogOf(headerText: string): HTMLElement {
+  const header = screen.getAllByText(headerText).find((h) => h.closest('[role="dialog"]'));
+  return header!.closest('[role="dialog"]') as HTMLElement;
+}
+
+/** Assert the modal with the given header is hidden (Cloudscape uses display:none). */
+function expectModalHidden(headerText: string) {
+  expect(dialogOf(headerText).className).toContain("hidden");
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -208,5 +228,44 @@ describe("S3Dashboard", () => {
     });
     render(<S3Dashboard />, { wrapper: createWrapper() });
     expect(screen.getByText("dated-bucket")).toBeTruthy();
+  });
+
+  it("bucket name click navigates to the S3 page with the bucket param", () => {
+    mockBuckets.mockReturnValue({
+      data: { buckets: [{ name: "my-bucket", createdAt: "2024-01-15T00:00:00Z" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<S3Dashboard />, { wrapper: createWrapper() });
+    const link = screen.getByText("my-bucket");
+    fireEvent.click(link.closest("button") as HTMLElement);
+    expect(window.location.hash).toBe("#/services/s3?bucket=my-bucket");
+  });
+
+  it("dismisses the create modal with Escape and clears the name", async () => {
+    const user = userEvent.setup();
+    render(<S3Dashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getAllByText("Create Bucket").length).toBeGreaterThanOrEqual(1));
+    const nameInput = screen.getByPlaceholderText("my-bucket");
+    await user.type(nameInput, "new-bucket");
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create Bucket"));
+    expect(nameInput).toHaveProperty("value", "");
+  });
+
+  it("submits create and closes the modal on success", async () => {
+    mockCreateBucket.mockImplementation((_payload: unknown, opts?: { onSuccess?: () => void }) => {
+      opts?.onSuccess?.();
+    });
+    const user = userEvent.setup();
+    render(<S3Dashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getAllByText("Create Bucket").length).toBeGreaterThanOrEqual(1));
+    const nameInput = screen.getByPlaceholderText("my-bucket");
+    await user.type(nameInput, "new-bucket");
+    const createBtns = screen.getAllByRole("button", { name: /Create bucket/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => expectModalHidden("Create Bucket"));
+    expect(nameInput).toHaveProperty("value", "");
   });
 });

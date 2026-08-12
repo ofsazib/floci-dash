@@ -210,4 +210,16 @@ describe("App — additional route navigation", () => {
       expect(screen.getByText("cw-page")).toBeTruthy();
     });
   });
+
+  it("renders the production devtools fallback when forced", async () => {
+    // import.meta.env.DEV is baked to true by vitest — flip the test seam so the
+    // production fallback (renders null) is exercised.
+    (globalThis as { __FORCE_PROD_DEVTOOLS__?: boolean }).__FORCE_PROD_DEVTOOLS__ = true;
+    window.location.hash = "#/";
+    render(<App />);
+    await waitFor(() => {
+      expect(screen.getByText("home-page")).toBeTruthy();
+    });
+    (globalThis as { __FORCE_PROD_DEVTOOLS__?: boolean }).__FORCE_PROD_DEVTOOLS__ = false;
+  });
 });

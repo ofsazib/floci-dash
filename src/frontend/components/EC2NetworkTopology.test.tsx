@@ -76,6 +76,16 @@ describe("EC2NetworkTopology", () => {
     expect(screen.getByText("Loading network topology...")).toBeTruthy();
   });
 
+  it("shows error state when the VPC query fails", () => {
+    mockVpcs.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: new Error("boom") });
+    mockSubnets.mockReturnValue({ data: undefined, isLoading: false, isError: false });
+    mockInstances.mockReturnValue({ data: undefined, isLoading: false, isError: false });
+    mockIgws.mockReturnValue({ data: undefined });
+    mockRtbs.mockReturnValue({ data: undefined });
+    render(<EC2NetworkTopology />, { wrapper: createWrapper() });
+    expect(screen.getByText(/Failed to load network topology data/i)).toBeTruthy();
+  });
+
   it("shows empty state when no VPCs exist", () => {
     setupMockData({ vpcs: [] });
     render(<EC2NetworkTopology />, { wrapper: createWrapper() });

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -60,6 +60,26 @@ vi.mock("../../hooks/useKinesis", () => ({
 }));
 
 import { KinesisDashboard } from "./KinesisDashboard";
+
+// ─── Modal helpers ───────────────────────────────────────
+
+/** Fire Escape on every mounted Cloudscape dialog (they stay mounted when hidden). */
+function dismissModalWithEscape() {
+  document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+    fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27 });
+  });
+}
+
+/** Locate a modal dialog by its header text. */
+function dialogOf(headerText: string): HTMLElement {
+  const header = screen.getAllByText(headerText).find((h) => h.closest('[role="dialog"]'));
+  return header!.closest('[role="dialog"]') as HTMLElement;
+}
+
+/** Assert the modal with the given header is hidden (Cloudscape uses display:none). */
+function expectModalHidden(headerText: string) {
+  expect(dialogOf(headerText).className).toContain("hidden");
+}
 
 // ─── Setup ──────────────────────────────────────────────
 
@@ -544,12 +564,11 @@ describe("KinesisDashboard — stream detail", () => {
       expect(screen.getByText(/Put record to my-stream/i)).toBeTruthy();
     });
 
-    // Escape key triggers onDismiss
-    await user.keyboard("{Escape}");
+    // Escape key triggers onDismiss (fires on the mounted dialog)
+    dismissModalWithEscape();
 
-    await waitFor(() => {
-      expect(mockPutRecord).not.toHaveBeenCalled();
-    });
+    await waitFor(() => expectModalHidden("Put record to my-stream"));
+    expect(mockPutRecord).not.toHaveBeenCalled();
   });
 
   it("shows dash for missing shard parent", async () => {
@@ -1191,5 +1210,66 @@ describe("KinesisDashboard — data edge cases", () => {
     await waitFor(() => expect(screen.getByText("no-ts")).toBeTruthy());
     // Record renders but Arrival row is absent (approximateArrivalTimestamp is falsy)
     expect(screen.queryByText(/Arrival:/)).toBeNull();
+  });
+
+  it("dismisses the create stream modal with Escape", async () => {
+    const user = userEvent.setup();
+    render(<KinesisDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create Kinesis stream")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create Kinesis stream"));
+  });
+
+  it("dismisses the register consumer modal with Escape", async () => {
+    setupStream();
+    const user = userEvent.setup();
+    render(<KinesisDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-stream"));
+    await waitFor(() => expect(screen.getByText(/Shards: my-stream/)).toBeTruthy());
+    await clickButton(user, /View consumers/i);
+    await waitFor(() => expect(screen.getByText(/Register consumer/i)).toBeTruthy());
+    await clickButton(user, /Register consumer/i);
+    await waitFor(() => expect(screen.getByText("Register Stream Consumer")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Register Stream Consumer"));
+  });
+
+  it("closes the subscribe modal with the Close button", async () => {
+    mockSubscribeToShard.mockResolvedValue({ events: [] });
+    setupStream();
+    mockConsumers.mockReturnValue({
+      data: { consumers: [{ ConsumerName: "sub-consumer", ConsumerARN: "arn:...", ConsumerStatus: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<KinesisDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-stream"));
+    await waitFor(() => expect(screen.getByText(/Shards: my-stream/)).toBeTruthy());
+    await clickButton(user, /View consumers/i);
+    await waitFor(() => expect(screen.getByText("sub-consumer")).toBeTruthy());
+    await user.click(screen.getAllByRole("button", { name: /Subscribe/i })[0]);
+    await waitFor(() => expect(screen.getByText(/Subscribe to Shard/)).toBeTruthy());
+    await user.click(within(dialogOf("Subscribe to Shard — my-stream")).getByRole("button", { name: /Close/i }));
+    await waitFor(() => expectModalHidden("Subscribe to Shard — my-stream"));
+  });
+
+  it("dismisses the subscribe modal with Escape", async () => {
+    mockSubscribeToShard.mockResolvedValue({ events: [] });
+    setupStream();
+    mockConsumers.mockReturnValue({
+      data: { consumers: [{ ConsumerName: "sub-consumer", ConsumerARN: "arn:...", ConsumerStatus: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<KinesisDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-stream"));
+    await waitFor(() => expect(screen.getByText(/Shards: my-stream/)).toBeTruthy());
+    await clickButton(user, /View consumers/i);
+    await waitFor(() => expect(screen.getByText("sub-consumer")).toBeTruthy());
+    await user.click(screen.getAllByRole("button", { name: /Subscribe/i })[0]);
+    await waitFor(() => expect(screen.getByText(/Subscribe to Shard/)).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Subscribe to Shard — my-stream"));
   });
 });

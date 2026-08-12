@@ -33,6 +33,7 @@ import {
   useCreateDBSubnetGroup,
   useDeleteDBSubnetGroup,
   useOrderableDBInstanceOptions,
+  useModifyDBSubnetGroup,
 } from "./useRDS";
 
 function createWrapper() {
@@ -379,5 +380,34 @@ describe("useOrderableDBInstanceOptions", () => {
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith("/aws/rds/orderable-db-instance-options?engine=postgres");
+  });
+});
+
+// ─── DB Subnet Groups ──────────────────────────────────────────────
+
+describe("useModifyDBSubnetGroup", () => {
+  it("calls api with PATCH method on the subnet group path", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useModifyDBSubnetGroup(), { wrapper: createWrapper() });
+    result.current.mutate({ name: "my-sg", subnetIds: ["subnet-1", "subnet-2"] });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/rds/db-subnet-groups/my-sg", {
+      method: "PATCH",
+      body: JSON.stringify({ subnetIds: ["subnet-1", "subnet-2"] }),
+    });
+  });
+
+  it("includes the description when provided", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useModifyDBSubnetGroup(), { wrapper: createWrapper() });
+    result.current.mutate({ name: "my-sg", dbSubnetGroupDescription: "Updated", subnetIds: ["subnet-1"] });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/rds/db-subnet-groups/my-sg",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ dbSubnetGroupDescription: "Updated", subnetIds: ["subnet-1"] }),
+      }),
+    );
   });
 });

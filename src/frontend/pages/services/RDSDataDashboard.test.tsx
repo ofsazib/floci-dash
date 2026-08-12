@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import "@testing-library/jest-dom/vitest";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -200,6 +200,24 @@ describe("RDSDataDashboard — interactions", () => {
 
     // Transaction ID field should appear after onSuccess
     await waitFor(() => expect(screen.getByLabelText(/Transaction ID/)).toBeTruthy());
+  });
+
+  it("edits the transaction ID field", async () => {
+    const user = userEvent.setup();
+    mockBeginTx.mockImplementation((_args: any, opts?: any) => {
+      if (opts?.onSuccess) opts.onSuccess({ transactionId: "tx-123" });
+    });
+    render(<RDSDataDashboard />, { wrapper: createWrapper() });
+    await user.type(screen.getByLabelText(/Resource ARN/), "arn:aws:rds:cluster:my-cluster");
+    await user.type(screen.getByLabelText(/Secret ARN/), "arn:aws:secretsmanager:secret:my-secret");
+    await user.type(screen.getByPlaceholderText("mydb"), "mydb");
+    await user.click(screen.getByRole("button", { name: /Begin Transaction/i }));
+    await waitFor(() => expect(screen.getByLabelText(/Transaction ID/)).toBeTruthy());
+    const txnInput = screen.getByLabelText(/Transaction ID/);
+    // fireEvent.change (clearing via user.clear would set the field to "" which
+    // unmounts it — the Transaction ID field is gated on a truthy transactionId)
+    fireEvent.change(txnInput, { target: { value: "tx-999" } });
+    expect((txnInput as HTMLInputElement).value).toBe("tx-999");
   });
 
   it("calls commit mutation", async () => {

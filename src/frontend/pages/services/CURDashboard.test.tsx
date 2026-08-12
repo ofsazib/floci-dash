@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -41,6 +41,26 @@ vi.mock("../../hooks/useCUR", () => ({
 }));
 
 import { CURDashboard } from "./CURDashboard";
+
+// ─── Modal helpers ───────────────────────────────────────
+
+/** Fire Escape on every mounted Cloudscape dialog (they stay mounted when hidden). */
+function dismissModalWithEscape() {
+  document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+    fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27 });
+  });
+}
+
+/** Locate a modal dialog by its header text. */
+function dialogOf(headerText: string): HTMLElement {
+  const header = screen.getAllByText(headerText).find((h) => h.closest('[role="dialog"]'));
+  return header!.closest('[role="dialog"]') as HTMLElement;
+}
+
+/** Assert the modal with the given header is hidden (Cloudscape uses display:none). */
+function expectModalHidden(headerText: string) {
+  expect(dialogOf(headerText).className).toContain("hidden");
+}
 
 // ─── Setup ──────────────────────────────────────────────
 
@@ -233,5 +253,86 @@ describe("CURDashboard — form validation", () => {
     const bucketInput = screen.getByPlaceholderText("my-report-bucket");
     await user.type(bucketInput, "bucket");
     expect(createBtn[createBtn.length - 1]).not.toBeDisabled();
+  });
+
+  it("filters reports by name", async () => {
+    mockReportDefs.mockReturnValue({
+      data: {
+        reportDefinitions: [
+          { ReportName: "alpha-report", TimeUnit: "DAILY", Format: "textORcsv", S3Bucket: "b1" },
+          { ReportName: "beta-report", TimeUnit: "HOURLY", Format: "Parquet", S3Bucket: "b2" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<CURDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("alpha-report")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("Find reports by name"), "beta");
+    await waitFor(() => expect(screen.getByText("beta-report")).toBeTruthy());
+    expect(screen.queryByText("alpha-report")).toBeNull();
+  });
+
+  it("dismisses the create modal with Escape and resets the form", async () => {
+    const user = userEvent.setup();
+    render(<CURDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /create/i);
+    await waitFor(() => expect(screen.getByText("Create Cost & Usage Report")).toBeTruthy());
+    const nameInput = screen.getByPlaceholderText("my-cur-report");
+    await user.type(nameInput, "TestReport");
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create Cost & Usage Report"));
+    expect(nameInput).toHaveProperty("value", "");
+  });
+
+  it("submits create and resets the form on success", async () => {
+    mockCreateReport.mockImplementation((_payload: unknown, opts?: { onSuccess?: () => void }) => {
+      opts?.onSuccess?.();
+    });
+    const user = userEvent.setup();
+    render(<CURDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /create/i);
+    await waitFor(() => expect(screen.getByText("Create Cost & Usage Report")).toBeTruthy());
+    const nameInput = screen.getByPlaceholderText("my-cur-report");
+    await user.type(nameInput, "TestReport");
+    await user.type(screen.getByPlaceholderText("my-report-bucket"), "my-bucket");
+    await waitFor(() => {
+      const btns = screen.getAllByRole("button", { name: /Create report/i });
+      const enabled = btns.find((b) => !b.hasAttribute("disabled"));
+      expect(enabled).toBeTruthy();
+    });
+    const reportBtns = screen.getAllByRole("button", { name: /Create report/i });
+    await user.click(reportBtns[reportBtns.length - 1]);
+    await waitFor(() => expectModalHidden("Create Cost & Usage Report"));
+    expect(nameInput).toHaveProperty("value", "");
+  });
+
+  it("picks a custom time unit and format via the Selects", async () => {
+    const user = userEvent.setup();
+    render(<CURDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /create/i);
+    await waitFor(() => expect(screen.getByText("Create Cost & Usage Report")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-cur-report"), "TestReport");
+    await user.type(screen.getByPlaceholderText("my-report-bucket"), "my-bucket");
+    await user.click(screen.getByRole("button", { name: /Daily/i }));
+    await user.click(screen.getByRole("option", { name: /Monthly/i }));
+    await user.click(screen.getByRole("button", { name: /textORcsv/i }));
+    await user.click(screen.getByRole("option", { name: /Parquet/i }));
+    await waitFor(() => {
+      const btns = screen.getAllByRole("button", { name: /Create report/i });
+      const enabled = btns.find((b) => !b.hasAttribute("disabled"));
+      expect(enabled).toBeTruthy();
+    });
+    const reportBtns = screen.getAllByRole("button", { name: /Create report/i });
+    await user.click(reportBtns[reportBtns.length - 1]);
+    await waitFor(() => {
+      expect(mockCreateReport).toHaveBeenCalledWith(
+        expect.objectContaining({ reportName: "TestReport", timeUnit: "MONTHLY", format: "Parquet" }),
+        expect.any(Object),
+      );
+    });
   });
 });

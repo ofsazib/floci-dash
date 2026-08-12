@@ -87,6 +87,25 @@ describe("ACMDashboard — data", () => {
     expect(screen.getByText("Yes")).toBeTruthy();
   });
 
+  it("filters certificates by domain", async () => {
+    mockCertificates.mockReturnValue({
+      data: {
+        certificates: [
+          { CertificateArn: "arn:1", DomainName: "example.com", Status: "ISSUED", Type: "AMAZON_ISSUED", InUse: false },
+          { CertificateArn: "arn:2", DomainName: "other.net", Status: "ISSUED", Type: "AMAZON_ISSUED", InUse: false },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ACMDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("example.com")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("Find certificates by domain"), "other");
+    await waitFor(() => expect(screen.getByText("other.net")).toBeTruthy());
+    expect(screen.queryByText("example.com")).toBeNull();
+  });
+
   it("renders certificates with null/undefined fields gracefully", () => {
     mockCertificates.mockReturnValue({
       data: {

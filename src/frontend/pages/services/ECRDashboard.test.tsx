@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -192,6 +192,18 @@ describe("ECRDashboard — create repository", () => {
       expect(mockCreateRepo).toHaveBeenCalledWith(
         expect.objectContaining({ name: "new-repo" }),
       );
+    });
+  });
+
+  it("dismisses create repository modal with Escape", async () => {
+    const user = userEvent.setup();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create repository")).toBeTruthy());
+    document.querySelectorAll('[class*="awsui_dialog"]').forEach((d) => fireEvent.keyDown(d as HTMLElement, { keyCode: 27 }));
+    await waitFor(() => {
+      const header = screen.getAllByText("Create repository").find((h) => h.closest('[role="dialog"]'));
+      expect(header!.closest('[role="dialog"]')!.className).toContain("hidden");
     });
   });
 
