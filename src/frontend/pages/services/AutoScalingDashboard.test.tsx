@@ -1836,3 +1836,106 @@ describe("AutoScalingDashboard — modal dismiss & success paths", () => {
     );
   });
 });
+
+describe("AutoScalingDashboard — sparse-data branches", () => {
+  it("shows empty groups when data is undefined", async () => {
+    mockGroupsHook.mockReturnValue({ data: undefined, isLoading: false });
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText(/No auto scaling groups/)).toBeTruthy());
+  });
+
+  it("shows empty launch configurations when data is undefined", async () => {
+    mockLCsHook.mockReturnValue({ data: undefined, isLoading: false });
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Launch Configurations/i }));
+    await waitFor(() => expect(screen.getByText(/No launch configurations/)).toBeTruthy());
+  });
+
+  it("renders the ASG selector with no options when data is undefined", async () => {
+    mockGroupsHook.mockReturnValue({ data: undefined, isLoading: false });
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => expect(screen.getByText(/Select an ASG/)).toBeTruthy());
+  });
+
+  it("shows fallback messages when describe-types data is missing", async () => {
+    mockNotificationTypes.mockReturnValue({ data: undefined, isLoading: false });
+    mockTerminationPolicyTypes.mockReturnValue({ data: undefined, isLoading: false });
+    mockAdjustmentTypes.mockReturnValue({ data: undefined, isLoading: false });
+    mockLifecycleHookTypes.mockReturnValue({ data: undefined, isLoading: false });
+    mockMetricCollectionTypes.mockReturnValue({ data: undefined, isLoading: false });
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => {
+      expect(screen.getByText("No notification types found.")).toBeTruthy();
+      expect(screen.getByText("No termination policy types found.")).toBeTruthy();
+      expect(screen.getByText("No adjustment types found.")).toBeTruthy();
+      expect(screen.getByText("No lifecycle hook types found.")).toBeTruthy();
+      expect(screen.getByText("No metric collection types found.")).toBeTruthy();
+    });
+  });
+
+  it("shows no policies when the policies data is undefined", async () => {
+    setupASGForAdvanced();
+    mockScalingPolicies.mockReturnValue({ data: undefined, isLoading: false });
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await selectASG(user, "my-asg");
+    await waitFor(() => expect(screen.getAllByText(/No scaling policies found/).length).toBeGreaterThanOrEqual(1));
+  });
+
+  it("shows no hooks when the lifecycle hook data is undefined", async () => {
+    setupASGForAdvanced();
+    mockLifecycleHooks.mockReturnValue({ data: undefined, isLoading: false });
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await selectASG(user, "my-asg");
+    await waitFor(() => expect(screen.getAllByText(/No lifecycle hooks found/).length).toBeGreaterThanOrEqual(1));
+  });
+
+  it("starts a refresh with the default healthy percentage when the input is empty", async () => {
+    setupASGForAdvanced();
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await selectASG(user, "my-asg");
+    await user.click(screen.getByRole("button", { name: /Start Refresh/ }));
+    await waitFor(() => expect(screen.getByText(/Start Instance Refresh/)).toBeTruthy());
+    const healthyInput = screen.getByPlaceholderText("90");
+    await user.clear(healthyInput);
+    await user.click(screen.getByRole("button", { name: /^Start$/ }));
+    await waitFor(() => {
+      expect(mockStartRefresh).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "my-asg", minHealthyPercentage: 90 }),
+        expect.any(Object)
+      );
+    });
+  });
+
+  it("creates a policy with default adjustment and cooldown when the inputs are empty", async () => {
+    setupASGForAdvanced();
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await selectASG(user, "my-asg");
+    await user.click(screen.getAllByText(/Create policy/)[0]);
+    await waitFor(() => expect(screen.getByText(/Create Scaling Policy/)).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("scale-up"), "scale-out");
+    const adjInput = screen.getByPlaceholderText("1");
+    await user.clear(adjInput);
+    const coolInput = screen.getByPlaceholderText("300");
+    await user.clear(coolInput);
+    await user.click(screen.getByRole("button", { name: /^Create$/ }));
+    await waitFor(() => {
+      expect(mockCreatePolicy).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "my-asg", policyName: "scale-out", scalingAdjustment: 1, cooldown: 300 }),
+        expect.any(Object)
+      );
+    });
+  });
+});

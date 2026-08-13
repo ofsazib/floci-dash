@@ -544,3 +544,75 @@ describe("CloudFrontDashboard — functions", () => {
     await waitFor(() => expect(screen.queryByText("fn-alpha")).toBeNull());
   });
 });
+
+describe("CloudFrontDashboard — sparse-data branches", () => {
+  it("maps empty distributions when data is undefined", async () => {
+    mockDistributions.mockReturnValue({ data: undefined, isLoading: false });
+    render(<CloudFrontDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText(/No CloudFront distributions/i)).toBeTruthy());
+  });
+
+  it("maps empty invalidations when invalidation data is undefined", async () => {
+    mockDistributions.mockReturnValue({
+      data: { distributions: [{ Id: "E1", DomainName: "d1.cloudfront.net", Status: "Deployed", Enabled: true }], total: 1 },
+      isLoading: false,
+    });
+    mockInvalidations.mockReturnValue({ data: undefined, isLoading: false });
+    const user = userEvent.setup();
+    render(<CloudFrontDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("E1"));
+    await waitFor(() => expect(screen.getByText(/No invalidations/i)).toBeTruthy());
+  });
+
+  it("shows dashes for invalidations without path items or create time", async () => {
+    mockDistributions.mockReturnValue({
+      data: { distributions: [{ Id: "E1", DomainName: "d1.cloudfront.net", Status: "Deployed", Enabled: true }], total: 1 },
+      isLoading: false,
+    });
+    mockInvalidations.mockReturnValue({
+      data: { invalidations: [{ Id: "I001", Status: "Completed", InvalidationBatch: { Paths: {} } }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CloudFrontDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("E1"));
+    await waitFor(() => expect(screen.getByText("I001")).toBeTruthy());
+    expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("maps empty cache policies when data is undefined", async () => {
+    mockCachePolicies.mockReturnValue({ data: undefined, isLoading: false });
+    const user = userEvent.setup();
+    render(<CloudFrontDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Cache Policies/i }));
+    await waitFor(() => expect(screen.getByText(/No cache policies/i)).toBeTruthy());
+  });
+
+  it("filters cache policies when a name is missing", async () => {
+    mockCachePolicies.mockReturnValue({
+      data: {
+        cachePolicies: [
+          { CachePolicy: { Id: "cp-x", CachePolicyConfig: {} }, Type: "custom" },
+          { CachePolicy: { Id: "cp-y", CachePolicyConfig: { Name: "Named" } }, Type: "managed" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CloudFrontDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Cache Policies/i }));
+    await waitFor(() => expect(screen.getByText("cp-x")).toBeTruthy());
+    const filterInput = screen.getByPlaceholderText("Find policies");
+    await user.type(filterInput, "zzz");
+    await waitFor(() => expect(screen.queryByText("cp-x")).toBeNull());
+  });
+
+  it("maps empty functions when data is undefined", async () => {
+    mockFunctions.mockReturnValue({ data: undefined, isLoading: false });
+    const user = userEvent.setup();
+    render(<CloudFrontDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /functions/i }));
+    await waitFor(() => expect(screen.getByText(/No CloudFront functions/i)).toBeTruthy());
+  });
+});

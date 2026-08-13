@@ -362,3 +362,69 @@ describe("DynamoDBExports", () => {
     await waitFor(() => expectModalHidden("Export Details"));
   });
 });
+
+describe("DynamoDBExports — sparse-data branches", () => {
+  it("shows the raw status for an unknown export status", async () => {
+    mockExports.mockReturnValue({
+      exports: [{ exportArn: "arn:unknown", exportStatus: "PENDING", itemCount: 5 }],
+      total: 1,
+    });
+    render(<DynamoDBExports tableName="test-table" />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("PENDING")).toBeTruthy());
+  });
+
+  it("shows the empty state when exports data is undefined", async () => {
+    mockExports.mockReturnValue(undefined);
+    render(<DynamoDBExports tableName="test-table" />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("No exports")).toBeTruthy());
+  });
+
+  it("shows a dash for an export without an ARN", async () => {
+    mockExports.mockReturnValue({
+      exports: [{ exportStatus: "COMPLETED" }],
+      total: 1,
+    });
+    render(<DynamoDBExports tableName="test-table" />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("Completed")).toBeTruthy());
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("shows the default message when the export error has no message", async () => {
+    exportTableState.isError = true;
+    exportTableState.error = new Error();
+    const user = userEvent.setup();
+    render(<DynamoDBExports tableName="test-table" />, { wrapper: createWrapper() });
+    await clickButton(user, /Export to S3/i);
+    await waitFor(() => expect(screen.getByText("Failed to create export")).toBeTruthy());
+  });
+
+  it("shows the manifest in the export detail modal", async () => {
+    mockExports.mockReturnValue({
+      exports: [{ exportArn: "arn:manifest", exportStatus: "COMPLETED" }],
+      total: 1,
+    });
+    describeState.data = {
+      exportStatus: "COMPLETED",
+      exportManifest: "s3://bucket/manifest.json",
+    };
+    const user = userEvent.setup();
+    render(<DynamoDBExports tableName="test-table" />, { wrapper: createWrapper() });
+    await clickButton(user, /^Details$/);
+    await waitFor(() => expect(screen.getByText("s3://bucket/manifest.json")).toBeTruthy());
+  });
+
+  it("shows the default failure message when none is provided", async () => {
+    mockExports.mockReturnValue({
+      exports: [{ exportArn: "arn:fail2", exportStatus: "FAILED" }],
+      total: 1,
+    });
+    describeState.data = {
+      exportStatus: "FAILED",
+      failureCode: "InternalError",
+    };
+    const user = userEvent.setup();
+    render(<DynamoDBExports tableName="test-table" />, { wrapper: createWrapper() });
+    await clickButton(user, /^Details$/);
+    await waitFor(() => expect(screen.getByText("No failure message available")).toBeTruthy());
+  });
+});

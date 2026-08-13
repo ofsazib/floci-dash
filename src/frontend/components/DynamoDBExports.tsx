@@ -225,7 +225,7 @@ export default function DynamoDBExports({ tableName }: { tableName: string }) {
                     {
                       s3Bucket,
                       s3Prefix: s3Prefix || undefined,
-                      exportFormat: exportFormat.value ?? "DYNAMODB_JSON",
+                      exportFormat: exportFormat.value!,
                     },
                     { onSuccess: () => setShowCreate(false) }
                   );

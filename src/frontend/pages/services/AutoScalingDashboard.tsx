@@ -628,6 +628,13 @@ export function AutoScalingDashboard() {
   const lifecycleHookTypes = useASGLifecycleHookTypes();
   const metricCollectionTypes = useASGMetricCollectionTypes();
 
+  const selectedGroupTags = selectedASG
+    ? (data?.groups?.find((g: any) => g.AutoScalingGroupName === selectedASG)?.Tags || [])
+    : [];
+  const scalingPoliciesList = scalingPolicies.data?.policies || [];
+  const lifecycleHooksList = lifecycleHooks.data?.lifecycleHooks || [];
+  const metricTypesList = metricCollectionTypes.data?.metricCollectionTypes || [];
+
   if (isLoading) return <TableSkeleton />;
 
   return (
@@ -716,7 +723,7 @@ export function AutoScalingDashboard() {
               <FormField label="Select Auto Scaling Group">
                 <Select
                   selectedOption={selectedASG ? { label: selectedASG, value: selectedASG } : null}
-                  onChange={({ detail }) => setSelectedASG(detail.selectedOption?.value || null)}
+                  onChange={({ detail }) => setSelectedASG(detail.selectedOption!.value!)}
                   options={(data?.groups || []).map((g: any) => ({
                     label: g.AutoScalingGroupName,
                     value: g.AutoScalingGroupName,
@@ -758,10 +765,10 @@ export function AutoScalingDashboard() {
                   <Container header={<Header variant="h2" actions={<Button onClick={() => setShowAddTag(true)}>Add tag</Button>}>
                     Tags
                   </Header>}>
-                    {(data?.groups?.find((g: any) => g.AutoScalingGroupName === selectedASG)?.Tags || []).length > 0 ? (
+                    {selectedGroupTags.length > 0 ? (
                       <ResourceTable
                         resourceName="Tag"
-                        items={(data?.groups?.find((g: any) => g.AutoScalingGroupName === selectedASG)?.Tags || []).map((t: any) => ({
+                        items={selectedGroupTags.map((t: any) => ({
                           key: t.Key,
                           value: t.Value,
                         }))}
@@ -824,9 +831,9 @@ export function AutoScalingDashboard() {
                   <Container header={scalingPolicyHeader}>
                     {scalingPolicies.isLoading ? (
                       <Spinner />
-                    ) : (scalingPolicies.data?.policies || []).length > 0 ? (
+                    ) : scalingPoliciesList.length > 0 ? (
                       <SpaceBetween size="xs">
-                        {(scalingPolicies.data?.policies || []).map((p: any) => (
+                        {scalingPoliciesList.map((p: any) => (
                           <Box key={p.PolicyName}>
                             <Box variant="small">{p.PolicyName} ({p.PolicyType}) — {p.AdjustmentType || "N/A"}: {p.ScalingAdjustment ?? "-"}</Box>
                             <DeleteButton
@@ -847,9 +854,9 @@ export function AutoScalingDashboard() {
                   <Container header={lifecycleHooksHeader}>
                     {lifecycleHooks.isLoading ? (
                       <Spinner />
-                    ) : (lifecycleHooks.data?.lifecycleHooks || []).length > 0 ? (
+                    ) : lifecycleHooksList.length > 0 ? (
                       <SpaceBetween size="xs">
-                        {(lifecycleHooks.data?.lifecycleHooks || []).map((h: any) => (
+                        {lifecycleHooksList.map((h: any) => (
                           <Box key={h.LifecycleHookName}>
                             <Box variant="small">{h.LifecycleHookName} — {h.LifecycleTransition} (default: {h.DefaultResult})</Box>
                             <DeleteButton
@@ -919,8 +926,8 @@ export function AutoScalingDashboard() {
                     <Spinner />
                   ) : (
                     <SpaceBetween size="xs">
-                      {(metricCollectionTypes.data?.metricCollectionTypes || []).length > 0 ? (
-                        (metricCollectionTypes.data?.metricCollectionTypes || []).map((m: any) => (
+                      {metricTypesList.length > 0 ? (
+                        metricTypesList.map((m: any) => (
                           <Box key={m.metric} variant="small">
                             {m.metric} ({m.granularities?.join(", ") || "No granularities"})
                           </Box>
@@ -939,7 +946,7 @@ export function AutoScalingDashboard() {
                   <SpaceBetween direction="horizontal" size="xs">
                     <Button variant="link" onClick={() => setShowStartRefresh(false)}>Cancel</Button>
                     <Button variant="primary" loading={startRefresh.isPending} onClick={() => {
-                      if (selectedASG) startRefresh.mutate({ name: selectedASG, minHealthyPercentage: Number(minHealthy) || 90 }, { onSuccess: () => setShowStartRefresh(false) });
+                      startRefresh.mutate({ name: selectedASG!, minHealthyPercentage: Number(minHealthy) || 90 }, { onSuccess: () => setShowStartRefresh(false) });
                     }}>Start</Button>
                   </SpaceBetween>
                 }>
@@ -953,9 +960,7 @@ export function AutoScalingDashboard() {
                   <SpaceBetween direction="horizontal" size="xs">
                     <Button variant="link" onClick={() => setShowAddTag(false)}>Cancel</Button>
                     <Button variant="primary" loading={createOrUpdateTags.isPending} onClick={() => {
-                      if (selectedASG && tagKey.trim() && tagValue.trim()) {
-                        createOrUpdateTags.mutate({ name: selectedASG, tags: [{ key: tagKey.trim(), value: tagValue.trim() }] }, { onSuccess: () => { setShowAddTag(false); setTagKey(""); setTagValue(""); } });
-                      }
+                      createOrUpdateTags.mutate({ name: selectedASG!, tags: [{ key: tagKey.trim(), value: tagValue.trim() }] }, { onSuccess: () => { setShowAddTag(false); setTagKey(""); setTagValue(""); } });
                     }} disabled={!tagKey.trim() || !tagValue.trim()}>Add</Button>
                   </SpaceBetween>
                 }>
@@ -968,9 +973,7 @@ export function AutoScalingDashboard() {
                   <SpaceBetween direction="horizontal" size="xs">
                     <Button variant="link" onClick={() => setShowAttachTGs(false)}>Cancel</Button>
                     <Button variant="primary" loading={attachTGs.isPending} onClick={() => {
-                      if (selectedASG && tgArnsList.trim()) {
-                        attachTGs.mutate({ name: selectedASG, targetGroupARNs: tgArnsList.split(/[,\n]+/).map((s: string) => s.trim()).filter(Boolean) }, { onSuccess: () => { setShowAttachTGs(false); setTgArnsList(""); } });
-                      }
+                      attachTGs.mutate({ name: selectedASG!, targetGroupARNs: tgArnsList.split(/[,\n]+/).map((s: string) => s.trim()).filter(Boolean) }, { onSuccess: () => { setShowAttachTGs(false); setTgArnsList(""); } });
                     }} disabled={!tgArnsList.trim()}>Attach</Button>
                   </SpaceBetween>
                 }>
@@ -984,9 +987,7 @@ export function AutoScalingDashboard() {
                   <SpaceBetween direction="horizontal" size="xs">
                     <Button variant="link" onClick={() => setShowAttachLBs(false)}>Cancel</Button>
                     <Button variant="primary" loading={attachLBs.isPending} onClick={() => {
-                      if (selectedASG && lbNamesList.trim()) {
-                        attachLBs.mutate({ name: selectedASG, loadBalancerNames: lbNamesList.split(/[,\n]+/).map((s: string) => s.trim()).filter(Boolean) }, { onSuccess: () => { setShowAttachLBs(false); setLbNamesList(""); } });
-                      }
+                      attachLBs.mutate({ name: selectedASG!, loadBalancerNames: lbNamesList.split(/[,\n]+/).map((s: string) => s.trim()).filter(Boolean) }, { onSuccess: () => { setShowAttachLBs(false); setLbNamesList(""); } });
                     }} disabled={!lbNamesList.trim()}>Attach</Button>
                   </SpaceBetween>
                 }>
@@ -1002,16 +1003,14 @@ export function AutoScalingDashboard() {
                   <SpaceBetween direction="horizontal" size="xs">
                     <Button variant="link" onClick={() => setShowCreatePolicy(false)}>Cancel</Button>
                     <Button variant="primary" loading={createPolicy.isPending} onClick={() => {
-                      if (selectedASG && policyName.trim()) {
-                        createPolicy.mutate({
-                          name: selectedASG,
-                          policyName: policyName.trim(),
-                          policyType,
-                          adjustmentType,
-                          scalingAdjustment: Number(scalingAdjustment) || 1,
-                          cooldown: Number(policyCooldown) || 300,
-                        }, { onSuccess: () => { setShowCreatePolicy(false); setPolicyName(""); } });
-                      }
+                      createPolicy.mutate({
+                        name: selectedASG!,
+                        policyName: policyName.trim(),
+                        policyType,
+                        adjustmentType,
+                        scalingAdjustment: Number(scalingAdjustment) || 1,
+                        cooldown: Number(policyCooldown) || 300,
+                      }, { onSuccess: () => { setShowCreatePolicy(false); setPolicyName(""); } });
                     }} disabled={!policyName.trim()}>Create</Button>
                   </SpaceBetween>
                 }>
@@ -1019,14 +1018,14 @@ export function AutoScalingDashboard() {
                   <FormField label="Policy Type">
                     <Select
                       selectedOption={policyType === "SimpleScaling" ? { label: "Simple Scaling", value: "SimpleScaling" } : { label: "Step Scaling", value: "StepScaling" }}
-                      onChange={({ detail }) => setPolicyType(detail.selectedOption?.value || "SimpleScaling")}
+                      onChange={({ detail }) => setPolicyType(detail.selectedOption!.value!)}
                       options={[{ label: "Simple Scaling", value: "SimpleScaling" }, { label: "Step Scaling", value: "StepScaling" }]}
                     />
                   </FormField>
                   <FormField label="Adjustment Type">
                     <Select
                       selectedOption={{ label: adjustmentType, value: adjustmentType }}
-                      onChange={({ detail }) => setAdjustmentType(detail.selectedOption?.value || "ChangeInCapacity")}
+                      onChange={({ detail }) => setAdjustmentType(detail.selectedOption!.value!)}
                       options={[
                         { label: "ChangeInCapacity", value: "ChangeInCapacity" },
                         { label: "ExactCapacity", value: "ExactCapacity" },
@@ -1045,16 +1044,14 @@ export function AutoScalingDashboard() {
                   <SpaceBetween direction="horizontal" size="xs">
                     <Button variant="link" onClick={() => setShowCreateHook(false)}>Cancel</Button>
                     <Button variant="primary" loading={putHook.isPending} onClick={() => {
-                      if (selectedASG && hookName.trim() && hookTransition.trim()) {
-                        putHook.mutate({
-                          name: selectedASG,
-                          lifecycleHookName: hookName.trim(),
-                          lifecycleTransition: hookTransition,
-                          notificationTargetARN: hookTargetARN.trim() || undefined,
-                          roleARN: hookRoleARN.trim() || undefined,
-                          defaultResult: hookResult,
-                        }, { onSuccess: () => { setShowCreateHook(false); setHookName(""); } });
-                      }
+                      putHook.mutate({
+                        name: selectedASG!,
+                        lifecycleHookName: hookName.trim(),
+                        lifecycleTransition: hookTransition,
+                        notificationTargetARN: hookTargetARN.trim() || undefined,
+                        roleARN: hookRoleARN.trim() || undefined,
+                        defaultResult: hookResult,
+                      }, { onSuccess: () => { setShowCreateHook(false); setHookName(""); } });
                     }} disabled={!hookName.trim()}>Create</Button>
                   </SpaceBetween>
                 }>
@@ -1062,7 +1059,7 @@ export function AutoScalingDashboard() {
                   <FormField label="Lifecycle Transition">
                     <Select
                       selectedOption={{ label: hookTransition, value: hookTransition }}
-                      onChange={({ detail }) => setHookTransition(detail.selectedOption?.value || "autoscaling:EC2_INSTANCE_LAUNCHING")}
+                      onChange={({ detail }) => setHookTransition(detail.selectedOption!.value!)}
                       options={[
                         { label: "autoscaling:EC2_INSTANCE_LAUNCHING", value: "autoscaling:EC2_INSTANCE_LAUNCHING" },
                         { label: "autoscaling:EC2_INSTANCE_TERMINATING", value: "autoscaling:EC2_INSTANCE_TERMINATING" },
@@ -1072,7 +1069,7 @@ export function AutoScalingDashboard() {
                   <FormField label="Default Result">
                     <Select
                       selectedOption={{ label: hookResult, value: hookResult }}
-                      onChange={({ detail }) => setHookResult(detail.selectedOption?.value || "ABANDON")}
+                      onChange={({ detail }) => setHookResult(detail.selectedOption!.value!)}
                       options={[
                         { label: "ABANDON", value: "ABANDON" },
                         { label: "CONTINUE", value: "CONTINUE" },
@@ -1090,13 +1087,11 @@ export function AutoScalingDashboard() {
                   <SpaceBetween direction="horizontal" size="xs">
                     <Button variant="link" onClick={() => setShowCompleteAction(false)}>Cancel</Button>
                     <Button variant="primary" loading={completeAction.isPending} onClick={() => {
-                      if (selectedASG && completeHookName.trim()) {
-                        completeAction.mutate({
-                          name: selectedASG,
-                          lifecycleHookName: completeHookName.trim(),
-                          lifecycleActionResult: completeActionResult,
-                        }, { onSuccess: () => { setShowCompleteAction(false); setCompleteHookName(""); } });
-                      }
+                      completeAction.mutate({
+                        name: selectedASG!,
+                        lifecycleHookName: completeHookName.trim(),
+                        lifecycleActionResult: completeActionResult,
+                      }, { onSuccess: () => { setShowCompleteAction(false); setCompleteHookName(""); } });
                     }} disabled={!completeHookName.trim()}>Complete</Button>
                   </SpaceBetween>
                 }>
@@ -1104,7 +1099,7 @@ export function AutoScalingDashboard() {
                   <FormField label="Action Result">
                     <Select
                       selectedOption={{ label: completeActionResult, value: completeActionResult }}
-                      onChange={({ detail }) => setCompleteActionResult(detail.selectedOption?.value || "CONTINUE")}
+                      onChange={({ detail }) => setCompleteActionResult(detail.selectedOption!.value!)}
                       options={[
                         { label: "CONTINUE", value: "CONTINUE" },
                         { label: "ABANDON", value: "ABANDON" },
