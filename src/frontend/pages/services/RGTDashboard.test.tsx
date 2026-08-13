@@ -150,4 +150,25 @@ describe("RGTDashboard", () => {
     await waitFor(() => expect(screen.queryByText(/i-001/)).toBeNull());
   });
 
+  it("renders empty list when resourceTagMappingList key is missing", () => {
+    mockResources.mockReturnValue({ data: { total: 0 } as any, isLoading: false });
+    render(<RGTDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No tagged resources found/i)).toBeTruthy();
+  });
+
+  it("renders no tag keys when tagKeys key is missing", () => {
+    mockTagKeys.mockReturnValue({ data: {} as any });
+    render(<RGTDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("Tag Keys")).toBeTruthy();
+  });
+
+  it("shows No values when tagValues key is missing", async () => {
+    mockTagKeys.mockReturnValue({ data: { tagKeys: ["MissingVals"] } });
+    mockTagValues.mockReturnValue({ data: {} as any });
+    const user = userEvent.setup();
+    render(<RGTDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("MissingVals"));
+    await waitFor(() => expect(screen.getByText("No values")).toBeTruthy());
+  });
+
 });

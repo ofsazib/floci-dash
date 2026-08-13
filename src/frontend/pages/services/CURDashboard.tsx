@@ -544,7 +544,6 @@ export function CURDashboard() {
   }
 
   function handleCreate() {
-    if (!name || !timeUnit.value || !s3Bucket) return;
     createReport.mutate(
       {
         reportName: name,

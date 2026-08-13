@@ -268,4 +268,23 @@ describe("S3Dashboard", () => {
     await waitFor(() => expectModalHidden("Create Bucket"));
     expect(nameInput).toHaveProperty("value", "");
   });
+
+  it("shows load error fallback without message", () => {
+    mockBuckets.mockReturnValue({
+      data: undefined, isLoading: false, isError: true,
+      error: {} as Error,
+    });
+    render(<S3Dashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("Failed to load buckets")).toBeTruthy();
+  });
+
+  it("shows create bucket error fallback without message", async () => {
+    createBucketState.isError = true;
+    createBucketState.error = {} as Error;
+    const user = userEvent.setup();
+    const { container } = render(<S3Dashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(container.textContent).toContain("Create Bucket"));
+    await waitFor(() => expect(screen.getByText("Failed to create bucket")).toBeTruthy());
+  });
 });

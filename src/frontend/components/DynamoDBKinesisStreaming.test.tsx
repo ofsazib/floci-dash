@@ -212,4 +212,40 @@ describe("DynamoDBKinesisStreaming", () => {
       expect(mockDisable).toHaveBeenCalledWith("arn:aws:kinesis:us-east-1:123:stream/my-stream");
     });
   });
+
+  it("renders an unknown destination status as a blue badge", () => {
+    mockStreamingData.mockReturnValue({
+      destinations: [{
+        streamArn: "arn:aws:kinesis:us-east-1:123:stream/my-stream",
+        destinationStatus: "PROCESSING",
+      }],
+      total: 1,
+    });
+    render(<DynamoDBKinesisStreaming tableName="test-table" />, { wrapper: createWrapper() });
+    expect(screen.getByText("PROCESSING")).toBeTruthy();
+  });
+
+  it("renders empty state when destinations key is missing", () => {
+    mockStreamingData.mockReturnValue({ total: 0 } as any);
+    render(<DynamoDBKinesisStreaming tableName="test-table" />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No Kinesis streaming destinations/)).toBeTruthy();
+  });
+
+  it("shows enable streaming error alert with message", async () => {
+    enableState.isError = true;
+    enableState.error = new Error("Enable denied");
+    const user = userEvent.setup();
+    render(<DynamoDBKinesisStreaming tableName="test-table" />, { wrapper: createWrapper() });
+    await clickButton(user, /Enable streaming/);
+    await waitFor(() => expect(screen.getByText("Enable denied")).toBeTruthy());
+  });
+
+  it("shows enable streaming error fallback without message", async () => {
+    enableState.isError = true;
+    enableState.error = {} as Error;
+    const user = userEvent.setup();
+    render(<DynamoDBKinesisStreaming tableName="test-table" />, { wrapper: createWrapper() });
+    await clickButton(user, /Enable streaming/);
+    await waitFor(() => expect(screen.getByText("Failed to enable Kinesis streaming")).toBeTruthy());
+  });
 });

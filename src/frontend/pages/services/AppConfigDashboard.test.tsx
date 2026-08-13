@@ -14,6 +14,11 @@ const mockDeleteEnv = vi.fn();
 const mockCreateProfile = vi.fn();
 const mockDeleteProfile = vi.fn();
 
+const deleteAppState = vi.hoisted(() => ({
+  isPending: false,
+  variables: null as string | null,
+}));
+
 const createEnvState = vi.hoisted(() => ({
   isPending: false,
   isError: false,
@@ -38,7 +43,11 @@ const deleteProfileState = vi.hoisted(() => ({
 
 vi.mock("../../hooks/useAppConfig", () => ({
   useAppConfigApplications: (...args: any[]) => mockApps(...args),
-  useDeleteAppConfigApplication: () => ({ mutateAsync: mockDeleteApp, isPending: false, variables: null }),
+  useDeleteAppConfigApplication: () => ({
+    mutateAsync: mockDeleteApp,
+    get isPending() { return deleteAppState.isPending; },
+    get variables() { return deleteAppState.variables; },
+  }),
   useAppConfigEnvironments: (...args: any[]) => mockEnvs(...args),
   useAppConfigProfiles: (...args: any[]) => mockProfiles(...args),
   useCreateAppConfigEnvironment: () => ({
@@ -89,6 +98,8 @@ function expectModalHidden(headerText: string) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  deleteAppState.isPending = false;
+  deleteAppState.variables = null;
   createEnvState.isPending = false;
   createEnvState.isError = false;
   createEnvState.error = null;
@@ -239,16 +250,26 @@ describe("AppConfigDashboard", () => {
   });
 });
 
+async function navigateToDetail(user: any) {
+  setupOneApp();
+  render(<AppConfigDashboard />, { wrapper: createWrapper() });
+  await waitFor(() => screen.getByText("my-app"));
+  await user.click(screen.getByText("my-app"));
+  await waitFor(() => expect(screen.getByRole("tab", { name: /Environments/i })).toBeTruthy());
+}
+
+async function navigateToProfiles(user: any) {
+  setupOneApp();
+  render(<AppConfigDashboard />, { wrapper: createWrapper() });
+  await waitFor(() => screen.getByText("my-app"));
+  await user.click(screen.getByText("my-app"));
+  await waitFor(() => screen.getByRole("tab", { name: /Configuration Profiles/i }));
+  await user.click(screen.getByRole("tab", { name: /Configuration Profiles/i }));
+}
+
 // ─── App Detail — Environments Tab ──────────────────────
 
 describe("AppConfigDashboard — environments", () => {
-  async function navigateToDetail(user: any) {
-    setupOneApp();
-    render(<AppConfigDashboard />, { wrapper: createWrapper() });
-    await waitFor(() => screen.getByText("my-app"));
-    await user.click(screen.getByText("my-app"));
-    await waitFor(() => expect(screen.getByRole("tab", { name: /Environments/i })).toBeTruthy());
-  }
 
   it("opens create environment modal", async () => {
     const user = userEvent.setup();
@@ -339,14 +360,6 @@ describe("AppConfigDashboard — environments", () => {
 // ─── App Detail — Profiles Tab ──────────────────────────
 
 describe("AppConfigDashboard — profiles", () => {
-  async function navigateToProfiles(user: any) {
-    setupOneApp();
-    render(<AppConfigDashboard />, { wrapper: createWrapper() });
-    await waitFor(() => screen.getByText("my-app"));
-    await user.click(screen.getByText("my-app"));
-    await waitFor(() => screen.getByRole("tab", { name: /Configuration Profiles/i }));
-    await user.click(screen.getByRole("tab", { name: /Configuration Profiles/i }));
-  }
 
   it("opens create profile modal", async () => {
     const user = userEvent.setup();
@@ -560,5 +573,146 @@ describe("AppConfigDashboard — profiles", () => {
       expect.objectContaining({ name: "app-cfg", description: "Profile description" }),
       expect.any(Object),
     );
+  });
+});
+
+describe("AppConfigDashboard — branch coverage", () => {
+  it("renders empty list when applications key is missing", () => {
+    mockApps.mockReturnValue({ data: { total: 0 } as any, isLoading: false });
+    render(<AppConfigDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("No AppConfig applications")).toBeTruthy();
+  });
+
+  it("shows delete-app loading state on matching row", () => {
+    deleteAppState.isPending = true;
+    deleteAppState.variables = "app-1";
+    mockApps.mockReturnValue({
+      data: { applications: [{ Id: "app-1", Name: "my-app", Description: "Test app" }], total: 1 },
+      isLoading: false,
+    });
+    render(<AppConfigDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByRole("button", { name: /Delete my-app/i })).toBeTruthy();
+  });
+
+  it("renders empty environments when environments key is missing", async () => {
+    const user = userEvent.setup();
+    mockApps.mockReturnValue({ data: { applications: [{ Id: "app-1", Name: "my-app" }], total: 1 }, isLoading: false });
+    mockEnvs.mockReturnValue({ data: { total: 0 } as any });
+    render(<AppConfigDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("my-app"));
+    await user.click(screen.getByText("my-app"));
+    await waitFor(() => screen.getByRole("tab", { name: /Environments/i }));
+    await user.click(screen.getByRole("tab", { name: /Environments/i }));
+    await waitFor(() => expect(screen.getByText("No environments")).toBeTruthy());
+  });
+
+  it("shows delete-environment loading state on matching row", async () => {
+    deleteEnvState.isPending = true;
+    deleteEnvState.variables = "env-del";
+    mockApps.mockReturnValue({ data: { applications: [{ Id: "app-1", Name: "my-app" }], total: 1 }, isLoading: false });
+    mockEnvs.mockReturnValue({ data: { environments: [{ Id: "env-del", Name: "dev", State: "ACTIVE" }], total: 1 } });
+    const user = userEvent.setup();
+    render(<AppConfigDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("my-app"));
+    await user.click(screen.getByText("my-app"));
+    await waitFor(() => screen.getByRole("tab", { name: /Environments/i }));
+    await user.click(screen.getByRole("tab", { name: /Environments/i }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /Delete dev/i })).toBeTruthy());
+  });
+
+  it("renders empty profiles when profiles key is missing", async () => {
+    const user = userEvent.setup();
+    mockApps.mockReturnValue({ data: { applications: [{ Id: "app-1", Name: "my-app" }], total: 1 }, isLoading: false });
+    mockProfiles.mockReturnValue({ data: { total: 0 } as any });
+    render(<AppConfigDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("my-app"));
+    await user.click(screen.getByText("my-app"));
+    await waitFor(() => screen.getByRole("tab", { name: /Configuration Profiles/i }));
+    await user.click(screen.getByRole("tab", { name: /Configuration Profiles/i }));
+    await waitFor(() => expect(screen.getByText("No configuration profiles")).toBeTruthy());
+  });
+
+  it("shows delete-profile loading state on matching row", async () => {
+    deleteProfileState.isPending = true;
+    deleteProfileState.variables = "prof-del";
+    mockApps.mockReturnValue({ data: { applications: [{ Id: "app-1", Name: "my-app" }], total: 1 }, isLoading: false });
+    mockProfiles.mockReturnValue({ data: { profiles: [{ Id: "prof-del", Name: "old-config", Type: "AWS.Freeform" }], total: 1 } });
+    const user = userEvent.setup();
+    render(<AppConfigDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("my-app"));
+    await user.click(screen.getByText("my-app"));
+    await waitFor(() => screen.getByRole("tab", { name: /Configuration Profiles/i }));
+    await user.click(screen.getByRole("tab", { name: /Configuration Profiles/i }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /Delete old-config/i })).toBeTruthy());
+  });
+
+  it("creates environment with empty description payload", async () => {
+    mockCreateEnv.mockImplementation((_payload: unknown, opts?: { onSuccess?: () => void }) => {
+      opts?.onSuccess?.();
+    });
+    mockApps.mockReturnValue({ data: { applications: [{ Id: "app-1", Name: "my-app" }], total: 1 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<AppConfigDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("my-app"));
+    await user.click(screen.getByText("my-app"));
+    await waitFor(() => screen.getByRole("tab", { name: /Environments/i }));
+    await user.click(screen.getByRole("tab", { name: /Environments/i }));
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create environment")).toBeTruthy());
+    const dialog = dialogOf("Create environment");
+    await user.type(within(dialog).getByPlaceholderText("production"), "empty-desc");
+    await user.click(within(dialog).getByRole("button", { name: /^Create$/ }));
+    await waitFor(() => expect(mockCreateEnv).toHaveBeenCalled());
+    expect(mockCreateEnv).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "empty-desc", description: undefined }),
+      expect.any(Object),
+    );
+  });
+
+  it("shows create env error fallback without message", async () => {
+    createEnvState.isError = true;
+    createEnvState.error = {} as Error;
+    const user = userEvent.setup();
+    await navigateToDetail(user);
+    await clickButton(user, /Create/i);
+    await waitFor(() => {
+      expect(screen.getByText("Failed to create environment")).toBeTruthy();
+    });
+  });
+
+  it("creates profile with empty locationUri falling back to hosted", async () => {
+    mockCreateProfile.mockImplementation((_payload: unknown, opts?: { onSuccess?: () => void }) => {
+      opts?.onSuccess?.();
+    });
+    mockApps.mockReturnValue({ data: { applications: [{ Id: "app-1", Name: "my-app" }], total: 1 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<AppConfigDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("my-app"));
+    await user.click(screen.getByText("my-app"));
+    await waitFor(() => screen.getByRole("tab", { name: /Configuration Profiles/i }));
+    await user.click(screen.getByRole("tab", { name: /Configuration Profiles/i }));
+    await clickButton(user, /Create$/i);
+    await waitFor(() => expect(screen.getByText("Create configuration profile")).toBeTruthy());
+    const dialog = dialogOf("Create configuration profile");
+    await user.type(within(dialog).getByPlaceholderText("my-config"), "empty-loc");
+    const locInput = within(dialog).getByPlaceholderText("hosted");
+    fireEvent.change(locInput, { target: { value: "" } });
+    await user.click(within(dialog).getByRole("button", { name: /^Create$/ }));
+    await waitFor(() => expect(mockCreateProfile).toHaveBeenCalled());
+    expect(mockCreateProfile).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "empty-loc", locationUri: "hosted" }),
+      expect.any(Object),
+    );
+  });
+
+  it("shows create profile error fallback without message", async () => {
+    createProfileState.isError = true;
+    createProfileState.error = {} as Error;
+    const user = userEvent.setup();
+    await navigateToProfiles(user);
+    await clickButton(user, /Create/i);
+    await waitFor(() => {
+      expect(screen.getByText("Failed to create profile")).toBeTruthy();
+    });
   });
 });

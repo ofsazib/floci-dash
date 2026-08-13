@@ -129,4 +129,21 @@ describe("ServiceGrid", () => {
     expect(screen.getByTestId("card-autoscaling")).toBeTruthy();
     expect(screen.getByText("Compute")).toBeTruthy();
   });
+
+  it("sorts two unknown services by their raw keys", () => {
+    render(
+      <ServiceGrid
+        services={{
+          zeta_service: "running",
+          alpha_service: "available",
+        }}
+      />,
+    );
+    const cards = screen.getAllByTestId(/card-(alpha|zeta)_service/);
+    expect(cards.length).toBe(2);
+    // Both land in "Other" and sort alphabetically by raw key
+    expect(screen.getByText("Other")).toBeTruthy();
+    expect(screen.getByTestId("card-alpha_service")).toBeTruthy();
+    expect(screen.getByTestId("card-zeta_service")).toBeTruthy();
+  });
 });

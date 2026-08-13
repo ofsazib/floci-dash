@@ -874,3 +874,353 @@ describe("CloudTrailDashboard — coverage completion", () => {
     await waitFor(() => expect(screen.queryByPlaceholderText("Value to match...")).toBeNull());
   });
 });
+
+describe("CloudTrailDashboard — branch coverage", () => {
+  function trailsWithOne() {
+    mockTrails.mockReturnValue({
+      data: {
+        trails: [
+          { Name: "my-trail", TrailARN: "arn:aws:cloudtrail:us-east-1::trail/my-trail", S3BucketName: "b", IsMultiRegionTrail: true, IncludeGlobalServiceEvents: true, HomeRegion: "us-east-1", CreationDate: 1700000000 },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    mockEventSelectors.mockReturnValue({
+      data: { trailName: "my-trail", eventSelectors: [], advancedEventSelectors: [] },
+      isLoading: false,
+    });
+  }
+
+  it("clears selected trail when switching to the Trails tab", async () => {
+    trailsWithOne();
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-trail")).toBeTruthy());
+    await clickButton(user, /event selectors/i);
+    await waitFor(() => expect(screen.getByText("Event Selectors for my-trail")).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /^Trails$/ }));
+    await waitFor(() => expect(screen.getByText("CloudTrail Trails")).toBeTruthy());
+    expect(screen.queryByText("Event Selectors for my-trail")).toBeNull();
+  });
+
+  it("searches with empty max results defaulting to 50", async () => {
+    mockLookupEvents.mockImplementation((_params, opts) => {
+      opts?.onSuccess?.({ events: [], nextToken: null, total: 0 });
+    });
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /lookup events/i }));
+    const maxResults = screen.getByRole("spinbutton");
+    fireEvent.change(maxResults, { target: { value: "" } });
+    await clickButton(user, /search events/i);
+    expect(mockLookupEvents).toHaveBeenCalledWith(
+      expect.objectContaining({ maxResults: 50 }),
+      expect.anything(),
+    );
+  });
+
+  it("shows em dash for event without time in the results table", async () => {
+    mockLookupEvents.mockImplementation((_params, opts) => {
+      opts?.onSuccess?.({
+        events: [{ eventId: "e-nt", eventName: "NoTimeEvent", eventSource: "s3.amazonaws.com", username: "alice" }],
+        nextToken: null,
+        total: 1,
+      });
+    });
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /lookup events/i }));
+    await clickButton(user, /search events/i);
+    await waitFor(() => expect(screen.getByText("NoTimeEvent")).toBeTruthy());
+    expect(screen.getAllByText("\u2014").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("loads more with start/end times and empty max results", async () => {
+    mockLookupEvents.mockImplementation((_params, opts) => {
+      opts?.onSuccess?.({
+        events: [{ eventId: "e-1", eventName: "CreateBucket", eventTime: "2024-01-01T00:00:00Z", eventSource: "s3.amazonaws.com", username: "alice" }],
+        nextToken: "next-token",
+        total: 2,
+      });
+    });
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /lookup events/i }));
+    await user.type(screen.getByPlaceholderText("2024-01-01T00:00:00Z"), "2024-06-01T00:00:00Z");
+    await user.type(screen.getByPlaceholderText("2024-12-31T23:59:59Z"), "2024-12-01T00:00:00Z");
+    const maxResults = screen.getByRole("spinbutton");
+    fireEvent.change(maxResults, { target: { value: "" } });
+    await clickButton(user, /search events/i);
+    await waitFor(() => expect(screen.getByText(/More results available/i)).toBeTruthy());
+    await clickButton(user, /Load more/i);
+    expect(mockLookupEvents).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        maxResults: 50,
+        nextToken: "next-token",
+        startTime: "2024-06-01T00:00:00Z",
+        endTime: "2024-12-01T00:00:00Z",
+      }),
+      expect.anything(),
+    );
+  });
+
+  it("loads more when first page has no events or total", async () => {
+    const responses = [
+      { nextToken: "next-token" } as any, // sparse first page
+      { events: [{ eventId: "e-2", eventName: "Second", eventTime: "2024-02-01T00:00:00Z", eventSource: "s3.amazonaws.com", username: "bob" }], nextToken: null, total: 1 },
+    ];
+    mockLookupEvents.mockImplementation((_params, opts) => {
+      opts?.onSuccess?.(responses.shift());
+    });
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /lookup events/i }));
+    await clickButton(user, /search events/i);
+    await waitFor(() => expect(screen.getByText(/More results available/i)).toBeTruthy());
+    await clickButton(user, /Load more/i);
+    await waitFor(() => expect(screen.getByText("Second")).toBeTruthy());
+    expect(mockLookupEvents).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows detail modal with missing event time and username", async () => {
+    mockLookupEvents.mockImplementation((_params, opts) => {
+      opts?.onSuccess?.({
+        events: [{ eventId: "e-min", eventName: "MinimalEvent", eventSource: "s3.amazonaws.com" }],
+        nextToken: null,
+        total: 1,
+      });
+    });
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /lookup events/i }));
+    await clickButton(user, /search events/i);
+    await waitFor(() => expect(screen.getByText("MinimalEvent")).toBeTruthy());
+    await clickButton(user, /Details/i);
+    await waitFor(() => expect(screen.getByText("Event Detail")).toBeTruthy());
+    expect(screen.getAllByText("\u2014").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("shows resources with missing type and name", async () => {
+    mockLookupEvents.mockImplementation((_params, opts) => {
+      opts?.onSuccess?.({
+        events: [{
+          eventId: "e-res",
+          eventName: "ResEvent",
+          eventTime: "2024-01-01T00:00:00Z",
+          eventSource: "s3.amazonaws.com",
+          username: "alice",
+          resources: [{}, { ResourceType: "AWS::S3::Bucket" }],
+        }],
+        nextToken: null,
+        total: 1,
+      });
+    });
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /lookup events/i }));
+    await clickButton(user, /search events/i);
+    await waitFor(() => expect(screen.getByText("ResEvent")).toBeTruthy());
+    await clickButton(user, /Details/i);
+    await waitFor(() => expect(screen.getByText("Resources")).toBeTruthy());
+    expect(screen.getByText("Resource:")).toBeTruthy();
+    expect(screen.getAllByText("\u2014").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("handles selector with unknown ReadWriteType falling back", async () => {
+    trailsWithOne();
+    mockEventSelectors.mockReturnValue({
+      data: { trailName: "my-trail", eventSelectors: [{ ReadWriteType: "Custom", IncludeManagementEvents: false }], advancedEventSelectors: [] },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-trail")).toBeTruthy());
+    await clickButton(user, /event selectors/i);
+    await waitFor(() => expect(screen.getByText("Event Selectors for my-trail")).toBeTruthy());
+    // Current config shows the raw selector value
+    expect(screen.getByText(/Read\/Write: Custom/)).toBeTruthy();
+    // Clicking the event-selectors tab itself fires the Tabs onChange falsy arm
+    await user.click(screen.getByRole("tab", { name: /Event Selectors: my-trail/ }));
+    await waitFor(() => expect(screen.getByText("Event Selectors for my-trail")).toBeTruthy());
+  });
+
+  it("handles selector without ReadWriteType", async () => {
+    trailsWithOne();
+    mockEventSelectors.mockReturnValue({
+      data: { trailName: "my-trail", eventSelectors: [{ IncludeManagementEvents: true }], advancedEventSelectors: [] },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-trail")).toBeTruthy());
+    await clickButton(user, /event selectors/i);
+    await waitFor(() => expect(screen.getByText("Event Selectors for my-trail")).toBeTruthy());
+    expect(screen.getByText(/Read\/Write: All/)).toBeTruthy();
+  });
+
+  it("handles advanced selectors with missing field data", async () => {
+    trailsWithOne();
+    mockEventSelectors.mockReturnValue({
+      data: {
+        trailName: "my-trail",
+        eventSelectors: [{ ReadWriteType: "All", IncludeManagementEvents: true }],
+        advancedEventSelectors: [
+          { Name: "Sparse", FieldSelectors: [{ Field: "unknown-field", Equals: [] }] },
+          { Name: "NoFields" },
+        ],
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-trail")).toBeTruthy());
+    await clickButton(user, /event selectors/i);
+    await waitFor(() => expect(screen.getByText("Event Selectors for my-trail")).toBeTruthy());
+    // Both advanced selectors render in current config (Name fallback + empty field list)
+    expect(screen.getByText(/Sparse:/)).toBeTruthy();
+    expect(screen.getByText(/NoFields:/)).toBeTruthy();
+  });
+
+  it("shows spinner when event selectors are loading", async () => {
+    trailsWithOne();
+    mockEventSelectors.mockReturnValue({ data: undefined, isLoading: true });
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-trail")).toBeTruthy());
+    await clickButton(user, /event selectors/i);
+    await waitFor(() => expect(document.querySelector('[class*="awsui_circle"]')).toBeTruthy());
+  });
+
+  it("shows put selectors error fallback without message", async () => {
+    putSelectorsState.isError = true;
+    putSelectorsState.error = {} as Error;
+    trailsWithOne();
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-trail")).toBeTruthy());
+    await clickButton(user, /event selectors/i);
+    await waitFor(() => expect(screen.getByText("Failed to update event selectors")).toBeTruthy());
+    putSelectorsState.isError = false;
+    putSelectorsState.error = null;
+  });
+
+  it("edits advanced fields across two rows", async () => {
+    trailsWithOne();
+    mockEventSelectors.mockReturnValue({
+      data: {
+        trailName: "my-trail",
+        eventSelectors: [{ ReadWriteType: "All", IncludeManagementEvents: true }],
+        advancedEventSelectors: [
+          { Name: "Custom", FieldSelectors: [{ Field: "eventSource", Equals: ["s3.amazonaws.com"] }, { Field: "eventName", Equals: ["CreateBucket"] }] },
+        ],
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-trail")).toBeTruthy());
+    await clickButton(user, /event selectors/i);
+    await waitFor(() => expect(screen.getByText("Event Selectors for my-trail")).toBeTruthy());
+    // Two advanced field rows render (i>0 arms for labels)
+    expect(screen.getAllByPlaceholderText("Value to match...").length).toBe(2);
+    // Change the FIELD Select on the FIRST row (idx === i and idx !== i map arms)
+    const fieldTriggers = screen.getAllByText(/eventSource|eventName/);
+    await user.click(fieldTriggers[0]);
+    await waitFor(() => expect(screen.getByText("eventCategory")).toBeTruthy());
+    await user.click(screen.getByText("eventCategory"));
+    // Change the equals value on the SECOND row (idx !== i map arm)
+    const equalsInputs = screen.getAllByPlaceholderText("Value to match...");
+    await user.type(equalsInputs[1], "X");
+    // Save — second row still has a value, first keeps its own
+    await clickButton(user, /save event selectors/i);
+    expect(mockPutEventSelectors).toHaveBeenCalledWith(
+      expect.objectContaining({
+        advancedEventSelectors: [
+          expect.objectContaining({
+            FieldSelectors: [
+              expect.objectContaining({ Field: "eventCategory", Equals: ["s3.amazonaws.com"] }),
+              expect.objectContaining({ Field: "eventName", Equals: ["CreateBucketX"] }),
+            ],
+          }),
+        ],
+      }),
+      expect.anything(),
+    );
+  });
+
+  it("saves advanced field with empty equals as undefined", async () => {
+    trailsWithOne();
+    mockEventSelectors.mockReturnValue({
+      data: {
+        trailName: "my-trail",
+        eventSelectors: [{ ReadWriteType: "All", IncludeManagementEvents: true }],
+        advancedEventSelectors: [{ Name: "Custom", FieldSelectors: [{ Field: "eventSource" }] }],
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-trail")).toBeTruthy());
+    await clickButton(user, /event selectors/i);
+    await waitFor(() => expect(screen.getByText("Event Selectors for my-trail")).toBeTruthy());
+    await clickButton(user, /save event selectors/i);
+    expect(mockPutEventSelectors).toHaveBeenCalledWith(
+      expect.objectContaining({
+        advancedEventSelectors: [
+          expect.objectContaining({
+            FieldSelectors: [expect.objectContaining({ Equals: undefined })],
+          }),
+        ],
+      }),
+      expect.anything(),
+    );
+  });
+
+  it("renders current config when eventSelectors key is missing", async () => {
+    trailsWithOne();
+    mockEventSelectors.mockReturnValue({
+      data: { trailName: "my-trail" } as any,
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-trail")).toBeTruthy());
+    await clickButton(user, /event selectors/i);
+    await waitFor(() => expect(screen.getByText("Event Selectors for my-trail")).toBeTruthy());
+    expect(screen.queryByText(/Current Configuration/i)).toBeNull();
+  });
+
+  it("hides advanced current config when advancedEventSelectors key is missing", async () => {
+    trailsWithOne();
+    mockEventSelectors.mockReturnValue({
+      data: { trailName: "my-trail", eventSelectors: [{ ReadWriteType: "All", IncludeManagementEvents: true }] } as any,
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-trail")).toBeTruthy());
+    await clickButton(user, /event selectors/i);
+    await waitFor(() => expect(screen.getByText("Event Selectors for my-trail")).toBeTruthy());
+    expect(screen.getByText(/Current Configuration/i)).toBeTruthy();
+    expect(screen.queryByText(/Advanced Event Selectors:/)).toBeNull();
+  });
+
+  it("renders advanced current config with missing name and field selectors", async () => {
+    trailsWithOne();
+    mockEventSelectors.mockReturnValue({
+      data: {
+        trailName: "my-trail",
+        eventSelectors: [{ ReadWriteType: "All", IncludeManagementEvents: true }],
+        advancedEventSelectors: [{}],
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-trail")).toBeTruthy());
+    await clickButton(user, /event selectors/i);
+    await waitFor(() => expect(screen.getByText("Event Selectors for my-trail")).toBeTruthy());
+    expect(screen.getByText(/Advanced Event Selectors:/)).toBeTruthy();
+  });
+});

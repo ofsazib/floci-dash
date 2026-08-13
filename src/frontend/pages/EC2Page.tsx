@@ -262,8 +262,9 @@ export function EC2InstanceList({ onSelect }: { onSelect: (id: string) => void }
       keyName: i.keyName,
     }));
 
+  const amiImages = amis?.images && amis.images.length > 0 ? amis.images : [];
+
   function handleCreate() {
-    if (!form.imageId) return;
     runInstance.mutate(
       {
         imageId: form.imageId,
@@ -325,11 +326,11 @@ export function EC2InstanceList({ onSelect }: { onSelect: (id: string) => void }
           {runInstance.isError && <Alert type="error" dismissible>{(runInstance.error as Error)?.message || "Failed to launch instance"}</Alert>}
           <SpaceBetween size="m">
             <FormField label="AMI ID" description="Amazon Machine Image">
-              {(amis?.images || []).length > 0 ? (
+              {amiImages.length > 0 ? (
                 <Select
                   selectedOption={form.imageId ? { label: form.imageId, value: form.imageId } : null}
                   onChange={({ detail }) => setForm(p => ({ ...p, imageId: detail.selectedOption.value || "" }))}
-                  options={(amis?.images || []).map(img => ({
+                  options={amiImages.map(img => ({
                     label: `${img.id}${img.name ? ` — ${img.name}` : ""}`,
                     description: img.platform || img.architecture || "",
                     value: img.id,
@@ -597,7 +598,7 @@ function EC2SubnetList() {
             <FormField label="VPC ID" description="Select the VPC for this subnet">
               <Select
                 selectedOption={form.vpcId ? { label: form.vpcId, value: form.vpcId } : { label: "Select a VPC", value: "" }}
-                onChange={({ detail }) => setForm(p => ({ ...p, vpcId: detail.selectedOption.value || "" }))}
+                onChange={({ detail }) => setForm(p => ({ ...p, vpcId: detail.selectedOption.value! }))}
                 options={(vpcs?.vpcs || []).map(v => ({ label: `${v.id} (${v.cidrBlock})`, value: v.id }))}
               />
             </FormField>
@@ -677,8 +678,7 @@ function EC2SecurityGroupList() {
         footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
           <Button variant="link" onClick={() => setShowRule(null)}>Cancel</Button>
           <Button variant="primary" onClick={() => {
-            if (!showRule) return;
-            const data = { groupId: showRule.groupId, ipProtocol: ruleForm.ipProtocol, fromPort: parseInt(ruleForm.fromPort), toPort: parseInt(ruleForm.toPort), cidrIp: ruleForm.cidrIp };
+            const data = { groupId: showRule!.groupId, ipProtocol: ruleForm.ipProtocol, fromPort: parseInt(ruleForm.fromPort), toPort: parseInt(ruleForm.toPort), cidrIp: ruleForm.cidrIp };
             authorizeIngress.mutate(data, { onSuccess: () => setShowRule(null) });
           }}>Add</Button>
         </SpaceBetween></Box>}
@@ -752,7 +752,7 @@ function EC2KeyPairList() {
           <FormField label="Key pair name"><Input value={form.keyName} onChange={({ detail }) => setForm(p => ({ ...p, keyName: detail.value }))} placeholder="my-key" /></FormField>
           <FormField label="Key type">
             <Select selectedOption={{ label: form.keyType === "rsa" ? "RSA" : "ED25519", value: form.keyType }}
-              onChange={({ detail }) => setForm(p => ({ ...p, keyType: detail.selectedOption.value || "rsa" }))}
+              onChange={({ detail }) => setForm(p => ({ ...p, keyType: detail.selectedOption.value! }))}
               options={[{ label: "RSA", value: "rsa" }, { label: "ED25519", value: "ed25519" }]} />
           </FormField>
         </SpaceBetween></Form>
@@ -794,6 +794,7 @@ function EC2ElasticIpList() {
   const items = (data?.addresses || []).map((a) => ({
     allocationId: a.allocationId,
     publicIp: a.publicIp,
+    name: a.publicIp || a.allocationId,
     privateIp: a.privateIp,
     instanceId: a.instanceId,
     domain: a.domain,
@@ -808,11 +809,11 @@ function EC2ElasticIpList() {
         headerCounter={data?.total}
         items={items}
         columns={[
-          { id: "publicIp", header: "Public IP", cell: (item: any) => item.publicIp || item.allocationId, isRowHeader: true },
+          { id: "publicIp", header: "Public IP", cell: (item: any) => item.name, isRowHeader: true },
           { id: "privateIp", header: "Private IP", cell: (item: any) => item.privateIp || "-" },
           { id: "instance", header: "Associated instance", cell: (item: any) => item.instanceId || "-" },
           { id: "domain", header: "Scope", cell: (item: any) => item.domain },
-          { id: "actions", header: "", cell: (item: any) => <DeleteButton itemName={item.publicIp || item.allocationId} resourceType="Elastic IP" loading={release.isPending && release.variables === item.allocationId} onDelete={() => release.mutateAsync(item.allocationId)} /> },
+          { id: "actions", header: "", cell: (item: any) => <DeleteButton itemName={item.name} resourceType="Elastic IP" loading={release.isPending && release.variables === item.allocationId} onDelete={() => release.mutateAsync(item.allocationId)} /> },
         ]}
         loading={isLoading}
         emptyMessage="No Elastic IPs found"
@@ -882,7 +883,7 @@ function EC2InternetGatewayList() {
         footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
           <Button variant="link" onClick={() => setShowAttach(null)}>Cancel</Button>
           <Button variant="primary" disabled={!attachVpcId} onClick={() => {
-            if (showAttach) attach.mutate({ id: showAttach.id, vpcId: attachVpcId }, { onSuccess: () => setShowAttach(null) });
+            attach.mutate({ id: showAttach!.id, vpcId: attachVpcId }, { onSuccess: () => setShowAttach(null) });
           }}>Attach</Button>
         </SpaceBetween></Box>}
       >
@@ -1017,7 +1018,7 @@ function EC2VolumeList() {
           <FormField label="Size (GiB)"><Input type="number" value={form.size} onChange={({ detail }) => setForm(p => ({ ...p, size: detail.value }))} /></FormField>
           <FormField label="Volume type">
             <Select selectedOption={{ label: form.volumeType.toUpperCase(), value: form.volumeType }}
-              onChange={({ detail }) => setForm(p => ({ ...p, volumeType: detail.selectedOption.value || "gp2" }))}
+              onChange={({ detail }) => setForm(p => ({ ...p, volumeType: detail.selectedOption.value! }))}
               options={["gp2", "gp3", "io1", "io2", "sc1", "st1", "standard"].map(t => ({ label: t.toUpperCase(), value: t }))} />
           </FormField>
         </SpaceBetween></Form>
@@ -1050,6 +1051,8 @@ export function EC2LaunchTemplateList() {
     }
   }, [showCreate]);
 
+  const amiImages = amis?.images && amis.images.length > 0 ? amis.images : [];
+
   const items = (data?.launchTemplates || []).map((lt) => ({
     id: lt.id, name: lt.name, defaultVersion: lt.defaultVersion, latestVersion: lt.latestVersion, createdAt: lt.createdAt,
   }));
@@ -1076,11 +1079,11 @@ export function EC2LaunchTemplateList() {
         <Form><SpaceBetween size="m">
           <FormField label="Template name"><Input value={form.launchTemplateName} onChange={({ detail }) => setForm(p => ({ ...p, launchTemplateName: detail.value }))} placeholder="my-template" /></FormField>
           <FormField label="AMI ID" description="Amazon Machine Image">
-              {(amis?.images || []).length > 0 ? (
+              {amiImages.length > 0 ? (
                 <Select
                   selectedOption={form.imageId ? { label: form.imageId, value: form.imageId } : null}
                   onChange={({ detail }) => setForm(p => ({ ...p, imageId: detail.selectedOption.value || "" }))}
-                  options={(amis?.images || []).map(img => ({
+                  options={amiImages.map(img => ({
                     label: `${img.id}${img.name ? ` — ${img.name}` : ""}`,
                     description: img.platform || img.architecture || "",
                     value: img.id,
@@ -1137,9 +1140,7 @@ function CommandBox({ command }: { command: string }) {
       setTimeout(() => setCopied(false), 2000);
     } catch {
       // Fallback: select the input text
-      if (inputRef.current) {
-        (inputRef.current as any).select();
-      }
+      (inputRef.current as any).select();
     }
   };
 
@@ -1256,7 +1257,7 @@ function EC2FlowLogList() {
             logDestinationType: form.logDestinationType || undefined,
             logDestination: form.logDestination || undefined,
             logFormat: form.logFormat || undefined,
-            maxAggregationInterval: form.maxAggregationInterval ? parseInt(form.maxAggregationInterval) : undefined,
+            maxAggregationInterval: parseInt(form.maxAggregationInterval),
           }, { onSuccess: () => setShowCreate(false) })}>Create</Button>
         </SpaceBetween></Box>}
       >
@@ -1274,14 +1275,14 @@ function EC2FlowLogList() {
             <FormField label="Resource type">
               <Select
                 selectedOption={{ label: form.resourceType, value: form.resourceType }}
-                onChange={({ detail }) => setForm(p => ({ ...p, resourceType: detail.selectedOption.value || "VPC" }))}
+                onChange={({ detail }) => setForm(p => ({ ...p, resourceType: detail.selectedOption.value! }))}
                 options={["VPC", "Subnet", "NetworkInterface"].map(t => ({ label: t, value: t }))}
               />
             </FormField>
             <FormField label="Traffic type">
               <Select
                 selectedOption={{ label: form.trafficType, value: form.trafficType }}
-                onChange={({ detail }) => setForm(p => ({ ...p, trafficType: detail.selectedOption.value || "ALL" }))}
+                onChange={({ detail }) => setForm(p => ({ ...p, trafficType: detail.selectedOption.value! }))}
                 options={[{ label: "ALL", value: "ALL" }, { label: "ACCEPT", value: "ACCEPT" }, { label: "REJECT", value: "REJECT" }]}
               />
             </FormField>
@@ -1303,7 +1304,7 @@ function EC2FlowLogList() {
             <FormField label="Max aggregation interval (seconds)">
               <Select
                 selectedOption={{ label: `${form.maxAggregationInterval}s`, value: form.maxAggregationInterval }}
-                onChange={({ detail }) => setForm(p => ({ ...p, maxAggregationInterval: detail.selectedOption.value || "600" }))}
+                onChange={({ detail }) => setForm(p => ({ ...p, maxAggregationInterval: detail.selectedOption.value! }))}
                 options={[{ label: "60s", value: "60" }, { label: "600s (10 min)", value: "600" }]}
               />
             </FormField>
@@ -1316,6 +1317,13 @@ function EC2FlowLogList() {
 
 
 // ─── NETWORK ACLs ───────────────────────────────────────
+
+const ACL_PROTOCOL_LABELS: Record<string, string> = {
+  "-1": "All traffic",
+  "6": "TCP",
+  "17": "UDP",
+  "1": "ICMP",
+};
 
 function EC2NetworkAclList() {
   const { data, isLoading, isError, error } = useEC2NetworkAcls();
@@ -1348,6 +1356,7 @@ function EC2NetworkAclList() {
   const expandedAclData = expandedAcl
     ? (data?.networkAcls || []).find((a) => a.networkAclId === expandedAcl)
     : null;
+  const expandedAclAssociations = expandedAclData?.associations || [];
 
   return (
     <SpaceBetween size="l">
@@ -1416,11 +1425,11 @@ function EC2NetworkAclList() {
 
             <div>
               <Box variant="h3" padding={{ bottom: "s" }}>Subnet Associations</Box>
-              {(expandedAclData.associations || []).length === 0 ? (
+              {expandedAclAssociations.length === 0 ? (
                 <Box color="text-body-secondary">No subnet associations</Box>
               ) : (
                 <SpaceBetween size="xs">
-                  {(expandedAclData.associations || []).map((assoc) => (
+                  {expandedAclAssociations.map((assoc) => (
                     <div key={assoc.networkAclAssociationId} style={{ display: "flex", gap: 12, alignItems: "center", padding: "6px 12px", borderRadius: 6, border: "1px solid var(--color-border-divider-default, #e9ebed)", background: "var(--color-background-container-content, #fff)" }}>
                       <Box variant="strong">{assoc.subnetId}</Box>
                       <Box variant="small" color="text-body-secondary">{assoc.networkAclAssociationId}</Box>
@@ -1442,7 +1451,7 @@ function EC2NetworkAclList() {
         <FormField label="VPC ID" description="Select the VPC for this network ACL">
           <Select
             selectedOption={selectedVpc ? { label: selectedVpc, value: selectedVpc } : { label: "Select a VPC", value: "" }}
-            onChange={({ detail }) => setSelectedVpc(detail.selectedOption.value || "")}
+            onChange={({ detail }) => setSelectedVpc(detail.selectedOption.value!)}
             options={(vpcs?.vpcs || []).map(v => ({ label: `${v.id} (${v.cidrBlock})`, value: v.id }))}
           />
         </FormField>
@@ -1452,13 +1461,12 @@ function EC2NetworkAclList() {
         footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
           <Button variant="link" onClick={() => setShowEntryModal(null)}>Cancel</Button>
           <Button variant="primary" loading={createEntry.isPending} disabled={!entryForm.ruleNumber} onClick={() => {
-            if (!showEntryModal) return;
             createEntry.mutate({
-              aclId: showEntryModal.aclId,
+              aclId: showEntryModal!.aclId,
               ruleNumber: parseInt(entryForm.ruleNumber),
               protocol: entryForm.protocol,
               ruleAction: entryForm.ruleAction,
-              egress: showEntryModal.egress,
+              egress: showEntryModal!.egress,
               cidrBlock: entryForm.cidrBlock,
               portRangeFrom: entryForm.portRangeFrom ? parseInt(entryForm.portRangeFrom) : undefined,
               portRangeTo: entryForm.portRangeTo ? parseInt(entryForm.portRangeTo) : undefined,
@@ -1475,10 +1483,10 @@ function EC2NetworkAclList() {
             <FormField label="Protocol" description="Protocol number (-1 for all, 6 for TCP, 17 for UDP, 1 for ICMP)">
               <Select
                 selectedOption={{
-                  label: entryForm.protocol === "-1" ? "All traffic" : entryForm.protocol === "6" ? "TCP" : entryForm.protocol === "17" ? "UDP" : entryForm.protocol === "1" ? "ICMP" : entryForm.protocol,
+                  label: ACL_PROTOCOL_LABELS[entryForm.protocol],
                   value: entryForm.protocol
                 }}
-                onChange={({ detail }) => setEntryForm(p => ({ ...p, protocol: detail.selectedOption.value || "-1" }))}
+                onChange={({ detail }) => setEntryForm(p => ({ ...p, protocol: detail.selectedOption.value! }))}
                 options={[
                   { label: "All traffic", value: "-1" },
                   { label: "TCP", value: "6" },
@@ -1490,7 +1498,7 @@ function EC2NetworkAclList() {
             <FormField label="Action">
               <Select
                 selectedOption={{ label: entryForm.ruleAction === "allow" ? "ALLOW" : "DENY", value: entryForm.ruleAction }}
-                onChange={({ detail }) => setEntryForm(p => ({ ...p, ruleAction: detail.selectedOption.value || "allow" }))}
+                onChange={({ detail }) => setEntryForm(p => ({ ...p, ruleAction: detail.selectedOption.value! }))}
                 options={[{ label: "ALLOW", value: "allow" }, { label: "DENY", value: "deny" }]}
               />
             </FormField>

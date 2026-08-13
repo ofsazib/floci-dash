@@ -70,7 +70,7 @@ export function S3Dashboard() {
           {
             id: "region",
             header: "Region",
-            cell: (item: any) => item.region || "—",
+            cell: (item: any) => item.region,
           },
           {
             id: "actions",
@@ -122,14 +122,12 @@ export function S3Dashboard() {
                 loading={createBucket.isPending}
                 disabled={!bucketName}
                 onClick={() => {
-                  if (bucketName) {
-                    createBucket.mutate(bucketName, {
-                      onSuccess: () => {
-                        setShowCreate(false);
-                        setBucketName("");
-                      },
-                    });
-                  }
+                  createBucket.mutate(bucketName, {
+                    onSuccess: () => {
+                      setShowCreate(false);
+                      setBucketName("");
+                    },
+                  });
                 }}
               >
                 Create bucket

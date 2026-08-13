@@ -26,6 +26,18 @@ const mockCreateVault = vi.fn();
 const mockDeleteVault = vi.fn();
 const mockStopJob = vi.fn();
 
+// Mutable hook state so tests can exercise isPending/isError branches.
+const hookState = {
+  deletePlanPending: false,
+  deletePlanVariables: null as string | null,
+  deleteVaultPending: false,
+  deleteVaultVariables: null as string | null,
+  stopJobPending: false,
+  stopJobVariables: null as string | null,
+  createPlanError: null as Error | null,
+  createVaultError: null as Error | null,
+};
+
 vi.mock("../../hooks/useBackup", () => ({
   useBackupPlans: (...args: any[]) => mockPlans(...args),
   useBackupVaults: (...args: any[]) => mockVaults(...args),
@@ -34,31 +46,31 @@ vi.mock("../../hooks/useBackup", () => ({
   useCreateBackupPlan: () => ({
     mutate: mockCreatePlan,
     isPending: false,
-    isError: false,
-    error: null,
+    isError: !!hookState.createPlanError,
+    error: hookState.createPlanError,
     reset: vi.fn(),
   }),
   useDeleteBackupPlan: () => ({
     mutateAsync: mockDeletePlan,
-    isPending: false,
-    variables: null,
+    isPending: hookState.deletePlanPending,
+    variables: hookState.deletePlanVariables,
   }),
   useCreateBackupVault: () => ({
     mutate: mockCreateVault,
     isPending: false,
-    isError: false,
-    error: null,
+    isError: !!hookState.createVaultError,
+    error: hookState.createVaultError,
     reset: vi.fn(),
   }),
   useDeleteBackupVault: () => ({
     mutateAsync: mockDeleteVault,
-    isPending: false,
-    variables: null,
+    isPending: hookState.deleteVaultPending,
+    variables: hookState.deleteVaultVariables,
   }),
   useStopBackupJob: () => ({
     mutate: mockStopJob,
-    isPending: false,
-    variables: null,
+    isPending: hookState.stopJobPending,
+    variables: hookState.stopJobVariables,
   }),
 }));
 
@@ -88,6 +100,14 @@ function expectModalHidden(headerText: string) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  hookState.deletePlanPending = false;
+  hookState.deletePlanVariables = null;
+  hookState.deleteVaultPending = false;
+  hookState.deleteVaultVariables = null;
+  hookState.stopJobPending = false;
+  hookState.stopJobVariables = null;
+  hookState.createPlanError = null;
+  hookState.createVaultError = null;
 
   mockPlans.mockReturnValue({
     data: { plans: [], total: 0 },
@@ -563,5 +583,157 @@ describe("BackupDashboard — backup jobs", () => {
     const filterInput = screen.getByPlaceholderText("Find jobs");
     await user.type(filterInput, "beta");
     await waitFor(() => expect(screen.queryByText("alpha")).toBeNull());
+  });
+});
+
+describe("BackupDashboard — branch coverage", () => {
+  it("renders vault without ARN as dash", () => {
+    mockVaults.mockReturnValue({
+      data: { backupVaults: [{ BackupVaultName: "no-arn-vault" }], total: 1 },
+      isLoading: false,
+    });
+    render(<BackupDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("no-arn-vault")).toBeTruthy();
+    expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("renders job without ResourceArn/State and with trailing-slash ARN", () => {
+    mockJobs.mockReturnValue({
+      data: {
+        backupJobs: [
+          { BackupJobId: "j-nores" },
+          { BackupJobId: "j-trail", ResourceArn: "arn:aws:ec2:us-east-1:1:volume/", State: "RUNNING" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    render(<BackupDashboard />, { wrapper: createWrapper() });
+    // both jobs show "-" for the missing/empty resource and state
+    expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(3);
+    expect(screen.getByText(/j-nores/)).toBeTruthy();
+    expect(screen.getByText(/j-trail/)).toBeTruthy();
+  });
+
+  it("deselects a plan by clicking its name again", async () => {
+    const user = userEvent.setup();
+    mockPlans.mockReturnValue({
+      data: { plans: [{ BackupPlanId: "plan-x", BackupPlanName: "toggle-plan", BackupPlan: { BackupPlanName: "toggle-plan" } }], total: 1 },
+      isLoading: false,
+    });
+    render(<BackupDashboard />, { wrapper: createWrapper() });
+    const planLink = screen.getAllByRole("button", { name: /toggle-plan/i })[0];
+    await user.click(planLink);
+    await waitFor(() => expect(screen.getByText(/Selections for selected plan/)).toBeTruthy());
+    await user.click(planLink);
+    await waitFor(() => expect(screen.queryByText(/Selections for selected plan/)).toBeNull());
+  });
+
+  it("shows delete-plan loading state on matching row", () => {
+    hookState.deletePlanPending = true;
+    hookState.deletePlanVariables = "plan-123";
+    mockPlans.mockReturnValue({
+      data: { plans: [{ BackupPlanId: "plan-123", BackupPlanName: "loading-plan", BackupPlan: { BackupPlanName: "loading-plan" } }], total: 1 },
+      isLoading: false,
+    });
+    render(<BackupDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByRole("button", { name: /Delete loading-plan/i })).toBeTruthy();
+  });
+
+  it("shows selections with sparse fields when plan has empty selections data", async () => {
+    const user = userEvent.setup();
+    mockPlans.mockReturnValue({
+      data: { plans: [{ BackupPlanId: "plan-s", BackupPlanName: "sparse-plan", BackupPlan: { BackupPlanName: "sparse-plan" } }], total: 1 },
+      isLoading: false,
+    });
+    mockSelections.mockReturnValue({
+      data: { total: 0 } as any,
+      isLoading: false,
+    });
+    render(<BackupDashboard />, { wrapper: createWrapper() });
+    const planLink = screen.getAllByRole("button", { name: /sparse-plan/i })[0];
+    await user.click(planLink);
+    await waitFor(() => expect(screen.getByText(/Selections for selected plan/)).toBeTruthy());
+    expect(screen.getByText(/No selections for this plan/)).toBeTruthy();
+  });
+
+  it("shows selections with missing fields", async () => {
+    const user = userEvent.setup();
+    mockPlans.mockReturnValue({
+      data: { plans: [{ BackupPlanId: "plan-m", BackupPlanName: "min-plan", BackupPlan: { BackupPlanName: "min-plan" } }], total: 1 },
+      isLoading: false,
+    });
+    mockSelections.mockReturnValue({
+      data: { backupSelections: [{ SelectionId: "sel-min" }], total: 1 },
+      isLoading: false,
+    });
+    render(<BackupDashboard />, { wrapper: createWrapper() });
+    const planLink = screen.getAllByRole("button", { name: /min-plan/i })[0];
+    await user.click(planLink);
+    await waitFor(() => expect(screen.getByText(/Selections for selected plan/)).toBeTruthy());
+    expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("shows delete-vault loading state on matching row", () => {
+    hookState.deleteVaultPending = true;
+    hookState.deleteVaultVariables = "vault-loading";
+    mockVaults.mockReturnValue({
+      data: { backupVaults: [{ BackupVaultName: "vault-loading" }], total: 1 },
+      isLoading: false,
+    });
+    render(<BackupDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByRole("button", { name: /Delete vault-loading/i })).toBeTruthy();
+  });
+
+  it("renders job without id as empty-string slice", () => {
+    mockJobs.mockReturnValue({
+      data: { backupJobs: [{ State: "RUNNING" }], total: 1 },
+      isLoading: false,
+    });
+    render(<BackupDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("...")).toBeTruthy();
+  });
+
+  it("shows stop-job loading state on matching row", () => {
+    hookState.stopJobPending = true;
+    hookState.stopJobVariables = "job-stop";
+    mockJobs.mockReturnValue({
+      data: { backupJobs: [{ BackupJobId: "job-stop", State: "RUNNING" }], total: 1 },
+      isLoading: false,
+    });
+    render(<BackupDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByRole("button", { name: /Stop/i })).toBeTruthy();
+  });
+
+  it("shows create plan error alert with message", async () => {
+    hookState.createPlanError = new Error("Plan creation failed");
+    const user = userEvent.setup();
+    render(<BackupDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create plan/i);
+    await waitFor(() => expect(screen.getByText("Plan creation failed")).toBeTruthy());
+  });
+
+  it("shows create plan error alert fallback without message", async () => {
+    hookState.createPlanError = {} as Error;
+    const user = userEvent.setup();
+    render(<BackupDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create plan/i);
+    await waitFor(() => expect(screen.getByText("Failed to create plan")).toBeTruthy());
+  });
+
+  it("shows create vault error alert with message and fallback", async () => {
+    hookState.createVaultError = new Error("Vault creation failed");
+    const user = userEvent.setup();
+    render(<BackupDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create vault/i);
+    await waitFor(() => expect(screen.getByText("Vault creation failed")).toBeTruthy());
+  });
+
+  it("shows create vault error alert fallback without message", async () => {
+    hookState.createVaultError = {} as Error;
+    const user = userEvent.setup();
+    render(<BackupDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create vault/i);
+    await waitFor(() => expect(screen.getByText("Failed to create vault")).toBeTruthy());
   });
 });

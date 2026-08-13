@@ -229,6 +229,45 @@ describe("CURDashboard — report definitions list", () => {
       expect(mockDeleteReport).toHaveBeenCalledWith("DeleteMe");
     });
   });
+
+  it("shows load error fallback without message", () => {
+    mockReportDefs.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: {} as Error,
+    });
+    render(<CURDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("Failed to load report definitions")).toBeTruthy();
+  });
+
+  it("shows delete loading state on matching row", async () => {
+    deleteState.isPending = true;
+    deleteState.variables = "LoadingMe";
+    mockReportDefs.mockReturnValue({
+      data: {
+        reportDefinitions: [{ ReportName: "LoadingMe", TimeUnit: "DAILY", Format: "textORcsv", S3Bucket: "bucket" }],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<CURDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("LoadingMe")).toBeTruthy());
+    expect(screen.getByRole("button", { name: /Delete LoadingMe/i })).toBeTruthy();
+  });
+
+  it("shows create error fallback without message", async () => {
+    createState.isError = true;
+    createState.error = {} as Error;
+    const user = userEvent.setup();
+    render(<CURDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /create/i);
+    await waitFor(() => expect(screen.getByText("Failed to create report")).toBeTruthy());
+    createState.isError = false;
+    createState.error = null;
+  });
 });
 
 describe("CURDashboard — form validation", () => {

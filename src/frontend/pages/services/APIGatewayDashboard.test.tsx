@@ -378,4 +378,81 @@ describe("APIGatewayDashboard", () => {
     });
     await waitFor(() => expectModalHidden("Create REST API"));
   });
+
+  it("filters APIs missing a name", async () => {
+    mockApis.mockReturnValue({
+      data: { apis: [{ id: "api-1" }, { id: "api-2", name: "named-api" }], total: 2 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<APIGatewayDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("named-api")).toBeTruthy());
+    const filterInput = screen.getByPlaceholderText("Find APIs by name");
+    await user.type(filterInput, "named");
+    await waitFor(() => expect(screen.queryByText(/api-1/)).toBeNull());
+  });
+
+  it("shows create API error fallback without message", async () => {
+    createApiState.isError = true;
+    createApiState.error = {} as Error;
+    const user = userEvent.setup();
+    render(<APIGatewayDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Failed to create REST API")).toBeTruthy());
+  });
+
+  it("shows resources error fallback without message", async () => {
+    mockApis.mockReturnValue({
+      data: { apis: [{ id: "api-1", name: "my-api", createdDate: "2024-01-15T00:00:00Z" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockApiDetail.mockReturnValue({ data: { api: { id: "api-1", name: "my-api" } }, isLoading: false });
+    mockResources.mockReturnValue({
+      data: undefined, isLoading: false, isError: true,
+      error: {} as Error,
+    });
+    mockDeployments.mockReturnValue({ data: { deployments: [], total: 0 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<APIGatewayDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("my-api"));
+    await user.click(screen.getByText("View"));
+    await waitFor(() => expect(screen.getByText("Failed to load resources")).toBeTruthy());
+  });
+
+  it("shows detail with sparse resources and deployments", async () => {
+    mockApis.mockReturnValue({
+      data: { apis: [{ id: "api-1", name: "my-api", createdDate: "2024-01-15T00:00:00Z" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockApiDetail.mockReturnValue({ data: { api: { id: "api-1", name: "my-api" } }, isLoading: false });
+    mockResources.mockReturnValue({
+      data: { resources: [{ id: "res-1", path: "/" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockDeployments.mockReturnValue({
+      data: { deployments: [{ id: "dep-1", apiSummary: "sum" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<APIGatewayDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("my-api"));
+    await user.click(screen.getByText("View"));
+    await waitFor(() => expect(screen.getByText("dep-1")).toBeTruthy());
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("shows detail when deployments key is missing", async () => {
+    mockApis.mockReturnValue({
+      data: { apis: [{ id: "api-1", name: "my-api", createdDate: "2024-01-15T00:00:00Z" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockApiDetail.mockReturnValue({ data: { api: { id: "api-1", name: "my-api" } }, isLoading: false });
+    mockResources.mockReturnValue({ data: { resources: [], total: 0 }, isLoading: false, isError: false, error: null });
+    mockDeployments.mockReturnValue({ data: { total: 0 } as any, isLoading: false });
+    const user = userEvent.setup();
+    render(<APIGatewayDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("my-api"));
+    await user.click(screen.getByText("View"));
+    await waitFor(() => expect(screen.getByText("No deployments found.")).toBeTruthy());
+  });
 });

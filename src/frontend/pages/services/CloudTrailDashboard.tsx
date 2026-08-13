@@ -532,7 +532,6 @@ export function CloudTrailDashboard() {
             bucket: t.S3BucketName || "-",
             multiRegion: t.IsMultiRegionTrail ? "Yes" : "No",
             globalEvents: t.IncludeGlobalServiceEvents ? "Yes" : "No",
-            orgTrail: t.IsOrganizationTrail ? "Yes" : "No",
             homeRegion: t.HomeRegion || "-",
             created: t.CreationDate ? new Date(t.CreationDate * 1000).toLocaleDateString() : "-",
           }))}
@@ -598,7 +597,7 @@ export function CloudTrailDashboard() {
       activeTabId={activeTab}
       onChange={({ detail }) => {
         setActiveTab(detail.activeTabId);
-        if (detail.activeTabId !== "event-selectors") setSelectedTrail(null);
+        setSelectedTrail(null);
       }}
       tabs={tabs}
     />

@@ -15,6 +15,11 @@ const mockRestoreSecret = vi.fn();
 const mockPutSecretValue = vi.fn();
 const mockRandomPassword = vi.fn();
 
+const mockUseHealth = vi.fn();
+vi.mock("../hooks/useSystem", () => ({
+  useHealth: (...args: any[]) => mockUseHealth(...args),
+}));
+
 vi.mock("../hooks/useSecrets", () => ({
   useSecrets: (...args: any[]) => mockSecrets(...args),
   useSecret: (...args: any[]) => mockSecret(...args),
@@ -82,6 +87,7 @@ describe("SecretsManagerPage", () => {
     mockRestoreSecret.mockResolvedValue({});
     mockPutSecretValue.mockResolvedValue({});
     mockRandomPassword.mockResolvedValue({ randomPassword: "R@nd0m!Pass" });
+    mockUseHealth.mockReturnValue({ data: { services: { secretsmanager: "running" } }, isLoading: false });
   });
 
   it("renders secret list", () => {
@@ -480,6 +486,110 @@ describe("SecretsManagerPage", () => {
     await waitFor(() => {
       expect(screen.queryByText(/Secret: my-secret/)).toBeNull();
     });
+  });
+
+  // ─── Branch coverage ───────────────────────────────────
+
+  it("renders secret without created date or arn as dash and trackBy fallback", () => {
+    mockSecrets.mockReturnValue({
+      data: { secrets: [{ name: "no-date-secret" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    expect(screen.getByText("no-date-secret")).toBeTruthy();
+    expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("renders secret without tags key", () => {
+    mockSecrets.mockReturnValue({
+      data: { secrets: [{ ...defaultSecret, tags: undefined }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    expect(screen.getAllByText("my-secret").length).toBeGreaterThan(0);
+  });
+
+  it("detail overview shows Deleted date when present", async () => {
+    const user = userEvent.setup();
+    mockSecret.mockReturnValue({
+      data: { secret: { ...defaultSecret, deletedDate: new Date("2025-06-15") }, versions: [] },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText(/Deleted:/)).toBeTruthy());
+  });
+
+  it("secret value tab shows loading state", async () => {
+    mockSecretValue.mockReturnValue({ data: undefined, isLoading: true, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getAllByText(/Secret: my-secret/i).length).toBeGreaterThan(0));
+    await user.click(screen.getByRole("tab", { name: /Secret value/i }));
+    await waitFor(() => expect(screen.getAllByText("Loading...").length).toBeGreaterThan(0));
+  });
+
+  it("secret value tab shows fallbacks for missing version data", async () => {
+    const user = userEvent.setup();
+    mockSecretValue.mockReturnValue({
+      data: { secretString: undefined }, isLoading: false, isError: false, error: null,
+    });
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getAllByText(/Secret: my-secret/i).length).toBeGreaterThan(0));
+    await user.click(screen.getByRole("tab", { name: /Secret value/i }));
+    await waitFor(() => expect(screen.getAllByRole("button", { name: /Reveal/i }).length).toBeGreaterThan(0));
+    await clickButton(user, /Reveal/i);
+    await waitFor(() => expect(screen.getByText("(binary)")).toBeTruthy());
+    expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("versions tab shows non-current stage and missing fields", async () => {
+    const user = userEvent.setup();
+    mockSecret.mockReturnValue({
+      data: {
+        secret: defaultSecret,
+        versions: [{ versionId: "v-old", stages: ["AWSPREVIOUS"] }],
+        versionIdsToStages: { "v-old": ["AWSPREVIOUS"] },
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getAllByText(/Secret: my-secret/i).length).toBeGreaterThan(0));
+    await user.click(screen.getByRole("tab", { name: /Versions/i }));
+    await waitFor(() => expect(screen.getAllByText("AWSPREVIOUS").length).toBeGreaterThan(0));
+    expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("versions tab renders version with no stages", async () => {
+    const user = userEvent.setup();
+    mockSecret.mockReturnValue({
+      data: {
+        secret: defaultSecret,
+        versions: [{ versionId: "v-none" }],
+        versionIdsToStages: {},
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getAllByText(/Secret: my-secret/i).length).toBeGreaterThan(0));
+    await user.click(screen.getByRole("tab", { name: /Versions/i }));
+    await waitFor(() => expect(screen.getAllByText("v-none").length).toBeGreaterThan(0));
+  });
+
+  it("shows available status text", () => {
+    mockUseHealth.mockReturnValue({ data: { services: { secretsmanager: "available" } }, isLoading: false });
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    expect(screen.getAllByText("Available").length).toBeGreaterThan(0);
+  });
+
+  it("shows connected status when service missing", () => {
+    mockUseHealth.mockReturnValue({ data: { services: {} }, isLoading: false });
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    expect(screen.getAllByText("Connected").length).toBeGreaterThan(0);
   });
 
 });
