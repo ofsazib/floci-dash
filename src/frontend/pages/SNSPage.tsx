@@ -254,7 +254,6 @@ function CreateTopicModal({
   const handleSubmit = () => {
     let topicName = name.trim();
     if (isFifo && !topicName.endsWith(".fifo")) topicName += ".fifo";
-    if (!topicName) return;
 
     const attributes: Record<string, string> = {};
     if (displayName) attributes.DisplayName = displayName;
@@ -579,7 +578,6 @@ function SubscribeModal({
   const subscribe = useSNSSubscribe();
 
   const handleSubscribe = () => {
-    if (!endpoint.trim()) return;
     subscribe.mutate(
       { topicArn, protocol, endpoint: endpoint.trim() },
       {
@@ -620,7 +618,7 @@ function SubscribeModal({
           <FormField label="Protocol">
             <Select
               selectedOption={{ value: protocol, label: protocol.toUpperCase() }}
-              onChange={({ detail }) => setProtocol(detail.selectedOption?.value || "sqs")}
+              onChange={({ detail }) => setProtocol(detail.selectedOption!.value as string)}
               options={[
                 { value: "sqs", label: "SQS" },
                 { value: "lambda", label: "Lambda" },
@@ -664,7 +662,6 @@ function PublishModal({
   const publish = useSNSPublish();
 
   const handlePublish = () => {
-    if (!message.trim()) return;
     publish.mutate(
       {
         topicArn,
@@ -745,7 +742,6 @@ function TagsTab({
   const tags = data?.tags || [];
 
   const handleAdd = () => {
-    if (!newKey.trim()) return;
     tag.mutate(
       { topicArn, tags: [{ Key: newKey, Value: newValue }] },
       {

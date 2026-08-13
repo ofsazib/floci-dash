@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../test/helpers";
 import React from "react";
@@ -456,5 +456,297 @@ describe("SNSPage", () => {
     // Owner and DisplayName default to "—" when attributes are empty
     const dashes = screen.getAllByText("—");
     expect(dashes.length).toBeGreaterThanOrEqual(2);
+  });
+
+  // ─── Remaining branch coverage (2026) ────────────────────
+
+  it("selects a topic from the list", async () => {
+    const user = userEvent.setup();
+    render(<SNSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-topic"));
+    expect(mockSetSearchParams).toHaveBeenCalledWith({ topicArn: "arn:aws:sns:us-east-1:000000000000:my-topic" });
+  });
+
+  it("shows delete topic success toast", async () => {
+    const user = userEvent.setup();
+    mockDeleteTopicMutate.mockImplementation((_arn: any, opts: any) => opts?.onSuccess?.());
+    render(<SNSPage />, { wrapper: createWrapper() });
+    await clickButton(user, "Delete topic");
+    await waitFor(() => expect(mockDeleteTopicMutate).toHaveBeenCalled());
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("success", "Topic deleted"));
+  });
+
+  it("shows delete topic error toast", async () => {
+    const user = userEvent.setup();
+    mockDeleteTopicMutate.mockImplementation((_arn: any, opts: any) => opts?.onError?.(new Error("boom")));
+    render(<SNSPage />, { wrapper: createWrapper() });
+    await clickButton(user, "Delete topic");
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "Delete failed: boom"));
+  });
+
+  it("opens create topic modal from empty state", async () => {
+    const user = userEvent.setup();
+    render(<SNSPage />, { wrapper: createWrapper() });
+    const searchInput = screen.getByPlaceholderText("Find topics...");
+    await user.type(searchInput, "zzz");
+    await waitFor(() => expect(screen.getByText("No topics found")).toBeTruthy());
+    await clickButton(user, /^Create topic$/i, { last: true });
+    await waitFor(() => expect(screen.getByPlaceholderText("my-topic")).toBeTruthy());
+  });
+
+  it("creates a FIFO topic with display name", async () => {
+    const user = userEvent.setup();
+    mockCreateTopicMutate.mockImplementation((_body: any, opts: any) => opts?.onSuccess?.());
+    render(<SNSPage />, { wrapper: createWrapper() });
+    await clickButton(user, /^Create topic$/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-topic")).toBeTruthy());
+    const dialog = screen.getByRole("dialog");
+    await user.type(within(dialog).getByPlaceholderText("my-topic"), "orders");
+    await user.type(within(dialog).getAllByRole("textbox")[1], "Order Feed");
+    await user.click(within(dialog).getByRole("button", { name: /Standard/i }));
+    await user.click(await screen.findByRole("option", { name: /FIFO/i }));
+    await clickButton(user, /^Create$/i);
+    await waitFor(() =>
+      expect(mockCreateTopicMutate).toHaveBeenCalledWith(
+        { name: "orders.fifo", attributes: { DisplayName: "Order Feed", FifoTopic: "true" } },
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      ),
+    );
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("success", 'Topic "orders.fifo" created'));
+    await waitFor(() => expect(screen.queryByPlaceholderText("my-topic")).toBeNull());
+  });
+
+  it("shows create topic error toast", async () => {
+    const user = userEvent.setup();
+    mockCreateTopicMutate.mockImplementation((_body: any, opts: any) => opts?.onError?.(new Error("boom")));
+    render(<SNSPage />, { wrapper: createWrapper() });
+    await clickButton(user, /^Create topic$/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-topic")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-topic"), "orders");
+    await clickButton(user, /^Create$/i);
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "Create failed: boom"));
+  });
+
+  it("shows unsubscribe success toast", async () => {
+    const user = userEvent.setup();
+    mockSubscriptions.mockReturnValue({
+      data: { subscriptions: [
+        { SubscriptionArn: "arn:aws:sns:us-east-1:000000000000:my-topic:sub-1", Protocol: "sqs", Endpoint: "arn:aws:sqs:us-east-1:000000000000:my-queue", TopicArn: "arn:aws:sns:us-east-1:000000000000:my-topic" },
+      ] },
+      isLoading: false,
+    });
+    mockUnsubscribeMutate.mockImplementation((_body: any, opts: any) => opts?.onSuccess?.());
+    mockSearchParams.mockReturnValue([new URLSearchParams("?topicArn=arn:aws:sns:us-east-1:000000000000:my-topic"), mockSetSearchParams]);
+    render(<SNSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Subscriptions"));
+    await waitFor(() => expect(screen.getByText("sqs")).toBeTruthy());
+    await clickButton(user, "Unsubscribe");
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("success", "Subscription deleted"));
+  });
+
+  it("shows unsubscribe error toast", async () => {
+    const user = userEvent.setup();
+    mockSubscriptions.mockReturnValue({
+      data: { subscriptions: [
+        { SubscriptionArn: "arn:aws:sns:us-east-1:000000000000:my-topic:sub-1", Protocol: "sqs", Endpoint: "arn:aws:sqs:us-east-1:000000000000:my-queue", TopicArn: "arn:aws:sns:us-east-1:000000000000:my-topic" },
+      ] },
+      isLoading: false,
+    });
+    mockUnsubscribeMutate.mockImplementation((_body: any, opts: any) => opts?.onError?.(new Error("boom")));
+    mockSearchParams.mockReturnValue([new URLSearchParams("?topicArn=arn:aws:sns:us-east-1:000000000000:my-topic"), mockSetSearchParams]);
+    render(<SNSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Subscriptions"));
+    await waitFor(() => expect(screen.getByText("sqs")).toBeTruthy());
+    await clickButton(user, "Unsubscribe");
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "Delete failed: boom"));
+  });
+
+  it("subscribes with a different protocol", async () => {
+    const user = userEvent.setup();
+    mockSubscribeMutate.mockImplementation((_body: any, opts: any) => opts?.onSuccess?.());
+    mockSearchParams.mockReturnValue([new URLSearchParams("?topicArn=arn:aws:sns:us-east-1:000000000000:my-topic"), mockSetSearchParams]);
+    render(<SNSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Subscriptions"));
+    await clickButton(user, /Create subscription/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("arn:aws:sqs:us-east-1:000000000000:my-queue")).toBeTruthy());
+    const dialog = screen.getByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: /SQS/i }));
+    await user.click(await screen.findByRole("option", { name: /Lambda/i }));
+    await user.type(within(dialog).getByPlaceholderText("arn:aws:sqs:us-east-1:000000000000:my-queue"), "arn:aws:lambda:us-east-1:000000000000:fn");
+    await clickButton(user, /^Subscribe$/i);
+    await waitFor(() =>
+      expect(mockSubscribeMutate).toHaveBeenCalledWith(
+        { topicArn: "arn:aws:sns:us-east-1:000000000000:my-topic", protocol: "lambda", endpoint: "arn:aws:lambda:us-east-1:000000000000:fn" },
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      ),
+    );
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("success", "Subscription created"));
+    await waitFor(() => expect(screen.queryByPlaceholderText("arn:aws:lambda:us-east-1:000000000000:fn")).toBeNull());
+  });
+
+  it("shows subscribe error toast", async () => {
+    const user = userEvent.setup();
+    mockSubscribeMutate.mockImplementation((_body: any, opts: any) => opts?.onError?.(new Error("boom")));
+    mockSearchParams.mockReturnValue([new URLSearchParams("?topicArn=arn:aws:sns:us-east-1:000000000000:my-topic"), mockSetSearchParams]);
+    render(<SNSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Subscriptions"));
+    await clickButton(user, /Create subscription/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("arn:aws:sqs:us-east-1:000000000000:my-queue")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("arn:aws:sqs:us-east-1:000000000000:my-queue"), "arn:aws:sqs:us-east-1:000000000000:test-queue");
+    await clickButton(user, /^Subscribe$/i);
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "Subscribe failed: boom"));
+  });
+
+  it("publishes to FIFO topic with subject and group id", async () => {
+    const user = userEvent.setup();
+    mockTopicAttributes.mockReturnValue({ data: { attributes: { FifoTopic: "true" } }, isLoading: false });
+    mockPublishMutate.mockImplementation((_body: any, opts: any) => opts?.onSuccess?.({ messageId: "abc12345xyz" }));
+    mockSearchParams.mockReturnValue([new URLSearchParams("?topicArn=arn:aws:sns:us-east-1:000000000000:my-topic.fifo"), mockSetSearchParams]);
+    render(<SNSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Publish"));
+    await clickButton(user, /Publish message/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("Enter message content...")).toBeTruthy());
+    const dialog = screen.getByRole("dialog");
+    const inputs = within(dialog).getAllByRole("textbox");
+    await user.type(inputs[0], "Hello");
+    await user.type(inputs[1], "Hello SNS");
+    await user.type(within(dialog).getByPlaceholderText("group-1"), "g1");
+    await clickButton(user, /^Publish$/i, { last: true });
+    await waitFor(() =>
+      expect(mockPublishMutate).toHaveBeenCalledWith(
+        { topicArn: "arn:aws:sns:us-east-1:000000000000:my-topic.fifo", message: "Hello SNS", subject: "Hello", messageGroupId: "g1" },
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      ),
+    );
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("success", "Published: abc12345…"));
+  });
+
+  it("shows publish error toast", async () => {
+    const user = userEvent.setup();
+    mockPublishMutate.mockImplementation((_body: any, opts: any) => opts?.onError?.(new Error("boom")));
+    mockSearchParams.mockReturnValue([new URLSearchParams("?topicArn=arn:aws:sns:us-east-1:000000000000:my-topic"), mockSetSearchParams]);
+    render(<SNSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Publish"));
+    await clickButton(user, /Publish message/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("Enter message content...")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("Enter message content..."), "Hello SNS");
+    await clickButton(user, /^Publish$/i, { last: true });
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "Publish failed: boom"));
+  });
+
+  it("shows tag added toast", async () => {
+    const user = userEvent.setup();
+    mockTagMutate.mockImplementation((_body: any, opts: any) => opts?.onSuccess?.());
+    mockSearchParams.mockReturnValue([new URLSearchParams("?topicArn=arn:aws:sns:us-east-1:000000000000:my-topic"), mockSetSearchParams]);
+    render(<SNSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Tags"));
+    await waitFor(() => expect(screen.getAllByRole("textbox").length).toBeGreaterThanOrEqual(2));
+    const inputs = screen.getAllByRole("textbox");
+    await user.type(inputs[0], "my-key");
+    await user.type(inputs[1], "my-value");
+    await clickButton(user, /Add tag/i);
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("success", "Tag added"));
+  });
+
+  it("shows tag error toast", async () => {
+    const user = userEvent.setup();
+    mockTagMutate.mockImplementation((_body: any, opts: any) => opts?.onError?.(new Error("boom")));
+    mockSearchParams.mockReturnValue([new URLSearchParams("?topicArn=arn:aws:sns:us-east-1:000000000000:my-topic"), mockSetSearchParams]);
+    render(<SNSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Tags"));
+    await waitFor(() => expect(screen.getAllByRole("textbox").length).toBeGreaterThanOrEqual(2));
+    const inputs = screen.getAllByRole("textbox");
+    await user.type(inputs[0], "my-key");
+    await clickButton(user, /Add tag/i);
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "Tag failed: boom"));
+  });
+
+  it("shows tag removed toast", async () => {
+    const user = userEvent.setup();
+    mockTopicTags.mockReturnValue({ data: { tags: [{ Key: "Environment", Value: "production" }] }, isLoading: false });
+    mockUntagMutate.mockImplementation((_body: any, opts: any) => opts?.onSuccess?.());
+    mockSearchParams.mockReturnValue([new URLSearchParams("?topicArn=arn:aws:sns:us-east-1:000000000000:my-topic"), mockSetSearchParams]);
+    render(<SNSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Tags"));
+    await waitFor(() => expect(screen.getByText("Environment")).toBeTruthy());
+    await clickButton(user, "Remove tag");
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("success", "Tag removed"));
+  });
+
+  it("shows remove tag error toast", async () => {
+    const user = userEvent.setup();
+    mockTopicTags.mockReturnValue({ data: { tags: [{ Key: "Environment", Value: "production" }] }, isLoading: false });
+    mockUntagMutate.mockImplementation((_body: any, opts: any) => opts?.onError?.(new Error("boom")));
+    mockSearchParams.mockReturnValue([new URLSearchParams("?topicArn=arn:aws:sns:us-east-1:000000000000:my-topic"), mockSetSearchParams]);
+    render(<SNSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Tags"));
+    await waitFor(() => expect(screen.getByText("Environment")).toBeTruthy());
+    await clickButton(user, "Remove tag");
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "Remove failed: boom"));
+  });
+
+  // ─── Remaining branch coverage (2026) ────────────────────
+
+  it("skips deleting a topic when confirm is declined", async () => {
+    const user = userEvent.setup();
+    mockConfirm.mockResolvedValueOnce(false);
+    render(<SNSPage />, { wrapper: createWrapper() });
+    await clickButton(user, "Delete topic");
+    await waitFor(() => expect(mockConfirm).toHaveBeenCalled());
+    expect(mockDeleteTopicMutate).not.toHaveBeenCalled();
+  });
+
+  it("skips unsubscribing when confirm is declined", async () => {
+    const user = userEvent.setup();
+    mockSubscriptions.mockReturnValue({
+      data: { subscriptions: [
+        { SubscriptionArn: "arn:aws:sns:us-east-1:000000000000:my-topic:sub-1", Protocol: "sqs", Endpoint: "arn:aws:sqs:us-east-1:000000000000:my-queue", TopicArn: "arn:aws:sns:us-east-1:000000000000:my-topic" },
+      ] },
+      isLoading: false,
+    });
+    mockConfirm.mockResolvedValueOnce(false);
+    mockSearchParams.mockReturnValue([new URLSearchParams("?topicArn=arn:aws:sns:us-east-1:000000000000:my-topic"), mockSetSearchParams]);
+    render(<SNSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Subscriptions"));
+    await waitFor(() => expect(screen.getByText("sqs")).toBeTruthy());
+    await clickButton(user, "Unsubscribe");
+    await waitFor(() => expect(mockConfirm).toHaveBeenCalled());
+    expect(mockUnsubscribeMutate).not.toHaveBeenCalled();
+  });
+
+  it("shows generic error text when error has no message", () => {
+    mockSNSTopics.mockReturnValue({
+      data: undefined, isLoading: false, isError: true, error: {} as Error,
+    });
+    render(<SNSPage />, { wrapper: createWrapper() });
+    expect(screen.getByText("Failed to load topics")).toBeTruthy();
+  });
+
+  it("falls back to empty attributes when data is undefined", () => {
+    mockTopicAttributes.mockReturnValue({ data: undefined, isLoading: true });
+    mockSearchParams.mockReturnValue([new URLSearchParams("?topicArn=arn:aws:sns:us-east-1:000000000000:my-topic"), mockSetSearchParams]);
+    render(<SNSPage />, { wrapper: createWrapper() });
+    // Defaults render: Type card shows "Standard", Owner/DisplayName show "—"
+    expect(screen.getAllByText("Standard").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("publishes to FIFO topic without a group id", async () => {
+    const user = userEvent.setup();
+    mockTopicAttributes.mockReturnValue({ data: { attributes: { FifoTopic: "true" } }, isLoading: false });
+    mockPublishMutate.mockImplementation((_body: any, opts: any) => opts?.onSuccess?.({ messageId: "abc12345xyz" }));
+    mockSearchParams.mockReturnValue([new URLSearchParams("?topicArn=arn:aws:sns:us-east-1:000000000000:my-topic.fifo"), mockSetSearchParams]);
+    render(<SNSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Publish"));
+    await clickButton(user, /Publish message/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("Enter message content...")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("Enter message content..."), "Hello SNS");
+    await clickButton(user, /^Publish$/i, { last: true });
+    await waitFor(() =>
+      expect(mockPublishMutate).toHaveBeenCalledWith(
+        { topicArn: "arn:aws:sns:us-east-1:000000000000:my-topic.fifo", message: "Hello SNS", subject: undefined, messageGroupId: undefined },
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      ),
+    );
   });
 });
