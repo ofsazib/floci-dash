@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -106,6 +106,27 @@ const toastMock = vi.fn();
 vi.mock("../../components/Toast", () => ({
   useToast: () => ({ showToast: toastMock }),
 }));
+
+// ─── Modal helpers ──────────────────────────────────────
+
+/** Fire Escape on every mounted Cloudscape dialog (they stay mounted when hidden). */
+function dismissModalWithEscape() {
+  document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+    fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27, key: "Escape" });
+  });
+}
+
+function dialogOf(headerText: string): HTMLElement {
+  const header = screen
+    .getAllByText(headerText)
+    .find((h) => h.closest('[role="dialog"]'));
+  return header!.closest('[role="dialog"]') as HTMLElement;
+}
+
+/** Assert the modal with the given header is hidden (Cloudscape uses display:none). */
+function expectModalHidden(headerText: string) {
+  expect(dialogOf(headerText).className).toContain("hidden");
+}
 
 // ─── Setup ──────────────────────────────────────────────
 
@@ -1666,5 +1687,199 @@ describe("ECSDashboard — remaining branch targets", () => {
         expect.any(Object),
       );
     });
+  });
+});
+
+// ─── Modal dismiss & success paths ──────────────────────
+
+describe("ECSDashboard — modal dismiss & success paths", () => {
+  it("dismisses create cluster modal with Escape", async () => {
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create cluster")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create cluster"));
+  });
+
+  it("closes create cluster modal when creation succeeds", async () => {
+    mockCreateCluster.mockImplementation((_body: any, opts: any) =>
+      opts?.onSuccess?.(),
+    );
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create cluster")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-cluster"), "new-cluster");
+    await clickButton(user, /Create/i, { last: true });
+    await waitFor(() => expectModalHidden("Create cluster"));
+  });
+
+  it("dismisses put account setting modal with Escape and Cancel", async () => {
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /account settings/i }));
+    await clickButton(user, /Create Account Setting/i);
+    await waitFor(() => expect(screen.getByText("Put account setting")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Put account setting"));
+    // Reopen and Cancel
+    await clickButton(user, /Create Account Setting/i);
+    await waitFor(() => expect(screen.getByText("Put account setting")).toBeTruthy());
+    await user.click(
+      within(dialogOf("Put account setting")).getByRole("button", {
+        name: /Cancel/i,
+      }),
+    );
+    await waitFor(() => expectModalHidden("Put account setting"));
+  });
+
+  it("changes setting selects and shows success toast on save", async () => {
+    mockPutAccountSetting.mockImplementation((_body: any, opts: any) =>
+      opts?.onSuccess?.(),
+    );
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /account settings/i }));
+    await clickButton(user, /Create Account Setting/i);
+    await waitFor(() => expect(screen.getByText("Put account setting")).toBeTruthy());
+    // Change the setting name select
+    await user.click(screen.getByText("containerInsights"));
+    await user.click(await screen.findByText("serviceLongArnFormat"));
+    // Change the value select
+    await user.click(screen.getByText("enabled"));
+    await user.click(await screen.findByText("disabled"));
+    await clickButton(user, /Save/i);
+    await waitFor(() => {
+      expect(mockPutAccountSetting).toHaveBeenCalledWith(
+        { name: "serviceLongArnFormat", value: "disabled", isDefault: false },
+        expect.any(Object),
+      );
+    });
+    await waitFor(() => {
+      expect(toastMock).toHaveBeenCalledWith(
+        "success",
+        "Set serviceLongArnFormat to disabled",
+      );
+    });
+    await waitFor(() => expectModalHidden("Put account setting"));
+  });
+
+  it("dismisses create service modal with Escape and Cancel", async () => {
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [{ clusterName: "my-cluster", status: "ACTIVE", clusterArn: "arn:1" }],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy(),
+    );
+    await clickButton(user, /Create/i);
+    await waitFor(() =>
+      expect(screen.getAllByText("Create Service").length).toBeGreaterThan(0),
+    );
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create Service"));
+    // Reopen and Cancel
+    await clickButton(user, /Create/i);
+    await waitFor(() =>
+      expect(screen.getAllByText("Create Service").length).toBeGreaterThan(0),
+    );
+    await user.click(
+      within(dialogOf("Create Service")).getByRole("button", {
+        name: /Cancel/i,
+      }),
+    );
+    await waitFor(() => expectModalHidden("Create Service"));
+  });
+
+  it("dismisses run task modal with Escape and closes on success", async () => {
+    mockRunTask.mockImplementation((_body: any, opts: any) =>
+      opts?.onSuccess?.(),
+    );
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [{ clusterName: "my-cluster", status: "ACTIVE", clusterArn: "arn:1" }],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy(),
+    );
+    await user.click(screen.getByRole("tab", { name: /tasks/i }));
+    await waitFor(() =>
+      expect(screen.getByText(/No running tasks/)).toBeTruthy(),
+    );
+    await clickButton(user, /Run/i);
+    await waitFor(() => expect(screen.getByText("Run task")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Run task"));
+    // Reopen and submit with onSuccess
+    await clickButton(user, /Run/i);
+    await waitFor(() => expect(screen.getByText("Run task")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-task:1"), "my-task:2");
+    await clickButton(user, /Run/i, { last: true });
+    await waitFor(() => expectModalHidden("Run task"));
+  });
+
+  it("dismisses create task set modal with Escape and closes on success", async () => {
+    mockCreateTaskSet.mockImplementation((_body: any, opts: any) =>
+      opts?.onSuccess?.(),
+    );
+    mockServices.mockReturnValue({
+      data: { services: [{ serviceName: "svc1", status: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [{ clusterName: "my-cluster", status: "ACTIVE", clusterArn: "arn:1" }],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy(),
+    );
+    await user.click(screen.getByRole("tab", { name: /task sets/i }));
+    await user.click(screen.getByText("Choose a service"));
+    await user.click(await screen.findByText("svc1"));
+    await clickButton(user, /Create/i);
+    await waitFor(() =>
+      expect(screen.getByText("Create task set")).toBeTruthy(),
+    );
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create task set"));
+    // Reopen, type a task definition, and submit with onSuccess
+    await clickButton(user, /Create/i);
+    await waitFor(() =>
+      expect(screen.getByText("Create task set")).toBeTruthy(),
+    );
+    await user.type(
+      within(dialogOf("Create task set")).getByPlaceholderText("my-task-def:1"),
+      "my-task-def:3",
+    );
+    await clickButton(user, /Create/i, { last: true });
+    await waitFor(() =>
+      expect(toastMock).toHaveBeenCalledWith("success", "Task set created"),
+    );
+    await waitFor(() => expectModalHidden("Create task set"));
   });
 });

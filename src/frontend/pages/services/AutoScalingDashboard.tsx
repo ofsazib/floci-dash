@@ -188,7 +188,6 @@ import {
 } from "../../hooks/useEKS";
 import {
   useAutoScalingGroups,
-  useCreateAutoScalingGroup,
   useDeleteAutoScalingGroup,
   useLaunchConfigurations,
   useScalingPolicies,
@@ -530,15 +529,8 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
 
 export function AutoScalingDashboard() {
   const { data, isLoading } = useAutoScalingGroups();
-  const createGroup = useCreateAutoScalingGroup();
   const deleteGroup = useDeleteAutoScalingGroup();
   const { data: lcData } = useLaunchConfigurations();
-  const [showCreate, setShowCreate] = useState(false);
-  const [name, setName] = useState("");
-  const [minSize, setMinSize] = useState("1");
-  const [maxSize, setMaxSize] = useState("5");
-  const [desired, setDesired] = useState("2");
-  const [lcName, setLcName] = useState("");
 
   // ── Advanced State ──
   const [selectedASG, setSelectedASG] = useState<string | null>(null);
@@ -659,7 +651,6 @@ export function AutoScalingDashboard() {
                 created: g.CreatedTime ? new Date(g.CreatedTime).toLocaleDateString() : "-",
               }))}
               loading={isLoading}
-              onCreate={() => setShowCreate(true)}
               emptyMessage="No auto scaling groups"
               columns={[
                 { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },

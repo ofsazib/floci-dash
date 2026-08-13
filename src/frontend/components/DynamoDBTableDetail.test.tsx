@@ -18,16 +18,33 @@ vi.mock("../lib/utils", () => ({
 }));
 
 vi.mock("./ResourceTable", () => ({
-  default: ({ items, headerTitle, onCreate, columns }: any) =>
-    React.createElement(
+  default: ({
+    items,
+    headerTitle,
+    onCreate,
+    columns,
+    filterEnabled,
+    filterPlaceholder,
+    filterFunction,
+  }: any) => {
+    const [query, setQuery] = React.useState("");
+    const visible =
+      filterEnabled && filterFunction
+        ? (items ?? []).filter((item: any) => filterFunction(item, query))
+        : items ?? [];
+    return React.createElement(
       "div",
       { "data-testid": "resource-table" },
       React.createElement("span", null, headerTitle),
-      React.createElement(
-        "span",
-        null,
-        `${items?.length ?? 0} items`,
-      ),
+      React.createElement("span", null, `${visible.length} items`),
+      filterEnabled
+        ? React.createElement("input", {
+            "data-testid": "filter-input",
+            placeholder: filterPlaceholder,
+            value: query,
+            onChange: (e: any) => setQuery(e.target.value),
+          })
+        : null,
       onCreate
         ? React.createElement(
             "button",
@@ -40,22 +57,21 @@ vi.mock("./ResourceTable", () => ({
             React.createElement("span", { key: `h-${c.id}` }, c.header),
           )
         : null,
-      items
-        ? items.map((item: any, idx: number) =>
+      visible.map((item: any, idx: number) =>
+        React.createElement(
+          "div",
+          { key: `row-${idx}`, "data-testid": `row-${idx}` },
+          columns.map((c: any) =>
             React.createElement(
-              "div",
-              { key: `row-${idx}`, "data-testid": `row-${idx}` },
-              columns.map((c: any) =>
-                React.createElement(
-                  "span",
-                  { key: `c-${c.id}-${idx}` },
-                  typeof c.cell === "function" ? c.cell(item) : null,
-                ),
-              ),
+              "span",
+              { key: `c-${c.id}-${idx}` },
+              typeof c.cell === "function" ? c.cell(item) : null,
             ),
-          )
-        : null,
-    ),
+          ),
+        ),
+      ),
+    );
+  },
 }));
 
 vi.mock("./DeleteButton", () => ({
@@ -79,11 +95,16 @@ vi.mock("@cloudscape-design/components", async (importOriginal) => {
     await importOriginal<typeof import("@cloudscape-design/components")>();
   return {
     ...actual,
-    Modal: ({ visible, header, footer, children }: any) => {
+    Modal: ({ visible, header, footer, children, onDismiss }: any) => {
       if (!visible) return null;
       return React.createElement(
         "div",
         { role: "dialog" },
+        React.createElement(
+          "button",
+          { "data-testid": "modal-dismiss", onClick: onDismiss },
+          "Dismiss",
+        ),
         header,
         children,
         footer,
@@ -1295,5 +1316,143 @@ describe("DynamoDBTableDetail — put item modal", () => {
     await user.click(screen.getByTestId("rt-create"));
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByText("put-boom")).toBeTruthy();
+  });
+});
+
+describe("DynamoDBTableDetail — remaining coverage", () => {
+  it("filters items via the search box", async () => {
+    const user = userEvent.setup();
+    render(<DynamoDBTableDetail tableName="users" onBack={vi.fn()} />, {
+      wrapper: createWrapper(),
+    });
+    expect(screen.getByText("2 items")).toBeTruthy();
+    await user.type(
+      screen.getByPlaceholderText("Find items by value"),
+      "alice",
+    );
+    expect(screen.getByText("1 items")).toBeTruthy();
+  });
+
+  it("dismisses the put modal", async () => {
+    const user = userEvent.setup();
+    render(<DynamoDBTableDetail tableName="users" onBack={vi.fn()} />, {
+      wrapper: createWrapper(),
+    });
+    await user.click(screen.getByTestId("rt-create"));
+    const dialog = screen.getByRole("dialog");
+    await user.click(within(dialog).getByTestId("modal-dismiss"));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("dismisses the item details modal", async () => {
+    const user = userEvent.setup();
+    render(<DynamoDBTableDetail tableName="users" onBack={vi.fn()} />, {
+      wrapper: createWrapper(),
+    });
+    await user.click(screen.getAllByRole("button", { name: /^View$/i })[0]);
+    const dialog = screen.getByRole("dialog");
+    await user.click(within(dialog).getByTestId("modal-dismiss"));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("dismisses the update modal and removes extra attributes", async () => {
+    const user = userEvent.setup();
+    render(<DynamoDBTableDetail tableName="users" onBack={vi.fn()} />, {
+      wrapper: createWrapper(),
+    });
+    await user.click(screen.getAllByRole("button", { name: /^Edit$/i })[0]);
+    const dialog = screen.getByRole("dialog");
+    await user.click(
+      within(dialog).getByRole("button", { name: /Remove attribute/i }),
+    );
+    expect(within(dialog).queryByPlaceholderText("Attribute name")).toBeNull();
+    await user.click(within(dialog).getByTestId("modal-dismiss"));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("closes the update modal when the save succeeds", async () => {
+    const user = userEvent.setup();
+    (mockPutItem.mutate as any).mockImplementation(
+      (_item: any, opts: any) => opts?.onSuccess?.(),
+    );
+    render(<DynamoDBTableDetail tableName="users" onBack={vi.fn()} />, {
+      wrapper: createWrapper(),
+    });
+    await user.click(screen.getAllByRole("button", { name: /^Edit$/i })[0]);
+    const dialog = screen.getByRole("dialog");
+    await user.click(
+      within(dialog).getByRole("button", { name: /Save changes/i }),
+    );
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+  });
+
+  it("clears the quick-add fields when the item details save succeeds", async () => {
+    const user = userEvent.setup();
+    (mockPutItem.mutate as any).mockImplementation(
+      (_item: any, opts: any) => opts?.onSuccess?.(),
+    );
+    render(<DynamoDBTableDetail tableName="users" onBack={vi.fn()} />, {
+      wrapper: createWrapper(),
+    });
+    await user.click(screen.getAllByRole("button", { name: /^View$/i })[0]);
+    const dialog = screen.getByRole("dialog");
+    await user.type(
+      within(dialog).getByPlaceholderText("attribute-name"),
+      "age",
+    );
+    await user.type(
+      within(dialog).getByPlaceholderText("Attribute value"),
+      "30",
+    );
+    await user.click(within(dialog).getByRole("button", { name: /^Save$/i }));
+    await waitFor(() => {
+      expect(
+        within(dialog).getByPlaceholderText("attribute-name"),
+      ).toHaveProperty("value", "");
+    });
+  });
+
+  it("dismisses the save-preset modal", async () => {
+    const user = userEvent.setup();
+    render(<DynamoDBTableDetail tableName="users" onBack={vi.fn()} />, {
+      wrapper: createWrapper(),
+    });
+    await user.click(screen.getByRole("button", { name: /Save as preset/i }));
+    const dialog = screen.getByRole("dialog");
+    await user.click(within(dialog).getByTestId("modal-dismiss"));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("closes the manage-presets modal via Close and dismiss", async () => {
+    const user = userEvent.setup();
+    localStorage.setItem(
+      "floci-dash-dynamodb-presets",
+      JSON.stringify({
+        users: [
+          {
+            name: "p1",
+            conditions: [
+              { attr: "a", op: "=", value: "1", enabled: true },
+            ],
+            logic: "AND",
+          },
+        ],
+      }),
+    );
+    render(<DynamoDBTableDetail tableName="users" onBack={vi.fn()} />, {
+      wrapper: createWrapper(),
+    });
+    await user.click(screen.getByRole("button", { name: /Manage/i }));
+    const dialog = screen.getByRole("dialog");
+    await user.click(
+      within(dialog).getByRole("button", { name: /^Close$/i }),
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await user.click(screen.getByRole("button", { name: /Manage/i }));
+    const dialog2 = screen.getByRole("dialog");
+    await user.click(within(dialog2).getByTestId("modal-dismiss"));
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });

@@ -36,6 +36,12 @@ import {
   usePutEventInvokeConfig,
   useDeleteEventInvokeConfig,
   useCreateLayerVersion,
+  useCodeSigningConfig,
+  useAttachCodeSigningConfig,
+  useDetachCodeSigningConfig,
+  useCodeSigningConfigs,
+  useCreateCodeSigningConfig,
+  useDeleteCodeSigningConfig,
 } from "./useLambda";
 
 function createWrapper() {
@@ -459,5 +465,160 @@ describe("useCreateLayerVersion", () => {
         body: JSON.stringify({ zipFile: "base64...", compatibleRuntimes: ["nodejs22.x"] }),
       })
     );
+  });
+});
+
+// ─── CODE SIGNING CONFIG ────────────────────────────────
+
+describe("useCodeSigningConfig", () => {
+  it("does NOT call api when name is null", () => {
+    renderHook(() => useCodeSigningConfig(null), { wrapper: createWrapper() });
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api with name in path when name provided", async () => {
+    mockApi.mockResolvedValueOnce({ codeSigningConfigArn: "arn:1" });
+    const { result } = renderHook(() => useCodeSigningConfig("fn-1"), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(
+      "/lambda/functions/fn-1/code-signing-config"
+    );
+  });
+});
+
+describe("useAttachCodeSigningConfig", () => {
+  it("calls api with PUT method, name in path, arn in body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useAttachCodeSigningConfig(), {
+      wrapper: createWrapper(),
+    });
+    await result.current.mutateAsync({
+      name: "fn-1",
+      codeSigningConfigArn: "arn:cs:1",
+    });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/lambda/functions/fn-1/code-signing-config",
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({ codeSigningConfigArn: "arn:cs:1" }),
+      })
+    );
+  });
+
+  it("invalidates the function code-signing query on success", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useAttachCodeSigningConfig(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync({
+      name: "fn-1",
+      codeSigningConfigArn: "arn:cs:1",
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["aws", "lambda", "functions", "fn-1", "code-signing-config"],
+    });
+  });
+});
+
+describe("useDetachCodeSigningConfig", () => {
+  it("calls api with DELETE method and name in path", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useDetachCodeSigningConfig(), {
+      wrapper: createWrapper(),
+    });
+    await result.current.mutateAsync("fn-1");
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/lambda/functions/fn-1/code-signing-config",
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
+
+  it("invalidates the function code-signing query on success", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useDetachCodeSigningConfig(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync("fn-1");
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["aws", "lambda", "functions", "fn-1", "code-signing-config"],
+    });
+  });
+});
+
+describe("useCodeSigningConfigs", () => {
+  it("calls api with correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ codeSigningConfigs: [], total: 0 });
+    const { result } = renderHook(() => useCodeSigningConfigs(), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/lambda/code-signing-configs");
+  });
+});
+
+describe("useCreateCodeSigningConfig", () => {
+  it("calls api with POST method and serialized body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useCreateCodeSigningConfig(), {
+      wrapper: createWrapper(),
+    });
+    await result.current.mutateAsync({ description: "sig", signingProfiles: ["p1"] });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/lambda/code-signing-configs",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ description: "sig", signingProfiles: ["p1"] }),
+      })
+    );
+  });
+
+  it("invalidates the code-signing-configs query on success", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useCreateCodeSigningConfig(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync({ description: "sig" });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["aws", "lambda", "code-signing-configs"],
+    });
+  });
+});
+
+describe("useDeleteCodeSigningConfig", () => {
+  it("calls api with DELETE method and encoded arn in path", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useDeleteCodeSigningConfig(), {
+      wrapper: createWrapper(),
+    });
+    await result.current.mutateAsync("arn:aws:lambda:us-east-1:123:code-signing-config:csc-1");
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/lambda/code-signing-configs/arn%3Aaws%3Alambda%3Aus-east-1%3A123%3Acode-signing-config%3Acsc-1",
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
+
+  it("invalidates the code-signing-configs query on success", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const { result } = renderHook(() => useDeleteCodeSigningConfig(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await result.current.mutateAsync("arn:1");
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["aws", "lambda", "code-signing-configs"],
+    });
   });
 });

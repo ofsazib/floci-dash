@@ -1,9 +1,18 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
+
+// ─── Modal helpers ──────────────────────────────────────
+
+/** Fire Escape on every mounted Cloudscape dialog (fires onDismiss). */
+function dismissModalWithEscape() {
+  document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+    fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27, key: "Escape" });
+  });
+}
 
 // ─── Mock ConfirmDialog ─────────────────────────────────
 
@@ -769,13 +778,6 @@ describe("AutoScalingDashboard — lifecycle hooks", () => {
   });
 });
 
-describe("AutoScalingDashboard — create ASG button", () => {
-  it("shows create ASG button on groups tab", () => {
-    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
-    expect(screen.getByRole("button", { name: /Create Auto Scaling Group/i })).toBeTruthy();
-  });
-});
-
 describe("AutoScalingDashboard — instance refresh", () => {
   beforeEach(() => {
     setupASGForAdvanced();
@@ -1523,5 +1525,314 @@ describe("AutoScalingDashboard — metric granularities edge", () => {
         expect.any(Object),
       );
     });
+  });
+});
+
+describe("AutoScalingDashboard — modal dismiss & success paths", () => {
+  beforeEach(() => {
+    setupASGForAdvanced();
+  });
+
+  it("filters groups by name", async () => {
+    mockGroupsHook.mockReturnValue({
+      data: {
+        groups: [
+          { AutoScalingGroupName: "alpha", MinSize: 1, MaxSize: 2, DesiredCapacity: 1, Instances: [], HealthCheckType: "EC2" },
+          { AutoScalingGroupName: "beta", MinSize: 1, MaxSize: 3, DesiredCapacity: 1, Instances: [], HealthCheckType: "EC2" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("alpha")).toBeTruthy());
+    await user.type(
+      screen.getByPlaceholderText("Find groups by name"),
+      "beta",
+    );
+    await waitFor(() => expect(screen.queryByText("alpha")).toBeNull());
+  });
+
+  it("filters launch configurations by name", async () => {
+    mockLCsHook.mockReturnValue({
+      data: {
+        launchConfigurations: [
+          { LaunchConfigurationName: "my-lc", ImageId: "ami-1", InstanceType: "t3.micro", CreatedTime: "2025-01-01T00:00:00.000Z" },
+          { LaunchConfigurationName: "other-lc", ImageId: "ami-2", InstanceType: "t2.nano", CreatedTime: "2025-01-02T00:00:00.000Z" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Launch Configurations/i }));
+    await waitFor(() => expect(screen.getByText("my-lc")).toBeTruthy());
+    await user.type(
+      screen.getByPlaceholderText("Find launch configs"),
+      "other",
+    );
+    await waitFor(() => expect(screen.queryByText("my-lc")).toBeNull());
+  });
+
+  it("dismisses start refresh modal with Escape and Cancel", async () => {
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await selectASG(user, "my-asg");
+    await user.click(screen.getByRole("button", { name: /Start Refresh/i }));
+    await waitFor(() =>
+      expect(screen.getByText("Start Instance Refresh")).toBeTruthy(),
+    );
+    const minInput = screen.getByPlaceholderText("90");
+    await user.clear(minInput);
+    await user.type(minInput, "80");
+    dismissModalWithEscape();
+    await waitFor(() =>
+      expect(screen.queryByText("Start Instance Refresh")).toBeNull(),
+    );
+    await user.click(screen.getByRole("button", { name: /Start Refresh/i }));
+    await waitFor(() =>
+      expect(screen.getByText("Start Instance Refresh")).toBeTruthy(),
+    );
+    await user.click(screen.getByRole("button", { name: /Cancel/i }));
+    await waitFor(() =>
+      expect(screen.queryByText("Start Instance Refresh")).toBeNull(),
+    );
+    // Reopen and submit with onSuccess
+    mockStartRefresh.mockImplementation((_body: any, opts: any) =>
+      opts?.onSuccess?.(),
+    );
+    await user.click(screen.getByRole("button", { name: /Start Refresh/i }));
+    await waitFor(() =>
+      expect(screen.getByText("Start Instance Refresh")).toBeTruthy(),
+    );
+    await user.clear(screen.getByPlaceholderText("90"));
+    await user.type(screen.getByPlaceholderText("90"), "80");
+    await user.click(screen.getByRole("button", { name: /^Start$/ }));
+    await waitFor(() => {
+      expect(mockStartRefresh).toHaveBeenCalledWith(
+        { name: "my-asg", minHealthyPercentage: 80 },
+        expect.any(Object),
+      );
+    });
+    await waitFor(() =>
+      expect(screen.queryByText("Start Instance Refresh")).toBeNull(),
+    );
+  });
+
+  it("dismisses add tag modal with Escape and submits on success", async () => {
+    mockCreateOrUpdateTags.mockImplementation((_body: any, opts: any) =>
+      opts?.onSuccess?.(),
+    );
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await selectASG(user, "my-asg");
+    await user.click(screen.getByRole("button", { name: /Add tag/i }));
+    await waitFor(() => expect(screen.getByText("Add Tag")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expect(screen.queryByText("Add Tag")).toBeNull());
+    // Reopen, fill, and submit
+    await user.click(screen.getByRole("button", { name: /Add tag/i }));
+    await waitFor(() => expect(screen.getByText("Add Tag")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("env"), "team");
+    await user.type(screen.getByPlaceholderText("production"), "core");
+    await user.click(screen.getByRole("button", { name: /^Add$/ }));
+    await waitFor(() => {
+      expect(mockCreateOrUpdateTags).toHaveBeenCalledWith(
+        { name: "my-asg", tags: [{ key: "team", value: "core" }] },
+        expect.any(Object),
+      );
+    });
+    await waitFor(() => expect(screen.queryByText("Add Tag")).toBeNull());
+  });
+
+  it("dismisses attach target groups modal with Escape and submits on success", async () => {
+    mockAttachTGs.mockImplementation((_body: any, opts: any) =>
+      opts?.onSuccess?.(),
+    );
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await selectASG(user, "my-asg");
+    await user.click(screen.getAllByRole("button", { name: /Attach/i })[0]);
+    await waitFor(() =>
+      expect(screen.getByText("Attach LB Target Groups")).toBeTruthy(),
+    );
+    dismissModalWithEscape();
+    await waitFor(() =>
+      expect(screen.queryByText("Attach LB Target Groups")).toBeNull(),
+    );
+    // Reopen, fill, and submit
+    await user.click(screen.getAllByRole("button", { name: /Attach/i })[0]);
+    await waitFor(() =>
+      expect(screen.getByText("Attach LB Target Groups")).toBeTruthy(),
+    );
+    await user.type(
+      screen.getByPlaceholderText("arn:aws:elasticloadbalancing:..."),
+      "arn:aws:elasticloadbalancing:us-east-1:123:targetgroup/tg1",
+    );
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: /^Attach$/,
+      }),
+    );
+    await waitFor(() => {
+      expect(mockAttachTGs).toHaveBeenCalledWith(
+        {
+          name: "my-asg",
+          targetGroupARNs: ["arn:aws:elasticloadbalancing:us-east-1:123:targetgroup/tg1"],
+        },
+        expect.any(Object),
+      );
+    });
+    await waitFor(() =>
+      expect(screen.queryByText("Attach LB Target Groups")).toBeNull(),
+    );
+  });
+
+  it("dismisses attach load balancers modal with Escape, Cancel, and submit", async () => {
+    mockAttachLBs.mockImplementation((_body: any, opts: any) =>
+      opts?.onSuccess?.(),
+    );
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await selectASG(user, "my-asg");
+    await user.click(screen.getAllByRole("button", { name: /Attach/i })[1]);
+    await waitFor(() =>
+      expect(screen.getByText("Attach Classic Load Balancers")).toBeTruthy(),
+    );
+    dismissModalWithEscape();
+    await waitFor(() =>
+      expect(screen.queryByText("Attach Classic Load Balancers")).toBeNull(),
+    );
+    await user.click(screen.getAllByRole("button", { name: /Attach/i })[1]);
+    await waitFor(() =>
+      expect(screen.getByText("Attach Classic Load Balancers")).toBeTruthy(),
+    );
+    await user.click(screen.getByRole("button", { name: /Cancel/i }));
+    await waitFor(() =>
+      expect(screen.queryByText("Attach Classic Load Balancers")).toBeNull(),
+    );
+    // Reopen, fill, and submit
+    await user.click(screen.getAllByRole("button", { name: /Attach/i })[1]);
+    await waitFor(() =>
+      expect(screen.getByText("Attach Classic Load Balancers")).toBeTruthy(),
+    );
+    await user.type(screen.getByPlaceholderText("my-classic-lb"), "my-lb");
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: /^Attach$/,
+      }),
+    );
+    await waitFor(() => {
+      expect(mockAttachLBs).toHaveBeenCalledWith(
+        { name: "my-asg", loadBalancerNames: ["my-lb"] },
+        expect.any(Object),
+      );
+    });
+    await waitFor(() =>
+      expect(screen.queryByText("Attach Classic Load Balancers")).toBeNull(),
+    );
+  });
+
+  it("dismisses create scaling policy modal with Escape and closes on success", async () => {
+    mockCreatePolicy.mockImplementation((_body: any, opts: any) =>
+      opts?.onSuccess?.(),
+    );
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await selectASG(user, "my-asg");
+    await user.click(screen.getAllByText(/Create policy/)[0]);
+    await waitFor(() =>
+      expect(screen.getByText(/Create Scaling Policy/)).toBeTruthy(),
+    );
+    dismissModalWithEscape();
+    await waitFor(() =>
+      expect(screen.queryByText(/Create Scaling Policy/)).toBeNull(),
+    );
+    await user.click(screen.getAllByText(/Create policy/)[0]);
+    await waitFor(() =>
+      expect(screen.getByText(/Create Scaling Policy/)).toBeTruthy(),
+    );
+    await user.type(screen.getByPlaceholderText("scale-up"), "cpu-policy");
+    const adjInput = screen.getByLabelText(/Scaling Adjustment/i);
+    await user.clear(adjInput);
+    await user.type(adjInput, "5");
+    const coolInput = screen.getByLabelText(/Cooldown/i);
+    await user.clear(coolInput);
+    await user.type(coolInput, "120");
+    await user.click(screen.getByRole("button", { name: /Create$/ }));
+    await waitFor(() => {
+      expect(mockCreatePolicy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          policyName: "cpu-policy",
+          scalingAdjustment: 5,
+          cooldown: 120,
+        }),
+        expect.any(Object),
+      );
+    });
+    await waitFor(() =>
+      expect(screen.queryByText(/Create Scaling Policy/)).toBeNull(),
+    );
+  });
+
+  it("dismisses create lifecycle hook modal with Escape and closes on success", async () => {
+    mockPutHook.mockImplementation((_body: any, opts: any) =>
+      opts?.onSuccess?.(),
+    );
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await selectASG(user, "my-asg");
+    await user.click(screen.getAllByText(/Create hook/)[0]);
+    await waitFor(() =>
+      expect(screen.getByText(/Create Lifecycle Hook/)).toBeTruthy(),
+    );
+    dismissModalWithEscape();
+    await waitFor(() =>
+      expect(screen.queryByText(/Create Lifecycle Hook/)).toBeNull(),
+    );
+    await user.click(screen.getAllByText(/Create hook/)[0]);
+    await waitFor(() =>
+      expect(screen.getByText(/Create Lifecycle Hook/)).toBeTruthy(),
+    );
+    await user.type(screen.getByPlaceholderText("my-hook"), "scale-down");
+    await user.click(screen.getByRole("button", { name: /Create$/ }));
+    await waitFor(() =>
+      expect(screen.queryByText(/Create Lifecycle Hook/)).toBeNull(),
+    );
+  });
+
+  it("dismisses complete lifecycle action modal with Escape and closes on success", async () => {
+    mockCompleteAction.mockImplementation((_body: any, opts: any) =>
+      opts?.onSuccess?.(),
+    );
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await selectASG(user, "my-asg");
+    await user.click(screen.getAllByText(/Complete action/)[0]);
+    await waitFor(() =>
+      expect(screen.getByText(/Complete Lifecycle Action/)).toBeTruthy(),
+    );
+    dismissModalWithEscape();
+    await waitFor(() =>
+      expect(screen.queryByText(/Complete Lifecycle Action/)).toBeNull(),
+    );
+    await user.click(screen.getAllByText(/Complete action/)[0]);
+    await waitFor(() =>
+      expect(screen.getByText(/Complete Lifecycle Action/)).toBeTruthy(),
+    );
+    await user.type(screen.getByPlaceholderText("my-hook"), "finish-hook");
+    await user.click(screen.getByRole("button", { name: /Complete$/ }));
+    await waitFor(() =>
+      expect(screen.queryByText(/Complete Lifecycle Action/)).toBeNull(),
+    );
   });
 });

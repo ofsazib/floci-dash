@@ -349,7 +349,7 @@ function CreateRoleModal({ onClose, onSubmit }: { onClose: () => void; onSubmit:
             <Input value={description} onChange={({ detail }) => setDescription(detail.value)} />
           </FormField>
           <FormField label="Trust policy (AssumeRolePolicyDocument)" description="Default: EC2 service can assume this role">
-            <Textarea value={defaultTrustPolicy} rows={8} onChange={() => {}} />
+            <Textarea value={defaultTrustPolicy} rows={8} />
           </FormField>
         </SpaceBetween>
       </Form>
@@ -534,7 +534,7 @@ function CreatePolicyModal({ onClose, onSubmit }: { onClose: () => void; onSubmi
             <Input value={description} onChange={({ detail }) => setDescription(detail.value)} />
           </FormField>
           <FormField label="Policy document">
-            <Textarea value={defaultDoc} rows={10} onChange={() => {}} />
+            <Textarea value={defaultDoc} rows={10} />
           </FormField>
         </SpaceBetween>
       </Form>
@@ -665,7 +665,7 @@ function GroupsTab() {
         }>
           <Form>
             <FormField label="Group name">
-              <Input id="group-name-input" value="" onChange={() => {}} />
+              <Input id="group-name-input" value="" />
             </FormField>
           </Form>
         </Modal>

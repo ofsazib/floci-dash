@@ -1,9 +1,30 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
+
+// ─── Modal helpers ──────────────────────────────────────
+
+/** Fire Escape on every mounted Cloudscape dialog (fires onDismiss). */
+function dismissModalWithEscape() {
+  document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+    fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27, key: "Escape" });
+  });
+}
+
+function dialogOf(headerText: string): HTMLElement {
+  const header = screen
+    .getAllByText(headerText)
+    .find((h) => h.closest('[role="dialog"]'));
+  return header!.closest('[role="dialog"]') as HTMLElement;
+}
+
+/** Assert the modal with the given header is hidden (Cloudscape uses display:none). */
+function expectModalHidden(headerText: string) {
+  expect(dialogOf(headerText).className).toContain("hidden");
+}
 
 // ─── vi.hoisted states ─────────────────────────────────
 
@@ -741,5 +762,179 @@ describe("ElastiCacheDashboard — users", () => {
     expect(screen.getByText("Failed to create user")).toBeTruthy();
     createUserState.isError = false;
     createUserState.error = null;
+  });
+});
+
+describe("ElastiCacheDashboard — modal dismiss & success paths", () => {
+  it("dismisses create replication group modal with Escape, Cancel, and closes on success", async () => {
+    mockCreateRG.mockImplementation((_body: any, opts: any) =>
+      opts?.onSuccess?.(),
+    );
+    const user = userEvent.setup();
+    mockRG.mockReturnValue({
+      data: { replicationGroups: [], total: 0 },
+      isLoading: false,
+    });
+    render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() =>
+      expect(
+        screen.getAllByText("Create Replication Group").length,
+      ).toBeGreaterThan(0),
+    );
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create Replication Group"));
+    // Reopen and Cancel
+    await clickButton(user, /Create/i);
+    await waitFor(() =>
+      expect(
+        screen.getAllByText("Create Replication Group").length,
+      ).toBeGreaterThan(0),
+    );
+    await user.click(
+      within(dialogOf("Create Replication Group")).getByRole("button", {
+        name: /Cancel/i,
+      }),
+    );
+    await waitFor(() => expectModalHidden("Create Replication Group"));
+    // Reopen, fill, and submit with onSuccess
+    await clickButton(user, /Create/i);
+    await waitFor(() =>
+      expect(
+        screen.getAllByText("Create Replication Group").length,
+      ).toBeGreaterThan(0),
+    );
+    await user.type(screen.getByPlaceholderText("my-rg"), "rg-ok");
+    await user.type(
+      screen.getByPlaceholderText("My replication group"),
+      "Description",
+    );
+    await clickButton(user, /Create/i, { last: true });
+    await waitFor(() => {
+      expect(mockCreateRG).toHaveBeenCalledWith(
+        {
+          ReplicationGroupId: "rg-ok",
+          Description: "Description",
+        },
+        expect.any(Object),
+      );
+    });
+    await waitFor(() => expectModalHidden("Create Replication Group"));
+  });
+
+  it("dismisses create cache cluster modal with Escape, Cancel, and closes on success", async () => {
+    mockCreateCC.mockImplementation((_body: any, opts: any) =>
+      opts?.onSuccess?.(),
+    );
+    const user = userEvent.setup();
+    mockCC.mockReturnValue({
+      data: { cacheClusters: [], total: 0 },
+      isLoading: false,
+    });
+    render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /cache clusters/i }));
+    await waitFor(() =>
+      expect(screen.getByText("No cache clusters found")).toBeTruthy(),
+    );
+    await clickButton(user, /Create/i);
+    await waitFor(() =>
+      expect(screen.getAllByText("Create Cache Cluster").length).toBeGreaterThan(
+        0,
+      ),
+    );
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create Cache Cluster"));
+    // Reopen and Cancel
+    await clickButton(user, /Create/i);
+    await waitFor(() =>
+      expect(screen.getAllByText("Create Cache Cluster").length).toBeGreaterThan(
+        0,
+      ),
+    );
+    await user.click(
+      within(dialogOf("Create Cache Cluster")).getByRole("button", {
+        name: /Cancel/i,
+      }),
+    );
+    await waitFor(() => expectModalHidden("Create Cache Cluster"));
+    // Reopen, fill, and submit with onSuccess
+    await clickButton(user, /Create/i);
+    await waitFor(() =>
+      expect(screen.getAllByText("Create Cache Cluster").length).toBeGreaterThan(
+        0,
+      ),
+    );
+    await user.type(screen.getByPlaceholderText("my-cache-cluster"), "cc-ok");
+    await clickButton(user, /Create/i, { last: true });
+    await waitFor(() => {
+      expect(mockCreateCC).toHaveBeenCalledWith(
+        { CacheClusterId: "cc-ok" },
+        expect.any(Object),
+      );
+    });
+    await waitFor(() => expectModalHidden("Create Cache Cluster"));
+  });
+
+  it("dismisses create user modal with Escape, Cancel, and closes on success", async () => {
+    mockCreateUser.mockImplementation((_body: any, opts: any) =>
+      opts?.onSuccess?.(),
+    );
+    const user = userEvent.setup();
+    mockUsers.mockReturnValue({ data: { users: [], total: 0 }, isLoading: false });
+    render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /users/i }));
+    await waitFor(() => expect(screen.getByText("No users found")).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() =>
+      expect(screen.getByText("Create ElastiCache User")).toBeTruthy(),
+    );
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create ElastiCache User"));
+    // Reopen and Cancel
+    await clickButton(user, /Create/i);
+    await waitFor(() =>
+      expect(screen.getByText("Create ElastiCache User")).toBeTruthy(),
+    );
+    await user.click(
+      within(dialogOf("Create ElastiCache User")).getByRole("button", {
+        name: /Cancel/i,
+      }),
+    );
+    await waitFor(() => expectModalHidden("Create ElastiCache User"));
+    // Reopen, fill, and submit with onSuccess
+    await clickButton(user, /Create/i);
+    await waitFor(() =>
+      expect(screen.getByText("Create ElastiCache User")).toBeTruthy(),
+    );
+    await user.type(screen.getByPlaceholderText("my-user"), "user-ok");
+    await clickButton(user, /Create/i, { last: true });
+    await waitFor(() => {
+      expect(mockCreateUser).toHaveBeenCalledWith(
+        { UserId: "user-ok" },
+        expect.any(Object),
+      );
+    });
+    await waitFor(() => expectModalHidden("Create ElastiCache User"));
+  });
+
+  it("deletes a user via the row delete button", async () => {
+    const user = userEvent.setup();
+    mockUsers.mockReturnValue({
+      data: {
+        users: [{ UserId: "user-1", UserName: "u1", Status: "active" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<ElastiCacheDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /users/i }));
+    await waitFor(() => expect(screen.getByText("user-1")).toBeTruthy());
+    const deleteBtn = screen.getByRole("button", { name: /Delete user-1/i });
+    await user.click(deleteBtn);
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() =>
+      expect(mockDeleteUser).toHaveBeenCalledWith({ UserId: "user-1" }),
+    );
   });
 });

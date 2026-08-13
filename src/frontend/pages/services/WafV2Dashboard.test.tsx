@@ -1,9 +1,31 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
+
+/** Assert the modal with the given header is hidden (Cloudscape uses display:none). */
+function expectModalHidden(headerText: string) {
+  const header = screen
+    .getAllByText(headerText)
+    .find((h) => h.closest('[role="dialog"]'));
+  const dialog = header!.closest('[role="dialog"]') as HTMLElement;
+  expect(dialog.className).toContain("hidden");
+}
+
+/** The currently visible Cloudscape dialog (hidden ones stay mounted with display:none). */
+function visibleDialog(): HTMLElement {
+  const dialogs = Array.from(document.querySelectorAll('[role="dialog"]')).filter(
+    (d) => !d.className.includes("hidden"),
+  );
+  return dialogs[dialogs.length - 1] as HTMLElement;
+}
+
+const toastMock = vi.fn();
+vi.mock("../../components/Toast", () => ({
+  useToast: () => ({ showToast: toastMock }),
+}));
 
 const mockWebAcls = vi.fn();
 const mockCreateWebAcl = vi.fn();
@@ -983,5 +1005,463 @@ describe("WafV2Dashboard — Edit Regex Set data states", () => {
     await waitFor(() => expect(screen.getByText("my-regex")).toBeTruthy());
     await user.click(screen.getAllByRole("button", { name: /Edit/i })[0]);
     await waitFor(() => expect(screen.getByText("Failed to load regex pattern set.")).toBeTruthy());
+  });
+});
+
+describe("WafV2Dashboard — modal dismiss & success paths", () => {
+  it("dismisses create Web ACL modal with Escape, Cancel, and closes on success", async () => {
+    mockCreateWebAcl.mockImplementation((_body: any, opts: any) =>
+      opts?.onSuccess?.(),
+    );
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create Web ACL/i);
+    await waitFor(() =>
+      expect(screen.getAllByText("Create Web ACL").length).toBeGreaterThan(1),
+    );
+    document
+      .querySelectorAll('[class*="awsui_dialog"]')
+      .forEach((dialog) => {
+        fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27, key: "Escape" });
+      });
+    await waitFor(() => expectModalHidden("Create Web ACL"));
+    // Reopen and Cancel
+    await clickButton(user, /Create Web ACL/i);
+    await waitFor(() =>
+      expect(screen.getAllByText("Create Web ACL").length).toBeGreaterThan(1),
+    );
+    const cancelBtns = screen.getAllByRole("button", { name: /Cancel/i });
+    await user.click(cancelBtns[cancelBtns.length - 1]);
+    await waitFor(() => expectModalHidden("Create Web ACL"));
+    // Reopen, fill, and submit with onSuccess
+    await clickButton(user, /Create Web ACL/i);
+    await waitFor(() =>
+      expect(screen.getAllByText("Create Web ACL").length).toBeGreaterThan(1),
+    );
+    await user.type(screen.getByPlaceholderText("my-web-acl"), "acl-ok");
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => {
+      expect(mockCreateWebAcl).toHaveBeenCalledWith(
+        expect.objectContaining({ Name: "acl-ok" }),
+        expect.any(Object),
+      );
+    });
+    await waitFor(() => expectModalHidden("Create Web ACL"));
+  });
+
+  it("creates an IP set with description and addresses and shows success toast", async () => {
+    mockCreateIPSetMutate.mockImplementation((_body: any, opts: any) =>
+      opts?.onSuccess?.(),
+    );
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create IP set/i);
+    await waitFor(() =>
+      expect(screen.getByText("Create IP Set")).toBeTruthy(),
+    );
+    await user.type(screen.getByPlaceholderText("my-ip-set"), "blocked");
+    await user.type(screen.getByPlaceholderText("Blocked IPs"), "My blocked IPs");
+    await user.type(screen.getByPlaceholderText("10.0.0.0/8"), "10.0.0.0/8");
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => {
+      expect(mockCreateIPSetMutate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          Name: "blocked",
+          Description: "My blocked IPs",
+          Addresses: ["10.0.0.0/8"],
+        }),
+        expect.any(Object),
+      );
+    });
+    await waitFor(() =>
+      expect(toastMock).toHaveBeenCalledWith("success", "IP set created"),
+    );
+  });
+
+  it("creates a regex pattern set with patterns and shows success toast", async () => {
+    mockCreateRegexSetMutate.mockImplementation((_body: any, opts: any) =>
+      opts?.onSuccess?.(),
+    );
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create regex set/i);
+    await waitFor(() =>
+      expect(screen.getByText("Create Regex Pattern Set")).toBeTruthy(),
+    );
+    await user.type(screen.getByPlaceholderText("my-regex-set"), "sql");
+    await user.type(
+      screen.getByPlaceholderText("SQL injection patterns"),
+      "desc",
+    );
+    await user.type(
+      screen.getByPlaceholderText(".*union.*select.*"),
+      ".*union.*select.*",
+    );
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => {
+      expect(mockCreateRegexSetMutate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          Name: "sql",
+          RegularExpressionList: [{ RegexString: ".*union.*select.*" }],
+        }),
+        expect.any(Object),
+      );
+    });
+    await waitFor(() =>
+      expect(toastMock).toHaveBeenCalledWith(
+        "success",
+        "Regex pattern set created",
+      ),
+    );
+  });
+
+  it("updates a regex pattern set and shows success toast", async () => {
+    mockUpdateRegexSetMutate.mockImplementation((_body: any, opts: any) =>
+      opts?.onSuccess?.(),
+    );
+    mockRegexSets.mockReturnValue({
+      data: {
+        regexPatternSets: [{ Name: "my-regex", Id: "re-1", Description: "Test" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    mockRegexSetQuery.mockReturnValue({
+      data: {
+        regexPatternSet: {
+          Id: "re-1",
+          Name: "my-regex",
+          Description: "old",
+          LockToken: "lt-1",
+          RegularExpressionList: [{ RegexString: "a" }],
+        },
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-regex")).toBeTruthy());
+    await user.click(screen.getAllByRole("button", { name: /Edit/i })[0]);
+    await waitFor(() =>
+      expect(screen.getByText(/Edit Regex Pattern Set/)).toBeTruthy(),
+    );
+    await user.type(
+      screen.getByPlaceholderText("SQL injection patterns"),
+      "new-pattern",
+    );
+    await user.type(
+      screen.getAllByPlaceholderText(".*union.*select.*")[0],
+      "new-regex",
+    );
+    const saveBtns = screen.getAllByRole("button", { name: /^Save$/i });
+    await user.click(saveBtns[saveBtns.length - 1]);
+    await waitFor(() => {
+      expect(mockUpdateRegexSetMutate).toHaveBeenCalledWith(
+        expect.objectContaining({ Id: "re-1", LockToken: "lt-1" }),
+        expect.any(Object),
+      );
+    });
+    await waitFor(() =>
+      expect(toastMock).toHaveBeenCalledWith(
+        "success",
+        "Regex pattern set updated",
+      ),
+    );
+  });
+
+  it("creates a rule group with description and shows success toast", async () => {
+    mockCreateRuleGroupMutate.mockImplementation((_body: any, opts: any) =>
+      opts?.onSuccess?.(),
+    );
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create rule group/i);
+    await waitFor(() =>
+      expect(screen.getByText("Create Rule Group")).toBeTruthy(),
+    );
+    await user.type(screen.getByPlaceholderText("my-rule-group"), "rg");
+    await user.type(
+      screen.getByPlaceholderText("Rate limiting rules"),
+      "desc",
+    );
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => {
+      expect(mockCreateRuleGroupMutate).toHaveBeenCalledWith(
+        expect.objectContaining({ Name: "rg", Description: "desc" }),
+        expect.any(Object),
+      );
+    });
+    await waitFor(() =>
+      expect(toastMock).toHaveBeenCalledWith("success", "Rule group created"),
+    );
+  });
+
+  it("saves a logging configuration and shows success toast", async () => {
+    mockPutLoggingMutate.mockImplementation((_body: any, opts: any) =>
+      opts?.onSuccess?.(),
+    );
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Configure logging/i);
+    await waitFor(() =>
+      expect(screen.getByText("Configure Logging")).toBeTruthy(),
+    );
+    const dialog = visibleDialog();
+    await user.type(
+      within(dialog).getByPlaceholderText("arn:aws:wafv2:...:webacl/..."),
+      "arn:aws:wafv2:us-east-1:123:webacl/a1",
+    );
+    await user.type(
+      within(dialog).getByPlaceholderText("arn:aws:logs:..."),
+      "arn:aws:logs:us-east-1:123:log-group:lg1",
+    );
+    await user.click(screen.getByRole("button", { name: /^Save$/i }));
+    await waitFor(() => {
+      expect(mockPutLoggingMutate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ResourceArn: "arn:aws:wafv2:us-east-1:123:webacl/a1",
+        }),
+        expect.any(Object),
+      );
+    });
+    await waitFor(() =>
+      expect(toastMock).toHaveBeenCalledWith(
+        "success",
+        "Logging configuration saved",
+      ),
+    );
+  });
+
+  it("associates a web ACL and shows success toast", async () => {
+    mockAssociateMutate.mockImplementation((_body: any, opts: any) =>
+      opts?.onSuccess?.(),
+    );
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    const assocBtns = screen.getAllByRole("button", {
+      name: /Associate Web ACL/i,
+    });
+    await user.click(assocBtns[0]);
+    await waitFor(() =>
+      expect(screen.getByText(/Web ACL ARN/)).toBeTruthy(),
+    );
+    const dialog = visibleDialog();
+    await user.type(
+      within(dialog).getByPlaceholderText("arn:aws:wafv2:...:webacl/..."),
+      "arn:aws:wafv2:us-east-1:123:webacl/a1",
+    );
+    await user.type(
+      within(dialog).getByPlaceholderText("arn:aws:elasticloadbalancing:..."),
+      "arn:aws:elasticloadbalancing:us-east-1:123:loadbalancer/app/lb1",
+    );
+    await user.click(
+      screen.getAllByRole("button", { name: /^Associate$/ })[
+        screen.getAllByRole("button", { name: /^Associate$/ }).length - 1
+      ],
+    );
+    await waitFor(() => {
+      expect(mockAssociateMutate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ResourceArn: "arn:aws:elasticloadbalancing:us-east-1:123:loadbalancer/app/lb1",
+        }),
+        expect.any(Object),
+      );
+    });
+    await waitFor(() =>
+      expect(toastMock).toHaveBeenCalledWith("success", "Web ACL associated"),
+    );
+  });
+
+  it("disassociates a web ACL and shows success toast", async () => {
+    mockDisassociateMutate.mockImplementation((_body: any, opts: any) =>
+      opts?.onSuccess?.(),
+    );
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    const disassocBtns = screen.getAllByRole("button", {
+      name: /Disassociate Web ACL/i,
+    });
+    await user.click(disassocBtns[0]);
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /^Disassociate$/ }),
+      ).toBeTruthy(),
+    );
+    const dialog = visibleDialog();
+    await user.type(
+      within(dialog).getByPlaceholderText("arn:aws:elasticloadbalancing:..."),
+      "arn:aws:elasticloadbalancing:us-east-1:123:loadbalancer/app/lb1",
+    );
+    await user.click(
+      screen.getAllByRole("button", { name: /^Disassociate$/ })[
+        screen.getAllByRole("button", { name: /^Disassociate$/ }).length - 1
+      ],
+    );
+    await waitFor(() => {
+      expect(mockDisassociateMutate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ResourceArn: "arn:aws:elasticloadbalancing:us-east-1:123:loadbalancer/app/lb1",
+        }),
+        expect.any(Object),
+      );
+    });
+    await waitFor(() =>
+      expect(toastMock).toHaveBeenCalledWith(
+        "success",
+        "Web ACL disassociated",
+      ),
+    );
+  });
+
+  it("puts a permission policy and shows success toast", async () => {
+    mockPutPermissionMutate.mockImplementation((_body: any, opts: any) =>
+      opts?.onSuccess?.(),
+    );
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Put policy/i);
+    await waitFor(() =>
+      expect(screen.getByText("Put Permission Policy")).toBeTruthy(),
+    );
+    const dialog = visibleDialog();
+    await user.type(
+      within(dialog).getByPlaceholderText("arn:aws:wafv2:...:webacl/..."),
+      "arn:aws:wafv2:us-east-1:123:webacl/a1",
+    );
+    fireEvent.change(
+      within(dialog).getByPlaceholderText('{"Version": "2012-10-17", ...}'),
+      { target: { value: '{"Version":"2012-10-17","Statement":[]}' } },
+    );
+    await user.click(screen.getByRole("button", { name: /^Save$/i }));
+    await waitFor(() => {
+      expect(mockPutPermissionMutate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ResourceArn: "arn:aws:wafv2:us-east-1:123:webacl/a1",
+        }),
+        expect.any(Object),
+      );
+    });
+    await waitFor(() =>
+      expect(toastMock).toHaveBeenCalledWith(
+        "success",
+        "Permission policy saved",
+      ),
+    );
+  });
+
+  it("deletes an IP set via confirmation", async () => {
+    mockIPSets.mockReturnValue({
+      data: {
+        ipSets: [{ Name: "blocked", Id: "ip-1" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("blocked")).toBeTruthy());
+    const deleteBtn = screen.getByRole("button", {
+      name: /Delete blocked/i,
+    });
+    await user.click(deleteBtn);
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i, { last: true });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Delete blocked/i })).toBeTruthy();
+    });
+  });
+
+  it("deletes a regex pattern set via confirmation", async () => {
+    mockRegexSets.mockReturnValue({
+      data: {
+        regexPatternSets: [{ Name: "regexi", Id: "re-1" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("regexi")).toBeTruthy());
+    await user.click(
+      screen.getByRole("button", { name: /Delete regexi/i }),
+    );
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i, { last: true });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Delete regexi/i })).toBeTruthy(),
+    );
+  });
+
+  it("deletes a rule group via confirmation", async () => {
+    mockRuleGroups.mockReturnValue({
+      data: { ruleGroups: [{ Name: "rg-del", Id: "rg-1" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("rg-del")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Delete rg-del/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i, { last: true });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Delete rg-del/i })).toBeTruthy(),
+    );
+  });
+
+  it("deletes a logging configuration via confirmation", async () => {
+    mockLoggingConfigs.mockReturnValue({
+      data: {
+        loggingConfigurations: [
+          { ResourceArn: "arn:aws:wafv2:us-east-1:123:webacl/a1", LogDestinationConfigs: ["lg"] },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await waitFor(() =>
+      expect(screen.getByText("arn:aws:wafv2:us-east-1:123:webacl/a1")).toBeTruthy(),
+    );
+    await user.click(
+      screen.getByRole("button", {
+        name: /Delete arn:aws:wafv2:us-east-1:123:webacl\/a1/i,
+      }),
+    );
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i, { last: true });
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", {
+          name: /Delete arn:aws:wafv2:us-east-1:123:webacl\/a1/i,
+        }),
+      ).toBeTruthy(),
+    );
+  });
+
+  it("deletes a permission policy via confirmation", async () => {
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    // The permission section input is the last of the two page-level ARN inputs
+    await user.type(
+      screen.getAllByPlaceholderText("arn:aws:wafv2:...:webacl/...")[1],
+      "arn:aws:wafv2:us-east-1:123:webacl/a1",
+    );
+    await user.click(
+      screen.getByRole("button", {
+        name: /Delete arn:aws:wafv2:us-east-1:123:webacl\/a1/i,
+      }),
+    );
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i, { last: true });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Put policy/i })).toBeTruthy();
+    });
   });
 });

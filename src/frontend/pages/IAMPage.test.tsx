@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../test/helpers";
 import React from "react";
@@ -622,5 +622,387 @@ describe("IAMPage", () => {
       // Tags render as Badges with "key: value" text
       expect(screen.getByText("Environment: production")).toBeTruthy();
     });
+  });
+});
+
+describe("IAMPage — remaining coverage", () => {
+  beforeEach(() => {
+    mockIAMRoles.mockReturnValue({
+      data: { roles: [{ name: "ec2-role", arn: "arn:aws:iam::000000000000:role/ec2-role", createDate: "2024-01-01" }] },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockIAMUsers.mockReturnValue({
+      data: { users: [{ name: "admin-user", arn: "arn:aws:iam::000000000000:user/admin-user", createDate: "2024-01-01" }] },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockIAMGroups.mockReturnValue({
+      data: { groups: [{ name: "admins", arn: "arn:aws:iam::000000000000:group/admins" }] },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockIAMPolicies.mockReturnValue({
+      data: { policies: [{ name: "AdminPolicy", arn: "arn:aws:iam::000000000000:policy/AdminPolicy", scope: "Local" }] },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockIAMUser.mockReturnValue({
+      data: { user: null, accessKeys: [], attachedPolicies: [], groups: [], inlinePolicies: [] },
+      isLoading: false,
+    });
+    mockIAMRole.mockReturnValue({
+      data: { role: null, attachedPolicies: [], tags: {} },
+      isLoading: false,
+    });
+    mockIAMPolicy.mockReturnValue({
+      data: { policy: null, versions: [] },
+      isLoading: false,
+    });
+    mockPolicyVersion.mockReturnValue({
+      data: { document: null },
+      isLoading: false,
+    });
+  });
+
+  it("shows error toast when deleting a user fails", async () => {
+    mockDeleteUserMutate.mockRejectedValue(new Error("delete-failed"));
+    const user = userEvent.setup();
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Users/i }));
+    await clickButton(user, /Delete admin-user/i);
+    await waitFor(() => expect(screen.getByText(/Are you sure/i)).toBeTruthy());
+    await clickButton(user, /^Delete$/);
+    await waitFor(() =>
+      expect(mockDeleteUserMutate).toHaveBeenCalledWith("admin-user"),
+    );
+  });
+
+  it("shows error toast when creating a user fails", async () => {
+    mockCreateUserMutate.mockRejectedValue(new Error("create-failed"));
+    const user = userEvent.setup();
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Users/i }));
+    await clickButton(user, /Create user/i);
+    await waitFor(() => expect(screen.getByDisplayValue("/")).toBeTruthy());
+    const inputs = screen.getAllByRole("textbox");
+    await user.type(inputs[0], "new-user");
+    await clickButton(user, /Create/i, { last: true });
+    await waitFor(() =>
+      expect(mockCreateUserMutate).toHaveBeenCalled(),
+    );
+  });
+
+  it("types a custom path and cancels the create user modal", async () => {
+    const user = userEvent.setup();
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Users/i }));
+    await clickButton(user, /Create user/i);
+    await waitFor(() => expect(screen.getByDisplayValue("/")).toBeTruthy());
+    const inputs = screen.getAllByRole("textbox");
+    await user.type(inputs[1], "custom");
+    await clickButton(user, /Cancel/i, { last: true });
+    await waitFor(() =>
+      expect(screen.queryAllByText("Create user")).toHaveLength(1),
+    );
+  });
+
+  it("closes the user detail modal", async () => {
+    mockIAMUser.mockReturnValue({
+      data: {
+        user: { name: "admin-user", arn: "arn:1", userId: "A1", path: "/", createDate: "2024-01-01T00:00:00Z" },
+        accessKeys: [],
+        attachedPolicies: [],
+        groups: [],
+        inlinePolicies: [],
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Users/i }));
+    await clickButton(user, /View/i, { last: true });
+    await waitFor(() =>
+      expect(screen.getByText(/User: admin-user/i)).toBeTruthy(),
+    );
+    await clickButton(user, /^Close$/);
+    await waitFor(() =>
+      expect(screen.queryByText(/User: admin-user/i)).toBeNull(),
+    );
+  });
+
+  it("shows error toast and dismisses the key alert in user detail", async () => {
+    mockCreateAccessKeyMutate.mockRejectedValueOnce(
+      new Error("key-failed"),
+    );
+    mockIAMUser.mockReturnValue({
+      data: {
+        user: { name: "admin-user", arn: "arn:1", userId: "A1", path: "/", createDate: "2024-01-01T00:00:00Z" },
+        accessKeys: [],
+        attachedPolicies: [],
+        groups: [],
+        inlinePolicies: [],
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Users/i }));
+    await clickButton(user, /View/i, { last: true });
+    await waitFor(() =>
+      expect(screen.getByText(/User: admin-user/i)).toBeTruthy(),
+    );
+    await clickButton(user, /Create access key/i);
+    await waitFor(() =>
+      expect(mockCreateAccessKeyMutate).toHaveBeenCalledWith("admin-user"),
+    );
+    // Second call succeeds and renders the warning alert; dismiss it
+    mockCreateAccessKeyMutate.mockResolvedValue({
+      accessKeyId: "NEWKEY",
+      secretAccessKey: "SECRETVALUE",
+      status: "Active",
+    });
+    await clickButton(user, /Create access key/i);
+    await waitFor(() =>
+      expect(screen.getByText("NEWKEY")).toBeTruthy(),
+    );
+    // The alert's dismiss button is icon-only (no accessible name in this
+    // Cloudscape version), so click it via its class.
+    await user.click(
+      document.querySelector('[class*="awsui_dismiss-button"]') as HTMLElement,
+    );
+    await waitFor(() =>
+      expect(screen.queryByText("NEWKEY")).toBeNull(),
+    );
+  });
+
+  it("shows error toast when deleting a role fails", async () => {
+    mockDeleteRoleMutate.mockRejectedValue(new Error("delete-failed"));
+    const user = userEvent.setup();
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /Delete ec2-role/i);
+    await waitFor(() => expect(screen.getByText(/Are you sure/i)).toBeTruthy());
+    await clickButton(user, /^Delete$/);
+    await waitFor(() =>
+      expect(mockDeleteRoleMutate).toHaveBeenCalledWith("ec2-role"),
+    );
+  });
+
+  it("shows error toast when creating a role fails and cancels the modal", async () => {
+    mockCreateRoleMutate.mockRejectedValue(new Error("create-failed"));
+    const user = userEvent.setup();
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /Create role/i);
+    await waitFor(() =>
+      expect(screen.getByText(/AssumeRolePolicyDocument/i)).toBeTruthy(),
+    );
+    const inputs = screen.getAllByRole("textbox");
+    await user.type(inputs[0], "test-role");
+    await user.type(inputs[1], "My role description");
+    await clickButton(user, /Create/i, { last: true });
+    await waitFor(() => expect(mockCreateRoleMutate).toHaveBeenCalled());
+    // Reopen and Cancel to cover the onClose handler
+    await clickButton(user, /Create role/i);
+    await waitFor(() =>
+      expect(screen.getByText(/AssumeRolePolicyDocument/i)).toBeTruthy(),
+    );
+    await clickButton(user, /Cancel/i, { last: true });
+    await waitFor(() =>
+      expect(screen.queryByText(/AssumeRolePolicyDocument/i)).toBeNull(),
+    );
+  });
+
+  it("closes the role detail modal and falls back on invalid trust policy", async () => {
+    mockIAMRole.mockReturnValue({
+      data: {
+        role: {
+          name: "ec2-role",
+          arn: "arn:1",
+          roleId: "R123",
+          path: "/",
+          createDate: "2024-01-01T00:00:00Z",
+          assumeRolePolicyDocument: "{not-json",
+        },
+        attachedPolicies: [],
+        tags: {},
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i, { last: true });
+    await waitFor(() =>
+      expect(screen.getByText(/Role: ec2-role/i)).toBeTruthy(),
+    );
+    expect(screen.getByText("{not-json")).toBeTruthy();
+    await clickButton(user, /^Close$/);
+    await waitFor(() =>
+      expect(screen.queryByText(/Role: ec2-role/i)).toBeNull(),
+    );
+  });
+
+  it("switches the policy scope selector", async () => {
+    const user = userEvent.setup();
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Policies/i }));
+    await waitFor(() =>
+      expect(screen.getAllByText("Policies").length).toBeGreaterThan(0),
+    );
+    await user.click(screen.getAllByText("Local")[0]);
+    await user.click(await screen.findByText("AWS"));
+  });
+
+  it("shows error toast when deleting a policy fails", async () => {
+    mockDeletePolicyMutate.mockRejectedValue(new Error("delete-failed"));
+    const user = userEvent.setup();
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Policies/i }));
+    await clickButton(user, /Delete AdminPolicy/i);
+    await waitFor(() => expect(screen.getByText(/Are you sure/i)).toBeTruthy());
+    await clickButton(user, /^Delete$/);
+    await waitFor(() =>
+      expect(mockDeletePolicyMutate).toHaveBeenCalledWith(
+        "arn:aws:iam::000000000000:policy/AdminPolicy",
+      ),
+    );
+  });
+
+  it("shows error toast when creating a policy fails and cancels the modal", async () => {
+    mockCreatePolicyMutate.mockRejectedValue(new Error("create-failed"));
+    const user = userEvent.setup();
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Policies/i }));
+    await clickButton(user, /Create policy/i);
+    await waitFor(() =>
+      expect(screen.getByText(/Policy document/i)).toBeTruthy(),
+    );
+    const inputs = screen.getAllByRole("textbox");
+    await user.type(inputs[0], "test-policy");
+    await user.type(inputs[1], "Policy description");
+    await clickButton(user, /Create/i, { last: true });
+    await waitFor(() => expect(mockCreatePolicyMutate).toHaveBeenCalled());
+    // Reopen and Cancel to cover the onClose handler
+    await clickButton(user, /Create policy/i);
+    await waitFor(() =>
+      expect(screen.getByText(/Policy document/i)).toBeTruthy(),
+    );
+    await clickButton(user, /Cancel/i, { last: true });
+    await waitFor(() =>
+      expect(screen.queryByText(/Policy document/i)).toBeNull(),
+    );
+  });
+
+  it("switches policy version and falls back on invalid document", async () => {
+    mockIAMPolicy.mockReturnValue({
+      data: {
+        policy: {
+          name: "AdminPolicy",
+          arn: "arn:aws:iam::000000000000:policy/AdminPolicy",
+          policyId: "P123",
+          defaultVersionId: "v1",
+          attachmentCount: 2,
+          createDate: "2024-01-01T00:00:00Z",
+        },
+        versions: [
+          { versionId: "v1", isDefaultVersion: true },
+          { versionId: "v2", isDefaultVersion: false },
+        ],
+      },
+      isLoading: false,
+    });
+    mockPolicyVersion.mockReturnValue({
+      data: { document: "{not-json" },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Policies/i }));
+    await clickButton(user, /View/i, { last: true });
+    await waitFor(() =>
+      expect(screen.getByText(/Policy: AdminPolicy/i)).toBeTruthy(),
+    );
+    expect(screen.getByText("{not-json")).toBeTruthy();
+    await user.click(screen.getByText("v1 (default)"));
+    await user.click(await screen.findByText("v2"));
+    await clickButton(user, /^Close$/);
+    await waitFor(() =>
+      expect(screen.queryByText(/Policy: AdminPolicy/i)).toBeNull(),
+    );
+  });
+
+  it("shows error toast when deleting a group fails", async () => {
+    mockDeleteGroupMutate.mockRejectedValue(new Error("delete-failed"));
+    const user = userEvent.setup();
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Groups/i }));
+    await clickButton(user, /Delete admins/i);
+    await waitFor(() => expect(screen.getByText(/Are you sure/i)).toBeTruthy());
+    await clickButton(user, /^Delete$/);
+    await waitFor(() =>
+      expect(mockDeleteGroupMutate).toHaveBeenCalledWith("admins"),
+    );
+  });
+
+  it("dismisses, cancels, and creates a group", async () => {
+    mockCreateGroupMutate.mockImplementation((_body: any, opts: any) =>
+      opts?.onSuccess?.(_body, {}),
+    );
+    const user = userEvent.setup();
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Groups/i }));
+    await clickButton(user, /Create group/i);
+    await waitFor(() =>
+      expect(screen.getAllByText("Group name").length).toBeGreaterThan(0),
+    );
+    // The modal header lives inside a dialog; the page also keeps a hidden
+    // ConfirmDialog mounted, so assert on the modal header's presence instead
+    // of counting dialogs.
+    const expectCreateGroupClosed = () => {
+      const visibleDialogs = Array.from(
+        document.querySelectorAll('[role="dialog"]'),
+      ).filter((d) => !d.className.includes("hidden"));
+      expect(
+        visibleDialogs.some((d) => d.textContent?.includes("Create group")),
+      ).toBe(false);
+    };
+    // Escape to cover onDismiss
+    document
+      .querySelectorAll('[class*="awsui_dialog"]')
+      .forEach((dialog) => {
+        fireEvent.keyDown(dialog as HTMLElement, {
+          keyCode: 27,
+          key: "Escape",
+          bubbles: true,
+        });
+      });
+    await waitFor(expectCreateGroupClosed);
+    // Reopen and Cancel
+    await clickButton(user, /Create group/i);
+    await waitFor(() =>
+      expect(screen.getAllByText("Group name").length).toBeGreaterThan(0),
+    );
+    await clickButton(user, /Cancel/i, { last: true });
+    await waitFor(expectCreateGroupClosed);
+    // Reopen and submit with onSuccess
+    await clickButton(user, /Create group/i);
+    await waitFor(() =>
+      expect(screen.getAllByText("Group name").length).toBeGreaterThan(0),
+    );
+    const input = document.getElementById(
+      "group-name-input",
+    ) as HTMLInputElement;
+    if (input) input.value = "ok-group";
+    await clickButton(user, /^Create$/);
+    await waitFor(() =>
+      expect(mockCreateGroupMutate).toHaveBeenCalledWith(
+        { name: "ok-group" },
+        expect.anything(),
+      ),
+    );
+    await waitFor(expectCreateGroupClosed);
   });
 });

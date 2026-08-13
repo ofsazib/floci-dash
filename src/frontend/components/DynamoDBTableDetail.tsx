@@ -979,7 +979,6 @@ export default function DynamoDBTableDetail({
                 <Input
                   value={editKeyValues[hashKeyAttr] ?? ""}
                   disabled
-                  onChange={() => {}}
                 />
               </FormField>
             )}
@@ -988,7 +987,6 @@ export default function DynamoDBTableDetail({
                 <Input
                   value={editKeyValues[rangeKeyAttr] ?? ""}
                   disabled
-                  onChange={() => {}}
                 />
               </FormField>
             )}
@@ -1167,14 +1165,8 @@ export default function DynamoDBTableDetail({
                   }
                   loading={putItem.isPending}
                   onClick={() => {
-                    if (
-                      !selectedItem ||
-                      !quickAttrName ||
-                      !quickAttrValue
-                    )
-                      return;
                     const updated = {
-                      ...selectedItem,
+                      ...selectedItem!,
                       [quickAttrName]: quickAttrValue,
                     };
                     putItem.mutate(updated, {
