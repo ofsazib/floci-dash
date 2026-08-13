@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
 import userEvent from "@testing-library/user-event";
@@ -1312,3 +1312,236 @@ describe("S3BucketConfig — ACL tab", () => {
     expect(screen.getByText("Failed to update ACL")).toBeTruthy();
   });
 });
+
+describe("S3BucketConfig — Select changes, input changes, and modal completions", () => {
+  it("changes versioning Select and saves Suspended", async () => {
+    const user = userEvent.setup();
+    const mockMutate = vi.fn();
+    (useS3UpdateVersioning as any).mockReturnValue({ mutate: mockMutate, isPending: false, isError: false, error: null });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Versioning" }));
+    const trigger = screen.getByRole("button", { name: /Enabled/i });
+    await user.click(trigger);
+    await user.click(screen.getByRole("option", { name: /Suspended/i }));
+    await user.click(screen.getByRole("button", { name: /Save changes/i }));
+    expect(mockMutate).toHaveBeenCalledWith("Suspended");
+  });
+
+  it("submits invalid JSON policy text through the catch branch", async () => {
+    const user = userEvent.setup();
+    const mockMutate = vi.fn();
+    (useS3UpdateBucketPolicy as any).mockReturnValue({ mutate: mockMutate, isPending: false, isError: false, error: null });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Policy" }));
+    await waitFor(() => expect(screen.getByDisplayValue(/Version/)).toBeTruthy());
+    const textarea = screen.getByDisplayValue(/Version/);
+    await user.clear(textarea);
+    await user.type(textarea, "not-json");
+    await user.click(screen.getByRole("button", { name: /Save policy/i }));
+    expect(mockMutate).toHaveBeenCalledWith("not-json");
+  });
+
+  it("changes encryption Select to SSE-KMS and enables", async () => {
+    const user = userEvent.setup();
+    const mockMutate = vi.fn();
+    (useS3UpdateBucketEncryption as any).mockReturnValue({ mutate: mockMutate, isPending: false, isError: false, error: null });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Encryption" }));
+    const trigger = screen.getByRole("button", { name: /AES256/i });
+    await user.click(trigger);
+    await user.click(screen.getByRole("option", { name: /aws:kms/i }));
+    await user.click(screen.getByRole("button", { name: /Enable encryption/i }));
+    expect(mockMutate).toHaveBeenCalledWith("aws:kms");
+  });
+
+  it("adds a lifecycle rule with all fields typed and closes on success", async () => {
+    const user = userEvent.setup();
+    const mockMutate = vi.fn((_params: any, opts: any) => opts?.onSuccess?.());
+    (useS3UpdateBucketLifecycle as any).mockReturnValue({ mutate: mockMutate, isPending: false, isError: false, error: null });
+    (useS3BucketLifecycle as any).mockReturnValue({ data: { rules: [] }, isLoading: false, isError: false, error: null });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Lifecycle" }));
+    await waitFor(() => expect(screen.getByText(/No lifecycle rules configured/)).toBeTruthy());
+    await user.click(screen.getAllByRole("button", { name: /Add lifecycle rule/i })[0]);
+    await waitFor(() => expect(screen.getByRole("dialog")).toBeTruthy());
+    // Fill every field
+    await user.type(screen.getByPlaceholderText("e.g. expire-old-logs"), "rule-1");
+    await user.type(screen.getByPlaceholderText("e.g. logs/"), "logs/");
+    await user.type(screen.getByPlaceholderText("e.g. 90"), "90");
+    const days30 = screen.getAllByPlaceholderText("e.g. 30");
+    await user.type(days30[0], "30");
+    await user.type(days30[1], "60");
+    await user.type(screen.getByPlaceholderText("e.g. 7"), "7");
+    // Change status and storage class Selects
+    await user.click(screen.getByRole("button", { name: /Enabled/i }));
+    await user.click(screen.getByRole("option", { name: /Disabled/i }));
+    await user.click(screen.getByRole("button", { name: /GLACIER/i }));
+    await user.click(screen.getByRole("option", { name: /DEEP_ARCHIVE/i }));
+    await user.click(screen.getAllByRole("button", { name: /^Add rule$/i })[0]);
+    await waitFor(() => expect(mockMutate).toHaveBeenCalled());
+    const payload = mockMutate.mock.calls[0][0];
+    expect(payload[0]).toEqual(
+      expect.objectContaining({
+        Status: "Disabled",
+        ID: "rule-1",
+        Filter: { Prefix: "logs/" },
+        Expiration: { Days: 90 },
+        NoncurrentVersionExpiration: { NoncurrentDays: 30 },
+        AbortIncompleteMultipartUpload: { DaysAfterInitiation: 7 },
+        Transitions: [{ StorageClass: "DEEP_ARCHIVE", Days: 60 }],
+      }),
+    );
+  });
+
+  it("loads rule without transitions into GLACIER defaults", async () => {
+    const user = userEvent.setup();
+    (useS3BucketLifecycle as any).mockReturnValue({
+      data: { rules: [{ ID: "r1", Status: "Enabled", Expiration: { Days: 90 } }] },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Lifecycle" }));
+    await user.click(screen.getByRole("button", { name: /Edit rule/i }));
+    await waitFor(() => expect(screen.getByText("Edit lifecycle rule")).toBeTruthy());
+    expect(screen.getByRole("button", { name: /GLACIER/i })).toBeTruthy();
+  });
+
+  it("deletes a lifecycle rule on success", async () => {
+    const user = userEvent.setup();
+    const mockMutate = vi.fn((_params: any, opts: any) => opts?.onSuccess?.());
+    (useS3UpdateBucketLifecycle as any).mockReturnValue({ mutate: mockMutate, isPending: false, isError: false, error: null });
+    (useS3BucketLifecycle as any).mockReturnValue({
+      data: { rules: [{ ID: "r1", Status: "Enabled" }, { ID: "r2", Status: "Enabled" }] },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Lifecycle" }));
+    await user.click(screen.getAllByRole("button", { name: /Delete rule/i })[0]);
+    await waitFor(() => expect(mockMutate).toHaveBeenCalled());
+    expect(mockMutate.mock.calls[0][0]).toEqual([
+      expect.objectContaining({ ID: "r2" }),
+    ]);
+  });
+
+  it("deletes all lifecycle rules on success", async () => {
+    const user = userEvent.setup();
+    const mockDelete = vi.fn((_params: any, opts: any) => opts?.onSuccess?.());
+    (useS3DeleteBucketLifecycle as any).mockReturnValue({ mutate: mockDelete, isPending: false, isError: false, error: null });
+    (useS3BucketLifecycle as any).mockReturnValue({
+      data: { rules: [{ ID: "r1", Status: "Enabled" }] },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Lifecycle" }));
+    await user.click(screen.getByRole("button", { name: /Delete all/i }));
+    await waitFor(() => expect(mockDelete).toHaveBeenCalled());
+    expect(mockDelete).toHaveBeenCalledWith(undefined, expect.any(Object));
+  });
+
+  it("opens add rule modal from the table header and dismisses with Escape and Cancel", async () => {
+    const user = userEvent.setup();
+    (useS3BucketLifecycle as any).mockReturnValue({
+      data: { rules: [{ ID: "r1", Status: "Enabled" }] },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Lifecycle" }));
+    await user.click(screen.getAllByRole("button", { name: /^Add rule$/i })[0]);
+    await waitFor(() => expect(screen.getByText("Add lifecycle rule")).toBeTruthy());
+    // Escape to dismiss (fire on the awsui_dialog element like other dashboards)
+    document.querySelectorAll('[class*="awsui_dialog"]').forEach((d) => {
+      fireEvent.keyDown(d as HTMLElement, { keyCode: 27 });
+    });
+    await waitFor(() => expect(dialogOf("Add lifecycle rule").className).toContain("hidden"));
+    // Reopen and click Cancel
+    await user.click(screen.getAllByRole("button", { name: /^Add rule$/i })[0]);
+    await waitFor(() => expect(screen.getByText("Add lifecycle rule")).toBeTruthy());
+    await user.click(within(dialogOf("Add lifecycle rule")).getByRole("button", { name: /^Cancel$/i }));
+    await waitFor(() => expect(dialogOf("Add lifecycle rule").className).toContain("hidden"));
+  });
+
+  it("types website index and error documents", async () => {
+    const user = userEvent.setup();
+    const mockMutate = vi.fn();
+    (useS3BucketWebsite as any).mockReturnValue({ data: WEBSITE_DATA, isLoading: false, isError: false, error: null });
+    (useS3UpdateBucketWebsite as any).mockReturnValue({ mutate: mockMutate, isPending: false, isError: false, error: null });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Website" }));
+    await waitFor(() => expect(screen.getByDisplayValue("index.html")).toBeTruthy());
+    const indexInput = screen.getByDisplayValue("index.html");
+    await user.clear(indexInput);
+    await user.type(indexInput, "home.html");
+    const errorInput = screen.getByDisplayValue("error.html");
+    await user.clear(errorInput);
+    await user.type(errorInput, "404.html");
+    await user.click(screen.getByRole("button", { name: /Save website configuration/i }));
+    await waitFor(() => {
+      expect(mockMutate).toHaveBeenCalledWith({ indexDocument: "home.html", errorDocument: "404.html" });
+    });
+  });
+
+  it("toggles all four public access settings", async () => {
+    const user = userEvent.setup();
+    const mockMutate = vi.fn();
+    (useS3UpdatePublicAccessBlock as any).mockReturnValue({ mutate: mockMutate, isPending: false, isError: false, error: null });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Public Access" }));
+    const toggles = screen.getAllByRole("checkbox");
+    for (const t of toggles) {
+      await user.click(t);
+    }
+    await user.click(screen.getByRole("button", { name: /Save settings/i }));
+    await waitFor(() => expect(mockMutate).toHaveBeenCalled());
+    expect(mockMutate.mock.calls[0][0]).toEqual({
+      blockPublicAcls: true,
+      ignorePublicAcls: true,
+      blockPublicPolicy: true,
+      restrictPublicBuckets: true,
+    });
+  });
+
+  it("types target prefix in logging config", async () => {
+    const user = userEvent.setup();
+    const mockMutate = vi.fn();
+    (useS3BucketLogging as any).mockReturnValue({ data: LOGGING_DATA, isLoading: false, isError: false, error: null });
+    (useS3UpdateBucketLogging as any).mockReturnValue({ mutate: mockMutate, isPending: false, isError: false, error: null });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Logging" }));
+    await waitFor(() => expect(screen.getByText("Server Access Logging")).toBeTruthy());
+    const bucketInput = screen.getByPlaceholderText("my-logs-bucket");
+    await user.type(bucketInput, "log-bucket");
+    const prefixInput = screen.getByPlaceholderText("logs/");
+    await user.type(prefixInput, "logs/");
+    await user.click(screen.getByRole("button", { name: /Save logging configuration/i }));
+    await waitFor(() => {
+      expect(mockMutate).toHaveBeenCalledWith({ targetBucket: "log-bucket", targetPrefix: "logs/" });
+    });
+  });
+
+  it("changes canned ACL Select", async () => {
+    const user = userEvent.setup();
+    const mockMutate = vi.fn();
+    (useS3PutBucketAcl as any).mockReturnValue({ mutate: mockMutate, isPending: false, isError: false, error: null });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "ACL" }));
+    const trigger = screen.getByRole("button", { name: /private/i });
+    await user.click(trigger);
+    await user.click(screen.getByRole("option", { name: /public-read —/i }));
+    await user.click(screen.getByRole("button", { name: /Apply ACL/i }));
+    await waitFor(() => expect(mockMutate).toHaveBeenCalledWith({ cannedAcl: "public-read" }));
+  });
+});
+
+/** Locate a modal dialog by its header text. */
+function dialogOf(headerText: string): HTMLElement {
+  const header = screen.getAllByText(headerText).find((h) => h.closest('[role="dialog"]'));
+  return header!.closest('[role="dialog"]') as HTMLElement;
+}

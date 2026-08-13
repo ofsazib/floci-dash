@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -168,6 +168,26 @@ vi.mock("../../hooks/useCodePipeline", () => ({
 }));
 
 import { CodePipelineDashboard } from "./CodePipelineDashboard";
+
+// ─── Modal helpers ───────────────────────────────────────
+
+/** Fire Escape on every mounted Cloudscape dialog (they stay mounted when hidden). */
+function dismissModalWithEscape() {
+  document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+    fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27 });
+  });
+}
+
+/** Locate a modal dialog by its header text. */
+function dialogOf(headerText: string | RegExp): HTMLElement {
+  const header = screen.getAllByText(headerText).find((h) => h.closest('[role="dialog"]'));
+  return header!.closest('[role="dialog"]') as HTMLElement;
+}
+
+/** Assert the modal with the given header is hidden (Cloudscape uses display:none). */
+function expectModalHidden(headerText: string) {
+  expect(dialogOf(headerText).className).toContain("hidden");
+}
 
 // ─── Setup ──────────────────────────────────────────────
 
@@ -1244,5 +1264,297 @@ describe("CodePipelineDashboard — stage status other and execution fallbacks",
     await waitFor(() => expect(screen.getByText(/Pipeline: my-pipe/)).toBeTruthy());
     // Multiple "—" values for null fields
     expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe("CodePipelineDashboard — modal onDismiss, Cancel, and onSuccess completions", () => {
+  it("dismisses create pipeline modal with Escape", async () => {
+    const user = userEvent.setup();
+    render(<CodePipelineDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create pipeline")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create pipeline"));
+  });
+
+  it("closes create pipeline modal on success", async () => {
+    mockCreatePipeline.mockImplementation((_params: any, opts: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    render(<CodePipelineDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create pipeline")).toBeTruthy());
+    const input = screen.getByPlaceholderText("my-pipeline");
+    await user.type(input, "new-pipe");
+    await clickButton(user, /Create/i, { last: true });
+    await waitFor(() => expectModalHidden("Create pipeline"));
+  });
+
+  it("dismisses start execution modal with Escape and cancels", async () => {
+    const user = userEvent.setup();
+    mockPipelines.mockReturnValue({
+      data: { pipelines: [{ name: "my-pipe", version: 1 }], total: 1 },
+      isLoading: false,
+    });
+    mockPipelineState.mockReturnValue({
+      data: { state: { pipelineVersion: 1, stageStates: [] } },
+      isLoading: false,
+    });
+    render(<CodePipelineDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /my-pipe/i);
+    await waitFor(() => expect(screen.getByText(/Pipeline: my-pipe/)).toBeTruthy());
+    await clickButton(user, /Start Execution/i);
+    await waitFor(() => expect(screen.getByText(/Start execution: my-pipe/)).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Start execution: my-pipe"));
+    // Reopen and click Cancel
+    await clickButton(user, /Start Execution/i);
+    await waitFor(() => expect(screen.getByText(/Start execution: my-pipe/)).toBeTruthy());
+    await user.click(within(dialogOf("Start execution: my-pipe")).getByRole("button", { name: /^Cancel$/i }));
+    await waitFor(() => expectModalHidden("Start execution: my-pipe"));
+  });
+
+  it("closes start execution modal on success", async () => {
+    mockStartExecution.mockImplementation((_params: any, opts: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    mockPipelines.mockReturnValue({
+      data: { pipelines: [{ name: "my-pipe", version: 1 }], total: 1 },
+      isLoading: false,
+    });
+    mockPipelineState.mockReturnValue({
+      data: { state: { pipelineVersion: 1, stageStates: [] } },
+      isLoading: false,
+    });
+    render(<CodePipelineDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /my-pipe/i);
+    await waitFor(() => expect(screen.getByText(/Pipeline: my-pipe/)).toBeTruthy());
+    await clickButton(user, /Start Execution/i);
+    await waitFor(() => expect(screen.getByText(/Start execution: my-pipe/)).toBeTruthy());
+    await clickButton(user, /Start/i, { last: true });
+    await waitFor(() => expectModalHidden("Start execution: my-pipe"));
+  });
+
+  it("dismisses rollback modal with Escape and cancels", async () => {
+    const user = userEvent.setup();
+    await setupWithFailedExec(user);
+    await clickButton(user, /Rollback stage/i);
+    await waitFor(() => expect(screen.getByText(/Rollback Stage/)).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Rollback Stage — my-pipe"));
+    await clickButton(user, /Rollback stage/i);
+    await waitFor(() => expect(screen.getByText(/Rollback Stage/)).toBeTruthy());
+    await user.click(within(dialogOf("Rollback Stage — my-pipe")).getByRole("button", { name: /^Cancel$/i }));
+    await waitFor(() => expectModalHidden("Rollback Stage — my-pipe"));
+  });
+
+  it("submits rollback with stage name and closes on success", async () => {
+    hoisted.rollbackMutate.mockImplementation((_params: any, opts: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    await setupWithFailedExec(user);
+    await clickButton(user, /Rollback stage/i);
+    await waitFor(() => expect(screen.getByText(/Rollback Stage/)).toBeTruthy());
+    const deployInput = screen.getAllByPlaceholderText("Deploy")[0];
+    await user.type(deployInput, "Deploy");
+    await clickButton(user, /Rollback/i, { last: true });
+    await waitFor(() => expect(hoisted.rollbackMutate).toHaveBeenCalledWith(
+      { name: "my-pipe", executionId: "exec-fail", stageName: "Deploy" },
+      expect.any(Object),
+    ));
+    await waitFor(() => expectModalHidden("Rollback Stage — my-pipe"));
+  });
+
+  it("dismisses override modal with Escape and cancels", async () => {
+    const user = userEvent.setup();
+    await setupWithFailedExec(user);
+    await clickButton(user, /Override condition/i);
+    await waitFor(() => expect(screen.getByText(/Override Stage Condition/)).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Override Stage Condition — my-pipe"));
+    await clickButton(user, /Override condition/i);
+    await waitFor(() => expect(screen.getByText(/Override Stage Condition/)).toBeTruthy());
+    await user.click(within(dialogOf("Override Stage Condition — my-pipe")).getByRole("button", { name: /^Cancel$/i }));
+    await waitFor(() => expectModalHidden("Override Stage Condition — my-pipe"));
+  });
+
+  it("closes override modal on success", async () => {
+    hoisted.overrideMutate.mockImplementation((_params: any, opts: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    await setupWithFailedExec(user);
+    await clickButton(user, /Override condition/i);
+    await waitFor(() => expect(screen.getByText(/Override Stage Condition/)).toBeTruthy());
+    const deployInputs = screen.getAllByPlaceholderText("Deploy");
+    await user.type(deployInputs[deployInputs.length - 1], "Deploy");
+    const condInputs = screen.getAllByPlaceholderText("CheckForCondition");
+    await user.type(condInputs[condInputs.length - 1], "CheckForCondition");
+    await clickButton(user, /Override/i, { last: true });
+    await waitFor(() => expectModalHidden("Override Stage Condition — my-pipe"));
+  });
+
+  it("dismisses create webhook modal with Escape and closes on success", async () => {
+    mockCreateWebhook.mockImplementation((_params: any, opts: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    render(<CodePipelineDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /webhooks/i }));
+    await waitFor(() => expect(screen.getByText("No webhooks found")).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create webhook")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create webhook"));
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create webhook")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-webhook"), "new-hook");
+    await user.type(screen.getByPlaceholderText("https://example.com/webhook"), "https://hook.example.com");
+    await clickButton(user, /Create/i, { last: true });
+    await waitFor(() => expectModalHidden("Create webhook"));
+  });
+
+  it("dismisses create action type modal with Escape and changes category", async () => {
+    const user = userEvent.setup();
+    render(<CodePipelineDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /action types/i }));
+    await waitFor(() => expect(screen.getByText("No action types found")).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create custom action type")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create custom action type"));
+    // Reopen and change the category Select
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create custom action type")).toBeTruthy());
+    const dialog = dialogOf("Create custom action type");
+    await user.click(within(dialog).getByRole("button", { name: /Build/i }));
+    await user.click(screen.getByRole("option", { name: /Deploy/i }));
+    expect(screen.getByText("Deploy")).toBeTruthy();
+  });
+
+  it("closes create action type modal on success", async () => {
+    mockCreateActionType.mockImplementation((_params: any, opts: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    render(<CodePipelineDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /action types/i }));
+    await waitFor(() => expect(screen.getByText("No action types found")).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Create custom action type")).toBeTruthy());
+    const provInput = screen.getByPlaceholderText("MyCustomProvider");
+    await user.type(provInput, "MyAction");
+    await clickButton(user, /Create/i, { last: true });
+    await waitFor(() => expectModalHidden("Create custom action type"));
+  });
+
+  it("dismisses delete action type modal with Escape and cancels", async () => {
+    const user = userEvent.setup();
+    mockActionTypes.mockReturnValue({
+      data: {
+        actionTypes: [{ id: { category: "Build", owner: "AWS", provider: "CodeBuild", version: "1" } }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<CodePipelineDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /action types/i }));
+    await waitFor(() => expect(screen.getByText("CodeBuild")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Delete action type CodeBuild/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Delete action type?"));
+    await user.click(screen.getByRole("button", { name: /Delete action type CodeBuild/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await user.click(within(dialogOf("Delete action type?")).getByRole("button", { name: /^Cancel$/i }));
+    await waitFor(() => expectModalHidden("Delete action type?"));
+  });
+
+  it("closes delete action type modal on success", async () => {
+    hoisted.deleteActionTypeMutate.mockImplementation((_params: any, opts: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    mockActionTypes.mockReturnValue({
+      data: {
+        actionTypes: [{ id: { category: "Build", owner: "AWS", provider: "CodeBuild", version: "1" } }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<CodePipelineDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /action types/i }));
+    await waitFor(() => expect(screen.getByText("CodeBuild")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Delete action type CodeBuild/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i, { last: true });
+    await waitFor(() => expectModalHidden("Delete action type?"));
+  });
+
+  it("filters rule executions by name", async () => {
+    const user = userEvent.setup();
+    mockPipelines.mockReturnValue({
+      data: { pipelines: [{ name: "my-pipe", version: 1 }], total: 1 },
+      isLoading: false,
+    });
+    mockPipelineState.mockReturnValue({
+      data: { state: { pipelineVersion: 1, stageStates: [] } },
+      isLoading: false,
+    });
+    hoisted.ruleExecutionsData = {
+      ruleExecutionDetails: [
+        { ruleExecutionId: "rule-a", status: "Succeeded", ruleName: "AlphaRule", startTime: "2024-01-01T00:00:00Z", lastUpdateTime: "2024-01-02T00:00:00Z" },
+        { ruleExecutionId: "rule-b", status: "Succeeded", ruleName: "BetaRule", startTime: "2024-01-01T00:00:00Z", lastUpdateTime: "2024-01-02T00:00:00Z" },
+      ],
+      total: 2,
+    };
+    render(<CodePipelineDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /my-pipe/i);
+    await waitFor(() => expect(screen.getByText(/Pipeline: my-pipe/)).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /Rules/ }));
+    await waitFor(() => expect(screen.getByText("AlphaRule")).toBeTruthy());
+    const filterInput = screen.getByPlaceholderText("Find rule executions by name");
+    await user.type(filterInput, "Beta");
+    await waitFor(() => expect(screen.queryByText("AlphaRule")).toBeNull());
+  });
+
+  it("dismisses poll jobs modal with Escape and cancels", async () => {
+    const user = userEvent.setup();
+    render(<CodePipelineDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Jobs/i }));
+    await waitFor(() => expect(screen.getByText(/Poll for jobs/)).toBeTruthy());
+    await clickButton(user, /Poll for jobs/i);
+    await waitFor(() => expect(screen.getByText(/Poll for Jobs/)).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Poll for Jobs"));
+    await clickButton(user, /Poll for jobs/i);
+    await waitFor(() => expect(screen.getByText(/Poll for Jobs/)).toBeTruthy());
+    await user.click(within(dialogOf("Poll for Jobs")).getByRole("button", { name: /^Cancel$/i }));
+    await waitFor(() => expectModalHidden("Poll for Jobs"));
+  });
+
+  it("changes poll category Select", async () => {
+    const user = userEvent.setup();
+    render(<CodePipelineDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Jobs/i }));
+    await waitFor(() => expect(screen.getByText(/Poll for jobs/)).toBeTruthy());
+    await clickButton(user, /Poll for jobs/i);
+    await waitFor(() => expect(screen.getByText(/Poll for Jobs/)).toBeTruthy());
+    const dialog = dialogOf("Poll for Jobs");
+    await user.click(within(dialog).getByRole("button", { name: /Build/i }));
+    await user.click(screen.getByRole("option", { name: /Deploy/i }));
+    expect(within(dialog).getByText("Deploy")).toBeTruthy();
+  });
+
+  it("closes job detail modal with Close and Escape", async () => {
+    const user = userEvent.setup();
+    hoisted.pollMutateAsync.mockResolvedValue({ jobs: [{ id: "job-1", accountId: "123" }] });
+    render(<CodePipelineDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Jobs/i }));
+    await waitFor(() => expect(screen.getByText(/Poll for jobs/)).toBeTruthy());
+    await clickButton(user, /Poll for jobs/i);
+    await waitFor(() => expect(screen.getByText(/Poll for Jobs/)).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("MyCustomProvider"), "MyProvider");
+    await clickButton(user, /^Poll$/i, { last: true });
+    await waitFor(() => expect(screen.getAllByText("job-1").length).toBeGreaterThan(0));
+    await clickButton(user, /Details/i);
+    await waitFor(() => expect(screen.getByText(/Job Detail:/)).toBeTruthy());
+    const detailDialog = dialogOf(/Job Detail:/);
+    await user.click(within(detailDialog).getByRole("button", { name: /^Close$/i }));
+    await waitFor(() => expect(detailDialog.className).toContain("hidden"));
+    // Reopen and dismiss with Escape
+    await clickButton(user, /Details/i);
+    await waitFor(() => expect(screen.getByText(/Job Detail:/)).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expect(dialogOf(/Job Detail:/).className).toContain("hidden"));
   });
 });

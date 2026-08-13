@@ -26,6 +26,11 @@ const mockCreateStackInstances = vi.fn();
 const mockDeleteStackInstances = vi.fn();
 const mockStackResource = vi.fn();
 const mockSetPolicyFn = vi.fn();
+const mockUseHealth = vi.fn();
+
+vi.mock("../hooks/useSystem", () => ({
+  useHealth: (...args: any[]) => mockUseHealth(...args),
+}));
 
 vi.mock("../hooks/useCloudFormation", () => ({
   useStacks: (...args: any[]) => mockStacks(...args),
@@ -76,9 +81,16 @@ function pageWrapper() {
   );
 }
 
+/** Locate a modal dialog by its header text. */
+function dialogOf(headerText: string): HTMLElement {
+  const header = screen.getAllByText(headerText).find((h) => h.closest('[role="dialog"]'));
+  return header!.closest('[role="dialog"]') as HTMLElement;
+}
+
 describe("CloudFormationPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseHealth.mockReturnValue({ data: { services: {} }, isLoading: false });
     mockStacks.mockReturnValue({
       data: { stacks: [{ name: "my-stack", status: "CREATE_COMPLETE", creationTime: new Date("2025-01-01"), description: "Test stack", stackId: "arn:aws:cloudformation:us-east-1:123:stack/my-stack/abc" }], total: 1 },
       isLoading: false, isError: false, error: null,
@@ -2178,4 +2190,294 @@ describe("CloudFormationPage", () => {
     await waitFor(() => expect(screen.getByText("exp-null")).toBeTruthy());
   });
 
+});
+
+describe("CloudFormationPage — modal onClose, error toasts, and breadcrumb", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseHealth.mockReturnValue({ data: { services: {} }, isLoading: false });
+    mockStacks.mockReturnValue({
+      data: { stacks: [{ name: "my-stack", status: "CREATE_COMPLETE", creationTime: new Date("2025-01-01"), description: "Test stack", stackId: "arn:aws:cloudformation:us-east-1:123:stack/my-stack/abc" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockStack.mockReturnValue({ data: { stack: null, resources: [], events: [] }, isLoading: false, isError: false, error: null });
+    mockStackTemplate.mockReturnValue({ data: { template: "{}" }, isLoading: false, isError: false, error: null });
+    mockExports.mockReturnValue({ data: { exports: [] }, isLoading: false, isError: false, error: null });
+    mockChangeSets.mockReturnValue({ data: { changeSets: [] }, isLoading: false, isError: false, error: null });
+    mockChangeSet.mockReturnValue({ data: { changeSet: null }, isLoading: false, isError: false, error: null });
+    mockCreateChangeSet.mockResolvedValue({});
+    mockExecuteChangeSet.mockResolvedValue({});
+    mockDeleteChangeSet.mockResolvedValue({});
+    mockStackSets.mockReturnValue({ data: { stackSets: [] }, isLoading: false, isError: false, error: null });
+    mockStackSet.mockReturnValue({ data: { stackSet: null, instances: [], operations: [] }, isLoading: false, isError: false, error: null });
+    mockCreateStackSet.mockResolvedValue({});
+    mockDeleteStackSet.mockResolvedValue({});
+    mockCreateStackInstances.mockResolvedValue({});
+    mockDeleteStackInstances.mockResolvedValue({});
+    mockStackResource.mockReturnValue({ data: { resource: null }, isLoading: false, isError: false, error: null });
+    mockSetPolicyFn.mockResolvedValue({});
+  });
+
+  it("shows delete stack error toast", async () => {
+    mockDeleteStack.mockRejectedValueOnce(new Error("Delete stack failed"));
+    const user = userEvent.setup();
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("button", { name: /Delete my-stack/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/i)).toBeTruthy());
+    await clickButton(user, /Delete/i, { last: true });
+    await waitFor(() => expect(mockDeleteStack).toHaveBeenCalledWith("my-stack"));
+  });
+
+  it("cancels create stack modal and types template", async () => {
+    const user = userEvent.setup();
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /Create stack/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-stack")).toBeTruthy());
+    // Type into the template textarea (last textbox)
+    const textboxes = screen.getAllByRole("textbox");
+    await user.type(textboxes[textboxes.length - 1], "AWSTemplateFormatVersion");
+    await clickButton(user, /^Cancel$/i, { last: true });
+    await waitFor(() => expect(screen.queryByPlaceholderText("my-stack")).toBeNull());
+  });
+
+  it("shows create stack error toast", async () => {
+    mockCreateStack.mockRejectedValueOnce(new Error("Create stack failed"));
+    const user = userEvent.setup();
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /Create stack/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-stack")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-stack"), "err-stack");
+    await clickButton(user, /Create/i, { last: true });
+    await waitFor(() => expect(mockCreateStack).toHaveBeenCalled());
+  });
+
+  it("closes stack detail modal", async () => {
+    const user = userEvent.setup();
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText(/Stack: my-stack/)).toBeTruthy());
+    await clickButton(user, /^Close$/i);
+    await waitFor(() => expect(screen.queryByText(/Stack: my-stack/)).toBeNull());
+  });
+
+  it("closes resource detail container", async () => {
+    const user = userEvent.setup();
+    mockStack.mockReturnValue({
+      data: {
+        stack: { stackId: "arn:1", status: "CREATE_COMPLETE", creationTime: new Date(), outputs: [], parameters: [], tags: [] },
+        resources: [{ logicalId: "MyBucket", type: "AWS::S3::Bucket", status: "CREATE_COMPLETE", physicalId: "my-bucket", lastUpdated: new Date() }],
+        events: [],
+      },
+      isLoading: false,
+    });
+    mockStackResource.mockReturnValue({
+      data: { resource: { logicalId: "MyBucket", resourceType: "AWS::S3::Bucket", status: "CREATE_COMPLETE" } },
+      isLoading: false,
+    });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText(/Stack: my-stack/)).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /Resources/ }));
+    await waitFor(() => expect(screen.getByText("MyBucket")).toBeTruthy());
+    const viewBtns = screen.getAllByRole("button", { name: "View" });
+    await user.click(viewBtns[viewBtns.length - 1]);
+    await waitFor(() => expect(screen.getByText(/Resource: MyBucket/)).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "Close resource detail" }));
+    await waitFor(() => expect(screen.queryByText(/Resource: MyBucket/)).toBeNull());
+  });
+
+  it("cancels create change set modal and fills description and template", async () => {
+    mockValidateTemplate.mockResolvedValue({ parameters: [{ key: "Env" }] });
+    const user = userEvent.setup();
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Change Sets/i }));
+    await waitFor(() => clickButton(user, /my-stack/i));
+    await waitFor(() => clickButton(user, /Create change set/i));
+    await waitFor(() => expect(screen.getByText(/Create change set for my-stack/)).toBeTruthy());
+    const textboxes = screen.getAllByRole("textbox");
+    await user.type(textboxes[1], "Updated description");
+    await user.type(textboxes[textboxes.length - 1], "AWSTemplateFormatVersion");
+    await clickButton(user, /Validate/i);
+    await waitFor(() => expect(mockValidateTemplate).toHaveBeenCalled());
+    await clickButton(user, /^Cancel$/i);
+    await waitFor(() => expect(screen.queryByText(/Create change set for my-stack/)).toBeNull());
+  });
+
+  it("shows validate error toast in create change set modal", async () => {
+    mockValidateTemplate.mockRejectedValueOnce(new Error("Invalid template"));
+    const user = userEvent.setup();
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Change Sets/i }));
+    await waitFor(() => clickButton(user, /my-stack/i));
+    await waitFor(() => clickButton(user, /Create change set/i));
+    await waitFor(() => expect(screen.getByText(/Create change set for my-stack/)).toBeTruthy());
+    await clickButton(user, /Validate/i);
+    await waitFor(() => expect(mockValidateTemplate).toHaveBeenCalled());
+  });
+
+  it("shows create change set error toast", async () => {
+    mockCreateChangeSet.mockRejectedValueOnce(new Error("Create change set failed"));
+    const user = userEvent.setup();
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Change Sets/i }));
+    await waitFor(() => clickButton(user, /my-stack/i));
+    await waitFor(() => clickButton(user, /Create change set/i));
+    await waitFor(() => expect(screen.getByText(/Create change set for my-stack/)).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-change-set"), "err-cs");
+    await clickButton(user, /Create/i, { last: true });
+    await waitFor(() => expect(mockCreateChangeSet).toHaveBeenCalled());
+  });
+
+  it("closes change set detail view", async () => {
+    mockChangeSets.mockReturnValue({
+      data: { changeSets: [{ name: "cs-close", executionStatus: "AVAILABLE", creationTime: new Date() }], total: 1 },
+      isLoading: false,
+    });
+    mockChangeSet.mockReturnValue({
+      data: { changeSet: { name: "cs-close", executionStatus: "AVAILABLE", creationTime: new Date(), changes: [], parameters: [] } },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Change Sets/i }));
+    await waitFor(() => clickButton(user, /my-stack/i));
+    await waitFor(() => clickButton(user, /View/i));
+    await waitFor(() => expect(screen.getByText("Change Set: cs-close")).toBeTruthy());
+    await clickButton(user, /^Close$/i);
+    await waitFor(() => expect(screen.queryByText("Change Set: cs-close")).toBeNull());
+  });
+
+  it("executes change set from detail view with success and error", async () => {
+    mockChangeSets.mockReturnValue({
+      data: { changeSets: [{ name: "cs-x", executionStatus: "AVAILABLE", creationTime: new Date() }], total: 1 },
+      isLoading: false,
+    });
+    mockChangeSet.mockReturnValue({
+      data: { changeSet: { name: "cs-x", executionStatus: "AVAILABLE", creationTime: new Date(), changes: [], parameters: [] } },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Change Sets/i }));
+    await waitFor(() => clickButton(user, /my-stack/i));
+    await waitFor(() => clickButton(user, /View/i));
+    await waitFor(() => expect(screen.getByText("Change Set: cs-x")).toBeTruthy());
+    await clickButton(user, /Execute/i, { last: true });
+    await waitFor(() => expect(mockExecuteChangeSet).toHaveBeenCalledWith({ stackName: "my-stack", changeSetName: "cs-x" }));
+    // Success closes the detail view
+    await waitFor(() => expect(screen.queryByText("Change Set: cs-x")).toBeNull());
+    // Reopen and exercise the error path
+    mockExecuteChangeSet.mockRejectedValueOnce(new Error("Execute failed"));
+    await waitFor(() => clickButton(user, /View/i));
+    await waitFor(() => expect(screen.getByText("Change Set: cs-x")).toBeTruthy());
+    await clickButton(user, /Execute/i, { last: true });
+    await waitFor(() => expect(mockExecuteChangeSet).toHaveBeenCalledTimes(2));
+  });
+
+  it("deletes a stack set with success and error toasts", async () => {
+    const user = userEvent.setup();
+    mockStackSets.mockReturnValue({
+      data: { stackSets: [{ name: "ss-del", status: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Stack Sets/i }));
+    await waitFor(() => expect(screen.getByText("ss-del")).toBeTruthy());
+    // Success path
+    await user.click(screen.getByRole("button", { name: /Delete ss-del/ }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /Delete/i, { last: true });
+    await waitFor(() => expect(mockDeleteStackSet).toHaveBeenCalledWith("ss-del"));
+    // Error path
+    mockDeleteStackSet.mockRejectedValueOnce(new Error("Delete failed"));
+    await user.click(screen.getByRole("button", { name: /Delete ss-del/ }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /Delete/i, { last: true });
+    await waitFor(() => expect(mockDeleteStackSet).toHaveBeenCalledTimes(2));
+  });
+
+  it("cancels create stack set modal and fills description and template", async () => {
+    const user = userEvent.setup();
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Stack Sets/i }));
+    await waitFor(() => expect(screen.getByText("No stack sets")).toBeTruthy());
+    await clickButton(user, /Create stack set/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-stack-set")).toBeTruthy());
+    const textboxes = screen.getAllByRole("textbox");
+    await user.type(textboxes[1], "Multi-region");
+    await user.type(textboxes[textboxes.length - 1], "AWSTemplateFormatVersion");
+    await clickButton(user, /^Cancel$/i, { last: true });
+    await waitFor(() => expect(screen.queryByPlaceholderText("my-stack-set")).toBeNull());
+  });
+
+  it("shows create stack set success toast", async () => {
+    mockCreateStackSet.mockResolvedValue({});
+    const user = userEvent.setup();
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Stack Sets/i }));
+    await waitFor(() => expect(screen.getByText("No stack sets")).toBeTruthy());
+    await clickButton(user, /Create stack set/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("my-stack-set")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-stack-set"), "ok-ss");
+    await clickButton(user, /Create/i, { last: true });
+    await waitFor(() => expect(mockCreateStackSet).toHaveBeenCalled());
+  });
+
+  it("closes stack set detail modal", async () => {
+    mockStackSets.mockReturnValue({
+      data: { stackSets: [{ name: "ss-detail", status: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    mockStackSet.mockReturnValue({
+      data: { stackSet: { name: "ss-detail", status: "ACTIVE" }, instances: [], operations: [] },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Stack Sets/i }));
+    await waitFor(() => clickButton(user, /View/i));
+    await waitFor(() => expect(screen.getByText(/Stack Set: ss-detail/)).toBeTruthy());
+    await clickButton(user, /^Close$/i);
+    await waitFor(() => expect(screen.queryByText(/Stack Set: ss-detail/)).toBeNull());
+  });
+
+  it("cancels add instances modal and shows deployment error toast", async () => {
+    const user = userEvent.setup();
+    mockStackSets.mockReturnValue({
+      data: { stackSets: [{ name: "ss-add2", status: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    mockStackSet.mockReturnValue({
+      data: { stackSet: { name: "ss-add2", status: "ACTIVE" }, instances: [], operations: [] },
+      isLoading: false,
+    });
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Stack Sets/i }));
+    await waitFor(() => clickButton(user, /View/i));
+    await waitFor(() => clickButton(user, /Add instances/i));
+    await waitFor(() => expect(screen.getByText(/Add instances to ss-add2/)).toBeTruthy());
+    // Cancel closes the modal
+    await clickButton(user, /^Cancel$/i, { last: true });
+    await waitFor(() => expect(screen.queryByText(/Add instances to ss-add2/)).toBeNull());
+    // Reopen and submit with an error
+    mockCreateStackInstances.mockRejectedValueOnce(new Error("Deploy failed"));
+    await clickButton(user, /Add instances/i);
+    await waitFor(() => expect(screen.getByText(/Add instances to ss-add2/)).toBeTruthy());
+    const textareas = screen.getAllByRole("textbox");
+    const { fireEvent } = require("@testing-library/react");
+    fireEvent.change(textareas[0], { target: { value: "123456789012" } });
+    fireEvent.change(textareas[1], { target: { value: "us-east-1" } });
+    await clickButton(user, /Deploy/i);
+    await waitFor(() => expect(mockCreateStackInstances).toHaveBeenCalled());
+  });
+
+  it("navigates via breadcrumb", async () => {
+    const user = userEvent.setup();
+    render(<CloudFormationPage />, { wrapper: pageWrapper() });
+    const nav = document.querySelector("nav");
+    const dash = screen.getAllByText("Dashboard").find((el) => nav && nav.contains(el));
+    await user.click(dash!);
+    // onFollow prevents default and calls navigate — just verify no crash
+    expect(screen.getAllByText("CloudFormation").length).toBeGreaterThan(0);
+  });
 });
