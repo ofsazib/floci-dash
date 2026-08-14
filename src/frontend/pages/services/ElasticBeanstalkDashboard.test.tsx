@@ -24,6 +24,9 @@ const mockDeleteEnvMutateAsync = vi.fn();
 const createAppState = vi.hoisted(() => ({ isError: false, error: null as Error | null, isPending: false }));
 const createVersionState = vi.hoisted(() => ({ isError: false, error: null as Error | null, isPending: false }));
 const createEnvState = vi.hoisted(() => ({ isError: false, error: null as Error | null, isPending: false }));
+const deleteAppState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
+const deleteEnvState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
+const deleteVersionState = vi.hoisted(() => ({ isPending: false, variables: null as { appName: string; versionLabel: string } | null }));
 
 vi.mock("../../hooks/useElasticBeanstalk", () => ({
   useApplications: (...args: any[]) => mockApplications(...args),
@@ -36,8 +39,8 @@ vi.mock("../../hooks/useElasticBeanstalk", () => ({
   }),
   useDeleteApplication: () => ({
     mutateAsync: mockDeleteAppMutateAsync,
-    isPending: false,
-    variables: null,
+    get isPending() { return deleteAppState.isPending; },
+    get variables() { return deleteAppState.variables; },
   }),
   useApplicationVersions: (...args: any[]) => mockApplicationVersions(...args),
   useCreateApplicationVersion: () => ({
@@ -49,8 +52,8 @@ vi.mock("../../hooks/useElasticBeanstalk", () => ({
   }),
   useDeleteApplicationVersion: () => ({
     mutateAsync: mockDeleteVersionMutateAsync,
-    isPending: false,
-    variables: null,
+    get isPending() { return deleteVersionState.isPending; },
+    get variables() { return deleteVersionState.variables; },
   }),
   useEnvironments: (...args: any[]) => mockEnvironments(...args),
   useCreateEnvironment: () => ({
@@ -62,8 +65,8 @@ vi.mock("../../hooks/useElasticBeanstalk", () => ({
   }),
   useDeleteEnvironment: () => ({
     mutateAsync: mockDeleteEnvMutateAsync,
-    isPending: false,
-    variables: null,
+    get isPending() { return deleteEnvState.isPending; },
+    get variables() { return deleteEnvState.variables; },
   }),
   useConfigurationSettings: (...args: any[]) => mockConfigurationSettings(...args),
 }));
@@ -105,6 +108,12 @@ beforeEach(() => {
   createEnvState.isError = false;
   createEnvState.error = null;
   createEnvState.isPending = false;
+  deleteAppState.isPending = false;
+  deleteAppState.variables = null;
+  deleteEnvState.isPending = false;
+  deleteEnvState.variables = null;
+  deleteVersionState.isPending = false;
+  deleteVersionState.variables = null;
 
   mockApplications.mockReturnValue({
     data: { applications: [], total: 0 },
@@ -1191,5 +1200,134 @@ describe("ElasticBeanstalkDashboard — fallbacks and variants", () => {
       expect.objectContaining({ appName: "my-app", environmentName: "my-env" }),
       expect.any(Object),
     );
+  });
+});
+
+describe("ElasticBeanstalkDashboard — sparse data fallbacks", () => {
+  it("renders dash fallbacks when an environment has no fields", async () => {
+    const user = userEvent.setup();
+    mockApplications.mockReturnValue({
+      data: {
+        applications: [{ applicationName: "my-app", description: "Test", versions: 0, configurationTemplates: 0, dateCreated: "2024-01-01T00:00:00Z" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    mockEnvironments.mockReturnValue({
+      data: { environments: [{} as any], total: 1 },
+      isLoading: false,
+    });
+    render(<ElasticBeanstalkDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /my-app/i);
+    await waitFor(() => expect(screen.getByText(/Environments — my-app/)).toBeTruthy());
+    // Sparse env maps every missing field to "—"
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(6);
+  });
+
+  it("renders dash fallbacks when a version has no fields", async () => {
+    const user = userEvent.setup();
+    mockApplications.mockReturnValue({
+      data: {
+        applications: [{ applicationName: "my-app", description: "Test", versions: 0, configurationTemplates: 0, dateCreated: "2024-01-01T00:00:00Z" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    mockApplicationVersions.mockReturnValue({
+      data: { versions: [{} as any], total: 1 },
+      isLoading: false,
+    });
+    render(<ElasticBeanstalkDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /my-app/i);
+    await waitFor(() => expect(screen.getByText(/Application Versions — my-app/)).toBeTruthy());
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("shows delete loading state for an application", () => {
+    deleteAppState.isPending = true;
+    deleteAppState.variables = "my-app";
+    mockApplications.mockReturnValue({
+      data: { applications: [{ applicationName: "my-app" }], total: 1 },
+      isLoading: false,
+    });
+    render(<ElasticBeanstalkDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("my-app")).toBeTruthy();
+    // DeleteButton disabled while its app is pending
+    expect(screen.getByLabelText("Delete my-app")).toHaveProperty("disabled", true);
+  });
+
+  it("shows delete loading state for an environment", async () => {
+    const user = userEvent.setup();
+    deleteEnvState.isPending = true;
+    deleteEnvState.variables = "my-env";
+    mockApplications.mockReturnValue({
+      data: { applications: [{ applicationName: "my-app" }], total: 1 },
+      isLoading: false,
+    });
+    mockEnvironments.mockReturnValue({
+      data: { environments: [{ environmentName: "my-env" }], total: 1 },
+      isLoading: false,
+    });
+    render(<ElasticBeanstalkDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /my-app/i);
+    await waitFor(() => expect(screen.getByText("my-env")).toBeTruthy());
+    expect(screen.getByLabelText("Delete my-env")).toHaveProperty("disabled", true);
+  });
+
+  it("shows delete loading state for a version", async () => {
+    const user = userEvent.setup();
+    deleteVersionState.isPending = true;
+    deleteVersionState.variables = { appName: "my-app", versionLabel: "v1" };
+    mockApplications.mockReturnValue({
+      data: { applications: [{ applicationName: "my-app" }], total: 1 },
+      isLoading: false,
+    });
+    mockApplicationVersions.mockReturnValue({
+      data: { versions: [{ versionLabel: "v1" }], total: 1 },
+      isLoading: false,
+    });
+    render(<ElasticBeanstalkDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /my-app/i);
+    await waitFor(() => expect(screen.getByText("v1")).toBeTruthy());
+    expect(screen.getByLabelText("Delete v1")).toHaveProperty("disabled", true);
+  });
+
+  it("shows default error message when create application error has no message", async () => {
+    const user = userEvent.setup();
+    createAppState.isError = true;
+    createAppState.error = new Error();
+    render(<ElasticBeanstalkDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Failed to create application")).toBeTruthy());
+  });
+
+  it("shows default error message when create version error has no message", async () => {
+    const user = userEvent.setup();
+    createVersionState.isError = true;
+    createVersionState.error = new Error();
+    mockApplications.mockReturnValue({
+      data: { applications: [{ applicationName: "my-app" }], total: 1 },
+      isLoading: false,
+    });
+    render(<ElasticBeanstalkDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /my-app/i);
+    await waitFor(() => expect(screen.getByText(/Environments — my-app/)).toBeTruthy());
+    await clickButton(user, /Create version/i);
+    await waitFor(() => expect(screen.getByText("Failed to create version")).toBeTruthy());
+  });
+
+  it("shows default error message when create environment error has no message", async () => {
+    const user = userEvent.setup();
+    createEnvState.isError = true;
+    createEnvState.error = new Error();
+    mockApplications.mockReturnValue({
+      data: { applications: [{ applicationName: "my-app" }], total: 1 },
+      isLoading: false,
+    });
+    render(<ElasticBeanstalkDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /my-app/i);
+    await waitFor(() => expect(screen.getByText(/Environments — my-app/)).toBeTruthy());
+    await clickButton(user, /Create environment/i);
+    await waitFor(() => expect(screen.getByText("Failed to create environment")).toBeTruthy());
   });
 });

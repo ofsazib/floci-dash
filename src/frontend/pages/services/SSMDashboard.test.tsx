@@ -579,4 +579,65 @@ describe("SSMDashboard — parameter detail view", () => {
       );
     });
   });
+
+  it("filters parameters without a Name without crashing", async () => {
+    mockParameters.mockReturnValue({
+      data: {
+        parameters: [{ Type: "String", Value: "v1" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<SSMDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getAllByText("String").length).toBeGreaterThanOrEqual(1));
+    await user.type(screen.getByPlaceholderText("Find parameters by name"), "zzz");
+    // The nameless parameter still renders its Type cell (no name matches the filter)
+    await waitFor(() => expect(screen.getAllByText("String").length).toBeGreaterThanOrEqual(1));
+  });
+
+  it("shows default error message when putParam error has no message", async () => {
+    putParamState.isError = true;
+    putParamState.error = new Error();
+    const user = userEvent.setup();
+    render(<SSMDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /create/i);
+    await waitFor(() => expect(screen.getByText("Failed to create parameter")).toBeTruthy());
+  });
+
+  it("shows default error message in detail view when error has no message", async () => {
+    mockParameter.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new Error(),
+    });
+    const user = userEvent.setup();
+    render(<SSMDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText("Failed to load parameter")).toBeTruthy());
+  });
+
+  it("renders sparse version history cells with fallbacks", async () => {
+    mockParameter.mockReturnValue({
+      data: {
+        parameter: { Type: "String", Version: 1, Value: "current-value" },
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockParameterHistory.mockReturnValue({
+      data: { history: [{} as any], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<SSMDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => {
+      expect(screen.getByText("Version History")).toBeTruthy();
+      expect(screen.getByText("(empty)")).toBeTruthy();
+      expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2);
+    });
+  });
 });

@@ -231,4 +231,52 @@ describe("EC2NetworkTopology", () => {
     expect(screen.getByText("i-vpc1")).toBeTruthy();
     expect(screen.getByText("i-vpc2")).toBeTruthy();
   });
+
+  it("renders sparse VPC, subnet, and instance fallbacks", () => {
+    setupMockData({
+      vpcs: [{ id: "vpc-sparse", isDefault: false }],
+      subnets: [{ id: "subnet-sparse", vpcId: "vpc-sparse" }],
+      instances: [{ id: "i-sparse", vpcId: "vpc-sparse", subnetId: "subnet-sparse" }],
+    });
+
+    render(<EC2NetworkTopology />, { wrapper: createWrapper() });
+    // VPC card: no CIDR + no tenancy -> fallbacks
+    expect(screen.getAllByText("No CIDR").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/Tenancy: default/)).toBeTruthy();
+    // Instance card: no state/type/IP -> fallbacks
+    expect(screen.getByText("i-sparse")).toBeTruthy();
+    expect(screen.getByText("unknown")).toBeTruthy();
+    expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("renders instance public IP when present", () => {
+    setupMockData({
+      vpcs: [{ id: "vpc-1", cidrBlock: "10.0.0.0/16", isDefault: false, state: "available", instanceTenancy: "default" }],
+      subnets: [{ id: "subnet-1", vpcId: "vpc-1", cidrBlock: "10.0.1.0/24", availabilityZone: "us-east-1a", state: "available", availableIpCount: 251 }],
+      instances: [
+        { id: "i-pub", state: "running", instanceType: "t3.micro", privateIp: "10.0.1.5", publicIp: "52.1.2.3", vpcId: "vpc-1", subnetId: "subnet-1" },
+      ],
+    });
+
+    render(<EC2NetworkTopology />, { wrapper: createWrapper() });
+    expect(screen.getByText("52.1.2.3")).toBeTruthy();
+  });
+
+  it("shows +N more when a VPC has more than 3 route tables", () => {
+    setupMockData({
+      vpcs: [{ id: "vpc-1", cidrBlock: "10.0.0.0/16", isDefault: false, state: "available", instanceTenancy: "default" }],
+      subnets: [],
+      instances: [],
+      rtbs: [
+        { id: "rtb-1", vpcId: "vpc-1", associations: [{ main: true }] },
+        { id: "rtb-2", vpcId: "vpc-1", associations: [{ subnetId: "subnet-1" }] },
+        { id: "rtb-3", vpcId: "vpc-1" },
+        { id: "rtb-4", vpcId: "vpc-1" },
+      ],
+    });
+
+    render(<EC2NetworkTopology />, { wrapper: createWrapper() });
+    expect(screen.getByText("Route Tables (4)")).toBeTruthy();
+    expect(screen.getByText("+1 more")).toBeTruthy();
+  });
 });

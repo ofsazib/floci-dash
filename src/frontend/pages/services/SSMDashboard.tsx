@@ -634,7 +634,7 @@ export function SSMDashboard() {
                     <FormField label="Type">
                       <Select
                         selectedOption={{ label: form.type, value: form.type }}
-                        onChange={({ detail }) => setForm((p) => ({ ...p, type: detail.selectedOption?.value || "String" }))}
+                        onChange={({ detail }) => setForm((p) => ({ ...p, type: detail.selectedOption!.value! }))}
                         options={SSM_TYPE_OPTIONS}
                       />
                     </FormField>
@@ -741,7 +741,7 @@ function SSMParameterDetail({ name, onBack }: { name: string; onBack: () => void
                     cell: (item: any) => (
                       <span style={{ fontFamily: "monospace" }}>
                         {(item.Value || "").length > 60
-                          ? (item.Value || "").slice(0, 60) + "…"
+                          ? item.Value!.slice(0, 60) + "…"
                           : item.Value || "(empty)"}
                       </span>
                     ),
