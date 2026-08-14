@@ -225,6 +225,25 @@ describe("STSDashboard — assume role tab", () => {
     // assumedRoleUser is null, so the ARN section should not appear
     expect(screen.queryByText(/Assumed Role ARN/)).toBeNull();
   });
+
+  it("renders dash fallbacks for sparse assume role result fields", async () => {
+    mockAssumeRole.mockImplementationOnce((_params: any, options?: { onSuccess?: (data: any) => void }) => {
+      options?.onSuccess?.({ credentials: {}, assumedRoleUser: {} });
+    });
+    const user = userEvent.setup();
+    render(<STSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /assume role/i }));
+    await waitFor(() => expect(screen.getByText(/No role assumed yet/i)).toBeTruthy());
+    await clickButton(user, /^Assume role$/i);
+    const roleArnInput = screen.getByPlaceholderText(/arn:aws:iam/);
+    await user.type(roleArnInput, "arn:aws:iam::123456789012:role/my-role");
+    const assumeBtns = screen.getAllByRole("button", { name: /^Assume$/i });
+    await user.click(assumeBtns[assumeBtns.length - 1]);
+    await waitFor(() => {
+      expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(6);
+    });
+    expect(screen.getByText(/Assumed Role ARN/)).toBeTruthy();
+  });
 });
 
 describe("STSDashboard — session token tab", () => {

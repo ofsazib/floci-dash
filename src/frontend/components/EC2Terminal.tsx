@@ -53,9 +53,7 @@ function TerminalInner({ instanceId }: { instanceId: string }) {
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
 
-    if (terminalRef.current) {
-      term.open(terminalRef.current);
-    }
+    term.open(terminalRef.current!);
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const host = window.location.host;
@@ -116,9 +114,7 @@ function TerminalInner({ instanceId }: { instanceId: string }) {
     };
 
     const resizeObserver = new ResizeObserver(() => handleResize());
-    if (terminalRef.current) {
-      resizeObserver.observe(terminalRef.current);
-    }
+    resizeObserver.observe(terminalRef.current!);
     window.addEventListener("resize", handleResize);
 
     setTimeout(() => term.focus(), 200);

@@ -7,6 +7,8 @@ let lastWs: any = null;
 let termOnData: any = null;
 const mockWrite = vi.fn();
 
+const fitAddonState = vi.hoisted(() => ({ dims: { cols: 80, rows: 24 } as { cols: number; rows: number } | null }));
+
 const mockTerminal = vi.hoisted(() => {
   class MockTerminal {
     loadAddon = vi.fn();
@@ -23,7 +25,7 @@ const mockTerminal = vi.hoisted(() => {
 const mockFitAddon = vi.hoisted(() => {
   class MockFitAddon {
     fit = vi.fn();
-    proposeDimensions = vi.fn(() => ({ cols: 80, rows: 24 }));
+    proposeDimensions = vi.fn(() => fitAddonState.dims);
   }
   return MockFitAddon;
 });
@@ -41,6 +43,7 @@ function renderTerminal(instanceId = "i-123", onClose = vi.fn()) {
 beforeEach(() => {
   lastWs = null;
   termOnData = null;
+  fitAddonState.dims = { cols: 80, rows: 24 };
   mockWrite.mockReset();
   class MockWebSocket {
     static OPEN = 1;
@@ -204,5 +207,33 @@ describe("EC2Terminal", () => {
     const btns = screen.getAllByRole("button");
     fireEvent.click(btns[1]);
     expect(lastWs.close).toHaveBeenCalled();
+  });
+
+  it("uses wss protocol when the page is served over https", () => {
+    const original = window.location;
+    Object.defineProperty(window, "location", {
+      value: { ...original, protocol: "https:" },
+      configurable: true,
+    });
+    try {
+      renderTerminal();
+    } finally {
+      Object.defineProperty(window, "location", { value: original, configurable: true });
+    }
+    expect(lastWs.url).toMatch(/^wss:\/\//);
+  });
+
+  it("does not forward input when the socket is not open", () => {
+    renderTerminal();
+    lastWs.readyState = 0; // CONNECTING
+    termOnData("ls\n");
+    expect(lastWs.send).not.toHaveBeenCalled();
+  });
+
+  it("does not send a resize message when dimensions are unavailable", () => {
+    fitAddonState.dims = null;
+    renderTerminal();
+    fireEvent(window, new Event("resize"));
+    expect(lastWs.send).not.toHaveBeenCalled();
   });
 });
