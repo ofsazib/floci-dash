@@ -8,15 +8,23 @@ import React from "react";
 const mockClusters = vi.fn();
 const mockDeleteCluster = vi.fn();
 
+const deleteClusterState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
+
 vi.mock("../../hooks/useMsk", () => ({
   useMskClusters: (...args: any[]) => mockClusters(...args),
-  useDeleteMskCluster: () => ({ mutateAsync: mockDeleteCluster, isPending: false, variables: null }),
+  useDeleteMskCluster: () => ({
+    mutateAsync: mockDeleteCluster,
+    get isPending() { return deleteClusterState.isPending; },
+    get variables() { return deleteClusterState.variables; },
+  }),
 }));
 
 import { MskDashboard } from "./MskDashboard";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  deleteClusterState.isPending = false;
+  deleteClusterState.variables = null;
   mockClusters.mockReturnValue({ data: { clusters: [], total: 0 }, isLoading: false });
 });
 
@@ -107,5 +115,26 @@ describe("MskDashboard", () => {
     await waitFor(() => {
       expect(screen.queryByText("alpha-cluster")).toBeNull();
     });
+  });
+
+  it("shows empty message when clusters data is missing", () => {
+    mockClusters.mockReturnValue({ data: { total: 0 }, isLoading: false });
+    render(<MskDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No MSK clusters/i)).toBeTruthy();
+  });
+
+  it("shows delete loading state for a cluster", () => {
+    deleteClusterState.isPending = true;
+    deleteClusterState.variables = "arn:aws:kafka:us-east-1:123:cluster/my-cluster";
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [{ ClusterName: "my-cluster", ClusterArn: "arn:aws:kafka:us-east-1:123:cluster/my-cluster", State: "ACTIVE" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<MskDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("my-cluster")).toBeTruthy();
+    expect(screen.getByLabelText("Delete my-cluster")).toBeDisabled();
   });
 });

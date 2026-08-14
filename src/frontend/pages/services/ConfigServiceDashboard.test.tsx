@@ -27,6 +27,9 @@ const mockPackStatuses = vi.fn();
 const mockRecorderStatuses = vi.fn();
 const mockStartEval = vi.fn();
 
+const deleteRuleState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
+const deletePackState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
+
 vi.mock("../../hooks/useConfigService", () => ({
   useConfigRules: (...args: any[]) => mockRules(...args),
   useConfigRecorders: (...args: any[]) => mockRecorders(...args),
@@ -34,13 +37,13 @@ vi.mock("../../hooks/useConfigService", () => ({
   usePutConfigRule: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteConfigRule: () => ({
     mutateAsync: mockDeleteRule,
-    isPending: false,
-    variables: null,
+    get isPending() { return deleteRuleState.isPending; },
+    get variables() { return deleteRuleState.variables; },
   }),
   useDeleteConformancePack: () => ({
     mutateAsync: mockDeletePack,
-    isPending: false,
-    variables: null,
+    get isPending() { return deletePackState.isPending; },
+    get variables() { return deletePackState.variables; },
   }),
   useConfigRecorderStatuses: (...args: any[]) => mockRecorderStatuses(...args),
   useConformancePackStatuses: (...args: any[]) => mockPackStatuses(...args),
@@ -62,6 +65,11 @@ import { ConfigServiceDashboard } from "./ConfigServiceDashboard";
 
 beforeEach(() => {
   vi.clearAllMocks();
+
+  deleteRuleState.isPending = false;
+  deleteRuleState.variables = null;
+  deletePackState.isPending = false;
+  deletePackState.variables = null;
 
   mockRules.mockReturnValue({
     data: { rules: [], total: 0 },
@@ -792,5 +800,127 @@ describe("ConfigServiceDashboard — advanced edge cases", () => {
     await user.type(screen.getByPlaceholderText("Find packs"), "beta");
     await waitFor(() => expect(screen.getByText("status-beta")).toBeTruthy());
     expect(screen.queryByText("status-alpha")).toBeNull();
+  });
+});
+
+describe("ConfigServiceDashboard — branch coverage: loading + sparse data", () => {
+  it("shows delete loading state for a config rule", () => {
+    deleteRuleState.isPending = true;
+    deleteRuleState.variables = "required-tags";
+    mockRules.mockReturnValue({
+      data: { rules: [{ ConfigRuleName: "required-tags", Source: {} }], total: 1 },
+      isLoading: false,
+    });
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("required-tags")).toBeTruthy();
+    expect(screen.getByLabelText("Delete required-tags")).toBeDisabled();
+  });
+
+  it("shows empty recorders when recorders data is missing", async () => {
+    const user = userEvent.setup();
+    mockRecorders.mockReturnValue({ data: { total: 0 }, isLoading: false });
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /recorders/i }));
+    await waitFor(() => expect(screen.getByText("No configuration recorders")).toBeTruthy());
+  });
+
+  it("shows empty packs when conformance packs data is missing", async () => {
+    const user = userEvent.setup();
+    mockPacks.mockReturnValue({ data: { total: 0 }, isLoading: false });
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /conformance packs/i }));
+    await waitFor(() => expect(screen.getByText("No conformance packs")).toBeTruthy());
+  });
+
+  it("shows delete loading state for a conformance pack", async () => {
+    const user = userEvent.setup();
+    deletePackState.isPending = true;
+    deletePackState.variables = "my-pack";
+    mockPacks.mockReturnValue({
+      data: { conformancePacks: [{ ConformancePackName: "my-pack" }], total: 1 },
+      isLoading: false,
+    });
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /conformance packs/i }));
+    await waitFor(() => expect(screen.getByText("my-pack")).toBeTruthy());
+    expect(screen.getByLabelText("Delete my-pack")).toBeDisabled();
+  });
+
+  it("shows empty compliance when compliance data is missing", async () => {
+    const user = userEvent.setup();
+    mockCompliance.mockReturnValue({ data: { total: 0 }, isLoading: false });
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+    await waitFor(() => expect(screen.getByText("No compliance data")).toBeTruthy());
+  });
+
+  it("shows empty evaluation status when statuses data is missing", async () => {
+    const user = userEvent.setup();
+    mockEvalStatus.mockReturnValue({ data: { total: 0 }, isLoading: false });
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+    await waitFor(() => expect(screen.getByText("No evaluation status")).toBeTruthy());
+  });
+
+  it("renders sparse evaluation status rows with dashes", async () => {
+    const user = userEvent.setup();
+    mockEvalStatus.mockReturnValue({
+      data: { statuses: [{ ConfigRuleName: "eval-rule" }], total: 1 },
+      isLoading: false,
+    });
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+    await waitFor(() => expect(screen.getByText("eval-rule")).toBeTruthy());
+    expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("shows empty pack status when statuses data is missing", async () => {
+    const user = userEvent.setup();
+    mockPackStatuses.mockReturnValue({ data: { total: 0 }, isLoading: false });
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+    await waitFor(() => expect(screen.getByText("No pack status")).toBeTruthy());
+  });
+
+  it("renders sparse pack status rows with dashes", async () => {
+    const user = userEvent.setup();
+    mockPackStatuses.mockReturnValue({
+      data: { statuses: [{ ConformancePackName: "pack-status" }], total: 1 },
+      isLoading: false,
+    });
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+    await waitFor(() => expect(screen.getByText("pack-status")).toBeTruthy());
+    expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("shows empty recorder status when statuses data is missing", async () => {
+    const user = userEvent.setup();
+    mockRecorderStatuses.mockReturnValue({ data: { total: 0 }, isLoading: false });
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+    await waitFor(() => expect(screen.getByText("No recorder status")).toBeTruthy());
+  });
+
+  it("renders recorder status with last stop time", async () => {
+    const user = userEvent.setup();
+    mockRecorderStatuses.mockReturnValue({
+      data: {
+        statuses: [{
+          name: "rec-status",
+          recording: true,
+          lastStartTime: "2024-01-01T00:00:00Z",
+          lastStopTime: "2024-01-02T00:00:00Z",
+          lastStatus: "Active",
+        }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+    await waitFor(() => expect(screen.getByText("rec-status")).toBeTruthy());
+    expect(screen.getByText("Yes")).toBeTruthy();
+    expect(screen.getAllByText(/2024/).length).toBeGreaterThanOrEqual(2);
   });
 });
