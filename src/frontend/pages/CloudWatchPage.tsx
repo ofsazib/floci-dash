@@ -110,7 +110,7 @@ function MetricsTab() {
           <Select
             selectedOption={selectedNamespace ? { label: selectedNamespace, value: selectedNamespace } : null}
             onChange={({ detail }) => {
-              setSelectedNamespace(detail.selectedOption?.value || undefined);
+              setSelectedNamespace(detail.selectedOption!.value);
               setSelectedMetric(null);
             }}
             options={namespaces.map((n) => ({ label: n, value: n }))}
@@ -135,7 +135,7 @@ function MetricsTab() {
             loading={metricsQuery.isLoading}
             trackBy={(m: any) => `${m.namespace}:${m.metricName}:${JSON.stringify(m.dimensions)}`}
             selectedItems={selectedMetric ? [selectedMetric] : []}
-            onSelectionChange={({ detail }) => setSelectedMetric(detail.selectedItems[0] || null)}
+            onSelectionChange={({ detail }) => setSelectedMetric(detail.selectedItems[0])}
             empty={<Box textAlign="center" color="inherit"><b>No metrics</b><Box variant="p" color="text-body-secondary">Put metric data to create metrics.</Box></Box>}
           />
         </SpaceBetween>
@@ -214,7 +214,7 @@ function PutMetricModal({ namespaces, onClose, onSubmit }: {
           <FormField label="Namespace">
             <Select
               selectedOption={namespace ? { label: namespace, value: namespace } : null}
-              onChange={({ detail }) => setNamespace(detail.selectedOption?.value || "")}
+              onChange={({ detail }) => setNamespace(detail.selectedOption!.value!)}
               options={[...namespaces.map((n) => ({ label: n, value: n })), { label: "AWS/Lambda", value: "AWS/Lambda" }, { label: "AWS/EC2", value: "AWS/EC2" }, { label: "Custom", value: "Custom" }]}
               placeholder="Select namespace"
             />

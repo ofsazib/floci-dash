@@ -1150,3 +1150,88 @@ describe("CloudWatchPage — data edge cases", () => {
     });
   });
 });
+
+describe("CloudWatchPage — branch completion", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseHealth.mockReturnValue({ data: undefined });
+    mockCloudWatchMetrics.mockReturnValue({ data: { namespaces: ["AWS/Lambda"], metrics: [{ namespace: "AWS/Lambda", metricName: "Invocations", dimensions: [] }] }, isLoading: false, refetch: vi.fn() });
+    mockMetricStatistics.mockReturnValue({ data: { datapoints: [] }, isLoading: false });
+    mockCloudWatchAlarms.mockReturnValue({ data: { alarms: [] }, isLoading: false });
+  });
+
+  it("renders empty metrics state when namespaces and metrics are undefined", async () => {
+    mockCloudWatchMetrics.mockReturnValue({
+      data: {},
+      isLoading: false,
+      refetch: vi.fn(),
+    });
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    const tabs = screen.getAllByText("Metrics");
+    await user.click(tabs[tabs.length - 1]);
+    await waitFor(() => {
+      expect(screen.getByText("No metrics")).toBeTruthy();
+    });
+  });
+
+  it("renders dash dimensions cell for a metric without dimensions", async () => {
+    mockCloudWatchMetrics.mockReturnValue({
+      data: {
+        namespaces: ["AWS/Lambda"],
+        metrics: [{ namespace: "AWS/Lambda", metricName: "Invocations" }],
+      },
+      isLoading: false,
+      refetch: vi.fn(),
+    });
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    const tabs = screen.getAllByText("Metrics");
+    await user.click(tabs[tabs.length - 1]);
+    await waitFor(() => {
+      expect(screen.getAllByText("Invocations").length).toBeGreaterThan(0);
+    });
+    // undefined dimensions → empty map → "-" fallback in the dims cell
+    expect(screen.getAllByText("-").length).toBeGreaterThan(0);
+  });
+
+  it("shows no datapoints prompt when stats data lacks the datapoints key", async () => {
+    mockMetricStatistics.mockReturnValue({ data: {}, isLoading: false });
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    const tabs = screen.getAllByText("Metrics");
+    await user.click(tabs[tabs.length - 1]);
+    await waitFor(() => {
+      expect(screen.getAllByText("Invocations").length).toBeGreaterThan(0);
+    });
+    const radios = screen.getAllByRole("radio");
+    await user.click(radios[0]);
+    await waitFor(() => {
+      expect(
+        screen.getByText("No datapoints in the last hour"),
+      ).toBeTruthy();
+    });
+  });
+
+  it("shows dashes for every missing datapoint scalar field", async () => {
+    mockMetricStatistics.mockReturnValue({
+      data: {
+        datapoints: [{ timestamp: "2025-01-01T00:00:00Z" }],
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    const tabs = screen.getAllByText("Metrics");
+    await user.click(tabs[tabs.length - 1]);
+    await waitFor(() => {
+      expect(screen.getAllByText("Invocations").length).toBeGreaterThan(0);
+    });
+    const radios = screen.getAllByRole("radio");
+    await user.click(radios[0]);
+    // average/sum/min/max/sampleCount/unit all fall back to "-"
+    await waitFor(() => {
+      expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(6);
+    });
+  });
+});

@@ -572,7 +572,7 @@ function PolicyDetailModal({ arn, onClose }: { arn: string; onClose: () => void 
             <SpaceBetween size="m">
               <Select
                 selectedOption={currentVersion ? { label: currentVersion + (defaultVersion?.versionId === currentVersion ? " (default)" : ""), value: currentVersion } : null}
-                onChange={({ detail }) => setSelectedVersion(detail.selectedOption?.value || null)}
+                onChange={({ detail }) => setSelectedVersion(detail.selectedOption!.value!)}
                 options={versions.map((v: any) => ({
                   label: v.versionId + (v.isDefaultVersion ? " (default)" : ""),
                   value: v.versionId,

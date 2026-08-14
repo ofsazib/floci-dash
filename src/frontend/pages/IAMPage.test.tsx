@@ -51,6 +51,15 @@ vi.mock("../components/Toast", () => ({
   ToastProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
+const mockUseHealth = vi.fn();
+
+vi.mock("../hooks/useSystem", () => ({
+  useHealth: (...args: any[]) => {
+    const result = mockUseHealth(...args);
+    return result === undefined ? { data: undefined } : result;
+  },
+}));
+
 import IAMPage from "./IAMPage";
 
 function pageWrapper() {
@@ -1004,5 +1013,296 @@ describe("IAMPage — remaining coverage", () => {
       ),
     );
     await waitFor(expectCreateGroupClosed);
+  });
+});
+
+describe("IAMPage — branch completion", () => {
+  beforeEach(() => {
+    mockIAMRoles.mockReturnValue({
+      data: { roles: [{ name: "ec2-role", arn: "arn:aws:iam::000000000000:role/ec2-role", createDate: "2024-01-01" }] },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockIAMUsers.mockReturnValue({
+      data: { users: [{ name: "admin-user", arn: "arn:aws:iam::000000000000:user/admin-user", createDate: "2024-01-01" }] },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockIAMGroups.mockReturnValue({
+      data: { groups: [{ name: "admins", arn: "arn:aws:iam::000000000000:group/admins" }] },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockIAMPolicies.mockReturnValue({
+      data: { policies: [{ name: "AdminPolicy", arn: "arn:aws:iam::000000000000:policy/AdminPolicy", scope: "Local" }] },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockIAMUser.mockReturnValue({
+      data: { user: null, accessKeys: [], attachedPolicies: [], groups: [], inlinePolicies: [] },
+      isLoading: false,
+    });
+    mockIAMRole.mockReturnValue({
+      data: { role: null, attachedPolicies: [], tags: {} },
+      isLoading: false,
+    });
+    mockIAMPolicy.mockReturnValue({
+      data: { policy: null, versions: [] },
+      isLoading: false,
+    });
+    mockPolicyVersion.mockReturnValue({
+      data: { document: null },
+      isLoading: false,
+    });
+    mockUseHealth.mockReturnValue({ data: undefined });
+  });
+
+  it("renders sparse user rows with dash created date", async () => {
+    mockIAMUsers.mockReturnValue({
+      data: { users: [{ name: "sparse-user", arn: "arn:1" }] },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Users/i }));
+    await waitFor(() => {
+      expect(screen.getByText("sparse-user")).toBeTruthy();
+      // created cell falls back to "-" when createDate is missing
+      expect(screen.getAllByText("-").length).toBeGreaterThan(0);
+    });
+  });
+
+  it("renders user detail with sparse keys and inactive status", async () => {
+    mockIAMUser.mockReturnValue({
+      data: {
+        user: { name: "admin-user", arn: "arn:1", userId: "A1", path: "/" },
+        accessKeys: [{ accessKeyId: "AKIA123", status: "Inactive" }],
+        attachedPolicies: [],
+        groups: [],
+        inlinePolicies: [],
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Users/i }));
+    await clickButton(user, /View/i, { last: true });
+    await waitFor(() =>
+      expect(screen.getByText(/User: admin-user/i)).toBeTruthy(),
+    );
+    // non-Active status badge, dash created, no newKey so items come from accessKeys
+    expect(screen.getByText("Inactive")).toBeTruthy();
+    expect(screen.getAllByText("AKIA123").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("-").length).toBeGreaterThan(0);
+  });
+
+  it("renders sparse role rows and detail", async () => {
+    mockIAMRoles.mockReturnValue({
+      data: { roles: [{ name: "sparse-role", arn: "arn:1" }] },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockIAMRole.mockReturnValue({
+      data: {
+        role: { name: "sparse-role", arn: "arn:1", roleId: "R1", path: "/" },
+        attachedPolicies: [],
+        tags: {},
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await waitFor(() => expect(screen.getByText("sparse-role")).toBeTruthy());
+    await clickButton(user, /View/i, { last: true });
+    await waitFor(() =>
+      expect(screen.getByText(/Role: sparse-role/i)).toBeTruthy(),
+    );
+    // created + description fall back to "-"
+    expect(screen.getAllByText("-").length).toBeGreaterThan(0);
+  });
+
+  it("renders AWS-scope policy with a create date", async () => {
+    mockIAMPolicies.mockReturnValue({
+      data: {
+        policies: [
+          { name: "AWSManaged", arn: "arn:1", scope: "AWS", createDate: "2024-01-01T00:00:00Z" },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Policies/i }));
+    await waitFor(() => expect(screen.getByText("AWSManaged")).toBeTruthy());
+    // created cell renders the date (blue AWS badge covers the scope truthy arm)
+    expect(screen.getAllByText(/2024/).length).toBeGreaterThan(0);
+  });
+
+  it("renders policy detail with sparse policy and no version selected", async () => {
+    mockIAMPolicy.mockReturnValue({
+      data: {
+        policy: {
+          name: "AdminPolicy",
+          arn: "arn:1",
+          policyId: "P1",
+          defaultVersionId: "v1",
+          attachmentCount: 0,
+        },
+        versions: [],
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Policies/i }));
+    await clickButton(user, /View/i, { last: true });
+    await waitFor(() =>
+      expect(screen.getByText(/Policy: AdminPolicy/i)).toBeTruthy(),
+    );
+    // created falls back to "-", no document → prompt text
+    expect(screen.getAllByText("-").length).toBeGreaterThan(0);
+    expect(
+      screen.getByText("Select a version to view document"),
+    ).toBeTruthy();
+  });
+
+  it("shows loading document while policy version loads", async () => {
+    mockIAMPolicy.mockReturnValue({
+      data: {
+        policy: {
+          name: "AdminPolicy",
+          arn: "arn:1",
+          policyId: "P1",
+          defaultVersionId: "v1",
+          attachmentCount: 0,
+          createDate: "2024-01-01T00:00:00Z",
+        },
+        versions: [{ versionId: "v1", isDefaultVersion: true }],
+      },
+      isLoading: false,
+    });
+    mockPolicyVersion.mockReturnValue({ data: undefined, isLoading: true });
+    const user = userEvent.setup();
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Policies/i }));
+    await clickButton(user, /View/i, { last: true });
+    await waitFor(() =>
+      expect(screen.getByText("Loading document...")).toBeTruthy(),
+    );
+  });
+
+  it("selects a non-default policy version", async () => {
+    mockIAMPolicy.mockReturnValue({
+      data: {
+        policy: {
+          name: "AdminPolicy",
+          arn: "arn:1",
+          policyId: "P1",
+          defaultVersionId: "v1",
+          attachmentCount: 0,
+          createDate: "2024-01-01T00:00:00Z",
+        },
+        versions: [
+          { versionId: "v1", isDefaultVersion: true },
+          { versionId: "v2", isDefaultVersion: false },
+        ],
+      },
+      isLoading: false,
+    });
+    mockPolicyVersion.mockReturnValue({
+      data: { document: "{}" },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Policies/i }));
+    await clickButton(user, /View/i, { last: true });
+    await waitFor(() =>
+      expect(screen.getByText(/Policy: AdminPolicy/i)).toBeTruthy(),
+    );
+    // open the version Select and pick the non-default v2
+    await user.click(screen.getByRole("button", { name: /v1 \(default\)/i }));
+    await user.click(await screen.findByRole("option", { name: /v2/i }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /^v2$/ })).toBeTruthy(),
+    );
+  });
+
+  it("renders group rows with a create date", async () => {
+    mockIAMGroups.mockReturnValue({
+      data: {
+        groups: [
+          { name: "admins", arn: "arn:1", createDate: "2024-01-01T00:00:00Z" },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Groups/i }));
+    await waitFor(() => expect(screen.getByText("admins")).toBeTruthy());
+    expect(screen.getAllByText(/2024/).length).toBeGreaterThan(0);
+  });
+
+  it("creates an access key without a status field", async () => {
+    mockIAMUser.mockReturnValue({
+      data: {
+        user: {
+          name: "admin-user",
+          arn: "arn:1",
+          userId: "A1",
+          path: "/",
+          createDate: "2024-01-01T00:00:00Z",
+        },
+        accessKeys: [],
+        attachedPolicies: [],
+        groups: [],
+        inlinePolicies: [],
+      },
+      isLoading: false,
+    });
+    mockCreateAccessKeyMutate.mockResolvedValue({
+      accessKeyId: "NEWKEY",
+      secretAccessKey: "SECRETVALUE",
+    });
+    const user = userEvent.setup();
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Users/i }));
+    await clickButton(user, /View/i, { last: true });
+    await waitFor(() =>
+      expect(screen.getByText(/User: admin-user/i)).toBeTruthy(),
+    );
+    await clickButton(user, /Create access key/i);
+    await waitFor(() => expect(screen.getByText("NEWKEY")).toBeTruthy());
+    // status falls back to "Active" when the response omits it
+    expect(screen.getAllByText("Active").length).toBeGreaterThan(0);
+  });
+
+  it("renders running and available health statuses", async () => {
+    mockUseHealth.mockReturnValue({
+      data: { services: { iam: "running" } },
+    });
+    const { rerender } = render(<IAMPage />, {
+      wrapper: pageWrapper(),
+    });
+    expect(screen.getByText("Running")).toBeTruthy();
+    mockUseHealth.mockReturnValue({
+      data: { services: { iam: "available" } },
+    });
+    rerender(<IAMPage />);
+    await waitFor(() =>
+      expect(screen.getByText("Available")).toBeTruthy(),
+    );
   });
 });
