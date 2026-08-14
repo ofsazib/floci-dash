@@ -587,7 +587,6 @@ export function WafV2Dashboard() {
   }));
 
   function handleCreate() {
-    if (!aclName.trim()) return;
     createWebAcl.mutate(
       { Name: aclName.trim(), Scope: "REGIONAL", DefaultAction: { Allow: {} } },
       {
@@ -988,7 +987,6 @@ function CreateIPSetModal({
   const [addresses, setAddresses] = useState("");
 
   function handleCreate() {
-    if (!name.trim()) return;
     const addrList = addresses
       .split(/[,\n\s]+/)
       .map((s) => s.trim())
@@ -1031,7 +1029,6 @@ function CreateRegexSetModal({
   const [patterns, setPatterns] = useState("");
 
   function handleCreate() {
-    if (!name.trim()) return;
     const patternList = patterns
       .split(/\n/)
       .map((s) => s.trim())
@@ -1096,7 +1093,6 @@ function EditRegexSetModal({
   const lockToken = getQuery.data?.regexPatternSet?.LockToken;
 
   function handleSave() {
-    if (!lockToken) return;
     const patternList = patterns
       .split(/\n/)
       .map((s) => s.trim())
@@ -1152,7 +1148,6 @@ function CreateRuleGroupModal({
   const [capacity, setCapacity] = useState(100);
 
   function handleCreate() {
-    if (!name.trim()) return;
     createRuleGroup.mutate(
       { Name: name.trim(), Scope: "REGIONAL", Description: description.trim() || undefined, Capacity: capacity },
       { onSuccess: onCreated }
@@ -1192,7 +1187,6 @@ function PutLoggingConfigModal({
   const [logDestinations, setLogDestinations] = useState("");
 
   function handleSave() {
-    if (!resourceArn.trim() || !logDestinations.trim()) return;
     const destinations = logDestinations.split(/[,\n]+/).map((s) => s.trim()).filter(Boolean);
     putLoggingConfig.mutate(
       { ResourceArn: resourceArn.trim(), LogDestinationConfigs: destinations },
@@ -1234,7 +1228,6 @@ function AssociateWebACLModal({
   const [resourceArn, setResourceArn] = useState("");
 
   function handleAssociate() {
-    if (!webACLArn.trim() || !resourceArn.trim()) return;
     associateWebACL.mutate(
       { WebACLArn: webACLArn.trim(), ResourceArn: resourceArn.trim() },
       { onSuccess: onCreated }
@@ -1274,7 +1267,6 @@ function DisassociateWebACLModal({
   const [resourceArn, setResourceArn] = useState("");
 
   function handleDisassociate() {
-    if (!resourceArn.trim()) return;
     disassociateWebACL.mutate(
       { ResourceArn: resourceArn.trim() },
       { onSuccess: onCreated }
@@ -1310,7 +1302,6 @@ function PutPermissionPolicyModal({
   const [policy, setPolicy] = useState("");
 
   function handleSave() {
-    if (!resourceArn.trim() || !policy.trim()) return;
     putPermission.mutate(
       { ResourceArn: resourceArn.trim(), Policy: policy },
       { onSuccess: onCreated }

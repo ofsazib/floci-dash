@@ -534,7 +534,7 @@ function BucketLifecycle({ bucket }: Props) {
         <Box variant="p" color="text-body-secondary">
           Lifecycle rules help you manage objects in your bucket by defining transitions and expiration policies.
         </Box>
-        {(rules.length ?? 0) > 0 ? (
+        {rules.length > 0 ? (
           <Table
             header={
               <Header
@@ -814,7 +814,7 @@ function BucketNotifications({ bucket }: Props) {
         </Box>
         {(data?.total ?? 0) > 0 ? (
           <Table
-            header={<Header variant="h3" counter={`(${data?.total || 0})`}>Active Notifications</Header>}
+            header={<Header variant="h3" counter={`(${data?.total})`}>Active Notifications</Header>}
             columnDefinitions={[
               { id: "type", header: "Type", cell: (item: any) => {
                 if (item.LambdaFunctionArn) return "Lambda";

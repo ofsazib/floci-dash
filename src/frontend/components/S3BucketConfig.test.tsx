@@ -1540,6 +1540,171 @@ describe("S3BucketConfig — Select changes, input changes, and modal completion
   });
 });
 
+// ─── Branch-completion sparse fixtures (campaign batch 4i) ────────────
+
+describe("S3BucketConfig — branch-completion fixtures", () => {
+  it("loads a transition without Days into the edit form", async () => {
+    const user = userEvent.setup();
+    const mockMutate = vi.fn();
+    (useS3UpdateBucketLifecycle as any).mockReturnValue({ mutate: mockMutate, isPending: false, isError: false, error: null });
+    (useS3BucketLifecycle as any).mockReturnValue({
+      data: {
+        rules: [
+          { id: "r1", status: "Enabled", transitions: [{ StorageClass: "GLACIER" }] },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Lifecycle" }));
+    await user.click(screen.getByRole("button", { name: /Edit rule/i }));
+    await waitFor(() => expect(screen.getByText("Edit lifecycle rule")).toBeTruthy());
+    const days30 = screen.getAllByPlaceholderText("e.g. 30");
+    expect(days30[1]).toHaveProperty("value", "");
+  });
+
+  it("updates one of two rules leaving the other untouched", async () => {
+    const user = userEvent.setup();
+    const mockMutate = vi.fn();
+    (useS3UpdateBucketLifecycle as any).mockReturnValue({ mutate: mockMutate, isPending: false, isError: false, error: null });
+    (useS3BucketLifecycle as any).mockReturnValue({
+      data: {
+        rules: [
+          { id: "keep-me", status: "Enabled", prefix: "a/", expiration: { Days: 10 } },
+          { id: "edit-me", status: "Disabled", prefix: "b/", expiration: { Days: 20 } },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Lifecycle" }));
+    await user.click(screen.getAllByRole("button", { name: /Edit rule/i })[1]);
+    await waitFor(() => expect(screen.getByText("Edit lifecycle rule")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Update rule/i }));
+    await waitFor(() => expect(mockMutate).toHaveBeenCalled());
+    const payload = mockMutate.mock.calls[0][0];
+    expect(payload).toHaveLength(2);
+    expect(payload[0]).toEqual({ id: "keep-me", status: "Enabled", prefix: "a/", expiration: { Days: 10 } });
+    expect(payload[1]).toEqual({
+      Status: "Disabled",
+      ID: "edit-me",
+      Filter: { Prefix: "b/" },
+      Expiration: { Days: 20 },
+    });
+  });
+
+  it("shows dash for a lifecycle rule without an id or ID", async () => {
+    const user = userEvent.setup();
+    (useS3BucketLifecycle as any).mockReturnValue({
+      data: { rules: [{ Status: "Enabled", Filter: { Prefix: "x/" } }] },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Lifecycle" }));
+    // ID cell dash + expiration dash
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("Prefix: x/")).toBeTruthy();
+  });
+
+  it("hides Delete CORS button when there are no rules", async () => {
+    const user = userEvent.setup();
+    // No `total` key at all: `data?.total ?? 0` short-circuits to 0, exercising
+    // the falsy arm of the `> 0 &&` conditional through the nullish path.
+    (useS3BucketCors as any).mockReturnValue({ data: { corsRules: [] }, isLoading: false, isError: false, error: null });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "CORS" }));
+    expect(screen.getByText("CORS Configuration")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Delete CORS/i })).toBeNull();
+  });
+
+  it("leaves error document empty when website has no errorDocument", async () => {
+    const user = userEvent.setup();
+    (useS3BucketWebsite as any).mockReturnValue({
+      data: { configured: true, indexDocument: "index.html" },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Website" }));
+    await waitFor(() => expect(screen.getByDisplayValue("index.html")).toBeTruthy());
+    expect(screen.getByPlaceholderText("error.html")).toHaveProperty("value", "");
+  });
+
+  it("renders notifications when snsNotifications key is absent", async () => {
+    (useS3BucketNotifications as any).mockReturnValue({
+      data: {
+        total: 1,
+        lambdaNotifications: [{ LambdaFunctionArn: "arn:aws:lambda:fn:only-lambda", Events: ["s3:ObjectCreated:*"] }],
+        sqsNotifications: [],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Notifications" }));
+    expect(screen.getByText("arn:aws:lambda:fn:only-lambda")).toBeTruthy();
+  });
+
+  it("labels a null grantee as Unknown", async () => {
+    const user = userEvent.setup();
+    (useS3BucketAcl as any).mockReturnValue({
+      data: {
+        owner: { displayName: "Owner Name", id: "owner-id" },
+        grants: [{ grantee: null, permission: "READ" }],
+        totalGrants: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "ACL" }));
+    expect(screen.getByText("Unknown")).toBeTruthy();
+    expect(screen.getByText("READ")).toBeTruthy();
+  });
+
+  it("labels a bare grantee as Unknown", async () => {
+    const user = userEvent.setup();
+    (useS3BucketAcl as any).mockReturnValue({
+      data: {
+        owner: { displayName: "Owner Name", id: "owner-id" },
+        grants: [{ grantee: {}, permission: "WRITE" }],
+        totalGrants: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "ACL" }));
+    expect(screen.getByText("Unknown")).toBeTruthy();
+    expect(screen.getByText("WRITE")).toBeTruthy();
+  });
+
+  it("omits the grants table when the grants key is absent", async () => {
+    const user = userEvent.setup();
+    (useS3BucketAcl as any).mockReturnValue({
+      data: { owner: { displayName: "Owner Name", id: "owner-id" }, totalGrants: 0 },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "ACL" }));
+    expect(screen.queryByText("Current Grants")).toBeNull();
+    expect(screen.getByText("Owner Name")).toBeTruthy();
+  });
+});
+
 /** Locate a modal dialog by its header text. */
 function dialogOf(headerText: string): HTMLElement {
   const header = screen.getAllByText(headerText).find((h) => h.closest('[role="dialog"]'));

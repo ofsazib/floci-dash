@@ -155,18 +155,17 @@ export default function DynamoDBTableDetail({
   }
 
   function handleSavePreset() {
-    if (!presetName) return;
     const validConditions = filterConditions.filter((c) => c.attr);
     if (validConditions.length === 0) return;
     const newPreset: SavedPreset = {
       name: presetName,
       conditions: validConditions.map((c) => ({
         attr: c.attr,
-        op: c.op.value ?? "=",
+        op: c.op.value!,
         value: c.value,
         enabled: c.enabled,
       })),
-      logic: (filterLogic.value as "AND" | "OR") ?? "AND",
+      logic: filterLogic.value as "AND" | "OR",
     };
     savePresets([...tablePresets, newPreset]);
     setShowSavePreset(false);
@@ -211,10 +210,9 @@ export default function DynamoDBTableDetail({
   const pageLastEvaluatedKey = scan?.lastEvaluatedKey;
 
   function goToNextPage() {
-    if (!pageLastEvaluatedKey) return;
     setPageCursors((prev) => {
       const next = [...prev];
-      next[pageIndex + 1] = pageLastEvaluatedKey;
+      next[pageIndex + 1] = pageLastEvaluatedKey!;
       return next;
     });
     setPageIndex((prev) => prev + 1);
@@ -241,10 +239,10 @@ export default function DynamoDBTableDetail({
     setActiveFilters({
       filters: valid.map((c) => ({
         attribute: c.attr,
-        operator: c.op.value ?? "=",
-        value: OPS_WITHOUT_VALUE.has(c.op.value ?? "") ? true : c.value,
+        operator: c.op.value!,
+        value: OPS_WITHOUT_VALUE.has(c.op.value!) ? true : c.value,
       })),
-      logic: (filterLogic.value as "AND" | "OR") ?? "AND",
+      logic: filterLogic.value as "AND" | "OR",
     });
   }
 
@@ -629,7 +627,7 @@ export default function DynamoDBTableDetail({
                     )
                   }
                   placeholder="Value"
-                  disabled={OPS_WITHOUT_VALUE.has(cond.op.value ?? "")}
+                  disabled={OPS_WITHOUT_VALUE.has(cond.op.value!)}
                 />
               </FormField>
             </div>
