@@ -853,8 +853,9 @@ function ChangeSetDetail({
                   id: "scope",
                   header: "Scope",
                   cell: (c: any) =>
+                    // the join only runs when the length check above found a non-empty scope
                     (c.resourceChange?.scope || []).length > 0
-                      ? (c.resourceChange?.scope || []).join(", ")
+                      ? c.resourceChange!.scope!.join(", ")
                       : "-",
                 },
               ]}

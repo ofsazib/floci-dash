@@ -37,6 +37,13 @@ let mockPutObjectAclError: Error | null = null;
 let mockDeleteObjectMutate = vi.fn();
 let mockCreateFolderMutate = vi.fn();
 let mockDeleteFolderMutate = vi.fn();
+let mockDeleteBucketIsPending = false;
+let mockDeleteBucketVariables: string | null = null;
+let mockDeleteObjectIsPending = false;
+let mockDeleteObjectVariables: string | null = null;
+let mockDeleteFolderIsPending = false;
+let mockDeleteFolderVariables: string | null = null;
+let mockObjectAttributesIsLoading = false;
 let mockConfirmDialog = vi.fn(() => Promise.resolve(true));
 const mockS3SelectMutate = vi.fn();
 let mockS3SelectIsError = false;
@@ -48,12 +55,12 @@ vi.mock("../hooks/useS3", () => ({
   useS3Objects: (...args: any[]) => mockObjects(...args),
   useS3ObjectDetail: (...args: any[]) => mockObjectDetail(...args),
   useS3CreateBucket: () => ({ mutate: mockCreateBucketMutate, isPending: false, isError: mockCreateBucketIsError, error: mockCreateBucketError }),
-  useS3DeleteBucket: () => ({ mutate: mockDeleteBucket, isPending: false, variables: null }),
+  useS3DeleteBucket: () => ({ mutate: mockDeleteBucket, isPending: mockDeleteBucketIsPending, variables: mockDeleteBucketVariables }),
   useS3UploadFiles: () => ({ mutateAsync: mockUploadMutateAsync, isPending: false, isError: mockUploadIsError, error: mockUploadError }),
-  useS3DeleteObject: () => ({ mutate: mockDeleteObjectMutate, isPending: false, variables: null }),
+  useS3DeleteObject: () => ({ mutate: mockDeleteObjectMutate, isPending: mockDeleteObjectIsPending, variables: mockDeleteObjectVariables }),
   useS3CreateFolder: () => ({ mutate: mockCreateFolderMutate, isPending: false }),
   useS3BatchDeleteObjects: () => ({ mutate: mockBatchDeleteMutate, isPending: mockBatchDeleteIsPending }),
-  useS3DeleteFolder: () => ({ mutate: mockDeleteFolderMutate, isPending: false, variables: null }),
+  useS3DeleteFolder: () => ({ mutate: mockDeleteFolderMutate, isPending: mockDeleteFolderIsPending, variables: mockDeleteFolderVariables }),
 }));
 
 vi.mock("../hooks/useS3Config", () => ({
@@ -61,7 +68,7 @@ vi.mock("../hooks/useS3Config", () => ({
   useS3UpdateObjectTags: () => ({ mutate: mockUpdateObjectTags, isPending: false }),
   useS3ObjectAcl: () => ({ data: mockObjectAclData, isLoading: mockObjectAclIsLoading }),
   useS3PutObjectAcl: () => ({ mutate: mockPutObjectAclMutate, isPending: mockPutObjectAclIsPending, isError: mockPutObjectAclIsError, error: mockPutObjectAclError }),
-  useS3ObjectAttributes: () => ({ data: mockObjectAttributesData, isLoading: false }),
+  useS3ObjectAttributes: () => ({ data: mockObjectAttributesData, isLoading: mockObjectAttributesIsLoading }),
 }));
 
 vi.mock("../hooks/useS3Select", () => ({
@@ -137,6 +144,13 @@ describe("S3Page", () => {
     mockDeleteObjectMutate = vi.fn();
     mockCreateFolderMutate = vi.fn();
     mockDeleteFolderMutate = vi.fn();
+    mockDeleteBucketIsPending = false;
+    mockDeleteBucketVariables = null;
+    mockDeleteObjectIsPending = false;
+    mockDeleteObjectVariables = null;
+    mockDeleteFolderIsPending = false;
+    mockDeleteFolderVariables = null;
+    mockObjectAttributesIsLoading = false;
     mockConfirmDialog = vi.fn(() => Promise.resolve(true));
     mockS3SelectIsPending = false;
     mockS3SelectIsError = false;
@@ -2116,5 +2130,320 @@ describe("S3Page", () => {
       { Key: "env", Value: "prod" },
       { Key: "team", Value: "core-v2" },
     ]);
+  });
+});
+
+describe("S3Page — branch completion", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSearchParams.mockReturnValue([new URLSearchParams(), vi.fn()]);
+    mockHealth.mockReturnValue({ data: { services: { s3: "running" } } });
+    mockBuckets.mockReturnValue({
+      data: { buckets: [{ name: "my-bucket", createdAt: "2024-01-01T00:00:00Z" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockObjects.mockReturnValue({ data: { objects: [], total: 0 }, isLoading: false });
+    mockObjectDetail.mockReturnValue({ data: undefined, isLoading: false });
+    mockObjectTags.mockReturnValue({ data: { tags: [], total: 0 } });
+    mockCreateBucketIsError = false;
+    mockCreateBucketError = null;
+    mockUploadMutateAsync = vi.fn();
+    mockUploadIsError = false;
+    mockUploadError = null;
+    mockBatchDeleteMutate = vi.fn();
+    mockBatchDeleteIsPending = false;
+    mockObjectAclData = { owner: null, grants: [], totalGrants: 0 };
+    mockObjectAclIsLoading = false;
+    mockObjectAttributesData = { checksum: null };
+    mockObjectAttributesIsLoading = false;
+    mockPutObjectAclMutate = vi.fn();
+    mockPutObjectAclIsPending = false;
+    mockPutObjectAclIsError = false;
+    mockPutObjectAclError = null;
+    mockDeleteObjectMutate = vi.fn();
+    mockCreateFolderMutate = vi.fn();
+    mockDeleteFolderMutate = vi.fn();
+    mockDeleteBucketIsPending = false;
+    mockDeleteBucketVariables = null;
+    mockDeleteObjectIsPending = false;
+    mockDeleteObjectVariables = null;
+    mockDeleteFolderIsPending = false;
+    mockDeleteFolderVariables = null;
+    mockConfirmDialog = vi.fn(() => Promise.resolve(true));
+    mockS3SelectIsPending = false;
+    mockS3SelectIsError = false;
+    mockS3SelectError = null;
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("shows a plural upload button for multiple files", async () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("bucket=my-bucket"), vi.fn()]);
+    mockObjects.mockReturnValue({ data: { objects: [], total: 0 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<S3Page />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getAllByText("my-bucket").length).toBeGreaterThanOrEqual(1));
+    await clickButton(user, /Upload/i);
+    await waitFor(() => expect(screen.getAllByPlaceholderText("folder/subfolder/").length).toBeGreaterThan(0));
+    const fileInput = document.querySelector('input[type="file"]');
+    await waitFor(() => expect(fileInput).toBeTruthy());
+    fireEvent.change(fileInput!, {
+      target: {
+        files: [
+          new File(["a"], "a.txt", { type: "text/plain" }),
+          new File(["b"], "b.txt", { type: "text/plain" }),
+        ],
+      },
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Upload 2 files/i })).toBeTruthy(),
+    );
+  });
+
+  it("shows the fallback message when the upload error has no message", async () => {
+    mockUploadIsError = true;
+    mockUploadError = new Error();
+    mockSearchParams.mockReturnValue([new URLSearchParams("bucket=my-bucket"), vi.fn()]);
+    mockObjects.mockReturnValue({ data: { objects: [], total: 0 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<S3Page />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getAllByText("my-bucket").length).toBeGreaterThanOrEqual(1));
+    await clickButton(user, /Upload/i);
+    await waitFor(() =>
+      expect(screen.getByText("Failed to upload")).toBeTruthy(),
+    );
+  });
+
+  it("shows the delete bucket button in its loading state", () => {
+    mockDeleteBucketIsPending = true;
+    mockDeleteBucketVariables = "my-bucket";
+    render(<S3Page />, { wrapper: createWrapper() });
+    const btn = screen.getByRole("button", { name: /Delete my-bucket/i });
+    expect(btn.getAttribute("aria-disabled")).toBe("true");
+  });
+
+  it("navigates up from a nested folder", async () => {
+    mockObjects
+      .mockReturnValueOnce({ data: { folders: [{ prefix: "images/", name: "images" }], objects: [], total: 0 }, isLoading: false })
+      .mockReturnValueOnce({ data: { folders: [{ prefix: "images/sub/", name: "sub" }], objects: [], total: 0 }, isLoading: false })
+      .mockReturnValueOnce({ data: { folders: [], objects: [], total: 0 }, isLoading: false })
+      .mockReturnValueOnce({ data: { folders: [], objects: [{ key: "images/a.png", size: 1, lastModified: "2024-01-01" }], total: 1 }, isLoading: false });
+    mockSearchParams.mockReturnValue([new URLSearchParams("bucket=my-bucket"), vi.fn()]);
+    const user = userEvent.setup();
+    render(<S3Page />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getAllByText("my-bucket").length).toBeGreaterThanOrEqual(1));
+    await user.click(screen.getByRole("button", { name: /images\//i }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /sub\//i })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /sub\//i }));
+    await waitFor(() => expect(screen.getByText("Empty folder")).toBeTruthy());
+    await clickButton(user, /Back/i);
+    await waitFor(() => expect(screen.getByText("a.png")).toBeTruthy());
+  });
+
+  it("shows a dash for an object without a lastModified date", async () => {
+    mockObjects.mockReturnValue({
+      data: { objects: [{ key: "plain.txt", size: 10 }], total: 1 },
+      isLoading: false,
+    });
+    mockSearchParams.mockReturnValue([new URLSearchParams("bucket=my-bucket"), vi.fn()]);
+    render(<S3Page />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("plain.txt")).toBeTruthy());
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+  });
+
+  it("shows the delete object button in its loading state", () => {
+    mockObjects.mockReturnValue({
+      data: { objects: [{ key: "plain.txt", size: 10, lastModified: "2024-01-01" }], total: 1 },
+      isLoading: false,
+    });
+    mockDeleteObjectIsPending = true;
+    mockDeleteObjectVariables = "plain.txt";
+    mockSearchParams.mockReturnValue([new URLSearchParams("bucket=my-bucket"), vi.fn()]);
+    render(<S3Page />, { wrapper: createWrapper() });
+    const btn = screen.getByRole("button", { name: /Delete plain\.txt/i });
+    expect(btn.getAttribute("aria-disabled")).toBe("true");
+  });
+
+  it("shows the delete folder button in its loading state", async () => {
+    mockObjects.mockReturnValue({
+      data: { folders: [{ prefix: "images/", name: "images" }], objects: [], total: 0 },
+      isLoading: false,
+    });
+    mockDeleteFolderIsPending = true;
+    mockDeleteFolderVariables = "images/";
+    mockSearchParams.mockReturnValue([new URLSearchParams("bucket=my-bucket"), vi.fn()]);
+    render(<S3Page />, { wrapper: createWrapper() });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Delete folder images/i })).toBeTruthy(),
+    );
+    const btn = screen.getByRole("button", { name: /Delete folder images/i });
+    expect(btn.getAttribute("aria-disabled")).toBe("true");
+  });
+
+  it("falls back to zero when folder deletion omits totalDeleted", async () => {
+    mockDeleteFolderMutate.mockImplementation((_prefix: string, opts: any) =>
+      opts?.onSuccess?.({}),
+    );
+    mockObjects.mockReturnValue({
+      data: { folders: [{ prefix: "images/", name: "images" }], objects: [], total: 0 },
+      isLoading: false,
+    });
+    mockSearchParams.mockReturnValue([new URLSearchParams("bucket=my-bucket"), vi.fn()]);
+    const user = userEvent.setup();
+    render(<S3Page />, { wrapper: createWrapper() });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Delete folder images/i })).toBeTruthy(),
+    );
+    await user.click(screen.getByRole("button", { name: /Delete folder images/i }));
+    await waitFor(() => expect(mockDeleteFolderMutate).toHaveBeenCalled());
+    expect(mockShowToast).toHaveBeenCalledWith(
+      "success",
+      'Folder "images" deleted (0 objects)',
+    );
+  });
+
+  it("falls back to the selected keys when batch delete omits deleted", async () => {
+    mockBatchDeleteMutate.mockImplementation((_keys: any, opts: any) =>
+      opts?.onSuccess?.({}),
+    );
+    mockObjects.mockReturnValue({
+      data: {
+        objects: [
+          { key: "a.txt", size: 10, lastModified: "2024-01-01" },
+          { key: "b.txt", size: 20, lastModified: "2024-01-01" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    mockSearchParams.mockReturnValue([new URLSearchParams("bucket=my-bucket"), vi.fn()]);
+    const user = userEvent.setup();
+    render(<S3Page />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("a.txt")).toBeTruthy());
+    const checkboxes = screen.getAllByRole("checkbox");
+    if (checkboxes.length > 1) {
+      await user.click(checkboxes[1]);
+      await user.click(checkboxes[2]);
+    }
+    await waitFor(() =>
+      expect(screen.getByText(/Delete selected \(2\)/i)).toBeTruthy(),
+    );
+    await clickButton(user, /Delete selected/i);
+    await waitFor(() => expect(mockBatchDeleteMutate).toHaveBeenCalled());
+    expect(mockShowToast).toHaveBeenCalledWith("success", "2 objects deleted");
+  });
+
+  it("uses the raw key as filename for a trailing-slash object", async () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("?bucket=my-bucket&object=dir/"), vi.fn()]);
+    mockObjectDetail.mockReturnValue({
+      data: { size: 100, contentType: "image/png", lastModified: "2024-01-01T00:00:00Z", etag: "abc" },
+      isLoading: false, isError: false, error: null,
+    });
+    mockObjectTags.mockReturnValue({ data: { tags: [], total: 0 } });
+    render(<S3Page />, { wrapper: createWrapper() });
+    await waitFor(() =>
+      expect(screen.getByAltText("dir/")).toBeTruthy(),
+    );
+  });
+
+  it("enters tag editing with no existing tags", async () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("?bucket=my-bucket&object=file.bin"), vi.fn()]);
+    mockObjectDetail.mockReturnValue({
+      data: { size: 10, contentType: "application/octet-stream", lastModified: "2024-01-01", etag: "abc" },
+      isLoading: false, isError: false, error: null,
+    });
+    mockObjectTags.mockReturnValue({ data: { total: 0 } });
+    const user = userEvent.setup();
+    render(<S3Page />, { wrapper: createWrapper() });
+    await waitFor(() =>
+      expect(screen.getByText("No tags set on this object.")).toBeTruthy(),
+    );
+    await clickButton(user, /Edit tags/i);
+    await waitFor(() =>
+      expect(screen.queryAllByPlaceholderText("Key")).toHaveLength(0),
+    );
+  });
+
+  it("edits a tag key without touching the other tags", async () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("?bucket=my-bucket&object=file.bin"), vi.fn()]);
+    mockObjectDetail.mockReturnValue({
+      data: { size: 10, contentType: "application/octet-stream", lastModified: "2024-01-01", etag: "abc" },
+      isLoading: false, isError: false, error: null,
+    });
+    mockObjectTags.mockReturnValue({
+      data: { tags: [{ Key: "env", Value: "prod" }, { Key: "team", Value: "core" }], total: 2 },
+    });
+    const user = userEvent.setup();
+    render(<S3Page />, { wrapper: createWrapper() });
+    await clickButton(user, /Edit tags/i);
+    const keyInputs = screen.getAllByPlaceholderText("Key");
+    await user.type(keyInputs[0], "2");
+    await clickButton(user, /Save tags/i);
+    await waitFor(() => expect(mockUpdateObjectTags).toHaveBeenCalled());
+    expect(mockUpdateObjectTags.mock.calls[0][0]).toEqual([
+      { Key: "env2", Value: "prod" },
+      { Key: "team", Value: "core" },
+    ]);
+  });
+
+  it("renders the ACL container when the ACL data is null", () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("?bucket=my-bucket&object=file.bin"), vi.fn()]);
+    mockObjectDetail.mockReturnValue({
+      data: { size: 10, contentType: "application/octet-stream", lastModified: "2024-01-01", etag: "abc" },
+      isLoading: false, isError: false, error: null,
+    });
+    mockObjectTags.mockReturnValue({ data: { tags: [], total: 0 } });
+    mockObjectAclData = null;
+    render(<S3Page />, { wrapper: createWrapper() });
+    expect(screen.getByText("Object ACL")).toBeTruthy();
+    expect(
+      screen.getByText("No grants configured for this object."),
+    ).toBeTruthy();
+  });
+
+  it("shows a spinner while checksum attributes are loading", () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("?bucket=my-bucket&object=file.bin"), vi.fn()]);
+    mockObjectDetail.mockReturnValue({
+      data: { size: 10, contentType: "application/octet-stream", lastModified: "2024-01-01", etag: "abc" },
+      isLoading: false, isError: false, error: null,
+    });
+    mockObjectTags.mockReturnValue({ data: { tags: [], total: 0 } });
+    mockObjectAttributesData = null;
+    mockObjectAttributesIsLoading = true;
+    const { container } = render(<S3Page />, { wrapper: createWrapper() });
+    expect(screen.getByText(/Checksums/)).toBeTruthy();
+    expect(container.querySelectorAll("svg").length).toBeGreaterThan(0);
+  });
+
+  it("keeps a custom SQL expression when toggling the input type", async () => {
+    mockSearchParams.mockReturnValue([new URLSearchParams("bucket=my-bucket"), vi.fn()]);
+    mockObjects.mockReturnValue({ data: { objects: [], total: 0 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<S3Page />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /S3 Select/i }));
+    const textarea = screen.getByPlaceholderText("SELECT * FROM S3Object LIMIT 10") as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "SELECT * FROM S3Object LIMIT 5" } });
+    const jsonBtns = screen.getAllByRole("button", { name: /^JSON$/i });
+    await user.click(jsonBtns[0]);
+    await waitFor(() =>
+      expect(textarea.value).toBe("SELECT * FROM S3Object LIMIT 5"),
+    );
+  });
+
+  it("shows the query failed fallback when the select error has no message", async () => {
+    mockS3SelectIsError = true;
+    mockS3SelectError = new Error();
+    mockSearchParams.mockReturnValue([new URLSearchParams("bucket=my-bucket"), vi.fn()]);
+    const user = userEvent.setup();
+    render(<S3Page />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /S3 Select/i }));
+    await waitFor(() => expect(screen.getByText("Run query")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("data.csv"), "test.csv");
+    await clickButton(user, /Run query/i);
+    await waitFor(() =>
+      expect(screen.getByText("Query failed")).toBeTruthy(),
+    );
   });
 });

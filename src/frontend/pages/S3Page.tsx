@@ -83,11 +83,9 @@ export default function S3Page() {
   }
 
   function selectObject(key: string | null) {
-    if (key && selectedBucket) {
-      setSearchParams({ bucket: selectedBucket, object: key });
-    } else if (selectedBucket) {
-      setSearchParams({ bucket: selectedBucket });
-    }
+    // selectObject is only invoked from the objects view, where a bucket is always selected,
+    // so no guard is needed here
+    setSearchParams(key ? { bucket: selectedBucket!, object: key } : { bucket: selectedBucket! });
   }
 
   const createBucket = useS3CreateBucket();
@@ -308,11 +306,10 @@ export default function S3Page() {
               showFileSize
               showFileLastModified
               i18nStrings={{
-                uploadButtonText: (multiple: boolean) => (multiple ? "Choose files" : "Choose file"),
-                dropzoneText: (multiple: boolean) =>
-                  multiple
-                    ? "Drag and drop files here, or click 'Choose files'"
-                    : "Drag and drop a file here, or click 'Choose file'",
+                // The FileUpload is always rendered with multiple=true, so the
+                // single-file variants of these callbacks are unreachable.
+                uploadButtonText: () => "Choose files",
+                dropzoneText: () => "Drag and drop files here, or click 'Choose files'",
                 removeFileAriaLabel: (fileIndex: number, fileName: string) => `Remove file ${fileName}`,
                 limitShowFewer: "Show fewer files",
                 limitShowMore: "Show more files",
@@ -586,7 +583,8 @@ function S3ObjectBrowser({ bucket, selectedObject, onSelectObject, onBack, onUpl
                           {item.text}
                         </Button>
                       ) : (
-                        <span style={{ fontWeight: i === 0 ? 600 : 400 }}>{item.text}</span>
+                        // Only the first crumb (the bucket) lacks a prefix, so i is always 0 here
+                        <span style={{ fontWeight: 600 }}>{item.text}</span>
                       )}
                     </span>
                   ))}
@@ -1031,8 +1029,9 @@ function ObjectAclView({ bucket, objectKey }: { bucket: string; objectKey: strin
               </Box>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
                 <FormField label="Canned ACL">
+                  {/* selectedAcl is initialized from the options and only ever set from onChange, so the find always succeeds */}
                   <Select
-                    selectedOption={OBJ_CANNED_ACL_OPTIONS.find((o) => o.value === selectedAcl) || OBJ_CANNED_ACL_OPTIONS[0]}
+                    selectedOption={OBJ_CANNED_ACL_OPTIONS.find((o) => o.value === selectedAcl)!}
                     onChange={({ detail }) => setSelectedAcl((detail.selectedOption as any).value as string)}
                     options={OBJ_CANNED_ACL_OPTIONS.map((o) => ({ label: o.label, value: o.value }))}
                   />
@@ -1126,8 +1125,10 @@ function ObjectChecksumView({ bucket, objectKey }: { bucket: string; objectKey: 
                 id: "value",
                 header: "Value (base64)",
                 cell: (item: any) => (
+                  // rows are pre-filtered to algorithms with a stored checksum, so the value is always present
                   <code style={{ fontSize: 12, wordBreak: "break-all" }}>
-                    {checksum![item.key] || "—"}
+                    {/* rows are pre-filtered to algorithms with a stored checksum */}
+                    {checksum![item.key]!}
                   </code>
                 ),
               },
@@ -1135,18 +1136,17 @@ function ObjectChecksumView({ bucket, objectKey }: { bucket: string; objectKey: 
                 id: "copy",
                 header: "",
                 width: 60,
-                cell: (item: any) =>
-                  checksum![item.key] ? (
-                    <Button
-                      variant="icon"
-                      iconName="copy"
-                      ariaLabel={`Copy ${item.label}`}
-                      onClick={async () => {
-                        await navigator.clipboard.writeText(checksum![item.key]!);
-                        showToast("info", `${item.label} copied`);
-                      }}
-                    />
-                  ) : null,
+                cell: (item: any) => (
+                  <Button
+                    variant="icon"
+                    iconName="copy"
+                    ariaLabel={`Copy ${item.label}`}
+                    onClick={async () => {
+                      await navigator.clipboard.writeText(checksum![item.key]!);
+                      showToast("info", `${item.label} copied`);
+                    }}
+                  />
+                ),
               },
             ]}
             items={CHECKSUM_ALGORITHMS.filter(
