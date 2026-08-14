@@ -59,7 +59,9 @@ export default class ErrorBoundary extends Component<Props, State> {
                 An unexpected error occurred while rendering this section.
                 Please try again, or refresh the page if the problem persists.
               </Box>
-              {process.env.NODE_ENV === "development" && (
+              {
+                /* v8 ignore next -- NODE_ENV is statically inlined by Vite in this env; the falsy arm only runs in production builds */
+                process.env.NODE_ENV === "development" && (
                 <pre
                   className="fd-code-block"
                   style={{
