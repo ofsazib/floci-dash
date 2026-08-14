@@ -51,6 +51,16 @@ const hoisted = vi.hoisted(() => ({
   jobDetailsError: null as Error | null,
   ruleExecutionsData: { ruleExecutionDetails: [] as any[], total: 0 },
   ruleExecutionsIsLoading: false,
+  createPipelineIsError: false,
+  createPipelineError: null as Error | null,
+  deletePipelineIsPending: false,
+  deletePipelineVariables: null as string | null,
+  createWebhookIsError: false,
+  createWebhookError: null as Error | null,
+  deleteWebhookIsPending: false,
+  deleteWebhookVariables: null as string | null,
+  createActionTypeIsError: false,
+  createActionTypeError: null as Error | null,
 }));
 
 vi.mock("../../hooks/useCodePipeline", () => ({
@@ -58,14 +68,14 @@ vi.mock("../../hooks/useCodePipeline", () => ({
   useCreatePipeline: () => ({
     mutate: mockCreatePipeline,
     isPending: false,
-    isError: false,
-    error: null,
+    get isError() { return hoisted.createPipelineIsError; },
+    get error() { return hoisted.createPipelineError; },
     reset: vi.fn(),
   }),
   useDeletePipeline: () => ({
     mutateAsync: mockDeletePipeline,
-    isPending: false,
-    variables: null,
+    get isPending() { return hoisted.deletePipelineIsPending; },
+    get variables() { return hoisted.deletePipelineVariables; },
   }),
   usePipelineState: (...args: any[]) => mockPipelineState(...args),
   usePipelineExecutions: (...args: any[]) => mockPipelineExecutions(...args),
@@ -88,21 +98,21 @@ vi.mock("../../hooks/useCodePipeline", () => ({
   useCreateWebhook: () => ({
     mutate: mockCreateWebhook,
     isPending: false,
-    isError: false,
-    error: null,
+    get isError() { return hoisted.createWebhookIsError; },
+    get error() { return hoisted.createWebhookError; },
     reset: vi.fn(),
   }),
   useDeleteWebhook: () => ({
     mutateAsync: mockDeleteWebhook,
-    isPending: false,
-    variables: null,
+    get isPending() { return hoisted.deleteWebhookIsPending; },
+    get variables() { return hoisted.deleteWebhookVariables; },
   }),
   useActionTypes: (...args: any[]) => mockActionTypes(...args),
   useCreateCustomActionType: () => ({
     mutate: mockCreateActionType,
     isPending: false,
-    isError: false,
-    error: null,
+    get isError() { return hoisted.createActionTypeIsError; },
+    get error() { return hoisted.createActionTypeError; },
     reset: vi.fn(),
   }),
   useDeleteCustomActionType: () => ({
@@ -214,6 +224,16 @@ beforeEach(() => {
   hoisted.jobDetailsError = null;
   hoisted.ruleExecutionsData = { ruleExecutionDetails: [], total: 0 };
   hoisted.ruleExecutionsIsLoading = false;
+  hoisted.createPipelineIsError = false;
+  hoisted.createPipelineError = null;
+  hoisted.deletePipelineIsPending = false;
+  hoisted.deletePipelineVariables = null;
+  hoisted.createWebhookIsError = false;
+  hoisted.createWebhookError = null;
+  hoisted.deleteWebhookIsPending = false;
+  hoisted.deleteWebhookVariables = null;
+  hoisted.createActionTypeIsError = false;
+  hoisted.createActionTypeError = null;
 
   mockPipelines.mockReturnValue({
     data: { pipelines: [], total: 0 },
@@ -1556,5 +1576,232 @@ describe("CodePipelineDashboard — modal onDismiss, Cancel, and onSuccess compl
     await waitFor(() => expect(screen.getByText(/Job Detail:/)).toBeTruthy());
     dismissModalWithEscape();
     await waitFor(() => expect(dialogOf(/Job Detail:/).className).toContain("hidden"));
+  });
+});
+
+describe("CodePipelineDashboard — branch coverage: loading + error states", () => {
+  it("shows delete loading state for a pipeline", () => {
+    hoisted.deletePipelineIsPending = true;
+    hoisted.deletePipelineVariables = "my-pipe";
+    mockPipelines.mockReturnValue({
+      data: { pipelines: [{ name: "my-pipe", version: 1 }], total: 1 },
+      isLoading: false,
+    });
+    render(<CodePipelineDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("my-pipe")).toBeTruthy();
+    expect(screen.getByLabelText("Delete my-pipe")).toBeDisabled();
+  });
+
+  it("shows delete loading state for a webhook", async () => {
+    const user = userEvent.setup();
+    hoisted.deleteWebhookIsPending = true;
+    hoisted.deleteWebhookVariables = "my-hook";
+    mockWebhooks.mockReturnValue({
+      data: {
+        webhooks: [{ definition: { name: "my-hook", targetPipeline: "my-pipe", targetAction: "Source" }, url: "https://example.com/hook" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<CodePipelineDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /webhooks/i }));
+    await waitFor(() => expect(screen.getByText("my-hook")).toBeTruthy());
+    expect(screen.getByLabelText("Delete my-hook")).toBeDisabled();
+  });
+
+  it("shows register loading state for a webhook", async () => {
+    const user = userEvent.setup();
+    hoisted.registerIsPending = true;
+    hoisted.registerVariables = "my-hook";
+    mockWebhooks.mockReturnValue({
+      data: {
+        webhooks: [{ definition: { name: "my-hook", targetPipeline: "my-pipe", targetAction: "Source" }, url: "https://example.com/hook" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<CodePipelineDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /webhooks/i }));
+    await waitFor(() => expect(screen.getByText("my-hook")).toBeTruthy());
+    expect(screen.getByRole("button", { name: "Register webhook" })).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("shows deregister loading state for a webhook", async () => {
+    const user = userEvent.setup();
+    hoisted.deregisterIsPending = true;
+    hoisted.deregisterVariables = "my-hook";
+    mockWebhooks.mockReturnValue({
+      data: {
+        webhooks: [{ definition: { name: "my-hook", targetPipeline: "my-pipe", targetAction: "Source" }, url: "https://example.com/hook" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<CodePipelineDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /webhooks/i }));
+    await waitFor(() => expect(screen.getByText("my-hook")).toBeTruthy());
+    expect(screen.getByRole("button", { name: "Deregister webhook" })).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("shows delete loading state for an action type", async () => {
+    const user = userEvent.setup();
+    hoisted.deleteActionTypeIsPending = true;
+    hoisted.deleteActionTypeVariables = { owner: "AWS", category: "Build", provider: "CodeBuild", version: "1" };
+    mockActionTypes.mockReturnValue({
+      data: {
+        actionTypes: [{ id: { category: "Build", owner: "AWS", provider: "CodeBuild", version: "1" } }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<CodePipelineDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /action types/i }));
+    await waitFor(() => expect(screen.getByText("CodeBuild")).toBeTruthy());
+    expect(screen.getByRole("button", { name: "Delete action type CodeBuild" })).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("shows error alert in create pipeline modal", async () => {
+    const user = userEvent.setup();
+    hoisted.createPipelineIsError = true;
+    hoisted.createPipelineError = new Error("Pipeline creation failed");
+    render(<CodePipelineDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Pipeline creation failed")).toBeTruthy());
+  });
+
+  it("shows default error when create pipeline error has no message", async () => {
+    const user = userEvent.setup();
+    hoisted.createPipelineIsError = true;
+    hoisted.createPipelineError = new Error();
+    render(<CodePipelineDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Failed to create pipeline")).toBeTruthy());
+  });
+
+  it("shows error alert in create webhook modal", async () => {
+    const user = userEvent.setup();
+    hoisted.createWebhookIsError = true;
+    hoisted.createWebhookError = new Error("Webhook creation failed");
+    render(<CodePipelineDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /webhooks/i }));
+    await waitFor(() => expect(screen.getByText("No webhooks found")).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Webhook creation failed")).toBeTruthy());
+  });
+
+  it("shows default error when create webhook error has no message", async () => {
+    const user = userEvent.setup();
+    hoisted.createWebhookIsError = true;
+    hoisted.createWebhookError = new Error();
+    render(<CodePipelineDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /webhooks/i }));
+    await waitFor(() => expect(screen.getByText("No webhooks found")).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Failed to create webhook")).toBeTruthy());
+  });
+
+  it("shows error alert in create action type modal", async () => {
+    const user = userEvent.setup();
+    hoisted.createActionTypeIsError = true;
+    hoisted.createActionTypeError = new Error("Action type creation failed");
+    render(<CodePipelineDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /action types/i }));
+    await waitFor(() => expect(screen.getByText("No action types found")).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Action type creation failed")).toBeTruthy());
+  });
+
+  it("shows default error when create action type error has no message", async () => {
+    const user = userEvent.setup();
+    hoisted.createActionTypeIsError = true;
+    hoisted.createActionTypeError = new Error();
+    render(<CodePipelineDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /action types/i }));
+    await waitFor(() => expect(screen.getByText("No action types found")).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Failed to create action type")).toBeTruthy());
+  });
+});
+
+describe("CodePipelineDashboard — branch coverage: sparse data", () => {
+  it("renders executions table when executions data is missing", async () => {
+    const user = userEvent.setup();
+    mockPipelines.mockReturnValue({
+      data: { pipelines: [{ name: "my-pipe", version: 1 }], total: 1 },
+      isLoading: false,
+    });
+    mockPipelineState.mockReturnValue({
+      data: { state: { pipelineVersion: 1, stageStates: [] } },
+      isLoading: false,
+    });
+    mockPipelineExecutions.mockReturnValue({ data: { total: 0 }, isLoading: false });
+    render(<CodePipelineDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /my-pipe/i);
+    await waitFor(() => expect(screen.getByText(/Pipeline: my-pipe/)).toBeTruthy());
+    expect(screen.getByText("No executions yet")).toBeTruthy();
+  });
+
+  it("renders empty rule executions when details are missing", async () => {
+    const user = userEvent.setup();
+    mockPipelines.mockReturnValue({
+      data: { pipelines: [{ name: "my-pipe", version: 1 }], total: 1 },
+      isLoading: false,
+    });
+    mockPipelineState.mockReturnValue({
+      data: { state: { pipelineVersion: 1, stageStates: [] } },
+      isLoading: false,
+    });
+    hoisted.ruleExecutionsData = { total: 0 } as any;
+    render(<CodePipelineDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /my-pipe/i);
+    await waitFor(() => expect(screen.getByText(/Pipeline: my-pipe/)).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /Rules/ }));
+    await waitFor(() => expect(screen.getByText("No rule executions for this pipeline")).toBeTruthy());
+  });
+
+  it("renders fallback dashes for sparse poll jobs", async () => {
+    const user = userEvent.setup();
+    hoisted.pollMutateAsync.mockResolvedValue({ jobs: [{ data: { action: "build" } }] });
+    render(<CodePipelineDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Jobs/i }));
+    await waitFor(() => expect(screen.getByText(/Poll for jobs/)).toBeTruthy());
+    await clickButton(user, /Poll for jobs/i);
+    await waitFor(() => expect(screen.getByText(/Poll for Jobs/)).toBeTruthy());
+    const providerInput = screen.getByPlaceholderText("MyCustomProvider");
+    await user.type(providerInput, "MyProvider");
+    await clickButton(user, /^Poll$/i, { last: true });
+    await waitFor(() => expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2));
+  });
+
+  it("shows no jobs found when poll returns no jobs key", async () => {
+    const user = userEvent.setup();
+    hoisted.pollMutateAsync.mockResolvedValue({});
+    render(<CodePipelineDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Jobs/i }));
+    await waitFor(() => expect(screen.getByText(/Poll for jobs/)).toBeTruthy());
+    await clickButton(user, /Poll for jobs/i);
+    await waitFor(() => expect(screen.getByText(/Poll for Jobs/)).toBeTruthy());
+    const providerInput = screen.getByPlaceholderText("MyCustomProvider");
+    await user.type(providerInput, "MyProvider");
+    await clickButton(user, /^Poll$/i, { last: true });
+    await waitFor(() => expect(screen.getByText(/No jobs found/)).toBeTruthy());
+  });
+
+  it("job detail renders dashes for sparse details", async () => {
+    const user = userEvent.setup();
+    hoisted.pollMutateAsync.mockResolvedValue({ jobs: [{ id: "job-1", accountId: "123" }] });
+    hoisted.jobDetailsData = { jobDetails: {} };
+    render(<CodePipelineDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Jobs/i }));
+    await waitFor(() => expect(screen.getByText(/Poll for jobs/)).toBeTruthy());
+    await clickButton(user, /Poll for jobs/i);
+    await waitFor(() => expect(screen.getByText(/Poll for Jobs/)).toBeTruthy());
+    const providerInput = screen.getByPlaceholderText("MyCustomProvider");
+    await user.type(providerInput, "MyProvider");
+    await clickButton(user, /^Poll$/i, { last: true });
+    await waitFor(() => expect(screen.getAllByText("job-1").length).toBeGreaterThan(0));
+    await clickButton(user, /Details/i);
+    await waitFor(() => expect(screen.getByText(/Job Detail:/)).toBeTruthy());
+    await waitFor(() => expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2));
   });
 });

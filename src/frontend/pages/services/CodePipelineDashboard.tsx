@@ -311,7 +311,7 @@ export function CodePipelineDashboard() {
                         emptyMessage="No executions yet"
                         filterEnabled
                         filterPlaceholder="Find by execution ID"
-                        filterFunction={(i: any, s: string) => (i.id || "").toLowerCase().includes(s.toLowerCase())}
+                        filterFunction={(i: any, s: string) => i.id.toLowerCase().includes(s.toLowerCase())}
                       />
                     </Box>
                   </Container>
@@ -684,7 +684,7 @@ export function CodePipelineDashboard() {
                     <FormField label="Category">
                       <Select
                         selectedOption={{ label: actionTypeCat, value: actionTypeCat }}
-                        onChange={({ detail }) => setActionTypeCat(detail.selectedOption.value || "Build")}
+                        onChange={({ detail }) => setActionTypeCat(detail.selectedOption.value!)}
                         options={[
                           { label: "Source", value: "Source" },
                           { label: "Build", value: "Build" },
@@ -714,17 +714,15 @@ export function CodePipelineDashboard() {
                         variant="primary"
                         loading={deleteActionType.isPending}
                         onClick={() => {
-                          if (deleteActionTypeTarget) {
-                            deleteActionType.mutate(
-                              {
-                                owner: deleteActionTypeTarget.owner,
-                                category: deleteActionTypeTarget.category,
-                                provider: deleteActionTypeTarget.provider,
-                                version: deleteActionTypeTarget.version,
-                              },
-                              { onSuccess: () => { setShowDeleteActionType(false); setDeleteActionTypeTarget(null); } }
-                            );
-                          }
+                          deleteActionType.mutate(
+                            {
+                              owner: deleteActionTypeTarget!.owner,
+                              category: deleteActionTypeTarget!.category,
+                              provider: deleteActionTypeTarget!.provider,
+                              version: deleteActionTypeTarget!.version,
+                            },
+                            { onSuccess: () => { setShowDeleteActionType(false); setDeleteActionTypeTarget(null); } }
+                          );
                         }}
                       >
                         Delete
@@ -861,7 +859,7 @@ export function CodePipelineDashboard() {
                     <FormField label="Action category">
                       <Select
                         selectedOption={{ label: pollCat, value: pollCat }}
-                        onChange={({ detail }) => setPollCat(detail.selectedOption.value || "Build")}
+                        onChange={({ detail }) => setPollCat(detail.selectedOption.value!)}
                         options={[
                           { label: "Source", value: "Source" },
                           { label: "Build", value: "Build" },
