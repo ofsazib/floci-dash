@@ -39,22 +39,25 @@ describe("ServiceCard", () => {
     expect(mockNavigate).toHaveBeenCalledWith("/services/s3");
   });
 
-  it("navigates to service on Enter key", async () => {
-    const user = userEvent.setup();
+  it("navigates to service on Enter key", () => {
     render(<ServiceCard serviceKey="ec2" status="available" />);
     const card = screen.getByRole("button", { name: /open ec2/i });
-    card.focus();
-    await user.keyboard("{Enter}");
+    fireEvent.keyDown(card, { key: "Enter" });
     expect(mockNavigate).toHaveBeenCalledWith("/services/ec2");
   });
 
-  it("navigates to service on Space key", async () => {
-    const user = userEvent.setup();
+  it("navigates to service on Space key", () => {
     render(<ServiceCard serviceKey="lambda" status="running" />);
     const card = screen.getByRole("button", { name: /open lambda/i });
-    card.focus();
-    await user.keyboard(" ");
+    fireEvent.keyDown(card, { key: " " });
     expect(mockNavigate).toHaveBeenCalledWith("/services/lambda");
+  });
+
+  it("does not navigate on other keys", () => {
+    render(<ServiceCard serviceKey="ec2" status="running" />);
+    const card = screen.getByRole("button", { name: /open ec2/i });
+    fireEvent.keyDown(card, { key: "Tab" });
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 
   it("toggles favorite when star is clicked", async () => {
@@ -108,23 +111,35 @@ describe("ServiceCard", () => {
     expect(starBtn.style.opacity).toBe("0.4");
   });
 
-  it("toggles favorite on star Enter keypress", async () => {
-    const user = userEvent.setup();
+  it("toggles favorite on star Enter keypress", () => {
     render(<ServiceCard serviceKey="s3" status="running" />);
     const starBtn = screen.getByRole("button", { name: /add s3 to favorites/i });
-    starBtn.focus();
-    await user.keyboard("{Enter}");
+    fireEvent.keyDown(starBtn, { key: "Enter" });
     expect(mockToggleFavorite).toHaveBeenCalledWith("s3");
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
-  it("toggles favorite on star Space keypress", async () => {
-    const user = userEvent.setup();
+  it("toggles favorite on star Space keypress", () => {
     render(<ServiceCard serviceKey="s3" status="running" />);
     const starBtn = screen.getByRole("button", { name: /add s3 to favorites/i });
-    starBtn.focus();
-    await user.keyboard(" ");
+    fireEvent.keyDown(starBtn, { key: " " });
     expect(mockToggleFavorite).toHaveBeenCalledWith("s3");
     expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it("does not toggle favorite on other keys", () => {
+    render(<ServiceCard serviceKey="s3" status="running" />);
+    const starBtn = screen.getByRole("button", { name: /add s3 to favorites/i });
+    fireEvent.keyDown(starBtn, { key: "Tab" });
+    expect(mockToggleFavorite).not.toHaveBeenCalled();
+  });
+
+  it("keeps star opacity at 1 on mouse leave when favorite", () => {
+    mockIsFavorite.mockReturnValue(true);
+    render(<ServiceCard serviceKey="s3" status="running" />);
+    const starBtn = screen.getByRole("button", { name: /remove s3 from favorites/i });
+    fireEvent.mouseEnter(starBtn);
+    fireEvent.mouseLeave(starBtn);
+    expect(starBtn.style.opacity).toBe("1");
   });
 });
