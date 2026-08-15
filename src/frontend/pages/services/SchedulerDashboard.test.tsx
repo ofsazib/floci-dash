@@ -1123,3 +1123,79 @@ describe("SchedulerDashboard — modal completions", () => {
     await waitFor(() => expectModalHidden("Create schedule"));
   });
 });
+
+describe("SchedulerDashboard — sparse fixture arms", () => {
+  it("filters groups when a group has no name", async () => {
+    mockGroups.mockReturnValue({
+      data: {
+        groups: [
+          { State: "ACTIVE" },
+          { Name: "beta", State: "ACTIVE" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<SchedulerDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("beta")).toBeTruthy());
+    const filterInput = screen.getByPlaceholderText("Find groups by name");
+    await user.type(filterInput, "beta");
+    await waitFor(() => expect(screen.queryByText("beta")).toBeTruthy());
+  });
+
+  it("filters schedules when a schedule has no name", async () => {
+    mockGroups.mockReturnValue({
+      data: { groups: [{ Name: "my-group", State: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    mockSchedules.mockReturnValue({
+      data: {
+        schedules: [
+          { ScheduleExpression: "rate(1 min)" },
+          { Name: "beta-schedule", ScheduleExpression: "rate(5 min)" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<SchedulerDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-group")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-group" }));
+    await waitFor(() => expect(screen.getByText("beta-schedule")).toBeTruthy());
+    const filterInput = screen.getByPlaceholderText("Find schedules by name");
+    await user.type(filterInput, "beta");
+    await waitFor(() => expect(screen.queryByText("beta-schedule")).toBeTruthy());
+  });
+
+  it("edits a schedule without a ScheduleExpression", async () => {
+    mockGroups.mockReturnValue({
+      data: { groups: [{ Name: "my-group", State: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    mockSchedules.mockReturnValue({
+      data: {
+        schedules: [
+          {
+            Name: "edit-me",
+            State: "ENABLED",
+            Target: { Arn: "arn:aws:lambda:us-east-1:123:function:my-fn" },
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<SchedulerDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-group")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "my-group" }));
+    await waitFor(() => expect(screen.getByText("edit-me")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Edit edit-me/i }));
+    await waitFor(() => expect(screen.getByText(/Edit schedule: edit-me/)).toBeTruthy());
+    const editDialog = dialogOf("Edit schedule: edit-me");
+    // First textbox inside the edit dialog is the expression input (no placeholder on edit)
+    expect(within(editDialog).getAllByRole("textbox")[0]).toHaveProperty("value", "");
+  });
+});

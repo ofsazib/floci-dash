@@ -876,21 +876,19 @@ export function CognitoDashboard() {
                           deleteUserAttributes.isPending
                         }
                         disabled={
-                          activeAuthFlowType === "initiate" || activeAuthFlowType === "admin-initiate"
-                            ? !authFlowClientId || !authFlowUsername || !authFlowPassword
-                            : activeAuthFlowType === "confirm-sign-up"
-                              ? !authFlowClientId || !authFlowUsername || !authFlowConfirmationCode
-                              : activeAuthFlowType === "admin-respond-challenge"
-                                ? !authFlowClientId || !authFlowChallengeName
-                                : activeAuthFlowType === "forgot-password"
-                                  ? !authFlowClientId || !authFlowUsername
-                                  : activeAuthFlowType === "confirm-forgot-password"
-                                    ? !authFlowClientId || !authFlowUsername || !authFlowConfirmationCode || !authFlowPassword
-                                    : activeAuthFlowType === "get-user" || activeAuthFlowType === "delete-user-attributes"
-                                      ? !authFlowAccessToken
-                                      : activeAuthFlowType === "update-user-attributes"
-                                        ? !authFlowAccessToken || !authFlowUserAttributes
-                                        : true
+                          // The flow-operation Select offers exactly these nine types — the object
+                          // lookup below covers every one, so no fallback arm exists.
+                          ({
+                            initiate: !authFlowClientId || !authFlowUsername || !authFlowPassword,
+                            "admin-initiate": !authFlowClientId || !authFlowUsername || !authFlowPassword,
+                            "confirm-sign-up": !authFlowClientId || !authFlowUsername || !authFlowConfirmationCode,
+                            "admin-respond-challenge": !authFlowClientId || !authFlowChallengeName,
+                            "forgot-password": !authFlowClientId || !authFlowUsername,
+                            "confirm-forgot-password": !authFlowClientId || !authFlowUsername || !authFlowConfirmationCode || !authFlowPassword,
+                            "get-user": !authFlowAccessToken,
+                            "delete-user-attributes": !authFlowAccessToken,
+                            "update-user-attributes": !authFlowAccessToken || !authFlowUserAttributes,
+                          } as Record<string, boolean>)[activeAuthFlowType]
                         }
                         onClick={async () => {
                           setAuthFlowResult(null);
@@ -947,7 +945,8 @@ export function CognitoDashboard() {
                                 accessToken: authFlowAccessToken,
                                 userAttributes,
                               });
-                            } else if (activeAuthFlowType === "delete-user-attributes") {
+                            } else {
+                              // delete-user-attributes — the only flow type left unhandled above
                               const userAttributeNames = authFlowUserAttributes
                                 .split(/[,\n]+/)
                                 .map((s: string) => s.trim())
@@ -1014,7 +1013,7 @@ export function CognitoDashboard() {
                       </Box>
                     ) : (
                       <SpaceBetween size="xs">
-                        {(resourceServersData.resourceServers || []).map((rs: any) => (
+                        {resourceServersData.resourceServers!.map((rs: any) => (
                           <Box key={rs.Identifier} padding={{ vertical: "xs" }}>
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                               <div>

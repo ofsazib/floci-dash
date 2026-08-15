@@ -1702,3 +1702,27 @@ describe("CognitoDashboard — undefined query data", () => {
     await waitFor(() => expectModalHidden("Add Custom Attributes"));
   });
 });
+
+describe("CognitoDashboard — sparse fixture arms", () => {
+  it("shows no user pools when the userPools key is absent", () => {
+    mockPools.mockReturnValue({ data: { total: 0 }, isLoading: false });
+    render(<CognitoDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No Cognito user pools/i)).toBeTruthy();
+  });
+
+  it("shows no resource servers when the resourceServers key is absent", async () => {
+    mockResourceServers.mockReturnValue({ total: 1 });
+    const user = userEvent.setup();
+    mockPools.mockReturnValue({
+      data: { userPools: [{ Id: "p1", Name: "pool", Status: "Enabled" }], total: 1 },
+      isLoading: false,
+    });
+    render(<CognitoDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("pool"));
+    await user.click(screen.getByText("pool"));
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => expect(screen.getByText("Resource Servers")).toBeTruthy());
+    expect(screen.getByText(/No resource servers found/i)).toBeTruthy();
+    mockResourceServers.mockReturnValue(null);
+  });
+});

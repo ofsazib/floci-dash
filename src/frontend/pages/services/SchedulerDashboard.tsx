@@ -892,7 +892,7 @@ function SchedulerGroupDetail({
               <Select
                 selectedOption={{ label: editForm.state, value: editForm.state }}
                 onChange={({ detail }) =>
-                  setEditForm((p) => ({ ...p, state: detail.selectedOption.value || "ENABLED" }))
+                  setEditForm((p) => ({ ...p, state: detail.selectedOption.value! }))
                 }
                 options={[
                   { label: "ENABLED", value: "ENABLED" },

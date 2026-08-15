@@ -520,7 +520,6 @@ export function BCMDashboard() {
   }));
 
   function handleCreate() {
-    if (!exportName.trim()) return;
     createExport.mutate(
       { Name: exportName.trim(), Export: {} },
       {

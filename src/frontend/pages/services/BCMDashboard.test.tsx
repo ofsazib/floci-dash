@@ -18,6 +18,11 @@ const createExportState = vi.hoisted(() => ({
   error: null as Error | null,
 }));
 
+const deleteExportState = vi.hoisted(() => ({
+  isPending: false,
+  variables: null as string | null,
+}));
+
 vi.mock("../../hooks/useBCMDataExports", () => ({
   useBCMExports: (...args: any[]) => mockExports(...args),
   useBCMTables: (...args: any[]) => mockTables(...args),
@@ -30,8 +35,8 @@ vi.mock("../../hooks/useBCMDataExports", () => ({
   }),
   useDeleteBCMExport: () => ({
     mutateAsync: mockDeleteExport,
-    isPending: false,
-    variables: null,
+    isPending: deleteExportState.isPending,
+    variables: deleteExportState.variables,
   }),
   useBCMExportExecutions: (...args: any[]) => mockExportExecutions(...args),
 }));
@@ -69,6 +74,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   createExportState.isError = false;
   createExportState.error = null;
+  deleteExportState.isPending = false;
+  deleteExportState.variables = null;
   mockExports.mockReturnValue({
     data: { exports: [], total: 0 },
     isLoading: false,
@@ -133,6 +140,58 @@ describe("BCMDashboard — exports list", () => {
     });
     render(<BCMDashboard />, { wrapper: createWrapper() });
     expect(screen.getByText("Access denied")).toBeTruthy();
+  });
+
+  it("shows fallback text when the error has no message", () => {
+    mockExports.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new Error(),
+    });
+    render(<BCMDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("Failed to load exports")).toBeTruthy();
+  });
+
+  it("shows delete loading state", () => {
+    deleteExportState.isPending = true;
+    deleteExportState.variables = "arn:aws:bcm-data-exports:us-east-1:123:export/loading-export";
+    mockExports.mockReturnValue({
+      data: {
+        exports: [
+          { ExportArn: "arn:aws:bcm-data-exports:us-east-1:123:export/loading-export", Name: "LoadingExport" },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<BCMDashboard />, { wrapper: createWrapper() });
+    const deleteBtn = screen.getByRole("button", {
+      name: /Delete arn:aws:bcm-data-exports:us-east-1:123:export\/loading-export/i,
+    });
+    expect(deleteBtn).toBeDisabled();
+  });
+
+  it("filters exports when an item has no name", async () => {
+    mockExports.mockReturnValue({
+      data: {
+        exports: [
+          { ExportArn: "arn:aws:bcm-data-exports:us-east-1:123:export/unnamed" },
+          { ExportArn: "arn:aws:bcm-data-exports:us-east-1:123:export/named", Name: "beta-export" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<BCMDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("beta-export")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("Find exports by name"), "beta");
+    await waitFor(() => expect(screen.queryByText("beta-export")).toBeTruthy());
   });
 
   it("opens create export modal and submits", async () => {
