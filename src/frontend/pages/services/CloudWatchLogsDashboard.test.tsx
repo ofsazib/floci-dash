@@ -1081,6 +1081,33 @@ describe("CloudWatchLogsDashboard", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: /Auto-scroll OFF/i })).toBeTruthy());
   });
 
+  it("keeps auto-scroll on when scrolled while at the bottom", async () => {
+    mockLogGroups.mockReturnValue({
+      data: { logGroups: [{ logGroupName: "/aws/lambda/test" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockLogStreams.mockReturnValue({
+      data: { logStreams: [{ logStreamName: "my-stream", storedBytes: 512 }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockLogEvents.mockReturnValue({
+      data: { events: [{ eventId: "e1", timestamp: 1705000000000, message: "Hello" }] },
+      isLoading: false, isError: false, error: null, refetch: vi.fn(),
+    });
+    const user = userEvent.setup();
+    const { container } = render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("/aws/lambda/test"));
+    await user.click(screen.getByText("/aws/lambda/test"));
+    await waitFor(() => expect(screen.getByText("my-stream")).toBeTruthy());
+    await user.click(screen.getByText("my-stream"));
+    await waitFor(() => expect(screen.getByText("Hello")).toBeTruthy());
+    const scrollDiv = container.querySelector('[style*="overflow-y"]') as HTMLElement;
+    // Default happy-dom metrics (scrollHeight/scrollTop/clientHeight all 0) mean the
+    // scroll position is at the bottom (0 - 0 - 0 < 50), so auto-scroll stays on.
+    fireEvent.scroll(scrollDiv);
+    await waitFor(() => expect(screen.getByRole("button", { name: /Auto-scroll ON/i })).toBeTruthy());
+  });
+
   it("refreshes events via the refresh button", async () => {
     const mockRefetch = vi.fn();
     mockLogGroups.mockReturnValue({

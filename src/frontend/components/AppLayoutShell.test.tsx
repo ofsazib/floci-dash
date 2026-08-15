@@ -900,6 +900,37 @@ describe("AppLayoutShell — global search select", () => {
     await user.click(option);
     expect(mockNavigate).toHaveBeenCalledWith("/services/redshift");
   });
+
+  it("does not navigate when a non-service value is selected", async () => {
+    mockNavigate.mockClear();
+    const user = userEvent.setup();
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    await user.type(screen.getAllByPlaceholderText(/Search services/)[1], "zzz");
+    const option = await screen.findByRole("option", { name: /Search for "zzz"/i });
+    await user.click(option);
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it("does not navigate when selecting with no health services", async () => {
+    mockNavigate.mockClear();
+    (useHealth as any).mockReturnValue({ data: { stats: { running: 0, total: 0 } } });
+    const user = userEvent.setup();
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    await user.type(screen.getAllByPlaceholderText(/Search services/)[1], "zzz");
+    const option = await screen.findByRole("option", { name: /Search for "zzz"/i });
+    await user.click(option);
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
 });
 
 describe("AppLayoutShell — search without health data", () => {
@@ -914,6 +945,21 @@ describe("AppLayoutShell — search without health data", () => {
     );
     await user.type(screen.getByPlaceholderText(/^Find services/), "s3");
     expect(screen.getByText("No matches")).toBeTruthy();
+  });
+
+  it("builds empty search options when health has no services", async () => {
+    (useHealth as any).mockReturnValue({ data: { stats: { running: 0, total: 0 } } });
+    const user = userEvent.setup();
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    // The search still renders with no options; typing produces no service match
+    await user.type(screen.getAllByPlaceholderText(/Search services/)[1], "s3");
+    expect(screen.getByRole("combobox")).toBeTruthy();
+    expect(screen.getAllByPlaceholderText(/Search services/).length).toBeGreaterThan(0);
   });
 });
 

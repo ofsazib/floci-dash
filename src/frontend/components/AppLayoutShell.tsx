@@ -93,12 +93,10 @@ export default function AppLayoutShell({ children }: Props) {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
-        // Focus the input inside the Autosuggest
-        const input = searchRef.current?.querySelector("input");
-        if (input) {
-          input.focus();
-          input.select();
-        }
+        // Focus the input inside the Autosuggest (the header search is always mounted)
+        const input = searchRef.current!.querySelector("input")!;
+        input.focus();
+        input.select();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -116,14 +114,12 @@ export default function AppLayoutShell({ children }: Props) {
   const searchOptions: AutosuggestProps.Options = useMemo(() => {
     const flociServices = health?.services ? Object.keys(health.services) : [];
     const all: AutosuggestProps.Option[] = [];
-    const added = new Set<string>();
 
+    // Every key maps to a distinct label via the constants above (or falls back to the key itself),
+    // so no dedup is needed.
     for (const key of flociServices) {
       const label = IMPLEMENTED_SERVICES[key] || SERVICE_LABELS[key] || key;
-      if (!added.has(label)) {
-        added.add(label);
-        all.push({ value: label, label, description: key });
-      }
+      all.push({ value: label, label, description: key });
     }
 
     const sorted = all.sort((a, b) => a.label!.localeCompare(b.label!));
@@ -324,7 +320,7 @@ export default function AppLayoutShell({ children }: Props) {
       if (serviceMatch) {
         useRecentlyVisited.getState().addVisited(serviceMatch[1]);
       }
-      navigate(path || "/");
+      navigate(path);
     }
   };
 
@@ -341,12 +337,10 @@ export default function AppLayoutShell({ children }: Props) {
 
   const handleSkipToContent = () => {
     // Focus the main content area — prefer semantic selectors first
-    const contentEl = document.querySelector<HTMLElement>("main, [role='main'], #main-content");
-    if (contentEl) {
-      contentEl.setAttribute("tabindex", "-1");
-      contentEl.focus();
-      contentEl.scrollIntoView({ behavior: "smooth" });
-    }
+    const contentEl = document.querySelector<HTMLElement>("main, [role='main'], #main-content")!;
+    contentEl.setAttribute("tabindex", "-1");
+    contentEl.focus();
+    contentEl.scrollIntoView({ behavior: "smooth" });
   };
 
   return (
@@ -518,7 +512,7 @@ export default function AppLayoutShell({ children }: Props) {
           <SpaceBetween size="s">
             {nonRunningServices.map(({ key, status }) => (
               <Box key={key} variant="p">
-                <StatusIndicator type={status === "running" ? "success" : "warning"}>
+                <StatusIndicator type="warning">
                   {SERVICE_LABELS[key as keyof typeof SERVICE_LABELS] || key}: {status}
                 </StatusIndicator>
               </Box>

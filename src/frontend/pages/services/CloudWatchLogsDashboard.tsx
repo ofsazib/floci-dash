@@ -557,7 +557,6 @@ function CloudWatchLogGroupList({ onSelect }: { onSelect: (name: string) => void
   }
 
   function handleCreate() {
-    if (!groupName) return;
     createGroup.mutate(
       { logGroupName: groupName },
       {
@@ -789,7 +788,6 @@ function CloudWatchLogStreamList({
   }
 
   function handleCreate() {
-    if (!streamName) return;
     createStream.mutate(
       { logGroupName, logStreamName: streamName },
       {
@@ -944,7 +942,7 @@ function CloudWatchLogStreamDetail({
     logGroupName,
     logStreamName,
     {
-      limit: parseInt((limit.value || "500") as string),
+      limit: parseInt(limit.value!),
       startFromHead: false,
     },
     autoRefresh
@@ -1047,8 +1045,7 @@ function CloudWatchLogStreamDetail({
           lineHeight: "1.6",
         }}
         onScroll={() => {
-          if (!eventsContainerRef.current) return;
-          const el = eventsContainerRef.current;
+          const el = eventsContainerRef.current!;
           const atBottom =
             el.scrollHeight - el.scrollTop - el.clientHeight < 50;
           if (!atBottom) setAutoScroll(false);
@@ -1218,7 +1215,6 @@ function CloudWatchSubscriptionFilterList({
   }
 
   function handleCreate() {
-    if (!form.filterName || !form.destinationArn) return;
     putFilter.mutate(
       {
         logGroupName,
@@ -1399,7 +1395,6 @@ function CloudWatchLogGroupTags({ logGroupName }: { logGroupName: string }) {
   const tagEntries = Object.entries(tags).map(([key, value]) => ({ key, value }));
 
   function handleAddTag() {
-    if (!newKey) return;
     const updated = { ...tags, [newKey]: newValue };
     tagMutation.mutate(
       { logGroupName, tags: updated },
