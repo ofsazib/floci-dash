@@ -11,6 +11,10 @@ const mockRepositories = vi.fn();
 const mockCreateRepo = vi.fn();
 const mockDeleteRepo = vi.fn();
 const mockScanConfig = vi.fn();
+const deleteRepoState: { isPending: boolean; variables: string | null } = {
+  isPending: false,
+  variables: null,
+};
 
 vi.mock("../../hooks/useECR", () => ({
   useECRRepositories: (...args: any[]) => mockRepositories(...args),
@@ -20,8 +24,8 @@ vi.mock("../../hooks/useECR", () => ({
   }),
   useECRDeleteRepository: () => ({
     mutateAsync: mockDeleteRepo,
-    isPending: false,
-    variables: null,
+    get isPending() { return deleteRepoState.isPending; },
+    get variables() { return deleteRepoState.variables; },
   }),
   useECRScanningConfiguration: (...args: any[]) => mockScanConfig(...args),
 }));
@@ -32,6 +36,8 @@ import { ECRDashboard } from "./ECRDashboard";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  deleteRepoState.isPending = false;
+  deleteRepoState.variables = null;
   mockRepositories.mockReturnValue({
     data: { repositories: [], total: 0 },
     isLoading: false,
@@ -282,6 +288,35 @@ describe("ECRDashboard — delete repository", () => {
       expect(mockDeleteRepo).toHaveBeenCalledWith("my-repo");
     });
   });
+
+  it("shows empty message when repositories key is missing", () => {
+    mockRepositories.mockReturnValue({ data: {} as any, isLoading: false });
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No repositories/i)).toBeTruthy();
+  });
+
+  it("shows delete loading state on the matching repository only", async () => {
+    mockRepositories.mockReturnValue({
+      data: {
+        repositories: [
+          { repositoryName: "repo-a", repositoryUri: "uri-a" },
+          { repositoryName: "repo-b", repositoryUri: "uri-b" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    deleteRepoState.isPending = true;
+    deleteRepoState.variables = "repo-a";
+    const user = userEvent.setup();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("repo-b")).toBeTruthy());
+    // repo-a's delete button is disabled (loading); repo-b's stays enabled
+    const deleteA = screen.getByRole("button", { name: /Delete repo-a/i });
+    const deleteB = screen.getByRole("button", { name: /Delete repo-b/i });
+    expect((deleteA as HTMLButtonElement).disabled).toBe(true);
+    expect((deleteB as HTMLButtonElement).disabled).toBe(false);
+  });
 });
 
 describe("ECRDashboard — scanning configuration", () => {
@@ -400,6 +435,24 @@ describe("ECRDashboard — scanning configuration", () => {
     await waitFor(() => expect(screen.getByText("my-repo")).toBeTruthy());
     await clickButton(user, /Scan config/i);
     await waitFor(() => expect(screen.getByText("Failed to fetch scanning config")).toBeTruthy());
+  });
+
+  it("shows fallback message when the scan config error has no message", async () => {
+    mockRepositories.mockReturnValue(repoData);
+    mockScanConfig.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new Error(""),
+    });
+
+    const user = userEvent.setup();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-repo")).toBeTruthy());
+    await clickButton(user, /Scan config/i);
+    await waitFor(() => {
+      expect(screen.getByText(/Failed to load scanning configuration/i)).toBeTruthy();
+    });
   });
 
   it("shows failure with fallback messages", async () => {

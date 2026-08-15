@@ -853,7 +853,7 @@ export function KinesisDashboard() {
                         : { label: "Select a shard...", value: "" }
                       }
                       onChange={({ detail }) =>
-                        setSubscribeShardId(detail.selectedOption.value || "")
+                        setSubscribeShardId(detail.selectedOption.value!)
                       }
                       options={(shardsData?.shards || []).map((sh: any) => ({
                         label: sh.ShardId,
@@ -872,7 +872,7 @@ export function KinesisDashboard() {
                           : { label: "TRIM_HORIZON (oldest)", value: "TRIM_HORIZON" }
                       }
                       onChange={({ detail }) =>
-                        setSubscribeStartingPos(detail.selectedOption.value || "TRIM_HORIZON")
+                        setSubscribeStartingPos(detail.selectedOption.value!)
                       }
                       options={[
                         { label: "TRIM_HORIZON (oldest)", value: "TRIM_HORIZON" },

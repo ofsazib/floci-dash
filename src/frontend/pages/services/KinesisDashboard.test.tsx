@@ -829,6 +829,16 @@ describe("KinesisDashboard — data edge cases", () => {
     expect(detailTabs.length).toBeGreaterThan(0);
   });
 
+  it("switches to the detail tab and shows no-selection alert", async () => {
+    const user = userEvent.setup();
+    render(<KinesisDashboard />, { wrapper: createWrapper() });
+    const detailTab = screen.getByRole("tab", { name: /Stream Details/i });
+    await user.click(detailTab);
+    await waitFor(() => {
+      expect(screen.getByText(/Select a stream to view its shards/i)).toBeTruthy();
+    });
+  });
+
   it("handles undefined shards data in detail", async () => {
     setupStream();
     mockShards.mockReturnValue({ data: undefined });

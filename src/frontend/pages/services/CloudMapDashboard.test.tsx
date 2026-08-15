@@ -423,4 +423,49 @@ describe("CloudMapDashboard — instance list drill-down", () => {
       expect(screen.getByText("my-namespace")).toBeTruthy();
     });
   });
+
+  it("shows empty message when namespaces key is missing", () => {
+    mockNamespaces.mockReturnValue({ data: {} as any, isLoading: false });
+    render(<CloudMapDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/No namespaces/i)).toBeTruthy();
+  });
+
+  it("shows empty message when services key is missing", async () => {
+    mockNamespaces.mockReturnValue({
+      data: {
+        namespaces: [{ Id: "ns-123", Name: "my-namespace", Type: "DNS_PRIVATE" }],
+        total: 1,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    mockServices.mockReturnValue({ data: {} as any, isLoading: false });
+    const user = userEvent.setup();
+    render(<CloudMapDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /my-namespace/i);
+    await waitFor(() => expect(screen.getByText(/No services/i)).toBeTruthy());
+  });
+
+  it("shows empty message when instances key is missing", async () => {
+    mockNamespaces.mockReturnValue({
+      data: {
+        namespaces: [{ Id: "ns-123", Name: "my-namespace", Type: "DNS_PRIVATE" }],
+        total: 1,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    mockServices.mockReturnValue({
+      data: {
+        services: [{ Id: "svc-456", Name: "my-service", Type: "HTTP" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    mockInstances.mockReturnValue({ data: {} as any, isLoading: false });
+    const user = userEvent.setup();
+    render(<CloudMapDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /my-namespace/i);
+    await waitFor(() => expect(screen.getByText("my-service")).toBeTruthy());
+    await clickButton(user, /my-service/i);
+    await waitFor(() => expect(screen.getByText(/No instances/i)).toBeTruthy());
+  });
 });
