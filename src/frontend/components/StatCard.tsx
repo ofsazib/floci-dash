@@ -24,7 +24,8 @@ export default function StatCard({
   isText,
   size = "md",
 }: Props) {
-  const v = VARIANTS[variant] || VARIANTS.default;
+  // The variant prop is a closed union over all four VARIANTS keys
+  const v = VARIANTS[variant];
   const padding = size === "sm" ? "16px 20px" : "20px 24px";
 
   return (

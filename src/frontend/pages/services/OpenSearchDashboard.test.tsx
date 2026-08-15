@@ -165,4 +165,10 @@ describe("OpenSearchDashboard — delete", () => {
     expect(screen.getByText("domain-a")).toBeTruthy();
     expect(screen.getByText("domain-b")).toBeTruthy();
   });
+
+  it("shows the empty state when the domains key is absent", () => {
+    mockDomains.mockReturnValue({ data: { total: 0 }, isLoading: false });
+    render(<OpenSearchDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("No OpenSearch domains")).toBeTruthy();
+  });
 });

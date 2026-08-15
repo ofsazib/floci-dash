@@ -625,7 +625,7 @@ export function BatchDashboard() {
           <SpaceBetween size="m">
             <FormField label="Name"><Input value={ceName} onChange={({ detail }) => setCeName(detail.value)} /></FormField>
             <FormField label="Type">
-              <Select selectedOption={{ label: ceType, value: ceType }} onChange={({ detail }) => setCeType(detail.selectedOption.value || "MANAGED")} options={[{ label: "MANAGED", value: "MANAGED" }, { label: "UNMANAGED", value: "UNMANAGED" }]} />
+              <Select selectedOption={{ label: ceType, value: ceType }} onChange={({ detail }) => setCeType(detail.selectedOption.value!)} options={[{ label: "MANAGED", value: "MANAGED" }, { label: "UNMANAGED", value: "UNMANAGED" }]} />
             </FormField>
           </SpaceBetween>
         </Form>

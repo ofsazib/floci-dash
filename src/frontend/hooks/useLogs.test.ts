@@ -206,6 +206,18 @@ describe("useLogEvents", () => {
     );
   });
 
+  it("disables the refetch interval when autoRefresh is false", async () => {
+    mockApi.mockResolvedValueOnce({ events: [] });
+    const { result } = renderHook(
+      () => useLogEvents("/aws/lambda/test", "stream-1", { limit: 100, startFromHead: true }, false),
+      { wrapper: createWrapper() },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/logs/log-groups/${encodeURIComponent("/aws/lambda/test")}/streams/stream-1/events?limit=100&startFromHead=true`
+    );
+  });
+
   it("builds query string from options", async () => {
     mockApi.mockResolvedValueOnce({ events: [] });
     const { result } = renderHook(

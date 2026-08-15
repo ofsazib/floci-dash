@@ -234,7 +234,8 @@ export default function DynamoDBUpdateTable({ tableName, tableDetail }: Props) {
 
   function handleApplyChanges() {
     const params = buildParams();
-    if (Object.keys(params).length === 0) return;
+    // The Apply changes button is disabled via `hasChanges` (same computation),
+    // so params is never empty here.
     updateTable.mutate(params, {
       onSuccess: () => {
         setGsisToCreate([]);

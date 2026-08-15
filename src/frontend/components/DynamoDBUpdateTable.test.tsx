@@ -608,4 +608,17 @@ describe("DynamoDBUpdateTable — apply changes", () => {
     await user.click(screen.getByRole("button", { name: /^Remove$/i }));
     await waitFor(() => expect(screen.queryByText("Indexes to create (1)")).toBeNull());
   });
+
+  it("does nothing when Apply changes is clicked without modifications", async () => {
+    const user = userEvent.setup();
+    const unchangedDetail = {
+      ...defaultDetail,
+      streamSpecification: { StreamEnabled: false, StreamViewType: "NEW_AND_OLD_IMAGES" },
+    };
+    render(<DynamoDBUpdateTable tableName="t" tableDetail={unchangedDetail} />, {
+      wrapper: createWrapper(),
+    });
+    await clickButton(user, /Apply changes/);
+    expect(mockUpdateTable).not.toHaveBeenCalled();
+  });
 });

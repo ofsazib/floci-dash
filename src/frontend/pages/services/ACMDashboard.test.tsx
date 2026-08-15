@@ -17,12 +17,18 @@ vi.mock("../../components/ConfirmDialog", () => ({
 const mockCertificates = vi.fn();
 const mockDeleteCert = vi.fn();
 
+const deleteCertState = vi.hoisted(() => ({
+  isPending: false,
+  variables: null as string | null,
+}));
+
 vi.mock("../../hooks/useACM", () => ({
   useACMCertificates: (...args: any[]) => mockCertificates(...args),
   useRequestACMCertificate: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteACMCertificate: () => ({
     mutateAsync: mockDeleteCert,
-    isPending: false,
+    isPending: deleteCertState.isPending,
+    variables: deleteCertState.variables,
   }),
 }));
 
@@ -32,6 +38,8 @@ import { ACMDashboard } from "./ACMDashboard";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  deleteCertState.isPending = false;
+  deleteCertState.variables = null;
 
   mockCertificates.mockReturnValue({
     data: { certificates: [], total: 0 },
@@ -166,5 +174,28 @@ describe("ACMDashboard — data", () => {
         "arn:aws:acm:us-east-1::certificate/abc123",
       );
     });
+  });
+
+  it("shows the delete button disabled while deleting", async () => {
+    deleteCertState.isPending = true;
+    deleteCertState.variables = "arn:aws:acm:us-east-1::certificate/abc123";
+    mockCertificates.mockReturnValue({
+      data: {
+        certificates: [
+          {
+            CertificateArn: "arn:aws:acm:us-east-1::certificate/abc123",
+            DomainName: "example.com",
+            Status: "ISSUED",
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+
+    render(<ACMDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("example.com")).toBeTruthy());
+    const deleteBtn = screen.getByRole("button", { name: /Delete example.com/i });
+    expect(deleteBtn).toBeDisabled();
   });
 });

@@ -66,6 +66,15 @@ describe("useS3Objects", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith("/aws/s3/buckets/my-bucket/objects");
   });
+
+  it("calls api with a prefix query when prefix is provided", async () => {
+    mockApi.mockResolvedValueOnce({ bucket: "b", objects: [], total: 0 });
+    const { result } = renderHook(() => useS3Objects("my-bucket", "logs/"), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/s3/buckets/my-bucket/objects?prefix=logs%2F");
+  });
 });
 
 describe("useS3ObjectDetail", () => {

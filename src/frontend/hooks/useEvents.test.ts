@@ -539,4 +539,16 @@ describe("useRemoveEventBusPermission", () => {
       expect.objectContaining({ method: "DELETE" })
     );
   });
+
+  it("calls api without statementId when it is not provided", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useRemoveEventBusPermission(), {
+      wrapper: createWrapper(),
+    });
+    await result.current.mutateAsync({ eventBusName: "custom" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/events/buses/permissions?name=custom",
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
 });

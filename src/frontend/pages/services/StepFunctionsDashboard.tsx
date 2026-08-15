@@ -719,7 +719,7 @@ export function StepFunctionsDashboard() {
                 <SpaceBetween direction="horizontal" size="s">
                   <Select
                     selectedOption={versionSm ? { value: versionSm } : null}
-                    onChange={({ detail }) => setVersionSm(detail.selectedOption?.value ?? null)}
+                    onChange={({ detail }) => setVersionSm(detail.selectedOption!.value!)}
                     options={(smData?.stateMachines || []).map((sm: any) => ({
                       value: sm.stateMachineArn,
                       label: sm.name,

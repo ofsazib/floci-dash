@@ -83,6 +83,15 @@ describe("usePricingProducts", () => {
       `/aws/pricing/products?serviceCode=${SERVICE_CODE}&filters=${encodeURIComponent(JSON.stringify(params.filters))}`
     );
   });
+
+  it("calls api with maxResults when provided", async () => {
+    mockApi.mockResolvedValueOnce({ products: [] });
+    const { result } = renderHook(() => usePricingProducts({ serviceCode: SERVICE_CODE, maxResults: 25 }), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(`/aws/pricing/products?serviceCode=${SERVICE_CODE}&maxResults=25`);
+  });
 });
 
 describe("usePricingPriceLists", () => {

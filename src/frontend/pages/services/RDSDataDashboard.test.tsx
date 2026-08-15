@@ -306,4 +306,18 @@ describe("RDSDataDashboard — interactions", () => {
       expect(call.transactionId).toBeUndefined();
     });
   });
+
+  it("handles begin transaction resolving without a transactionId", async () => {
+    const user = userEvent.setup();
+    mockBeginTx.mockImplementation((_args: any, opts?: any) => {
+      if (opts?.onSuccess) opts.onSuccess({});
+    });
+    render(<RDSDataDashboard />, { wrapper: createWrapper() });
+    await user.type(screen.getByLabelText(/Resource ARN/), "arn:aws:rds:cluster:my-cluster");
+    await user.type(screen.getByLabelText(/Secret ARN/), "arn:aws:secretsmanager:secret:my-secret");
+    await user.click(screen.getByRole("button", { name: /Begin Transaction/i }));
+    await waitFor(() => expect(mockBeginTx).toHaveBeenCalled());
+    // No transaction ID was returned, so the Transaction ID field stays hidden
+    expect(screen.queryByLabelText(/Transaction ID/)).toBeNull();
+  });
 });

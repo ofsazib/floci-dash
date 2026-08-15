@@ -778,7 +778,7 @@ function Route53ZoneDetail({ zoneId, onBack }: { zoneId: string; onBack: () => v
               <Select
                 selectedOption={{ label: form.type, value: form.type }}
                 onChange={({ detail }) =>
-                  setForm((p) => ({ ...p, type: detail.selectedOption?.value || "A" }))
+                  setForm((p) => ({ ...p, type: detail.selectedOption!.value! }))
                 }
                 options={RECORD_TYPE_OPTIONS}
               />

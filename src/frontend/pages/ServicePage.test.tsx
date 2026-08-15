@@ -323,6 +323,12 @@ describe("ServicePage — Unknown service", () => {
     render(<ServicePage />, { wrapper: createWrapper() });
     expect(screen.getAllByText("Coming soon").length).toBeGreaterThan(0);
   });
+
+  it("renders nothing when no service param is present", () => {
+    mockParams.mockReturnValue({});
+    render(<ServicePage />, { wrapper: createWrapper() });
+    expect(screen.queryByText(/Coming soon/i)).toBeNull();
+  });
 });
 
 // ────────────────────────────────────────────────────────

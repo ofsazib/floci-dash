@@ -766,7 +766,7 @@ export function S3VectorsDashboard() {
             <FormField label="Distance metric">
               <Select
                 selectedOption={{ label: distanceMetric, value: distanceMetric }}
-                onChange={({ detail }) => setDistanceMetric(detail.selectedOption.value || "cosine")}
+                onChange={({ detail }) => setDistanceMetric(detail.selectedOption.value!)}
                 options={[
                   { label: "cosine", value: "cosine" },
                   { label: "euclidean", value: "euclidean" },
