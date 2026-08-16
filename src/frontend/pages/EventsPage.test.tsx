@@ -1603,6 +1603,37 @@ describe("EventsPage", () => {
     expect(screen.getByText(/Raw policy/i)).toBeTruthy();
   });
 
+  it("handles an unparseable bus policy", async () => {
+    const user = userEvent.setup();
+    mockEventBuses.mockReturnValue({
+      data: {
+        eventBuses: [
+          { Name: "default", Arn: "arn:aws:..." },
+          { Name: "custom-bus", Arn: "arn:aws:events:...:custom-bus" },
+        ],
+      },
+      isLoading: false,
+    });
+    mockDescribeBus.mockReturnValue({
+      data: {
+        eventBus: {
+          Name: "custom-bus",
+          Policy: "this is not valid json {",
+        },
+      },
+      isLoading: false,
+    });
+    render(<EventsPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByText("Event Buses"));
+    await user.click(screen.getByText("custom-bus"));
+    await waitFor(() => {
+      expect(screen.getByText(/Permissions for:/)).toBeTruthy();
+    });
+    // Parse fails -> zero statements, raw policy still shown
+    expect(screen.getByText(/\(0\)/)).toBeTruthy();
+    expect(screen.getByText(/Raw policy/i)).toBeTruthy();
+  });
+
   it("removes a permission from the bus policy", async () => {
     const user = userEvent.setup();
     mockEventBuses.mockReturnValue({

@@ -4,7 +4,9 @@ export default defineConfig({
   test: {
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
     environment: "node",
-    testTimeout: 10000,
+    // 20s: modal-flow and integration tests can exceed 10s under full-suite
+    // parallel load with coverage instrumentation (they pass in isolation).
+    testTimeout: 20000,
     globals: true,
     pool: "forks",
     setupFiles: ["./src/test/setup.ts"],
@@ -23,6 +25,9 @@ export default defineConfig({
         "src/test/**",
         // Bootstrap entry — a single createRoot().render() call, nothing to test.
         "src/frontend/main.tsx",
+        // Pure type-declaration files — no executable statements to cover.
+        "src/frontend/types/api.ts",
+        "src/backend/types.ts",
       ],
       reportsDirectory: "./coverage",
       reportOnFailure: true,
