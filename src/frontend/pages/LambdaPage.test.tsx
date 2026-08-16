@@ -590,6 +590,23 @@ describe("LambdaPage", () => {
     expect(mockDeleteConcurrencyMutate).toHaveBeenCalled();
   });
 
+  it("opens concurrency modal with empty value when concurrency is not set", async () => {
+    const user = userEvent.setup();
+    render(<LambdaPage />, { wrapper: createWrapper() });
+    await clickButton(user, /my-function/i);
+    await waitFor(() => {
+      expect(screen.getByText("Back to Functions")).toBeTruthy();
+    });
+    // Click the inline-icon edit button next to the Reserved concurrency label
+    const label = screen.getByText("Reserved concurrency");
+    const row = label.closest("div")!.parentElement!;
+    const editBtn = row.querySelector("button") as HTMLButtonElement;
+    await user.click(editBtn);
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/e\.g\. 10/)).toBeTruthy();
+    });
+  });
+
   it("creates function URL from Advanced tab", async () => {
     const user = userEvent.setup();
     render(<LambdaPage />, { wrapper: createWrapper() });

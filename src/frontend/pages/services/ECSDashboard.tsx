@@ -889,7 +889,7 @@ function ECSClusterDetail({ clusterName, onBack }: { clusterName: string; onBack
                     onChange={({ detail }) =>
                       setServiceForm((p) => ({
                         ...p,
-                        taskDefinition: detail.selectedOption?.value || "",
+                        taskDefinition: detail.selectedOption?.value!,
                       }))
                     }
                     options={(taskDefFamilies.data?.families || []).map((f: string) => ({ label: f, value: f }))}
@@ -910,7 +910,7 @@ function ECSClusterDetail({ clusterName, onBack }: { clusterName: string; onBack
                   <Select
                     selectedOption={{ label: serviceForm.launchType, value: serviceForm.launchType }}
                     onChange={({ detail }) =>
-                      setServiceForm((p) => ({ ...p, launchType: detail.selectedOption?.value || "FARGATE" }))
+                      setServiceForm((p) => ({ ...p, launchType: detail.selectedOption?.value! }))
                     }
                     options={[
                       { label: "FARGATE", value: "FARGATE" },

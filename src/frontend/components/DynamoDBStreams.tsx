@@ -65,15 +65,13 @@ export default function DynamoDBStreams({ tableName }: { tableName: string }) {
   };
 
   async function handlePollRecords() {
-    if (!streamDetailArn || !shardId) return;
-
     setPolling(true);
     setRecords([]);
 
     try {
       const iter: { shardIterator?: string } = await getShardIterator.mutateAsync({
-        streamArn: streamDetailArn,
-        shardId,
+        streamArn: streamDetailArn!,
+        shardId: shardId!,
         shardIteratorType: iteratorType,
         sequenceNumber: sequenceNumber || undefined,
       });
@@ -94,11 +92,10 @@ export default function DynamoDBStreams({ tableName }: { tableName: string }) {
   }
 
   async function handleContinuePolling() {
-    if (!nextIterator) return;
     setPolling(true);
     try {
       const result = await getRecords.mutateAsync({
-        shardIterator: nextIterator,
+        shardIterator: nextIterator!,
         limit: 50,
       });
       setRecords((prev) => [...prev, ...(result.records || [])]);
