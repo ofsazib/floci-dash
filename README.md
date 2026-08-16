@@ -63,6 +63,7 @@
 - **Toast notifications** — Global API error interceptor that surfaces network and server errors via non-intrusive toast notifications
 - **Content Security Policy** — Strict CSP headers applied in production (self-only scripts, inline styles allowed for Cloudscape, no inline event handlers)
 - **Input sanitization** — All user inputs sanitized on the backend (control character stripping, path traversal prevention, JSON validation, length limits)
+- **100% test coverage** — **9,221 tests across 271 files** with **100% statement/branch/function/line coverage** across every file with executable code (backend routes, frontend pages/components/hooks, and 294 integration tests against a live Floci instance)
 - **Docker health checks** — Container health monitoring via `/api/healthz` endpoint, used by Docker Compose for dependency ordering
 - **Optimized Docker image** — Multi-stage build with pnpm cache mounts and `pnpm prune --prod` for minimal production image size
 
@@ -203,21 +204,25 @@ docker run -p 3000:3000 -p 4566:4566 \
 
 ### Testing
 
-The project includes **3,183 tests** across 187 test files, organized as:
+The project includes **9,221 tests across 271 test files** with **100% statement / branch / function / line coverage** on every file with executable code, organized as:
 
 | Tests | Files | Location |
 |-------|-------|----------|
-| Backend route unit tests | 50 | `src/backend/routes/aws/*.test.ts` |
-| Frontend page/component tests | 48 | `src/frontend/pages/*.test.tsx`, `src/frontend/components/*.test.tsx` |
-| Frontend hook tests | 36 | `src/frontend/hooks/*.test.ts` |
-| Other tests | 53 | shared libs, stores, types, etc. |
-| Integration tests (requires Floci) | 1 | `src/backend/integration.test.ts` |
+| Backend route unit tests | 82 | `src/backend/routes/aws/*.test.ts`, `src/backend/routes/{system,active,inspection}.test.ts` |
+| Other backend unit tests | 4 | `src/backend/clients`, `src/backend/index.ts`, `src/backend/types.ts` |
+| Frontend page tests | 73 | `src/frontend/pages/*.test.tsx`, `src/frontend/pages/services/*.test.tsx` |
+| Frontend component tests | 23 | `src/frontend/components/*.test.tsx` |
+| Frontend hook tests | 82 | `src/frontend/hooks/*.test.ts(x)` |
+| Other frontend tests | 6 | `src/frontend/lib`, `src/frontend/stores`, `src/frontend/App.tsx` |
+| Integration tests (requires Floci) | 1 | `src/backend/integration.test.ts` (294 tests) |
 
 ```bash
 make test           # Fast unit tests (no Floci needed)
 make test-cov       # Unit tests with coverage report
 make test-all       # Unit + integration tests (requires Floci service container)
 ```
+
+Run the full suite with Floci up (`make up-bg`) to include the 294 integration tests: `npx vitest run` → **271/271 files, 9,221/9,221 tests, exit 0**.
 
 ### Key design decisions
 
@@ -284,7 +289,6 @@ src/
       useAPIGateway.ts     API Gateway REST API operations
       useAppSync.ts        AppSync GraphQL API operations
       useScheduler.ts      EventBridge Scheduler operations
-      useService.ts        Generic service hook
       useSystem.ts         Health, active services
       useActivityFeed.ts   Dashboard activity feed (localStorage)
       useResourceCounts.ts Resource count summaries
