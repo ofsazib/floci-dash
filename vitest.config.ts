@@ -31,11 +31,13 @@ export default defineConfig({
       ],
       reportsDirectory: "./coverage",
       reportOnFailure: true,
+      // 100% — every file with executable code is fully covered (verified
+      // 2026-08-16). New or modified code must stay at 100% or CI fails.
       thresholds: {
-        statements: 72,
-        branches: 50,
-        functions: 62,
-        lines: 74,
+        statements: 100,
+        branches: 100,
+        functions: 100,
+        lines: 100,
       },
     },
   },
