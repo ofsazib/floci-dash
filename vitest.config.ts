@@ -9,6 +9,11 @@ export default defineConfig({
     testTimeout: 20000,
     globals: true,
     pool: "forks",
+    // Cap fork workers: 12 workers × coverage-instrumented React test DOMs +
+    // a live Floci container exceeds the RAM on 12-core dev machines, causing
+    // tests to hang (150s+) under memory pressure. 4 workers stay stable.
+    // CI runners have ≤4 vCPUs, so this does not slow CI.
+    maxWorkers: 4,
     setupFiles: ["./src/test/setup.ts"],
     coverage: {
       provider: "v8",

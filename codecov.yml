@@ -10,7 +10,10 @@ coverage:
         informational: true
     patch:
       default:
-        target: 75%
+        # 100% — every file with executable code is fully covered (vitest
+        # thresholds are also at 100%). New or modified code must stay at
+        # 100% or the patch check fails.
+        target: 100%
         informational: false
 
 comment:
@@ -24,3 +27,7 @@ ignore:
   - "src/test/**"
   - "dist/**"
   - "coverage/**"
+  # Pure type-declaration files — no executable statements to cover
+  # (mirrors the exclude list in vitest.config.ts).
+  - "src/frontend/types/api.ts"
+  - "src/backend/types.ts"
