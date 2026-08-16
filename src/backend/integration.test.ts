@@ -14,6 +14,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import systemRoutes from "./routes/system";
 import awsRoutes from "./routes/aws/index";
+import { setFlociEndpoint } from "./clients/config";
 
 // ── Test App Setup ──────────────────────────────────────
 // Build a minimal Hono app from the same route modules used in production,
@@ -23,6 +24,11 @@ process.env.FLOCI_URL = process.env.FLOCI_URL || "http://localhost:9878";
 process.env.AWS_REGION = "us-east-1";
 process.env.AWS_ACCESS_KEY_ID = "test";
 process.env.AWS_SECRET_ACCESS_KEY = "test";
+
+// config.ts captures FLOCI_URL at import time (before this module body runs),
+// so the env assignment above alone is too late for the routes — they read the
+// mutable currentEndpoint. Point it at the host-mapped Floci port explicitly.
+setFlociEndpoint(process.env.FLOCI_URL || "http://localhost:9878");
 
 const app = new Hono();
 app.use("*", cors({ origin: "*" }));

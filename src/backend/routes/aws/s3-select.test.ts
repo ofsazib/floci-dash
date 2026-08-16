@@ -1,4 +1,13 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+
+// The S3 Select tests stub globalThis.fetch directly (not vi.stubGlobal), so it
+// must be restored after each test — otherwise the mock leaks into other test
+// files that share a vitest fork worker and breaks real network fetches
+// (e.g. src/backend/integration.test.ts).
+const realFetch = globalThis.fetch;
+afterEach(() => {
+  globalThis.fetch = realFetch;
+});
 
 // Mock the config module to control floci endpoint
 vi.mock("../../clients/config", () => ({
