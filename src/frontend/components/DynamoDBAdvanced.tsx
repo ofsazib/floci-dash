@@ -369,7 +369,6 @@ function SingleStatementEditor() {
   const [result, setResult] = useState<any>(null);
 
   function handleExecute() {
-    if (!statement.trim()) return;
     executeStatement.mutate(
       { statement, consistentRead },
       {
@@ -450,7 +449,6 @@ function TransactionEditor() {
 
   function handleExecute() {
     const lines = transactionStmts.split("\n").filter((l) => l.trim());
-    if (lines.length === 0) return;
     const statements = lines.map((line) => ({ Statement: line.trim() }));
     executeTransaction.mutate(statements, {
       onSuccess: (data) => setResult(data),
@@ -539,7 +537,6 @@ function BatchEditor() {
 
   function handleExecute() {
     const lines = batchStmts.split("\n").filter((l) => l.trim());
-    if (lines.length === 0) return;
     const statements = lines.map((line) => ({ Statement: line.trim() }));
     executeBatch.mutate(statements, {
       onSuccess: (data) => setResult(data),

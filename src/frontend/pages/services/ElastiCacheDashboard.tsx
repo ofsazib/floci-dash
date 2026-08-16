@@ -559,7 +559,6 @@ function ElastiCacheReplicationGroupSection() {
   }
 
   function handleCreate() {
-    if (!form.ReplicationGroupId.trim()) return;
     const body: any = { ReplicationGroupId: form.ReplicationGroupId.trim() };
     if (form.Description.trim()) body.Description = form.Description.trim();
     if (form.AuthToken.trim()) body.AuthToken = form.AuthToken.trim();
@@ -735,7 +734,6 @@ function ElastiCacheCacheClusterSection() {
   }));
 
   function handleCreate() {
-    if (!CacheClusterId.trim()) return;
     create.mutate(
       { CacheClusterId: CacheClusterId.trim() },
       {
@@ -908,7 +906,6 @@ function ElastiCacheUserSection() {
   }
 
   function handleCreate() {
-    if (!form.UserId.trim()) return;
     const body: any = { UserId: form.UserId.trim() };
     if (form.UserName.trim()) body.UserName = form.UserName.trim();
     if (form.AccessString.trim()) body.AccessString = form.AccessString.trim();

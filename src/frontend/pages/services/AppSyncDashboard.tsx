@@ -609,7 +609,7 @@ export function AppSyncDashboard() {
               <Select
                 selectedOption={{ label: form.authenticationType, value: form.authenticationType }}
                 onChange={({ detail }) =>
-                  setForm((p) => ({ ...p, authenticationType: detail.selectedOption?.value || "API_KEY" }))
+                  setForm((p) => ({ ...p, authenticationType: detail.selectedOption?.value! }))
                 }
                 options={APPSYNC_AUTH_OPTIONS}
               />
@@ -874,7 +874,7 @@ function AppSyncApiDetail({ apiId, onBack }: { apiId: string; onBack: () => void
             <FormField label="Type">
               <Select
                 selectedOption={{ label: dsForm.type, value: dsForm.type }}
-                onChange={({ detail }) => setDsForm((p) => ({ ...p, type: detail.selectedOption?.value || "NONE" }))}
+                onChange={({ detail }) => setDsForm((p) => ({ ...p, type: detail.selectedOption?.value! }))}
                 options={APPSYNC_DS_TYPE_OPTIONS}
               />
             </FormField>
@@ -938,7 +938,7 @@ function AppSyncApiDetail({ apiId, onBack }: { apiId: string; onBack: () => void
                     : { label: "Select data source", value: "" }
                 }
                 onChange={({ detail }) =>
-                  setFuncForm((p) => ({ ...p, dataSourceName: detail.selectedOption?.value || "" }))
+                  setFuncForm((p) => ({ ...p, dataSourceName: detail.selectedOption?.value! }))
                 }
                 options={dataSources.map((ds: any) => ({ label: ds.name, value: ds.name }))}
                 placeholder="Select data source"
