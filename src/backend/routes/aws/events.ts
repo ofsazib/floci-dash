@@ -5,6 +5,7 @@ import { EventBridgeClient } from "@aws-sdk/client-eventbridge";
 import {
   ListEventBusesCommand,
   CreateEventBusCommand,
+  UpdateEventBusCommand,
   DeleteEventBusCommand,
   DescribeEventBusCommand,
   ListRulesCommand,
@@ -97,6 +98,29 @@ router.post("/buses", async (c: Context) => {
     })
   );
   return c.json({ eventBusArn: result.EventBusArn }, 201);
+});
+
+router.put("/buses", async (c: Context) => {
+  const body = await c.req.json();
+  const busName = sanitizeName(body.name || "", 256);
+  if (!busName) return c.json({ error: "name is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new UpdateEventBusCommand({
+      Name: busName,
+      Description: body.description !== undefined ? sanitizeText(body.description, 1024) : undefined,
+      KmsKeyIdentifier: body.kmsKeyIdentifier || undefined,
+      DeadLetterConfig: body.deadLetterArn
+        ? { Arn: sanitizeText(body.deadLetterArn, 2048) }
+        : undefined,
+    })
+  );
+  return c.json({
+    eventBusArn: result.Arn,
+    name: result.Name,
+    description: result.Description,
+    kmsKeyIdentifier: result.KmsKeyIdentifier,
+  });
 });
 
 router.delete("/buses", async (c: Context) => {

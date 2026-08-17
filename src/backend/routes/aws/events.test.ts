@@ -20,6 +20,7 @@ vi.mock("@aws-sdk/client-eventbridge", () => ({
   EventBridgeClient: mockEBClient,
   ListEventBusesCommand: createCmd("ListEventBusesCommand"),
   CreateEventBusCommand: createCmd("CreateEventBusCommand"),
+  UpdateEventBusCommand: createCmd("UpdateEventBusCommand"),
   DeleteEventBusCommand: createCmd("DeleteEventBusCommand"),
   DescribeEventBusCommand: createCmd("DescribeEventBusCommand"),
   ListRulesCommand: createCmd("ListRulesCommand"),
@@ -132,6 +133,57 @@ describe("Events (EventBridge) Routes", () => {
     it("DELETE /buses — 400 when name missing", async () => {
       const res = await del("/buses");
       expect(res.status).toBe(400);
+    });
+
+    it("PUT /buses — updates an event bus", async () => {
+      mockSend.mockResolvedValueOnce({
+        Arn: "arn:aws:events:us-east-1:123:event-bus/custom",
+        Name: "custom",
+        Description: "updated desc",
+        KmsKeyIdentifier: "key/123",
+      });
+      const res = await router.request("/buses", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "custom", description: "updated desc", kmsKeyIdentifier: "key/123", deadLetterArn: "arn:aws:sqs:us-east-1:123:queue/dlq" }),
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.eventBusArn).toBe("arn:aws:events:us-east-1:123:event-bus/custom");
+      expect(body.description).toBe("updated desc");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("UpdateEventBusCommand");
+      expect(cmd.Name).toBe("custom");
+      expect(cmd.Description).toBe("updated desc");
+      expect(cmd.KmsKeyIdentifier).toBe("key/123");
+      expect(cmd.DeadLetterConfig).toEqual({ Arn: "arn:aws:sqs:us-east-1:123:queue/dlq" });
+    });
+
+    it("PUT /buses — 400 when name missing", async () => {
+      const res = await router.request("/buses", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("PUT /buses — omits optional fields when absent", async () => {
+      mockSend.mockResolvedValueOnce({ EventBusArn: "arn" });
+      const res = await router.request("/buses", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "custom" }),
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.Description).toBeUndefined();
+      expect(cmd.KmsKeyIdentifier).toBeUndefined();
+      expect(cmd.DeadLetterConfig).toBeUndefined();
+      const body = await res.json();
+      expect(body.name).toBeUndefined();
+      expect(body.kmsKeyIdentifier).toBeUndefined();
     });
   });
 

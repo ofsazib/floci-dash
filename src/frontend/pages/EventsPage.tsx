@@ -32,6 +32,7 @@ import {
   useEventArchives,
   useEventReplays,
   useCreateEventBus,
+  useUpdateEventBus,
   useDeleteEventBus,
   usePutEventRule,
   useDeleteEventRule,
@@ -494,6 +495,7 @@ function BusesTab({
   confirm: (opts: { title: string; message: string; confirmText?: string; variant?: "primary" | "danger" }) => Promise<boolean>;
 }) {
   const [showCreate, setShowCreate] = useState(false);
+  const [editBus, setEditBus] = useState<EventBus | null>(null);
   const [selectedBus, setSelectedBus] = useState<string | null>(null);
   const { data, isLoading } = useEventBuses();
   const deleteBus = useDeleteEventBus();
@@ -534,25 +536,33 @@ function BusesTab({
               header: "",
               cell: (item: EventBus) =>
                 item.Name !== "default" && (
-                  <Button
-                    variant="icon"
-                    iconName="remove"
-                    ariaLabel="Delete bus"
-                    onClick={async () => {
-                      const ok = await confirm({
-                        title: `Delete event bus "${item.Name}"?`,
-                        message: "All rules on this bus will also be deleted.",
-                        confirmText: "Delete",
-                        variant: "danger",
-                      });
-                      if (ok) {
-                        deleteBus.mutate(item.Name, {
-                          onSuccess: () => showToast("success", "Bus deleted"),
-                          onError: (e) => showToast("error", e.message),
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <Button
+                      variant="icon"
+                      iconName="edit"
+                      ariaLabel={`Edit bus ${item.Name}`}
+                      onClick={() => setEditBus(item)}
+                    />
+                    <Button
+                      variant="icon"
+                      iconName="remove"
+                      ariaLabel="Delete bus"
+                      onClick={async () => {
+                        const ok = await confirm({
+                          title: `Delete event bus "${item.Name}"?`,
+                          message: "All rules on this bus will also be deleted.",
+                          confirmText: "Delete",
+                          variant: "danger",
                         });
-                      }
-                    }}
-                  />
+                        if (ok) {
+                          deleteBus.mutate(item.Name, {
+                            onSuccess: () => showToast("success", "Bus deleted"),
+                            onError: (e) => showToast("error", e.message),
+                          });
+                        }
+                      }}
+                    />
+                  </SpaceBetween>
                 ),
             },
           ]}
@@ -561,6 +571,9 @@ function BusesTab({
 
         {showCreate && (
           <CreateBusModal visible={showCreate} onDismiss={() => setShowCreate(false)} showToast={showToast} />
+        )}
+        {editBus && (
+          <EditBusModal bus={editBus} onDismiss={() => setEditBus(null)} showToast={showToast} />
         )}
       </Container>
 
@@ -632,6 +645,58 @@ function CreateBusModal({
             <Input value={description} onChange={({ detail }) => setDescription(detail.value)} />
           </FormField>
         </SpaceBetween>
+      </Form>
+    </Modal>
+  );
+}
+
+function EditBusModal({
+  bus,
+  onDismiss,
+  showToast,
+}: {
+  bus: EventBus;
+  onDismiss: () => void;
+  showToast: (type: "success" | "error" | "info" | "warning", msg: string) => void;
+}) {
+  const [description, setDescription] = useState(bus.Description || "");
+  const updateBus = useUpdateEventBus();
+
+  return (
+    <Modal
+      visible
+      onDismiss={onDismiss}
+      header={`Edit event bus — ${bus.Name}`}
+      footer={
+        <Box float="right">
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button variant="link" onClick={onDismiss}>Cancel</Button>
+            <Button
+              variant="primary"
+              onClick={() =>
+                updateBus.mutate(
+                  { name: bus.Name, description: description.trim() || undefined },
+                  {
+                    onSuccess: () => {
+                      showToast("success", `Bus "${bus.Name}" updated`);
+                      onDismiss();
+                    },
+                    onError: (e) => showToast("error", e.message),
+                  }
+                )
+              }
+              loading={updateBus.isPending}
+            >
+              Save
+            </Button>
+          </SpaceBetween>
+        </Box>
+      }
+    >
+      <Form>
+        <FormField label="Description">
+          <Input value={description} onChange={({ detail }) => setDescription(detail.value)} />
+        </FormField>
       </Form>
     </Modal>
   );

@@ -16,6 +16,7 @@ import {
   useEventArchives,
   useEventReplays,
   useCreateEventBus,
+  useUpdateEventBus,
   useDeleteEventBus,
   usePutEventRule,
   useDeleteEventRule,
@@ -150,6 +151,34 @@ describe("useCreateEventBus", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ name: "bus-1", description: "desc" }),
+      })
+    );
+  });
+});
+
+describe("useUpdateEventBus", () => {
+  it("calls api with PUT method and serialized body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useUpdateEventBus(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ name: "bus-1", description: "new desc", kmsKeyIdentifier: "key/1", deadLetterArn: "arn:aws:sqs:us-east-1:123:queue/dlq" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/events/buses",
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({ name: "bus-1", description: "new desc", kmsKeyIdentifier: "key/1", deadLetterArn: "arn:aws:sqs:us-east-1:123:queue/dlq" }),
+      })
+    );
+  });
+
+  it("sends only provided fields", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useUpdateEventBus(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ name: "bus-1" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/events/buses",
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({ name: "bus-1" }),
       })
     );
   });

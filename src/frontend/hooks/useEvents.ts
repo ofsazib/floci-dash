@@ -185,6 +185,15 @@ export function useCreateEventBus() {
   });
 }
 
+export function useUpdateEventBus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { name: string; description?: string; kmsKeyIdentifier?: string; deadLetterArn?: string }) =>
+      api("/aws/events/buses", { method: "PUT", body: JSON.stringify(params) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "events", "buses"] }),
+  });
+}
+
 export function useDeleteEventBus() {
   const qc = useQueryClient();
   return useMutation({

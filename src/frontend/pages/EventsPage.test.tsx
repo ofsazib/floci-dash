@@ -14,6 +14,7 @@ const mockEventReplays = vi.fn();
 const mockPutRuleMutate = vi.fn();
 const mockDeleteRuleMutate = vi.fn();
 const mockCreateBusMutate = vi.fn();
+const mockUpdateBusMutate = vi.fn();
 const mockDeleteBusMutate = vi.fn();
 const mockCreateArchiveMutate = vi.fn();
 const mockDeleteArchiveMutate = vi.fn();
@@ -49,6 +50,7 @@ vi.mock("../hooks/useEvents", () => ({
   useEventArchives: (...args: any[]) => mockEventArchives(...args),
   useEventReplays: (...args: any[]) => mockEventReplays(...args),
   useCreateEventBus: () => ({ mutate: mockCreateBusMutate, isPending: false }),
+  useUpdateEventBus: () => ({ mutate: mockUpdateBusMutate, isPending: false }),
   useDeleteEventBus: () => ({ mutate: mockDeleteBusMutate, isPending: false }),
   usePutEventRule: () => ({ mutate: mockPutRuleMutate, isPending: false }),
   useDeleteEventRule: () => ({ mutate: mockDeleteRuleMutate, isPending: false }),
@@ -650,6 +652,130 @@ describe("EventsPage", () => {
     await waitFor(() => expect(screen.getByText(/Permissions for:/)).toBeTruthy());
     await clickButton(user, /Hide/i);
     await waitFor(() => expect(screen.queryByText(/Permissions for:/)).toBeNull());
+  });
+
+  // ─── Edit bus modal ─────────────────────────────────────
+
+  it("opens the edit bus modal with prefilled description", async () => {
+    const user = userEvent.setup();
+    mockEventBuses.mockReturnValue({
+      data: { eventBuses: [{ Name: "custom-bus", Description: "A described bus", Arn: "arn" }] },
+      isLoading: false,
+    });
+    render(<EventsPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByText("Event Buses"));
+    await user.click(screen.getByLabelText("Edit bus custom-bus"));
+    await waitFor(() =>
+      expect(screen.getByText("Edit event bus — custom-bus")).toBeTruthy(),
+    );
+    expect(screen.getByDisplayValue("A described bus")).toBeTruthy();
+  });
+
+  it("opens the edit modal for a bus without a description", async () => {
+    const user = userEvent.setup();
+    mockEventBuses.mockReturnValue({
+      data: { eventBuses: [{ Name: "bare-bus", Arn: "arn" }] },
+      isLoading: false,
+    });
+    render(<EventsPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByText("Event Buses"));
+    await user.click(screen.getByLabelText("Edit bus bare-bus"));
+    await waitFor(() =>
+      expect(screen.getByText("Edit event bus — bare-bus")).toBeTruthy(),
+    );
+    const input = screen.getByLabelText("Description") as HTMLInputElement;
+    expect(input.value).toBe("");
+  });
+
+  it("updates the bus description and closes on success", async () => {
+    mockUpdateBusMutate.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    mockEventBuses.mockReturnValue({
+      data: { eventBuses: [{ Name: "custom-bus", Description: "Old desc", Arn: "arn" }] },
+      isLoading: false,
+    });
+    render(<EventsPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByText("Event Buses"));
+    await user.click(screen.getByLabelText("Edit bus custom-bus"));
+    await waitFor(() =>
+      expect(screen.getByText("Edit event bus — custom-bus")).toBeTruthy(),
+    );
+    const input = screen.getByDisplayValue("Old desc");
+    await user.clear(input);
+    await user.type(input, "New desc");
+    await clickButton(user, /Save/i);
+    await waitFor(() => {
+      expect(mockUpdateBusMutate).toHaveBeenCalledWith(
+        { name: "custom-bus", description: "New desc" },
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      );
+      expect(mockShowToast).toHaveBeenCalledWith("success", 'Bus "custom-bus" updated');
+    });
+    await waitFor(() =>
+      expect(screen.queryByText("Edit event bus — custom-bus")).toBeNull(),
+    );
+  });
+
+  it("sends undefined description when the field is cleared", async () => {
+    mockUpdateBusMutate.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    mockEventBuses.mockReturnValue({
+      data: { eventBuses: [{ Name: "custom-bus", Description: "Old desc", Arn: "arn" }] },
+      isLoading: false,
+    });
+    render(<EventsPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByText("Event Buses"));
+    await user.click(screen.getByLabelText("Edit bus custom-bus"));
+    await waitFor(() =>
+      expect(screen.getByText("Edit event bus — custom-bus")).toBeTruthy(),
+    );
+    const input = screen.getByDisplayValue("Old desc");
+    await user.clear(input);
+    await clickButton(user, /Save/i);
+    await waitFor(() => {
+      expect(mockUpdateBusMutate).toHaveBeenCalledWith(
+        { name: "custom-bus", description: undefined },
+        expect.anything(),
+      );
+    });
+  });
+
+  it("shows error toast when updating a bus fails", async () => {
+    mockUpdateBusMutate.mockImplementation((_b: any, opts: any) => opts?.onError?.(new Error("bus update failed")));
+    const user = userEvent.setup();
+    mockEventBuses.mockReturnValue({
+      data: { eventBuses: [{ Name: "custom-bus", Description: "Old desc", Arn: "arn" }] },
+      isLoading: false,
+    });
+    render(<EventsPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByText("Event Buses"));
+    await user.click(screen.getByLabelText("Edit bus custom-bus"));
+    await waitFor(() =>
+      expect(screen.getByText("Edit event bus — custom-bus")).toBeTruthy(),
+    );
+    await clickButton(user, /Save/i);
+    await waitFor(() =>
+      expect(mockShowToast).toHaveBeenCalledWith("error", "bus update failed"),
+    );
+  });
+
+  it("cancels the edit bus modal without updating", async () => {
+    const user = userEvent.setup();
+    mockEventBuses.mockReturnValue({
+      data: { eventBuses: [{ Name: "custom-bus", Description: "Old desc", Arn: "arn" }] },
+      isLoading: false,
+    });
+    render(<EventsPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByText("Event Buses"));
+    await user.click(screen.getByLabelText("Edit bus custom-bus"));
+    await waitFor(() =>
+      expect(screen.getByText("Edit event bus — custom-bus")).toBeTruthy(),
+    );
+    await clickButton(user, /Cancel/i);
+    await waitFor(() =>
+      expect(screen.queryByText("Edit event bus — custom-bus")).toBeNull(),
+    );
+    expect(mockUpdateBusMutate).not.toHaveBeenCalled();
   });
 
   // ─── Archives Tab ───────────────────────────────────────
