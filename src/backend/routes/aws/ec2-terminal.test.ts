@@ -1139,3 +1139,44 @@ describe("EC2 Terminal WebSocket", () => {
     });
   });
 });
+
+describe("DOCKER_SOCKET env capture", () => {
+  // The module captures DOCKER_SOCKET at import time (`|| "/var/run/docker.sock"`),
+  // so coverage of the two arms depends on the ambient env. Re-importing under
+  // both stub states covers both arms deterministically.
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it("uses DOCKER_SOCKET when set", async () => {
+    vi.stubEnv("DOCKER_SOCKET", "/tmp/test-docker.sock");
+    vi.resetModules();
+    const { setupTerminalWebSocket: freshSetup } = await import("./ec2-terminal");
+    freshSetup(createMockHttpServer());
+
+    _nodeMock.mockHttpRequest.mockReturnValue(createMockReq());
+
+    const ws = createMockWs();
+    const req = { url: validUrl, headers: { host: "localhost" } };
+    _wsMock.state.connectionHandler!(ws, req);
+
+    // The exec-creation POST is issued synchronously with the captured socket path.
+    expect(_nodeMock.mockHttpRequest.mock.calls[0][0].socketPath).toBe("/tmp/test-docker.sock");
+  });
+
+  it("falls back to the default socket when DOCKER_SOCKET is unset", async () => {
+    vi.stubEnv("DOCKER_SOCKET", "");
+    vi.resetModules();
+    const { setupTerminalWebSocket: freshSetup } = await import("./ec2-terminal");
+    freshSetup(createMockHttpServer());
+
+    _nodeMock.mockHttpRequest.mockReturnValue(createMockReq());
+
+    const ws = createMockWs();
+    const req = { url: validUrl, headers: { host: "localhost" } };
+    _wsMock.state.connectionHandler!(ws, req);
+
+    expect(_nodeMock.mockHttpRequest.mock.calls[0][0].socketPath).toBe("/var/run/docker.sock");
+  });
+});

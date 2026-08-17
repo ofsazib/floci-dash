@@ -2,9 +2,8 @@
 #
 # Runs on every push/PR to main.
 #   - TypeScript typecheck
-#   - Unit tests (fast, no dependencies)
-#   - Integration tests (Floci runs as a service container)
-#   - Coverage report uploaded as artifact
+#   - Unit tests + coverage (fast, no dependencies)
+#   - Full suite + coverage against Floci (service container) — gates the 100% thresholds end-to-end
 
 name: CI
 
@@ -56,8 +55,8 @@ jobs:
       - name: Unit tests + coverage (no Floci needed)
         run: make test-cov
 
-      - name: Integration tests (against Floci service container)
-        run: make integration-test
+      - name: Full suite + coverage against Floci (gates the 100% thresholds end-to-end)
+        run: make test-all-cov
         env:
           FLOCI_URL: http://localhost:9878
 

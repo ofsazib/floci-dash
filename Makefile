@@ -4,7 +4,7 @@ SHELL := /bin/bash
 COMPOSE := docker compose
 
 .PHONY: help install setup dev dev-backend dev-frontend build build-frontend \
-        build-backend typecheck start clean test test-cov test-all integration-test \
+        build-backend typecheck start clean test test-cov test-all test-all-cov integration-test \
         _ensure-floci \
         up up-bg down restart rebuild logs logs-floci logs-dashboard \
         ps shell shell-floci prod prod-bg prod-down \
@@ -69,6 +69,10 @@ test-cov: ## Run unit tests with coverage report (no Floci needed)
 test-all: ## Run all tests including integration (requires Floci)
 	$(MAKE) _ensure-floci
 	FLOCI_URL=http://localhost:$(FLOCI_PORT) pnpm run test
+
+test-all-cov: ## Full suite + coverage (unit + integration, requires Floci) — gates the 100% thresholds end-to-end
+	$(MAKE) _ensure-floci
+	FLOCI_URL=http://localhost:$(FLOCI_PORT) pnpm exec vitest run --coverage
 
 integration-test: ## Run integration tests against Floci (starts Floci if not running)
 	$(MAKE) _ensure-floci

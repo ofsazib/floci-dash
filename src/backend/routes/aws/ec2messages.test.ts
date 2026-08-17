@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 const mockFetch = vi.hoisted(() => vi.fn());
 
@@ -195,5 +195,49 @@ describe("EC2 Messages Routes", () => {
       const body = await res.json();
       expect(body.Endpoint).toBe("ec2messages.us-east-1.amazonaws.com");
     });
+  });
+});
+
+describe("module FLOCI_URL capture", () => {
+  // The module captures FLOCI_URL at import time (`|| "http://localhost:4566"`),
+  // so coverage of the two arms depends on the ambient env. Re-importing under
+  // both stub states covers both arms deterministically (make targets set FLOCI_URL).
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it("uses FLOCI_URL when set", async () => {
+    vi.stubEnv("FLOCI_URL", "http://floci.example:9878");
+    vi.resetModules();
+    const { default: freshRouter } = await import("./ec2messages");
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      text: () => Promise.resolve("{}"),
+    });
+    const res = await freshRouter.request("/messages/get", {
+      method: "POST",
+      body: JSON.stringify({ Destination: "i-1" }),
+      headers: { "content-type": "application/json" },
+    });
+    expect(res.status).toBe(200);
+    expect(String(mockFetch.mock.calls[0][0])).toContain("http://floci.example:9878");
+  });
+
+  it("falls back to the default endpoint when FLOCI_URL is unset", async () => {
+    vi.stubEnv("FLOCI_URL", "");
+    vi.resetModules();
+    const { default: freshRouter } = await import("./ec2messages");
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      text: () => Promise.resolve("{}"),
+    });
+    const res = await freshRouter.request("/messages/get", {
+      method: "POST",
+      body: JSON.stringify({ Destination: "i-2" }),
+      headers: { "content-type": "application/json" },
+    });
+    expect(res.status).toBe(200);
+    expect(String(mockFetch.mock.calls[0][0])).toContain("http://localhost:4566");
   });
 });

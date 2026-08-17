@@ -63,7 +63,7 @@
 - **Toast notifications** — Global API error interceptor that surfaces network and server errors via non-intrusive toast notifications
 - **Content Security Policy** — Strict CSP headers applied in production (self-only scripts, inline styles allowed for Cloudscape, no inline event handlers)
 - **Input sanitization** — All user inputs sanitized on the backend (control character stripping, path traversal prevention, JSON validation, length limits)
-- **100% test coverage** — **9,221 tests across 271 files** with **100% statement/branch/function/line coverage** across every file with executable code (backend routes, frontend pages/components/hooks, and 294 integration tests against a live Floci instance)
+- **100% test coverage** — **9,229 tests across 273 files** with **100% statement/branch/function/line coverage** across every file with executable code (backend routes, frontend pages/components/hooks, and 294 integration tests against a live Floci instance)
 - **Docker health checks** — Container health monitoring via `/api/healthz` endpoint, used by Docker Compose for dependency ordering
 - **Optimized Docker image** — Multi-stage build with pnpm cache mounts and `pnpm prune --prod` for minimal production image size
 
@@ -204,12 +204,12 @@ docker run -p 3000:3000 -p 4566:4566 \
 
 ### Testing
 
-The project includes **9,221 tests across 271 test files** with **100% statement / branch / function / line coverage** on every file with executable code, organized as:
+The project includes **9,229 tests across 273 test files** with **100% statement / branch / function / line coverage** on every file with executable code, organized as:
 
 | Tests | Files | Location |
 |-------|-------|----------|
 | Backend route unit tests | 82 | `src/backend/routes/aws/*.test.ts`, `src/backend/routes/{system,active,inspection}.test.ts` |
-| Other backend unit tests | 4 | `src/backend/clients`, `src/backend/index.ts`, `src/backend/types.ts` |
+| Other backend unit tests | 6 | `src/backend/clients`, `src/backend/index.ts`, `src/backend/types.ts` |
 | Frontend page tests | 73 | `src/frontend/pages/*.test.tsx`, `src/frontend/pages/services/*.test.tsx` |
 | Frontend component tests | 23 | `src/frontend/components/*.test.tsx` |
 | Frontend hook tests | 82 | `src/frontend/hooks/*.test.ts(x)` |
@@ -220,9 +220,10 @@ The project includes **9,221 tests across 271 test files** with **100% statement
 make test           # Fast unit tests (no Floci needed)
 make test-cov       # Unit tests with coverage report
 make test-all       # Unit + integration tests (requires Floci service container)
+make test-all-cov   # Full suite + coverage (unit + integration) — gates the 100% thresholds end-to-end
 ```
 
-Run the full suite with Floci up (`make up-bg`) to include the 294 integration tests: `npx vitest run` → **271/271 files, 9,221/9,221 tests, exit 0**.
+Run the full suite with Floci up (`make up-bg`) to include the 294 integration tests: `npx vitest run` → **273/273 files, 9,229/9,229 tests, exit 0**. CI runs `make test-cov` (fast unit gate) followed by `make test-all-cov` (full combined coverage gate, worker pool capped at 4 to stay within runner RAM).
 
 ### Key design decisions
 
