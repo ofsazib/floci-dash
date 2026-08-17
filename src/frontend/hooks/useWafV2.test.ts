@@ -14,6 +14,8 @@ import {
   useCreateWebACL,
   useWebACL,
   useDeleteWebACL,
+  useUpdateWebACL,
+  useCheckCapacity,
   useIPSets,
   useCreateIPSet,
   useDeleteIPSet,
@@ -137,6 +139,58 @@ describe("useDeleteWebACL", () => {
       Scope: "REGIONAL",
       LockToken: "lock-1",
     });
+  });
+});
+
+describe("useUpdateWebACL", () => {
+  it("calls api with PUT method and encoded id", async () => {
+    mockApi.mockResolvedValueOnce({ nextLockToken: "lock-2" });
+    const { result } = renderHook(() => useUpdateWebACL(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({
+      Id: "id/1",
+      Name: "acl1",
+      Scope: "CLOUDFRONT",
+      LockToken: "lock-1",
+      Description: "updated",
+      Rules: [{ Name: "r1" }],
+    });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/wafv2/web-acls/id%2F1",
+      expect.objectContaining({ method: "PUT" })
+    );
+    const callArgs = mockApi.mock.calls[0][1];
+    expect(JSON.parse(callArgs.body)).toEqual({
+      Id: "id/1",
+      Name: "acl1",
+      Scope: "CLOUDFRONT",
+      LockToken: "lock-1",
+      Description: "updated",
+      Rules: [{ Name: "r1" }],
+    });
+  });
+
+  it("falls back to REGIONAL when Scope is missing", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useUpdateWebACL(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ Id: "id-1", Name: "acl1", LockToken: "lock-1" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/wafv2/web-acls/id-1",
+      expect.objectContaining({ method: "PUT" })
+    );
+  });
+});
+
+describe("useCheckCapacity", () => {
+  it("calls api with POST method and rules", async () => {
+    mockApi.mockResolvedValueOnce({ capacity: 42 });
+    const { result } = renderHook(() => useCheckCapacity(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ Rules: [{ Name: "r1" }], Scope: "REGIONAL" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/wafv2/capacity",
+      expect.objectContaining({ method: "POST" })
+    );
+    const callArgs = mockApi.mock.calls[0][1];
+    expect(JSON.parse(callArgs.body)).toEqual({ Rules: [{ Name: "r1" }], Scope: "REGIONAL" });
   });
 });
 

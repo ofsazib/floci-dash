@@ -14,6 +14,14 @@ function expectModalHidden(headerText: string) {
   expect(dialog.className).toContain("hidden");
 }
 
+/** Cloudscape Modal handles Escape via a React onKeyDown on the dialog element. */
+function dismissModalWithEscape() {
+  const dialog = Array.from(document.querySelectorAll('[class*="awsui_dialog"]'))
+    .filter((d) => !d.className.includes("hidden"))
+    .pop() as HTMLElement;
+  fireEvent.keyDown(dialog, { keyCode: 27, key: "Escape" });
+}
+
 /** The currently visible Cloudscape dialog (hidden ones stay mounted with display:none). */
 function visibleDialog(): HTMLElement {
   const dialogs = Array.from(document.querySelectorAll('[role="dialog"]')).filter(
@@ -30,6 +38,8 @@ vi.mock("../../components/Toast", () => ({
 const mockWebAcls = vi.fn();
 const mockCreateWebAcl = vi.fn();
 const mockDeleteWebAcl = vi.fn();
+const mockUpdateWebAclMutate = vi.fn();
+const mockCheckCapacityMutate = vi.fn();
 const mockIPSets = vi.fn();
 const mockRegexSets = vi.fn();
 const mockRuleGroups = vi.fn();
@@ -61,6 +71,8 @@ vi.mock("../../hooks/useWafV2", () => ({
   useWebACLs: (...args: any[]) => mockWebAcls(...args),
   useCreateWebACL: () => ({ mutate: mockCreateWebAcl, isPending: false }),
   useDeleteWebACL: () => ({ mutateAsync: mockDeleteWebAcl, isPending: deleteWebAclState.isPending, variables: deleteWebAclState.variables }),
+  useUpdateWebACL: () => ({ mutate: mockUpdateWebAclMutate, isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useCheckCapacity: () => ({ mutate: mockCheckCapacityMutate, isPending: false, isError: false, error: null, reset: vi.fn() }),
   useIPSets: (...args: any[]) => mockIPSets(...args),
   useRegexPatternSets: (...args: any[]) => mockRegexSets(...args),
   useRuleGroups: (...args: any[]) => mockRuleGroups(...args),
@@ -90,6 +102,12 @@ import { WafV2Dashboard } from "./WafV2Dashboard";
 beforeEach(() => {
   vi.clearAllMocks();
   mockWebAcls.mockReturnValue({ data: { webAcls: [], total: 0 }, isLoading: false });
+  mockUpdateWebAclMutate.mockReset();
+  mockUpdateWebAclMutate.mockImplementation((_payload: any, opts?: any) => {
+    opts?.onSuccess?.();
+    return Promise.resolve({});
+  });
+  mockCheckCapacityMutate.mockReset();
   mockIPSets.mockReturnValue({ data: { ipSets: [], total: 0 }, isLoading: false });
   mockRegexSets.mockReturnValue({ data: { regexPatternSets: [], total: 0 }, isLoading: false });
   mockRuleGroups.mockReturnValue({ data: { ruleGroups: [], total: 0 }, isLoading: false });
@@ -1463,5 +1481,221 @@ describe("WafV2Dashboard — modal dismiss & success paths", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /Put policy/i })).toBeTruthy();
     });
+  });
+});
+
+describe("WafV2Dashboard — edit web ACL + capacity check", () => {
+  const ACL = { Name: "my-acl", Id: "acl-1", Description: "My ACL", ARN: "arn:aws:wafv2:us-east-1:123:regional/webacl/my-acl/abc" };
+
+  async function openEdit(user: ReturnType<typeof userEvent.setup>) {
+    mockWebAcls.mockReturnValue({ data: { webAcls: [ACL], total: 1 }, isLoading: false });
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-acl")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /^Edit$/i }));
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: /Edit Web ACL — my-acl/ })).toBeTruthy(),
+    );
+  }
+
+  it("opens the edit modal with prefilled description and saves", async () => {
+    const user = userEvent.setup();
+    await openEdit(user);
+    const dialog = () =>
+      within(screen.getByRole("dialog", { name: /Edit Web ACL — my-acl/ }));
+    expect(dialog().getByDisplayValue("My ACL")).toBeTruthy();
+    // Edit the description
+    await user.clear(dialog().getByRole("textbox", { name: /Description/i }));
+    await user.type(dialog().getByRole("textbox", { name: /Description/i }), "Renamed ACL");
+    // Switch default action to Block and add a rule
+    await user.click(dialog().getByRole("button", { name: /Allow/i }));
+    await user.click(screen.getByRole("option", { name: /Block/i }));
+    fireEvent.change(dialog().getByRole("textbox", { name: /Rules \(JSON array\)/i }), {
+      target: { value: '[{"Name": "r1", "Priority": 1}]' },
+    });
+    await user.click(dialog().getByRole("button", { name: /^Save$/i }));
+    await waitFor(() =>
+      expect(mockUpdateWebAclMutate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          Id: "acl-1",
+          Name: "my-acl",
+          Scope: "REGIONAL",
+          LockToken: "placeholder",
+          Description: "Renamed ACL",
+          DefaultAction: { Block: {} },
+          Rules: [{ Name: "r1", Priority: 1 }],
+        }),
+        expect.anything(),
+      ),
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: /Edit Web ACL/ })).toBeNull(),
+    );
+    expect(toastMock).toHaveBeenCalledWith("success", "Web ACL updated");
+  });
+
+  it("omits the description when it is the em-dash placeholder", async () => {
+    mockWebAcls.mockReturnValue({
+      data: { webAcls: [{ Name: "no-desc", Id: "acl-2", ARN: "arn:2" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<WafV2Dashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("no-desc")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /^Edit$/i }));
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: /Edit Web ACL — no-desc/ })).toBeTruthy(),
+    );
+    const dialog = () =>
+      within(screen.getByRole("dialog", { name: /Edit Web ACL — no-desc/ }));
+    expect(dialog().getByRole("textbox", { name: /Description/i })).toHaveValue("");
+    await user.click(dialog().getByRole("button", { name: /^Save$/i }));
+    await waitFor(() =>
+      expect(mockUpdateWebAclMutate).toHaveBeenCalledWith(
+        expect.objectContaining({ Description: undefined }),
+        expect.anything(),
+      ),
+    );
+  });
+
+  it("shows a validation error for invalid rules JSON and fixes it", async () => {
+    const user = userEvent.setup();
+    await openEdit(user);
+    const dialog = () =>
+      within(screen.getByRole("dialog", { name: /Edit Web ACL — my-acl/ }));
+    fireEvent.change(dialog().getByRole("textbox", { name: /Rules \(JSON array\)/i }), {
+      target: { value: "{not json" },
+    });
+    await user.click(dialog().getByRole("button", { name: /^Save$/i }));
+    await waitFor(() => expect(screen.getByText("Rules must be valid JSON")).toBeTruthy());
+    expect(mockUpdateWebAclMutate).not.toHaveBeenCalled();
+    // Dismiss the error alert
+    const dismiss = document.querySelector('[class*="awsui_dismiss-button"]') as HTMLElement;
+    fireEvent.click(dismiss);
+    await waitFor(() => expect(screen.queryByText("Rules must be valid JSON")).toBeNull());
+  });
+
+  it("shows the fallback error when the update fails without a message", async () => {
+    mockUpdateWebAclMutate.mockImplementation((_payload: any, opts?: any) => {
+      opts?.onError?.(new Error());
+      return Promise.reject(new Error());
+    });
+    const user = userEvent.setup();
+    await openEdit(user);
+    const dialog = () =>
+      within(screen.getByRole("dialog", { name: /Edit Web ACL — my-acl/ }));
+    await user.click(dialog().getByRole("button", { name: /^Save$/i }));
+    await waitFor(() =>
+      expect(screen.getByText("Failed to update web ACL")).toBeTruthy(),
+    );
+  });
+
+  it("checks capacity and shows the result", async () => {
+    mockCheckCapacityMutate.mockImplementation((_payload: any, opts?: any) => {
+      opts?.onSuccess?.({ capacity: 1500 });
+      return Promise.resolve({ capacity: 1500 });
+    });
+    const user = userEvent.setup();
+    await openEdit(user);
+    const dialog = () =>
+      within(screen.getByRole("dialog", { name: /Edit Web ACL — my-acl/ }));
+    fireEvent.change(dialog().getByRole("textbox", { name: /Rules \(JSON array\)/i }), {
+      target: { value: '[{"Name": "r1", "Priority": 1}]' },
+    });
+    await user.click(dialog().getByRole("button", { name: /Check capacity/i }));
+    await waitFor(() => expect(screen.getByText("Capacity: 1500 units")).toBeTruthy());
+    expect(mockCheckCapacityMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ Rules: [{ Name: "r1", Priority: 1 }], Scope: "REGIONAL" }),
+      expect.anything(),
+    );
+    // Dismiss the success alert
+    const dismiss = document.querySelector('[class*="awsui_dismiss-button"]') as HTMLElement;
+    fireEvent.click(dismiss);
+    await waitFor(() => expect(screen.queryByText("Capacity: 1500 units")).toBeNull());
+  });
+
+  it("shows capacity errors for invalid JSON and failed checks", async () => {
+    const user = userEvent.setup();
+    await openEdit(user);
+    const dialog = () =>
+      within(screen.getByRole("dialog", { name: /Edit Web ACL — my-acl/ }));
+    fireEvent.change(dialog().getByRole("textbox", { name: /Rules \(JSON array\)/i }), {
+      target: { value: "bad json" },
+    });
+    await user.click(dialog().getByRole("button", { name: /Check capacity/i }));
+    await waitFor(() =>
+      expect(screen.getByText("Rules must be valid JSON")).toBeTruthy(),
+    );
+    // Fix the JSON, then fail the check with a message-less error
+    fireEvent.change(dialog().getByRole("textbox", { name: /Rules \(JSON array\)/i }), {
+      target: { value: "[]" },
+    });
+    mockCheckCapacityMutate.mockImplementation((_payload: any, opts?: any) => {
+      opts?.onError?.(new Error());
+      return Promise.reject(new Error());
+    });
+    await user.click(dialog().getByRole("button", { name: /Check capacity/i }));
+    await waitFor(() =>
+      expect(screen.getByText("Capacity check failed")).toBeTruthy(),
+    );
+    // Dismiss the capacity error alert
+    const dismiss = document.querySelector('[class*="awsui_dismiss-button"]') as HTMLElement;
+    fireEvent.click(dismiss);
+    await waitFor(() =>
+      expect(screen.queryByText("Capacity check failed")).toBeNull(),
+    );
+  });
+
+  it("falls back to an empty rules array when the rules textarea is cleared", async () => {
+    const user = userEvent.setup();
+    await openEdit(user);
+    const dialog = () =>
+      within(screen.getByRole("dialog", { name: /Edit Web ACL — my-acl/ }));
+    await user.clear(dialog().getByRole("textbox", { name: /Rules \(JSON array\)/i }));
+    await user.click(dialog().getByRole("button", { name: /^Save$/i }));
+    await waitFor(() =>
+      expect(mockUpdateWebAclMutate).toHaveBeenCalledWith(
+        expect.objectContaining({ Rules: [] }),
+        expect.anything(),
+      ),
+    );
+  });
+
+  it("checks capacity with the empty-rules fallback", async () => {
+    mockCheckCapacityMutate.mockImplementation((_payload: any, opts?: any) => {
+      opts?.onSuccess?.({ capacity: 0 });
+      return Promise.resolve({ capacity: 0 });
+    });
+    const user = userEvent.setup();
+    await openEdit(user);
+    const dialog = () =>
+      within(screen.getByRole("dialog", { name: /Edit Web ACL — my-acl/ }));
+    await user.clear(dialog().getByRole("textbox", { name: /Rules \(JSON array\)/i }));
+    await user.click(dialog().getByRole("button", { name: /Check capacity/i }));
+    await waitFor(() =>
+      expect(mockCheckCapacityMutate).toHaveBeenCalledWith(
+        expect.objectContaining({ Rules: [] }),
+        expect.anything(),
+      ),
+    );
+  });
+
+  it("dismisses the edit modal with Escape", async () => {
+    const user = userEvent.setup();
+    await openEdit(user);
+    dismissModalWithEscape();
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: /Edit Web ACL/ })).toBeNull(),
+    );
+  });
+
+  it("cancels the edit modal", async () => {
+    const user = userEvent.setup();
+    await openEdit(user);
+    const dialog = () =>
+      within(screen.getByRole("dialog", { name: /Edit Web ACL — my-acl/ }));
+    await user.click(dialog().getByRole("button", { name: /^Cancel$/i }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: /Edit Web ACL/ })).toBeNull(),
+    );
   });
 });

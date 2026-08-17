@@ -33,6 +33,8 @@ import {
   DisassociateWebACLCommand,
   GetWebACLForResourceCommand,
   ListResourcesForWebACLCommand,
+  UpdateWebACLCommand,
+  CheckCapacityCommand,
   GetPermissionPolicyCommand,
   PutPermissionPolicyCommand,
   DeletePermissionPolicyCommand,
@@ -98,6 +100,46 @@ router.post("/web-acls/delete", async (c: Context) => {
     new DeleteWebACLCommand({ Id: body.Id, Name: body.Name, Scope: body.Scope, LockToken: body.LockToken })
   );
   return c.json({ deleted: true });
+});
+
+router.put("/web-acls/:id", async (c: Context) => {
+  const id = c.req.param("id")!;
+  const body = await c.req.json<any>();
+  if (!body.Name) return c.json({ error: "Name is required" }, 400);
+  if (!body.Scope) return c.json({ error: "Scope is required" }, 400);
+  if (!body.LockToken) return c.json({ error: "LockToken is required" }, 400);
+
+  const client = getClient();
+  const result = await client.send(
+    new UpdateWebACLCommand({
+      Id: id,
+      Name: body.Name,
+      Scope: body.Scope,
+      LockToken: body.LockToken,
+      Description: body.Description,
+      DefaultAction: body.DefaultAction || { Allow: {} },
+      Rules: body.Rules,
+      VisibilityConfig: body.VisibilityConfig || VISIBILITY_CONFIG,
+      CustomResponseBodies: body.CustomResponseBodies,
+      CaptchaConfig: body.CaptchaConfig,
+      ChallengeConfig: body.ChallengeConfig,
+      TokenDomains: body.TokenDomains,
+      AssociationConfig: body.AssociationConfig,
+    })
+  );
+  return c.json({ nextLockToken: result.NextLockToken });
+});
+
+router.post("/capacity", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.Rules) return c.json({ error: "Rules are required" }, 400);
+  const scope = body.Scope || "REGIONAL";
+
+  const client = getClient();
+  const result = await client.send(
+    new CheckCapacityCommand({ Rules: body.Rules, Scope: scope })
+  );
+  return c.json({ capacity: result.Capacity });
 });
 
 // ── IP Sets ───────────────────────────────────────────────

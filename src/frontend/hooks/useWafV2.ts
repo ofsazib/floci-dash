@@ -39,6 +39,23 @@ export function useDeleteWebACL() {
   });
 }
 
+export function useUpdateWebACL() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: any) =>
+      api(`/aws/wafv2/web-acls/${encodeURIComponent(body.Id)}`, { method: "PUT", body: JSON.stringify(body) }),
+    onSuccess: (_data, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "wafv2", "web-acls", (variables as any).Scope || "REGIONAL"] }),
+  });
+}
+
+export function useCheckCapacity() {
+  return useMutation({
+    mutationFn: (body: { Rules: any[]; Scope?: string }) =>
+      api("/aws/wafv2/capacity", { method: "POST", body: JSON.stringify(body) }),
+  });
+}
+
 // ─── IP Sets ────────────────────────────────────────────
 
 export function useIPSets(scope: string = "REGIONAL") {

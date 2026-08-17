@@ -22,6 +22,8 @@ vi.mock("@aws-sdk/client-wafv2", () => ({
   CreateWebACLCommand: createCmd("CreateWebACLCommand"),
   GetWebACLCommand: createCmd("GetWebACLCommand"),
   DeleteWebACLCommand: createCmd("DeleteWebACLCommand"),
+  UpdateWebACLCommand: createCmd("UpdateWebACLCommand"),
+  CheckCapacityCommand: createCmd("CheckCapacityCommand"),
   ListIPSetsCommand: createCmd("ListIPSetsCommand"),
   CreateIPSetCommand: createCmd("CreateIPSetCommand"),
   GetIPSetCommand: createCmd("GetIPSetCommand"),
@@ -738,6 +740,85 @@ describe("WAFv2 Routes — Permission Policy", () => {
 
   it("POST /permission-policy/delete — 400 when ResourceArn missing", async () => {
     const res = await post("/permission-policy/delete", {});
+    expect(res.status).toBe(400);
+  });
+
+  // ── Update WebACL + CheckCapacity ─────────────────────
+
+  it("PUT /web-acls/:id — updates a web ACL", async () => {
+    mockSend.mockResolvedValueOnce({ NextLockToken: "token-2" });
+    const res = await router.request("/web-acls/wacl-1", {
+      method: "PUT",
+      body: JSON.stringify({
+        Name: "my-acl",
+        Scope: "REGIONAL",
+        LockToken: "token-1",
+        Description: "updated",
+        Rules: [{ Name: "r1" }],
+        CustomResponseBodies: { b1: { Content: "x" } },
+        TokenDomains: ["example.com"],
+      }),
+      headers: { "content-type": "application/json" },
+    });
+    const json = await res.json();
+    expect(json.nextLockToken).toBe("token-2");
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("UpdateWebACLCommand");
+    expect(mockSend.mock.calls[0][0].Id).toBe("wacl-1");
+    expect(mockSend.mock.calls[0][0].Name).toBe("my-acl");
+    expect(mockSend.mock.calls[0][0].LockToken).toBe("token-1");
+    expect(mockSend.mock.calls[0][0].Description).toBe("updated");
+    expect(mockSend.mock.calls[0][0].Rules).toEqual([{ Name: "r1" }]);
+    expect(mockSend.mock.calls[0][0].DefaultAction).toEqual({ Allow: {} });
+    expect(mockSend.mock.calls[0][0].TokenDomains).toEqual(["example.com"]);
+  });
+
+  it("PUT /web-acls/:id — 400 when Name missing", async () => {
+    const res = await router.request("/web-acls/wacl-1", {
+      method: "PUT",
+      body: JSON.stringify({ Scope: "REGIONAL", LockToken: "t" }),
+      headers: { "content-type": "application/json" },
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("PUT /web-acls/:id — 400 when Scope missing", async () => {
+    const res = await router.request("/web-acls/wacl-1", {
+      method: "PUT",
+      body: JSON.stringify({ Name: "my-acl", LockToken: "t" }),
+      headers: { "content-type": "application/json" },
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("PUT /web-acls/:id — 400 when LockToken missing", async () => {
+    const res = await router.request("/web-acls/wacl-1", {
+      method: "PUT",
+      body: JSON.stringify({ Name: "my-acl", Scope: "REGIONAL" }),
+      headers: { "content-type": "application/json" },
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("POST /capacity — checks rules capacity with explicit scope", async () => {
+    mockSend.mockResolvedValueOnce({ Capacity: 42 });
+    const res = await post("/capacity", { Rules: [{ Name: "r1" }], Scope: "CLOUDFRONT" });
+    const json = await res.json();
+    expect(json.capacity).toBe(42);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("CheckCapacityCommand");
+    expect(mockSend.mock.calls[0][0].Rules).toEqual([{ Name: "r1" }]);
+    expect(mockSend.mock.calls[0][0].Scope).toBe("CLOUDFRONT");
+  });
+
+  it("POST /capacity — defaults scope to REGIONAL", async () => {
+    mockSend.mockResolvedValueOnce({ Capacity: 10 });
+    const res = await post("/capacity", { Rules: [] });
+    const json = await res.json();
+    expect(json.capacity).toBe(10);
+    expect(mockSend.mock.calls[0][0].Scope).toBe("REGIONAL");
+  });
+
+  it("POST /capacity — 400 when Rules missing", async () => {
+    const res = await post("/capacity", {});
     expect(res.status).toBe(400);
   });
 });

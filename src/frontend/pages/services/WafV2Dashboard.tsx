@@ -407,6 +407,8 @@ import {
   useWebACLs,
   useCreateWebACL,
   useDeleteWebACL,
+  useUpdateWebACL,
+  useCheckCapacity,
   useIPSets,
   useCreateIPSet,
   useDeleteIPSet,
@@ -521,6 +523,8 @@ export function WafV2Dashboard() {
   const webAclsQuery = useWebACLs();
   const createWebAcl = useCreateWebACL();
   const deleteWebAcl = useDeleteWebACL();
+  const updateWebAcl = useUpdateWebACL();
+  const checkCapacity = useCheckCapacity();
   const ipSetsQuery = useIPSets();
   const createIPSet = useCreateIPSet();
   const deleteIPSet = useDeleteIPSet();
@@ -533,6 +537,12 @@ export function WafV2Dashboard() {
   const deleteRuleGroup = useDeleteRuleGroup();
   const [showCreate, setShowCreate] = useState(false);
   const [aclName, setAclName] = useState("");
+  const [editWebAcl, setEditWebAcl] = useState<{ id: string; name: string; description: string } | null>(null);
+  const [editRules, setEditRules] = useState("[]");
+  const [editDefaultAction, setEditDefaultAction] = useState<SelectProps.Option>({ label: "Allow", value: "Allow" });
+  const [editError, setEditError] = useState<string | null>(null);
+  const [capacityResult, setCapacityResult] = useState<number | null>(null);
+  const [capacityError, setCapacityError] = useState<string | null>(null);
   const [showCreateIPSet, setShowCreateIPSet] = useState(false);
   const [showCreateRegexSet, setShowCreateRegexSet] = useState(false);
   const [editRegexSet, setEditRegexSet] = useState<{ id: string; name: string } | null>(null);
@@ -598,6 +608,54 @@ export function WafV2Dashboard() {
     );
   }
 
+  function handleEdit() {
+    let rules: any[];
+    try {
+      rules = JSON.parse(editRules || "[]");
+    } catch {
+      setEditError("Rules must be valid JSON");
+      return;
+    }
+    setEditError(null);
+    updateWebAcl.mutate(
+      {
+        Id: editWebAcl!.id,
+        Name: editWebAcl!.name,
+        Scope: "REGIONAL",
+        LockToken: "placeholder",
+        Description: editWebAcl!.description === "\u2014" ? undefined : editWebAcl!.description,
+        DefaultAction: editDefaultAction.value === "Block" ? { Block: {} } : { Allow: {} },
+        Rules: rules,
+      },
+      {
+        onSuccess: () => {
+          setEditWebAcl(null);
+          showToast("success", "Web ACL updated");
+        },
+        onError: (e) => setEditError((e as Error)?.message || "Failed to update web ACL"),
+      }
+    );
+  }
+
+  function handleCheckCapacity() {
+    let rules: any[];
+    try {
+      rules = JSON.parse(editRules || "[]");
+    } catch {
+      setCapacityError("Rules must be valid JSON");
+      return;
+    }
+    setCapacityError(null);
+    setCapacityResult(null);
+    checkCapacity.mutate(
+      { Rules: rules, Scope: "REGIONAL" },
+      {
+        onSuccess: (data: any) => setCapacityResult(data.capacity),
+        onError: (e) => setCapacityError((e as Error)?.message || "Capacity check failed"),
+      }
+    );
+  }
+
   return (
     <SpaceBetween size="l">
       <ResourceTable
@@ -617,12 +675,27 @@ export function WafV2Dashboard() {
             id: "actions",
             header: "",
             cell: (item: any) => (
-              <DeleteButton
-                itemName={item.name}
-                resourceType="web ACL"
-                loading={deleteWebAcl.isPending && deleteWebAcl.variables?.Name === item.name}
-                onDelete={() => deleteWebAcl.mutateAsync({ Id: item.id, Name: item.name, Scope: "REGIONAL", LockToken: "placeholder" })}
-              />
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button
+                  variant="link"
+                  onClick={() => {
+                    setEditWebAcl({ id: item.id, name: item.name, description: item.description });
+                    setEditRules("[]");
+                    setEditDefaultAction({ label: "Allow", value: "Allow" });
+                    setEditError(null);
+                    setCapacityResult(null);
+                    setCapacityError(null);
+                  }}
+                >
+                  Edit
+                </Button>
+                <DeleteButton
+                  itemName={item.name}
+                  resourceType="web ACL"
+                  loading={deleteWebAcl.isPending && deleteWebAcl.variables?.Name === item.name}
+                  onDelete={() => deleteWebAcl.mutateAsync({ Id: item.id, Name: item.name, Scope: "REGIONAL", LockToken: "placeholder" })}
+                />
+              </SpaceBetween>
             ),
           },
         ]}
@@ -899,6 +972,69 @@ export function WafV2Dashboard() {
           <Input value={aclName} onChange={({ detail }) => setAclName(detail.value)} placeholder="my-web-acl" />
         </FormField>
       </Modal>
+
+      {editWebAcl && (
+        <Modal
+          visible
+          onDismiss={() => setEditWebAcl(null)}
+          header={`Edit Web ACL — ${editWebAcl.name}`}
+          size="large"
+          footer={
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setEditWebAcl(null)}>Cancel</Button>
+              <Button variant="normal" onClick={handleCheckCapacity}>Check capacity</Button>
+              <Button variant="primary" loading={updateWebAcl.isPending} onClick={handleEdit} disabled={checkCapacity.isPending}>
+                Save
+              </Button>
+            </SpaceBetween>
+          }
+        >
+          <SpaceBetween size="m">
+            {editError && (
+              <Alert type="error" dismissible onDismiss={() => setEditError(null)}>
+                {editError}
+              </Alert>
+            )}
+            {capacityError && (
+              <Alert type="error" dismissible onDismiss={() => setCapacityError(null)}>
+                {capacityError}
+              </Alert>
+            )}
+            {capacityResult !== null && (
+              <Alert type="success" dismissible onDismiss={() => setCapacityResult(null)}>
+                Capacity: {capacityResult} units
+              </Alert>
+            )}
+            <FormField label="Description">
+              <Input
+                value={editWebAcl.description === "\u2014" ? "" : editWebAcl.description}
+                onChange={({ detail }) =>
+                  setEditWebAcl({ ...editWebAcl, description: detail.value })
+                }
+                placeholder="Optional description"
+              />
+            </FormField>
+            <FormField label="Default action">
+              <Select
+                selectedOption={editDefaultAction}
+                onChange={({ detail }) => setEditDefaultAction(detail.selectedOption)}
+                options={[
+                  { label: "Allow", value: "Allow" },
+                  { label: "Block", value: "Block" },
+                ]}
+              />
+            </FormField>
+            <FormField label="Rules (JSON array)" description="Paste the rules as a JSON array — Check capacity validates them">
+              <Textarea
+                value={editRules}
+                onChange={({ detail }) => setEditRules(detail.value)}
+                placeholder='[{"Name": "rule-1", "Priority": 1, ...}]'
+                rows={6}
+              />
+            </FormField>
+          </SpaceBetween>
+        </Modal>
+      )}
 
       {showCreateIPSet && (
         <CreateIPSetModal
