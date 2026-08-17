@@ -76,6 +76,49 @@ describe("System Routes", () => {
     expect(body.status).toBe("initialized");
   });
 
+  it("GET /diagnose — returns diagnostics from Floci", async () => {
+    mockFlociFetch.mockResolvedValueOnce({ version: "1.5.22", services: { s3: "running" } });
+    const res = await router.request("/diagnose", { method: "GET" });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.version).toBe("1.5.22");
+    expect(body.services.s3).toBe("running");
+    expect(mockFlociFetch).toHaveBeenCalledWith("/_floci/diagnose");
+  });
+
+  it("GET /config — returns runtime config from Floci", async () => {
+    mockFlociFetch.mockResolvedValueOnce({ storage: { mode: "memory" } });
+    const res = await router.request("/config", { method: "GET" });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.storage.mode).toBe("memory");
+    expect(mockFlociFetch).toHaveBeenCalledWith("/_floci/config");
+  });
+
+  it("POST /state/reset — resets Floci state", async () => {
+    mockFlociFetch.mockResolvedValueOnce({ status: "OK" });
+    const res = await router.request("/state/reset", { method: "POST" });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe("OK");
+    expect(mockFlociFetch).toHaveBeenCalledWith("/_floci/state/reset", { method: "POST" });
+  });
+
+  it("POST /state/nuke — nukes Floci state", async () => {
+    mockFlociFetch.mockResolvedValueOnce({ status: "OK" });
+    const res = await router.request("/state/nuke", { method: "POST" });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe("OK");
+    expect(mockFlociFetch).toHaveBeenCalledWith("/_floci/state/nuke", { method: "POST" });
+  });
+
+  it("POST /state/reset — propagates Floci errors", async () => {
+    mockFlociFetch.mockRejectedValueOnce(new Error("Floci 500: Internal Server Error"));
+    const res = await router.request("/state/reset", { method: "POST" });
+    expect(res.status).toBe(500);
+  });
+
   describe("GET /resource-counts", () => {
     it("returns counts for all queried services", async () => {
       mockAwsSend

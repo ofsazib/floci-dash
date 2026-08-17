@@ -21,6 +21,24 @@ vi.mock("../lib/client", () => ({
 
 import Settings from "./Settings";
 
+function dismissModalWithEscape() {
+  document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+    fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27, key: "Escape" });
+  });
+}
+
+function dialogOf(headerText: string): HTMLElement {
+  const header = screen
+    .getAllByText(headerText)
+    .find((h) => h.closest('[role="dialog"]'));
+  return header!.closest('[role="dialog"]') as HTMLElement;
+}
+
+/** Assert the modal with the given header is hidden (Cloudscape uses display:none). */
+function expectModalHidden(headerText: string) {
+  expect(dialogOf(headerText).className).toContain("hidden");
+}
+
 describe("Settings", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -213,5 +231,148 @@ describe("Settings", () => {
     await waitFor(() => {
       expect(screen.getByText(/Failed to update endpoint/)).toBeTruthy();
     });
+  });
+
+  // ─── Floci Maintenance (reset / nuke / diagnostics) ───
+
+  it("renders Floci Maintenance section", () => {
+    render(<Settings />, { wrapper: createWrapper() });
+    expect(screen.getByText("Floci Maintenance")).toBeTruthy();
+    expect(screen.getByText("Reset state")).toBeTruthy();
+    expect(screen.getByText("Nuke state")).toBeTruthy();
+    expect(screen.getByText("Load diagnostics")).toBeTruthy();
+  });
+
+  it("opens the reset confirm modal and cancels", async () => {
+    const user = userEvent.setup();
+    render(<Settings />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Reset state"));
+    expect(screen.getByText("Reset Floci state?")).toBeTruthy();
+    await user.click(screen.getByText("Cancel"));
+    await waitFor(() => expectModalHidden("Reset Floci state?"));
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("confirms reset and calls the API", async () => {
+    mockApi.mockResolvedValueOnce({ status: "OK" });
+    const user = userEvent.setup();
+    render(<Settings />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Reset state"));
+    // The confirm modal's primary button is the last "Reset" text (header + body + button)
+    const buttons = screen.getAllByText("Reset");
+    await user.click(buttons[buttons.length - 1]);
+    await waitFor(() => {
+      expect(mockApi).toHaveBeenCalledWith("/system/state/reset", { method: "POST" });
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/reset successfully/)).toBeTruthy();
+    });
+  });
+
+  it("nukes state after confirmation", async () => {
+    mockApi.mockResolvedValueOnce({ status: "OK" });
+    const user = userEvent.setup();
+    render(<Settings />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Nuke state"));
+    expect(screen.getByText("Nuke Floci state?")).toBeTruthy();
+    const buttons = screen.getAllByText("Nuke");
+    await user.click(buttons[buttons.length - 1]);
+    await waitFor(() => {
+      expect(mockApi).toHaveBeenCalledWith("/system/state/nuke", { method: "POST" });
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/nuked successfully/)).toBeTruthy();
+    });
+  });
+
+  it("shows error alert when reset fails", async () => {
+    mockApi.mockRejectedValueOnce(new Error("Floci unreachable"));
+    const user = userEvent.setup();
+    render(<Settings />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Reset state"));
+    const buttons = screen.getAllByText("Reset");
+    await user.click(buttons[buttons.length - 1]);
+    await waitFor(() => {
+      expect(screen.getByText(/Floci unreachable/)).toBeTruthy();
+    });
+  });
+
+  it("shows unknown-error fallback when reset rejects with non-Error", async () => {
+    mockApi.mockRejectedValueOnce("boom");
+    const user = userEvent.setup();
+    render(<Settings />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Reset state"));
+    const buttons = screen.getAllByText("Reset");
+    await user.click(buttons[buttons.length - 1]);
+    await waitFor(() => {
+      expect(screen.getByText(/Failed to reset Floci state: unknown error/)).toBeTruthy();
+    });
+  });
+
+  it("dismisses the maintenance alert", async () => {
+    mockApi.mockResolvedValueOnce({ status: "OK" });
+    const user = userEvent.setup();
+    render(<Settings />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Reset state"));
+    const buttons = screen.getAllByText("Reset");
+    await user.click(buttons[buttons.length - 1]);
+    await waitFor(() => expect(screen.getByText(/reset successfully/)).toBeTruthy());
+    const dismiss = document.querySelector('[class*="awsui_dismiss-button"]') as HTMLElement;
+    fireEvent.click(dismiss);
+    await waitFor(() => expect(screen.queryByText(/reset successfully/)).toBeNull());
+  });
+
+  it("loads and shows diagnostics", async () => {
+    mockApi.mockResolvedValueOnce({ version: "1.5.22", services: { s3: "running" } });
+    const user = userEvent.setup();
+    render(<Settings />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Load diagnostics"));
+    await waitFor(() => {
+      expect(mockApi).toHaveBeenCalledWith("/system/diagnose", { method: "GET" });
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/1.5.22/)).toBeTruthy();
+    });
+  });
+
+  it("closes the diagnostics modal", async () => {
+    mockApi.mockResolvedValueOnce({ version: "1.5.22" });
+    const user = userEvent.setup();
+    render(<Settings />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Load diagnostics"));
+    await waitFor(() => expect(screen.getByText(/1.5.22/)).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Floci Diagnostics"));
+  });
+
+  it("shows diagnostics error alert on failure", async () => {
+    mockApi.mockRejectedValueOnce(new Error("diagnose failed"));
+    const user = userEvent.setup();
+    render(<Settings />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Load diagnostics"));
+    await waitFor(() => {
+      expect(screen.getByText(/diagnose failed/)).toBeTruthy();
+    });
+  });
+
+  it("shows fallback error for non-Error rejection", async () => {
+    mockApi.mockRejectedValueOnce("oops");
+    const user = userEvent.setup();
+    render(<Settings />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Load diagnostics"));
+    await waitFor(() => {
+      expect(screen.getByText("Failed to load diagnostics")).toBeTruthy();
+    });
+  });
+
+  it("dismisses the diagnostics error alert", async () => {
+    mockApi.mockRejectedValueOnce(new Error("x"));
+    const user = userEvent.setup();
+    render(<Settings />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Load diagnostics"));
+    await waitFor(() => expect(screen.getByText("x")).toBeTruthy());
+    const dismiss = document.querySelector('[class*="awsui_dismiss-button"]') as HTMLElement;
+    fireEvent.click(dismiss);
+    await waitFor(() => expect(screen.queryByText("x")).toBeNull());
   });
 });

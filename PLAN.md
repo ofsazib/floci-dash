@@ -1780,6 +1780,8 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 | 25.124 | **Branch-coverage campaign — batches 4i-4m + the 14-file cleanup** — **4i** (S3BucketConfig 96.2%->100%, WafV2Dashboard 91.2%->100% — removed 9 disabled-mirrored guards, DynamoDBTableDetail 95.6%->100% — removed 6 `??` fallbacks + 2 guards), **4j** (AppLayoutShell, CloudWatchLogsDashboard — 7 missed branches each, mixed dead-arm removal + onSelect health-falsy test), **4k** (BCMDashboard 88.2%->100%, SchedulerDashboard 93.4%->100%, CognitoDashboard 97.8%->100% — the 9-level auth-flow disabled ternary refactored into an object lookup), **14-file cleanup** (all single-missed-branch files: ServicePage, StatCard, useEvents, useS3, usePricing, useLogs, ACMDashboard, OpenSearchDashboard, RDSDataDashboard, Route53Dashboard, StepFunctionsDashboard, BatchDashboard, S3VectorsDashboard, DynamoDBUpdateTable — 12 tests + 6 dead-arm removals), **4l** (CloudMapDashboard, ECRDashboard, KinesisDashboard — hoisted delete states + key-absent drill-down data + 2 dead Select fallbacks), **4m** (AppSyncDashboard, ElastiCacheDashboard, DynamoDBAdvanced — 9 dead guards/fallbacks removed, no test changes needed). Verification: typecheck clean, full suite 8,925 passed | Done | 2026-08-16 |
 | 25.125 | **Branch-campaign verification + final stragglers** — the whole-repo threshold run exposed 3 real gaps the frontend-only sweep's path filter had masked: **DynamoDBStreams** (removed the `!streamDetailArn \|\| !shardId` and `!nextIterator` guards — the panel/poll buttons only render when those values are set), **ECSDashboard** (removed the task-definition `\|\| ""` and launch-type `\|\| "FARGATE"` Select fallbacks), **LambdaPage** (+1 test clicking the Reserved-concurrency edit icon with concurrency unset — fires the `?? ""` nullish arm). Also found and fixed the root cause of the never-passing integration suite: `config.ts` captures FLOCI_URL at import time, so integration.test.ts's late env assignment never took effect and routes fetched the Docker-internal port 4566 instead of host-mapped 9878 — added `setFlociEndpoint()`; and restored `globalThis.fetch` after s3-select.test.ts's raw mock assignments leaked across fork workers. Verification: with Floci up, full suite 271/271 files, 9,221/9,221 tests, exit 0 — the first fully green end-to-end run | Done | 2026-08-16 |
 | 25.126 | **100% line + statement coverage repo-wide (all metrics)** — the milestone: **EventsPage** (+1 test feeding an unparseable bus policy — covered the JSON.parse catch return-null arm, the last uncovered statement in the repo), **vitest.config.ts** (testTimeout 10s -> 20s — modal-flow and integration tests exceeded 10s under full-suite parallel load with coverage instrumentation, which also silently truncated coverage mid-test; excluded the two pure type-declaration files src/frontend/types/api.ts + src/backend/types.ts since they have no executable statements), **deleted the tracked-but-empty useService.ts** (0 bytes, nothing imports it), and removed a stray src/frontend/coverage/ dir (created by a mis-cwd run) that the include glob was matching at 0%. Final verified state: typecheck clean; full suite with Floci up 271/271 files, 9,221/9,221 tests, exit 0; coverage **100% statements / 100% branch / 100% functions / 100% lines** — every file with executable code at 100% on every metric, far above the vitest thresholds (72/50/62/74) and the codecov patch target (75%) | Done | 2026-08-16 |
+| 25.127 | **Floci parity audit (2026-08-17)** — service-level diff (65/65 Floci services matched, zero missing), control-plane enumeration (`/_floci/*` vs `system.ts` — found reset/nuke/diagnose/config unwired), and operation-level diff (Floci `case "Op"` + `*_ACTIONS` sets vs dashboard SDK commands, filtered for false positives: enum/field names, STS ops covered by sts.ts, ec2messages agent-channel ops). Result: 17 new gap items added to the GAP ANALYSIS as G.81–G.97 (2 control-plane + 15 operations), summary stats updated | Done | 2026-08-17 |
+| 25.128 | **G.81+G.82 — Floci control plane (Settings page)** — `system.ts` +4 proxy routes: `GET /diagnose`, `GET /config` (→ `/_floci/diagnose`/`/_floci/config`), `POST /state/reset`, `POST /state/nuke` (→ `/_floci/state/reset|nuke` with `{ method: "POST" }`); Settings.tsx new "Floci Maintenance" container: Reset/Nuke buttons (primary) with a confirm modal (header "Reset/Nuke Floci state?", Cancel + confirm, body warning), success/error maintenance alerts (dismissible), "Load diagnostics" button opening a monospace JSON modal; removed the dead `if (target)` guard behind the confirm button (modal only renders with `confirmTarget !== null` → `handleMaintenance(target!)`); +5 backend tests (each route happy path + reset error propagation) and +11 frontend tests (section render, modal open/cancel, reset/nuke confirm flows + API assertions, reset error + non-Error fallback, alert dismiss, diagnostics load/open/close + error + fallback + dismiss). Verification: scoped runs 100/100/100/100 on both files, typecheck clean, `make test-cov` exit 0 (272/272 files, 8,956 tests, 100% all metrics) | Done | 2026-08-17 |
 
 ---
 
@@ -1787,9 +1789,9 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 ## GAP ANALYSIS — Floci Operations Not Yet Exposed in Dashboard
 ## ═══════════════════════════════════════════════════════════
 
-> **Audit date:** 2026-07-13 (verified against dashboard codebase)
-> **Method:** Compared every `case` statement in Floci's Java handlers against the dashboard's backend route files. Each item was verified by searching for the corresponding AWS command in both Floci handlers and dashboard routes.
-> **Result:** All 66 Floci services have basic CRUD in the dashboard. However, many services have significant Floci-supported operations NOT yet exposed. Several items from the initial audit (G.5 old, G.10 old, G.12 old partial, G.18 old, G.27 old) were found to be already implemented and have been removed.
+> **Audit date:** 2026-07-13 (1st/2nd pass, verified against dashboard codebase), **2026-08-17 (3rd pass — service-level + control-plane + operation-level parity audit)**
+> **Method:** Compared every `case` statement in Floci's Java handlers against the dashboard's backend route files. Each item was verified by searching for the corresponding AWS command in both Floci handlers and dashboard routes. The 2026-08-17 pass also diffed the Floci service directory list against dashboard routes (65/65 services matched — **zero missing services**) and enumerated Floci's lifecycle control endpoints (`/_floci/*`) against `system.ts`.
+> **Result:** All 65 Floci services have basic CRUD in the dashboard. However, many services have significant Floci-supported operations NOT yet exposed. Several items from the initial audit (G.5 old, G.10 old, G.12 old partial, G.18 old, G.27 old) were found to be already implemented and have been removed. The 3rd pass added the **control-plane gap category (G.81–G.82)** and operation gaps G.83–G.97 that the July audit did not list.
 
 ### Latest Gap Analysis — Service Depth & Priority Order
 
@@ -1967,6 +1969,39 @@ Full 66-service diff of Floci-supported operations vs. dashboard UI-reachable op
 
 ---
 
+### Third-Pass Audit — 2026-08-17 (Control Plane + New Operation Gaps)
+
+> **Method:** Full parity audit — (1) service-level: diffed every directory under `floci/services/` against `src/backend/routes/aws/` → **65/65 services matched, zero missing services** (the only unmatched dir, `floci/`, is the emulator's internal web UI — `duck`/`ui` — not an AWS service); (2) control-plane: enumerated Floci's `/_floci/*` lifecycle endpoints vs `system.ts`; (3) operation-level: diffed Floci `case "Op"` handler dispatch + `*_ACTIONS` sets against dashboard SDK commands per route. Items below were **not** in the G.1–G.80 list; ops already covered by G.1–G.80 (e.g. Athena StartQueryExecution → G.47, SSM Run Command → G.46, KMS Sign/Verify → G.58, IAM policy mgmt → G.57) are not duplicated here.
+
+#### Control Plane (new gap category)
+
+| # | Endpoint | Purpose | Dashboard Impact |
+|---|----------|---------|------------------|
+| G.81 | `POST /_floci/state/reset`, `POST /_floci/state/nuke` | Emulator state reset / full nuke | Done 2026-08-17 — Settings "Floci Maintenance" section: Reset state / Nuke state buttons with confirm modal, success/error alerts, `POST /system/state/reset` + `/system/state/nuke` proxy routes in `system.ts` (100% coverage) |
+| G.82 | `GET /_floci/diagnose`, `GET /_floci/config` | Diagnostics dump / runtime config | Done 2026-08-17 — "Load diagnostics" button in the same section opens a modal with the JSON dump; `GET /system/diagnose` proxy route (diagnose + config both proxied in `system.ts`, 100% coverage) |
+
+#### Operation Gaps (not previously tracked)
+
+| # | Service | Missing Operations | Dashboard Impact |
+|---|---------|-------------------|------------------|
+| G.83 | **DynamoDB** | Query | PartiQL/scan exists but the native `Query` API is absent — the core key-condition query path |
+| G.84 | **Step Functions** | CreateActivity, DeleteActivity, DescribeActivity, GetActivityTask, SendTaskSuccess, SendTaskFailure, SendTaskHeartbeat, StartSyncExecution, ValidateStateMachineDefinition, tags | Activities + task-token callbacks entirely absent (G.37/G.39 cover versions + start/stop only) |
+| G.85 | **IAM** | GetGroup, AddUserToGroup, RemoveUserFromGroup, group policies (Put/Get/Delete/List), Create/Delete/Get/ListLoginProfile, Generate/GetCredentialReport, GetAccountSummary, instance profiles (Create/Get/Delete/List/AddRole/RemoveRole), SetDefaultPolicyVersion, Tag/Untag policy-role-user | Group membership, login profiles, credential reports, and instance profiles unmanaged (G.57 covers inline/attached policies only) |
+| G.86 | **Cognito** | AdminGetUser, AdminRemoveUserFromGroup, AdminResetUserPassword, AdminUpdateUserAttributes, ChangePassword, SignUp, RespondToAuthChallenge, GetGroup, UpdateGroup, UpdateUserPool, UpdateUserPoolClient, tags | Admin user ops + update flows absent beyond G.15/G.77 |
+| G.87 | **SES** | GetAccountSendingEnabled, UpdateAccountSendingEnabled, GetSendQuota, GetSendStatistics, SendRawEmail, VerifyEmailAddress | Account-level sending stats + raw email send unexposed (G.11/G.12/G.53 cover notifications/templates) |
+| G.88 | **SNS** | AddPermission, RemovePermission, CheckIfPhoneNumberIsOptedOut, ListPhoneNumbersOptedOut, OptInPhoneNumber, Set/GetSMSAttributes, SMS sandbox (Create/Delete/List/GetStatus/Verify) | SMS + topic-permission management absent |
+| G.89 | **ECS** | DeregisterContainerInstance, DescribeContainerInstances, StartTask, GetTaskProtection, UpdateTaskProtection, UpdateContainerInstancesState, UpdateContainerAgent, DiscoverPollEndpoint | Container instances + task protection unmanaged (G.23/G.49 cover task sets/capacity providers) |
+| G.90 | **ECR** | BatchGetImage, GetAuthorizationToken | Image manifest retrieval + repo auth token absent (G.32/G.72 cover scanning config/tag mutability) |
+| G.91 | **ELBv2** | DescribeTags, ModifyListener, ModifyTargetGroup | Tag read + listener/target-group modify absent (G.13 covers attributes/rules/certificates) |
+| G.92 | **Cloud Map** | DiscoverInstances, DiscoverInstancesRevision, GetInstance, GetInstancesHealthStatus, GetOperation, ListOperations, RegisterInstance, DeregisterInstance, DNS namespaces (Public/Private), tags | Service discovery end-to-end unusable beyond basic CRUD (G.45 partial) |
+| G.93 | **EventBridge** | UpdateEventBus | Bus update absent (G.65 covers replays/permissions/TestEventPattern) |
+| G.94 | **WAFv2** | UpdateWebACL, CheckCapacity | Web ACL update + capacity check absent (G.9/G.10 cover regex sets/logging/associations) |
+| G.95 | **Auto Scaling** | CreateLaunchConfiguration, DeleteLaunchConfiguration, DescribeAutoScalingInstances, AttachInstances, DetachInstances, TerminateInstanceInAutoScalingGroup | Launch configs + instance attach/detach/terminate absent (G.14/G.34 cover refresh/tags/LB/types) |
+| G.96 | **API Gateway V2** | CreateAuthorizer, GetAuthorizer(s), Update/DeleteAuthorizer, CreateModel, GetModel(s), Update/DeleteModel, GetIntegration(Response)(s), Create/Update/DeleteIntegrationResponse, GetRoute(Response)(s), Create/Update/DeleteRouteResponse, GetDeployment, Update/DeleteDeployment, GetStage, Update/DeleteStage, TagResource, UntagResource, GetTags | Authorizers/models/integration-responses/route-responses/stages update absent (G.25 covers WebSocket discovery only) |
+| G.97 | **SSM** | GetParameters, GetParametersByPath, DeleteParameters, LabelParameterVersion, DescribeInstanceInformation, DescribePatchBaselines, GetDefaultPatchBaseline | Batch parameter fetch + instance/patch-baseline info absent (G.46 covers Run Command) |
+
+---
+
 ### Already Implemented (Removed from Gap List)
 
 These items were in the initial audit but found to be already implemented upon code verification:
@@ -1998,6 +2033,10 @@ These items were in the initial audit but found to be already implemented upon c
 | — Tier 1 (backend route exists, needs UI) | 7 (G.39–G.45) |
 | — Tier 2 (high-value, backend+frontend) | 14 (G.46–G.59) |
 | — Tier 3 (rounding-out) | 21 (G.60–G.80) |
+| Third-pass gaps (G.81–G.97, 2026-08-17) | 17 |
+| — Control plane (/_floci/* lifecycle endpoints) | 2 (G.81–G.82) |
+| — New operation gaps (not in G.1–G.80) | 15 (G.83–G.97) |
+| Missing services (service-level parity) | 0 of 65 |
 
 ### Recommended Implementation Order
 

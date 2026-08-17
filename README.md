@@ -48,6 +48,7 @@
 - **EC2 web terminal** — Interactive bash shell inside running EC2 instances directly from the browser (xterm.js + Docker Engine API with PTY)
 - **Dark mode** — Toggle between light and dark themes (persisted to localStorage)
 - **Configurable Floci endpoint** — Change the Floci URL at runtime from Settings (no restart needed)
+- **Floci maintenance** — Reset or nuke the emulator state from Settings with a confirmation modal, plus a diagnostics viewer that dumps `/_floci/diagnose` into a modal
 - **AWS-aligned sidebar** — Service categories reorganized to match AWS Console navigation (Application Integration, Containers, Management & Governance, etc.)
 - **Favorites** — Star any service for quick access; favorites persist in localStorage and appear at the top of the sidebar
 - **Recently Visited** — Last 10 visited services shown in the sidebar for quick re-access
@@ -63,7 +64,7 @@
 - **Toast notifications** — Global API error interceptor that surfaces network and server errors via non-intrusive toast notifications
 - **Content Security Policy** — Strict CSP headers applied in production (self-only scripts, inline styles allowed for Cloudscape, no inline event handlers)
 - **Input sanitization** — All user inputs sanitized on the backend (control character stripping, path traversal prevention, JSON validation, length limits)
-- **100% test coverage** — **9,233 tests across 273 files** with **100% statement/branch/function/line coverage** across every file with executable code (backend routes, frontend pages/components/hooks, and 294 integration tests against a live Floci instance)
+- **100% test coverage** — **9,250 tests across 273 files** with **100% statement/branch/function/line coverage** across every file with executable code (backend routes, frontend pages/components/hooks, and 295 integration tests against a live Floci instance)
 - **Docker health checks** — Container health monitoring via `/api/healthz` endpoint, used by Docker Compose for dependency ordering
 - **Optimized Docker image** — Multi-stage build with pnpm cache mounts and `pnpm prune --prod` for minimal production image size
 
@@ -204,7 +205,7 @@ docker run -p 3000:3000 -p 4566:4566 \
 
 ### Testing
 
-The project includes **9,233 tests across 273 test files** with **100% statement / branch / function / line coverage** on every file with executable code, organized as:
+The project includes **9,250 tests across 273 test files** with **100% statement / branch / function / line coverage** on every file with executable code, organized as:
 
 | Tests | Files | Location |
 |-------|-------|----------|
@@ -223,7 +224,7 @@ make test-all       # Unit + integration tests (requires Floci service container
 make test-all-cov   # Full suite + coverage (unit + integration) — gates the 100% thresholds end-to-end
 ```
 
-Run the full suite with Floci up (`make up-bg`) to include the 294 integration tests: `npx vitest run` → **273/273 files, 9,233/9,233 tests, exit 0**. CI runs `make test-cov` (fast unit gate) followed by `make test-all-cov` (full combined coverage gate, worker pool capped at 4 to stay within runner RAM).
+Run the full suite with Floci up (`make up-bg`) to include the 295 integration tests: `npx vitest run` → **273/273 files, 9,250/9,250 tests, exit 0**. CI runs `make test-cov` (fast unit gate) followed by `make test-all-cov` (full combined coverage gate, worker pool capped at 4 to stay within runner RAM).
 
 ### Key design decisions
 

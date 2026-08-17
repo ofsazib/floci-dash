@@ -40,6 +40,26 @@ router.get("/init", async (c: Context) => {
   return c.json(data);
 });
 
+router.get("/diagnose", async (c: Context) => {
+  const data = await flociFetch("/_floci/diagnose") as Record<string, unknown>;
+  return c.json(data);
+});
+
+router.get("/config", async (c: Context) => {
+  const data = await flociFetch("/_floci/config") as Record<string, unknown>;
+  return c.json(data);
+});
+
+router.post("/state/reset", async (c: Context) => {
+  const data = await flociFetch("/_floci/state/reset", { method: "POST" }) as { status?: string };
+  return c.json(data);
+});
+
+router.post("/state/nuke", async (c: Context) => {
+  const data = await flociFetch("/_floci/state/nuke", { method: "POST" }) as { status?: string };
+  return c.json(data);
+});
+
 router.get("/resource-counts", async (c: Context) => {
   const config = getAwsConfig();
   const counts: Record<string, number> = {};
