@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor, within, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
 import userEvent from "@testing-library/user-event";
@@ -10,6 +10,7 @@ vi.mock("../hooks/useDynamoDB", () => ({
   useDynamoDBDeleteItem: vi.fn(),
   useDynamoDBPutItem: vi.fn(),
   useDynamoDBFilteredScan: vi.fn(),
+  useDynamoDBQuery: vi.fn(),
 }));
 
 vi.mock("../lib/utils", () => ({
@@ -137,6 +138,7 @@ import {
   useDynamoDBDeleteItem,
   useDynamoDBPutItem,
   useDynamoDBFilteredScan,
+  useDynamoDBQuery,
 } from "../hooks/useDynamoDB";
 import { clickButton } from "../../test/helpers";
 
@@ -208,6 +210,12 @@ beforeEach(() => {
   mockDeleteItem.isError = false;
   mockDeleteItem.error = null;
   (mockDeleteItem.mutateAsync as any).mockReset();
+  (useDynamoDBQuery as any).mockReturnValue({
+    mutate: vi.fn(),
+    isPending: false,
+    isError: false,
+    error: null,
+  });
 });
 
 describe("DynamoDBTableDetail — loading & error states", () => {
@@ -1454,5 +1462,199 @@ describe("DynamoDBTableDetail — remaining coverage", () => {
     const dialog2 = screen.getByRole("dialog");
     await user.click(within(dialog2).getByTestId("modal-dismiss"));
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+});
+
+// ─── Query tab (native key-condition query) ───────────────
+
+describe("DynamoDBTableDetail — Query tab", () => {
+  const mockQueryMutate = vi.fn();
+
+  beforeEach(() => {
+    mockQueryMutate.mockReset();
+    (useDynamoDBQuery as any).mockReturnValue({
+      mutate: mockQueryMutate,
+      isPending: false,
+      isError: false,
+      error: null,
+    });
+  });
+
+  async function openQueryTab(user: ReturnType<typeof userEvent.setup>) {
+    render(<DynamoDBTableDetail tableName="users" onBack={vi.fn()} />, {
+      wrapper: createWrapper(),
+    });
+    await user.click(screen.getByRole("tab", { name: /Query/i }));
+  }
+
+  it("renders the query form with disabled run button until an expression is typed", async () => {
+    const user = userEvent.setup();
+    await openQueryTab(user);
+    expect(screen.getByText("Key-condition Query")).toBeTruthy();
+    const runBtn = screen.getByRole("button", { name: /Run Query/i });
+    expect(runBtn).toBeTruthy();
+  });
+
+  it("runs a query with expression + values + names + index + limit + forward toggle", async () => {
+    const user = userEvent.setup();
+    await openQueryTab(user);
+    mockQueryMutate.mockImplementation((_params: any, opts: any) => {
+      opts.onSuccess({ items: [{ pk: "u1" }], count: 1 });
+    });
+    await user.type(
+      screen.getByPlaceholderText("#pk = :v"),
+      "#pk = :v AND #sk > :s",
+    );
+    fireEvent.change(
+      screen.getByPlaceholderText("{ \":v\": \"user-1\" }"),
+      { target: { value: '{ ":v": "user-1", ":s": 5 }' } },
+    );
+    fireEvent.change(
+      screen.getByPlaceholderText("{ \"#pk\": \"userId\" }"),
+      { target: { value: '{ "#pk": "userId", "#sk": "sortKey" }' } },
+    );
+    await user.type(screen.getByPlaceholderText("my-gsi (optional)"), "my-gsi");
+    await user.type(screen.getByPlaceholderText("50 (optional)"), "25");
+    await user.click(screen.getByRole("button", { name: /Run Query/i }));
+    await waitFor(() => {
+      expect(mockQueryMutate).toHaveBeenCalledWith(
+        {
+          keyConditionExpression: "#pk = :v AND #sk > :s",
+          scanIndexForward: true,
+          expressionAttributeValues: { ":v": "user-1", ":s": 5 },
+          expressionAttributeNames: { "#pk": "userId", "#sk": "sortKey" },
+          indexName: "my-gsi",
+          limit: 25,
+        },
+        expect.anything(),
+      );
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/Results \(1\)/)).toBeTruthy();
+      expect(screen.getByText(/"pk": "u1"/)).toBeTruthy();
+    });
+  });
+
+  it("shows empty results message when no items match", async () => {
+    const user = userEvent.setup();
+    await openQueryTab(user);
+    mockQueryMutate.mockImplementation((_params: any, opts: any) => {
+      opts.onSuccess({ items: [], count: 0 });
+    });
+    await user.type(screen.getByPlaceholderText("#pk = :v"), "#pk = :v");
+    await user.click(screen.getByRole("button", { name: /Run Query/i }));
+    await waitFor(() => {
+      expect(screen.getByText("No items matched the query.")).toBeTruthy();
+    });
+  });
+
+  it("shows error for invalid attribute values JSON", async () => {
+    const user = userEvent.setup();
+    await openQueryTab(user);
+    await user.type(screen.getByPlaceholderText("#pk = :v"), "#pk = :v");
+    fireEvent.change(
+      screen.getByPlaceholderText("{ \":v\": \"user-1\" }"),
+      { target: { value: "not-json" } },
+    );
+    await user.click(screen.getByRole("button", { name: /Run Query/i }));
+    await waitFor(() => {
+      expect(
+        screen.getByText("Expression attribute values must be valid JSON"),
+      ).toBeTruthy();
+    });
+    expect(mockQueryMutate).not.toHaveBeenCalled();
+  });
+
+  it("shows error for invalid attribute names JSON", async () => {
+    const user = userEvent.setup();
+    await openQueryTab(user);
+    await user.type(screen.getByPlaceholderText("#pk = :v"), "#pk = :v");
+    fireEvent.change(
+      screen.getByPlaceholderText("{ \"#pk\": \"userId\" }"),
+      { target: { value: "oops" } },
+    ); // invalid names JSON (no values typed)
+    await user.click(screen.getByRole("button", { name: /Run Query/i }));
+    await waitFor(() => {
+      expect(
+        screen.getByText("Expression attribute names must be valid JSON"),
+      ).toBeTruthy();
+    });
+    expect(mockQueryMutate).not.toHaveBeenCalled();
+  });
+
+  it("shows mutation error message on failure", async () => {
+    const user = userEvent.setup();
+    await openQueryTab(user);
+    mockQueryMutate.mockImplementation((_params: any, opts: any) => {
+      opts.onError(new Error("Query rejected"));
+    });
+    await user.type(screen.getByPlaceholderText("#pk = :v"), "#pk = :v");
+    await user.click(screen.getByRole("button", { name: /Run Query/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Query rejected")).toBeTruthy();
+    });
+  });
+
+  it("dismisses the query error alert", async () => {
+    const user = userEvent.setup();
+    await openQueryTab(user);
+    mockQueryMutate.mockImplementation((_params: any, opts: any) => {
+      opts.onError(new Error("Dismiss me"));
+    });
+    await user.type(screen.getByPlaceholderText("#pk = :v"), "#pk = :v");
+    await user.click(screen.getByRole("button", { name: /Run Query/i }));
+    await waitFor(() => expect(screen.getByText("Dismiss me")).toBeTruthy());
+    const dismiss = document.querySelector(
+      '[class*="awsui_dismiss-button"]',
+    ) as HTMLElement;
+    fireEvent.click(dismiss);
+    await waitFor(() => expect(screen.queryByText("Dismiss me")).toBeNull());
+  });
+
+  it("toggles scan index forward off", async () => {
+    const user = userEvent.setup();
+    await openQueryTab(user);
+    mockQueryMutate.mockImplementation((_params: any, opts: any) => {
+      opts.onSuccess({ items: [], count: 0 });
+    });
+    await user.type(screen.getByPlaceholderText("#pk = :v"), "#pk = :v");
+    await user.click(screen.getByLabelText("Scan index forward"));
+    await user.click(screen.getByRole("button", { name: /Run Query/i }));
+    await waitFor(() => {
+      expect(mockQueryMutate).toHaveBeenCalledWith(
+        expect.objectContaining({ scanIndexForward: false }),
+        expect.anything(),
+      );
+    });
+  });
+
+  it("omits the limit when it is not a number", async () => {
+    const user = userEvent.setup();
+    await openQueryTab(user);
+    mockQueryMutate.mockImplementation((_params: any, opts: any) => {
+      opts.onSuccess({ items: [], count: 0 });
+    });
+    await user.type(screen.getByPlaceholderText("#pk = :v"), "#pk = :v");
+    await user.type(screen.getByPlaceholderText("50 (optional)"), "abc");
+    await user.click(screen.getByRole("button", { name: /Run Query/i }));
+    await waitFor(() => {
+      expect(mockQueryMutate).toHaveBeenCalledWith(
+        expect.not.objectContaining({ limit: expect.anything() }),
+        expect.anything(),
+      );
+    });
+  });
+
+  it("shows generic query-failed message when error has no message", async () => {
+    const user = userEvent.setup();
+    await openQueryTab(user);
+    mockQueryMutate.mockImplementation((_params: any, opts: any) => {
+      opts.onError("boom");
+    });
+    await user.type(screen.getByPlaceholderText("#pk = :v"), "#pk = :v");
+    await user.click(screen.getByRole("button", { name: /Run Query/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Query failed")).toBeTruthy();
+    });
   });
 });

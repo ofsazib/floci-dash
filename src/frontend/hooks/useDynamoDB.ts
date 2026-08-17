@@ -138,6 +138,30 @@ export function useDynamoDBFilteredScan(
   });
 }
 
+export interface NativeQueryParams {
+  keyConditionExpression: string;
+  expressionAttributeValues?: Record<string, any>;
+  expressionAttributeNames?: Record<string, string>;
+  indexName?: string;
+  scanIndexForward?: boolean;
+  limit?: number;
+  exclusiveStartKey?: Record<string, any>;
+  filterExpression?: string;
+}
+
+export function useDynamoDBQuery(table: string | null) {
+  const qc = useQueryClient();
+  return useMutation<ScanResult, Error, NativeQueryParams>({
+    mutationFn: (params) =>
+      api(`/aws/dynamodb/tables/${table}/items/query-native`, {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "dynamodb", "items", table] }),
+  });
+}
+
 export function useDynamoDBDeleteItem(table: string) {
   const qc = useQueryClient();
   return useMutation({

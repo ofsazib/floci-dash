@@ -26,6 +26,7 @@ vi.mock("@aws-sdk/client-dynamodb", () => ({
   DeleteTableCommand: createCmd("DeleteTableCommand"),
   DescribeTableCommand: createCmd("DescribeTableCommand"),
   ScanCommand: createCmd("ScanCommand"),
+  QueryCommand: createCmd("QueryCommand"),
   GetItemCommand: createCmd("GetItemCommand"),
   PutItemCommand: createCmd("PutItemCommand"),
   DeleteItemCommand: createCmd("DeleteItemCommand"),
@@ -526,6 +527,108 @@ describe("DynamoDB Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.items).toEqual([]);
+    });
+  });
+
+  describe("Native Query (key-condition expression)", () => {
+    function queryCmd() {
+      const call = mockSend.mock.calls[0][0];
+      return call;
+    }
+
+    it("POST query-native — requires keyConditionExpression", async () => {
+      const res = await post("/tables/users/items/query-native", {});
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("keyConditionExpression");
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("POST query-native — issues QueryCommand with minimal params", async () => {
+      mockSend.mockResolvedValueOnce({ Items: [{ id: { S: "1" } }], Count: 1, ScannedCount: 1 });
+      const res = await post("/tables/users/items/query-native", {
+        keyConditionExpression: "#pk = :v",
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.count).toBe(1);
+      expect(body.items).toEqual([{ id: { S: "1" } }]);
+      const cmd = queryCmd();
+      expect(cmd.__cmdName).toBe("QueryCommand");
+      expect(cmd.TableName).toBe("users");
+      expect(cmd.KeyConditionExpression).toBe("#pk = :v");
+    });
+
+    it("POST query-native — passes all optional params", async () => {
+      mockSend.mockResolvedValueOnce({ Items: [], Count: 0, ScannedCount: 0 });
+      const res = await post("/tables/users/items/query-native", {
+        keyConditionExpression: "#pk = :v AND #sk > :s",
+        expressionAttributeValues: { ":v": "user-1", ":s": 5 },
+        expressionAttributeNames: { "#pk": "pk", "#sk": "sk" },
+        indexName: "my-index",
+        scanIndexForward: false,
+        limit: 10,
+        exclusiveStartKey: { pk: "user-1" },
+        filterExpression: "#st = :st",
+      });
+      expect(res.status).toBe(200);
+      const cmd = queryCmd();
+      expect(cmd.__cmdName).toBe("QueryCommand");
+      expect(cmd.ExpressionAttributeValues).toEqual({ ":v": "user-1", ":s": 5 });
+      expect(cmd.ExpressionAttributeNames).toEqual({ "#pk": "pk", "#sk": "sk" });
+      expect(cmd.IndexName).toBe("my-index");
+      expect(cmd.ScanIndexForward).toBe(false);
+      expect(cmd.Limit).toBe(10);
+      expect(cmd.ExclusiveStartKey).toEqual({ pk: "user-1" });
+      expect(cmd.FilterExpression).toBe("#st = :st");
+    });
+
+    it("POST query-native — omits empty optional params", async () => {
+      mockSend.mockResolvedValueOnce({ Items: [], Count: 0, ScannedCount: 0 });
+      const res = await post("/tables/users/items/query-native", {
+        keyConditionExpression: "#pk = :v",
+        expressionAttributeValues: {},
+        expressionAttributeNames: {},
+        scanIndexForward: undefined,
+        limit: undefined,
+        exclusiveStartKey: undefined,
+        filterExpression: undefined,
+      });
+      expect(res.status).toBe(200);
+      const cmd = queryCmd();
+      expect(cmd.__cmdName).toBe("QueryCommand");
+      expect(cmd.ExpressionAttributeValues).toBeUndefined();
+      expect(cmd.ExpressionAttributeNames).toBeUndefined();
+      expect(cmd.IndexName).toBeUndefined();
+      expect(cmd.ScanIndexForward).toBeUndefined();
+      expect(cmd.Limit).toBeUndefined();
+      expect(cmd.ExclusiveStartKey).toBeUndefined();
+      expect(cmd.FilterExpression).toBeUndefined();
+    });
+
+    it("POST query-native — returns lastEvaluatedKey when present", async () => {
+      mockSend.mockResolvedValueOnce({
+        Items: [{ id: { S: "1" } }],
+        Count: 1,
+        ScannedCount: 2,
+        LastEvaluatedKey: { id: { S: "1" } },
+      });
+      const res = await post("/tables/users/items/query-native", {
+        keyConditionExpression: "#pk = :v",
+      });
+      const body = await res.json();
+      expect(body.lastEvaluatedKey).toEqual({ id: { S: "1" } });
+    });
+
+    it("POST query-native — sparse response defaults to empty array", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/tables/users/items/query-native", {
+        keyConditionExpression: "#pk = :v",
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.items).toEqual([]);
+      expect(body.count).toBeUndefined();
     });
   });
 

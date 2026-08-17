@@ -12,8 +12,11 @@ import {
   Alert,
   Container,
   ColumnLayout,
+  Header,
   Spinner,
   Tabs,
+  Toggle,
+  Textarea,
   type SelectProps,
 } from "@cloudscape-design/components";
 import {
@@ -21,7 +24,9 @@ import {
   useDynamoDBDeleteItem,
   useDynamoDBPutItem,
   useDynamoDBFilteredScan,
+  useDynamoDBQuery,
   type FilterParams,
+  type NativeQueryParams,
 } from "../hooks/useDynamoDB";
 import ResourceTable from "./ResourceTable";
 import DeleteButton from "./DeleteButton";
@@ -225,6 +230,57 @@ export default function DynamoDBTableDetail({
   function resetPagination() {
     setPageCursors([null]);
     setPageIndex(0);
+  }
+
+  // ─── Native Query tab state ─────────────────────────────
+  const [queryExpr, setQueryExpr] = useState("");
+  const [queryValues, setQueryValues] = useState("");
+  const [queryNames, setQueryNames] = useState("");
+  const [queryIndex, setQueryIndex] = useState("");
+  const [queryLimit, setQueryLimit] = useState("");
+  const [queryForward, setQueryForward] = useState(true);
+  const [queryError, setQueryError] = useState<string | null>(null);
+  const [queryResult, setQueryResult] = useState<{
+    items: Record<string, any>[];
+    count: number;
+  } | null>(null);
+  const queryMutation = useDynamoDBQuery(tableName);
+
+  function handleRunQuery() {
+    setQueryError(null);
+    const params: NativeQueryParams = {
+      keyConditionExpression: queryExpr.trim(),
+      scanIndexForward: queryForward,
+    };
+    if (queryValues.trim()) {
+      try {
+        params.expressionAttributeValues = JSON.parse(queryValues);
+      } catch {
+        setQueryError("Expression attribute values must be valid JSON");
+        return;
+      }
+    }
+    if (queryNames.trim()) {
+      try {
+        params.expressionAttributeNames = JSON.parse(queryNames);
+      } catch {
+        setQueryError("Expression attribute names must be valid JSON");
+        return;
+      }
+    }
+    if (queryIndex.trim()) params.indexName = queryIndex.trim();
+    if (queryLimit.trim()) {
+      const n = parseInt(queryLimit, 10);
+      if (!Number.isNaN(n)) params.limit = n;
+    }
+    queryMutation.mutate(params, {
+      onSuccess: (data) => {
+        setQueryResult({ items: data.items, count: data.count });
+      },
+      onError: (err) => {
+        setQueryError((err as Error)?.message || "Query failed");
+      },
+    });
   }
 
   function handleApplyFilters() {
@@ -733,6 +789,99 @@ export default function DynamoDBTableDetail({
           Next
         </Button>
       </div>
+              </SpaceBetween>
+            ),
+          },
+          {
+            label: "Query",
+            id: "query",
+            content: (
+              <SpaceBetween size="l">
+                <Container header={<Header variant="h3">Key-condition Query</Header>}>
+                  <SpaceBetween size="m">
+                    <Box variant="p" color="text-body-secondary">
+                      Run a native DynamoDB Query against the partition key (and optional sort key).
+                      Use placeholders like <code>#pk = :v</code> and provide the attribute names and values as JSON.
+                    </Box>
+                    {queryError && (
+                      <Alert type="error" dismissible onDismiss={() => setQueryError(null)}>
+                        {queryError}
+                      </Alert>
+                    )}
+                    <FormField label="Key condition expression">
+                      <Input
+                        value={queryExpr}
+                        onChange={({ detail }) => setQueryExpr(detail.value)}
+                        placeholder="#pk = :v"
+                      />
+                    </FormField>
+                    <FormField label="Expression attribute values (JSON)">
+                      <Textarea
+                        value={queryValues}
+                        onChange={({ detail }) => setQueryValues(detail.value)}
+                        placeholder={"{ \":v\": \"user-1\" }"}
+                      />
+                    </FormField>
+                    <FormField label="Expression attribute names (JSON)">
+                      <Textarea
+                        value={queryNames}
+                        onChange={({ detail }) => setQueryNames(detail.value)}
+                        placeholder={"{ \"#pk\": \"userId\" }"}
+                      />
+                    </FormField>
+                    <FormField label="Index name">
+                      <Input
+                        value={queryIndex}
+                        onChange={({ detail }) => setQueryIndex(detail.value)}
+                        placeholder="my-gsi (optional)"
+                      />
+                    </FormField>
+                    <FormField label="Limit">
+                      <Input
+                        value={queryLimit}
+                        onChange={({ detail }) => setQueryLimit(detail.value)}
+                        placeholder="50 (optional)"
+                      />
+                    </FormField>
+                    <Toggle
+                      checked={queryForward}
+                      onChange={({ detail }) => setQueryForward(detail.checked)}
+                    >
+                      Scan index forward
+                    </Toggle>
+                    <Button
+                      variant="primary"
+                      loading={queryMutation.isPending}
+                      onClick={handleRunQuery}
+                      disabled={!queryExpr.trim()}
+                    >
+                      Run Query
+                    </Button>
+                  </SpaceBetween>
+                </Container>
+                {queryResult && (
+                  <Container header={<Header variant="h3">Results ({queryResult.count})</Header>}>
+                    {queryResult.items.length === 0 ? (
+                      <Box variant="p" color="text-body-secondary">
+                        No items matched the query.
+                      </Box>
+                    ) : (
+                      <Box fontSize="body-s">
+                        <pre
+                          style={{
+                            margin: 0,
+                            whiteSpace: "pre-wrap",
+                            fontFamily: "monospace",
+                            maxHeight: 320,
+                            overflow: "auto",
+                          }}
+                        >
+                          {JSON.stringify(queryResult.items, null, 2)}
+                        </pre>
+                      </Box>
+                    )}
+                  </Container>
+                )}
               </SpaceBetween>
             ),
           },

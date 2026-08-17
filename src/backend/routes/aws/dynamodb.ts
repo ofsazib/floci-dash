@@ -7,6 +7,7 @@ import {
   DeleteTableCommand,
   DescribeTableCommand,
   ScanCommand,
+  QueryCommand,
   GetItemCommand,
   PutItemCommand,
   DeleteItemCommand,
@@ -209,6 +210,49 @@ router.post("/tables/:name/items/query", async (c: Context) => {
   }
 
   const result = await ddb().send(new ScanCommand(params));
+  const items = (result.Items || []).map((item) => unmarshall(item));
+  return c.json({
+    table: name,
+    items,
+    count: result.Count,
+    scannedCount: result.ScannedCount,
+    lastEvaluatedKey: result.LastEvaluatedKey ? unmarshall(result.LastEvaluatedKey) : undefined,
+  });
+});
+
+// Native Query (key-condition expression on the partition key + optional sort key)
+router.post("/tables/:name/items/query-native", async (c: Context) => {
+  const name = c.req.param("name");
+  const { keyConditionExpression, expressionAttributeValues, expressionAttributeNames, indexName, scanIndexForward, limit, exclusiveStartKey, filterExpression } = await c.req.json<{
+    keyConditionExpression: string;
+    expressionAttributeValues?: Record<string, any>;
+    expressionAttributeNames?: Record<string, string>;
+    indexName?: string;
+    scanIndexForward?: boolean;
+    limit?: number;
+    exclusiveStartKey?: Record<string, any>;
+    filterExpression?: string;
+  }>();
+
+  if (!keyConditionExpression) {
+    return c.json({ error: "keyConditionExpression is required" }, 400);
+  }
+
+  const params: any = { TableName: name, KeyConditionExpression: keyConditionExpression };
+
+  if (expressionAttributeValues && Object.keys(expressionAttributeValues).length > 0) {
+    params.ExpressionAttributeValues = marshall(expressionAttributeValues);
+  }
+  if (expressionAttributeNames && Object.keys(expressionAttributeNames).length > 0) {
+    params.ExpressionAttributeNames = expressionAttributeNames;
+  }
+  if (indexName) params.IndexName = indexName;
+  if (scanIndexForward !== undefined) params.ScanIndexForward = scanIndexForward;
+  if (limit !== undefined) params.Limit = limit;
+  if (exclusiveStartKey) params.ExclusiveStartKey = marshall(exclusiveStartKey);
+  if (filterExpression) params.FilterExpression = filterExpression;
+
+  const result = await ddb().send(new QueryCommand(params));
   const items = (result.Items || []).map((item) => unmarshall(item));
   return c.json({
     table: name,

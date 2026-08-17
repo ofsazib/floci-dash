@@ -22,6 +22,7 @@ import {
   useDynamoDBKinesisStreaming,
   useDynamoDBEnableKinesisStreaming,
   useDynamoDBDisableKinesisStreaming,
+  useDynamoDBQuery,
 } from "./useDynamoDB";
 
 function createWrapper() {
@@ -286,5 +287,37 @@ describe("useDynamoDBDisableKinesisStreaming", () => {
         body: JSON.stringify({ streamArn }),
       }),
     );
+  });
+});
+
+describe("useDynamoDBQuery", () => {
+  it("calls the native query endpoint with the params body", async () => {
+    mockApi.mockResolvedValueOnce({ items: [], count: 0 });
+    const { result } = renderHook(() => useDynamoDBQuery("orders"), {
+      wrapper: createWrapper(),
+    });
+    const params = {
+      keyConditionExpression: "#pk = :v",
+      expressionAttributeValues: { ":v": "user-1" },
+      expressionAttributeNames: { "#pk": "pk" },
+      limit: 10,
+    };
+    await result.current.mutateAsync(params);
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/dynamodb/tables/orders/items/query-native",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    );
+  });
+
+  it("invalidates the items cache on success", async () => {
+    mockApi.mockResolvedValueOnce({ items: [], count: 0 });
+    const { result } = renderHook(() => useDynamoDBQuery("orders"), {
+      wrapper: createWrapper(),
+    });
+    await result.current.mutateAsync({ keyConditionExpression: "#pk = :v" });
+    expect(mockApi).toHaveBeenCalledTimes(1);
   });
 });
