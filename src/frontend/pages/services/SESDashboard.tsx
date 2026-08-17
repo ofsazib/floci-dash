@@ -23,9 +23,11 @@ import {
   Container,
   Spinner,
   Checkbox,
+  Toggle,
   type SelectProps,
   type TabsProps,
 } from "@cloudscape-design/components";
+import StatCard from "../../components/StatCard";
 import { useHealth } from "../../hooks/useSystem";
 import { getServiceLabel } from "../../types/services";
 import StatusBadge from "../../components/StatusBadge";
@@ -171,6 +173,12 @@ import {
   useSESDeleteIdentity,
   useSESSendEmail,
   useSESVerifiedEmails,
+  useSESVerifyEmailAddress,
+  useSESSendingEnabled,
+  useSESSetSendingEnabled,
+  useSESSendQuota,
+  useSESSendStatistics,
+  useSESSendRawEmail,
   useSESNotificationAttributes,
   useSESSetNotificationTopic,
   useSESSetFeedbackForwarding,
@@ -529,8 +537,20 @@ export function SESDashboard() {
   const deleteIdentity = useSESDeleteIdentity();
   const sendEmail = useSESSendEmail();
   const { data: verifiedEmails } = useSESVerifiedEmails();
+  const verifyEmailAddress = useSESVerifyEmailAddress();
+  const { data: sendingEnabled } = useSESSendingEnabled();
+  const accountSetSendingEnabled = useSESSetSendingEnabled();
+  const { data: sendQuota } = useSESSendQuota();
+  const { data: sendStats } = useSESSendStatistics();
+  const sendRawEmail = useSESSendRawEmail();
   const [showVerifyEmail, setShowVerifyEmail] = useState(false);
+  const [showVerifyEmailAddress, setShowVerifyEmailAddress] = useState(false);
   const [showSendEmail, setShowSendEmail] = useState(false);
+  const [showSendRaw, setShowSendRaw] = useState(false);
+  const [rawAddress, setRawAddress] = useState("");
+  const [rawMessage, setRawMessage] = useState("");
+  const [accountError, setAccountError] = useState<string | null>(null);
+  const [rawError, setRawError] = useState<string | null>(null);
   const [emailAddress, setEmailAddress] = useState("");
   const [sendFrom, setSendFrom] = useState("");
   const [sendTo, setSendTo] = useState("");
@@ -651,6 +671,67 @@ export function SESDashboard() {
           </Box>
         </Container>
       )}
+
+      <Container
+        header={
+          <Header
+            variant="h2"
+            actions={
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button onClick={() => setShowSendRaw(true)}>Send raw email</Button>
+                <Button onClick={() => setShowVerifyEmailAddress(true)}>Verify address</Button>
+              </SpaceBetween>
+            }
+          >
+            Account
+          </Header>
+        }
+      >
+        <SpaceBetween size="l">
+          {accountError && (
+            <Alert type="error" dismissible onDismiss={() => setAccountError(null)}>
+              {accountError}
+            </Alert>
+          )}
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <Toggle
+              checked={sendingEnabled?.enabled ?? false}
+              onChange={({ detail }) =>
+                accountSetSendingEnabled.mutate(detail.checked, {
+                  onError: (e) => setAccountError((e as Error)?.message || "Failed to update sending"),
+                })
+              }
+            >
+              Account sending enabled
+            </Toggle>
+          </div>
+          <ColumnLayout columns={3}>
+            <StatCard label="Max 24h send" value={sendQuota?.max24HourSend != null ? String(sendQuota.max24HourSend) : "—"} />
+            <StatCard label="Max send rate" value={sendQuota?.maxSendRate != null ? String(sendQuota.maxSendRate) : "—"} />
+            <StatCard label="Sent last 24h" value={sendQuota?.sentLast24Hours != null ? String(sendQuota.sentLast24Hours) : "—"} />
+          </ColumnLayout>
+          {(sendStats?.sendDataPoints || []).length > 0 && (
+            <ResourceTable
+              resourceName="Data point"
+              headerTitle="Send statistics"
+              items={sendStats!.sendDataPoints.map((p: any) => ({
+                timestamp: p.timestamp ? new Date(p.timestamp).toLocaleString() : "—",
+                deliveryAttempts: p.deliveryAttempts ?? 0,
+                rejects: p.rejects ?? 0,
+                complaints: p.complaints ?? 0,
+                bounces: p.bounces ?? 0,
+              }))}
+              columns={[
+                { id: "timestamp", header: "Timestamp", cell: (i: any) => i.timestamp },
+                { id: "deliveryAttempts", header: "Delivery attempts", cell: (i: any) => i.deliveryAttempts },
+                { id: "rejects", header: "Rejects", cell: (i: any) => i.rejects },
+                { id: "complaints", header: "Complaints", cell: (i: any) => i.complaints },
+                { id: "bounces", header: "Bounces", cell: (i: any) => i.bounces },
+              ]}
+            />
+          )}
+        </SpaceBetween>
+      </Container>
 
       {/* ── Identity Notification Detail ── */}
       {selectedIdentity && (
@@ -826,6 +907,102 @@ export function SESDashboard() {
               value={emailAddress}
               onChange={({ detail }) => setEmailAddress(detail.value)}
               placeholder="user@example.com"
+            />
+          </FormField>
+        </Form>
+      </Modal>
+      <Modal
+        visible={showVerifyEmailAddress}
+        onDismiss={() => setShowVerifyEmailAddress(false)}
+        header="Verify address (verified-emails list)"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowVerifyEmailAddress(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  verifyEmailAddress.mutate(rawAddress.trim(), {
+                    onSuccess: () => {
+                      setShowVerifyEmailAddress(false);
+                      setRawAddress("");
+                    },
+                    onError: (e) => setRawError((e as Error)?.message || "Failed to verify email"),
+                  });
+                }}
+                disabled={!rawAddress.trim()}
+                loading={verifyEmailAddress.isPending}
+              >
+                Verify
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          {rawError && (
+            <Alert type="error" dismissible onDismiss={() => setRawError(null)}>
+              {rawError}
+            </Alert>
+          )}
+          <FormField label="Email address">
+            <Input
+              value={rawAddress}
+              onChange={({ detail }) => setRawAddress(detail.value)}
+              placeholder="new@example.com"
+            />
+          </FormField>
+        </Form>
+      </Modal>
+      <Modal
+        visible={showSendRaw}
+        onDismiss={() => setShowSendRaw(false)}
+        header="Send raw email (MIME)"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowSendRaw(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  sendRawEmail.mutate(
+                    { rawMessage: rawMessage.trim(), source: rawAddress.trim() || undefined },
+                    {
+                      onSuccess: () => {
+                        setShowSendRaw(false);
+                        setRawMessage("");
+                        setRawAddress("");
+                      },
+                      onError: (e) => setRawError((e as Error)?.message || "Failed to send raw email"),
+                    },
+                  );
+                }}
+                disabled={!rawMessage.trim()}
+                loading={sendRawEmail.isPending}
+              >
+                Send
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          <FormField label="Raw message">
+            <Textarea
+              value={rawMessage}
+              onChange={({ detail }) => setRawMessage(detail.value)}
+              placeholder="RAW: From: sender@example.com&#10;RAW: Subject: Hello&#10;RAW: Body text"
+            />
+          </FormField>
+          <FormField label="Source (optional)">
+            <Input
+              value={rawAddress}
+              onChange={({ detail }) => setRawAddress(detail.value)}
+              placeholder="sender@example.com"
             />
           </FormField>
         </Form>

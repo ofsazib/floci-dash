@@ -29,6 +29,12 @@ vi.mock("@aws-sdk/client-ses", () => ({
   SetIdentityMailFromDomainCommand: createCmd("SetIdentityMailFromDomainCommand"),
   GetIdentityMailFromDomainAttributesCommand: createCmd("GetIdentityMailFromDomainAttributesCommand"),
   ListVerifiedEmailAddressesCommand: createCmd("ListVerifiedEmailAddressesCommand"),
+  GetAccountSendingEnabledCommand: createCmd("GetAccountSendingEnabledCommand"),
+  UpdateAccountSendingEnabledCommand: createCmd("UpdateAccountSendingEnabledCommand"),
+  GetSendQuotaCommand: createCmd("GetSendQuotaCommand"),
+  GetSendStatisticsCommand: createCmd("GetSendStatisticsCommand"),
+  SendRawEmailCommand: createCmd("SendRawEmailCommand"),
+  VerifyEmailAddressCommand: createCmd("VerifyEmailAddressCommand"),
   GetIdentityNotificationAttributesCommand: createCmd("GetIdentityNotificationAttributesCommand"),
   SetIdentityNotificationTopicCommand: createCmd("SetIdentityNotificationTopicCommand"),
   SetIdentityFeedbackForwardingEnabledCommand: createCmd("SetIdentityFeedbackForwardingEnabledCommand"),
@@ -297,6 +303,145 @@ describe("SES Routes", () => {
       const body = await res.json();
       expect(body.total).toBe(0);
       expect(body.emails).toEqual([]);
+    });
+
+    it("POST /verified-emails — verifies an email address", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/verified-emails", { emailAddress: "  new@example.com  " });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.emailAddress).toBe("new@example.com");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("VerifyEmailAddressCommand");
+      expect(cmd.EmailAddress).toBe("new@example.com");
+    });
+
+    it("POST /verified-emails — 400 when emailAddress missing", async () => {
+      const res = await post("/verified-emails", {});
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("POST /verified-emails — 400 for blank emailAddress", async () => {
+      const res = await post("/verified-emails", { emailAddress: "   " });
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe("Account sending stats", () => {
+    it("GET /account/sending-enabled — returns enabled when true", async () => {
+      mockSend.mockResolvedValueOnce({ Enabled: true });
+      const res = await get("/account/sending-enabled");
+      const body = await res.json();
+      expect(body.enabled).toBe(true);
+    });
+
+    it("GET /account/sending-enabled — defaults to false when absent", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/account/sending-enabled");
+      const body = await res.json();
+      expect(body.enabled).toBe(false);
+    });
+
+    it("PUT /account/sending-enabled — enables sending", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/account/sending-enabled", { enabled: true });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("UpdateAccountSendingEnabledCommand");
+      expect(mockSend.mock.calls[0][0].Enabled).toBe(true);
+    });
+
+    it("PUT /account/sending-enabled — disables sending with falsy value", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/account/sending-enabled", { enabled: false });
+      const body = await res.json();
+      expect(body.enabled).toBe(false);
+    });
+
+    it("GET /account/send-quota — returns quota numbers", async () => {
+      mockSend.mockResolvedValueOnce({ Max24HourSend: 50000, MaxSendRate: 14, SentLast24Hours: 1234 });
+      const res = await get("/account/send-quota");
+      const body = await res.json();
+      expect(body.max24HourSend).toBe(50000);
+      expect(body.maxSendRate).toBe(14);
+      expect(body.sentLast24Hours).toBe(1234);
+    });
+
+    it("GET /account/send-statistics — maps data points", async () => {
+      mockSend.mockResolvedValueOnce({
+        SendDataPoints: [
+          {
+            Timestamp: new Date("2026-01-01T00:00:00Z"),
+            DeliveryAttempts: 10,
+            Rejects: 1,
+            Complaints: 0,
+            Bounces: 2,
+          },
+        ],
+      });
+      const res = await get("/account/send-statistics");
+      const body = await res.json();
+      expect(body.sendDataPoints[0].timestamp).toBe("2026-01-01T00:00:00.000Z");
+      expect(body.sendDataPoints[0].deliveryAttempts).toBe(10);
+      expect(body.sendDataPoints[0].bounces).toBe(2);
+    });
+
+    it("GET /account/send-statistics — sparse data point defaults timestamp to null", async () => {
+      mockSend.mockResolvedValueOnce({ SendDataPoints: [{ DeliveryAttempts: 1 }] });
+      const res = await get("/account/send-statistics");
+      const body = await res.json();
+      expect(body.sendDataPoints[0].timestamp).toBeNull();
+    });
+
+    it("GET /account/send-statistics — empty data points", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/account/send-statistics");
+      const body = await res.json();
+      expect(body.sendDataPoints).toEqual([]);
+    });
+  });
+
+  describe("Raw email", () => {
+    it("POST /send-raw — sends raw message with source and destinations", async () => {
+      mockSend.mockResolvedValueOnce({ MessageId: "raw-msg-1" });
+      const res = await post("/send-raw", {
+        rawMessage: "From: a@b.c\nSubject: hi\n\nbody",
+        source: "sender@example.com",
+        destinations: ["to@example.com"],
+      });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.messageId).toBe("raw-msg-1");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("SendRawEmailCommand");
+      expect(cmd.Source).toBe("sender@example.com");
+      expect(cmd.Destinations).toEqual(["to@example.com"]);
+      expect(cmd.RawMessage.Data).toBeInstanceOf(Uint8Array);
+    });
+
+    it("POST /send-raw — omits source/destinations when absent", async () => {
+      mockSend.mockResolvedValueOnce({ MessageId: "m2" });
+      const res = await post("/send-raw", { rawMessage: "Subject: x\n\nbody" });
+      const body = await res.json();
+      expect(body.messageId).toBe("m2");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.Source).toBeUndefined();
+      expect(cmd.Destinations).toBeUndefined();
+    });
+
+    it("POST /send-raw — omits destinations when empty array", async () => {
+      mockSend.mockResolvedValueOnce({ MessageId: "m3" });
+      const res = await post("/send-raw", { rawMessage: "Subject: x\n\nbody", destinations: [] });
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.Destinations).toBeUndefined();
+    });
+
+    it("POST /send-raw — 400 when rawMessage missing", async () => {
+      const res = await post("/send-raw", {});
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
     });
   });
 

@@ -31,6 +31,12 @@ import {
   DeleteConfigurationSetTrackingOptionsCommand,
   UpdateConfigurationSetReputationMetricsEnabledCommand,
   PutConfigurationSetDeliveryOptionsCommand,
+  GetAccountSendingEnabledCommand,
+  UpdateAccountSendingEnabledCommand,
+  GetSendQuotaCommand,
+  GetSendStatisticsCommand,
+  SendRawEmailCommand,
+  VerifyEmailAddressCommand,
 } from "@aws-sdk/client-ses";
 
 const router = new Hono();
@@ -453,6 +459,75 @@ router.get("/verified-emails", async (c: Context) => {
     emails: result.VerifiedEmailAddresses || [],
     total: result.VerifiedEmailAddresses?.length || 0,
   });
+});
+
+router.post("/verified-emails", async (c: Context) => {
+  const body = await c.req.json<{ emailAddress: string }>();
+  if (!body.emailAddress || !body.emailAddress.trim()) {
+    return c.json({ error: "emailAddress is required" }, 400);
+  }
+  const client = getClient();
+  await client.send(new VerifyEmailAddressCommand({ EmailAddress: body.emailAddress.trim() }));
+  return c.json({ emailAddress: body.emailAddress.trim(), verified: true }, 201);
+});
+
+// ── Account sending stats ─────────────────────────────────
+
+router.get("/account/sending-enabled", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new GetAccountSendingEnabledCommand({}));
+  return c.json({ enabled: result.Enabled ?? false });
+});
+
+router.put("/account/sending-enabled", async (c: Context) => {
+  const body = await c.req.json<{ enabled: boolean }>();
+  const client = getClient();
+  await client.send(
+    new UpdateAccountSendingEnabledCommand({ Enabled: Boolean(body.enabled) })
+  );
+  return c.json({ enabled: Boolean(body.enabled), updated: true });
+});
+
+router.get("/account/send-quota", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new GetSendQuotaCommand({}));
+  return c.json({
+    max24HourSend: result.Max24HourSend,
+    maxSendRate: result.MaxSendRate,
+    sentLast24Hours: result.SentLast24Hours,
+  });
+});
+
+router.get("/account/send-statistics", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new GetSendStatisticsCommand({}));
+  return c.json({
+    sendDataPoints: (result.SendDataPoints || []).map((p) => ({
+      timestamp: p.Timestamp?.toISOString() || null,
+      deliveryAttempts: p.DeliveryAttempts,
+      rejects: p.Rejects,
+      complaints: p.Complaints,
+      bounces: p.Bounces,
+    })),
+  });
+});
+
+// ── Raw email ─────────────────────────────────────────────
+
+router.post("/send-raw", async (c: Context) => {
+  const body = await c.req.json<{ rawMessage: string; source?: string; destinations?: string[] }>();
+  if (!body.rawMessage || !body.rawMessage.trim()) {
+    return c.json({ error: "rawMessage is required" }, 400);
+  }
+  const client = getClient();
+  const result = await client.send(
+    new SendRawEmailCommand({
+      Source: body.source || undefined,
+      Destinations: body.destinations && body.destinations.length > 0 ? body.destinations : undefined,
+      RawMessage: { Data: new TextEncoder().encode(body.rawMessage) },
+    })
+  );
+  return c.json({ messageId: result.MessageId }, 201);
 });
 
 export default router;

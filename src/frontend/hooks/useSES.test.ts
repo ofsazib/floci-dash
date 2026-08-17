@@ -16,6 +16,12 @@ import {
   useSESDeleteIdentity,
   useSESSendEmail,
   useSESVerifiedEmails,
+  useSESVerifyEmailAddress,
+  useSESSendingEnabled,
+  useSESSetSendingEnabled,
+  useSESSendQuota,
+  useSESSendStatistics,
+  useSESSendRawEmail,
   useSESNotificationAttributes,
   useSESSetNotificationTopic,
   useSESSetFeedbackForwarding,
@@ -188,6 +194,78 @@ describe("useSESVerifiedEmails", () => {
     mockApi.mockRejectedValueOnce(new Error("fail"));
     const { result } = renderHook(() => useSESVerifiedEmails(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isError).toBe(true));
+  });
+});
+
+describe("useSESVerifyEmailAddress", () => {
+  it("calls api with POST method and email body", async () => {
+    mockApi.mockResolvedValueOnce({ emailAddress: "new@b.com", verified: true });
+    const { result } = renderHook(() => useSESVerifyEmailAddress(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("new@b.com");
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/email/verified-emails",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ emailAddress: "new@b.com" }),
+      }),
+    );
+  });
+});
+
+describe("useSESSendingEnabled", () => {
+  it("calls api with correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ enabled: true });
+    const { result } = renderHook(() => useSESSendingEnabled(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/email/account/sending-enabled");
+  });
+});
+
+describe("useSESSetSendingEnabled", () => {
+  it("calls api with PUT method and enabled body", async () => {
+    mockApi.mockResolvedValueOnce({ enabled: false, updated: true });
+    const { result } = renderHook(() => useSESSetSendingEnabled(), { wrapper: createWrapper() });
+    await result.current.mutateAsync(false);
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/email/account/sending-enabled",
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({ enabled: false }),
+      }),
+    );
+  });
+});
+
+describe("useSESSendQuota", () => {
+  it("calls api with correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ max24HourSend: 50000, maxSendRate: 14, sentLast24Hours: 10 });
+    const { result } = renderHook(() => useSESSendQuota(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/email/account/send-quota");
+  });
+});
+
+describe("useSESSendStatistics", () => {
+  it("calls api with correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ sendDataPoints: [] });
+    const { result } = renderHook(() => useSESSendStatistics(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/email/account/send-statistics");
+  });
+});
+
+describe("useSESSendRawEmail", () => {
+  it("calls api with POST method and raw body", async () => {
+    mockApi.mockResolvedValueOnce({ messageId: "m1" });
+    const { result } = renderHook(() => useSESSendRawEmail(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ rawMessage: "Subject: x\n\nbody", source: "a@b.c" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/email/send-raw",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ rawMessage: "Subject: x\n\nbody", source: "a@b.c" }),
+      }),
+    );
   });
 });
 

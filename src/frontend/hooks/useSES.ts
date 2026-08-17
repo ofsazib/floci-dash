@@ -77,6 +77,77 @@ export function useSESVerifiedEmails() {
   });
 }
 
+export function useSESVerifyEmailAddress() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (emailAddress: string) =>
+      api("/aws/email/verified-emails", {
+        method: "POST",
+        body: JSON.stringify({ emailAddress }),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "ses", "verified-emails"] }),
+  });
+}
+
+export interface SESSendQuota {
+  max24HourSend: number | undefined;
+  maxSendRate: number | undefined;
+  sentLast24Hours: number | undefined;
+}
+
+export interface SESSendDataPoint {
+  timestamp: string | null;
+  deliveryAttempts: number | undefined;
+  rejects: number | undefined;
+  complaints: number | undefined;
+  bounces: number | undefined;
+}
+
+export function useSESSendingEnabled() {
+  return useQuery<{ enabled: boolean }>({
+    queryKey: ["aws", "ses", "account", "sending-enabled"],
+    queryFn: () => api("/aws/email/account/sending-enabled"),
+  });
+}
+
+export function useSESSetSendingEnabled() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (enabled: boolean) =>
+      api("/aws/email/account/sending-enabled", {
+        method: "PUT",
+        body: JSON.stringify({ enabled }),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "ses", "account", "sending-enabled"] }),
+  });
+}
+
+export function useSESSendQuota() {
+  return useQuery<SESSendQuota>({
+    queryKey: ["aws", "ses", "account", "send-quota"],
+    queryFn: () => api("/aws/email/account/send-quota"),
+  });
+}
+
+export function useSESSendStatistics() {
+  return useQuery<{ sendDataPoints: SESSendDataPoint[] }>({
+    queryKey: ["aws", "ses", "account", "send-statistics"],
+    queryFn: () => api("/aws/email/account/send-statistics"),
+  });
+}
+
+export function useSESSendRawEmail() {
+  return useMutation({
+    mutationFn: (data: { rawMessage: string; source?: string; destinations?: string[] }) =>
+      api("/aws/email/send-raw", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+  });
+}
+
 // ─── Notification Attributes ─────────────────────────────
 
 export function useSESNotificationAttributes(identity: string | null) {

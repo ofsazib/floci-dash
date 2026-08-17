@@ -11,6 +11,14 @@ const verifyEmailState = vi.hoisted(() => ({
   isPending: false,
 }));
 
+const verifyEmailAddressState = vi.hoisted(() => ({
+  isPending: false,
+}));
+
+const sendRawState = vi.hoisted(() => ({
+  isPending: false,
+}));
+
 const deleteIdentityState = vi.hoisted(() => ({
   isPending: false,
   variables: null as string | null,
@@ -63,6 +71,12 @@ const setDeliveryOptsState = vi.hoisted(() => ({
 const mockIdentities = vi.fn();
 const mockVerifiedEmails = vi.fn();
 const mockVerifyEmail = vi.fn();
+const mockVerifyEmailAddress = vi.fn();
+const mockSendingEnabled = vi.fn();
+const mockAccountSetSendingEnabled = vi.fn();
+const mockSendQuota = vi.fn();
+const mockSendStats = vi.fn();
+const mockSendRawEmail = vi.fn();
 const mockDeleteIdentity = vi.fn();
 const mockSendEmail = vi.fn();
 const mockConfigSets = vi.fn();
@@ -88,6 +102,21 @@ let mockSetHeadersInNotifications = vi.fn();
 vi.mock("../../hooks/useSES", () => ({
   useSESIdentities: (...args: any[]) => mockIdentities(...args),
   useSESVerifiedEmails: (...args: any[]) => mockVerifiedEmails(...args),
+  useSESVerifyEmailAddress: () => ({
+    mutate: mockVerifyEmailAddress,
+    get isPending() { return verifyEmailAddressState.isPending; },
+  }),
+  useSESSendingEnabled: (...args: any[]) => mockSendingEnabled(...args),
+  useSESSetSendingEnabled: () => ({
+    mutate: mockAccountSetSendingEnabled,
+    isPending: false,
+  }),
+  useSESSendQuota: (...args: any[]) => mockSendQuota(...args),
+  useSESSendStatistics: (...args: any[]) => mockSendStats(...args),
+  useSESSendRawEmail: () => ({
+    mutate: mockSendRawEmail,
+    get isPending() { return sendRawState.isPending; },
+  }),
   useSESVerifyEmail: () => ({
     mutate: mockVerifyEmail,
     get isPending() { return verifyEmailState.isPending; },
@@ -257,9 +286,32 @@ function expectModalHidden(headerText: string) {
 beforeEach(() => {
   vi.clearAllMocks();
   verifyEmailState.isPending = false;
+  verifyEmailAddressState.isPending = false;
+  sendRawState.isPending = false;
   deleteIdentityState.isPending = false;
   deleteIdentityState.variables = null;
   sendEmailState.isPending = false;
+  mockVerifyEmailAddress.mockReset();
+  mockAccountSetSendingEnabled.mockReset();
+  mockSendRawEmail.mockReset();
+  mockSendingEnabled.mockReturnValue({
+    data: { enabled: true },
+    isLoading: false,
+    isError: false,
+    error: null,
+  });
+  mockSendQuota.mockReturnValue({
+    data: { max24HourSend: 50000, maxSendRate: 14, sentLast24Hours: 100 },
+    isLoading: false,
+    isError: false,
+    error: null,
+  });
+  mockSendStats.mockReturnValue({
+    data: { sendDataPoints: [] },
+    isLoading: false,
+    isError: false,
+    error: null,
+  });
   mockIdentities.mockReturnValue({
     data: { identities: [], total: 0 },
     isLoading: false,
@@ -1877,16 +1929,18 @@ describe("SESDashboard — remaining branches", () => {
     await waitFor(() => expect(screen.getByPlaceholderText("recipient@example.com")).toBeTruthy());
 
     // Send stays disabled until all four fields are filled (covers the || chain)
-    const sendBtn = () => screen.getByRole("button", { name: /^Send$/i }) as HTMLButtonElement;
+    const sendBtn = () =>
+      within(screen.getByRole("dialog", { name: /Send email/i })).getByRole("button", { name: /^Send$/i }) as HTMLButtonElement;
     expect(sendBtn().disabled).toBe(true);
 
-    await user.type(screen.getByPlaceholderText("sender@example.com"), "sender@example.com");
+    const sendDialog = () => within(screen.getByRole("dialog", { name: /Send email/i }));
+    await user.type(sendDialog().getByPlaceholderText("sender@example.com"), "sender@example.com");
     expect(sendBtn().disabled).toBe(true);
-    await user.type(screen.getByPlaceholderText("recipient@example.com"), "to@example.com");
+    await user.type(sendDialog().getByPlaceholderText("recipient@example.com"), "to@example.com");
     expect(sendBtn().disabled).toBe(true);
-    await user.type(screen.getByPlaceholderText("Test email"), "Hello");
+    await user.type(sendDialog().getByPlaceholderText("Test email"), "Hello");
     expect(sendBtn().disabled).toBe(true);
-    await user.type(screen.getByPlaceholderText("Hello from SES"), "Body text");
+    await user.type(sendDialog().getByPlaceholderText("Hello from SES"), "Body text");
     expect(sendBtn().disabled).toBe(false);
 
     await user.click(sendBtn());
@@ -2430,5 +2484,340 @@ describe("SESDashboard — modal completeness", () => {
     await waitFor(() => screen.getByRole("dialog", { name: /Set Delivery Options/i }));
     dismissModalWithEscape();
     await waitFor(() => expectModalHidden("Set Delivery Options"));
+  });
+});
+
+// ─── Account section ─────────────────────────────────────
+
+describe("SESDashboard — Account section", () => {
+  it("renders account stats from quota data", async () => {
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("Account")).toBeTruthy();
+    expect(screen.getByText("Max 24h send")).toBeTruthy();
+    expect(screen.getByText("50000")).toBeTruthy();
+    expect(screen.getByText("14")).toBeTruthy();
+    expect(screen.getByText("100")).toBeTruthy();
+  });
+
+  it("shows dashes when quota fields are missing", async () => {
+    mockSendQuota.mockReturnValue({
+      data: { max24HourSend: undefined, maxSendRate: undefined, sentLast24Hours: undefined },
+      isLoading: false,
+    });
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("toggles account sending enabled and shows error on failure", async () => {
+    mockAccountSetSendingEnabled.mockImplementation((_v: boolean, opts: any) =>
+      opts?.onError?.(new Error("sending toggle failed")),
+    );
+    const user = userEvent.setup();
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByLabelText("Account sending enabled"));
+    await waitFor(() =>
+      expect(screen.getByText("sending toggle failed")).toBeTruthy(),
+    );
+    expect(mockAccountSetSendingEnabled).toHaveBeenCalledWith(false, expect.anything());
+  });
+
+  it("toggles account sending enabled off and dismisses the error alert", async () => {
+    mockAccountSetSendingEnabled.mockImplementation((_v: boolean, opts: any) =>
+      opts?.onError?.(new Error("dismiss me")),
+    );
+    const user = userEvent.setup();
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByLabelText("Account sending enabled"));
+    await waitFor(() => expect(screen.getByText("dismiss me")).toBeTruthy());
+    const dismiss = document.querySelector(
+      '[class*="awsui_dismiss-button"]',
+    ) as HTMLElement;
+    fireEvent.click(dismiss);
+    await waitFor(() => expect(screen.queryByText("dismiss me")).toBeNull());
+  });
+
+  it("shows generic error when sending toggle fails without message", async () => {
+    mockAccountSetSendingEnabled.mockImplementation((_v: boolean, opts: any) =>
+      opts?.onError?.("boom"),
+    );
+    const user = userEvent.setup();
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByLabelText("Account sending enabled"));
+    await waitFor(() =>
+      expect(screen.getByText("Failed to update sending")).toBeTruthy(),
+    );
+  });
+
+  it("renders send statistics table when data points exist", async () => {
+    mockSendStats.mockReturnValue({
+      data: {
+        sendDataPoints: [
+          {
+            timestamp: "2026-01-01T00:00:00Z",
+            deliveryAttempts: 10,
+            rejects: 1,
+            complaints: 0,
+            bounces: 2,
+          },
+          {
+            timestamp: null,
+            deliveryAttempts: undefined,
+            rejects: undefined,
+            complaints: undefined,
+            bounces: undefined,
+          },
+        ],
+      },
+      isLoading: false,
+    });
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("Send statistics")).toBeTruthy();
+    expect(screen.getByText("10")).toBeTruthy();
+    expect(screen.getByText("—")).toBeTruthy();
+  });
+
+  it("does not render the statistics table when no data points", async () => {
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    expect(screen.queryByText("Send statistics")).toBeNull();
+  });
+
+  it("verifies an email address from the list modal", async () => {
+    mockVerifyEmailAddress.mockImplementation((_e: string, opts: any) =>
+      opts?.onSuccess?.(),
+    );
+    const user = userEvent.setup();
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Verify address"));
+    await waitFor(() =>
+      expect(screen.getByText("Verify address (verified-emails list)")).toBeTruthy(),
+    );
+    await user.type(screen.getByPlaceholderText("new@example.com"), "a@b.com");
+    await clickButton(user, /^Verify$/i, { last: true });
+    await waitFor(() =>
+      expect(mockVerifyEmailAddress).toHaveBeenCalledWith(
+        "a@b.com",
+        expect.anything(),
+      ),
+    );
+  });
+
+  it("shows error when verifying an email address fails", async () => {
+    mockVerifyEmailAddress.mockImplementation((_e: string, opts: any) =>
+      opts?.onError?.(new Error("verify failed")),
+    );
+    const user = userEvent.setup();
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Verify address"));
+    await waitFor(() =>
+      expect(screen.getByText("Verify address (verified-emails list)")).toBeTruthy(),
+    );
+    await user.type(screen.getByPlaceholderText("new@example.com"), "a@b.com");
+    await clickButton(user, /^Verify$/i, { last: true });
+    await waitFor(() => expect(screen.getByText("verify failed")).toBeTruthy());
+  });
+
+  it("sends a raw email with source", async () => {
+    mockSendRawEmail.mockImplementation((_r: any, opts: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Send raw email"));
+    await waitFor(() =>
+      expect(screen.getByText("Send raw email (MIME)")).toBeTruthy(),
+    );
+    const rawDialog = () =>
+      within(screen.getByRole("dialog", { name: "Send raw email (MIME)" }));
+    await user.type(
+      screen.getByPlaceholderText(/RAW: From: sender@example.com/),
+      "Subject: hi",
+    );
+    await user.type(
+      rawDialog().getByPlaceholderText("sender@example.com"),
+      "sender@example.com",
+    );
+    await user.click(rawDialog().getByRole("button", { name: /^Send$/i }));
+    await waitFor(() =>
+      expect(mockSendRawEmail).toHaveBeenCalledWith(
+        { rawMessage: "Subject: hi", source: "sender@example.com" },
+        expect.anything(),
+      ),
+    );
+  });
+
+  it("shows error when raw email send fails", async () => {
+    mockSendRawEmail.mockImplementation((_r: any, opts: any) =>
+      opts?.onError?.(new Error("raw failed")),
+    );
+    const user = userEvent.setup();
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Send raw email"));
+    await waitFor(() =>
+      expect(screen.getByText("Send raw email (MIME)")).toBeTruthy(),
+    );
+    await user.type(
+      screen.getByPlaceholderText(/RAW: From: sender@example.com/),
+      "Subject: hi",
+    );
+    await user.click(
+      within(screen.getByRole("dialog", { name: "Send raw email (MIME)" })).getByRole("button", {
+        name: /^Send$/i,
+      }),
+    );
+    await waitFor(() => expect(screen.getByText("raw failed")).toBeTruthy());
+  });
+
+  it("cancels the send raw modal", async () => {
+    const user = userEvent.setup();
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Send raw email"));
+    await waitFor(() =>
+      expect(screen.getByText("Send raw email (MIME)")).toBeTruthy(),
+    );
+    await user.click(
+      within(screen.getByRole("dialog", { name: "Send raw email (MIME)" })).getByRole("button", {
+        name: /^Cancel$/i,
+      }),
+    );
+    expect(mockSendRawEmail).not.toHaveBeenCalled();
+  });
+
+  it("cancels the verify-address modal", async () => {
+    const user = userEvent.setup();
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Verify address"));
+    await waitFor(() =>
+      expect(
+        dialogOf("Verify address (verified-emails list)").closest(
+          '[role="dialog"]',
+        )?.className,
+      ).not.toContain("hidden"),
+    );
+    await user.click(
+      within(
+        screen.getByRole("dialog", { name: "Verify address (verified-emails list)" }),
+      ).getByRole("button", { name: /^Cancel$/i }),
+    );
+    await waitFor(() =>
+      expectModalHidden("Verify address (verified-emails list)"),
+    );
+  });
+
+  it("escapes the send raw modal", async () => {
+    const user = userEvent.setup();
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Send raw email"));
+    await waitFor(() =>
+      expect(
+        dialogOf("Send raw email (MIME)").closest('[role="dialog"]')?.className,
+      ).not.toContain("hidden"),
+    );
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Send raw email (MIME)"));
+  });
+
+  it("escapes the verify-address modal", async () => {
+    const user = userEvent.setup();
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Verify address"));
+    await waitFor(() =>
+      expect(
+        dialogOf("Verify address (verified-emails list)").closest(
+          '[role="dialog"]',
+        )?.className,
+      ).not.toContain("hidden"),
+    );
+    dismissModalWithEscape();
+    await waitFor(() =>
+      expectModalHidden("Verify address (verified-emails list)"),
+    );
+  });
+
+  it("dismisses the raw error alert", async () => {
+    mockSendRawEmail.mockImplementation((_r: any, opts: any) =>
+      opts?.onError?.(new Error("raw dismiss me")),
+    );
+    const user = userEvent.setup();
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Send raw email"));
+    await waitFor(() =>
+      expect(screen.getByText("Send raw email (MIME)")).toBeTruthy(),
+    );
+    await user.type(
+      screen.getByPlaceholderText(/RAW: From: sender@example.com/),
+      "Subject: hi",
+    );
+    await user.click(
+      within(screen.getByRole("dialog", { name: "Send raw email (MIME)" })).getByRole("button", {
+        name: /^Send$/i,
+      }),
+    );
+    await waitFor(() => expect(screen.getByText("raw dismiss me")).toBeTruthy());
+    const dismiss = document.querySelectorAll(
+      '[class*="awsui_dismiss-button"]',
+    );
+    fireEvent.click(dismiss[dismiss.length - 1] as HTMLElement);
+    await waitFor(() => expect(screen.queryByText("raw dismiss me")).toBeNull());
+  });
+
+  it("renders the toggle unchecked when sending status is missing", async () => {
+    mockSendingEnabled.mockReturnValue({ data: null, isLoading: false });
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await waitFor(() =>
+      expect(screen.getByLabelText("Account sending enabled")).toBeTruthy(),
+    );
+    expect(
+      (screen.getByLabelText("Account sending enabled") as HTMLInputElement).checked,
+    ).toBe(false);
+  });
+
+  it("does not render the statistics table when sendDataPoints is absent", async () => {
+    mockSendStats.mockReturnValue({ data: {}, isLoading: false });
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("Account")).toBeTruthy());
+    expect(screen.queryByText("Send statistics")).toBeNull();
+  });
+
+  it("shows the generic message when verifying an address fails without a message", async () => {
+    mockVerifyEmailAddress.mockImplementation((_e: string, opts: any) =>
+      opts?.onError?.("boom"),
+    );
+    const user = userEvent.setup();
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Verify address"));
+    await waitFor(() =>
+      expect(screen.getByText("Verify address (verified-emails list)")).toBeTruthy(),
+    );
+    await user.type(screen.getByPlaceholderText("new@example.com"), "a@b.com");
+    await user.click(
+      within(
+        screen.getByRole("dialog", { name: "Verify address (verified-emails list)" }),
+      ).getByRole("button", { name: /^Verify$/i }),
+    );
+    await waitFor(() =>
+      expect(screen.getByText("Failed to verify email")).toBeTruthy(),
+    );
+  });
+
+  it("shows the generic message when raw email send fails without a message", async () => {
+    mockSendRawEmail.mockImplementation((_r: any, opts: any) =>
+      opts?.onError?.("boom"),
+    );
+    const user = userEvent.setup();
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Send raw email"));
+    await waitFor(() =>
+      expect(screen.getByText("Send raw email (MIME)")).toBeTruthy(),
+    );
+    await user.type(
+      screen.getByPlaceholderText(/RAW: From: sender@example.com/),
+      "Subject: hi",
+    );
+    await user.click(
+      within(screen.getByRole("dialog", { name: "Send raw email (MIME)" })).getByRole("button", {
+        name: /^Send$/i,
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.getByText("Failed to send raw email")).toBeTruthy(),
+    );
   });
 });
