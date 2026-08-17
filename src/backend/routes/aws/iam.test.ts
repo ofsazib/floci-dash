@@ -37,6 +37,17 @@ vi.mock("@aws-sdk/client-iam", () => ({
   ListGroupsCommand: createCmd("ListGroupsCommand"),
   CreateGroupCommand: createCmd("CreateGroupCommand"),
   DeleteGroupCommand: createCmd("DeleteGroupCommand"),
+  GetGroupCommand: createCmd("GetGroupCommand"),
+  AddUserToGroupCommand: createCmd("AddUserToGroupCommand"),
+  RemoveUserFromGroupCommand: createCmd("RemoveUserFromGroupCommand"),
+  SetDefaultPolicyVersionCommand: createCmd("SetDefaultPolicyVersionCommand"),
+  ListPolicyTagsCommand: createCmd("ListPolicyTagsCommand"),
+  TagRoleCommand: createCmd("TagRoleCommand"),
+  UntagRoleCommand: createCmd("UntagRoleCommand"),
+  TagPolicyCommand: createCmd("TagPolicyCommand"),
+  UntagPolicyCommand: createCmd("UntagPolicyCommand"),
+  TagUserCommand: createCmd("TagUserCommand"),
+  UntagUserCommand: createCmd("UntagUserCommand"),
   ListPoliciesCommand: createCmd("ListPoliciesCommand"),
   CreatePolicyCommand: createCmd("CreatePolicyCommand"),
   GetPolicyCommand: createCmd("GetPolicyCommand"),
@@ -55,6 +66,10 @@ vi.mock("@aws-sdk/client-iam", () => ({
   GetUserPolicyCommand: createCmd("GetUserPolicyCommand"),
   PutUserPolicyCommand: createCmd("PutUserPolicyCommand"),
   DeleteUserPolicyCommand: createCmd("DeleteUserPolicyCommand"),
+  ListGroupPoliciesCommand: createCmd("ListGroupPoliciesCommand"),
+  GetGroupPolicyCommand: createCmd("GetGroupPolicyCommand"),
+  PutGroupPolicyCommand: createCmd("PutGroupPolicyCommand"),
+  DeleteGroupPolicyCommand: createCmd("DeleteGroupPolicyCommand"),
   ListInstanceProfilesCommand: createCmd("ListInstanceProfilesCommand"),
   CreateInstanceProfileCommand: createCmd("CreateInstanceProfileCommand"),
   DeleteInstanceProfileCommand: createCmd("DeleteInstanceProfileCommand"),
@@ -207,13 +222,14 @@ describe("IAM Routes", () => {
         .mockResolvedValueOnce({ Groups: [] })
         .mockResolvedValueOnce({ AttachedPolicies: [] })
         .mockResolvedValueOnce({ AccessKeyMetadata: [] })
-        .mockResolvedValueOnce({ PolicyNames: [] });
+        .mockResolvedValueOnce({ PolicyNames: [] })
+        .mockResolvedValueOnce({ Tags: [] });
       const res = await get("/users/admin");
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.user.name).toBe("admin");
       expect(body.groups).toEqual([]);
-      expect(mockSend).toHaveBeenCalledTimes(5);
+      expect(mockSend).toHaveBeenCalledTimes(6);
     });
 
     it("GET /users/:name — gets user detail with actual access keys and groups", async () => {
@@ -235,7 +251,8 @@ describe("IAM Routes", () => {
             { AccessKeyId: "AKIA456", UserName: "admin", Status: "Inactive", CreateDate: new Date("2025-03-01") },
           ],
         })
-        .mockResolvedValueOnce({ PolicyNames: ["inline-policy-1"] });
+        .mockResolvedValueOnce({ PolicyNames: ["inline-policy-1"] })
+        .mockResolvedValueOnce({ Tags: [{ Key: "env", Value: "prod" }] });
       const res = await get("/users/admin");
       expect(res.status).toBe(200);
       const body = await res.json();
@@ -247,7 +264,8 @@ describe("IAM Routes", () => {
       expect(body.accessKeys[0].accessKeyId).toBe("AKIA123");
       expect(body.accessKeys[0].status).toBe("Active");
       expect(body.inlinePolicies).toEqual(["inline-policy-1"]);
-      expect(mockSend).toHaveBeenCalledTimes(5);
+      expect(body.tags).toEqual({ env: "prod" });
+      expect(mockSend).toHaveBeenCalledTimes(6);
     });
 
     it("GET /users/:name — sparse responses (all keys missing)", async () => {
@@ -255,6 +273,7 @@ describe("IAM Routes", () => {
         .mockResolvedValueOnce({
           User: { UserName: "admin", Arn: "arn:x", UserId: "A1", Path: "/", CreateDate: new Date("2025-01-01") },
         })
+        .mockResolvedValueOnce({})
         .mockResolvedValueOnce({})
         .mockResolvedValueOnce({})
         .mockResolvedValueOnce({})
@@ -266,6 +285,7 @@ describe("IAM Routes", () => {
       expect(body.attachedPolicies).toEqual([]);
       expect(body.accessKeys).toEqual([]);
       expect(body.inlinePolicies).toEqual([]);
+      expect(body.tags).toEqual({});
     });
 
     it("GET /users/:name — maps attached policies, access keys, and inline policies", async () => {
@@ -276,12 +296,14 @@ describe("IAM Routes", () => {
         .mockResolvedValueOnce({ Groups: [] })
         .mockResolvedValueOnce({ AttachedPolicies: [{ PolicyName: "AdminPolicy", PolicyArn: "arn:aws:iam::...:policy/AdminPolicy" }] })
         .mockResolvedValueOnce({ AccessKeyMetadata: [{ AccessKeyId: "AKIA789", UserName: "admin", Status: "Active", CreateDate: new Date() }] })
-        .mockResolvedValueOnce({ PolicyNames: ["p1", "p2"] });
+        .mockResolvedValueOnce({ PolicyNames: ["p1", "p2"] })
+        .mockResolvedValueOnce({ Tags: [] });
       const res = await get("/users/admin");
       const body = await res.json();
       expect(body.attachedPolicies).toEqual([{ name: "AdminPolicy", arn: "arn:aws:iam::...:policy/AdminPolicy" }]);
       expect(body.accessKeys[0].accessKeyId).toBe("AKIA789");
       expect(body.inlinePolicies).toEqual(["p1", "p2"]);
+      expect(body.tags).toEqual({});
     });
 
     it("POST /users/:name/access-keys — creates access key", async () => {
@@ -636,7 +658,7 @@ describe("IAM Routes", () => {
       expect(mockSend.mock.calls[0][0].Scope).toBe("AWS");
     });
 
-    it("GET /policies/detail — returns policy + versions", async () => {
+    it("GET /policies/detail — returns policy + versions + tags", async () => {
       mockSend
         .mockResolvedValueOnce({
           Policy: {
@@ -651,28 +673,34 @@ describe("IAM Routes", () => {
             { VersionId: "v1", IsDefaultVersion: true, CreateDate: new Date("2025-01-01") },
             { VersionId: "v2", IsDefaultVersion: false, CreateDate: new Date("2025-02-01") },
           ],
+        })
+        .mockResolvedValueOnce({
+          Tags: [{ Key: "env", Value: "prod" }],
         });
       const res = await get("/policies/detail?arn=arn:aws:iam::000000000000:policy/AdminPolicy");
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.policy.name).toBe("AdminPolicy");
       expect(body.versions).toHaveLength(2);
+      expect(body.tags).toEqual({ env: "prod" });
     });
 
     it("GET /policies/detail — null policy when not found", async () => {
-      mockSend.mockResolvedValue({ Policy: null, Versions: [] });
+      mockSend.mockResolvedValue({ Policy: null, Versions: [], Tags: [] });
       const res = await get("/policies/detail?arn=missing");
       const body = await res.json();
       expect(body.policy).toBeNull();
     });
 
-    it("GET /policies/detail — empty versions when Versions key missing", async () => {
+    it("GET /policies/detail — empty versions and tags when keys missing", async () => {
       mockSend
         .mockResolvedValueOnce({ Policy: { PolicyName: "P" } })
+        .mockResolvedValueOnce({})
         .mockResolvedValueOnce({});
       const res = await get("/policies/detail?arn=arn-x");
       const body = await res.json();
       expect(body.versions).toEqual([]);
+      expect(body.tags).toEqual({});
     });
 
     it("GET /policies/version — returns decoded document", async () => {
@@ -863,6 +891,221 @@ describe("IAM Routes", () => {
       const res = await get("/instance-profiles");
       const body = await res.json();
       expect(body.instanceProfiles[0].roles).toEqual(["r1", "r2"]);
+    });
+  });
+
+  describe("G.85 — group membership, default version, tags", () => {
+    it("GET /groups/:name — returns group with members", async () => {
+      mockSend.mockResolvedValueOnce({
+        Group: { GroupName: "admins", Arn: "arn:admins" },
+        Users: [{ UserName: "alice" }],
+      });
+      const res = await get("/groups/admins");
+      const body = await res.json();
+      expect(body.group.name).toBe("admins");
+      expect(body.users).toEqual([{ UserName: "alice" }]);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetGroupCommand");
+    });
+
+    it("GET /groups/:name — sparse users", async () => {
+      mockSend.mockResolvedValueOnce({ Group: { GroupName: "admins" } });
+      const res = await get("/groups/admins");
+      const body = await res.json();
+      expect(body.users).toEqual([]);
+    });
+
+    it("POST /groups/:name/users — adds a user", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/groups/admins/users", { userName: "alice" });
+      const body = await res.json();
+      expect(body.added).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("AddUserToGroupCommand");
+      expect(mockSend.mock.calls[0][0].UserName).toBe("alice");
+      const res400 = await post("/groups/admins/users", {});
+      expect(res400.status).toBe(400);
+    });
+
+    it("DELETE /groups/:name/users/:userName — removes a user", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/groups/admins/users/alice");
+      const body = await res.json();
+      expect(body.removed).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("RemoveUserFromGroupCommand");
+      expect(mockSend.mock.calls[0][0].UserName).toBe("alice");
+    });
+
+    it("GET /groups/:name/inline-policies — lists group inline policies", async () => {
+      mockSend.mockResolvedValueOnce({ PolicyNames: ["gp1", "gp2"] });
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/groups/admins/inline-policies");
+      const body = await res.json();
+      expect(body.policyNames).toEqual(["gp1", "gp2"]);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("ListGroupPoliciesCommand");
+      const sparse = await get("/groups/admins/inline-policies");
+      expect((await sparse.json()).policyNames).toEqual([]);
+    });
+
+    it("GET /groups/:name/inline-policies/:policyName — gets group inline policy document", async () => {
+      mockSend.mockResolvedValueOnce({
+        PolicyDocument: encodeURIComponent(JSON.stringify({ Version: "2012-10-17" })),
+      });
+      const res = await get("/groups/admins/inline-policies/gp1");
+      const body = await res.json();
+      expect(body.policyName).toBe("gp1");
+      expect(body.document).toContain("2012-10-17");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetGroupPolicyCommand");
+    });
+
+    it("GET /groups/:name/inline-policies/:policyName — null document when absent", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/groups/admins/inline-policies/gp2");
+      expect((await res.json()).document).toBeNull();
+    });
+
+    it("PUT /groups/:name/inline-policies — puts group inline policy", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/groups/admins/inline-policies", {
+        policyName: "gp1",
+        document: '{"Version":"2012-10-17"}',
+      });
+      const body = await res.json();
+      expect(body.put).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("PutGroupPolicyCommand");
+      expect(mockSend.mock.calls[0][0].GroupName).toBe("admins");
+    });
+
+    it("PUT /groups/:name/inline-policies — 400 when policyName missing", async () => {
+      const res = await put("/groups/admins/inline-policies", { document: '{"Version":"2012-10-17"}' });
+      expect(res.status).toBe(400);
+    });
+
+    it("PUT /groups/:name/inline-policies — puts without document", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/groups/admins/inline-policies", { policyName: "gp-no-doc" });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].PolicyDocument).toBeUndefined();
+    });
+
+    it("PUT /groups/:name/inline-policies — 400 when document is invalid JSON", async () => {
+      const res = await put("/groups/admins/inline-policies", { policyName: "bad", document: "not-json" });
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE /groups/:name/inline-policies/:policyName — deletes group inline policy", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/groups/admins/inline-policies/gp1");
+      expect((await res.json()).deleted).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteGroupPolicyCommand");
+    });
+
+    it("POST /policies/:arn/set-default-version — sets default version", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/policies/arn%3Ap1/set-default-version", { versionId: "v2" });
+      const body = await res.json();
+      expect(body.set).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("SetDefaultPolicyVersionCommand");
+      expect(mockSend.mock.calls[0][0].PolicyArn).toBe("arn:p1");
+      expect(mockSend.mock.calls[0][0].VersionId).toBe("v2");
+      const res400 = await post("/policies/arn%3Ap1/set-default-version", {});
+      expect(res400.status).toBe(400);
+    });
+
+    it("POST /users/:name/tags — tags a user with 400 when empty", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/users/alice/tags", { tags: [{ Key: "env", Value: "prod" }] });
+      const body = await res.json();
+      expect(body.tagged).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("TagUserCommand");
+      expect(mockSend.mock.calls[0][0].Tags).toEqual([{ Key: "env", Value: "prod" }]);
+      const res400 = await post("/users/alice/tags", { tags: [{ Key: "env" }] });
+      expect(res400.status).toBe(400);
+      const res400b = await post("/users/alice/tags", { tags: [{ Value: "prod" }] });
+      expect(res400b.status).toBe(400);
+      const res400c = await post("/users/alice/tags", {});
+      expect(res400c.status).toBe(400);
+    });
+
+    it("DELETE /users/:name/tags — untags a user with 400 when empty", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await router.request("/users/alice/tags", {
+        method: "DELETE",
+        body: JSON.stringify({ tagKeys: ["env"] }),
+        headers: { "content-type": "application/json" },
+      });
+      const body = await res.json();
+      expect(body.untagged).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("UntagUserCommand");
+      expect(mockSend.mock.calls[0][0].TagKeys).toEqual(["env"]);
+      const res400 = await router.request("/users/alice/tags", {
+        method: "DELETE",
+        body: JSON.stringify({ tagKeys: [] }),
+        headers: { "content-type": "application/json" },
+      });
+      expect(res400.status).toBe(400);
+    });
+
+    it("POST /roles/:name/tags — tags a role", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/roles/deploy/tags", { tags: [{ Key: "env", Value: "prod" }] });
+      const body = await res.json();
+      expect(body.tagged).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("TagRoleCommand");
+      const res400 = await post("/roles/deploy/tags", { tags: [{ Key: "env" }] });
+      expect(res400.status).toBe(400);
+      const res400b = await post("/roles/deploy/tags", { tags: [{ Value: "prod" }] });
+      expect(res400b.status).toBe(400);
+      const res400c = await post("/roles/deploy/tags", {});
+      expect(res400c.status).toBe(400);
+    });
+
+    it("DELETE /roles/:name/tags — untags a role", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await router.request("/roles/deploy/tags", {
+        method: "DELETE",
+        body: JSON.stringify({ tagKeys: ["env"] }),
+        headers: { "content-type": "application/json" },
+      });
+      const body = await res.json();
+      expect(body.untagged).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("UntagRoleCommand");
+      const res400 = await router.request("/roles/deploy/tags", {
+        method: "DELETE",
+        body: JSON.stringify({ tagKeys: [] }),
+        headers: { "content-type": "application/json" },
+      });
+      expect(res400.status).toBe(400);
+    });
+
+    it("POST /policies/:arn/tags — tags a policy", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/policies/arn%3Ap1/tags", { tags: [{ Key: "env", Value: "prod" }] });
+      const body = await res.json();
+      expect(body.tagged).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("TagPolicyCommand");
+      const res400 = await post("/policies/arn%3Ap1/tags", { tags: [{ Key: "env" }] });
+      expect(res400.status).toBe(400);
+      const res400b = await post("/policies/arn%3Ap1/tags", { tags: [{ Value: "prod" }] });
+      expect(res400b.status).toBe(400);
+      const res400c = await post("/policies/arn%3Ap1/tags", {});
+      expect(res400c.status).toBe(400);
+    });
+
+    it("DELETE /policies/:arn/tags — untags a policy", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await router.request("/policies/arn%3Ap1/tags", {
+        method: "DELETE",
+        body: JSON.stringify({ tagKeys: ["env"] }),
+        headers: { "content-type": "application/json" },
+      });
+      const body = await res.json();
+      expect(body.untagged).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("UntagPolicyCommand");
+      const res400 = await router.request("/policies/arn%3Ap1/tags", {
+        method: "DELETE",
+        body: JSON.stringify({ tagKeys: [] }),
+        headers: { "content-type": "application/json" },
+      });
+      expect(res400.status).toBe(400);
     });
   });
 });

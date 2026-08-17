@@ -14,7 +14,7 @@ export function useIAMUser(name: string | null) {
   return useQuery({
     queryKey: ["aws", "iam", "users", name],
     queryFn: () =>
-      api<{ user: any; groups: any[]; attachedPolicies: any[]; accessKeys: any[]; inlinePolicies: string[] }>(
+      api<{ user: any; groups: any[]; attachedPolicies: any[]; accessKeys: any[]; inlinePolicies: string[]; tags: Record<string, string> }>(
         `/aws/iam/users/${name}`
       ),
     enabled: !!name,
@@ -79,6 +79,141 @@ export function useIAMGroups() {
   });
 }
 
+export function useIAMGroup(name: string | null) {
+  return useQuery({
+    queryKey: ["aws", "iam", "groups", name],
+    queryFn: () => api<{ group: any; users: any[] }>(`/aws/iam/groups/${name}`),
+    enabled: !!name,
+  });
+}
+
+export function useAddUserToGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupName, userName }: { groupName: string; userName: string }) =>
+      api(`/aws/iam/groups/${groupName}/users`, { method: "POST", body: JSON.stringify({ userName }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam"] }),
+  });
+}
+
+export function useRemoveUserFromGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupName, userName }: { groupName: string; userName: string }) =>
+      api(`/aws/iam/groups/${groupName}/users/${userName}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam"] }),
+  });
+}
+
+export function useGroupInlinePolicies(groupName: string | null) {
+  return useQuery({
+    queryKey: ["aws", "iam", "groups", groupName, "inline-policies"],
+    queryFn: () => api<{ policyNames: string[] }>(`/aws/iam/groups/${groupName}/inline-policies`),
+    enabled: !!groupName,
+  });
+}
+
+export function useGroupInlinePolicy(groupName: string | null, policyName: string | null) {
+  return useQuery({
+    queryKey: ["aws", "iam", "groups", groupName, "inline-policies", policyName],
+    queryFn: () =>
+      api<{ policyName: string; document: string | null }>(
+        `/aws/iam/groups/${groupName}/inline-policies/${policyName}`
+      ),
+    enabled: !!groupName && !!policyName,
+  });
+}
+
+export function usePutGroupInlinePolicy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupName, policyName, document }: { groupName: string; policyName: string; document?: string }) =>
+      api(`/aws/iam/groups/${groupName}/inline-policies`, {
+        method: "PUT",
+        body: JSON.stringify({ policyName, document }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam"] }),
+  });
+}
+
+export function useDeleteGroupInlinePolicy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupName, policyName }: { groupName: string; policyName: string }) =>
+      api(`/aws/iam/groups/${groupName}/inline-policies/${policyName}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam"] }),
+  });
+}
+
+export function useSetDefaultPolicyVersion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ arn, versionId }: { arn: string; versionId: string }) =>
+      api(`/aws/iam/policies/${encodeURIComponent(arn)}/set-default-version`, {
+        method: "POST",
+        body: JSON.stringify({ versionId }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam"] }),
+  });
+}
+
+export function useTagUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userName, tags }: { userName: string; tags: { Key: string; Value: string }[] }) =>
+      api(`/aws/iam/users/${userName}/tags`, { method: "POST", body: JSON.stringify({ tags }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam"] }),
+  });
+}
+
+export function useUntagUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userName, tagKeys }: { userName: string; tagKeys: string[] }) =>
+      api(`/aws/iam/users/${userName}/tags`, { method: "DELETE", body: JSON.stringify({ tagKeys }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam"] }),
+  });
+}
+
+export function useTagRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ roleName, tags }: { roleName: string; tags: { Key: string; Value: string }[] }) =>
+      api(`/aws/iam/roles/${roleName}/tags`, { method: "POST", body: JSON.stringify({ tags }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam"] }),
+  });
+}
+
+export function useUntagRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ roleName, tagKeys }: { roleName: string; tagKeys: string[] }) =>
+      api(`/aws/iam/roles/${roleName}/tags`, { method: "DELETE", body: JSON.stringify({ tagKeys }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam"] }),
+  });
+}
+
+export function useTagPolicy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ arn, tags }: { arn: string; tags: { Key: string; Value: string }[] }) =>
+      api(`/aws/iam/policies/${encodeURIComponent(arn)}/tags`, { method: "POST", body: JSON.stringify({ tags }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam"] }),
+  });
+}
+
+export function useUntagPolicy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ arn, tagKeys }: { arn: string; tagKeys: string[] }) =>
+      api(`/aws/iam/policies/${encodeURIComponent(arn)}/tags`, {
+        method: "DELETE",
+        body: JSON.stringify({ tagKeys }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam"] }),
+  });
+}
+
 export function useCreateGroup() {
   const qc = useQueryClient();
   return useMutation({
@@ -108,7 +243,7 @@ export function useIAMPolicies(scope?: string) {
 export function useIAMPolicy(arn: string | null) {
   return useQuery({
     queryKey: ["aws", "iam", "policies", arn],
-    queryFn: () =>      api<{ policy: any; versions: any[] }>(`/aws/iam/policies/detail?arn=${encodeURIComponent(arn!)}`),
+    queryFn: () =>      api<{ policy: any; versions: any[]; tags: Record<string, string> }>(`/aws/iam/policies/detail?arn=${encodeURIComponent(arn!)}`),
     enabled: !!arn,
   });
 }
@@ -165,6 +300,41 @@ export function useInstanceProfiles() {
   return useQuery({
     queryKey: ["aws", "iam", "instance-profiles"],
     queryFn: () => api<{ instanceProfiles: any[]; total: number }>("/aws/iam/instance-profiles"),
+  });
+}
+
+export function useCreateInstanceProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string; path?: string }) =>
+      api("/aws/iam/instance-profiles", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam"] }),
+  });
+}
+
+export function useDeleteInstanceProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) => api(`/aws/iam/instance-profiles/${name}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam"] }),
+  });
+}
+
+export function useAddRoleToInstanceProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, roleName }: { name: string; roleName: string }) =>
+      api(`/aws/iam/instance-profiles/${name}/roles/${roleName}`, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam"] }),
+  });
+}
+
+export function useRemoveRoleFromInstanceProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, roleName }: { name: string; roleName: string }) =>
+      api(`/aws/iam/instance-profiles/${name}/roles/${roleName}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam"] }),
   });
 }
 

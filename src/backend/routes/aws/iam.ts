@@ -22,6 +22,17 @@ import {
   CreateGroupCommand,
   DeleteGroupCommand,
   ListGroupsForUserCommand,
+  GetGroupCommand,
+  AddUserToGroupCommand,
+  RemoveUserFromGroupCommand,
+  SetDefaultPolicyVersionCommand,
+  ListPolicyTagsCommand,
+  TagRoleCommand,
+  UntagRoleCommand,
+  TagPolicyCommand,
+  UntagPolicyCommand,
+  TagUserCommand,
+  UntagUserCommand,
   // Policies
   ListPoliciesCommand,
   CreatePolicyCommand,
@@ -47,6 +58,10 @@ import {
   GetUserPolicyCommand,
   PutUserPolicyCommand,
   DeleteUserPolicyCommand,
+  ListGroupPoliciesCommand,
+  GetGroupPolicyCommand,
+  PutGroupPolicyCommand,
+  DeleteGroupPolicyCommand,
   // Instance profiles
   ListInstanceProfilesCommand,
   CreateInstanceProfileCommand,
@@ -153,14 +168,17 @@ router.get("/users/:name", async (c: Context) => {
   const result = await iam().send(new GetUserCommand({ UserName: name }));
 
   // Fetch groups and attached policies in parallel
-  const [groupsRes, attachedRes, accessKeysRes, inlineRes] = await Promise.all([
+  const [groupsRes, attachedRes, accessKeysRes, inlineRes, tagsRes] = await Promise.all([
     iam().send(new ListGroupsForUserCommand({ UserName: name })),
     iam().send(new ListAttachedUserPoliciesCommand({ UserName: name })),
     iam().send(new ListAccessKeysCommand({ UserName: name })),
     iam().send(new ListUserPoliciesCommand({ UserName: name })),
+    iam().send(new ListUserTagsCommand({ UserName: name })),
   ]);
 
   const user = mapUser(result.User);
+  const tags: Record<string, string> = {};
+  (tagsRes.Tags || []).forEach((t: any) => { tags[t.Key] = t.Value; });
   return c.json({
     user,
     groups: (groupsRes.Groups || []).map(mapGroup),
@@ -169,6 +187,7 @@ router.get("/users/:name", async (c: Context) => {
       arn: p.PolicyArn,
     })),
     accessKeys: (accessKeysRes.AccessKeyMetadata || []).map(mapAccessKey),
+    tags,
     inlinePolicies: inlineRes.PolicyNames || [],
   });
 });
@@ -193,6 +212,24 @@ router.get("/users/:name/tags", async (c: Context) => {
   const tags: Record<string, string> = {};
   (result.Tags || []).forEach((t: any) => { tags[t.Key] = t.Value; });
   return c.json({ tags });
+});
+
+router.post("/users/:name/tags", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<any>();
+  const tags = (body.tags || []).filter((t: any) => t.Key && t.Value);
+  if (tags.length === 0) return c.json({ error: "tags must be a non-empty array of {Key, Value}" }, 400);
+  await iam().send(new TagUserCommand({ UserName: name, Tags: tags }));
+  return c.json({ tagged: true });
+});
+
+router.delete("/users/:name/tags", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<any>();
+  if (!body.tagKeys || !Array.isArray(body.tagKeys) || body.tagKeys.length === 0)
+    return c.json({ error: "tagKeys must be a non-empty array" }, 400);
+  await iam().send(new UntagUserCommand({ UserName: name, TagKeys: body.tagKeys }));
+  return c.json({ untagged: true });
 });
 
 // ─── ROLES ───────────────────────────────────────────────
@@ -282,6 +319,27 @@ router.delete("/groups/:name", async (c: Context) => {
   return c.json({ name, deleted: true });
 });
 
+router.get("/groups/:name", async (c: Context) => {
+  const name = c.req.param("name");
+  const result = await iam().send(new GetGroupCommand({ GroupName: name }));
+  return c.json({ group: mapGroup(result.Group), users: result.Users || [] });
+});
+
+router.post("/groups/:name/users", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<any>();
+  if (!body.userName) return c.json({ error: "userName is required" }, 400);
+  await iam().send(new AddUserToGroupCommand({ GroupName: name, UserName: body.userName }));
+  return c.json({ added: true });
+});
+
+router.delete("/groups/:name/users/:userName", async (c: Context) => {
+  const name = c.req.param("name");
+  const userName = c.req.param("userName");
+  await iam().send(new RemoveUserFromGroupCommand({ GroupName: name, UserName: userName }));
+  return c.json({ removed: true });
+});
+
 // ─── POLICIES ────────────────────────────────────────────
 
 router.get("/policies", async (c: Context) => {
@@ -295,10 +353,14 @@ router.get("/policies/detail", async (c: Context) => {
   const policyArn = c.req.query("arn");
   if (!policyArn) return c.json({ error: "arn query parameter required" }, 400);
 
-  const [policyRes, versionsRes] = await Promise.all([
+  const [policyRes, versionsRes, tagsRes] = await Promise.all([
     iam().send(new GetPolicyCommand({ PolicyArn: policyArn })),
     iam().send(new ListPolicyVersionsCommand({ PolicyArn: policyArn })),
+    iam().send(new ListPolicyTagsCommand({ PolicyArn: policyArn })),
   ]);
+
+  const tags: Record<string, string> = {};
+  (tagsRes.Tags || []).forEach((t: any) => { tags[t.Key] = t.Value; });
 
   return c.json({
     policy: policyRes.Policy ? mapPolicy(policyRes.Policy) : null,
@@ -307,6 +369,7 @@ router.get("/policies/detail", async (c: Context) => {
       isDefaultVersion: v.IsDefaultVersion,
       createDate: v.CreateDate,
     })),
+    tags,
   });
 });
 
@@ -325,6 +388,50 @@ router.get("/policies/version", async (c: Context) => {
     document: doc,
     isDefaultVersion: result.PolicyVersion?.IsDefaultVersion,
   });
+});
+
+router.post("/policies/:arn/set-default-version", async (c: Context) => {
+  const policyArn = c.req.param("arn");
+  const body = await c.req.json<any>();
+  if (!body.versionId) return c.json({ error: "versionId is required" }, 400);
+  await iam().send(new SetDefaultPolicyVersionCommand({ PolicyArn: policyArn, VersionId: body.versionId }));
+  return c.json({ set: true });
+});
+
+router.post("/policies/:arn/tags", async (c: Context) => {
+  const policyArn = c.req.param("arn");
+  const body = await c.req.json<any>();
+  const tags = (body.tags || []).filter((t: any) => t.Key && t.Value);
+  if (tags.length === 0) return c.json({ error: "tags must be a non-empty array of {Key, Value}" }, 400);
+  await iam().send(new TagPolicyCommand({ PolicyArn: policyArn, Tags: tags }));
+  return c.json({ tagged: true });
+});
+
+router.delete("/policies/:arn/tags", async (c: Context) => {
+  const policyArn = c.req.param("arn");
+  const body = await c.req.json<any>();
+  if (!body.tagKeys || !Array.isArray(body.tagKeys) || body.tagKeys.length === 0)
+    return c.json({ error: "tagKeys must be a non-empty array" }, 400);
+  await iam().send(new UntagPolicyCommand({ PolicyArn: policyArn, TagKeys: body.tagKeys }));
+  return c.json({ untagged: true });
+});
+
+router.post("/roles/:name/tags", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<any>();
+  const tags = (body.tags || []).filter((t: any) => t.Key && t.Value);
+  if (tags.length === 0) return c.json({ error: "tags must be a non-empty array of {Key, Value}" }, 400);
+  await iam().send(new TagRoleCommand({ RoleName: name, Tags: tags }));
+  return c.json({ tagged: true });
+});
+
+router.delete("/roles/:name/tags", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<any>();
+  if (!body.tagKeys || !Array.isArray(body.tagKeys) || body.tagKeys.length === 0)
+    return c.json({ error: "tagKeys must be a non-empty array" }, 400);
+  await iam().send(new UntagRoleCommand({ RoleName: name, TagKeys: body.tagKeys }));
+  return c.json({ untagged: true });
 });
 
 router.post("/policies", async (c: Context) => {
@@ -464,6 +571,48 @@ router.delete("/users/:name/inline-policies/:policyName", async (c: Context) => 
   const name = c.req.param("name");
   const policyName = c.req.param("policyName");
   await iam().send(new DeleteUserPolicyCommand({ UserName: name, PolicyName: policyName }));
+  return c.json({ policyName, deleted: true });
+});
+
+// ─── GROUP POLICIES ──────────────────────────────────────
+
+router.get("/groups/:name/inline-policies", async (c: Context) => {
+  const name = c.req.param("name");
+  const result = await iam().send(new ListGroupPoliciesCommand({ GroupName: name }));
+  return c.json({ policyNames: result.PolicyNames || [] });
+});
+
+router.get("/groups/:name/inline-policies/:policyName", async (c: Context) => {
+  const name = c.req.param("name");
+  const policyName = c.req.param("policyName");
+  const result = await iam().send(
+    new GetGroupPolicyCommand({ GroupName: name, PolicyName: policyName })
+  );
+  const doc = result.PolicyDocument ? decodeURIComponent(result.PolicyDocument as string) : null;
+  return c.json({ policyName, document: doc });
+});
+
+router.put("/groups/:name/inline-policies", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<any>();
+  const inlinePolicyName = sanitizeName(body.policyName || "", 128);
+  if (!inlinePolicyName) return c.json({ error: "policyName is required" }, 400);
+  if (body.document) {
+    const validation = validateJson(body.document, "object");
+    if (!validation.valid) {
+      return c.json({ error: `Invalid policy document: ${validation.error}` }, 400);
+    }
+  }
+  await iam().send(
+    new PutGroupPolicyCommand({ GroupName: name, PolicyName: inlinePolicyName, PolicyDocument: body.document })
+  );
+  return c.json({ policyName: inlinePolicyName, put: true });
+});
+
+router.delete("/groups/:name/inline-policies/:policyName", async (c: Context) => {
+  const name = c.req.param("name");
+  const policyName = c.req.param("policyName");
+  await iam().send(new DeleteGroupPolicyCommand({ GroupName: name, PolicyName: policyName }));
   return c.json({ policyName, deleted: true });
 });
 

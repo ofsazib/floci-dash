@@ -15,15 +15,33 @@ const mockIAMRole = vi.fn();
 const mockCreateRoleMutate = vi.fn();
 const mockDeleteRoleMutate = vi.fn();
 const mockIAMGroups = vi.fn();
+const mockIAMGroup = vi.fn();
 const mockCreateGroupMutate = vi.fn();
 const mockDeleteGroupMutate = vi.fn();
+const mockAddUserToGroup = vi.fn();
+const mockRemoveUserFromGroup = vi.fn();
+const mockGroupInlinePolicies = vi.fn();
+const mockGroupInlinePolicy = vi.fn();
+const mockPutGroupInlinePolicy = vi.fn();
+const mockDeleteGroupInlinePolicy = vi.fn();
 const mockIAMPolicies = vi.fn();
 const mockIAMPolicy = vi.fn();
 const mockPolicyVersion = vi.fn();
+const mockSetDefaultPolicyVersion = vi.fn();
 const mockCreatePolicyMutate = vi.fn();
 const mockDeletePolicyMutate = vi.fn();
 const mockCreateAccessKeyMutate = vi.fn();
+const mockTagUser = vi.fn();
+const mockUntagUser = vi.fn();
+const mockTagRole = vi.fn();
+const mockUntagRole = vi.fn();
+const mockTagPolicy = vi.fn();
+const mockUntagPolicy = vi.fn();
 const mockInstanceProfiles = vi.fn();
+const mockCreateInstanceProfile = vi.fn();
+const mockDeleteInstanceProfile = vi.fn();
+const mockAddRoleToInstanceProfile = vi.fn();
+const mockRemoveRoleFromInstanceProfile = vi.fn();
 
 vi.mock("../hooks/useIAM", () => ({
   useIAMUsers: (...args: any[]) => mockIAMUsers(...args),
@@ -35,6 +53,14 @@ vi.mock("../hooks/useIAM", () => ({
   useCreateRole: () => ({ mutateAsync: mockCreateRoleMutate, isPending: false }),
   useDeleteRole: () => ({ mutateAsync: mockDeleteRoleMutate, isPending: false }),
   useIAMGroups: (...args: any[]) => mockIAMGroups(...args),
+  useIAMGroup: (...args: any[]) => mockIAMGroup(...args),
+  useAddUserToGroup: () => ({ mutateAsync: mockAddUserToGroup, isPending: false }),
+  useRemoveUserFromGroup: () => ({ mutateAsync: mockRemoveUserFromGroup, isPending: false }),
+  useGroupInlinePolicies: (...args: any[]) => mockGroupInlinePolicies(...args),
+  useGroupInlinePolicy: (...args: any[]) => mockGroupInlinePolicy(...args),
+  usePutGroupInlinePolicy: () => ({ mutateAsync: mockPutGroupInlinePolicy, isPending: false }),
+  useDeleteGroupInlinePolicy: () => ({ mutateAsync: mockDeleteGroupInlinePolicy, isPending: false }),
+  useSetDefaultPolicyVersion: () => ({ mutateAsync: mockSetDefaultPolicyVersion, isPending: false }),
   useCreateGroup: () => ({ mutate: mockCreateGroupMutate, isPending: false }),
   useDeleteGroup: () => ({ mutateAsync: mockDeleteGroupMutate, isPending: false }),
   useIAMPolicies: (...args: any[]) => mockIAMPolicies(...args),
@@ -43,7 +69,17 @@ vi.mock("../hooks/useIAM", () => ({
   useCreatePolicy: () => ({ mutateAsync: mockCreatePolicyMutate, isPending: false }),
   useDeletePolicy: () => ({ mutateAsync: mockDeletePolicyMutate, isPending: false }),
   useCreateAccessKey: () => ({ mutateAsync: mockCreateAccessKeyMutate, isPending: false }),
-  useInstanceProfiles: () => ({ data: { instanceProfiles: [] }, isLoading: false }),
+  useTagUser: () => ({ mutateAsync: mockTagUser, isPending: false }),
+  useUntagUser: () => ({ mutateAsync: mockUntagUser, isPending: false }),
+  useTagRole: () => ({ mutateAsync: mockTagRole, isPending: false }),
+  useUntagRole: () => ({ mutateAsync: mockUntagRole, isPending: false }),
+  useTagPolicy: () => ({ mutateAsync: mockTagPolicy, isPending: false }),
+  useUntagPolicy: () => ({ mutateAsync: mockUntagPolicy, isPending: false }),
+  useInstanceProfiles: (...args: any[]) => mockInstanceProfiles(...args),
+  useCreateInstanceProfile: () => ({ mutateAsync: mockCreateInstanceProfile, isPending: false }),
+  useDeleteInstanceProfile: () => ({ mutateAsync: mockDeleteInstanceProfile, isPending: false }),
+  useAddRoleToInstanceProfile: () => ({ mutateAsync: mockAddRoleToInstanceProfile, isPending: false }),
+  useRemoveRoleFromInstanceProfile: () => ({ mutateAsync: mockRemoveRoleFromInstanceProfile, isPending: false }),
 }));
 
 vi.mock("../components/Toast", () => ({
@@ -78,10 +114,14 @@ describe("IAMPage", () => {
     mockIAMUsers.mockReturnValue({ data: { users: [{ name: "admin-user", arn: "arn:aws:iam::000000000000:user/admin-user", createDate: "2024-01-01" }] }, isLoading: false, isError: false, error: null });
     mockIAMGroups.mockReturnValue({ data: { groups: [{ name: "admins", arn: "arn:aws:iam::000000000000:group/admins" }] }, isLoading: false, isError: false, error: null });
     mockIAMPolicies.mockReturnValue({ data: { policies: [{ name: "AdminPolicy", arn: "arn:aws:iam::000000000000:policy/AdminPolicy", scope: "Local" }] }, isLoading: false, isError: false, error: null });
-    mockIAMUser.mockReturnValue({ data: { user: null, accessKeys: [], attachedPolicies: [], groups: [], inlinePolicies: [] }, isLoading: false });
+    mockIAMUser.mockReturnValue({ data: { user: null, accessKeys: [], attachedPolicies: [], groups: [], inlinePolicies: [], tags: {} }, isLoading: false });
     mockIAMRole.mockReturnValue({ data: { role: null, attachedPolicies: [], tags: {} }, isLoading: false });
-    mockIAMPolicy.mockReturnValue({ data: { policy: null, versions: [] }, isLoading: false });
+    mockIAMPolicy.mockReturnValue({ data: { policy: null, versions: [], tags: {} }, isLoading: false });
     mockPolicyVersion.mockReturnValue({ data: { document: null }, isLoading: false });
+    mockIAMGroup.mockReturnValue({ data: { group: null, users: [] }, isLoading: false });
+    mockGroupInlinePolicies.mockReturnValue({ data: { policyNames: [] }, isLoading: false });
+    mockGroupInlinePolicy.mockReturnValue({ data: { document: null }, isLoading: false });
+    mockInstanceProfiles.mockReturnValue({ data: { instanceProfiles: [] }, isLoading: false });
   });
 
   // ─── Render State Tests ─────────────────────────────────
@@ -1304,5 +1344,606 @@ describe("IAMPage — branch completion", () => {
     await waitFor(() =>
       expect(screen.getByText("Available")).toBeTruthy(),
     );
+  });
+});
+
+describe("IAMPage — G.85 group detail, policies, tags, instance profiles", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockIAMRoles.mockReturnValue({ data: { roles: [] }, isLoading: false, isError: false, error: null });
+    mockIAMUsers.mockReturnValue({ data: { users: [] }, isLoading: false, isError: false, error: null });
+    mockIAMGroups.mockReturnValue({ data: { groups: [] }, isLoading: false, isError: false, error: null });
+    mockIAMPolicies.mockReturnValue({ data: { policies: [] }, isLoading: false, isError: false, error: null });
+    mockIAMUser.mockReturnValue({ data: { user: null, accessKeys: [], attachedPolicies: [], groups: [], inlinePolicies: [], tags: {} }, isLoading: false });
+    mockIAMRole.mockReturnValue({ data: { role: null, attachedPolicies: [], tags: {} }, isLoading: false });
+    mockIAMPolicy.mockReturnValue({ data: { policy: null, versions: [], tags: {} }, isLoading: false });
+    mockPolicyVersion.mockReturnValue({ data: { document: null }, isLoading: false });
+    mockIAMGroup.mockReturnValue({ data: { group: null, users: [] }, isLoading: false });
+    mockGroupInlinePolicies.mockReturnValue({ data: { policyNames: [] }, isLoading: false });
+    mockGroupInlinePolicy.mockReturnValue({ data: { document: null }, isLoading: false });
+    mockInstanceProfiles.mockReturnValue({ data: { instanceProfiles: [] }, isLoading: false });
+  });
+
+  const groupData = {
+    data: {
+      group: { name: "admins", arn: "arn:aws:iam::000000000000:group/admins", path: "/", createDate: "2025-01-01" },
+      users: [{ UserName: "alice", Arn: "arn:aws:iam::000000000000:user/alice" }],
+    },
+    isLoading: false,
+  };
+
+  it("opens group detail and shows members", async () => {
+    const user = userEvent.setup();
+    mockIAMGroups.mockReturnValue({ data: { groups: [{ name: "admins", arn: "arn:aws:iam::000000000000:group/admins" }] }, isLoading: false, isError: false, error: null });
+    mockIAMGroup.mockReturnValue(groupData);
+    mockGroupInlinePolicies.mockReturnValue({ data: { policyNames: ["gp1"] }, isLoading: false });
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Groups/i }));
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText("Members (1)")).toBeTruthy());
+    expect(screen.getByText("alice")).toBeTruthy();
+    expect(screen.getByText("gp1")).toBeTruthy();
+  });
+
+  it("shows Group not found when group missing", async () => {
+    const user = userEvent.setup();
+    mockIAMGroups.mockReturnValue({ data: { groups: [{ name: "admins" }] }, isLoading: false, isError: false, error: null });
+    mockIAMGroup.mockReturnValue({ data: { group: null, users: [] }, isLoading: false });
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Groups/i }));
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText("Group not found")).toBeTruthy());
+  });
+
+  it("adds and removes a member", async () => {
+    const user = userEvent.setup();
+    mockIAMGroups.mockReturnValue({ data: { groups: [{ name: "admins" }] }, isLoading: false, isError: false, error: null });
+    mockIAMGroup.mockReturnValue(groupData);
+    mockGroupInlinePolicies.mockReturnValue({ data: { policyNames: [] }, isLoading: false });
+    mockAddUserToGroup.mockResolvedValue({});
+    mockRemoveUserFromGroup.mockResolvedValue({});
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Groups/i }));
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText("Members (1)")).toBeTruthy());
+    const inputs = screen.getAllByRole("textbox");
+    await user.type(inputs[inputs.length - 1], "bob");
+    await clickButton(user, /Add user/i);
+    await waitFor(() => expect(mockAddUserToGroup).toHaveBeenCalledWith({ groupName: "admins", userName: "bob" }));
+    await clickButton(user, /Remove/i);
+    await waitFor(() => expect(mockRemoveUserFromGroup).toHaveBeenCalledWith({ groupName: "admins", userName: "alice" }));
+  });
+
+  it("shows error toast when add user fails and does not add when empty", async () => {
+    const user = userEvent.setup();
+    mockIAMGroups.mockReturnValue({ data: { groups: [{ name: "admins" }] }, isLoading: false, isError: false, error: null });
+    mockIAMGroup.mockReturnValue(groupData);
+    mockGroupInlinePolicies.mockReturnValue({ data: { policyNames: [] }, isLoading: false });
+    mockAddUserToGroup.mockRejectedValue(new Error("add failed"));
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Groups/i }));
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText("Members (1)")).toBeTruthy());
+    await clickButton(user, /Add user/i);
+    await waitFor(() => expect(mockAddUserToGroup).not.toHaveBeenCalled());
+    const inputs = screen.getAllByRole("textbox");
+    await user.type(inputs[inputs.length - 1], "bob");
+    await clickButton(user, /Add user/i);
+    await waitFor(() => expect(mockAddUserToGroup).toHaveBeenCalled());
+  });
+
+  it("shows group detail loading, empty members, and sparse group fields", async () => {
+    const user = userEvent.setup();
+    mockIAMGroups.mockReturnValue({ data: { groups: [{ name: "admins" }] }, isLoading: false, isError: false, error: null });
+    mockIAMGroup.mockReturnValue({ data: null, isLoading: true });
+    mockGroupInlinePolicies.mockReturnValue({ data: {}, isLoading: false });
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Groups/i }));
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText("Loading...")).toBeTruthy());
+    mockIAMGroup.mockReturnValue({
+      data: { group: { name: "admins", arn: "arn:1" }, users: [{ name: "bob-only" }] },
+      isLoading: false,
+    });
+    await clickButton(user, /Close/i);
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText("bob-only")).toBeTruthy());
+    expect(screen.getAllByText("/").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("-").length).toBeGreaterThan(0);
+  });
+
+  it("shows the empty members state and removes a sparse user", async () => {
+    const user = userEvent.setup();
+    mockIAMGroups.mockReturnValue({ data: { groups: [{ name: "admins" }] }, isLoading: false, isError: false, error: null });
+    mockIAMGroup.mockReturnValue({ data: { group: { name: "admins", arn: "arn:1" }, users: [] }, isLoading: false });
+    mockGroupInlinePolicies.mockReturnValue({ data: { policyNames: [] }, isLoading: false });
+    mockRemoveUserFromGroup.mockResolvedValue({});
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Groups/i }));
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText("No members")).toBeTruthy());
+    mockIAMGroup.mockReturnValue({
+      data: { group: { name: "admins", arn: "arn:1" }, users: [{ userName: "u2" }, { name: "bob-only" }] },
+      isLoading: false,
+    });
+    await clickButton(user, /Close/i);
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText("u2")).toBeTruthy());
+    await clickButton(user, /Remove/i);
+    await waitFor(() => expect(mockRemoveUserFromGroup).toHaveBeenCalledWith({ groupName: "admins", userName: "u2" }));
+    await clickButton(user, /Remove/i, { last: true });
+    await waitFor(() => expect(mockRemoveUserFromGroup).toHaveBeenCalledWith({ groupName: "admins", userName: "bob-only" }));
+  });
+
+  it("shows loading and empty document for group inline policy view", async () => {
+    const user = userEvent.setup();
+    mockIAMGroups.mockReturnValue({ data: { groups: [{ name: "admins" }] }, isLoading: false, isError: false, error: null });
+    mockIAMGroup.mockReturnValue(groupData);
+    mockGroupInlinePolicies.mockReturnValue({ data: { policyNames: ["gp1"] }, isLoading: false });
+    mockGroupInlinePolicy.mockReturnValue({ data: null, isLoading: true });
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Groups/i }));
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText("gp1")).toBeTruthy());
+    await clickButton(user, /View/i, { last: true });
+    await waitFor(() => expect(screen.getByText("Loading...")).toBeTruthy());
+    mockGroupInlinePolicy.mockReturnValue({ data: { document: null }, isLoading: false });
+    await clickButton(user, /Delete/i, { last: true });
+    await waitFor(() => expect(mockDeleteGroupInlinePolicy).toHaveBeenCalled());
+  });
+
+  it("shows the no-document fallback for a group inline policy", async () => {
+    const user = userEvent.setup();
+    mockIAMGroups.mockReturnValue({ data: { groups: [{ name: "admins" }] }, isLoading: false, isError: false, error: null });
+    mockIAMGroup.mockReturnValue(groupData);
+    mockGroupInlinePolicies.mockReturnValue({ data: { policyNames: ["gp1"] }, isLoading: false });
+    mockGroupInlinePolicy.mockReturnValue({ data: { document: null }, isLoading: false });
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Groups/i }));
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText("gp1")).toBeTruthy());
+    await clickButton(user, /View/i, { last: true });
+    await waitFor(() => expect(screen.getByText("(no document)")).toBeTruthy());
+  });
+
+  it("does not add a tag when key or value is empty", async () => {
+    const user = userEvent.setup();
+    mockIAMRoles.mockReturnValue({ data: { roles: [{ name: "ec2-role" }] }, isLoading: false, isError: false, error: null });
+    mockIAMRole.mockReturnValue({ data: { role: { name: "ec2-role" }, attachedPolicies: [], tags: {} }, isLoading: false });
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText(/Role: ec2-role/)).toBeTruthy());
+    await clickButton(user, /Add tag/i);
+    await waitFor(() => expect(mockTagRole).not.toHaveBeenCalled());
+  });
+
+  it("adds, views, and deletes a group inline policy", async () => {
+    const user = userEvent.setup();
+    mockIAMGroups.mockReturnValue({ data: { groups: [{ name: "admins" }] }, isLoading: false, isError: false, error: null });
+    mockIAMGroup.mockReturnValue(groupData);
+    mockGroupInlinePolicies.mockReturnValue({ data: { policyNames: [] }, isLoading: false });
+    mockPutGroupInlinePolicy.mockResolvedValue({});
+    mockDeleteGroupInlinePolicy.mockResolvedValue({});
+    mockGroupInlinePolicy.mockReturnValue({ data: { document: "{\"Version\":\"2012-10-17\"}" }, isLoading: false });
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Groups/i }));
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText("Members (1)")).toBeTruthy());
+    await clickButton(user, /Add policy/i);
+    let inputs = screen.getAllByRole("textbox");
+    await user.type(inputs[inputs.length - 2], "gp2");
+    const textareas = screen.getAllByRole("textbox");
+    fireEvent.change(textareas[textareas.length - 1], { target: { value: "{\"Version\":\"2012-10-17\"}" } });
+    await clickButton(user, /Save policy/i);
+    await waitFor(() => expect(mockPutGroupInlinePolicy).toHaveBeenCalledWith({ groupName: "admins", policyName: "gp2", document: "{\"Version\":\"2012-10-17\"}" }));
+    // cancel the add-policy form
+    await clickButton(user, /Add policy/i);
+    await clickButton(user, /Cancel/i, { last: true });
+    await waitFor(() => expect(screen.queryByText(/Save policy/i)).toBeNull());
+  });
+
+  it("shows error toasts for group policy put/delete and add user failures", async () => {
+    const user = userEvent.setup();
+    mockIAMGroups.mockReturnValue({ data: { groups: [{ name: "admins" }] }, isLoading: false, isError: false, error: null });
+    mockIAMGroup.mockReturnValue(groupData);
+    mockGroupInlinePolicies.mockReturnValue({ data: { policyNames: ["gp1"] }, isLoading: false });
+    mockPutGroupInlinePolicy.mockRejectedValue(new Error("put failed"));
+    mockDeleteGroupInlinePolicy.mockRejectedValue(new Error("delete failed"));
+    mockAddUserToGroup.mockRejectedValue(new Error("add failed"));
+    mockRemoveUserFromGroup.mockRejectedValue(new Error("remove failed"));
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Groups/i }));
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText("Members (1)")).toBeTruthy());
+    await clickButton(user, /Add policy/i);
+    await clickButton(user, /Save policy/i);
+    await waitFor(() => expect(mockPutGroupInlinePolicy).not.toHaveBeenCalled());
+    const inputs = screen.getAllByRole("textbox");
+    await user.type(inputs[inputs.length - 2], "gp2");
+    await clickButton(user, /Save policy/i);
+    await waitFor(() => expect(mockPutGroupInlinePolicy).toHaveBeenCalled());
+    await clickButton(user, /Delete/i, { last: true });
+    await waitFor(() => expect(mockDeleteGroupInlinePolicy).toHaveBeenCalled());
+    // dismiss the info alert if open
+    const dismiss = document.querySelector('[class*="awsui_dismiss-button"]') as HTMLElement;
+    if (dismiss) fireEvent.click(dismiss);
+    // close the add-policy form so the last textbox is the user-name input
+    await clickButton(user, /Cancel/i, { last: true });
+    await waitFor(() => expect(screen.queryByText(/Save policy/i)).toBeNull());
+    // add user error + remove user error
+    const userInputs = screen.getAllByRole("textbox");
+    await user.type(userInputs[userInputs.length - 1], "bob");
+    await clickButton(user, /Add user/i);
+    await waitFor(() => expect(mockAddUserToGroup).toHaveBeenCalled());
+    await clickButton(user, /Remove/i);
+    await waitFor(() => expect(mockRemoveUserFromGroup).toHaveBeenCalled());
+  });
+
+  it("dismisses the viewed group policy alert", async () => {
+    const user = userEvent.setup();
+    mockIAMGroups.mockReturnValue({ data: { groups: [{ name: "admins" }] }, isLoading: false, isError: false, error: null });
+    mockIAMGroup.mockReturnValue(groupData);
+    mockGroupInlinePolicies.mockReturnValue({ data: { policyNames: ["gp1"] }, isLoading: false });
+    mockGroupInlinePolicy.mockReturnValue({ data: { document: "{}" }, isLoading: false });
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Groups/i }));
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText("gp1")).toBeTruthy());
+    await clickButton(user, /View/i, { last: true });
+    await waitFor(() => expect(screen.getByText("Policy: gp1")).toBeTruthy());
+    const dismiss = document.querySelector('[class*="awsui_dismiss-button"]') as HTMLElement;
+    if (dismiss) fireEvent.click(dismiss);
+    await waitFor(() => expect(screen.queryByText("Policy: gp1")).toBeNull());
+  });
+
+  it("views and deletes an existing group inline policy", async () => {
+    const user = userEvent.setup();
+    mockIAMGroups.mockReturnValue({ data: { groups: [{ name: "admins" }] }, isLoading: false, isError: false, error: null });
+    mockIAMGroup.mockReturnValue(groupData);
+    mockGroupInlinePolicies.mockReturnValue({ data: { policyNames: ["gp1"] }, isLoading: false });
+    mockGroupInlinePolicy.mockReturnValue({ data: { document: "{\"Version\":\"2012-10-17\"}" }, isLoading: false });
+    mockDeleteGroupInlinePolicy.mockResolvedValue({});
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Groups/i }));
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText("gp1")).toBeTruthy());
+    await clickButton(user, /View/i, { last: true });
+    await waitFor(() => expect(screen.getByText(/2012-10-17/)).toBeTruthy());
+    await clickButton(user, /Delete/i, { last: true });
+    await waitFor(() => expect(mockDeleteGroupInlinePolicy).toHaveBeenCalledWith({ groupName: "admins", policyName: "gp1" }));
+  });
+
+  it("closes the group detail modal", async () => {
+    const user = userEvent.setup();
+    mockIAMGroups.mockReturnValue({ data: { groups: [{ name: "admins" }] }, isLoading: false, isError: false, error: null });
+    mockIAMGroup.mockReturnValue(groupData);
+    mockGroupInlinePolicies.mockReturnValue({ data: { policyNames: [] }, isLoading: false });
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Groups/i }));
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText("Members (1)")).toBeTruthy());
+    await clickButton(user, /Close/i);
+    await waitFor(() => expect(screen.queryByText("Members (1)")).toBeNull());
+  });
+
+  it("sets default policy version and adds/removes policy tags", async () => {
+    const user = userEvent.setup();
+    mockIAMPolicies.mockReturnValue({ data: { policies: [{ name: "AdminPolicy", arn: "arn:aws:iam::000000000000:policy/AdminPolicy", scope: "Local" }] }, isLoading: false, isError: false, error: null });
+    mockIAMPolicy.mockReturnValue({
+      data: {
+        policy: { name: "AdminPolicy", arn: "arn:aws:iam::000000000000:policy/AdminPolicy", policyId: "P1", defaultVersionId: "v1", attachmentCount: 0, createDate: "2025-01-01" },
+        versions: [
+          { versionId: "v1", isDefaultVersion: true, createDate: "2025-01-01" },
+          { versionId: "v2", isDefaultVersion: false, createDate: "2025-02-01" },
+        ],
+        tags: { env: "prod" },
+      },
+      isLoading: false,
+    });
+    mockPolicyVersion.mockReturnValue({ data: { document: "{\"Version\":\"2012-10-17\"}" }, isLoading: false });
+    mockSetDefaultPolicyVersion.mockResolvedValue({});
+    mockTagPolicy.mockResolvedValue({});
+    mockUntagPolicy.mockResolvedValue({});
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Policies/i }));
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getAllByText(/AdminPolicy/).length).toBeGreaterThan(0));
+    // select v2 via the version Select
+    await user.click(screen.getByText("v1 (default)"));
+    await user.click(await screen.findByText("v2"));
+    await waitFor(() => expect(screen.getByText(/Set as default/i)).toBeTruthy());
+    await clickButton(user, /Set as default/i);
+    await waitFor(() => expect(mockSetDefaultPolicyVersion).toHaveBeenCalledWith({ arn: "arn:aws:iam::000000000000:policy/AdminPolicy", versionId: "v2" }));
+    // tag editor
+    const tagInputs = screen.getAllByRole("textbox");
+    await user.type(tagInputs[tagInputs.length - 2], "team");
+    await user.type(tagInputs[tagInputs.length - 1], "core");
+    await clickButton(user, /Add tag/i);
+    await waitFor(() => expect(mockTagPolicy).toHaveBeenCalledWith({ arn: "arn:aws:iam::000000000000:policy/AdminPolicy", tags: [{ Key: "team", Value: "core" }] }));
+    await clickButton(user, /Remove/i);
+    await waitFor(() => expect(mockUntagPolicy).toHaveBeenCalledWith({ arn: "arn:aws:iam::000000000000:policy/AdminPolicy", tagKeys: ["env"] }));
+  });
+
+  it("shows error toast when set default version fails", async () => {
+    const user = userEvent.setup();
+    mockIAMPolicies.mockReturnValue({ data: { policies: [{ name: "AdminPolicy", arn: "arn:aws:iam::000000000000:policy/AdminPolicy", scope: "Local" }] }, isLoading: false, isError: false, error: null });
+    mockIAMPolicy.mockReturnValue({
+      data: {
+        policy: { name: "AdminPolicy", arn: "arn:aws:iam::000000000000:policy/AdminPolicy", policyId: "P1", defaultVersionId: "v1" },
+        versions: [
+          { versionId: "v1", isDefaultVersion: true },
+          { versionId: "v2", isDefaultVersion: false },
+        ],
+        tags: {},
+      },
+      isLoading: false,
+    });
+    mockPolicyVersion.mockReturnValue({ data: { document: "{}" }, isLoading: false });
+    mockSetDefaultPolicyVersion.mockRejectedValue(new Error("set failed"));
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Policies/i }));
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getAllByText(/AdminPolicy/).length).toBeGreaterThan(0));
+    await user.click(screen.getByText("v1 (default)"));
+    await user.click(await screen.findByText("v2"));
+    await waitFor(() => expect(screen.getByText(/Set as default/i)).toBeTruthy());
+    await clickButton(user, /Set as default/i);
+    await waitFor(() => expect(mockSetDefaultPolicyVersion).toHaveBeenCalled());
+  });
+
+  it("adds and removes role tags in role detail", async () => {
+    const user = userEvent.setup();
+    mockIAMRoles.mockReturnValue({ data: { roles: [{ name: "ec2-role", arn: "arn:aws:iam::000000000000:role/ec2-role" }] }, isLoading: false, isError: false, error: null });
+    mockIAMRole.mockReturnValue({ data: { role: { name: "ec2-role", arn: "arn:aws:iam::000000000000:role/ec2-role", roleId: "R1", path: "/", maxSessionDuration: 3600, createDate: "2025-01-01" }, attachedPolicies: [], tags: { env: "prod" } }, isLoading: false });
+    mockTagRole.mockResolvedValue({});
+    mockUntagRole.mockResolvedValue({});
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText("env: prod")).toBeTruthy());
+    const tagInputs = screen.getAllByRole("textbox");
+    await user.type(tagInputs[tagInputs.length - 2], "team");
+    await user.type(tagInputs[tagInputs.length - 1], "core");
+    await clickButton(user, /Add tag/i);
+    await waitFor(() => expect(mockTagRole).toHaveBeenCalledWith({ roleName: "ec2-role", tags: [{ Key: "team", Value: "core" }] }));
+    await clickButton(user, /Remove/i);
+    await waitFor(() => expect(mockUntagRole).toHaveBeenCalledWith({ roleName: "ec2-role", tagKeys: ["env"] }));
+  });
+
+  it("adds and removes user tags in user detail", async () => {
+    const user = userEvent.setup();
+    mockIAMUsers.mockReturnValue({ data: { users: [{ name: "admin-user", arn: "arn:aws:iam::000000000000:user/admin-user" }] }, isLoading: false, isError: false, error: null });
+    mockIAMUser.mockReturnValue({ data: { user: { name: "admin-user", arn: "arn:aws:iam::000000000000:user/admin-user", userId: "U1", path: "/", createDate: "2025-01-01" }, accessKeys: [], attachedPolicies: [], groups: [], inlinePolicies: [], tags: { env: "prod" } }, isLoading: false });
+    mockTagUser.mockResolvedValue({});
+    mockUntagUser.mockResolvedValue({});
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Users/i }));
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText(/User: admin-user/)).toBeTruthy());
+    const tagInputs = screen.getAllByRole("textbox");
+    await user.type(tagInputs[tagInputs.length - 2], "team");
+    await user.type(tagInputs[tagInputs.length - 1], "core");
+    await clickButton(user, /Add tag/i);
+    await waitFor(() => expect(mockTagUser).toHaveBeenCalledWith({ userName: "admin-user", tags: [{ Key: "team", Value: "core" }] }));
+    await clickButton(user, /Remove/i);
+    await waitFor(() => expect(mockUntagUser).toHaveBeenCalledWith({ userName: "admin-user", tagKeys: ["env"] }));
+  });
+
+  it("shows error toasts when tag mutations fail", async () => {
+    const user = userEvent.setup();
+    mockIAMUsers.mockReturnValue({ data: { users: [{ name: "admin-user" }] }, isLoading: false, isError: false, error: null });
+    mockIAMUser.mockReturnValue({ data: { user: { name: "admin-user", arn: "arn:1" }, accessKeys: [], attachedPolicies: [], groups: [], inlinePolicies: [], tags: { env: "prod" } }, isLoading: false });
+    mockTagUser.mockRejectedValue(new Error("tag failed"));
+    mockUntagUser.mockRejectedValue(new Error("untag failed"));
+    mockIAMRoles.mockReturnValue({ data: { roles: [{ name: "ec2-role" }] }, isLoading: false, isError: false, error: null });
+    mockIAMRole.mockReturnValue({ data: { role: { name: "ec2-role" }, attachedPolicies: [], tags: { env: "prod" } }, isLoading: false });
+    mockTagRole.mockRejectedValue(new Error("tag-role failed"));
+    mockUntagRole.mockRejectedValue(new Error("untag-role failed"));
+    mockIAMPolicies.mockReturnValue({ data: { policies: [{ name: "P", arn: "arn:1", scope: "Local" }] }, isLoading: false, isError: false, error: null });
+    mockIAMPolicy.mockReturnValue({ data: { policy: { name: "P", arn: "arn:1" }, versions: [], tags: { env: "prod" } }, isLoading: false });
+    mockTagPolicy.mockRejectedValue(new Error("tag-policy failed"));
+    mockUntagPolicy.mockRejectedValue(new Error("untag-policy failed"));
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    // user tag failures
+    await user.click(screen.getByRole("tab", { name: /Users/i }));
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText(/User: admin-user/)).toBeTruthy());
+    const uInputs = screen.getAllByRole("textbox");
+    await user.type(uInputs[uInputs.length - 2], "k");
+    await user.type(uInputs[uInputs.length - 1], "v");
+    await clickButton(user, /Add tag/i);
+    await waitFor(() => expect(mockTagUser).toHaveBeenCalled());
+    await clickButton(user, /Remove/i);
+    await waitFor(() => expect(mockUntagUser).toHaveBeenCalled());
+    await clickButton(user, /Close/i);
+    // role tag failures
+    await user.click(screen.getByRole("tab", { name: /Roles/i }));
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText(/Role: ec2-role/)).toBeTruthy());
+    const rInputs = screen.getAllByRole("textbox");
+    await user.type(rInputs[rInputs.length - 2], "k");
+    await user.type(rInputs[rInputs.length - 1], "v");
+    await clickButton(user, /Add tag/i);
+    await waitFor(() => expect(mockTagRole).toHaveBeenCalled());
+    await clickButton(user, /Remove/i);
+    await waitFor(() => expect(mockUntagRole).toHaveBeenCalled());
+    await clickButton(user, /Close/i);
+    // policy tag failures
+    await user.click(screen.getByRole("tab", { name: /Policies/i }));
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText(/Policy: P/)).toBeTruthy());
+    const pInputs = screen.getAllByRole("textbox");
+    await user.type(pInputs[pInputs.length - 2], "k");
+    await user.type(pInputs[pInputs.length - 1], "v");
+    await clickButton(user, /Add tag/i);
+    await waitFor(() => expect(mockTagPolicy).toHaveBeenCalled());
+    await clickButton(user, /Remove/i);
+    await waitFor(() => expect(mockUntagPolicy).toHaveBeenCalled());
+  });
+
+  it("renders instance profiles tab with empty state", async () => {
+    const user = userEvent.setup();
+    mockInstanceProfiles.mockReturnValue({ data: {}, isLoading: false });
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Instance profiles/i }));
+    await waitFor(() => expect(screen.getByText("No instance profiles")).toBeTruthy());
+  });
+
+  it("creates an instance profile", async () => {
+    const user = userEvent.setup();
+    mockInstanceProfiles.mockReturnValue({ data: { instanceProfiles: [] }, isLoading: false });
+    mockCreateInstanceProfile.mockResolvedValue({});
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Instance profiles/i }));
+    await clickButton(user, /Create instance profile/i);
+    const inputs = screen.getAllByRole("textbox");
+    await user.type(inputs[0], "web-profile");
+    await clickButton(user, /Create/i, { last: true });
+    await waitFor(() => expect(mockCreateInstanceProfile).toHaveBeenCalledWith({ name: "web-profile", path: "/" }));
+  });
+
+  it("does not create an instance profile with an empty name", async () => {
+    const user = userEvent.setup();
+    mockInstanceProfiles.mockReturnValue({ data: { instanceProfiles: [] }, isLoading: false });
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Instance profiles/i }));
+    await clickButton(user, /Create instance profile/i);
+    await clickButton(user, /Create/i, { last: true });
+    await waitFor(() => expect(mockCreateInstanceProfile).not.toHaveBeenCalled());
+  });
+
+  it("shows instance profile fallbacks for sparse data", async () => {
+    const user = userEvent.setup();
+    mockInstanceProfiles.mockReturnValue({
+      data: {
+        instanceProfiles: [
+          { name: "sparse", arn: "arn:1", roles: ["raw-role", { name: "obj-role" }] },
+          { name: "noroles", arn: "arn:2" },
+        ],
+      },
+      isLoading: false,
+    });
+    mockRemoveRoleFromInstanceProfile.mockResolvedValue({});
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Instance profiles/i }));
+    await waitFor(() => expect(screen.getByText("sparse")).toBeTruthy());
+    expect(screen.getByText("raw-role")).toBeTruthy();
+    expect(screen.getByText("obj-role")).toBeTruthy();
+    expect(screen.getByText("noroles")).toBeTruthy();
+    await clickButton(user, /Remove/i, { last: true });
+    await waitFor(() => expect(mockRemoveRoleFromInstanceProfile).toHaveBeenCalledWith({ name: "sparse", roleName: "obj-role" }));
+  });
+
+  it("does not add a role when role name is empty and errors on failure", async () => {
+    const user = userEvent.setup();
+    mockInstanceProfiles.mockReturnValue({
+      data: { instanceProfiles: [{ name: "web-profile", arn: "arn:1", path: "/", roles: [] }] },
+      isLoading: false,
+    });
+    mockAddRoleToInstanceProfile.mockRejectedValue(new Error("add-role-failed"));
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Instance profiles/i }));
+    await waitFor(() => expect(screen.getByText("web-profile")).toBeTruthy());
+    await clickButton(user, /Add role/i);
+    await clickButton(user, /Add role/i, { last: true });
+    await waitFor(() => expect(mockAddRoleToInstanceProfile).not.toHaveBeenCalled());
+    const inputs = screen.getAllByRole("textbox");
+    await user.type(inputs[inputs.length - 1], "lambda-role");
+    await clickButton(user, /Add role/i, { last: true });
+    await waitFor(() => expect(mockAddRoleToInstanceProfile).toHaveBeenCalled());
+    // reopen and cancel the add-role modal
+    await clickButton(user, /Add role/i);
+    await waitFor(() => expect(screen.getByText(/Add role to web-profile/)).toBeTruthy());
+    await clickButton(user, /Cancel/i, { last: true });
+    await waitFor(() => expect(screen.queryByText(/Add role to web-profile/)).toBeNull());
+  });
+
+  it("shows error toasts for delete profile and remove role failures and escapes the add-role modal", async () => {
+    const user = userEvent.setup();
+    mockInstanceProfiles.mockReturnValue({
+      data: {
+        instanceProfiles: [
+          { name: "web-profile", arn: "arn:1", path: "/", roles: [{ RoleName: "ec2-role" }] },
+        ],
+      },
+      isLoading: false,
+    });
+    mockDeleteInstanceProfile.mockRejectedValue(new Error("delete-failed"));
+    mockRemoveRoleFromInstanceProfile.mockRejectedValue(new Error("remove-failed"));
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Instance profiles/i }));
+    await waitFor(() => expect(screen.getByText("web-profile")).toBeTruthy());
+    await clickButton(user, /Remove/i);
+    await waitFor(() => expect(mockRemoveRoleFromInstanceProfile).toHaveBeenCalled());
+    await clickButton(user, /Delete web-profile/i);
+    await waitFor(() => expect(screen.getByText(/Are you sure/i)).toBeTruthy());
+    await clickButton(user, /^Delete$/);
+    await waitFor(() => expect(mockDeleteInstanceProfile).toHaveBeenCalled());
+    // reopen the add-role modal and escape-dismiss it
+    await clickButton(user, /Add role/i);
+    await waitFor(() => expect(screen.getByText(/Add role to web-profile/)).toBeTruthy());
+    const dialogs = document.querySelectorAll('[class*="awsui_dialog"]');
+    dialogs.forEach((d) => fireEvent.keyDown(d as HTMLElement, { keyCode: 27, key: "Escape", bubbles: true }));
+    await waitFor(() => expect(screen.queryByText(/Add role to web-profile/)).toBeNull());
+  });
+
+  it("deletes an instance profile and adds/removes roles", async () => {
+    const user = userEvent.setup();
+    mockInstanceProfiles.mockReturnValue({
+      data: {
+        instanceProfiles: [
+          { name: "web-profile", arn: "arn:aws:iam::000000000000:instance-profile/web-profile", path: "/", roles: [{ RoleName: "ec2-role" }] },
+        ],
+      },
+      isLoading: false,
+    });
+    mockDeleteInstanceProfile.mockResolvedValue({});
+    mockAddRoleToInstanceProfile.mockResolvedValue({});
+    mockRemoveRoleFromInstanceProfile.mockResolvedValue({});
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Instance profiles/i }));
+    await waitFor(() => expect(screen.getByText("web-profile")).toBeTruthy());
+    await clickButton(user, /Add role/i);
+    const inputs = screen.getAllByRole("textbox");
+    await user.type(inputs[inputs.length - 1], "lambda-role");
+    await clickButton(user, /Add role/i, { last: true });
+    await waitFor(() => expect(mockAddRoleToInstanceProfile).toHaveBeenCalledWith({ name: "web-profile", roleName: "lambda-role" }));
+    await clickButton(user, /Remove/i);
+    await waitFor(() => expect(mockRemoveRoleFromInstanceProfile).toHaveBeenCalledWith({ name: "web-profile", roleName: "ec2-role" }));
+    await clickButton(user, /Delete web-profile/i);
+    await waitFor(() => expect(screen.getByText(/Are you sure/i)).toBeTruthy());
+    await clickButton(user, /^Delete$/);
+    await waitFor(() => expect(mockDeleteInstanceProfile).toHaveBeenCalledWith("web-profile"));
+  });
+
+  it("cancels and escapes the create instance profile modal and types the path", async () => {
+    const user = userEvent.setup();
+    mockInstanceProfiles.mockReturnValue({ data: { instanceProfiles: [] }, isLoading: false });
+    mockCreateInstanceProfile.mockRejectedValue(new Error("create failed"));
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Instance profiles/i }));
+    await clickButton(user, /Create instance profile/i);
+    let inputs = screen.getAllByRole("textbox");
+    await user.type(inputs[0], "web-profile");
+    await user.clear(inputs[1]);
+    await user.type(inputs[1], "/custom/");
+    await clickButton(user, /Create/i, { last: true });
+    await waitFor(() => expect(mockCreateInstanceProfile).toHaveBeenCalledWith({ name: "web-profile", path: "/custom/" }));
+    // the create modal stays open after failure — escape-dismiss it
+    const expectModalHidden = () => {
+      const visibleDialogs = Array.from(
+        document.querySelectorAll('[role="dialog"]'),
+      ).filter((d) => !d.className.includes("hidden"));
+      expect(
+        visibleDialogs.some((d) => d.textContent?.includes("Create instance profile")),
+      ).toBe(false);
+    };
+    const dialogs = document.querySelectorAll('[class*="awsui_dialog"]');
+    dialogs.forEach((d) => fireEvent.keyDown(d as HTMLElement, { keyCode: 27, key: "Escape", bubbles: true }));
+    await waitFor(expectModalHidden);
+    // reopen and cancel
+    await clickButton(user, /Create instance profile/i);
+    await waitFor(() => expect(screen.getByRole("textbox", { name: /Profile name/i })).toBeTruthy());
+    await clickButton(user, /Cancel/i, { last: true });
+    await waitFor(expectModalHidden);
   });
 });

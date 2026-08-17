@@ -36,6 +36,20 @@ import {
   useCreateRole,
   useDeleteRole,
   useIAMGroups,
+  useIAMGroup,
+  useAddUserToGroup,
+  useRemoveUserFromGroup,
+  useGroupInlinePolicies,
+  useGroupInlinePolicy,
+  usePutGroupInlinePolicy,
+  useDeleteGroupInlinePolicy,
+  useSetDefaultPolicyVersion,
+  useTagUser,
+  useUntagUser,
+  useTagRole,
+  useUntagRole,
+  useTagPolicy,
+  useUntagPolicy,
   useCreateGroup,
   useDeleteGroup,
   useIAMPolicies,
@@ -45,6 +59,10 @@ import {
   useDeletePolicy,
   useCreateAccessKey,
   useInstanceProfiles,
+  useCreateInstanceProfile,
+  useDeleteInstanceProfile,
+  useAddRoleToInstanceProfile,
+  useRemoveRoleFromInstanceProfile,
 } from "../hooks/useIAM";
 
 // ─── USERS TAB ───────────────────────────────────────────
@@ -152,12 +170,15 @@ function UserDetailModal({ userName, onClose }: { userName: string; onClose: () 
   const { showToast } = useToast();
   const userQuery = useIAMUser(userName);
   const createAccessKey = useCreateAccessKey();
+  const tagUser = useTagUser();
+  const untagUser = useUntagUser();
 
   const u = userQuery.data?.user;
   const accessKeys = userQuery.data?.accessKeys || [];
   const attachedPolicies = userQuery.data?.attachedPolicies || [];
   const groups = userQuery.data?.groups || [];
   const inlinePolicies = userQuery.data?.inlinePolicies || [];
+  const tags: Record<string, string> = userQuery.data?.tags || {};
 
   const [newKey, setNewKey] = useState<any | null>(null);
 
@@ -240,6 +261,24 @@ function UserDetailModal({ userName, onClose }: { userName: string; onClose: () 
                 {inlinePolicies.map((p: string) => <Badge key={p}>{p}</Badge>)}
               </SpaceBetween>
             )}
+          </Container>
+
+          <Container header={<Header variant="h3">Tags</Header>}>
+            <TagEditor
+              tags={tags}
+              onAdd={async (newTags) => {
+                try {
+                  await tagUser.mutateAsync({ userName, tags: newTags });
+                  showToast("success", "Tag added");
+                } catch (e: any) { showToast("error", e.message); }
+              }}
+              onRemove={async (keys) => {
+                try {
+                  await untagUser.mutateAsync({ userName, tagKeys: keys });
+                  showToast("success", "Tag removed");
+                } catch (e: any) { showToast("error", e.message); }
+              }}
+            />
           </Container>
         </SpaceBetween>
       ) : <Box>User not found</Box>}
@@ -358,7 +397,10 @@ function CreateRoleModal({ onClose, onSubmit }: { onClose: () => void; onSubmit:
 }
 
 function RoleDetailModal({ roleName, onClose }: { roleName: string; onClose: () => void }) {
+  const { showToast } = useToast();
   const roleQuery = useIAMRole(roleName);
+  const tagRole = useTagRole();
+  const untagRole = useUntagRole();
   const r = roleQuery.data?.role;
   const attachedPolicies = roleQuery.data?.attachedPolicies || [];
   const tags = roleQuery.data?.tags || {};
@@ -403,11 +445,21 @@ function RoleDetailModal({ roleName, onClose }: { roleName: string; onClose: () 
           </Container>
 
           <Container header={<Header variant="h3">Tags</Header>}>
-            {Object.keys(tags).length === 0 ? <Box color="text-body-secondary">No tags</Box> : (
-              <SpaceBetween size="xs">
-                {Object.entries(tags).map(([k, v]) => <Badge key={k}>{k}: {v}</Badge>)}
-              </SpaceBetween>
-            )}
+            <TagEditor
+              tags={tags}
+              onAdd={async (newTags) => {
+                try {
+                  await tagRole.mutateAsync({ roleName, tags: newTags });
+                  showToast("success", "Tag added");
+                } catch (e: any) { showToast("error", e.message); }
+              }}
+              onRemove={async (keys) => {
+                try {
+                  await untagRole.mutateAsync({ roleName, tagKeys: keys });
+                  showToast("success", "Tag removed");
+                } catch (e: any) { showToast("error", e.message); }
+              }}
+            />
           </Container>
         </SpaceBetween>
       ) : <Box>Role not found</Box>}
@@ -542,10 +594,45 @@ function CreatePolicyModal({ onClose, onSubmit }: { onClose: () => void; onSubmi
   );
 }
 
+function TagEditor({ tags, onAdd, onRemove }: {
+  tags: Record<string, string>;
+  onAdd: (tags: { Key: string; Value: string }[]) => void;
+  onRemove: (keys: string[]) => void;
+}) {
+  const [key, setKey] = useState("");
+  const [value, setValue] = useState("");
+
+  return (
+    <SpaceBetween size="xs">
+      <SpaceBetween direction="horizontal" size="xs">
+        <Input placeholder="Key" value={key} onChange={({ detail }) => setKey(detail.value)} />
+        <Input placeholder="Value" value={value} onChange={({ detail }) => setValue(detail.value)} />
+        <Button onClick={() => {
+          if (key && value) { onAdd([{ Key: key, Value: value }]); setKey(""); setValue(""); }
+        }}>Add tag</Button>
+      </SpaceBetween>
+      {Object.keys(tags).length === 0 ? <Box color="text-body-secondary">No tags</Box> : (
+        <SpaceBetween size="xs">
+          {Object.entries(tags).map(([k, v]) => (
+            <SpaceBetween key={k} direction="horizontal" size="xs">
+              <Badge>{k}: {v}</Badge>
+              <Button variant="link" onClick={() => onRemove([k])}>Remove</Button>
+            </SpaceBetween>
+          ))}
+        </SpaceBetween>
+      )}
+    </SpaceBetween>
+  );
+}
+
 function PolicyDetailModal({ arn, onClose }: { arn: string; onClose: () => void }) {
+  const { showToast } = useToast();
   const policyQuery = useIAMPolicy(arn);
   const [selectedVersion, setSelectedVersion] = useState<string | null>(null);
   const versionQuery = usePolicyVersion(arn, selectedVersion);
+  const setDefault = useSetDefaultPolicyVersion();
+  const tagPolicy = useTagPolicy();
+  const untagPolicy = useUntagPolicy();
 
   const p = policyQuery.data?.policy;
   const versions = policyQuery.data?.versions || [];
@@ -553,6 +640,7 @@ function PolicyDetailModal({ arn, onClose }: { arn: string; onClose: () => void 
 
   const currentVersion = selectedVersion || defaultVersion?.versionId;
   const currentDoc = versionQuery.data?.document;
+  const tags: Record<string, string> = policyQuery.data?.tags || {};
 
   return (
     <Modal visible={true} onDismiss={onClose} header={`Policy: ${p?.name || arn}`} size="large" footer={
@@ -579,6 +667,15 @@ function PolicyDetailModal({ arn, onClose }: { arn: string; onClose: () => void 
                 }))}
                 placeholder="Select version"
               />
+              {currentVersion && currentVersion !== defaultVersion?.versionId && (
+                <Button onClick={async () => {
+                  try {
+                    await setDefault.mutateAsync({ arn, versionId: currentVersion });
+                    showToast("success", `Version ${currentVersion} set as default`);
+                    setSelectedVersion(null);
+                  } catch (e: any) { showToast("error", e.message); }
+                }}>Set as default</Button>
+              )}
               {versionQuery.isLoading ? <Box>Loading document...</Box> : currentDoc ? (
                 <pre className="fd-code-bg" style={{ fontSize: 12, overflow: "auto", maxHeight: 300, padding: 12, borderRadius: 4 }}>
                   {(() => {
@@ -588,6 +685,24 @@ function PolicyDetailModal({ arn, onClose }: { arn: string; onClose: () => void 
                 </pre>
               ) : <Box color="text-body-secondary">Select a version to view document</Box>}
             </SpaceBetween>
+          </Container>
+
+          <Container header={<Header variant="h3">Tags</Header>}>
+            <TagEditor
+              tags={tags}
+              onAdd={async (newTags) => {
+                try {
+                  await tagPolicy.mutateAsync({ arn, tags: newTags });
+                  showToast("success", "Tag added");
+                } catch (e: any) { showToast("error", e.message); }
+              }}
+              onRemove={async (keys) => {
+                try {
+                  await untagPolicy.mutateAsync({ arn, tagKeys: keys });
+                  showToast("success", "Tag removed");
+                } catch (e: any) { showToast("error", e.message); }
+              }}
+            />
           </Container>
         </SpaceBetween>
       ) : <Box>Policy not found</Box>}
@@ -600,6 +715,7 @@ function PolicyDetailModal({ arn, onClose }: { arn: string; onClose: () => void 
 function GroupsTab() {
   const { showToast } = useToast();
   const [showCreate, setShowCreate] = useState(false);
+  const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
 
   const groupsQuery = useIAMGroups();
   const createGroup = useCreateGroup();
@@ -627,16 +743,19 @@ function GroupsTab() {
             id: "actions",
             header: "",
             cell: (g: any) => (
-              <DeleteButton
-                itemName={g.name}
-                resourceType="group"
-                onDelete={async () => {
-                  try {
-                    await deleteGroup.mutateAsync(g.name);
-                    showToast("success", `Group ${g.name} deleted`);
-                  } catch (e: any) { showToast("error", e.message); }
-                }}
-              />
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button onClick={() => setSelectedGroup(g.name)}>View</Button>
+                <DeleteButton
+                  itemName={g.name}
+                  resourceType="group"
+                  onDelete={async () => {
+                    try {
+                      await deleteGroup.mutateAsync(g.name);
+                      showToast("success", `Group ${g.name} deleted`);
+                    } catch (e: any) { showToast("error", e.message); }
+                  }}
+                />
+              </SpaceBetween>
             ),
           },
         ]}
@@ -645,6 +764,10 @@ function GroupsTab() {
         trackBy={(g: any) => g.name}
         empty={<Box textAlign="center"><b>No groups</b></Box>}
       />
+
+      {selectedGroup && (
+        <GroupDetailModal groupName={selectedGroup} onClose={() => setSelectedGroup(null)} />
+      )}
 
       {showCreate && (
         <Modal visible={true} onDismiss={() => setShowCreate(false)} header="Create group" footer={
@@ -674,6 +797,285 @@ function GroupsTab() {
   );
 }
 
+function GroupDetailModal({ groupName, onClose }: { groupName: string; onClose: () => void }) {
+  const { showToast } = useToast();
+  const groupQuery = useIAMGroup(groupName);
+  const addUser = useAddUserToGroup();
+  const removeUser = useRemoveUserFromGroup();
+  const policiesQuery = useGroupInlinePolicies(groupName);
+  const [viewPolicy, setViewPolicy] = useState<string | null>(null);
+  const policyQuery = useGroupInlinePolicy(groupName, viewPolicy);
+  const putPolicy = usePutGroupInlinePolicy();
+  const deletePolicy = useDeleteGroupInlinePolicy();
+
+  const [newUserName, setNewUserName] = useState("");
+  const [showAddPolicy, setShowAddPolicy] = useState(false);
+  const [newPolicyName, setNewPolicyName] = useState("");
+  const [newPolicyDoc, setNewPolicyDoc] = useState("");
+
+  const g = groupQuery.data?.group;
+  const users = groupQuery.data?.users || [];
+  const policyNames = policiesQuery.data?.policyNames || [];
+
+  return (
+    <Modal visible={true} onDismiss={onClose} header={`Group: ${groupName}`} size="large" footer={
+      <Button onClick={onClose}>Close</Button>
+    }>
+      {groupQuery.isLoading ? <Box>Loading...</Box> : g ? (
+        <SpaceBetween size="l">
+          <ColumnLayout columns={2} variant="text-grid">
+            <div><b>ARN:</b> {g.arn}</div>
+            <div><b>Path:</b> {g.path || "/"}</div>
+            <div><b>Created:</b> {g.createDate ? new Date(g.createDate).toLocaleString() : "-"}</div>
+          </ColumnLayout>
+
+          <Container header={
+            <Header variant="h3" actions={
+              <SpaceBetween direction="horizontal" size="xs">
+                <Input
+                  placeholder="User name"
+                  value={newUserName}
+                  onChange={({ detail }) => setNewUserName(detail.value)}
+                />
+                <Button onClick={async () => {
+                  if (!newUserName) return;
+                  try {
+                    await addUser.mutateAsync({ groupName, userName: newUserName });
+                    showToast("success", `User ${newUserName} added to ${groupName}`);
+                    setNewUserName("");
+                  } catch (e: any) { showToast("error", e.message); }
+                }}>Add user</Button>
+              </SpaceBetween>
+            }>
+              Members ({users.length})
+            </Header>
+          }>
+            {users.length === 0 ? <Box color="text-body-secondary">No members</Box> : (
+              <Table
+                columnDefinitions={[
+                  { id: "name", header: "User", cell: (u: any) => u.UserName || u.userName || u.name },
+                  { id: "arn", header: "ARN", cell: (u: any) => <span style={{ fontSize: 12, color: "#888" }}>{u.Arn || u.arn || "-"}</span> },
+                  {
+                    id: "actions",
+                    header: "",
+                    cell: (u: any) => (
+                      <Button variant="link" onClick={async () => {
+                        try {
+                          await removeUser.mutateAsync({ groupName, userName: u.UserName || u.userName || u.name });
+                          showToast("success", `User removed from ${groupName}`);
+                        } catch (e: any) { showToast("error", e.message); }
+                      }}>Remove</Button>
+                    ),
+                  },
+                ]}
+                items={users}
+                trackBy={(u: any) => u.UserName || u.userName || u.name}
+              />
+            )}
+          </Container>
+
+          <Container header={
+            <Header variant="h3" actions={
+              <SpaceBetween direction="horizontal" size="xs">
+                {!showAddPolicy && <Button onClick={() => setShowAddPolicy(true)}>Add policy</Button>}
+                {showAddPolicy && <Button variant="link" onClick={() => setShowAddPolicy(false)}>Cancel</Button>}
+              </SpaceBetween>
+            }>
+              Inline policies ({policyNames.length})
+            </Header>
+          }>
+            {showAddPolicy && (
+              <SpaceBetween size="xs">
+                <Input placeholder="Policy name" value={newPolicyName} onChange={({ detail }) => setNewPolicyName(detail.value)} />
+                <Textarea placeholder={"{\"Version\":\"2012-10-17\"}"} value={newPolicyDoc} rows={4} onChange={({ detail }) => setNewPolicyDoc(detail.value)} />
+                <Button variant="primary" onClick={async () => {
+                  if (!newPolicyName) return;
+                  try {
+                    await putPolicy.mutateAsync({ groupName, policyName: newPolicyName, document: newPolicyDoc });
+                    showToast("success", `Policy ${newPolicyName} added`);
+                    setNewPolicyName("");
+                    setNewPolicyDoc("");
+                    setShowAddPolicy(false);
+                  } catch (e: any) { showToast("error", e.message); }
+                }}>Save policy</Button>
+              </SpaceBetween>
+            )}
+            {policyNames.length === 0 && !showAddPolicy ? <Box color="text-body-secondary">No inline policies</Box> : (
+              <Table
+                columnDefinitions={[
+                  { id: "name", header: "Policy", cell: (p: string) => p },
+                  {
+                    id: "actions",
+                    header: "",
+                    cell: (p: string) => (
+                      <SpaceBetween direction="horizontal" size="xs">
+                        <Button variant="link" onClick={() => setViewPolicy(p)}>View</Button>
+                        <Button variant="link" onClick={async () => {
+                          try {
+                            await deletePolicy.mutateAsync({ groupName, policyName: p });
+                            showToast("success", `Policy ${p} deleted`);
+                          } catch (e: any) { showToast("error", e.message); }
+                        }}>Delete</Button>
+                      </SpaceBetween>
+                    ),
+                  },
+                ]}
+                items={policyNames}
+                trackBy={(p: string) => p}
+              />
+            )}
+            {viewPolicy && (
+              <Alert type="info" dismissible onDismiss={() => setViewPolicy(null)} header={`Policy: ${viewPolicy}`}>
+                <pre style={{ fontSize: 12, overflow: "auto", maxHeight: 200 }}>
+                  {policyQuery.isLoading ? "Loading..." : (policyQuery.data?.document || "(no document)")}
+                </pre>
+              </Alert>
+            )}
+          </Container>
+        </SpaceBetween>
+      ) : <Box>Group not found</Box>}
+    </Modal>
+  );
+}
+
+// ─── INSTANCE PROFILES TAB ───────────────────────────────
+
+function InstanceProfilesTab() {
+  const { showToast } = useToast();
+  const [showCreate, setShowCreate] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newPath, setNewPath] = useState("/");
+  const [addRoleTo, setAddRoleTo] = useState<string | null>(null);
+  const [roleName, setRoleName] = useState("");
+
+  const profilesQuery = useInstanceProfiles();
+  const createProfile = useCreateInstanceProfile();
+  const deleteProfile = useDeleteInstanceProfile();
+  const addRole = useAddRoleToInstanceProfile();
+  const removeRole = useRemoveRoleFromInstanceProfile();
+
+  const profiles = profilesQuery.data?.instanceProfiles || [];
+
+  return (
+    <SpaceBetween size="l">
+      <Table
+        header={
+          <Header
+            variant="h2"
+            counter={`(${profiles.length})`}
+            actions={<Button onClick={() => setShowCreate(true)}>Create instance profile</Button>}
+          >
+            Instance profiles
+          </Header>
+        }
+        columnDefinitions={[
+          { id: "name", header: "Profile name", cell: (p: any) => p.name },
+          { id: "path", header: "Path", cell: (p: any) => p.path || "/" },
+          { id: "arn", header: "ARN", cell: (p: any) => <span style={{ fontSize: 12, color: "#888" }}>{p.arn}</span> },
+          { id: "roles", header: "Roles", cell: (p: any) =>
+            (p.roles || []).length === 0 ? "-" : (
+              <SpaceBetween direction="horizontal" size="xs">
+                {p.roles.map((r: any) => {
+                  const roleLabel = r.RoleName || r.name || r;
+                  return (
+                    <SpaceBetween key={roleLabel} direction="horizontal" size="xs">
+                      <Badge>{roleLabel}</Badge>
+                      <Button variant="link" onClick={async () => {
+                        try {
+                          await removeRole.mutateAsync({ name: p.name, roleName: roleLabel });
+                          showToast("success", `Role ${roleLabel} removed from ${p.name}`);
+                        } catch (e: any) { showToast("error", e.message); }
+                      }}>Remove</Button>
+                    </SpaceBetween>
+                  );
+                })}
+              </SpaceBetween>
+            ) },
+          {
+            id: "actions",
+            header: "",
+            cell: (p: any) => (
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button onClick={() => setAddRoleTo(p.name)}>Add role</Button>
+                <DeleteButton
+                  itemName={p.name}
+                  resourceType="instance profile"
+                  onDelete={async () => {
+                    try {
+                      await deleteProfile.mutateAsync(p.name);
+                      showToast("success", `Instance profile ${p.name} deleted`);
+                    } catch (e: any) { showToast("error", e.message); }
+                  }}
+                />
+              </SpaceBetween>
+            ),
+          },
+        ]}
+        items={profiles}
+        loading={profilesQuery.isLoading}
+        trackBy={(p: any) => p.name}
+        empty={<Box textAlign="center"><b>No instance profiles</b></Box>}
+      />
+
+      {showCreate && (
+        <Modal visible={true} onDismiss={() => setShowCreate(false)} header="Create instance profile" footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreate(false)}>Cancel</Button>
+              <Button variant="primary" onClick={async () => {
+                if (!newName) return;
+                try {
+                  await createProfile.mutateAsync({ name: newName, path: newPath });
+                  showToast("success", `Instance profile ${newName} created`);
+                  setNewName("");
+                  setNewPath("/");
+                  setShowCreate(false);
+                } catch (e: any) { showToast("error", e.message); }
+              }}>Create</Button>
+            </SpaceBetween>
+          </Box>
+        }>
+          <Form>
+            <SpaceBetween size="m">
+              <FormField label="Profile name">
+                <Input value={newName} onChange={({ detail }) => setNewName(detail.value)} />
+              </FormField>
+              <FormField label="Path">
+                <Input value={newPath} onChange={({ detail }) => setNewPath(detail.value)} />
+              </FormField>
+            </SpaceBetween>
+          </Form>
+        </Modal>
+      )}
+
+      {addRoleTo && (
+        <Modal visible={true} onDismiss={() => setAddRoleTo(null)} header={`Add role to ${addRoleTo}`} footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setAddRoleTo(null)}>Cancel</Button>
+              <Button variant="primary" onClick={async () => {
+                if (!roleName) return;
+                try {
+                  await addRole.mutateAsync({ name: addRoleTo, roleName });
+                  showToast("success", `Role ${roleName} added to ${addRoleTo}`);
+                  setRoleName("");
+                  setAddRoleTo(null);
+                } catch (e: any) { showToast("error", e.message); }
+              }}>Add role</Button>
+            </SpaceBetween>
+          </Box>
+        }>
+          <Form>
+            <FormField label="Role name">
+              <Input value={roleName} onChange={({ detail }) => setRoleName(detail.value)} />
+            </FormField>
+          </Form>
+        </Modal>
+      )}
+    </SpaceBetween>
+  );
+}
+
 // ─── MAIN PAGE ───────────────────────────────────────────
 
 export default function IAMPage() {
@@ -689,6 +1091,7 @@ export default function IAMPage() {
     { id: "users", label: "Users", content: <UsersTab /> },
     { id: "policies", label: "Policies", content: <PoliciesTab /> },
     { id: "groups", label: "Groups", content: <GroupsTab /> },
+    { id: "instance-profiles", label: "Instance profiles", content: <InstanceProfilesTab /> },
   ];
 
   return (

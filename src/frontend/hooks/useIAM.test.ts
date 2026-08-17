@@ -19,6 +19,20 @@ import {
   useCreateRole,
   useDeleteRole,
   useIAMGroups,
+  useIAMGroup,
+  useAddUserToGroup,
+  useRemoveUserFromGroup,
+  useGroupInlinePolicies,
+  useGroupInlinePolicy,
+  usePutGroupInlinePolicy,
+  useDeleteGroupInlinePolicy,
+  useSetDefaultPolicyVersion,
+  useTagUser,
+  useUntagUser,
+  useTagRole,
+  useUntagRole,
+  useTagPolicy,
+  useUntagPolicy,
   useCreateGroup,
   useDeleteGroup,
   useIAMPolicies,
@@ -29,6 +43,10 @@ import {
   useCreateAccessKey,
   useDeleteAccessKey,
   useInstanceProfiles,
+  useCreateInstanceProfile,
+  useDeleteInstanceProfile,
+  useAddRoleToInstanceProfile,
+  useRemoveRoleFromInstanceProfile,
   useSetUserPermissionsBoundary,
   useDeleteUserPermissionsBoundary,
   useSetRolePermissionsBoundary,
@@ -301,6 +319,182 @@ describe("useDeleteAccessKey", () => {
   });
 });
 
+// ─── GROUPS ────────────────────────────────────────────────
+
+describe("useIAMGroup", () => {
+  it("calls api with correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ group: {}, users: [] });
+    const { result } = renderHook(() => useIAMGroup("admins"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/groups/admins");
+  });
+
+  it("is disabled when name is null", () => {
+    const { result } = renderHook(() => useIAMGroup(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+});
+
+describe("useAddUserToGroup", () => {
+  it("calls api with POST method and body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useAddUserToGroup(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ groupName: "admins", userName: "alice" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/iam/groups/admins/users",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ userName: "alice" }) })
+    );
+  });
+});
+
+describe("useRemoveUserFromGroup", () => {
+  it("calls api with DELETE method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useRemoveUserFromGroup(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ groupName: "admins", userName: "alice" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/iam/groups/admins/users/alice",
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
+});
+
+describe("useGroupInlinePolicies", () => {
+  it("calls api with correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ policyNames: [] });
+    const { result } = renderHook(() => useGroupInlinePolicies("admins"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/groups/admins/inline-policies");
+  });
+
+  it("is disabled when groupName is null", () => {
+    const { result } = renderHook(() => useGroupInlinePolicies(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+});
+
+describe("useGroupInlinePolicy", () => {
+  it("calls api with correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ policyName: "gp1", document: "{}" });
+    const { result } = renderHook(() => useGroupInlinePolicy("admins", "gp1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/groups/admins/inline-policies/gp1");
+  });
+
+  it("is disabled when policyName is null", () => {
+    const { result } = renderHook(() => useGroupInlinePolicy("admins", null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+});
+
+describe("usePutGroupInlinePolicy", () => {
+  it("calls api with PUT method and body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => usePutGroupInlinePolicy(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ groupName: "admins", policyName: "gp1", document: "{}" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/iam/groups/admins/inline-policies",
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ policyName: "gp1", document: "{}" }) })
+    );
+  });
+});
+
+describe("useDeleteGroupInlinePolicy", () => {
+  it("calls api with DELETE method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useDeleteGroupInlinePolicy(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ groupName: "admins", policyName: "gp1" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/iam/groups/admins/inline-policies/gp1",
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
+});
+
+describe("useSetDefaultPolicyVersion", () => {
+  it("calls api with POST method and body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useSetDefaultPolicyVersion(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ arn: "arn:aws:iam::123:policy/p1", versionId: "v2" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/iam/policies/arn%3Aaws%3Aiam%3A%3A123%3Apolicy%2Fp1/set-default-version",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ versionId: "v2" }) })
+    );
+  });
+});
+
+describe("useTagUser", () => {
+  it("calls api with POST method and body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useTagUser(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ userName: "alice", tags: [{ Key: "env", Value: "prod" }] });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/iam/users/alice/tags",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ tags: [{ Key: "env", Value: "prod" }] }) })
+    );
+  });
+});
+
+describe("useUntagUser", () => {
+  it("calls api with DELETE method and body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useUntagUser(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ userName: "alice", tagKeys: ["env"] });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/iam/users/alice/tags",
+      expect.objectContaining({ method: "DELETE", body: JSON.stringify({ tagKeys: ["env"] }) })
+    );
+  });
+});
+
+describe("useTagRole", () => {
+  it("calls api with POST method and body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useTagRole(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ roleName: "my-role", tags: [{ Key: "env", Value: "prod" }] });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/iam/roles/my-role/tags",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ tags: [{ Key: "env", Value: "prod" }] }) })
+    );
+  });
+});
+
+describe("useUntagRole", () => {
+  it("calls api with DELETE method and body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useUntagRole(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ roleName: "my-role", tagKeys: ["env"] });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/iam/roles/my-role/tags",
+      expect.objectContaining({ method: "DELETE", body: JSON.stringify({ tagKeys: ["env"] }) })
+    );
+  });
+});
+
+describe("useTagPolicy", () => {
+  it("calls api with POST method and body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useTagPolicy(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ arn: "arn:aws:iam::123:policy/p1", tags: [{ Key: "env", Value: "prod" }] });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/iam/policies/arn%3Aaws%3Aiam%3A%3A123%3Apolicy%2Fp1/tags",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ tags: [{ Key: "env", Value: "prod" }] }) })
+    );
+  });
+});
+
+describe("useUntagPolicy", () => {
+  it("calls api with DELETE method and body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useUntagPolicy(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ arn: "arn:aws:iam::123:policy/p1", tagKeys: ["env"] });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/iam/policies/arn%3Aaws%3Aiam%3A%3A123%3Apolicy%2Fp1/tags",
+      expect.objectContaining({ method: "DELETE", body: JSON.stringify({ tagKeys: ["env"] }) })
+    );
+  });
+});
+
 // ─── INSTANCE PROFILES ───────────────────────────────────
 
 describe("useInstanceProfiles", () => {
@@ -309,6 +503,54 @@ describe("useInstanceProfiles", () => {
     const { result } = renderHook(() => useInstanceProfiles(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith("/aws/iam/instance-profiles");
+  });
+});
+
+describe("useCreateInstanceProfile", () => {
+  it("calls api with POST method and body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useCreateInstanceProfile(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ name: "web-profile", path: "/" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/iam/instance-profiles",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ name: "web-profile", path: "/" }) })
+    );
+  });
+});
+
+describe("useDeleteInstanceProfile", () => {
+  it("calls api with DELETE method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useDeleteInstanceProfile(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("web-profile");
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/iam/instance-profiles/web-profile",
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
+});
+
+describe("useAddRoleToInstanceProfile", () => {
+  it("calls api with POST method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useAddRoleToInstanceProfile(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ name: "web-profile", roleName: "ec2-role" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/iam/instance-profiles/web-profile/roles/ec2-role",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+});
+
+describe("useRemoveRoleFromInstanceProfile", () => {
+  it("calls api with DELETE method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useRemoveRoleFromInstanceProfile(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ name: "web-profile", roleName: "ec2-role" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/iam/instance-profiles/web-profile/roles/ec2-role",
+      expect.objectContaining({ method: "DELETE" })
+    );
   });
 });
 
