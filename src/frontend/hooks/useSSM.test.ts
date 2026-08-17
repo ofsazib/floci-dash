@@ -14,6 +14,11 @@ import {
   useSSMParameter,
   usePutSSMParameter,
   useDeleteSSMParameter,
+  useSSMGetParameters,
+  useSSMParametersByPath,
+  useSSMDeleteParameters,
+  useSSMLabelParameter,
+  useSSMInstanceInformation,
   useSSMParameterHistory,
   useSSMTags,
   useAddSSMTags,
@@ -77,6 +82,76 @@ describe("useDeleteSSMParameter", () => {
       "/aws/ssm/parameters/%2Fapp%2Fconfig",
       expect.objectContaining({ method: "DELETE" })
     );
+  });
+});
+
+describe("useSSMGetParameters", () => {
+  it("calls api with POST batch body", async () => {
+    mockApi.mockResolvedValueOnce({ parameters: [], invalidParameters: [] });
+    const { result } = renderHook(() => useSSMGetParameters(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ Names: ["/a", "/b"], WithDecryption: true });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/ssm/parameters/batch",
+      expect.objectContaining({ method: "POST" })
+    );
+    const body = JSON.parse(mockApi.mock.calls[0][1].body);
+    expect(body).toEqual({ Names: ["/a", "/b"], WithDecryption: true });
+  });
+});
+
+describe("useSSMParametersByPath", () => {
+  it("does NOT call api when path is null", () => {
+    renderHook(() => useSSMParametersByPath(null), { wrapper: createWrapper() });
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api with encoded path", async () => {
+    mockApi.mockResolvedValueOnce({ parameters: [], nextToken: null });
+    const { result } = renderHook(() => useSSMParametersByPath("/app/dev"), { wrapper: createWrapper() });
+    await waitFor(() => expect(mockApi).toHaveBeenCalled());
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/ssm/parameters-by-path?path=%2Fapp%2Fdev"
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+  });
+});
+
+describe("useSSMDeleteParameters", () => {
+  it("calls api with POST and names", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useSSMDeleteParameters(), { wrapper: createWrapper() });
+    await result.current.mutateAsync(["/a", "/b"]);
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/ssm/parameters/delete-batch",
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(JSON.parse(mockApi.mock.calls[0][1].body)).toEqual({ Names: ["/a", "/b"] });
+  });
+});
+
+describe("useSSMLabelParameter", () => {
+  it("calls api with POST and label body", async () => {
+    mockApi.mockResolvedValueOnce({ invalidLabels: [], parameterVersion: 2 });
+    const { result } = renderHook(() => useSSMLabelParameter(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ Name: "/a", ParameterVersion: 2, Labels: ["prod"] });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/ssm/parameters/label",
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(JSON.parse(mockApi.mock.calls[0][1].body)).toEqual({
+      Name: "/a",
+      ParameterVersion: 2,
+      Labels: ["prod"],
+    });
+  });
+});
+
+describe("useSSMInstanceInformation", () => {
+  it("calls api with GET", async () => {
+    mockApi.mockResolvedValueOnce({ instances: [], total: 0 });
+    const { result } = renderHook(() => useSSMInstanceInformation(), { wrapper: createWrapper() });
+    await waitFor(() => expect(mockApi).toHaveBeenCalledWith("/aws/ssm/instance-information"));
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
   });
 });
 

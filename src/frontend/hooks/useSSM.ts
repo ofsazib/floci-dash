@@ -41,6 +41,56 @@ export function useDeleteSSMParameter() {
   });
 }
 
+export function useSSMGetParameters() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { Names: string[]; WithDecryption?: boolean }) =>
+      api("/aws/ssm/parameters/batch", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "ssm", "parameters"] }),
+  });
+}
+
+export function useSSMParametersByPath(path: string | null) {
+  return useQuery({
+    queryKey: ["aws", "ssm", "parameters-by-path", path],
+    queryFn: () =>
+      api<{ parameters: any[]; nextToken: string | null }>(
+        `/aws/ssm/parameters-by-path?path=${encodeURIComponent(path!)}`
+      ),
+    enabled: !!path,
+  });
+}
+
+export function useSSMDeleteParameters() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (names: string[]) =>
+      api("/aws/ssm/parameters/delete-batch", { method: "POST", body: JSON.stringify({ Names: names }) }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "ssm", "parameters"] }),
+  });
+}
+
+export function useSSMLabelParameter() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { Name: string; ParameterVersion: number; Labels: string[] }) =>
+      api("/aws/ssm/parameters/label", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "ssm", "parameters"] }),
+  });
+}
+
+export function useSSMInstanceInformation() {
+  return useQuery({
+    queryKey: ["aws", "ssm", "instance-information"],
+    queryFn: () =>
+      api<{ instances: any[]; total: number }>("/aws/ssm/instance-information"),
+    refetchInterval: 15000,
+  });
+}
+
 // ─── Parameter History ───────────────────────────────────
 
 export function useSSMParameterHistory(name: string | null) {

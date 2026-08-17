@@ -12,6 +12,11 @@ const mockParameter = vi.fn();
 const mockParameterHistory = vi.fn();
 const mockPutParam = vi.fn();
 const mockDeleteParam = vi.fn();
+const mockGetParamsBatch = vi.fn();
+const mockPathResults = vi.fn();
+const mockDeleteParamsBatch = vi.fn();
+const mockLabelParam = vi.fn();
+const mockInstances = vi.fn();
 
 const putParamState = vi.hoisted(() => ({
   isError: false,
@@ -40,6 +45,11 @@ vi.mock("../../hooks/useSSM", () => ({
     get isPending() { return deleteParamState.isPending; },
     get variables() { return deleteParamState.variables; },
   }),
+  useSSMGetParameters: () => ({ mutate: mockGetParamsBatch, isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useSSMParametersByPath: (...args: any[]) => mockPathResults(...args),
+  useSSMDeleteParameters: () => ({ mutateAsync: mockDeleteParamsBatch, isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useSSMLabelParameter: () => ({ mutate: mockLabelParam, isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useSSMInstanceInformation: (...args: any[]) => mockInstances(...args),
 }));
 
 import { SSMDashboard } from "./SSMDashboard";
@@ -93,6 +103,22 @@ beforeEach(() => {
   mockParameterHistory.mockReturnValue({
     data: undefined,
     isLoading: false,
+  });
+  mockPathResults.mockReturnValue({
+    data: undefined,
+    isLoading: false,
+  });
+  mockInstances.mockReturnValue({
+    data: { instances: [], total: 0 },
+    isLoading: false,
+  });
+  mockGetParamsBatch.mockReset();
+  mockDeleteParamsBatch.mockReset();
+  mockDeleteParamsBatch.mockResolvedValue({});
+  mockLabelParam.mockReset();
+  mockLabelParam.mockImplementation((_payload: any, opts?: any) => {
+    opts?.onSuccess?.();
+    return Promise.resolve({});
   });
 });
 
@@ -225,7 +251,10 @@ describe("SSMDashboard — parameters list", () => {
 
     await clickButton(user, /create/i);
     await waitFor(() => expect(screen.getByText("Create parameter")).toBeTruthy());
-    await clickButton(user, /Cancel/i);
+    await user.click(
+      within(dialogOf("Create parameter")).getByRole("button", { name: /^Cancel$/i }),
+    );
+    await waitFor(() => expectModalHidden("Create parameter"));
     expect(mockPutParam).not.toHaveBeenCalled();
   });
 
@@ -639,5 +668,311 @@ describe("SSMDashboard — parameter detail view", () => {
       expect(screen.getByText("(empty)")).toBeTruthy();
       expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2);
     });
+  });
+});
+
+describe("SSMDashboard — parameter lookup + managed instances", () => {
+  it("loads parameters by path and navigates to one", async () => {
+    mockPathResults.mockReturnValue({
+      data: { parameters: [{ Name: "/app/db", Value: "secret" }], nextToken: null },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<SSMDashboard />, { wrapper: createWrapper() });
+    await user.type(screen.getByPlaceholderText("/myapp"), "/app");
+    await clickButton(user, /Load by path/i);
+    await waitFor(() =>
+      expect(mockPathResults).toHaveBeenCalledWith("/app"),
+    );
+    await waitFor(() => expect(screen.getByText("/app/db")).toBeTruthy());
+    await user.click(screen.getByText("/app/db"));
+    await waitFor(() =>
+      expect(screen.getByText("Back to Parameters")).toBeTruthy(),
+    );
+  });
+
+  it("shows the empty path message when nothing matches", async () => {
+    mockPathResults.mockReturnValue({
+      data: { parameters: [], nextToken: null },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<SSMDashboard />, { wrapper: createWrapper() });
+    await user.type(screen.getByPlaceholderText("/myapp"), "/empty");
+    await clickButton(user, /Load by path/i);
+    await waitFor(() =>
+      expect(screen.getByText("No parameters found under this path.")).toBeTruthy(),
+    );
+  });
+
+  it("shows a dash for path results without a value and sparse data", async () => {
+    mockPathResults.mockReturnValue({
+      data: { parameters: [{ Name: "/a", Value: "v" }, { Name: "/b" }], nextToken: null },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<SSMDashboard />, { wrapper: createWrapper() });
+    await user.type(screen.getByPlaceholderText("/myapp"), "/sparse");
+    await clickButton(user, /Load by path/i);
+    await waitFor(() => expect(screen.getByText("/a")).toBeTruthy());
+    expect(screen.getByText("/b")).toBeTruthy();
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("handles sparse path data without a parameters array", async () => {
+    mockPathResults.mockReturnValue({
+      data: { nextToken: null },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<SSMDashboard />, { wrapper: createWrapper() });
+    await user.type(screen.getByPlaceholderText("/myapp"), "/sparse2");
+    await clickButton(user, /Load by path/i);
+    await waitFor(() =>
+      expect(screen.getByText("No parameters found under this path.")).toBeTruthy(),
+    );
+  });
+
+  it("opens the batch get modal and fetches values", async () => {
+    mockGetParamsBatch.mockImplementation((_payload: any, opts?: any) => {
+      opts?.onSuccess?.({ parameters: [{ Name: "/a", Value: "1", Version: 5 }], invalidParameters: [] });
+      return Promise.resolve({});
+    });
+    const user = userEvent.setup();
+    render(<SSMDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Batch get/i);
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: /Batch get parameters/ })).toBeTruthy(),
+    );
+    await user.type(screen.getByPlaceholderText("/myapp/db-url, /myapp/api-key"), "/a");
+    await clickButton(user, /Get values/i);
+    await waitFor(() => expect(screen.getByText("/a")).toBeTruthy());
+    expect(mockGetParamsBatch).toHaveBeenCalledWith(
+      expect.objectContaining({ Names: ["/a"] }),
+      expect.anything(),
+    );
+    // Label the returned parameter
+    await user.click(
+      within(screen.getByRole("dialog", { name: /Batch get parameters/ })).getByRole("button", {
+        name: /^Label$/i,
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: /Label parameter version/ })).toBeTruthy(),
+    );
+    await user.type(screen.getByPlaceholderText("prod"), "stable");
+    await clickButton(user, /Apply label/i);
+    await waitFor(() =>
+      expect(mockLabelParam).toHaveBeenCalledWith(
+        expect.objectContaining({ Name: "/a", ParameterVersion: 5, Labels: ["stable"] }),
+        expect.anything(),
+      ),
+    );
+    await waitFor(() => expectModalHidden("Label parameter version"));
+  });
+
+  it("validates the batch names input and dismisses the error", async () => {
+    const user = userEvent.setup();
+    render(<SSMDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Batch get/i);
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: /Batch get parameters/ })).toBeTruthy(),
+    );
+    await clickButton(user, /Get values/i);
+    await waitFor(() =>
+      expect(screen.getByText("Enter at least one parameter name")).toBeTruthy(),
+    );
+    expect(mockGetParamsBatch).not.toHaveBeenCalled();
+    const dismiss = document.querySelector('[class*="awsui_dismiss-button"]') as HTMLElement;
+    fireEvent.click(dismiss);
+    await waitFor(() =>
+      expect(screen.queryByText("Enter at least one parameter name")).toBeNull(),
+    );
+  });
+
+  it("shows the batch error fallback and deletes a batch result", async () => {
+    mockGetParamsBatch.mockImplementation((_payload: any, opts?: any) => {
+      opts?.onError?.(new Error());
+      return Promise.reject(new Error());
+    });
+    const user = userEvent.setup();
+    render(<SSMDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Batch get/i);
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: /Batch get parameters/ })).toBeTruthy(),
+    );
+    await user.type(screen.getByPlaceholderText("/myapp/db-url, /myapp/api-key"), "/a");
+    await clickButton(user, /Get values/i);
+    await waitFor(() =>
+      expect(screen.getByText("Batch get failed")).toBeTruthy(),
+    );
+    // Now fetch successfully and delete the result
+    mockGetParamsBatch.mockImplementation((_payload: any, opts?: any) => {
+      opts?.onSuccess?.({ parameters: [{ Name: "/a", Value: "1", Version: 1 }], invalidParameters: [] });
+      return Promise.resolve({});
+    });
+    await clickButton(user, /Get values/i);
+    await waitFor(() => expect(screen.getByText("/a")).toBeTruthy());
+    await user.click(
+      within(screen.getByRole("dialog", { name: /Batch get parameters/ })).getByRole("button", {
+        name: /Delete \/a/i,
+      }),
+    );
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i, { last: true });
+    await waitFor(() =>
+      expect(mockDeleteParamsBatch).toHaveBeenCalledWith(["/a"]),
+    );
+  });
+
+  it("validates the label input and shows the fallback label error", async () => {
+    mockGetParamsBatch.mockImplementation((_payload: any, opts?: any) => {
+      opts?.onSuccess?.({ parameters: [{ Name: "/a", Value: "1", Version: 2 }], invalidParameters: [] });
+      return Promise.resolve({});
+    });
+    const user = userEvent.setup();
+    render(<SSMDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Batch get/i);
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: /Batch get parameters/ })).toBeTruthy(),
+    );
+    await user.type(screen.getByPlaceholderText("/myapp/db-url, /myapp/api-key"), "/a");
+    await clickButton(user, /Get values/i);
+    await waitFor(() => expect(screen.getByText("/a")).toBeTruthy());
+    await user.click(
+      within(screen.getByRole("dialog", { name: /Batch get parameters/ })).getByRole("button", {
+        name: /^Label$/i,
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: /Label parameter version/ })).toBeTruthy(),
+    );
+    // Empty label → validation error
+    await clickButton(user, /Apply label/i);
+    await waitFor(() => expect(screen.getByText("Enter a label")).toBeTruthy());
+    expect(mockLabelParam).not.toHaveBeenCalled();
+    // Dismiss the label validation error
+    const dismiss = document.querySelector('[class*="awsui_dismiss-button"]') as HTMLElement;
+    fireEvent.click(dismiss);
+    await waitFor(() => expect(screen.queryByText("Enter a label")).toBeNull());
+    // Failed labeling → fallback error
+    mockLabelParam.mockImplementation((_payload: any, opts?: any) => {
+      opts?.onError?.(new Error());
+      return Promise.reject(new Error());
+    });
+    await user.type(screen.getByPlaceholderText("prod"), "x");
+    await clickButton(user, /Apply label/i);
+    await waitFor(() => expect(screen.getByText("Labeling failed")).toBeTruthy());
+    // Cancel the label modal
+    await user.click(
+      within(screen.getByRole("dialog", { name: /Label parameter version/ })).getByRole("button", {
+        name: /^Cancel$/i,
+      }),
+    );
+    await waitFor(() => expectModalHidden("Label parameter version"));
+  });
+
+  it("shows dashes for sparse batch results and labels version 1", async () => {
+    mockGetParamsBatch.mockImplementation((_payload: any, opts?: any) => {
+      opts?.onSuccess?.({ parameters: [{ Name: "/no-value" }], invalidParameters: [] });
+      return Promise.resolve({});
+    });
+    const user = userEvent.setup();
+    render(<SSMDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Batch get/i);
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: /Batch get parameters/ })).toBeTruthy(),
+    );
+    await user.type(screen.getByPlaceholderText("/myapp/db-url, /myapp/api-key"), "/no-value");
+    await clickButton(user, /Get values/i);
+    await waitFor(() => expect(screen.getByText("/no-value")).toBeTruthy());
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(1);
+    // Label with the version-1 fallback
+    await user.click(
+      within(screen.getByRole("dialog", { name: /Batch get parameters/ })).getByRole("button", {
+        name: /^Label$/i,
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: /Label parameter version/ })).toBeTruthy(),
+    );
+    expect(screen.getByText(/version 1/)).toBeTruthy();
+  });
+
+  it("handles sparse batch results with no parameters array", async () => {
+    mockGetParamsBatch.mockImplementation((_payload: any, opts?: any) => {
+      opts?.onSuccess?.({ invalidParameters: [] });
+      return Promise.resolve({});
+    });
+    const user = userEvent.setup();
+    render(<SSMDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Batch get/i);
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: /Batch get parameters/ })).toBeTruthy(),
+    );
+    await user.type(screen.getByPlaceholderText("/myapp/db-url, /myapp/api-key"), "/none");
+    await clickButton(user, /Get values/i);
+    await waitFor(() =>
+      expect(mockGetParamsBatch).toHaveBeenCalledWith(
+        expect.objectContaining({ Names: ["/none"] }),
+        expect.anything(),
+      ),
+    );
+    // Close via the footer Cancel button
+    await user.click(
+      within(screen.getByRole("dialog", { name: /Batch get parameters/ })).getByRole("button", {
+        name: /^Cancel$/i,
+      }),
+    );
+    await waitFor(() => expectModalHidden("Batch get parameters"));
+  });
+
+  it("cancels the batch get modal with Escape", async () => {
+    const user = userEvent.setup();
+    render(<SSMDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Batch get/i);
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: /Batch get parameters/ })).toBeTruthy(),
+    );
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Batch get parameters"));
+  });
+
+  it("renders the managed instances tab with data and dashes", async () => {
+    mockInstances.mockReturnValue({
+      data: {
+        instances: [
+          { InstanceId: "i-123", PlatformName: "Amazon Linux", AgentVersion: "3.2.0", PingStatus: "Online", InstanceType: "t3.micro", LastPingDateTime: "2026-01-01T00:00:00Z" },
+          { InstanceId: "i-456" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<SSMDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Managed Instances/i }));
+    await waitFor(() => expect(screen.getByText("i-123")).toBeTruthy());
+    expect(screen.getByText("i-456")).toBeTruthy();
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("shows the empty managed-instances message", async () => {
+    const user = userEvent.setup();
+    render(<SSMDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Managed Instances/i }));
+    await waitFor(() =>
+      expect(screen.getByText("No managed instances found.")).toBeTruthy(),
+    );
+  });
+
+  it("handles sparse instance data without an instances array", async () => {
+    mockInstances.mockReturnValue({ data: { total: 0 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<SSMDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Managed Instances/i }));
+    await waitFor(() =>
+      expect(screen.getByText("No managed instances found.")).toBeTruthy(),
+    );
   });
 });

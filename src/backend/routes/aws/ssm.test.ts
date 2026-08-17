@@ -23,6 +23,11 @@ vi.mock("@aws-sdk/client-ssm", () => ({
   GetParameterHistoryCommand: createCmd("GetParameterHistoryCommand"),
   PutParameterCommand: createCmd("PutParameterCommand"),
   DeleteParameterCommand: createCmd("DeleteParameterCommand"),
+  GetParametersCommand: createCmd("GetParametersCommand"),
+  GetParametersByPathCommand: createCmd("GetParametersByPathCommand"),
+  DeleteParametersCommand: createCmd("DeleteParametersCommand"),
+  LabelParameterVersionCommand: createCmd("LabelParameterVersionCommand"),
+  DescribeInstanceInformationCommand: createCmd("DescribeInstanceInformationCommand"),
   AddTagsToResourceCommand: createCmd("AddTagsToResourceCommand"),
   ListTagsForResourceCommand: createCmd("ListTagsForResourceCommand"),
   RemoveTagsFromResourceCommand: createCmd("RemoveTagsFromResourceCommand"),
@@ -222,5 +227,115 @@ describe("SSM routes — Tags", () => {
   it("DELETE /tags — 400 when no resourceId", async () => {
     const res = await del("/tags?tagKeys=env");
     expect(res.status).toBe(400);
+  });
+
+  // ── Batch params + instance info ──────────────────────
+
+  it("POST /parameters/batch — gets multiple parameters", async () => {
+    mockSend.mockResolvedValueOnce({
+      Parameters: [{ Name: "a", Value: "1" }],
+      InvalidParameters: ["b"],
+    });
+    const res = await post("/parameters/batch", { Names: ["a", "b"], WithDecryption: true });
+    const json = await res.json();
+    expect(json.parameters).toEqual([{ Name: "a", Value: "1" }]);
+    expect(json.invalidParameters).toEqual(["b"]);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetParametersCommand");
+    expect(mockSend.mock.calls[0][0].Names).toEqual(["a", "b"]);
+    expect(mockSend.mock.calls[0][0].WithDecryption).toBe(true);
+  });
+
+  it("POST /parameters/batch — sparse result and 400 without names", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/parameters/batch", { Names: ["a"] });
+    const json = await res.json();
+    expect(json.parameters).toEqual([]);
+    expect(json.invalidParameters).toEqual([]);
+    const res400 = await post("/parameters/batch", { Names: [] });
+    expect(res400.status).toBe(400);
+  });
+
+  it("GET /parameters-by-path — lists parameters under a path", async () => {
+    mockSend.mockResolvedValueOnce({
+      Parameters: [{ Name: "/app/db" }],
+      NextToken: "tok-1",
+    });
+    const res = await get("/parameters-by-path?path=/app&recursive=true&withDecryption=true");
+    const json = await res.json();
+    expect(json.parameters).toEqual([{ Name: "/app/db" }]);
+    expect(json.nextToken).toBe("tok-1");
+    const cmd = mockSend.mock.calls[0][0];
+    expect(cmd.__cmdName).toBe("GetParametersByPathCommand");
+    expect(cmd.Path).toBe("/app");
+    expect(cmd.Recursive).toBe(true);
+    expect(cmd.WithDecryption).toBe(true);
+  });
+
+  it("GET /parameters-by-path — sparse and 400 without path", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/parameters-by-path?path=/app");
+    const json = await res.json();
+    expect(json.parameters).toEqual([]);
+    expect(json.nextToken).toBeNull();
+    const res400 = await get("/parameters-by-path");
+    expect(res400.status).toBe(400);
+  });
+
+  it("POST /parameters/delete-batch — deletes multiple parameters", async () => {
+    mockSend.mockResolvedValueOnce({ DeletedParameters: ["a"], InvalidParameters: ["b"] });
+    const res = await post("/parameters/delete-batch", { Names: ["a", "b"] });
+    const json = await res.json();
+    expect(json.deletedParameters).toEqual(["a"]);
+    expect(json.invalidParameters).toEqual(["b"]);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteParametersCommand");
+    expect(mockSend.mock.calls[0][0].Names).toEqual(["a", "b"]);
+    const res400 = await post("/parameters/delete-batch", {});
+    expect(res400.status).toBe(400);
+    mockSend.mockResolvedValueOnce({});
+    const sparse = await post("/parameters/delete-batch", { Names: ["a"] });
+    const sparseJson = await sparse.json();
+    expect(sparseJson.deletedParameters).toEqual([]);
+    expect(sparseJson.invalidParameters).toEqual([]);
+  });
+
+  it("POST /parameters/label — labels a parameter version", async () => {
+    mockSend.mockResolvedValueOnce({ InvalidLabels: ["x"], ParameterVersion: 3 });
+    const res = await post("/parameters/label", { Name: "a", ParameterVersion: 3, Labels: ["prod"] });
+    const json = await res.json();
+    expect(json.invalidLabels).toEqual(["x"]);
+    expect(json.parameterVersion).toBe(3);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("LabelParameterVersionCommand");
+    expect(mockSend.mock.calls[0][0].Labels).toEqual(["prod"]);
+  });
+
+  it("POST /parameters/label — defaults labels and 400s without name/version", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/parameters/label", { Name: "a", ParameterVersion: 1 });
+    const json = await res.json();
+    expect(json.invalidLabels).toEqual([]);
+    expect(mockSend.mock.calls[0][0].Labels).toEqual([]);
+    const res400 = await post("/parameters/label", {});
+    expect(res400.status).toBe(400);
+    const res400v = await post("/parameters/label", { Name: "a" });
+    expect(res400v.status).toBe(400);
+  });
+
+  it("GET /instance-information — lists managed instances", async () => {
+    mockSend.mockResolvedValueOnce({
+      InstanceInformationList: [{ InstanceId: "i-1" }],
+    });
+    const res = await get("/instance-information");
+    const json = await res.json();
+    expect(json.instances).toEqual([{ InstanceId: "i-1" }]);
+    expect(json.total).toBe(1);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("DescribeInstanceInformationCommand");
+  });
+
+  it("GET /instance-information — sparse result", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/instance-information");
+    const json = await res.json();
+    expect(json.instances).toEqual([]);
+    expect(json.total).toBe(0);
   });
 });

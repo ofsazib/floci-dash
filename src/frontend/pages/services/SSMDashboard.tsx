@@ -97,6 +97,11 @@ import {
   useSSMParameter,
   usePutSSMParameter,
   useDeleteSSMParameter,
+  useSSMGetParameters,
+  useSSMParametersByPath,
+  useSSMDeleteParameters,
+  useSSMLabelParameter,
+  useSSMInstanceInformation,
   useSSMParameterHistory,
 } from "../../hooks/useSSM";
 import {
@@ -510,8 +515,22 @@ export function SSMDashboard() {
   const { data, isLoading, isError, error } = useSSMParameters();
   const putParam = usePutSSMParameter();
   const deleteParam = useDeleteSSMParameter();
+  const getParamsBatch = useSSMGetParameters();
+  const deleteParamsBatch = useSSMDeleteParameters();
+  const labelParam = useSSMLabelParameter();
+  const instancesQuery = useSSMInstanceInformation();
   const [showCreate, setShowCreate] = useState(false);
   const [selectedParam, setSelectedParam] = useState<string | null>(null);
+  const [showBatchGet, setShowBatchGet] = useState(false);
+  const [batchNames, setBatchNames] = useState("");
+  const [batchResults, setBatchResults] = useState<any[]>([]);
+  const [batchError, setBatchError] = useState<string | null>(null);
+  const [pathInput, setPathInput] = useState("");
+  const [submittedPath, setSubmittedPath] = useState<string | null>(null);
+  const [labelTarget, setLabelTarget] = useState<{ name: string; version: number } | null>(null);
+  const [labelName, setLabelName] = useState("");
+  const [labelError, setLabelError] = useState<string | null>(null);
+  const pathResultsQuery = useSSMParametersByPath(submittedPath);
 
   const [form, setForm] = useState({
     name: "",
@@ -555,6 +574,45 @@ export function SSMDashboard() {
     },
   ];
 
+  function handleBatchGet() {
+    const names = batchNames
+      .split(",")
+      .map((n) => n.trim())
+      .filter(Boolean);
+    if (names.length === 0) {
+      setBatchError("Enter at least one parameter name");
+      return;
+    }
+    setBatchError(null);
+    setBatchResults([]);
+    getParamsBatch.mutate(
+      { Names: names },
+      {
+        onSuccess: (res: any) => setBatchResults(res.parameters || []),
+        onError: (e) => setBatchError((e as Error)?.message || "Batch get failed"),
+      }
+    );
+  }
+
+  function handleLabel() {
+    const label = labelName.trim();
+    if (!label) {
+      setLabelError("Enter a label");
+      return;
+    }
+    setLabelError(null);
+    labelParam.mutate(
+      { Name: labelTarget!.name, ParameterVersion: labelTarget!.version, Labels: [label] },
+      {
+        onSuccess: () => {
+          setLabelTarget(null);
+          setLabelName("");
+        },
+        onError: (e) => setLabelError((e as Error)?.message || "Labeling failed"),
+      }
+    );
+  }
+
   if (selectedParam) {
     return (
       <SSMParameterDetail
@@ -587,6 +645,144 @@ export function SSMDashboard() {
                 }
                 onCreate={() => setShowCreate(true)}
               />
+
+              <Container
+                header={
+                  <Header variant="h3" actions={<Button onClick={() => setShowBatchGet(true)}>Batch get</Button>}>
+                    Parameter Lookup
+                  </Header>
+                }
+              >
+                <SpaceBetween size="m">
+                  <FormField label="Parameters by path" description="Load all parameters under a path">
+                    <SpaceBetween direction="horizontal" size="xs">
+                      <Input
+                        value={pathInput}
+                        onChange={({ detail }) => setPathInput(detail.value)}
+                        placeholder="/myapp"
+                      />
+                      <Button
+                        onClick={() => setSubmittedPath(pathInput.trim())}
+                        disabled={!pathInput.trim()}
+                      >
+                        Load by path
+                      </Button>
+                    </SpaceBetween>
+                  </FormField>
+                  {submittedPath && pathResultsQuery.data && (
+                    <Box>
+                      <Header variant="h3">Parameters under {submittedPath}</Header>
+                      {(pathResultsQuery.data.parameters || []).length === 0 ? (
+                        <Box variant="small" color="text-status-inactive">
+                          No parameters found under this path.
+                        </Box>
+                      ) : (
+                        <SpaceBetween size="xs">
+                          {pathResultsQuery.data.parameters.map((p: any) => (
+                            <Box key={p.Name}>
+                              <Button variant="link" onClick={() => setSelectedParam(p.Name)}>
+                                {p.Name}
+                              </Button>
+                              <Box variant="small" color="text-status-inactive">
+                                {p.Value || "—"}
+                              </Box>
+                            </Box>
+                          ))}
+                        </SpaceBetween>
+                      )}
+                    </Box>
+                  )}
+                </SpaceBetween>
+              </Container>
+
+              <Modal
+                visible={showBatchGet}
+                onDismiss={() => setShowBatchGet(false)}
+                header="Batch get parameters"
+                footer={
+                  <Box float="right">
+                    <SpaceBetween direction="horizontal" size="xs">
+                      <Button variant="link" onClick={() => setShowBatchGet(false)}>
+                        Cancel
+                      </Button>
+                      <Button variant="primary" onClick={handleBatchGet} loading={getParamsBatch.isPending}>
+                        Get values
+                      </Button>
+                    </SpaceBetween>
+                  </Box>
+                }
+              >
+                <SpaceBetween size="m">
+                  {batchError && (
+                    <Alert type="error" dismissible onDismiss={() => setBatchError(null)}>
+                      {batchError}
+                    </Alert>
+                  )}
+                  <FormField label="Parameter names" description="Comma-separated">
+                    <Input
+                      value={batchNames}
+                      onChange={({ detail }) => setBatchNames(detail.value)}
+                      placeholder="/myapp/db-url, /myapp/api-key"
+                    />
+                  </FormField>
+                  {batchResults.length > 0 && (
+                    <SpaceBetween size="xs">
+                      {batchResults.map((p: any) => (
+                        <Box key={p.Name}>
+                          <Box variant="awsui-key-label">{p.Name}</Box>
+                          <Box variant="small">{p.Value || "—"}</Box>
+                          <SpaceBetween direction="horizontal" size="xs">
+                            <Button
+                              variant="link"
+                              onClick={() => setLabelTarget({ name: p.Name, version: p.Version ?? 1 })}
+                            >
+                              Label
+                            </Button>
+                            <DeleteButton
+                              itemName={p.Name}
+                              resourceType="parameter"
+                              onDelete={() => deleteParamsBatch.mutateAsync([p.Name])}
+                            />
+                          </SpaceBetween>
+                        </Box>
+                      ))}
+                    </SpaceBetween>
+                  )}
+                </SpaceBetween>
+              </Modal>
+
+              <Modal
+                visible={!!labelTarget}
+                onDismiss={() => setLabelTarget(null)}
+                header="Label parameter version"
+                footer={
+                  <Box float="right">
+                    <SpaceBetween direction="horizontal" size="xs">
+                      <Button variant="link" onClick={() => setLabelTarget(null)}>
+                        Cancel
+                      </Button>
+                      <Button variant="primary" onClick={handleLabel} loading={labelParam.isPending}>
+                        Apply label
+                      </Button>
+                    </SpaceBetween>
+                  </Box>
+                }
+              >
+                <SpaceBetween size="m">
+                  {labelError && (
+                    <Alert type="error" dismissible onDismiss={() => setLabelError(null)}>
+                      {labelError}
+                    </Alert>
+                  )}
+                  <FormField label="Label" description={`For ${labelTarget?.name} version ${labelTarget?.version}`}>
+                    <Input
+                      value={labelName}
+                      onChange={({ detail }) => setLabelName(detail.value)}
+                      placeholder="prod"
+                    />
+                  </FormField>
+                </SpaceBetween>
+              </Modal>
 
               <Modal
                 visible={showCreate}
@@ -661,6 +857,28 @@ export function SSMDashboard() {
                 </Form>
               </Modal>
             </>
+          ),
+        },
+        {
+          id: "instances",
+          label: "Managed Instances",
+          content: (
+            <ResourceTable
+              resourceName="Instance"
+              headerTitle="SSM Managed Instances"
+              headerCounter={instancesQuery.data?.total}
+              items={instancesQuery.data?.instances || []}
+              columns={[
+                { id: "instanceId", header: "Instance ID", cell: (item: any) => item.InstanceId, isRowHeader: true },
+                { id: "platform", header: "Platform", cell: (item: any) => item.PlatformName || item.PlatformType || "—" },
+                { id: "version", header: "Agent Version", cell: (item: any) => item.AgentVersion || "—" },
+                { id: "status", header: "Status", cell: (item: any) => item.PingStatus || "—" },
+                { id: "type", header: "Instance Type", cell: (item: any) => item.InstanceType || "—" },
+                { id: "lastPing", header: "Last Ping", cell: (item: any) => item.LastPingDateTime || "—" },
+              ]}
+              loading={instancesQuery.isLoading}
+              emptyMessage="No managed instances found."
+            />
           ),
         },
       ]}

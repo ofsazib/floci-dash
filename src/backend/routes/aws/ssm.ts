@@ -8,6 +8,11 @@ import {
   GetParameterHistoryCommand,
   PutParameterCommand,
   DeleteParameterCommand,
+  GetParametersCommand,
+  GetParametersByPathCommand,
+  DeleteParametersCommand,
+  LabelParameterVersionCommand,
+  DescribeInstanceInformationCommand,
   AddTagsToResourceCommand,
   ListTagsForResourceCommand,
   RemoveTagsFromResourceCommand,
@@ -61,6 +66,61 @@ router.delete("/parameters/:name", async (c: Context) => {
   const client = getClient();
   await client.send(new DeleteParameterCommand({ Name: name }));
   return c.json({ deleted: true });
+});
+
+router.post("/parameters/batch", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.Names || !Array.isArray(body.Names) || body.Names.length === 0)
+    return c.json({ error: "Names must be a non-empty array" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new GetParametersCommand({ Names: body.Names, WithDecryption: body.WithDecryption })
+  );
+  return c.json({ parameters: result.Parameters || [], invalidParameters: result.InvalidParameters || [] });
+});
+
+router.get("/parameters-by-path", async (c: Context) => {
+  const path = c.req.query("path");
+  if (!path) return c.json({ error: "path query parameter required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new GetParametersByPathCommand({
+      Path: path,
+      Recursive: c.req.query("recursive") === "true",
+      WithDecryption: c.req.query("withDecryption") === "true",
+    })
+  );
+  return c.json({ parameters: result.Parameters || [], nextToken: result.NextToken || null });
+});
+
+router.post("/parameters/delete-batch", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.Names || !Array.isArray(body.Names) || body.Names.length === 0)
+    return c.json({ error: "Names must be a non-empty array" }, 400);
+  const client = getClient();
+  const result = await client.send(new DeleteParametersCommand({ Names: body.Names }));
+  return c.json({ deletedParameters: result.DeletedParameters || [], invalidParameters: result.InvalidParameters || [] });
+});
+
+router.post("/parameters/label", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.Name) return c.json({ error: "Name is required" }, 400);
+  if (body.ParameterVersion == null) return c.json({ error: "ParameterVersion is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new LabelParameterVersionCommand({
+      Name: body.Name,
+      ParameterVersion: body.ParameterVersion,
+      Labels: body.Labels || [],
+    })
+  );
+  return c.json({ invalidLabels: result.InvalidLabels || [], parameterVersion: result.ParameterVersion });
+});
+
+router.get("/instance-information", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new DescribeInstanceInformationCommand({}));
+  return c.json({ instances: result.InstanceInformationList || [], total: (result.InstanceInformationList || []).length });
 });
 
 // ── Parameter History ────────────────────────────────────
