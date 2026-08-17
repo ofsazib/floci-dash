@@ -20,6 +20,12 @@ vi.mock("@aws-sdk/client-auto-scaling", () => ({
   DeleteAutoScalingGroupCommand: createCmd("DeleteAutoScalingGroupCommand"),
   SetDesiredCapacityCommand: createCmd("SetDesiredCapacityCommand"),
   DescribeLaunchConfigurationsCommand: createCmd("DescribeLaunchConfigurationsCommand"),
+  CreateLaunchConfigurationCommand: createCmd("CreateLaunchConfigurationCommand"),
+  DeleteLaunchConfigurationCommand: createCmd("DeleteLaunchConfigurationCommand"),
+  DescribeAutoScalingInstancesCommand: createCmd("DescribeAutoScalingInstancesCommand"),
+  AttachInstancesCommand: createCmd("AttachInstancesCommand"),
+  DetachInstancesCommand: createCmd("DetachInstancesCommand"),
+  TerminateInstanceInAutoScalingGroupCommand: createCmd("TerminateInstanceInAutoScalingGroupCommand"),
   DescribePoliciesCommand: createCmd("DescribePoliciesCommand"),
   DescribeScalingActivitiesCommand: createCmd("DescribeScalingActivitiesCommand"),
   StartInstanceRefreshCommand: createCmd("StartInstanceRefreshCommand"),
@@ -671,6 +677,103 @@ describe("Auto Scaling Routes", () => {
       const res = await get("/metric-collection-types");
       const body = await res.json();
       expect(body.metricCollectionTypes).toEqual([]);
+    });
+  });
+
+  describe("launch configurations + instances", () => {
+    it("POST /launch-configurations — creates with all fields", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/launch-configurations", {
+        LaunchConfigurationName: "lc-1",
+        ImageId: "ami-1",
+        InstanceType: "t3.micro",
+        KeyName: "key",
+        SecurityGroups: ["sg-1"],
+        UserData: "#!/bin/bash",
+        IamInstanceProfile: "profile",
+        AssociatePublicIpAddress: true,
+      });
+      const body = await res.json();
+      expect(body.created).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("CreateLaunchConfigurationCommand");
+      expect(mockSend.mock.calls[0][0].LaunchConfigurationName).toBe("lc-1");
+      expect(mockSend.mock.calls[0][0].ImageId).toBe("ami-1");
+      expect(mockSend.mock.calls[0][0].SecurityGroups).toEqual(["sg-1"]);
+      expect(mockSend.mock.calls[0][0].AssociatePublicIpAddress).toBe(true);
+    });
+
+    it("POST /launch-configurations — 400 without name", async () => {
+      const res = await post("/launch-configurations", { ImageId: "ami-1" });
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE /launch-configurations/:name — deletes a launch config", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/launch-configurations/lc-1");
+      const body = await res.json();
+      expect(body.deleted).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteLaunchConfigurationCommand");
+      expect(mockSend.mock.calls[0][0].LaunchConfigurationName).toBe("lc-1");
+    });
+
+    it("GET /groups/:name/instances — filters by group with sparse result", async () => {
+      mockSend.mockResolvedValueOnce({
+        AutoScalingInstances: [
+          { InstanceId: "i-1", AutoScalingGroupName: "my-asg", LifecycleState: "InService" },
+          { InstanceId: "i-2", AutoScalingGroupName: "other-asg" },
+        ],
+      });
+      const res = await get("/groups/my-asg/instances");
+      const body = await res.json();
+      expect(body.instances).toEqual([
+        { InstanceId: "i-1", AutoScalingGroupName: "my-asg", LifecycleState: "InService" },
+      ]);
+      expect(body.total).toBe(1);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DescribeAutoScalingInstancesCommand");
+      mockSend.mockResolvedValueOnce({});
+      const empty = await get("/groups/my-asg/instances");
+      expect((await empty.json()).instances).toEqual([]);
+    });
+
+    it("POST /groups/:name/instances/attach — attaches instances", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/groups/my-asg/instances/attach", { InstanceIds: ["i-1", "i-2"] });
+      const body = await res.json();
+      expect(body.attached).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("AttachInstancesCommand");
+      expect(mockSend.mock.calls[0][0].AutoScalingGroupName).toBe("my-asg");
+      expect(mockSend.mock.calls[0][0].InstanceIds).toEqual(["i-1", "i-2"]);
+      const res400 = await post("/groups/my-asg/instances/attach", { InstanceIds: [] });
+      expect(res400.status).toBe(400);
+    });
+
+    it("POST /groups/:name/instances/detach — detaches instances", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/groups/my-asg/instances/detach", {
+        InstanceIds: ["i-1"],
+        ShouldDecrementDesiredCapacity: true,
+      });
+      const body = await res.json();
+      expect(body.detached).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DetachInstancesCommand");
+      expect(mockSend.mock.calls[0][0].ShouldDecrementDesiredCapacity).toBe(true);
+      const res400 = await post("/groups/my-asg/instances/detach", {});
+      expect(res400.status).toBe(400);
+    });
+
+    it("POST /instances/terminate — terminates an instance", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/instances/terminate", {
+        InstanceId: "i-1",
+        ShouldDecrementDesiredCapacity: false,
+      });
+      const body = await res.json();
+      expect(body.terminated).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("TerminateInstanceInAutoScalingGroupCommand");
+      expect(mockSend.mock.calls[0][0].InstanceId).toBe("i-1");
+      expect(mockSend.mock.calls[0][0].ShouldDecrementDesiredCapacity).toBe(false);
+      const res400 = await post("/instances/terminate", {});
+      expect(res400.status).toBe(400);
     });
   });
 });

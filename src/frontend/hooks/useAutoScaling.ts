@@ -147,6 +147,79 @@ export function useLaunchConfigurations() {
   });
 }
 
+export function useCreateLaunchConfiguration() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: any) =>
+      api("/aws/autoscaling/launch-configurations", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "autoscaling", "launch-configurations"] }),
+  });
+}
+
+export function useDeleteLaunchConfiguration() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api(`/aws/autoscaling/launch-configurations/${encodeURIComponent(name)}`, { method: "DELETE" }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "autoscaling", "launch-configurations"] }),
+  });
+}
+
+// ── Instances ────────────────────────────────────────────
+
+export function useASGInstances(groupName: string | null) {
+  return useQuery<{ instances: any[]; total: number }>({
+    queryKey: ["aws", "autoscaling", "instances", groupName],
+    queryFn: () =>
+      api(`/aws/autoscaling/groups/${encodeURIComponent(groupName!)}/instances`),
+    enabled: !!groupName,
+  });
+}
+
+export function useAttachInstances() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { name: string; InstanceIds: string[] }) =>
+      api(`/aws/autoscaling/groups/${encodeURIComponent(params.name)}/instances/attach`, {
+        method: "POST",
+        body: JSON.stringify({ InstanceIds: params.InstanceIds }),
+      }),
+    onSuccess: (_data, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "autoscaling", "instances", variables.name] }),
+  });
+}
+
+export function useDetachInstances() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { name: string; InstanceIds: string[]; ShouldDecrementDesiredCapacity?: boolean }) =>
+      api(`/aws/autoscaling/groups/${encodeURIComponent(params.name)}/instances/detach`, {
+        method: "POST",
+        body: JSON.stringify({
+          InstanceIds: params.InstanceIds,
+          ShouldDecrementDesiredCapacity: params.ShouldDecrementDesiredCapacity,
+        }),
+      }),
+    onSuccess: (_data, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "autoscaling", "instances", variables.name] }),
+  });
+}
+
+export function useTerminateASGInstance() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { InstanceId: string; ShouldDecrementDesiredCapacity?: boolean }) =>
+      api("/aws/autoscaling/instances/terminate", {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "autoscaling", "instances"] }),
+  });
+}
+
 // ── Scaling Policies ─────────────────────────────────────
 
 export function useScalingPolicies(groupName: string | null) {

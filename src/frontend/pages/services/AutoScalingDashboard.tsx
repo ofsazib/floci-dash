@@ -190,6 +190,12 @@ import {
   useAutoScalingGroups,
   useDeleteAutoScalingGroup,
   useLaunchConfigurations,
+  useCreateLaunchConfiguration,
+  useDeleteLaunchConfiguration,
+  useASGInstances,
+  useAttachInstances,
+  useDetachInstances,
+  useTerminateASGInstance,
   useScalingPolicies,
   useCreateScalingPolicy,
   useDeleteScalingPolicy,
@@ -531,9 +537,31 @@ export function AutoScalingDashboard() {
   const { data, isLoading } = useAutoScalingGroups();
   const deleteGroup = useDeleteAutoScalingGroup();
   const { data: lcData } = useLaunchConfigurations();
+  const createLC = useCreateLaunchConfiguration();
+  const deleteLC = useDeleteLaunchConfiguration();
+  const { showToast } = useToast();
+  const [showCreateLC, setShowCreateLC] = useState(false);
+  const [lcForm, setLcForm] = useState({
+    name: "",
+    imageId: "",
+    instanceType: "",
+    keyName: "",
+    securityGroups: "",
+    userData: "",
+    iamProfile: "",
+    associatePublicIp: false,
+  });
+  const [lcError, setLcError] = useState<string | null>(null);
+  const [attachIds, setAttachIds] = useState("");
+  const [detachIds, setDetachIds] = useState("");
+  const [instanceError, setInstanceError] = useState<string | null>(null);
 
   // ── Advanced State ──
   const [selectedASG, setSelectedASG] = useState<string | null>(null);
+  const asgInstances = useASGInstances(selectedASG);
+  const attachInstances = useAttachInstances();
+  const detachInstances = useDetachInstances();
+  const terminateInstance = useTerminateASGInstance();
   const [minHealthy, setMinHealthy] = useState("90");
   const [tagKey, setTagKey] = useState("");
   const [tagValue, setTagValue] = useState("");
@@ -690,28 +718,136 @@ export function AutoScalingDashboard() {
           id: "launch-configs",
           label: "Launch Configurations",
           content: (
-            <ResourceTable
-              resourceName="Launch Configuration"
-              headerTitle="Launch Configurations"
-              headerCounter={lcData?.total}
-              items={(lcData?.launchConfigurations || []).map((lc: any) => ({
-                name: lc.LaunchConfigurationName,
-                image: lc.ImageId,
-                type: lc.InstanceType,
-                created: lc.CreatedTime ? new Date(lc.CreatedTime).toLocaleDateString() : "-",
-              }))}
-              loading={false}
-              emptyMessage="No launch configurations"
-              columns={[
-                { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
-                { id: "image", header: "AMI", cell: (i: any) => i.image },
-                { id: "type", header: "Instance Type", cell: (i: any) => i.type },
-                { id: "created", header: "Created", cell: (i: any) => i.created },
-              ]}
-              filterEnabled
-              filterPlaceholder="Find launch configs"
-              filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
-            />
+            <>
+              <ResourceTable
+                resourceName="Launch Configuration"
+                headerTitle="Launch Configurations"
+                headerCounter={lcData?.total}
+                items={(lcData?.launchConfigurations || []).map((lc: any) => ({
+                  name: lc.LaunchConfigurationName,
+                  image: lc.ImageId,
+                  type: lc.InstanceType,
+                  created: lc.CreatedTime ? new Date(lc.CreatedTime).toLocaleDateString() : "-",
+                }))}
+                loading={false}
+                emptyMessage="No launch configurations"
+                columns={[
+                  { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+                  { id: "image", header: "AMI", cell: (i: any) => i.image },
+                  { id: "type", header: "Instance Type", cell: (i: any) => i.type },
+                  { id: "created", header: "Created", cell: (i: any) => i.created },
+                  {
+                    id: "actions",
+                    header: "",
+                    cell: (i: any) => (
+                      <DeleteButton
+                        itemName={i.name}
+                        resourceType="launch configuration"
+                        loading={deleteLC.isPending}
+                        onDelete={() => deleteLC.mutateAsync(i.name)}
+                      />
+                    ),
+                  },
+                ]}
+                filterEnabled
+                filterPlaceholder="Find launch configs"
+                filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+                onCreate={() => setShowCreateLC(true)}
+              />
+
+              <Modal
+                visible={showCreateLC}
+                onDismiss={() => setShowCreateLC(false)}
+                header="Create Launch Configuration"
+                footer={
+                  <Box float="right">
+                    <SpaceBetween direction="horizontal" size="xs">
+                      <Button variant="link" onClick={() => setShowCreateLC(false)}>
+                        Cancel
+                      </Button>
+                      <Button
+                        variant="primary"
+                        loading={createLC.isPending}
+                        disabled={!lcForm.name.trim()}
+                        onClick={() => {
+                          setLcError(null);
+                          createLC.mutate(
+                            {
+                              LaunchConfigurationName: lcForm.name.trim(),
+                              ImageId: lcForm.imageId.trim() || undefined,
+                              InstanceType: lcForm.instanceType.trim() || undefined,
+                              KeyName: lcForm.keyName.trim() || undefined,
+                              SecurityGroups: lcForm.securityGroups
+                                .split(",")
+                                .map((s: string) => s.trim())
+                                .filter(Boolean),
+                              UserData: lcForm.userData.trim() || undefined,
+                              IamInstanceProfile: lcForm.iamProfile.trim() || undefined,
+                              AssociatePublicIpAddress: lcForm.associatePublicIp,
+                            },
+                            {
+                              onSuccess: () => {
+                                setShowCreateLC(false);
+                                setLcForm({
+                                  name: "",
+                                  imageId: "",
+                                  instanceType: "",
+                                  keyName: "",
+                                  securityGroups: "",
+                                  userData: "",
+                                  iamProfile: "",
+                                  associatePublicIp: false,
+                                });
+                                showToast("success", "Launch configuration created");
+                              },
+                              onError: (e) =>
+                                setLcError((e as Error)?.message || "Failed to create launch configuration"),
+                            }
+                          );
+                        }}
+                      >
+                        Create
+                      </Button>
+                    </SpaceBetween>
+                  </Box>
+                }
+              >
+                <SpaceBetween size="m">
+                  {lcError && (
+                    <Alert type="error" dismissible onDismiss={() => setLcError(null)}>
+                      {lcError}
+                    </Alert>
+                  )}
+                  <FormField label="Name">
+                    <Input value={lcForm.name} onChange={({ detail }) => setLcForm((p) => ({ ...p, name: detail.value }))} placeholder="my-lc" />
+                  </FormField>
+                  <FormField label="AMI ID (optional)">
+                    <Input value={lcForm.imageId} onChange={({ detail }) => setLcForm((p) => ({ ...p, imageId: detail.value }))} placeholder="ami-12345678" />
+                  </FormField>
+                  <FormField label="Instance type (optional)">
+                    <Input value={lcForm.instanceType} onChange={({ detail }) => setLcForm((p) => ({ ...p, instanceType: detail.value }))} placeholder="t3.micro" />
+                  </FormField>
+                  <FormField label="Key name (optional)">
+                    <Input value={lcForm.keyName} onChange={({ detail }) => setLcForm((p) => ({ ...p, keyName: detail.value }))} placeholder="my-key" />
+                  </FormField>
+                  <FormField label="Security groups (optional)" description="Comma-separated">
+                    <Input value={lcForm.securityGroups} onChange={({ detail }) => setLcForm((p) => ({ ...p, securityGroups: detail.value }))} placeholder="sg-12345678, sg-87654321" />
+                  </FormField>
+                  <FormField label="User data (optional)">
+                    <Textarea value={lcForm.userData} onChange={({ detail }) => setLcForm((p) => ({ ...p, userData: detail.value }))} rows={3} />
+                  </FormField>
+                  <FormField label="IAM instance profile (optional)">
+                    <Input value={lcForm.iamProfile} onChange={({ detail }) => setLcForm((p) => ({ ...p, iamProfile: detail.value }))} placeholder="my-profile" />
+                  </FormField>
+                  <Checkbox
+                    checked={lcForm.associatePublicIp}
+                    onChange={({ detail }) => setLcForm((p) => ({ ...p, associatePublicIp: detail.checked }))}
+                  >
+                    Associate public IP address
+                  </Checkbox>
+                </SpaceBetween>
+              </Modal>
+            </>
           ),
         },
         {
@@ -734,6 +870,8 @@ export function AutoScalingDashboard() {
 
               {selectedASG && (
                 <SpaceBetween size="l">
+
+
                   {/* Instance Refresh */}
                   <Container header={<Header variant="h2" actions={<Button onClick={() => setShowStartRefresh(true)}>Start Refresh</Button>}>
                     Instance Refresh
@@ -939,6 +1077,117 @@ export function AutoScalingDashboard() {
                   )}
                 </SpaceBetween>
               </Container>
+
+                  {/* Instances */}
+                  <Container header={<Header variant="h2">Instances</Header>}>
+                    <SpaceBetween size="m">
+                      {instanceError && (
+                        <Alert type="error" dismissible onDismiss={() => setInstanceError(null)}>
+                          {instanceError}
+                        </Alert>
+                      )}
+                      {(asgInstances.data?.instances || []).length === 0 ? (
+                        <Box variant="small" color="text-status-inactive">
+                          No instances attached.
+                        </Box>
+                      ) : (
+                        <ResourceTable
+                          resourceName="Instance"
+                          items={asgInstances.data!.instances.map((inst: any) => ({
+                            id: inst.InstanceId,
+                            state: inst.LifecycleState,
+                            health: inst.HealthStatus,
+                            zone: inst.AvailabilityZone,
+                            protected: inst.ProtectedFromScaleIn ? "Yes" : "No",
+                          }))}
+                          columns={[
+                            { id: "id", header: "Instance ID", cell: (i: any) => i.id, isRowHeader: true },
+                            { id: "state", header: "Lifecycle", cell: (i: any) => i.state },
+                            { id: "health", header: "Health", cell: (i: any) => i.health },
+                            { id: "zone", header: "AZ", cell: (i: any) => i.zone },
+                            { id: "protected", header: "Protected", cell: (i: any) => i.protected },
+                            {
+                              id: "actions",
+                              header: "",
+                              cell: (i: any) => (
+                                <Button
+                                  variant="link"
+                                  onClick={() =>
+                                    terminateInstance.mutate(
+                                      { InstanceId: i.id, ShouldDecrementDesiredCapacity: true },
+                                      {
+                                        onSuccess: () =>
+                                          showToast("success", `Terminated ${i.id}`),
+                                        onError: (e) =>
+                                          setInstanceError((e as Error)?.message || "Termination failed"),
+                                      }
+                                    )
+                                  }
+                                >
+                                  Terminate
+                                </Button>
+                              ),
+                            },
+                          ]}
+                          loading={asgInstances.isLoading}
+                        />
+                      )}
+                      <SpaceBetween direction="horizontal" size="xs">
+                        <Input
+                          value={attachIds}
+                          onChange={({ detail }) => setAttachIds(detail.value)}
+                          placeholder="i-1234567890abcdef0"
+                        />
+                        <Button
+                          disabled={!attachIds.trim()}
+                          onClick={() => {
+                            const ids = attachIds.split(",").map((s: string) => s.trim()).filter(Boolean);
+                            setInstanceError(null);
+                            attachInstances.mutate(
+                              { name: selectedASG!, InstanceIds: ids },
+                              {
+                                onSuccess: () => {
+                                  setAttachIds("");
+                                  showToast("success", "Instances attached");
+                                },
+                                onError: (e) =>
+                                  setInstanceError((e as Error)?.message || "Attach failed"),
+                              }
+                            );
+                          }}
+                        >
+                          Attach
+                        </Button>
+                      </SpaceBetween>
+                      <SpaceBetween direction="horizontal" size="xs">
+                        <Input
+                          value={detachIds}
+                          onChange={({ detail }) => setDetachIds(detail.value)}
+                          placeholder="i-1234567890abcdef0"
+                        />
+                        <Button
+                          disabled={!detachIds.trim()}
+                          onClick={() => {
+                            const ids = detachIds.split(",").map((s: string) => s.trim()).filter(Boolean);
+                            setInstanceError(null);
+                            detachInstances.mutate(
+                              { name: selectedASG!, InstanceIds: ids, ShouldDecrementDesiredCapacity: false },
+                              {
+                                onSuccess: () => {
+                                  setDetachIds("");
+                                  showToast("success", "Instances detached");
+                                },
+                                onError: (e) =>
+                                  setInstanceError((e as Error)?.message || "Detach failed"),
+                              }
+                            );
+                          }}
+                        >
+                          Detach
+                        </Button>
+                      </SpaceBetween>
+                    </SpaceBetween>
+                  </Container>
 
               {/* Modals */}
               {showStartRefresh && (

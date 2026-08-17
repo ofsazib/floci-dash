@@ -14,6 +14,13 @@ function dismissModalWithEscape() {
   });
 }
 
+/** Assert the modal with the given header text is hidden (Cloudscape uses display:none). */
+function expectModalHidden(headerText: string) {
+  const header = screen.getAllByText(headerText).find((h) => h.closest('[role="dialog"]'));
+  const dialog = header!.closest('[role="dialog"]') as HTMLElement;
+  expect(dialog.className).toContain("hidden");
+}
+
 // ─── Mock ConfirmDialog ─────────────────────────────────
 
 vi.mock("../../components/ConfirmDialog", () => ({
@@ -27,6 +34,12 @@ vi.mock("../../components/ConfirmDialog", () => ({
 
 const mockGroupsHook = vi.fn();
 const mockLCsHook = vi.fn();
+const mockCreateLC = vi.fn();
+const mockDeleteLC = vi.fn();
+const mockASGInstances = vi.fn();
+const mockAttachInstances = vi.fn();
+const mockDetachInstances = vi.fn();
+const mockTerminateInstance = vi.fn();
 const mockCreateGroup = vi.fn();
 const mockDeleteGroup = vi.fn();
 const mockScalingPolicies = vi.fn();
@@ -68,6 +81,12 @@ const deleteGroupState = vi.hoisted(() => ({
 vi.mock("../../hooks/useAutoScaling", () => ({
   useAutoScalingGroups: (...args: any[]) => mockGroupsHook(...args),
   useLaunchConfigurations: (...args: any[]) => mockLCsHook(...args),
+  useCreateLaunchConfiguration: () => ({ mutate: mockCreateLC, isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useDeleteLaunchConfiguration: () => ({ mutateAsync: mockDeleteLC, isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useASGInstances: (...args: any[]) => mockASGInstances(...args),
+  useAttachInstances: () => ({ mutate: mockAttachInstances, isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useDetachInstances: () => ({ mutate: mockDetachInstances, isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useTerminateASGInstance: () => ({ mutate: mockTerminateInstance, isPending: false, isError: false, error: null, reset: vi.fn() }),
   useCreateAutoScalingGroup: () => ({
     mutate: mockCreateGroup,
     isPending: false,
@@ -218,6 +237,32 @@ beforeEach(() => {
   mockLCsHook.mockReturnValue({
     data: { launchConfigurations: [] as any[], total: 0 },
     isLoading: false,
+  });
+  mockASGInstances.mockReturnValue({
+    data: { instances: [], total: 0 },
+    isLoading: false,
+  });
+  mockCreateLC.mockReset();
+  mockCreateLC.mockImplementation((_payload: any, opts?: any) => {
+    opts?.onSuccess?.();
+    return Promise.resolve({});
+  });
+  mockDeleteLC.mockReset();
+  mockDeleteLC.mockResolvedValue({});
+  mockAttachInstances.mockReset();
+  mockAttachInstances.mockImplementation((_payload: any, opts?: any) => {
+    opts?.onSuccess?.();
+    return Promise.resolve({});
+  });
+  mockDetachInstances.mockReset();
+  mockDetachInstances.mockImplementation((_payload: any, opts?: any) => {
+    opts?.onSuccess?.();
+    return Promise.resolve({});
+  });
+  mockTerminateInstance.mockReset();
+  mockTerminateInstance.mockImplementation((_payload: any, opts?: any) => {
+    opts?.onSuccess?.();
+    return Promise.resolve({});
   });
   mockInstanceRefreshes.mockReturnValue({
     data: { instanceRefreshes: [] },
@@ -1937,5 +1982,236 @@ describe("AutoScalingDashboard — sparse-data branches", () => {
         expect.any(Object)
       );
     });
+  });
+});
+
+describe("AutoScalingDashboard — launch config create/delete", () => {
+  it("creates a launch configuration with all fields", async () => {
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Launch Configurations/i }));
+    await clickButton(user, /Create launch configuration/i);
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: /Create Launch Configuration/ })).toBeTruthy(),
+    );
+    const dialog = () =>
+      within(screen.getByRole("dialog", { name: /Create Launch Configuration/ }));
+    await user.type(dialog().getByPlaceholderText("my-lc"), "lc-1");
+    await user.type(dialog().getByPlaceholderText("ami-12345678"), "ami-1");
+    await user.type(dialog().getByPlaceholderText("t3.micro"), "t3.micro");
+    await user.type(dialog().getByPlaceholderText("my-key"), "key");
+    await user.type(dialog().getByPlaceholderText("sg-12345678, sg-87654321"), "sg-1, sg-2");
+    await user.type(dialog().getByPlaceholderText("my-profile"), "profile");
+    await user.type(dialog().getByRole("textbox", { name: /User data/i }), "#!/bin/bash");
+    await user.click(dialog().getByText("Associate public IP address"));
+    await clickButton(user, /^Create$/i, { last: true });
+    await waitFor(() =>
+      expect(mockCreateLC).toHaveBeenCalledWith(
+        expect.objectContaining({
+          LaunchConfigurationName: "lc-1",
+          ImageId: "ami-1",
+          InstanceType: "t3.micro",
+          KeyName: "key",
+          SecurityGroups: ["sg-1", "sg-2"],
+          IamInstanceProfile: "profile",
+          AssociatePublicIpAddress: true,
+        }),
+        expect.anything(),
+      ),
+    );
+  });
+
+  it("shows the fallback error when creating a launch config fails", async () => {
+    mockCreateLC.mockImplementation((_payload: any, opts?: any) => {
+      opts?.onError?.(new Error());
+      return Promise.reject(new Error());
+    });
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Launch Configurations/i }));
+    await clickButton(user, /Create launch configuration/i);
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: /Create Launch Configuration/ })).toBeTruthy(),
+    );
+    const dialog = () =>
+      within(screen.getByRole("dialog", { name: /Create Launch Configuration/ }));
+    await user.type(dialog().getByPlaceholderText("my-lc"), "lc-err");
+    await clickButton(user, /^Create$/i, { last: true });
+    await waitFor(() =>
+      expect(screen.getByText("Failed to create launch configuration")).toBeTruthy(),
+    );
+    const dismiss = document.querySelector('[class*="awsui_dismiss-button"]') as HTMLElement;
+    fireEvent.click(dismiss);
+    await waitFor(() =>
+      expect(screen.queryByText("Failed to create launch configuration")).toBeNull(),
+    );
+    // Cancel the modal
+    await user.click(
+      within(screen.getByRole("dialog", { name: /Create Launch Configuration/ })).getByRole("button", {
+        name: /^Cancel$/i,
+      }),
+    );
+    await waitFor(() => expectModalHidden("Create Launch Configuration"));
+  });
+
+  it("dismisses the create launch configuration modal with Escape", async () => {
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Launch Configurations/i }));
+    await clickButton(user, /Create launch configuration/i);
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: /Create Launch Configuration/ })).toBeTruthy(),
+    );
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create Launch Configuration"));
+  });
+
+  it("deletes a launch configuration", async () => {
+    mockLCsHook.mockReturnValue({
+      data: {
+        launchConfigurations: [{ LaunchConfigurationName: "my-lc", ImageId: "ami-1", InstanceType: "t3.micro", CreatedTime: new Date().toISOString() }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Launch Configurations/i }));
+    await waitFor(() => expect(screen.getByText("my-lc")).toBeTruthy());
+    await user.click(
+      screen.getByRole("button", { name: /Delete my-lc/i }),
+    );
+    await waitFor(() => expect(mockDeleteLC).toHaveBeenCalledWith("my-lc"));
+  });
+});
+
+describe("AutoScalingDashboard — instances", () => {
+  const GROUPS = {
+    data: {
+      groups: [{ AutoScalingGroupName: "asg-1", MinSize: 1, MaxSize: 5, DesiredCapacity: 2, Instances: [], HealthCheckType: "EC2" }],
+      total: 1,
+    },
+    isLoading: false,
+  };
+
+  async function selectASG(user: ReturnType<typeof userEvent.setup>) {
+    mockGroupsHook.mockReturnValue(GROUPS);
+    render(<AutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Advanced/i }));
+    await waitFor(() => expect(screen.getByText("Select an ASG...")).toBeTruthy());
+    await user.click(screen.getByText("Select an ASG..."));
+    await user.click(screen.getAllByText("asg-1")[0]);
+    await waitFor(() => expect(screen.getByText("Instances")).toBeTruthy());
+  }
+
+  it("shows instances and terminates one", async () => {
+    mockASGInstances.mockReturnValue({
+      data: {
+        instances: [
+          { InstanceId: "i-1", AutoScalingGroupName: "asg-1", LifecycleState: "InService", HealthStatus: "Healthy", AvailabilityZone: "us-east-1a", ProtectedFromScaleIn: true },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    await selectASG(user);
+    await waitFor(() => expect(screen.getByText("i-1")).toBeTruthy());
+    expect(screen.getByText("InService")).toBeTruthy();
+    expect(screen.getByText("Yes")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: /^Terminate$/i }));
+    await waitFor(() =>
+      expect(mockTerminateInstance).toHaveBeenCalledWith(
+        expect.objectContaining({ InstanceId: "i-1", ShouldDecrementDesiredCapacity: true }),
+        expect.anything(),
+      ),
+    );
+  });
+
+  it("attaches instances by comma-separated ids", async () => {
+    const user = userEvent.setup();
+    await selectASG(user);
+    await user.type(screen.getAllByPlaceholderText("i-1234567890abcdef0")[0], "i-1,i-2");
+    const attachBtns = screen.getAllByRole("button", { name: /^Attach$/i });
+    await user.click(attachBtns[attachBtns.length - 1]);
+    await waitFor(() =>
+      expect(mockAttachInstances).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "asg-1", InstanceIds: ["i-1", "i-2"] }),
+        expect.anything(),
+      ),
+    );
+  });
+
+  it("detaches instances", async () => {
+    const user = userEvent.setup();
+    await selectASG(user);
+    const inputs = screen.getAllByPlaceholderText("i-1234567890abcdef0");
+    await user.type(inputs[1], "i-3");
+    await user.click(screen.getByRole("button", { name: /^Detach$/i }));
+    await waitFor(() =>
+      expect(mockDetachInstances).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "asg-1", InstanceIds: ["i-3"], ShouldDecrementDesiredCapacity: false }),
+        expect.anything(),
+      ),
+    );
+  });
+
+  it("shows the fallback error when detach fails", async () => {
+    mockDetachInstances.mockImplementation((_payload: any, opts?: any) => {
+      opts?.onError?.(new Error());
+      return Promise.reject(new Error());
+    });
+    const user = userEvent.setup();
+    await selectASG(user);
+    const inputs = screen.getAllByPlaceholderText("i-1234567890abcdef0");
+    await user.type(inputs[1], "i-4");
+    await user.click(screen.getByRole("button", { name: /^Detach$/i }));
+    await waitFor(() => expect(screen.getByText("Detach failed")).toBeTruthy());
+  });
+
+  it("shows the fallback error when attach fails", async () => {
+    mockAttachInstances.mockImplementation((_payload: any, opts?: any) => {
+      opts?.onError?.(new Error());
+      return Promise.reject(new Error());
+    });
+    const user = userEvent.setup();
+    await selectASG(user);
+    await user.type(screen.getAllByPlaceholderText("i-1234567890abcdef0")[0], "i-9");
+    const attachBtns = screen.getAllByRole("button", { name: /^Attach$/i });
+    await user.click(attachBtns[attachBtns.length - 1]);
+    await waitFor(() => expect(screen.getByText("Attach failed")).toBeTruthy());
+    const dismiss = document.querySelector('[class*="awsui_dismiss-button"]') as HTMLElement;
+    fireEvent.click(dismiss);
+    await waitFor(() => expect(screen.queryByText("Attach failed")).toBeNull());
+  });
+
+  it("shows the fallback error when termination fails", async () => {
+    mockASGInstances.mockReturnValue({
+      data: {
+        instances: [
+          { InstanceId: "i-1", AutoScalingGroupName: "asg-1", LifecycleState: "InService", HealthStatus: "Healthy", AvailabilityZone: "us-east-1a", ProtectedFromScaleIn: false },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    mockTerminateInstance.mockImplementation((_payload: any, opts?: any) => {
+      opts?.onError?.(new Error());
+      return Promise.reject(new Error());
+    });
+    const user = userEvent.setup();
+    await selectASG(user);
+    await waitFor(() => expect(screen.getByText("i-1")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /^Terminate$/i }));
+    await waitFor(() => expect(screen.getByText("Termination failed")).toBeTruthy());
+  });
+
+  it("handles sparse instance data", async () => {
+    mockASGInstances.mockReturnValue({ data: undefined, isLoading: false });
+    const user = userEvent.setup();
+    await selectASG(user);
+    await waitFor(() =>
+      expect(screen.getByText("No instances attached.")).toBeTruthy(),
+    );
   });
 });

@@ -26,6 +26,12 @@ import {
   useDeleteAutoScalingGroup,
   useSetDesiredCapacity,
   useLaunchConfigurations,
+  useCreateLaunchConfiguration,
+  useDeleteLaunchConfiguration,
+  useASGInstances,
+  useAttachInstances,
+  useDetachInstances,
+  useTerminateASGInstance,
   useScalingPolicies,
   useScalingActivities,
   useStartInstanceRefresh,
@@ -136,6 +142,109 @@ describe("useAutoScaling hooks", () => {
       });
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(mockApi).toHaveBeenCalledWith("/aws/autoscaling/launch-configurations");
+    });
+  });
+
+  describe("useCreateLaunchConfiguration", () => {
+    it("calls api with POST body", async () => {
+      mockApi.mockResolvedValueOnce({});
+      const { result } = renderHook(() => useCreateLaunchConfiguration(), {
+        wrapper: createWrapper(),
+      });
+      await result.current.mutateAsync({ LaunchConfigurationName: "lc-1", ImageId: "ami-1" });
+      expect(mockApi).toHaveBeenCalledWith(
+        "/aws/autoscaling/launch-configurations",
+        expect.objectContaining({ method: "POST" })
+      );
+      expect(JSON.parse(mockApi.mock.calls[0][1].body)).toEqual({
+        LaunchConfigurationName: "lc-1",
+        ImageId: "ami-1",
+      });
+    });
+  });
+
+  describe("useDeleteLaunchConfiguration", () => {
+    it("calls api with DELETE and encoded name", async () => {
+      mockApi.mockResolvedValueOnce({});
+      const { result } = renderHook(() => useDeleteLaunchConfiguration(), {
+        wrapper: createWrapper(),
+      });
+      await result.current.mutateAsync("lc/1");
+      expect(mockApi).toHaveBeenCalledWith(
+        "/aws/autoscaling/launch-configurations/lc%2F1",
+        expect.objectContaining({ method: "DELETE" })
+      );
+    });
+  });
+
+  describe("useASGInstances", () => {
+    it("does NOT call api when groupName is null", () => {
+      renderHook(() => useASGInstances(null), { wrapper: createWrapper() });
+      expect(mockApi).not.toHaveBeenCalled();
+    });
+
+    it("calls api with encoded group name", async () => {
+      mockApi.mockResolvedValueOnce({ instances: [], total: 0 });
+      const { result } = renderHook(() => useASGInstances("my asg"), {
+        wrapper: createWrapper(),
+      });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockApi).toHaveBeenCalledWith("/aws/autoscaling/groups/my%20asg/instances");
+    });
+  });
+
+  describe("useAttachInstances", () => {
+    it("calls api with POST and instance ids", async () => {
+      mockApi.mockResolvedValueOnce({});
+      const { result } = renderHook(() => useAttachInstances(), {
+        wrapper: createWrapper(),
+      });
+      await result.current.mutateAsync({ name: "asg-1", InstanceIds: ["i-1"] });
+      expect(mockApi).toHaveBeenCalledWith(
+        "/aws/autoscaling/groups/asg-1/instances/attach",
+        expect.objectContaining({ method: "POST" })
+      );
+      expect(JSON.parse(mockApi.mock.calls[0][1].body)).toEqual({ InstanceIds: ["i-1"] });
+    });
+  });
+
+  describe("useDetachInstances", () => {
+    it("calls api with POST and capacity flag", async () => {
+      mockApi.mockResolvedValueOnce({});
+      const { result } = renderHook(() => useDetachInstances(), {
+        wrapper: createWrapper(),
+      });
+      await result.current.mutateAsync({
+        name: "asg-1",
+        InstanceIds: ["i-1"],
+        ShouldDecrementDesiredCapacity: true,
+      });
+      expect(mockApi).toHaveBeenCalledWith(
+        "/aws/autoscaling/groups/asg-1/instances/detach",
+        expect.objectContaining({ method: "POST" })
+      );
+      expect(JSON.parse(mockApi.mock.calls[0][1].body)).toEqual({
+        InstanceIds: ["i-1"],
+        ShouldDecrementDesiredCapacity: true,
+      });
+    });
+  });
+
+  describe("useTerminateASGInstance", () => {
+    it("calls api with POST and instance id", async () => {
+      mockApi.mockResolvedValueOnce({});
+      const { result } = renderHook(() => useTerminateASGInstance(), {
+        wrapper: createWrapper(),
+      });
+      await result.current.mutateAsync({ InstanceId: "i-1", ShouldDecrementDesiredCapacity: false });
+      expect(mockApi).toHaveBeenCalledWith(
+        "/aws/autoscaling/instances/terminate",
+        expect.objectContaining({ method: "POST" })
+      );
+      expect(JSON.parse(mockApi.mock.calls[0][1].body)).toEqual({
+        InstanceId: "i-1",
+        ShouldDecrementDesiredCapacity: false,
+      });
     });
   });
 

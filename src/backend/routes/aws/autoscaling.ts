@@ -9,6 +9,12 @@ import {
   DeleteAutoScalingGroupCommand,
   SetDesiredCapacityCommand,
   DescribeLaunchConfigurationsCommand,
+  CreateLaunchConfigurationCommand,
+  DeleteLaunchConfigurationCommand,
+  DescribeAutoScalingInstancesCommand,
+  AttachInstancesCommand,
+  DetachInstancesCommand,
+  TerminateInstanceInAutoScalingGroupCommand,
   DescribePoliciesCommand,
   DescribeScalingActivitiesCommand,
   StartInstanceRefreshCommand,
@@ -149,6 +155,87 @@ router.get("/launch-configurations", async (c: Context) => {
   const result = await client.send(new DescribeLaunchConfigurationsCommand({}));
   const launchConfigurations = result.LaunchConfigurations || [];
   return c.json({ launchConfigurations, total: launchConfigurations.length });
+});
+
+router.post("/launch-configurations", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.LaunchConfigurationName)
+    return c.json({ error: "LaunchConfigurationName is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new CreateLaunchConfigurationCommand({
+      LaunchConfigurationName: body.LaunchConfigurationName,
+      InstanceId: body.InstanceId,
+      ImageId: body.ImageId,
+      InstanceType: body.InstanceType,
+      KeyName: body.KeyName,
+      SecurityGroups: body.SecurityGroups,
+      UserData: body.UserData,
+      IamInstanceProfile: body.IamInstanceProfile,
+      AssociatePublicIpAddress: body.AssociatePublicIpAddress,
+    })
+  );
+  return c.json({ created: true }, 201);
+});
+
+router.delete("/launch-configurations/:name", async (c: Context) => {
+  const name = decodeURIComponent(c.req.param("name")!);
+  const client = getClient();
+  await client.send(new DeleteLaunchConfigurationCommand({ LaunchConfigurationName: name }));
+  return c.json({ deleted: true });
+});
+
+// ── Instances ────────────────────────────────────────────
+
+router.get("/groups/:name/instances", async (c: Context) => {
+  const name = decodeURIComponent(c.req.param("name")!);
+  const client = getClient();
+  const result = await client.send(new DescribeAutoScalingInstancesCommand({}));
+  const instances = (result.AutoScalingInstances || []).filter(
+    (i: any) => !i.AutoScalingGroupName || i.AutoScalingGroupName === name
+  );
+  return c.json({ instances, total: instances.length });
+});
+
+router.post("/groups/:name/instances/attach", async (c: Context) => {
+  const name = decodeURIComponent(c.req.param("name")!);
+  const body = await c.req.json<any>();
+  if (!body.InstanceIds || !Array.isArray(body.InstanceIds) || body.InstanceIds.length === 0)
+    return c.json({ error: "InstanceIds must be a non-empty array" }, 400);
+  const client = getClient();
+  await client.send(
+    new AttachInstancesCommand({ AutoScalingGroupName: name, InstanceIds: body.InstanceIds })
+  );
+  return c.json({ attached: true });
+});
+
+router.post("/groups/:name/instances/detach", async (c: Context) => {
+  const name = decodeURIComponent(c.req.param("name")!);
+  const body = await c.req.json<any>();
+  if (!body.InstanceIds || !Array.isArray(body.InstanceIds) || body.InstanceIds.length === 0)
+    return c.json({ error: "InstanceIds must be a non-empty array" }, 400);
+  const client = getClient();
+  await client.send(
+    new DetachInstancesCommand({
+      AutoScalingGroupName: name,
+      InstanceIds: body.InstanceIds,
+      ShouldDecrementDesiredCapacity: body.ShouldDecrementDesiredCapacity,
+    })
+  );
+  return c.json({ detached: true });
+});
+
+router.post("/instances/terminate", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.InstanceId) return c.json({ error: "InstanceId is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new TerminateInstanceInAutoScalingGroupCommand({
+      InstanceId: body.InstanceId,
+      ShouldDecrementDesiredCapacity: body.ShouldDecrementDesiredCapacity,
+    })
+  );
+  return c.json({ terminated: true });
 });
 
 // ── Scaling Policies ─────────────────────────────────────
