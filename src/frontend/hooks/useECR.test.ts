@@ -21,6 +21,8 @@ import {
   useECRLifecyclePolicy,
   useECRPutLifecyclePolicy,
   useECRScanningConfiguration,
+  useECRImageManifest,
+  useECRAuthToken,
 } from "./useECR";
 
 function createWrapper() {
@@ -215,5 +217,47 @@ describe("useECRScanningConfiguration", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith("/aws/ecr/repositories/my-repo/scanning-configuration");
     expect(result.current.data?.scanningConfiguration?.scanOnPush).toBe(true);
+  });
+});
+
+describe("useECRImageManifest", () => {
+  it("calls api with tag query param", async () => {
+    mockApi.mockResolvedValueOnce({ repositoryName: "my-repo", image: null });
+    const { result } = renderHook(() => useECRImageManifest(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ repoName: "my-repo", tag: "v1" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/ecr/repositories/my-repo/images/manifest?tag=v1",
+    );
+  });
+
+  it("calls api with digest query param", async () => {
+    mockApi.mockResolvedValueOnce({ repositoryName: "my-repo", image: null });
+    const { result } = renderHook(() => useECRImageManifest(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ repoName: "my-repo", digest: "sha256:abc" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/ecr/repositories/my-repo/images/manifest?digest=sha256%3Aabc",
+    );
+  });
+
+  it("calls api with no query params when tag/digest missing", async () => {
+    mockApi.mockResolvedValueOnce({ repositoryName: "my-repo", image: null });
+    const { result } = renderHook(() => useECRImageManifest(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ repoName: "my-repo" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/ecr/repositories/my-repo/images/manifest?");
+  });
+});
+
+describe("useECRAuthToken", () => {
+  it("does not fetch until refetch is called (enabled: false)", () => {
+    renderHook(() => useECRAuthToken(), { wrapper: createWrapper() });
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("fetches token on refetch", async () => {
+    mockApi.mockResolvedValueOnce({ authorizationToken: "tok", expiresAt: null, proxyEndpoint: "ep" });
+    const { result } = renderHook(() => useECRAuthToken(), { wrapper: createWrapper() });
+    result.current.refetch();
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ecr/auth-token");
   });
 });

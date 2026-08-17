@@ -19,6 +19,8 @@ import {
   UntagResourceCommand,
   ListTagsForResourceCommand,
   BatchGetRepositoryScanningConfigurationCommand,
+  BatchGetImageCommand,
+  GetAuthorizationTokenCommand,
 } from "@aws-sdk/client-ecr";
 
 const router = new Hono();
@@ -105,6 +107,50 @@ router.delete("/repositories/:name/images", async (c: Context) => {
   return c.json({
     imageIds: result.imageIds || [],
     failures: result.failures || [],
+  });
+});
+
+// ── Image manifests ───────────────────────────────────────
+
+router.get("/repositories/:name/images/manifest", async (c: Context) => {
+  const name = c.req.param("name");
+  const tag = c.req.query("tag");
+  const digest = c.req.query("digest");
+  if (!tag && !digest) {
+    return c.json({ error: "tag or digest is required" }, 400);
+  }
+  const client = getClient();
+  const result = await client.send(
+    new BatchGetImageCommand({
+      repositoryName: name,
+      imageIds: [{ imageTag: tag || undefined, imageDigest: digest || undefined }],
+    })
+  );
+  const image = (result.images || [])[0];
+  return c.json({
+    repositoryName: name,
+    image: image
+      ? {
+          registryId: image.registryId,
+          repositoryName: image.repositoryName,
+          imageId: image.imageId,
+          imageManifest: image.imageManifest,
+          imageManifestMediaType: image.imageManifestMediaType,
+        }
+      : null,
+  });
+});
+
+// ── Auth token ────────────────────────────────────────────
+
+router.get("/auth-token", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new GetAuthorizationTokenCommand({}));
+  const authData = (result.authorizationData || [])[0];
+  return c.json({
+    authorizationToken: authData?.authorizationToken || null,
+    expiresAt: authData?.expiresAt?.toISOString() || null,
+    proxyEndpoint: authData?.proxyEndpoint || null,
   });
 });
 

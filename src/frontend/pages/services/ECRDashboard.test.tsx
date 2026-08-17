@@ -11,9 +11,23 @@ const mockRepositories = vi.fn();
 const mockCreateRepo = vi.fn();
 const mockDeleteRepo = vi.fn();
 const mockScanConfig = vi.fn();
+const mockManifestMutate = vi.fn();
+const mockAuthTokenRefetch = vi.fn();
+const mockAuthToken = vi.fn();
 const deleteRepoState: { isPending: boolean; variables: string | null } = {
   isPending: false,
   variables: null,
+};
+const authTokenState: {
+  data: { authorizationToken: string | null; expiresAt: string | null; proxyEndpoint: string | null } | undefined;
+  isFetching: boolean;
+  isError: boolean;
+  error: Error | null;
+} = {
+  data: undefined,
+  isFetching: false,
+  isError: false,
+  error: null,
 };
 
 vi.mock("../../hooks/useECR", () => ({
@@ -28,6 +42,11 @@ vi.mock("../../hooks/useECR", () => ({
     get variables() { return deleteRepoState.variables; },
   }),
   useECRScanningConfiguration: (...args: any[]) => mockScanConfig(...args),
+  useECRImageManifest: () => ({
+    mutate: mockManifestMutate,
+    isPending: false,
+  }),
+  useECRAuthToken: (...args: any[]) => mockAuthToken(...args),
 }));
 
 import { ECRDashboard } from "./ECRDashboard";
@@ -49,6 +68,19 @@ beforeEach(() => {
     isLoading: false,
     isError: false,
     error: null,
+  });
+  mockManifestMutate.mockReset();
+  mockAuthTokenRefetch.mockReset();
+  authTokenState.data = undefined;
+  authTokenState.isFetching = false;
+  authTokenState.isError = false;
+  authTokenState.error = null;
+  mockAuthToken.mockReturnValue({
+    refetch: mockAuthTokenRefetch,
+    get data() { return authTokenState.data; },
+    get isFetching() { return authTokenState.isFetching; },
+    get isError() { return authTokenState.isError; },
+    get error() { return authTokenState.error; },
   });
 });
 
@@ -530,5 +562,256 @@ describe("ECRDashboard — scanning configuration", () => {
     await waitFor(() => expect(screen.getByText(/Scanning configuration/i)).toBeTruthy());
     // filterType null → "?" fallback, filter null → "*" fallback
     expect(screen.getByText(/\?: \*/)).toBeTruthy();
+  });
+});
+
+// ─── Manifest modal ───────────────────────────────────────
+
+describe("ECRDashboard — image manifest modal", () => {
+  const repoData = {
+    data: {
+      repositories: [
+        {
+          repositoryName: "my-repo",
+          repositoryUri: "uri",
+          createdAt: "2024-01-15T00:00:00Z",
+          imageTagMutability: "IMMUTABLE",
+          encryptionConfiguration: {},
+          tags: [],
+        },
+      ],
+      total: 1,
+    },
+    isLoading: false,
+  };
+
+  it("opens the manifest modal from a repository row", async () => {
+    mockRepositories.mockReturnValue(repoData);
+    const user = userEvent.setup();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-repo")).toBeTruthy());
+    await clickButton(user, /Manifest/i);
+    await waitFor(() =>
+      expect(screen.getByText("Image manifest — my-repo")).toBeTruthy(),
+    );
+  });
+
+  it("fetches manifest by tag and shows the result", async () => {
+    mockRepositories.mockReturnValue(repoData);
+    mockManifestMutate.mockImplementation((params: any, opts: any) => {
+      expect(params).toEqual({ repoName: "my-repo", tag: "v1", digest: undefined });
+      opts.onSuccess({ repositoryName: "my-repo", image: { imageManifest: "{}" } });
+    });
+    const user = userEvent.setup();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-repo")).toBeTruthy());
+    await clickButton(user, /Manifest/i);
+    await user.type(screen.getByPlaceholderText("latest"), "v1");
+    await clickButton(user, /Fetch manifest/i);
+    await waitFor(() => expect(screen.getByText(/imageManifest/)).toBeTruthy());
+    expect(mockManifestMutate).toHaveBeenCalledTimes(1);
+  });
+
+  it("fetches manifest by digest", async () => {
+    mockRepositories.mockReturnValue(repoData);
+    mockManifestMutate.mockImplementation((params: any, opts: any) => {
+      expect(params).toEqual({
+        repoName: "my-repo",
+        tag: undefined,
+        digest: "sha256:abc",
+      });
+      opts.onSuccess({ repositoryName: "my-repo", image: { imageManifest: "{}" } });
+    });
+    const user = userEvent.setup();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-repo")).toBeTruthy());
+    await clickButton(user, /Manifest/i);
+    await user.type(screen.getByPlaceholderText("sha256:... (alternative to tag)"), "sha256:abc");
+    await clickButton(user, /Fetch manifest/i);
+    await waitFor(() => expect(screen.getByText(/imageManifest/)).toBeTruthy());
+  });
+
+  it("does not fetch when tag and digest are both empty", async () => {
+    mockRepositories.mockReturnValue(repoData);
+    const user = userEvent.setup();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-repo")).toBeTruthy());
+    await clickButton(user, /Manifest/i);
+    const fetchBtn = screen.getByRole("button", { name: /Fetch manifest/i });
+    await user.click(fetchBtn);
+    expect(mockManifestMutate).not.toHaveBeenCalled();
+  });
+
+  it("renders the raw result when image is null", async () => {
+    mockRepositories.mockReturnValue(repoData);
+    mockManifestMutate.mockImplementation((_params: any, opts: any) => {
+      opts.onSuccess({ repositoryName: "my-repo", image: null });
+    });
+    const user = userEvent.setup();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-repo")).toBeTruthy());
+    await clickButton(user, /Manifest/i);
+    await user.type(screen.getByPlaceholderText("latest"), "v1");
+    await clickButton(user, /Fetch manifest/i);
+    await waitFor(() => expect(screen.getByText(/"image": null/)).toBeTruthy());
+  });
+
+  it("shows error when manifest fetch fails", async () => {
+    mockRepositories.mockReturnValue(repoData);
+    mockManifestMutate.mockImplementation((_params: any, opts: any) => {
+      opts.onError(new Error("manifest gone"));
+    });
+    const user = userEvent.setup();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-repo")).toBeTruthy());
+    await clickButton(user, /Manifest/i);
+    await user.type(screen.getByPlaceholderText("latest"), "v1");
+    await clickButton(user, /Fetch manifest/i);
+    await waitFor(() => expect(screen.getByText("manifest gone")).toBeTruthy());
+  });
+
+  it("shows generic error when manifest fetch fails without message", async () => {
+    mockRepositories.mockReturnValue(repoData);
+    mockManifestMutate.mockImplementation((_params: any, opts: any) => {
+      opts.onError("boom");
+    });
+    const user = userEvent.setup();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-repo")).toBeTruthy());
+    await clickButton(user, /Manifest/i);
+    await user.type(screen.getByPlaceholderText("latest"), "v1");
+    await clickButton(user, /Fetch manifest/i);
+    await waitFor(() =>
+      expect(screen.getByText("Failed to fetch manifest")).toBeTruthy(),
+    );
+  });
+
+  it("dismisses the manifest error alert", async () => {
+    mockRepositories.mockReturnValue(repoData);
+    mockManifestMutate.mockImplementation((_params: any, opts: any) => {
+      opts.onError(new Error("dismiss me"));
+    });
+    const user = userEvent.setup();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-repo")).toBeTruthy());
+    await clickButton(user, /Manifest/i);
+    await user.type(screen.getByPlaceholderText("latest"), "v1");
+    await clickButton(user, /Fetch manifest/i);
+    await waitFor(() => expect(screen.getByText("dismiss me")).toBeTruthy());
+    const dismiss = document.querySelector(
+      '[class*="awsui_dismiss-button"]',
+    ) as HTMLElement;
+    fireEvent.click(dismiss);
+    await waitFor(() => expect(screen.queryByText("dismiss me")).toBeNull());
+  });
+
+  it("closes the manifest modal", async () => {
+    mockRepositories.mockReturnValue(repoData);
+    const user = userEvent.setup();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-repo")).toBeTruthy());
+    await clickButton(user, /Manifest/i);
+    await waitFor(() =>
+      expect(screen.getByText("Image manifest — my-repo")).toBeTruthy(),
+    );
+    await clickButton(user, /^Close$/i);
+  });
+});
+
+// ─── Auth token modal ─────────────────────────────────────
+
+describe("ECRDashboard — auth token modal", () => {
+  const repoData = {
+    data: {
+      repositories: [
+        {
+          repositoryName: "my-repo",
+          repositoryUri: "uri",
+          createdAt: "2024-01-15T00:00:00Z",
+          imageTagMutability: "IMMUTABLE",
+          encryptionConfiguration: {},
+          tags: [],
+        },
+      ],
+      total: 1,
+    },
+    isLoading: false,
+  };
+
+  it("opens the auth token modal and calls refetch on demand", async () => {
+    mockRepositories.mockReturnValue(repoData);
+    const user = userEvent.setup();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-repo")).toBeTruthy());
+    await clickButton(user, /Auth token/i);
+    await waitFor(() => expect(screen.getByText("Registry auth token")).toBeTruthy());
+    await clickButton(user, /Fetch token/i);
+    expect(mockAuthTokenRefetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders fetched token data", async () => {
+    mockRepositories.mockReturnValue(repoData);
+    authTokenState.data = {
+      authorizationToken: "tok123",
+      expiresAt: "2026-01-01T00:00:00Z",
+      proxyEndpoint: "https://proxy",
+    };
+    const user = userEvent.setup();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-repo")).toBeTruthy());
+    await clickButton(user, /Auth token/i);
+    await waitFor(() => expect(screen.getByDisplayValue("tok123")).toBeTruthy());
+    expect(screen.getByDisplayValue("https://proxy")).toBeTruthy();
+    expect(screen.getByDisplayValue("2026-01-01T00:00:00Z")).toBeTruthy();
+  });
+
+  it("shows error when auth token fetch fails", async () => {
+    mockRepositories.mockReturnValue(repoData);
+    authTokenState.isError = true;
+    authTokenState.error = new Error("auth down");
+    const user = userEvent.setup();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-repo")).toBeTruthy());
+    await clickButton(user, /Auth token/i);
+    await waitFor(() => expect(screen.getByText("auth down")).toBeTruthy());
+  });
+
+  it("shows generic error when auth token fetch fails without message", async () => {
+    mockRepositories.mockReturnValue(repoData);
+    authTokenState.isError = true;
+    authTokenState.error = null;
+    const user = userEvent.setup();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-repo")).toBeTruthy());
+    await clickButton(user, /Auth token/i);
+    await waitFor(() =>
+      expect(screen.getByText("Failed to fetch auth token")).toBeTruthy(),
+    );
+  });
+
+  it("shows dashes when auth token fields are null", async () => {
+    mockRepositories.mockReturnValue(repoData);
+    authTokenState.data = {
+      authorizationToken: null,
+      expiresAt: null,
+      proxyEndpoint: null,
+    };
+    const user = userEvent.setup();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-repo")).toBeTruthy());
+    await clickButton(user, /Auth token/i);
+    await waitFor(() => expect(screen.getByText("Registry auth token")).toBeTruthy());
+    const dashes = screen.getAllByDisplayValue("—");
+    expect(dashes.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("closes the auth token modal", async () => {
+    mockRepositories.mockReturnValue(repoData);
+    const user = userEvent.setup();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-repo")).toBeTruthy());
+    await clickButton(user, /Auth token/i);
+    await waitFor(() => expect(screen.getByText("Registry auth token")).toBeTruthy());
+    await clickButton(user, /Close/i);
   });
 });

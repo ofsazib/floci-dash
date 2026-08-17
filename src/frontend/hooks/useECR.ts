@@ -139,3 +139,48 @@ export function useECRScanningConfiguration(repoName: string | null) {
     enabled: !!repoName,
   });
 }
+
+export interface ECRImageManifest {
+  repositoryName: string;
+  image: {
+    registryId?: string;
+    repositoryName?: string;
+    imageId?: { imageDigest?: string; imageTag?: string };
+    imageManifest?: string;
+    imageManifestMediaType?: string;
+  } | null;
+}
+
+export interface ECRManifestParams {
+  repoName: string;
+  tag?: string;
+  digest?: string;
+}
+
+export function useECRImageManifest() {
+  return useMutation<ECRImageManifest, Error, ECRManifestParams>({
+    mutationFn: ({ repoName, tag, digest }) => {
+      const params = new URLSearchParams();
+      if (tag) params.set("tag", tag);
+      if (digest) params.set("digest", digest);
+      return api(
+        `/aws/ecr/repositories/${encodeURIComponent(repoName)}/images/manifest?${params.toString()}`,
+      );
+    },
+  });
+}
+
+export interface ECRAuthToken {
+  authorizationToken: string | null;
+  expiresAt: string | null;
+  proxyEndpoint: string | null;
+}
+
+export function useECRAuthToken() {
+  return useQuery<ECRAuthToken>({
+    queryKey: ["aws", "ecr", "auth-token"],
+    queryFn: () => api("/aws/ecr/auth-token"),
+    enabled: false,
+  });
+}
+

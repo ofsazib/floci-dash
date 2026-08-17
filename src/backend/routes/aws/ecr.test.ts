@@ -30,6 +30,8 @@ vi.mock("@aws-sdk/client-ecr", () => ({
   UntagResourceCommand: createCmd("UntagResourceCommand"),
   ListTagsForResourceCommand: createCmd("ListTagsForResourceCommand"),
   BatchGetRepositoryScanningConfigurationCommand: createCmd("BatchGetRepositoryScanningConfigurationCommand"),
+  BatchGetImageCommand: createCmd("BatchGetImageCommand"),
+  GetAuthorizationTokenCommand: createCmd("GetAuthorizationTokenCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -583,6 +585,96 @@ describe("ECR Routes", () => {
       });
       expect(res.status).toBe(200);
       expect(mockSend.mock.calls[0][0].tagKeys).toEqual([]);
+    });
+  });
+
+  describe("Image manifests (BatchGetImage)", () => {
+    it("GET /repositories/:name/images/manifest?tag= — returns manifest", async () => {
+      mockSend.mockResolvedValueOnce({
+        images: [
+          {
+            registryId: "123456789012",
+            repositoryName: "my-repo",
+            imageId: { imageDigest: "sha256:abc" },
+            imageManifest: "{...}",
+            imageManifestMediaType: "application/vnd.docker.distribution.manifest.v2+json",
+          },
+        ],
+      });
+      const res = await get("/repositories/my-repo/images/manifest?tag=v1");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.image.imageManifest).toBe("{...}");
+      expect(body.image.imageId.imageDigest).toBe("sha256:abc");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("BatchGetImageCommand");
+      expect(cmd.repositoryName).toBe("my-repo");
+      expect(cmd.imageIds).toEqual([{ imageTag: "v1", imageDigest: undefined }]);
+    });
+
+    it("GET .../manifest?digest= — returns manifest by digest", async () => {
+      mockSend.mockResolvedValueOnce({
+        images: [{ imageId: { imageDigest: "sha256:def" }, imageManifest: "{}" }],
+      });
+      const res = await get("/repositories/my-repo/images/manifest?digest=sha256:def");
+      const body = await res.json();
+      expect(body.image.imageDigest).toBeUndefined();
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.imageIds).toEqual([{ imageTag: undefined, imageDigest: "sha256:def" }]);
+    });
+
+    it("GET .../manifest — 400 without tag or digest", async () => {
+      const res = await get("/repositories/my-repo/images/manifest");
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("tag or digest");
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("GET .../manifest — returns null image when not found", async () => {
+      mockSend.mockResolvedValueOnce({ images: [] });
+      const res = await get("/repositories/my-repo/images/manifest?tag=missing");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.image).toBeNull();
+    });
+
+    it("GET .../manifest — sparse response defaults to null image", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/repositories/my-repo/images/manifest?tag=v1");
+      const body = await res.json();
+      expect(body.image).toBeNull();
+    });
+  });
+
+  describe("Auth token (GetAuthorizationToken)", () => {
+    it("GET /auth-token — returns token data", async () => {
+      mockSend.mockResolvedValueOnce({
+        authorizationData: [
+          {
+            authorizationToken: "token123",
+            expiresAt: new Date("2026-01-01T00:00:00Z"),
+            proxyEndpoint: "https://123456789012.dkr.ecr.us-east-1.amazonaws.com",
+          },
+        ],
+      });
+      const res = await get("/auth-token");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.authorizationToken).toBe("token123");
+      expect(body.expiresAt).toBe("2026-01-01T00:00:00.000Z");
+      expect(body.proxyEndpoint).toContain("dkr.ecr");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("GetAuthorizationTokenCommand");
+    });
+
+    it("GET /auth-token — sparse response defaults to nulls", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/auth-token");
+      const body = await res.json();
+      expect(body.authorizationToken).toBeNull();
+      expect(body.expiresAt).toBeNull();
+      expect(body.proxyEndpoint).toBeNull();
     });
   });
 });

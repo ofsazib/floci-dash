@@ -154,6 +154,9 @@ import {
   useECRRepositoryPolicy,
   useECRLifecyclePolicy,
   useECRScanningConfiguration,
+  useECRImageManifest,
+  useECRAuthToken,
+  type ECRManifestParams,
 } from "../../hooks/useECR";
 import {
   useELBLoadBalancers,
@@ -513,6 +516,10 @@ export function ECRDashboard() {
   const [showCreate, setShowCreate] = useState(false);
   const [repoName, setRepoName] = useState("");
   const [scanConfigRepo, setScanConfigRepo] = useState<string | null>(null);
+  const [manifestRepo, setManifestRepo] = useState<string | null>(null);
+  const [showAuthToken, setShowAuthToken] = useState(false);
+  const manifestMutation = useECRImageManifest();
+  const authTokenQuery = useECRAuthToken();
 
   if (isLoading) return <TableSkeleton />;
 
@@ -544,8 +551,14 @@ export function ECRDashboard() {
             header: "",
             cell: (item: any) => (
               <SpaceBetween direction="horizontal" size="xs">
+                <Button variant="link" onClick={() => setManifestRepo(item.name)}>
+                  Manifest
+                </Button>
                 <Button variant="link" onClick={() => setScanConfigRepo(item.name)}>
                   Scan config
+                </Button>
+                <Button variant="link" onClick={() => setShowAuthToken(true)}>
+                  Auth token
                 </Button>
                 <DeleteButton
                   itemName={item.name}
@@ -599,8 +612,147 @@ export function ECRDashboard() {
           </FormField>
         </Form>
       </Modal>
+      <ECRManifestModal repoName={manifestRepo} onDismiss={() => setManifestRepo(null)} manifestMutation={manifestMutation} />
+      <ECRAuthTokenModal visible={showAuthToken} onDismiss={() => setShowAuthToken(false)} authTokenQuery={authTokenQuery} />
       <ECRScanConfigModal repoName={scanConfigRepo} onDismiss={() => setScanConfigRepo(null)} />
     </>
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  ECR — Image manifest modal
+// ────────────────────────────────────────────────────────
+
+function ECRManifestModal({
+  repoName,
+  onDismiss,
+  manifestMutation,
+}: {
+  repoName: string | null;
+  onDismiss: () => void;
+  manifestMutation: {
+    mutate: (params: ECRManifestParams, opts?: { onSuccess?: (d: any) => void; onError?: (e: Error) => void }) => void;
+    isPending: boolean;
+  };
+}) {
+  const [tag, setTag] = useState("");
+  const [digest, setDigest] = useState("");
+  const [result, setResult] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  function handleFetch() {
+    setError(null);
+    setResult(null);
+    manifestMutation.mutate(
+      { repoName: repoName!, tag: tag.trim() || undefined, digest: digest.trim() || undefined },
+      {
+        onSuccess: (data) => setResult(data),
+        onError: (e) => setError((e as Error)?.message || "Failed to fetch manifest"),
+      },
+    );
+  }
+
+  return (
+    <Modal
+      visible={repoName !== null}
+      onDismiss={onDismiss}
+      header={`Image manifest — ${repoName || ""}`}
+      footer={
+        <Box float="right">
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button variant="link" onClick={onDismiss}>
+              Close
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleFetch}
+              loading={manifestMutation.isPending}
+              disabled={!tag.trim() && !digest.trim()}
+            >
+              Fetch manifest
+            </Button>
+          </SpaceBetween>
+        </Box>
+      }
+    >
+      <SpaceBetween size="m">
+        {error && (
+          <Alert type="error" dismissible onDismiss={() => setError(null)}>
+            {error}
+          </Alert>
+        )}
+        <FormField label="Image tag">
+          <Input value={tag} onChange={({ detail }) => setTag(detail.value)} placeholder="latest" />
+        </FormField>
+        <FormField label="Image digest">
+          <Input
+            value={digest}
+            onChange={({ detail }) => setDigest(detail.value)}
+            placeholder="sha256:... (alternative to tag)"
+          />
+        </FormField>
+        {result && (
+          <Box fontSize="body-s">
+            <pre style={{ margin: 0, whiteSpace: "pre-wrap", fontFamily: "monospace" }}>
+              {JSON.stringify(result.image || result, null, 2)}
+            </pre>
+          </Box>
+        )}
+      </SpaceBetween>
+    </Modal>
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  ECR — Auth token modal
+// ────────────────────────────────────────────────────────
+
+function ECRAuthTokenModal({
+  visible,
+  onDismiss,
+  authTokenQuery,
+}: {
+  visible: boolean;
+  onDismiss: () => void;
+  authTokenQuery: {
+    refetch: () => void;
+    data?: { authorizationToken: string | null; expiresAt: string | null; proxyEndpoint: string | null };
+    isFetching: boolean;
+    isError: boolean;
+    error: Error | null;
+  };
+}) {
+  return (
+    <Modal visible={visible} onDismiss={onDismiss} header="Registry auth token">
+      <SpaceBetween size="m">
+        <Box variant="p" color="text-body-secondary">
+          Use this token to authenticate Docker to the local registry.
+        </Box>
+        {authTokenQuery.isError && (
+          <Alert type="error">
+            {(authTokenQuery.error as Error)?.message || "Failed to fetch auth token"}
+          </Alert>
+        )}
+        {authTokenQuery.data && (
+          <div>
+            <FormField label="Authorization token">
+              <Input readOnly value={authTokenQuery.data.authorizationToken || "—"} />
+            </FormField>
+            <FormField label="Proxy endpoint">
+              <Input readOnly value={authTokenQuery.data.proxyEndpoint || "—"} />
+            </FormField>
+            <FormField label="Expires at">
+              <Input readOnly value={authTokenQuery.data.expiresAt || "—"} />
+            </FormField>
+          </div>
+        )}
+        <Box float="right">
+          <Button loading={authTokenQuery.isFetching} onClick={() => authTokenQuery.refetch()}>
+            Fetch token
+          </Button>
+        </Box>
+      </SpaceBetween>
+    </Modal>
   );
 }
 
