@@ -41,38 +41,45 @@ The tracker uses these status values: `Done`, `In Progress`, `Pending`, `Blocked
 
 ## MANDATORY: Tests & Codecov Coverage
 
-**Every feature implementation MUST include tests before committing.** No feature is "done" without tests.
+**Every implementation or fix — new feature, bug fix, or refactor — MUST include tests and MUST keep the repo at 100% coverage on ALL four metrics (statements, branches, functions, lines) before committing.** No change is "done" unless it is fully covered. The gates enforce this: `vitest.config.ts` thresholds are at 100, `codecov.yml` patch target is at 100, and CI runs `make test-cov` + `make test-all-cov`. Never lower a threshold to make a failing run pass — add the missing tests instead.
 
-### Required steps after implementing any feature:
+### Required steps for ANY implementation or fix:
 
 1. **Write backend route tests** (`src/backend/routes/aws/{service}.test.ts`)
    - Mock the AWS SDK client and all command constructors using the `vi.hoisted` + `createCmd` pattern (see `kms.test.ts` or `ecs.test.ts` for reference)
    - Test every endpoint: happy path, empty results, error/400 validation cases
-   - Target: **>90% statement coverage** on new route files
+   - Target: **100% coverage on all metrics** for new route files
 
 2. **Write frontend hook tests** (`src/frontend/hooks/use{Service}.test.ts`)
    - Mock `api()` from `../lib/client`
    - Test every query hook: correct URL called, `enabled` gate when param is null
    - Test every mutation hook: correct method/URL/body, invalidation on success
-   - Target: **100% statement coverage** on new hook files
+   - Target: **100% coverage on all metrics** for new hook files
 
 3. **Write component/page tests** for non-trivial UI components
    - Use happy-dom environment (`// @vitest-environment happy-dom`)
    - Use `createWrapper()` from test helpers for React Query context
    - Test user flows: render, click, fill forms, verify API calls
 
-4. **Run coverage verification before committing:**
-   ```bash
-   npx vitest run --coverage
-   ```
-   - Verify new files have **>90% statement coverage**
-   - Verify overall coverage **does not decrease** below current thresholds in `vitest.config.ts`
-   - If coverage drops, add more tests — do not lower thresholds
+4. **Make env-dependent code deterministic** — any `process.env.X` read (especially import-time captures like `const X = process.env.Y || "default"`, and render-time reads in JSX) must be covered in BOTH arms regardless of the ambient shell environment:
+   - Use `vi.stubEnv` + `vi.resetModules()` + a dynamic `import()` to re-import the module under each env state (see `src/backend/clients/config.test.ts`, `src/backend/routes/aws/s3.test.ts`, `src/frontend/components/S3BucketConfig.test.tsx`)
+   - Always `vi.unstubAllEnvs()` (and `vi.resetModules()`) in `afterEach` so stubs never leak into other tests
+   - Never rely on ambient env or cross-test leaks to cover an env branch — `make test-all-cov` sets `FLOCI_URL`, which starves `|| "default"` fallbacks and flakes the 100% gate
 
-5. **Codecov best practices:**
-   - `codecov.yml` enforces a **75% patch target** — new code must meet this bar
+5. **Run coverage verification before committing — the full gate:**
+   ```bash
+   make test-cov      # CI gate: unit suite + coverage, no Floci needed
+   make test-all-cov  # full suite + coverage incl. integration (Floci up) — the definitive gate
+   ```
+   - Verify the run exits 0 and the report shows **100% statements / 100% branches / 100% functions / 100% lines** on **all files**
+   - If any file drops below 100% on any metric, add tests or remove dead branches — do not lower thresholds
+   - `make typecheck` must also pass
+
+6. **Codecov best practices:**
+   - `codecov.yml` enforces a **100% patch target** — new/modified code must be fully covered
    - Test both success AND error branches (e.g., empty arrays, missing params → 400)
-   - Cover edge cases: URL encoding, optional params, default values
+   - Cover edge cases: URL encoding, optional params, default values, key-absent data (`|| []`/`|| "—"` falsy arms)
+   - Dead code that mirrors a `disabled` prop or a guaranteed-value option list should be removed (with `!` assertions), not tested around
    - Never skip tests to save time — incomplete test coverage is technical debt
    - Prefer many small focused tests over one large test
    - Each test should verify one behavior (`it("does X when Y")`)
@@ -134,6 +141,9 @@ All commands use `make`. Run `make help` for the full list.
 | `make typecheck-docker` | TypeScript check (Docker) |
 | `make dev` | Native dev (needs Node.js 22+) |
 | `make build` | Native production build |
+| `make test` | Unit tests only (fast, no Floci needed) |
+| `make test-cov` | Unit tests + coverage — CI gate, must stay at 100% |
+| `make test-all-cov` | Full suite + coverage incl. integration (Floci up) — definitive 100% gate |
 
 ## Adding a New Service
 
@@ -141,10 +151,10 @@ All commands use `make`. Run `make help` for the full list.
 2. Create `src/backend/routes/aws/{service}.ts` with List/Create/Delete routes
 3. Register in `src/backend/routes/aws/index.ts`
 4. Create `src/frontend/hooks/use{Service}.ts` with query/mutation hooks
-5. Add service component to `src/frontend/pages/ServicePage.tsx`
-6. **Write tests** — backend route tests + frontend hook tests (see MANDATORY section above)
+5. Register the dashboard component in `src/frontend/pages/serviceRegistry.tsx`
+6. **Write tests** — backend route tests + frontend hook tests + component tests (see MANDATORY section above)
 7. Run `make typecheck` to verify
-8. Run `npx vitest run --coverage` — verify >90% coverage on new files
+8. Run `make test-cov` (and `make test-all-cov` with Floci up) — verify **100% coverage on all metrics**
 9. Update the tracker in PLAN.md
 10. **Update README.md** — add the service to the "Fully implemented" table
 

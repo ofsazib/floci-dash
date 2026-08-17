@@ -304,7 +304,7 @@ export const SERVICE_CATEGORIES: Record<string, string[]> = {
 
 - Cloudscape's `awsui-dark-mode` CSS class on `<body>` and `<html>`
 - Custom StatCard/ServiceCard colors work in both modes
-- Toggle stored in Zustand, persisted across sessions (TODO: localStorage persistence)
+- Toggle stored in Zustand, persisted across sessions (localStorage via `stores/settings.ts`, with tests)
 
 ---
 
@@ -1527,9 +1527,9 @@ Discovered during a full audit of Floci's 66 service directories (July 2026). Ea
 |---|------|--------|------|
 | 24.1 | **CodePipeline (codepipeline)** — 20+ operations: pipelines, executions, stage transitions, approvals, action executions, action types, webhooks, tags. Full implementation: backend route, useCodePipeline hooks, CodePipelineDashboard with tabs (Pipelines/Webhooks/Action Types), Create/Delete/Start/Stop/Retry, backend tests (31) + frontend tests (21). | Done | 2026-07-02 |
 | 24.2 | **S3 Vector Search (s3vectors)** — Vector buckets, indexes, vector data. Direct HTTP (raw POST endpoints). | Done | 2026-06-22 |
-| 24.3 | **Elastic Beanstalk (elasticbeanstalk)** — 14 ops: applications (Create/Describe/Update/Delete), versions (Create/Describe/Delete), environments (Create/Describe/Update/Terminate), config settings, DNS availability, solution stacks. Protocol: QUERY. No dashboard code exists. Install `@aws-sdk/client-elastic-beanstalk`, create `routes/elasticbeanstalk.ts`, `hooks/useElasticBeanstalk.ts`, `BeanstalkDashboard`, `SERVICE_LABELS`/`SERVICE_CATEGORIES` entries, tests. See `../floci/src/main/java/io/github/hectorvent/floci/services/elasticbeanstalk/`. | Pending | — |
+| 24.3 | **Elastic Beanstalk (elasticbeanstalk)** — 14 ops: applications (Create/Describe/Update/Delete), versions (Create/Describe/Delete), environments (Create/Describe/Update/Terminate), config settings, DNS availability, solution stacks. Protocol: QUERY. Installed `@aws-sdk/client-elastic-beanstalk`, created `routes/elasticbeanstalk.ts`, `hooks/useElasticBeanstalk.ts`, `ElasticBeanstalkDashboard.tsx` (registered in `serviceRegistry.tsx`), tests. See `../floci/src/main/java/io/github/hectorvent/floci/services/elasticbeanstalk/`. | Done | 2026-07-02 |
 | 24.4 | **IoT Core (iot)** — 20+ ops: things (CRUD with attributes/types), certificates (create keys+bundle, activate/deactivate/revoke), policies (CRUD + versions + attachments), shadows (get/update/delete), topic rules (SQL queries + actions), jobs (CRUD + cancel), tags. Protocol: REST_JSON. Installed `@aws-sdk/client-iot` + `@aws-sdk/client-iot-data-plane`. Created `routes/iot.ts` (85 backend tests, 100% branch coverage), `hooks/useIoT.ts` (54 hook tests, 95.65% stmts coverage), `IoTDashboard.tsx` (component tests - 21 tests all passing; 6 pre-existing failures fixed). | Done | 2026-07-04 |
-| 24.5 | Verify: typecheck + all tests pass + coverage thresholds met. Update README ("62 services" → "66 services", add new service specs to tables). | Pending | — |
+| 24.5 | Verify: typecheck + all tests pass + coverage thresholds met. Update README ("62 services" → "66 services", add new service specs to tables). | Done | 2026-07-02 |
 
 ---
 
@@ -1537,7 +1537,7 @@ Discovered during a full audit of Floci's 66 service directories (July 2026). Ea
 
 - **Official dashboard in Floci:** The Floci repo at `../floci` now has an untracked `dashboard/` directory — a separate Node/Express + React dashboard (`../floci/dashboard/`). Not committed to Floci's main branch yet. This is independent from this project.
 - **Floci service layout:** `appconfigdata` lives inside `appconfig/` dir. `ec2messages` lives inside `ssm/` dir. `resourcegroupstagging` is implemented as `resourcegroupstagging/` but registered as `tagging`. All three are enabled by default (except `tagging` which is NOT enabled in `application.yml`).
-- **66 Floci services total** (including `floci` internal). **63 implemented in the dashboard.** **3 remaining:** `codepipeline`, `elasticbeanstalk`, `iot` (see Phase 14). The `floci` service is Floci's own internal management service and does not need a dashboard UI.
+- **66 Floci services total** (including `floci` internal). **65 implemented in the dashboard** (the `floci` service is Floci's own internal management service and does not need a dashboard UI). All services from the Phase 14 audit — `codepipeline`, `elasticbeanstalk`, `iot` — are implemented (see Phase 14).
 - **No Floci changes.** Dashboard uses existing endpoints only — never edit `../floci`.
 
 ## Conventions
