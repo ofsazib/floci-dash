@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
@@ -503,6 +503,36 @@ describe("S3BucketConfig — Website tab", () => {
     await user.click(screen.getByRole("button", { name: "Website" }));
     expect(screen.queryByText("Static Website Hosting")).toBeNull();
   });
+
+  it("shows the configured AWS_REGION in the website endpoint", async () => {
+    // The endpoint text reads process.env.AWS_REGION at render time; stub both
+    // states so the branch is covered regardless of the ambient env (the
+    // loading-spinner test above leaves useS3BucketWebsite as isLoading, so pin
+    // the loaded state explicitly).
+    vi.stubEnv("AWS_REGION", "eu-west-1");
+    (useS3BucketWebsite as any).mockReturnValue({ data: WEBSITE_DATA, isLoading: false, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Website" }));
+    await waitFor(() =>
+      expect(screen.getByText("http://my-bucket.s3-website-eu-west-1.amazonaws.com")).toBeTruthy(),
+    );
+  });
+
+  it("falls back to us-east-1 in the website endpoint when AWS_REGION is unset", async () => {
+    vi.stubEnv("AWS_REGION", "");
+    (useS3BucketWebsite as any).mockReturnValue({ data: WEBSITE_DATA, isLoading: false, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Website" }));
+    await waitFor(() =>
+      expect(screen.getByText("http://my-bucket.s3-website-us-east-1.amazonaws.com")).toBeTruthy(),
+    );
+  });
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 describe("S3BucketConfig — Public Access tab", () => {

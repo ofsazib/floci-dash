@@ -21,7 +21,6 @@ import { setFlociEndpoint } from "./clients/config";
 // without starting an HTTP server. This keeps tests fast and avoids port conflicts.
 
 process.env.FLOCI_URL = process.env.FLOCI_URL || "http://localhost:9878";
-process.env.AWS_REGION = "us-east-1";
 process.env.AWS_ACCESS_KEY_ID = "test";
 process.env.AWS_SECRET_ACCESS_KEY = "test";
 

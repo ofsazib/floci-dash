@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 const mockSend = vi.hoisted(() => vi.fn());
 
@@ -758,5 +758,46 @@ describe("S3 Sparse Data Branches", () => {
       expect(body.deleted).toEqual(["f/1.txt"]);
       expect(body.errors).toEqual([{ key: "f/2.txt", code: "AccessDenied", message: "Permission denied" }]);
     });
+  });
+});
+
+describe("S3_MAX_UPLOAD_BYTES env capture", () => {
+  // The module captures S3_MAX_UPLOAD_BYTES at import time (`parseInt(...) || 50MB`),
+  // so coverage of the two `||` arms depends on the ambient env. Re-importing
+  // under both stub states covers both arms deterministically.
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it("uses S3_MAX_UPLOAD_BYTES when set", async () => {
+    vi.stubEnv("S3_MAX_UPLOAD_BYTES", "1024");
+    vi.resetModules();
+    const { default: freshRouter } = await import("./s3");
+    const form = new FormData();
+    form.append("files", new File([new Uint8Array(2048)], "big.bin"));
+    const res = await freshRouter.request("/buckets/my-bucket/objects/upload", {
+      method: "POST",
+      body: form,
+    });
+    const body = await res.json();
+    expect(body.results[0].status).toBe("error");
+    expect(body.results[0].error).toContain("MB limit");
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the 50MB default when S3_MAX_UPLOAD_BYTES is unset", async () => {
+    vi.stubEnv("S3_MAX_UPLOAD_BYTES", "");
+    vi.resetModules();
+    const { default: freshRouter } = await import("./s3");
+    mockSend.mockResolvedValueOnce({});
+    const form = new FormData();
+    form.append("files", new File(["hello"], "hello.txt"));
+    const res = await freshRouter.request("/buckets/my-bucket/objects/upload", {
+      method: "POST",
+      body: form,
+    });
+    expect(res.status).toBe(200);
+    expect(mockSend).toHaveBeenCalled();
   });
 });
