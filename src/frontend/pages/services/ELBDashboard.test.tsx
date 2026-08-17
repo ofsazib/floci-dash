@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -90,6 +90,13 @@ const mockSetIpAddrType = vi.fn();
 const mockAddCert = vi.fn();
 const mockRemoveCert = vi.fn();
 const mockModifyTgAttrs = vi.fn();
+const mockLBDescribeTags = vi.fn();
+const mockModifyListener = vi.fn();
+const mockModifyTG = vi.fn();
+const lbTagsState = vi.hoisted(() => ({
+  data: null as any,
+  isLoading: false,
+}));
 
 vi.mock("../../hooks/useELB", () => ({
   useELBLoadBalancers: (...args: any[]) => mockLoadBalancers(...args),
@@ -249,6 +256,28 @@ vi.mock("../../hooks/useELB", () => ({
     error: null,
     reset: vi.fn(),
   }),
+  useELBDescribeTags: (...args: any[]) => ({
+    data: lbTagsState.data,
+    isLoading: lbTagsState.isLoading,
+    isError: false,
+    error: null,
+  }),
+  useELBModifyListener: () => ({
+    mutate: mockModifyListener,
+    mutateAsync: mockModifyListener,
+    isPending: false,
+    isError: false,
+    error: null,
+    reset: vi.fn(),
+  }),
+  useELBModifyTargetGroup: () => ({
+    mutate: mockModifyTG,
+    mutateAsync: mockModifyTG,
+    isPending: false,
+    isError: false,
+    error: null,
+    reset: vi.fn(),
+  }),
 }));
 
 import { ELBDashboard } from "./ELBDashboard";
@@ -294,6 +323,18 @@ beforeEach(() => {
   });
   mockSetIpAddrType.mockReset();
   mockSetIpAddrType.mockResolvedValue({});
+  lbTagsState.data = null;
+  lbTagsState.isLoading = false;
+  mockModifyListener.mockReset();
+  mockModifyListener.mockImplementation((_payload: any, opts?: any) => {
+    opts?.onSuccess?.();
+    return Promise.resolve({});
+  });
+  mockModifyTG.mockReset();
+  mockModifyTG.mockImplementation((_payload: any, opts?: any) => {
+    opts?.onSuccess?.();
+    return Promise.resolve({});
+  });
 
   mockLoadBalancers.mockReturnValue({
     data: { loadBalancers: [], total: 0 },
@@ -2334,5 +2375,445 @@ describe("ELBDashboard — advanced settings", () => {
     render(<ELBDashboard />, { wrapper: createWrapper() });
     // Component renders with priorities pending state without crashing
     expect(screen.getByText("No load balancers")).toBeTruthy();
+  });
+});
+
+describe("ELBDashboard — tags / modify listener / modify target group", () => {
+  const LB_ARN_TAG = "arn:aws:elasticloadbalancing:us-east-1:123:loadbalancer/app/my-alb-tag/123";
+
+  function mockLb() {
+    mockLoadBalancers.mockReturnValue({
+      data: {
+        loadBalancers: [
+          {
+            loadBalancerName: "my-alb-tag",
+            loadBalancerArn: LB_ARN_TAG,
+            type: "application",
+            scheme: "internet-facing",
+            state: { Code: "active" },
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+  }
+
+  // ── Tags modal ────────────────────────────────────────
+
+  it("opens the tags modal and shows tag key-value pairs", async () => {
+    lbTagsState.data = {
+      tagDescriptions: [{ resourceArn: LB_ARN_TAG, tags: { env: "prod", team: "core" } }],
+      total: 1,
+    };
+    const user = userEvent.setup();
+    mockLb();
+    render(<ELBDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Tags"));
+    await waitFor(() => expect(screen.getByText("env: prod")).toBeTruthy());
+    expect(screen.getByText("team: core")).toBeTruthy();
+  });
+
+  it("shows no-tags message when the tag list is empty", async () => {
+    lbTagsState.data = { tagDescriptions: [], total: 0 };
+    const user = userEvent.setup();
+    mockLb();
+    render(<ELBDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Tags"));
+    await waitFor(() => expect(screen.getByText("No tags found.")).toBeTruthy());
+  });
+
+  it("closes the tags modal", async () => {
+    lbTagsState.data = { tagDescriptions: [], total: 0 };
+    const user = userEvent.setup();
+    mockLb();
+    render(<ELBDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Tags"));
+    await waitFor(() => expect(screen.getByText("No tags found.")).toBeTruthy());
+    await user.click(
+      within(screen.getByRole("dialog", { name: /Tags —/ })).getByRole("button", {
+        name: /Close/i,
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByText("No tags found.")).toBeNull(),
+    );
+  });
+
+  it("dismisses the tags modal with Escape", async () => {
+    lbTagsState.data = { tagDescriptions: [], total: 0 };
+    const user = userEvent.setup();
+    mockLb();
+    render(<ELBDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Tags"));
+    await waitFor(() => expect(screen.getByText("No tags found.")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() =>
+      expect(screen.queryByText("No tags found.")).toBeNull(),
+    );
+  });
+
+  // ── Edit listener modal ───────────────────────────────
+
+  async function openEditListener(user: ReturnType<typeof userEvent.setup>) {
+    mockLb();
+    mockLBListeners.mockReturnValue({
+      data: {
+        listeners: [{ listenerArn: "arn:listener-edit", protocol: "HTTP", port: 80 }],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<ELBDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+    await waitFor(() =>
+      expect(screen.getByText("Select a load balancer...")).toBeTruthy(),
+    );
+    await user.click(screen.getByText("Select a load balancer..."));
+    await user.click(screen.getAllByText(/my-alb-tag/)[0]);
+    await waitFor(() => expect(screen.getByText("HTTP:80")).toBeTruthy());
+    const editButtons = screen.getAllByText("Edit");
+    await user.click(editButtons[editButtons.length - 1]);
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: "Edit listener" })).toBeTruthy(),
+    );
+  }
+
+  it("opens the edit listener modal for a listener without port or protocol", async () => {
+    mockLb();
+    mockLBListeners.mockReturnValue({
+      data: {
+        listeners: [{ listenerArn: "arn:listener-min" }],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<ELBDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /advanced/i }));
+    await waitFor(() =>
+      expect(screen.getByText("Select a load balancer...")).toBeTruthy(),
+    );
+    await user.click(screen.getByText("Select a load balancer..."));
+    await user.click(screen.getAllByText(/my-alb-tag/)[0]);
+    await waitFor(() => expect(screen.getAllByText("Edit").length).toBeGreaterThan(0));
+    await user.click(screen.getAllByText("Edit")[screen.getAllByText("Edit").length - 1]);
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: "Edit listener" })).toBeTruthy(),
+    );
+    const dialog = () =>
+      within(screen.getByRole("dialog", { name: "Edit listener" }));
+    // Port falls back to empty and protocol falls back to HTTP
+    expect(dialog().getByRole("textbox", { name: /Port/i })).toHaveValue("");
+    expect(dialog().getByRole("button", { name: /HTTP/i })).toBeTruthy();
+  });
+
+  it("opens the edit listener modal and saves changes", async () => {
+    const user = userEvent.setup();
+    await openEditListener(user);
+    const dialog = () =>
+      within(screen.getByRole("dialog", { name: "Edit listener" }));
+    const portInput = dialog().getByRole("textbox", { name: /Port/i });
+    await user.clear(portInput);
+    await user.type(portInput, "8443");
+    // Change the protocol select to HTTPS
+    await user.click(dialog().getByRole("button", { name: /HTTP/i }));
+    await user.click(screen.getByRole("option", { name: /HTTPS/i }));
+    // Fill the optional SSL policy + certificates fields
+    await user.type(dialog().getByPlaceholderText("ELBSecurityPolicy-TLS-1-2"), "ELBSecurityPolicy-TLS-1-2-2021-06");
+    await user.type(dialog().getByPlaceholderText("arn:aws:acm:..."), "arn:aws:acm:us-east-1:123456789012:certificate/abc");
+    await user.click(dialog().getByRole("button", { name: /^Save$/i }));
+    await waitFor(() =>
+      expect(mockModifyListener).toHaveBeenCalledWith(
+        expect.objectContaining({
+          listenerArn: "arn:listener-edit",
+          port: 8443,
+          protocol: "HTTPS",
+          sslPolicy: "ELBSecurityPolicy-TLS-1-2-2021-06",
+          certificates: ["arn:aws:acm:us-east-1:123456789012:certificate/abc"],
+        }),
+        expect.anything(),
+      ),
+    );
+  });
+
+  it("shows an error when the listener update fails and clears the port", async () => {
+    mockModifyListener.mockImplementation((_payload: any, opts?: any) => {
+      opts?.onError?.(new Error("listener update failed"));
+      return Promise.reject(new Error("listener update failed"));
+    });
+    const user = userEvent.setup();
+    await openEditListener(user);
+    const dialog = () =>
+      within(screen.getByRole("dialog", { name: "Edit listener" }));
+    // Clear the port so the payload omits it (falsy + NaN arms)
+    await user.clear(dialog().getByRole("textbox", { name: /Port/i }));
+    await user.click(dialog().getByRole("button", { name: /^Save$/i }));
+    await waitFor(() =>
+      expect(screen.getByText("listener update failed")).toBeTruthy(),
+    );
+    expect(mockModifyListener.mock.calls[0][0].port).toBeUndefined();
+    // Dismiss the error alert
+    const dismiss = document.querySelector(
+      '[class*="awsui_dismiss-button"]',
+    ) as HTMLElement;
+    fireEvent.click(dismiss);
+    await waitFor(() =>
+      expect(screen.queryByText("listener update failed")).toBeNull(),
+    );
+  });
+
+  it("shows the fallback error when the listener update fails without a message", async () => {
+    mockModifyListener.mockImplementation((_payload: any, opts?: any) => {
+      opts?.onError?.(new Error());
+      return Promise.reject(new Error());
+    });
+    const user = userEvent.setup();
+    await openEditListener(user);
+    const dialog = () =>
+      within(screen.getByRole("dialog", { name: "Edit listener" }));
+    // A non-numeric port parses to NaN and is omitted from the payload
+    await user.clear(dialog().getByRole("textbox", { name: /Port/i }));
+    await user.type(dialog().getByRole("textbox", { name: /Port/i }), "abc");
+    await user.click(dialog().getByRole("button", { name: /^Save$/i }));
+    await waitFor(() =>
+      expect(screen.getByText("Failed to update listener")).toBeTruthy(),
+    );
+    expect(mockModifyListener.mock.calls[0][0].port).toBeUndefined();
+  });
+
+  it("cancels the edit listener modal", async () => {
+    const user = userEvent.setup();
+    await openEditListener(user);
+    const dialog = () =>
+      within(screen.getByRole("dialog", { name: "Edit listener" }));
+    await user.click(dialog().getByRole("button", { name: /^Cancel$/i }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Edit listener" })).toBeNull(),
+    );
+  });
+
+  it("dismisses the edit listener modal with Escape", async () => {
+    const user = userEvent.setup();
+    await openEditListener(user);
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: "Edit listener" })).toBeTruthy(),
+    );
+    dismissModalWithEscape();
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Edit listener" })).toBeNull(),
+    );
+  });
+
+  // ── Edit target group health check modal ─────────────
+
+  it("opens the health check modal and saves changes", async () => {
+    mockTargetGroups.mockReturnValue({
+      data: {
+        targetGroups: [
+          {
+            targetGroupName: "my-tg-hc",
+            targetGroupArn: "arn:aws:elasticloadbalancing:us-east-1:123:targetgroup/my-tg-hc/abc",
+            protocol: "HTTP",
+            port: 80,
+            targetType: "instance",
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<ELBDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /target groups/i }));
+    await waitFor(() => expect(screen.getByText("my-tg-hc")).toBeTruthy());
+    await user.click(screen.getByText("Health check"));
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: "Edit health check" })).toBeTruthy(),
+    );
+    const dialog = () =>
+      within(screen.getByRole("dialog", { name: "Edit health check" }));
+    const pathInput = dialog().getByRole("textbox", { name: /Health check path/i });
+    await user.type(pathInput, "/health");
+    await user.type(dialog().getByRole("textbox", { name: /Interval seconds/i }), "30");
+    await user.type(dialog().getByRole("textbox", { name: /Timeout seconds/i }), "10");
+    await user.type(dialog().getByRole("textbox", { name: /^Healthy threshold/i }), "3");
+    await user.type(dialog().getByRole("textbox", { name: /^Unhealthy threshold/i }), "5");
+    await user.click(dialog().getByRole("button", { name: /^Save$/i }));
+    await waitFor(() =>
+      expect(mockModifyTG).toHaveBeenCalledWith(
+        expect.objectContaining({
+          targetGroupArn: "arn:aws:elasticloadbalancing:us-east-1:123:targetgroup/my-tg-hc/abc",
+          healthCheckPath: "/health",
+          healthCheckIntervalSeconds: 30,
+          healthCheckTimeoutSeconds: 10,
+          healthyThresholdCount: 3,
+          unhealthyThresholdCount: 5,
+        }),
+        expect.anything(),
+      ),
+    );
+  });
+
+  it("saves the health check with non-numeric thresholds as undefined", async () => {
+    mockTargetGroups.mockReturnValue({
+      data: {
+        targetGroups: [
+          {
+            targetGroupName: "my-tg-hc",
+            targetGroupArn: "arn:aws:elasticloadbalancing:us-east-1:123:targetgroup/my-tg-hc/abc",
+            protocol: "HTTP",
+            port: 80,
+            targetType: "instance",
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<ELBDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /target groups/i }));
+    await waitFor(() => expect(screen.getByText("my-tg-hc")).toBeTruthy());
+    await user.click(screen.getByText("Health check"));
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: "Edit health check" })).toBeTruthy(),
+    );
+    const dialog = () =>
+      within(screen.getByRole("dialog", { name: "Edit health check" }));
+    await user.type(dialog().getByRole("textbox", { name: /Interval seconds/i }), "abc");
+    await user.type(dialog().getByRole("textbox", { name: /Timeout seconds/i }), "xyz");
+    await user.type(dialog().getByRole("textbox", { name: /^Healthy threshold/i }), "q");
+    await user.type(dialog().getByRole("textbox", { name: /^Unhealthy threshold/i }), "z");
+    await user.click(dialog().getByRole("button", { name: /^Save$/i }));
+    await waitFor(() =>
+      expect(mockModifyTG.mock.calls[0][0]).toMatchObject({
+        healthCheckIntervalSeconds: undefined,
+        healthCheckTimeoutSeconds: undefined,
+        healthyThresholdCount: undefined,
+        unhealthyThresholdCount: undefined,
+      }),
+    );
+  });
+
+  it("shows an error when the health check update fails and dismisses it", async () => {
+    mockModifyTG.mockImplementation((_payload: any, opts?: any) => {
+      opts?.onError?.(new Error());
+      return Promise.reject(new Error());
+    });
+    mockTargetGroups.mockReturnValue({
+      data: {
+        targetGroups: [
+          {
+            targetGroupName: "my-tg-hc",
+            targetGroupArn: "arn:aws:elasticloadbalancing:us-east-1:123:targetgroup/my-tg-hc/abc",
+            protocol: "HTTP",
+            port: 80,
+            targetType: "instance",
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<ELBDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /target groups/i }));
+    await waitFor(() => expect(screen.getByText("my-tg-hc")).toBeTruthy());
+    await user.click(screen.getByText("Health check"));
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: "Edit health check" })).toBeTruthy(),
+    );
+    const dialog = () =>
+      within(screen.getByRole("dialog", { name: "Edit health check" }));
+    await user.click(dialog().getByRole("button", { name: /^Save$/i }));
+    await waitFor(() =>
+      expect(screen.getByText("Failed to update health check")).toBeTruthy(),
+    );
+    const dismiss = document.querySelector(
+      '[class*="awsui_dismiss-button"]',
+    ) as HTMLElement;
+    fireEvent.click(dismiss);
+    await waitFor(() =>
+      expect(screen.queryByText("Failed to update health check")).toBeNull(),
+    );
+  });
+
+  it("cancels the health check modal", async () => {
+    mockTargetGroups.mockReturnValue({
+      data: {
+        targetGroups: [
+          {
+            targetGroupName: "my-tg-hc",
+            targetGroupArn: "arn:aws:elasticloadbalancing:us-east-1:123:targetgroup/my-tg-hc/abc",
+            protocol: "HTTP",
+            port: 80,
+            targetType: "instance",
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<ELBDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /target groups/i }));
+    await waitFor(() => expect(screen.getByText("my-tg-hc")).toBeTruthy());
+    await user.click(screen.getByText("Health check"));
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: "Edit health check" })).toBeTruthy(),
+    );
+    const dialog = () =>
+      within(screen.getByRole("dialog", { name: "Edit health check" }));
+    await user.click(dialog().getByRole("button", { name: /^Cancel$/i }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Edit health check" })).toBeNull(),
+    );
+  });
+
+  it("dismisses the health check modal with Escape", async () => {
+    mockTargetGroups.mockReturnValue({
+      data: {
+        targetGroups: [
+          {
+            targetGroupName: "my-tg-hc",
+            targetGroupArn: "arn:aws:elasticloadbalancing:us-east-1:123:targetgroup/my-tg-hc/abc",
+            protocol: "HTTP",
+            port: 80,
+            targetType: "instance",
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    const user = userEvent.setup();
+    render(<ELBDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /target groups/i }));
+    await waitFor(() => expect(screen.getByText("my-tg-hc")).toBeTruthy());
+    await user.click(screen.getByText("Health check"));
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: "Edit health check" })).toBeTruthy(),
+    );
+    dismissModalWithEscape();
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Edit health check" })).toBeNull(),
+    );
   });
 });

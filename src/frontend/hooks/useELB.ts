@@ -358,6 +358,52 @@ export function useELBSetRulePriorities() {
   });
 }
 
+// ─── Tags / Modify Listener / Modify Target Group ────────
+
+export function useELBDescribeTags(arns: string | null) {
+  return useQuery<{ tagDescriptions: Array<{ resourceArn: string; tags: Record<string, string> }>; total: number }>({
+    queryKey: ["aws", "elb", "tags", arns],
+    queryFn: () => api(`/aws/elasticloadbalancing/tags?arns=${encodeURIComponent(arns!)}`),
+    enabled: !!arns,
+  });
+}
+
+export function useELBModifyListener() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { listenerArn: string; port?: number; protocol?: string; sslPolicy?: string; defaultActions?: { type: string; targetGroupArn?: string }[]; certificates?: string[] }) =>
+      api(`/aws/elasticloadbalancing/listeners/${encodeURIComponent(data.listenerArn)}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          port: data.port,
+          protocol: data.protocol,
+          sslPolicy: data.sslPolicy,
+          defaultActions: data.defaultActions,
+          certificates: data.certificates,
+        }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "elb", "listeners"] }),
+  });
+}
+
+export function useELBModifyTargetGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { targetGroupArn: string; healthCheckPath?: string; healthCheckIntervalSeconds?: number; healthCheckTimeoutSeconds?: number; healthyThresholdCount?: number; unhealthyThresholdCount?: number }) =>
+      api(`/aws/elasticloadbalancing/target-groups/${encodeURIComponent(data.targetGroupArn)}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          healthCheckPath: data.healthCheckPath,
+          healthCheckIntervalSeconds: data.healthCheckIntervalSeconds,
+          healthCheckTimeoutSeconds: data.healthCheckTimeoutSeconds,
+          healthyThresholdCount: data.healthyThresholdCount,
+          unhealthyThresholdCount: data.unhealthyThresholdCount,
+        }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "elb", "target-groups"] }),
+  });
+}
+
 // ─── Account Limits ─────────────────────────────────────
 
 export function useELBAccountLimits() {

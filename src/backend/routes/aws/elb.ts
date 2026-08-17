@@ -36,6 +36,9 @@ import {
   RemoveListenerCertificatesCommand,
   DescribeListenerCertificatesCommand,
   DescribeAccountLimitsCommand,
+  DescribeTagsCommand,
+  ModifyListenerCommand,
+  ModifyTargetGroupCommand,
 } from "@aws-sdk/client-elastic-load-balancing-v2";
 
 const router = new Hono();
@@ -498,6 +501,73 @@ router.put("/target-groups/:arn/attributes", async (c: Context) => {
   return c.json({ targetGroupArn: arn, updated: true });
 });
 
+// ── Modify Listener ───────────────────────────────────────
+
+router.put("/listeners/:arn", async (c: Context) => {
+  const arn = decodeURIComponent(c.req.param("arn")!);
+  const body = await c.req.json<{
+    port?: number;
+    protocol?: string;
+    sslPolicy?: string;
+    defaultActions?: { type: string; targetGroupArn?: string }[];
+    certificates?: string[];
+  }>();
+  const client = getClient();
+  await client.send(
+    new ModifyListenerCommand({
+      ListenerArn: arn,
+      ...(body.port != null ? { Port: body.port } : {}),
+      ...(body.protocol ? { Protocol: body.protocol as any } : {}),
+      ...(body.sslPolicy ? { SslPolicy: body.sslPolicy } : {}),
+      ...(body.defaultActions
+        ? {
+            DefaultActions: body.defaultActions.map((a) => ({
+              Type: a.type as any,
+              ...(a.targetGroupArn ? { TargetGroupArn: a.targetGroupArn } : {}),
+            })),
+          }
+        : {}),
+      ...(body.certificates
+        ? { Certificates: body.certificates.map((certificateArn) => ({ CertificateArn: certificateArn })) }
+        : {}),
+    })
+  );
+  return c.json({ listenerArn: arn, updated: true });
+});
+
+// ── Modify Target Group ───────────────────────────────────
+
+router.put("/target-groups/:arn", async (c: Context) => {
+  const arn = decodeURIComponent(c.req.param("arn")!);
+  const body = await c.req.json<{
+    healthCheckPath?: string;
+    healthCheckIntervalSeconds?: number;
+    healthCheckTimeoutSeconds?: number;
+    healthyThresholdCount?: number;
+    unhealthyThresholdCount?: number;
+  }>();
+  const client = getClient();
+  await client.send(
+    new ModifyTargetGroupCommand({
+      TargetGroupArn: arn,
+      ...(body.healthCheckPath != null ? { HealthCheckPath: body.healthCheckPath } : {}),
+      ...(body.healthCheckIntervalSeconds != null
+        ? { HealthCheckIntervalSeconds: body.healthCheckIntervalSeconds }
+        : {}),
+      ...(body.healthCheckTimeoutSeconds != null
+        ? { HealthCheckTimeoutSeconds: body.healthCheckTimeoutSeconds }
+        : {}),
+      ...(body.healthyThresholdCount != null
+        ? { HealthyThresholdCount: body.healthyThresholdCount }
+        : {}),
+      ...(body.unhealthyThresholdCount != null
+        ? { UnhealthyThresholdCount: body.unhealthyThresholdCount }
+        : {}),
+    })
+  );
+  return c.json({ targetGroupArn: arn, updated: true });
+});
+
 // ── Account Limits ────────────────────────────────────────
 
 router.get("/account-limits", async (c: Context) => {
@@ -511,6 +581,21 @@ router.get("/account-limits", async (c: Context) => {
 });
 
 // ── Tags ──────────────────────────────────────────────────
+
+router.get("/tags", async (c: Context) => {
+  const arns = (c.req.query("arns") || "")
+    .split(",")
+    .map((a) => a.trim())
+    .filter(Boolean);
+  if (!arns.length) return c.json({ error: "arns are required" }, 400);
+  const client = getClient();
+  const result = await client.send(new DescribeTagsCommand({ ResourceArns: arns }));
+  const tagDescriptions = (result.TagDescriptions || []).map((td) => ({
+    resourceArn: td.ResourceArn,
+    tags: Object.fromEntries((td.Tags || []).map((t) => [t.Key, t.Value])),
+  }));
+  return c.json({ tagDescriptions, total: tagDescriptions.length });
+});
 
 router.post("/tags", async (c: Context) => {
   const body = await c.req.json<{ resourceArns: string[]; tags: Record<string, string> }>();

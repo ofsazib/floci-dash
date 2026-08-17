@@ -181,6 +181,9 @@ import {
   useELBModifyRule,
   useELBDeleteRule,
   useELBSetRulePriorities,
+  useELBDescribeTags,
+  useELBModifyListener,
+  useELBModifyTargetGroup,
 } from "../../hooks/useELB";
 import {
   useSESIdentities,
@@ -578,6 +581,28 @@ export function ELBDashboard() {
   const [ruleFormError, setRuleFormError] = useState<string | null>(null);
   const [priorityInputs, setPriorityInputs] = useState<Record<string, string>>({});
 
+  // ── Tags / Modify Listener / Modify Target Group ──
+  const [tagsArn, setTagsArn] = useState<string | null>(null);
+  const [showTagsModal, setShowTagsModal] = useState(false);
+  const lbTags = useELBDescribeTags(tagsArn);
+  const modifyListener = useELBModifyListener();
+  const modifyTG = useELBModifyTargetGroup();
+  const [showEditListenerModal, setShowEditListenerModal] = useState(false);
+  const [editListenerArn, setEditListenerArn] = useState<string | null>(null);
+  const [editPort, setEditPort] = useState("");
+  const [editProtocol, setEditProtocol] = useState<SelectProps.Option>({ label: "HTTP", value: "HTTP" });
+  const [editSslPolicy, setEditSslPolicy] = useState("");
+  const [editCertArns, setEditCertArns] = useState("");
+  const [editListenerError, setEditListenerError] = useState<string | null>(null);
+  const [showEditTGModal, setShowEditTGModal] = useState(false);
+  const [editTGArn, setEditTGArn] = useState<string | null>(null);
+  const [editHcPath, setEditHcPath] = useState("");
+  const [editHcInterval, setEditHcInterval] = useState("");
+  const [editHcTimeout, setEditHcTimeout] = useState("");
+  const [editHealthy, setEditHealthy] = useState("");
+  const [editUnhealthy, setEditUnhealthy] = useState("");
+  const [editTGError, setEditTGError] = useState<string | null>(null);
+
   const PROTOCOL_OPTIONS: SelectProps.Option[] = [
     { label: "HTTP", value: "HTTP" },
     { label: "HTTPS", value: "HTTPS" },
@@ -627,12 +652,23 @@ export function ELBDashboard() {
                     id: "actions",
                     header: "",
                     cell: (item: any) => (
-                      <DeleteButton
-                        itemName={item.name}
-                        resourceType="load balancer"
-                        loading={deleteLB.isPending && deleteLB.variables === item.arn}
-                        onDelete={() => deleteLB.mutateAsync(item.arn)}
-                      />
+                      <SpaceBetween direction="horizontal" size="xs">
+                        <Button
+                          variant="link"
+                          onClick={() => {
+                            setTagsArn(item.arn);
+                            setShowTagsModal(true);
+                          }}
+                        >
+                          Tags
+                        </Button>
+                        <DeleteButton
+                          itemName={item.name}
+                          resourceType="load balancer"
+                          loading={deleteLB.isPending && deleteLB.variables === item.arn}
+                          onDelete={() => deleteLB.mutateAsync(item.arn)}
+                        />
+                      </SpaceBetween>
                     ),
                   },
                 ]}
@@ -685,6 +721,36 @@ export function ELBDashboard() {
                 </Form>
               </Modal>
               )}
+              {/* Tags modal */}
+              {showTagsModal && tagsArn && (
+                <Modal
+                  visible
+                  onDismiss={() => setShowTagsModal(false)}
+                  header={`Tags — ${tagsArn}`}
+                  footer={
+                    <Box float="right">
+                      <Button variant="link" onClick={() => setShowTagsModal(false)}>
+                        Close
+                      </Button>
+                    </Box>
+                  }
+                >
+                  <SpaceBetween size="xs">
+                    {lbTags.data?.tagDescriptions?.[0]?.tags &&
+                    Object.keys(lbTags.data.tagDescriptions[0].tags).length > 0 ? (
+                      Object.entries(lbTags.data.tagDescriptions[0].tags).map(([key, value]) => (
+                        <Box key={key} variant="awsui-key-label">
+                          {key}: {value}
+                        </Box>
+                      ))
+                    ) : (
+                      <Box variant="small" color="text-status-inactive">
+                        No tags found.
+                      </Box>
+                    )}
+                  </SpaceBetween>
+                </Modal>
+              )}
             </>
           ),
         },
@@ -721,12 +787,29 @@ export function ELBDashboard() {
                     id: "actions",
                     header: "",
                     cell: (item: any) => (
-                      <DeleteButton
-                        itemName={item.name}
-                        resourceType="target group"
-                        loading={deleteTG.isPending && deleteTG.variables === item.arn}
-                        onDelete={() => deleteTG.mutateAsync(item.arn)}
-                      />
+                      <SpaceBetween direction="horizontal" size="xs">
+                        <Button
+                          variant="link"
+                          onClick={() => {
+                            setEditTGArn(item.arn);
+                            setEditHcPath("");
+                            setEditHcInterval("");
+                            setEditHcTimeout("");
+                            setEditHealthy("");
+                            setEditUnhealthy("");
+                            setEditTGError(null);
+                            setShowEditTGModal(true);
+                          }}
+                        >
+                          Health check
+                        </Button>
+                        <DeleteButton
+                          itemName={item.name}
+                          resourceType="target group"
+                          loading={deleteTG.isPending && deleteTG.variables === item.arn}
+                          onDelete={() => deleteTG.mutateAsync(item.arn)}
+                        />
+                      </SpaceBetween>
                     ),
                   },
                 ]}
@@ -792,6 +875,95 @@ export function ELBDashboard() {
                   </FormField>
                 </Form>
               </Modal>
+              )}
+              {/* Edit target group health check modal */}
+              {showEditTGModal && editTGArn && (
+                <Modal
+                  visible
+                  onDismiss={() => setShowEditTGModal(false)}
+                  header="Edit health check"
+                  footer={
+                    <Box float="right">
+                      <SpaceBetween direction="horizontal" size="xs">
+                        <Button variant="link" onClick={() => setShowEditTGModal(false)}>
+                          Cancel
+                        </Button>
+                        <Button
+                          variant="primary"
+                          loading={modifyTG.isPending}
+                          onClick={() => {
+                            const interval = editHcInterval ? parseInt(editHcInterval, 10) : undefined;
+                            const timeout = editHcTimeout ? parseInt(editHcTimeout, 10) : undefined;
+                            const healthy = editHealthy ? parseInt(editHealthy, 10) : undefined;
+                            const unhealthy = editUnhealthy ? parseInt(editUnhealthy, 10) : undefined;
+                            modifyTG.mutate(
+                              {
+                                targetGroupArn: editTGArn,
+                                healthCheckPath: editHcPath.trim() || undefined,
+                                healthCheckIntervalSeconds: Number.isNaN(interval) ? undefined : interval,
+                                healthCheckTimeoutSeconds: Number.isNaN(timeout) ? undefined : timeout,
+                                healthyThresholdCount: Number.isNaN(healthy) ? undefined : healthy,
+                                unhealthyThresholdCount: Number.isNaN(unhealthy) ? undefined : unhealthy,
+                              },
+                              {
+                                onSuccess: () => {
+                                  setShowEditTGModal(false);
+                                },
+                                onError: (e) =>
+                                  setEditTGError((e as Error)?.message || "Failed to update health check"),
+                              },
+                            );
+                          }}
+                        >
+                          Save
+                        </Button>
+                      </SpaceBetween>
+                    </Box>
+                  }
+                >
+                  <Form>
+                    {editTGError && (
+                      <Alert type="error" dismissible onDismiss={() => setEditTGError(null)}>
+                        {editTGError}
+                      </Alert>
+                    )}
+                    <FormField label="Health check path (optional)">
+                      <Input
+                        value={editHcPath}
+                        onChange={({ detail }) => setEditHcPath(detail.value)}
+                        placeholder="/health"
+                      />
+                    </FormField>
+                    <FormField label="Interval seconds (optional)">
+                      <Input
+                        value={editHcInterval}
+                        onChange={({ detail }) => setEditHcInterval(detail.value)}
+                        inputMode="numeric"
+                      />
+                    </FormField>
+                    <FormField label="Timeout seconds (optional)">
+                      <Input
+                        value={editHcTimeout}
+                        onChange={({ detail }) => setEditHcTimeout(detail.value)}
+                        inputMode="numeric"
+                      />
+                    </FormField>
+                    <FormField label="Healthy threshold (optional)">
+                      <Input
+                        value={editHealthy}
+                        onChange={({ detail }) => setEditHealthy(detail.value)}
+                        inputMode="numeric"
+                      />
+                    </FormField>
+                    <FormField label="Unhealthy threshold (optional)">
+                      <Input
+                        value={editUnhealthy}
+                        onChange={({ detail }) => setEditUnhealthy(detail.value)}
+                        inputMode="numeric"
+                      />
+                    </FormField>
+                  </Form>
+                </Modal>
               )}
             </>
           ),
@@ -903,6 +1075,20 @@ export function ELBDashboard() {
                                     setSelectedTGArn(null);
                                   }}>
                                     Attributes
+                                  </Button>
+                                  <Button
+                                    variant="link"
+                                    onClick={() => {
+                                      setEditListenerArn(l.listenerArn);
+                                      setEditPort(String(l.port ?? ""));
+                                      setEditProtocol({ label: l.protocol || "HTTP", value: l.protocol || "HTTP" });
+                                      setEditSslPolicy("");
+                                      setEditCertArns("");
+                                      setEditListenerError(null);
+                                      setShowEditListenerModal(true);
+                                    }}
+                                  >
+                                    Edit
                                   </Button>
                                 </SpaceBetween>
                               </Box>
@@ -1158,6 +1344,90 @@ export function ELBDashboard() {
                   </SpaceBetween>
                 </Modal>
               )}
+
+
+              {/* Edit listener modal */}
+              {showEditListenerModal && editListenerArn && (
+                <Modal
+                  visible
+                  onDismiss={() => setShowEditListenerModal(false)}
+                  header="Edit listener"
+                  footer={
+                    <Box float="right">
+                      <SpaceBetween direction="horizontal" size="xs">
+                        <Button variant="link" onClick={() => setShowEditListenerModal(false)}>
+                          Cancel
+                        </Button>
+                        <Button
+                          variant="primary"
+                          loading={modifyListener.isPending}
+                          onClick={() => {
+                            const port = editPort ? parseInt(editPort, 10) : undefined;
+                            modifyListener.mutate(
+                              {
+                                listenerArn: editListenerArn,
+                                port: Number.isNaN(port) ? undefined : port,
+                                protocol: editProtocol.value,
+                                sslPolicy: editSslPolicy.trim() || undefined,
+                                certificates: editCertArns
+                                  .split(",")
+                                  .map((a) => a.trim())
+                                  .filter(Boolean),
+                              },
+                              {
+                                onSuccess: () => {
+                                  setShowEditListenerModal(false);
+                                },
+                                onError: (e) =>
+                                  setEditListenerError((e as Error)?.message || "Failed to update listener"),
+                              },
+                            );
+                          }}
+                        >
+                          Save
+                        </Button>
+                      </SpaceBetween>
+                    </Box>
+                  }
+                >
+                  <Form>
+                    {editListenerError && (
+                      <Alert type="error" dismissible onDismiss={() => setEditListenerError(null)}>
+                        {editListenerError}
+                      </Alert>
+                    )}
+                    <FormField label="Port">
+                      <Input
+                        value={editPort}
+                        onChange={({ detail }) => setEditPort(detail.value)}
+                        inputMode="numeric"
+                      />
+                    </FormField>
+                    <FormField label="Protocol">
+                      <Select
+                        selectedOption={editProtocol}
+                        onChange={({ detail }) => setEditProtocol(detail.selectedOption)}
+                        options={PROTOCOL_OPTIONS}
+                      />
+                    </FormField>
+                    <FormField label="SSL policy (optional)">
+                      <Input
+                        value={editSslPolicy}
+                        onChange={({ detail }) => setEditSslPolicy(detail.value)}
+                        placeholder="ELBSecurityPolicy-TLS-1-2"
+                      />
+                    </FormField>
+                    <FormField label="Certificates (comma-separated ARNs, optional)">
+                      <Input
+                        value={editCertArns}
+                        onChange={({ detail }) => setEditCertArns(detail.value)}
+                        placeholder="arn:aws:acm:..."
+                      />
+                    </FormField>
+                  </Form>
+                </Modal>
+              )}
+
             </SpaceBetween>
           ),
         },

@@ -51,6 +51,9 @@ vi.mock("@aws-sdk/client-elastic-load-balancing-v2", () => ({
   RemoveListenerCertificatesCommand: createCmd("RemoveListenerCertificatesCommand"),
   DescribeListenerCertificatesCommand: createCmd("DescribeListenerCertificatesCommand"),
   DescribeAccountLimitsCommand: createCmd("DescribeAccountLimitsCommand"),
+  DescribeTagsCommand: createCmd("DescribeTagsCommand"),
+  ModifyListenerCommand: createCmd("ModifyListenerCommand"),
+  ModifyTargetGroupCommand: createCmd("ModifyTargetGroupCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -846,6 +849,129 @@ describe("ELB Routes", () => {
       const res = await get("/account-limits");
       const body = await res.json();
       expect(body.total).toBe(0);
+    });
+  });
+
+  describe("Tags", () => {
+    it("GET — returns tag descriptions", async () => {
+      mockSend.mockResolvedValueOnce({
+        TagDescriptions: [
+          {
+            ResourceArn: "arn:lb1",
+            Tags: [
+              { Key: "env", Value: "prod" },
+              { Key: "team", Value: "core" },
+            ],
+          },
+        ],
+      });
+      const res = await get("/tags?arns=arn:lb1");
+      const body = await res.json();
+      expect(body.tagDescriptions).toEqual([
+        { resourceArn: "arn:lb1", tags: { env: "prod", team: "core" } },
+      ]);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DescribeTagsCommand");
+      expect(mockSend.mock.calls[0][0].ResourceArns).toEqual(["arn:lb1"]);
+    });
+
+    it("GET — multiple ARNs split from query", async () => {
+      mockSend.mockResolvedValueOnce({ TagDescriptions: [] });
+      const res = await get("/tags?arns=arn:lb1%2Carn:lb2");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(mockSend.mock.calls[0][0].ResourceArns).toEqual(["arn:lb1", "arn:lb2"]);
+    });
+
+    it("GET — 400 without arns", async () => {
+      const res = await get("/tags");
+      expect(res.status).toBe(400);
+    });
+
+    it("GET — sparse tag list becomes empty object", async () => {
+      mockSend.mockResolvedValueOnce({ TagDescriptions: [{ ResourceArn: "arn:lb1" }] });
+      const res = await get("/tags?arns=arn:lb1");
+      const body = await res.json();
+      expect(body.tagDescriptions[0].tags).toEqual({});
+    });
+
+    it("GET — absent TagDescriptions becomes empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/tags?arns=arn:lb1");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+    });
+  });
+
+  describe("Modify Listener", () => {
+    it("PUT — modifies listener with all fields", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/listeners/arn:listener1", {
+        port: 8443,
+        protocol: "HTTPS",
+        sslPolicy: "ELBSecurityPolicy-TLS-1-2",
+        defaultActions: [{ type: "forward", targetGroupArn: "arn:tg1" }],
+        certificates: ["arn:cert1"],
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("ModifyListenerCommand");
+      expect(cmd.Port).toBe(8443);
+      expect(cmd.Protocol).toBe("HTTPS");
+      expect(cmd.SslPolicy).toBe("ELBSecurityPolicy-TLS-1-2");
+      expect(cmd.DefaultActions).toEqual([{ Type: "forward", TargetGroupArn: "arn:tg1" }]);
+      expect(cmd.Certificates).toEqual([{ CertificateArn: "arn:cert1" }]);
+    });
+
+    it("PUT — action without target group omits it", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/listeners/arn:listener1", {
+        defaultActions: [{ type: "fixed-response" }],
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.DefaultActions).toEqual([{ Type: "fixed-response" }]);
+      expect(cmd.Port).toBeUndefined();
+    });
+
+    it("PUT — empty body omits all optionals", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/listeners/arn:listener1", {});
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("ModifyListenerCommand");
+      expect(cmd.Port).toBeUndefined();
+      expect(cmd.DefaultActions).toBeUndefined();
+      expect(cmd.Certificates).toBeUndefined();
+    });
+  });
+
+  describe("Modify Target Group", () => {
+    it("PUT — modifies health check settings", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/target-groups/arn:tg1", {
+        healthCheckPath: "/health",
+        healthCheckIntervalSeconds: 30,
+        healthCheckTimeoutSeconds: 5,
+        healthyThresholdCount: 3,
+        unhealthyThresholdCount: 3,
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("ModifyTargetGroupCommand");
+      expect(cmd.HealthCheckPath).toBe("/health");
+      expect(cmd.HealthCheckIntervalSeconds).toBe(30);
+      expect(cmd.HealthCheckTimeoutSeconds).toBe(5);
+      expect(cmd.HealthyThresholdCount).toBe(3);
+      expect(cmd.UnhealthyThresholdCount).toBe(3);
+    });
+
+    it("PUT — empty body omits all optionals", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/target-groups/arn:tg1", {});
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("ModifyTargetGroupCommand");
+      expect(cmd.HealthCheckPath).toBeUndefined();
     });
   });
 });

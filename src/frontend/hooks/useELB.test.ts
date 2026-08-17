@@ -40,6 +40,9 @@ import {
   useELBModifyRule,
   useELBDeleteRule,
   useELBSetRulePriorities,
+  useELBDescribeTags,
+  useELBModifyListener,
+  useELBModifyTargetGroup,
 } from "./useELB";
 
 const LB_ARN = "arn:aws:elasticloadbalancing:us-east-1:123:loadbalancer/my-lb";
@@ -474,6 +477,79 @@ describe("useELBSetRulePriorities", () => {
     expect(mockApi).toHaveBeenCalledWith(
       "/aws/elasticloadbalancing/rules/set-priorities",
       expect.objectContaining({ method: "PUT" })
+    );
+  });
+});
+
+describe("useELBDescribeTags", () => {
+  it("fetches tags for the given ARNs", async () => {
+    mockApi.mockResolvedValueOnce({ tagDescriptions: [], total: 0 });
+    const { result } = renderHook(() => useELBDescribeTags(LB_ARN), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.data).toBeTruthy());
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/elasticloadbalancing/tags?arns=${ENC_LB}`
+    );
+  });
+
+  it("does not fetch when arns is null", async () => {
+    const { result } = renderHook(() => useELBDescribeTags(null), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+});
+
+describe("useELBModifyListener", () => {
+  it("calls api with PUT method and full body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useELBModifyListener(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({
+      listenerArn: LB_ARN,
+      port: 8443,
+      protocol: "HTTPS",
+      sslPolicy: "ELBSecurityPolicy-TLS-1-2",
+      defaultActions: [{ type: "forward", targetGroupArn: TG_ARN }],
+      certificates: ["arn:cert1"],
+    });
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/elasticloadbalancing/listeners/${ENC_LB}`,
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({
+          port: 8443,
+          protocol: "HTTPS",
+          sslPolicy: "ELBSecurityPolicy-TLS-1-2",
+          defaultActions: [{ type: "forward", targetGroupArn: TG_ARN }],
+          certificates: ["arn:cert1"],
+        }),
+      })
+    );
+  });
+});
+
+describe("useELBModifyTargetGroup", () => {
+  it("calls api with PUT method and health-check body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useELBModifyTargetGroup(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({
+      targetGroupArn: TG_ARN,
+      healthCheckPath: "/health",
+      healthCheckIntervalSeconds: 30,
+      healthCheckTimeoutSeconds: 5,
+      healthyThresholdCount: 3,
+      unhealthyThresholdCount: 3,
+    });
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/elasticloadbalancing/target-groups/${ENC_TG}`,
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({
+          healthCheckPath: "/health",
+          healthCheckIntervalSeconds: 30,
+          healthCheckTimeoutSeconds: 5,
+          healthyThresholdCount: 3,
+          unhealthyThresholdCount: 3,
+        }),
+      })
     );
   });
 });
