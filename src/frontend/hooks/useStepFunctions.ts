@@ -140,3 +140,121 @@ export function useActivities() {
     queryFn: () => api("/aws/stepfunctions/activities"),
   });
 }
+
+export function useCreateActivity() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api("/aws/stepfunctions/activities", { method: "POST", body: JSON.stringify({ name }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "stepfunctions", "activities"] }),
+  });
+}
+
+export function useDeleteActivity() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (arn: string) =>
+      api(`/aws/stepfunctions/activities/${encodeURIComponent(arn)}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "stepfunctions", "activities"] }),
+  });
+}
+
+export function useDescribeActivity() {
+  return useMutation({
+    mutationFn: (arn: string) => api(`/aws/stepfunctions/activities/${encodeURIComponent(arn)}`),
+  });
+}
+
+export function useGetActivityTask() {
+  return useMutation({
+    mutationFn: ({ arn, workerName }: { arn: string; workerName: string }) =>
+      api(`/aws/stepfunctions/activities/${encodeURIComponent(arn)}/tasks`, {
+        method: "POST",
+        body: JSON.stringify({ workerName }),
+      }),
+  });
+}
+
+export function useSendTaskSuccess() {
+  return useMutation({
+    mutationFn: ({ arn, taskToken, output }: { arn: string; taskToken: string; output?: string }) =>
+      api(`/aws/stepfunctions/activities/${encodeURIComponent(arn)}/tasks/success`, {
+        method: "POST",
+        body: JSON.stringify({ taskToken, output }),
+      }),
+  });
+}
+
+export function useSendTaskFailure() {
+  return useMutation({
+    mutationFn: ({ arn, taskToken, error, cause }: { arn: string; taskToken: string; error?: string; cause?: string }) =>
+      api(`/aws/stepfunctions/activities/${encodeURIComponent(arn)}/tasks/failure`, {
+        method: "POST",
+        body: JSON.stringify({ taskToken, error, cause }),
+      }),
+  });
+}
+
+export function useSendTaskHeartbeat() {
+  return useMutation({
+    mutationFn: ({ arn, taskToken }: { arn: string; taskToken: string }) =>
+      api(`/aws/stepfunctions/activities/${encodeURIComponent(arn)}/tasks/heartbeat`, {
+        method: "POST",
+        body: JSON.stringify({ taskToken }),
+      }),
+  });
+}
+
+// ── Sync executions + validation + tags ──────────────────
+
+export function useStartSyncExecution() {
+  return useMutation({
+    mutationFn: ({ arn, name, input }: { arn: string; name?: string; input?: string }) =>
+      api(`/aws/stepfunctions/state-machines/${encodeURIComponent(arn)}/sync-executions`, {
+        method: "POST",
+        body: JSON.stringify({ name, input }),
+      }),
+  });
+}
+
+export function useValidateStateMachineDefinition() {
+  return useMutation({
+    mutationFn: ({ definition, type }: { definition: string; type?: string }) =>
+      api("/aws/stepfunctions/state-machines/validate", {
+        method: "POST",
+        body: JSON.stringify({ definition, type }),
+      }),
+  });
+}
+
+export function useStateMachineTags(arn: string | null) {
+  return useQuery<any[]>({
+    queryKey: ["aws", "stepfunctions", "tags", arn],
+    queryFn: () => api(`/aws/stepfunctions/state-machines/${encodeURIComponent(arn!)}/tags`),
+    enabled: !!arn,
+  });
+}
+
+export function useTagStateMachine(arn: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (tags: { key: string; value: string }[]) =>
+      api(`/aws/stepfunctions/state-machines/${encodeURIComponent(arn)}/tags`, {
+        method: "PUT",
+        body: JSON.stringify({ tags }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "stepfunctions", "tags", arn] }),
+  });
+}
+
+export function useUntagStateMachine(arn: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (tagKeys: string[]) =>
+      api(`/aws/stepfunctions/state-machines/${encodeURIComponent(arn)}/tags`, {
+        method: "DELETE",
+        body: JSON.stringify({ tagKeys }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "stepfunctions", "tags", arn] }),
+  });
+}

@@ -21,6 +21,7 @@ import {
   Textarea,
   ColumnLayout,
   Container,
+  Divider,
   Spinner,
   Checkbox,
   type SelectProps,
@@ -307,6 +308,17 @@ import {
   useDeleteStateMachineVersion,
   useStartExecution,
   useStopExecution,
+  useCreateActivity,
+  useDeleteActivity,
+  useGetActivityTask,
+  useSendTaskSuccess,
+  useSendTaskFailure,
+  useSendTaskHeartbeat,
+  useStartSyncExecution,
+  useValidateStateMachineDefinition,
+  useStateMachineTags,
+  useTagStateMachine,
+  useUntagStateMachine,
 } from "../../hooks/useStepFunctions";
 import {
   useOpenSearchDomains,
@@ -526,6 +538,40 @@ export function StepFunctionsDashboard() {
   const [startName, setStartName] = useState("");
   const [startInput, setStartInput] = useState("{}");
   const [startError, setStartError] = useState<string | null>(null);
+  // G.84 — activities, task callbacks, sync runs, validation, tags
+  const createActivity = useCreateActivity();
+  const deleteActivity = useDeleteActivity();
+  const getActivityTask = useGetActivityTask();
+  const sendTaskSuccess = useSendTaskSuccess();
+  const sendTaskFailure = useSendTaskFailure();
+  const sendTaskHeartbeat = useSendTaskHeartbeat();
+  const startSyncExecution = useStartSyncExecution();
+  const validateDefinition = useValidateStateMachineDefinition();
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createName, setCreateName] = useState("");
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [taskAct, setTaskAct] = useState<string | null>(null);
+  const [taskWorker, setTaskWorker] = useState("");
+  const [taskData, setTaskData] = useState<any>(null);
+  const [taskError, setTaskError] = useState<string | null>(null);
+  const [taskOutput, setTaskOutput] = useState("{}");
+  const [taskFailError, setTaskFailError] = useState("");
+  const [taskFailCause, setTaskFailCause] = useState("");
+  const [tagsArn, setTagsArn] = useState<string | null>(null);
+  const { data: tagsData } = useStateMachineTags(tagsArn);
+  const tagStateMachine = useTagStateMachine(tagsArn || "");
+  const untagStateMachine = useUntagStateMachine(tagsArn || "");
+  const [newTagKey, setNewTagKey] = useState("");
+  const [newTagValue, setNewTagValue] = useState("");
+  const [syncArn, setSyncArn] = useState<string | null>(null);
+  const [syncName, setSyncName] = useState("");
+  const [syncInput, setSyncInput] = useState("{}");
+  const [syncResult, setSyncResult] = useState<any>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [validateOpen, setValidateOpen] = useState(false);
+  const [validateDef, setValidateDef] = useState("");
+  const [validateResult, setValidateResult] = useState<any>(null);
+  const [validateError, setValidateError] = useState<string | null>(null);
 
   if (isLoading) return <TableSkeleton />;
 
@@ -634,6 +680,7 @@ export function StepFunctionsDashboard() {
   }
 
   return (
+    <>
     <Tabs
       tabs={[
         {
@@ -644,6 +691,11 @@ export function StepFunctionsDashboard() {
               resourceName="State Machine"
               headerTitle="Step Functions State Machines"
               headerCounter={smData?.total}
+              headerActions={
+                <Button variant="primary" iconName="script" onClick={() => setValidateOpen(true)}>
+                  Validate definition
+                </Button>
+              }
               items={(smData?.stateMachines || []).map((sm: any) => ({
                 arn: sm.stateMachineArn,
                 name: sm.name,
@@ -669,12 +721,20 @@ export function StepFunctionsDashboard() {
                   id: "actions",
                   header: "",
                   cell: (i: any) => (
-                    <DeleteButton
-                      itemName={i.name}
-                      resourceType="state machine"
-                      loading={deleteSm.isPending && deleteSm.variables === i.arn}
-                      onDelete={() => deleteSm.mutateAsync(i.arn)}
-                    />
+                    <SpaceBetween direction="horizontal" size="xs">
+                      <Button variant="link" onClick={() => setTagsArn(i.arn)}>
+                        Tags
+                      </Button>
+                      <Button variant="link" onClick={() => { setSyncArn(i.arn); setSyncName(""); setSyncInput("{}"); setSyncResult(null); setSyncError(null); }}>
+                        Sync run
+                      </Button>
+                      <DeleteButton
+                        itemName={i.name}
+                        resourceType="state machine"
+                        loading={deleteSm.isPending && deleteSm.variables === i.arn}
+                        onDelete={() => deleteSm.mutateAsync(i.arn)}
+                      />
+                    </SpaceBetween>
                   ),
                 },
               ]}
@@ -692,6 +752,11 @@ export function StepFunctionsDashboard() {
               resourceName="Activity"
               headerTitle="Activities"
               headerCounter={actData?.total}
+              headerActions={
+                <Button variant="primary" iconName="add-plus" onClick={() => { setCreateOpen(true); setCreateName(""); setCreateError(null); }}>
+                  Create activity
+                </Button>
+              }
               items={(actData?.activities || []).map((a: any) => ({
                 arn: a.activityArn,
                 name: a.name,
@@ -703,6 +768,34 @@ export function StepFunctionsDashboard() {
                 { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
                 { id: "arn", header: "ARN", cell: (i: any) => i.arn },
                 { id: "created", header: "Created", cell: (i: any) => i.created },
+                {
+                  id: "actions",
+                  header: "",
+                  cell: (i: any) => (
+                    <SpaceBetween direction="horizontal" size="xs">
+                      <Button
+                        variant="link"
+                        onClick={() => {
+                          setTaskAct(i.arn);
+                          setTaskWorker("");
+                          setTaskData(null);
+                          setTaskError(null);
+                          setTaskOutput("{}");
+                          setTaskFailError("");
+                          setTaskFailCause("");
+                        }}
+                      >
+                        Task callbacks
+                      </Button>
+                      <DeleteButton
+                        itemName={i.name}
+                        resourceType="activity"
+                        loading={deleteActivity.isPending && deleteActivity.variables === i.arn}
+                        onDelete={() => deleteActivity.mutateAsync(i.arn)}
+                      />
+                    </SpaceBetween>
+                  ),
+                },
               ]}
               filterEnabled
               filterPlaceholder="Find activities"
@@ -785,6 +878,322 @@ export function StepFunctionsDashboard() {
         },
       ]}
     />
+
+    {/* G.84 — Create activity modal */}
+    <Modal
+      visible={createOpen}
+      onDismiss={() => setCreateOpen(false)}
+      header="Create activity"
+      footer={
+        <Box float="right">
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button variant="link" onClick={() => setCreateOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              iconName="add-plus"
+              disabled={!createName.trim()}
+              loading={createActivity.isPending}
+              onClick={async () => {
+                setCreateError(null);
+                try {
+                  await createActivity.mutateAsync(createName.trim());
+                  setCreateOpen(false);
+                  setCreateName("");
+                } catch (e: any) {
+                  setCreateError(e?.message || "Failed to create activity");
+                }
+              }}
+            >
+              Create
+            </Button>
+          </SpaceBetween>
+        </Box>
+      }
+    >
+      <Form>
+        <SpaceBetween size="m">
+          {createError && <Alert type="error">{createError}</Alert>}
+          <FormField label="Activity name">
+            <Input value={createName} onChange={(e) => setCreateName(e.detail.value)} placeholder="my-activity" />
+          </FormField>
+        </SpaceBetween>
+      </Form>
+    </Modal>
+
+    {/* G.84 — Task callbacks modal */}
+    <Modal
+      visible={!!taskAct}
+      onDismiss={() => setTaskAct(null)}
+      header={`Task callbacks: ${taskAct || ""}`}
+      size="large"
+      footer={
+        <Box float="right">
+          <Button variant="link" onClick={() => setTaskAct(null)}>
+            Close
+          </Button>
+        </Box>
+      }
+    >
+      <SpaceBetween size="m">
+        {taskError && <Alert type="error">{taskError}</Alert>}
+        <SpaceBetween direction="horizontal" size="xs">
+          <Input
+            value={taskWorker}
+            onChange={(e) => setTaskWorker(e.detail.value)}
+            placeholder="Worker name"
+            disabled={!!taskData}
+          />
+          <Button
+            variant="primary"
+            disabled={!taskWorker.trim()}
+            loading={getActivityTask.isPending}
+            onClick={async () => {
+              setTaskError(null);
+              try {
+                const res: any = await getActivityTask.mutateAsync({ arn: taskAct!, workerName: taskWorker.trim() });
+                setTaskData(res.task || null);
+              } catch (e: any) {
+                setTaskError(e?.message || "Failed to get activity task");
+              }
+            }}
+          >
+            Poll for task
+          </Button>
+        </SpaceBetween>
+        {taskData ? (
+          <Container header={<Header variant="h3">Task</Header>}>
+            <SpaceBetween size="s">
+              <div>
+                <b>Task token:</b> {taskData.taskToken || "—"}
+              </div>
+              <div>
+                <b>Input:</b> <Box>{taskData.input || "{}"}</Box>
+              </div>
+              <Divider />
+              <SpaceBetween direction="horizontal" size="xs">
+                <Input value={taskOutput} onChange={(e) => setTaskOutput(e.detail.value)} placeholder='{"result": "ok"}' />
+                <Button
+                  variant="primary"
+                  loading={sendTaskSuccess.isPending}
+                  onClick={async () => {
+                    setTaskError(null);
+                    try {
+                      await sendTaskSuccess.mutateAsync({ arn: taskAct!, taskToken: taskData.taskToken, output: taskOutput });
+                      setTaskData(null);
+                      setTaskWorker("");
+                    } catch (e: any) {
+                      setTaskError(e?.message || "Failed to send task success");
+                    }
+                  }}
+                >
+                  Send success
+                </Button>
+              </SpaceBetween>
+              <SpaceBetween direction="horizontal" size="xs">
+                <Input value={taskFailError} onChange={(e) => setTaskFailError(e.detail.value)} placeholder="Error name" />
+                <Input value={taskFailCause} onChange={(e) => setTaskFailCause(e.detail.value)} placeholder="Cause" />
+                <Button
+                  variant="normal"
+                  loading={sendTaskFailure.isPending}
+                  onClick={async () => {
+                    setTaskError(null);
+                    try {
+                      await sendTaskFailure.mutateAsync({
+                        arn: taskAct!,
+                        taskToken: taskData.taskToken,
+                        error: taskFailError.trim() || undefined,
+                        cause: taskFailCause.trim() || undefined,
+                      });
+                      setTaskData(null);
+                      setTaskWorker("");
+                    } catch (e: any) {
+                      setTaskError(e?.message || "Failed to send task failure");
+                    }
+                  }}
+                >
+                  Send failure
+                </Button>
+                <Button
+                  variant="normal"
+                  loading={sendTaskHeartbeat.isPending}
+                  onClick={async () => {
+                    setTaskError(null);
+                    try {
+                      await sendTaskHeartbeat.mutateAsync({ arn: taskAct!, taskToken: taskData.taskToken });
+                    } catch (e: any) {
+                      setTaskError(e?.message || "Failed to send heartbeat");
+                    }
+                  }}
+                >
+                  Heartbeat
+                </Button>
+              </SpaceBetween>
+            </SpaceBetween>
+          </Container>
+        ) : (
+          <Box color="text-body-secondary">No task fetched yet. Poll with a worker name to receive a task.</Box>
+        )}
+      </SpaceBetween>
+    </Modal>
+
+    {/* G.84 — Tags modal */}
+    <Modal
+      visible={!!tagsArn}
+      onDismiss={() => setTagsArn(null)}
+      header={`Tags for state machine`}
+    >
+      <SpaceBetween size="s">
+        {(tagsData || []).length === 0 ? (
+          <Box color="text-body-secondary">No tags found.</Box>
+        ) : (
+          <SpaceBetween size="xs">
+            {tagsData?.map((t: any) => (
+              <SpaceBetween key={t.key} direction="horizontal" size="xs">
+                <Box variant="small">
+                  <b>{t.key}:</b> {t.value}
+                </Box>
+                <Button
+                  variant="link"
+                  onClick={() => untagStateMachine.mutateAsync([t.key])}
+                >
+                  Remove
+                </Button>
+              </SpaceBetween>
+            ))}
+          </SpaceBetween>
+        )}
+        <SpaceBetween direction="horizontal" size="xs">
+          <Input placeholder="Key" value={newTagKey} onChange={(e) => setNewTagKey(e.detail.value)} />
+          <Input placeholder="Value" value={newTagValue} onChange={(e) => setNewTagValue(e.detail.value)} />
+          <Button
+            variant="primary"
+            disabled={!newTagKey.trim()}
+            loading={tagStateMachine.isPending}
+            onClick={async () => {
+              try {
+                await tagStateMachine.mutateAsync([{ key: newTagKey.trim(), value: newTagValue }]);
+                setNewTagKey("");
+                setNewTagValue("");
+              } catch {
+                // tag errors surface via query refetch failure only
+              }
+            }}
+          >
+            Add tag
+          </Button>
+        </SpaceBetween>
+        <Button variant="link" onClick={() => setTagsArn(null)}>
+          Close
+        </Button>
+      </SpaceBetween>
+    </Modal>
+
+    {/* G.84 — Sync run modal */}
+    <Modal
+      visible={!!syncArn}
+      onDismiss={() => setSyncArn(null)}
+      header={`Sync run: ${syncArn || ""}`}
+      footer={
+        <Box float="right">
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button variant="link" onClick={() => setSyncArn(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              loading={startSyncExecution.isPending}
+              onClick={async () => {
+                setSyncError(null);
+                setSyncResult(null);
+                try {
+                  const res: any = await startSyncExecution.mutateAsync({
+                    arn: syncArn!,
+                    name: syncName.trim() || undefined,
+                    input: syncInput.trim() || undefined,
+                  });
+                  setSyncResult(res.execution || null);
+                } catch (e: any) {
+                  setSyncError(e?.message || "Failed to run sync execution");
+                }
+              }}
+            >
+              Run
+            </Button>
+          </SpaceBetween>
+        </Box>
+      }
+    >
+      <Form>
+        <SpaceBetween size="m">
+          {syncError && <Alert type="error">{syncError}</Alert>}
+          {syncResult && (
+            <Alert type="success">
+              <b>Status:</b> {syncResult.status || "—"} — <b>Execution ARN:</b> {syncResult.executionArn || "—"}
+            </Alert>
+          )}
+          <FormField label="Name" description="Optional execution name.">
+            <Input value={syncName} onChange={(e) => setSyncName(e.detail.value)} placeholder="my-sync-run" />
+          </FormField>
+          <FormField label="Input" description="JSON input passed to the state machine.">
+            <Textarea value={syncInput} onChange={(e) => setSyncInput(e.detail.value)} rows={6} />
+          </FormField>
+        </SpaceBetween>
+      </Form>
+    </Modal>
+
+    {/* G.84 — Validate definition modal */}
+    <Modal
+      visible={validateOpen}
+      onDismiss={() => setValidateOpen(false)}
+      header="Validate state machine definition"
+      footer={
+        <Box float="right">
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button variant="link" onClick={() => setValidateOpen(false)}>
+              Close
+            </Button>
+            <Button
+              variant="primary"
+              disabled={!validateDef.trim()}
+              loading={validateDefinition.isPending}
+              onClick={async () => {
+                setValidateError(null);
+                setValidateResult(null);
+                try {
+                  const res: any = await validateDefinition.mutateAsync({ definition: validateDef });
+                  setValidateResult(res);
+                } catch (e: any) {
+                  setValidateError(e?.message || "Failed to validate definition");
+                }
+              }}
+            >
+              Validate
+            </Button>
+          </SpaceBetween>
+        </Box>
+      }
+    >
+      <Form>
+        <SpaceBetween size="m">
+          {validateError && <Alert type="error">{validateError}</Alert>}
+          {validateResult && (
+            <Alert type={validateResult.valid ? "success" : "error"}>
+              {validateResult.valid
+                ? "Definition is valid."
+                : (validateResult.errors || []).length > 0
+                  ? validateResult.errors.map((d: any) => `${d.code || ""} ${d.message || ""}`).join("; ")
+                  : "Definition is invalid."}
+            </Alert>
+          )}
+          <FormField label="Definition" description="Amazon States Language JSON definition.">
+            <Textarea value={validateDef} onChange={(e) => setValidateDef(e.detail.value)} rows={10} />
+          </FormField>
+        </SpaceBetween>
+      </Form>
+    </Modal>
+  </>
   );
 }
 

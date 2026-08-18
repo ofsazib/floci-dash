@@ -16,6 +16,18 @@ import {
   PublishStateMachineVersionCommand,
   ListStateMachineVersionsCommand,
   DeleteStateMachineVersionCommand,
+  CreateActivityCommand,
+  DeleteActivityCommand,
+  DescribeActivityCommand,
+  GetActivityTaskCommand,
+  SendTaskSuccessCommand,
+  SendTaskFailureCommand,
+  SendTaskHeartbeatCommand,
+  StartSyncExecutionCommand,
+  ValidateStateMachineDefinitionCommand,
+  ListTagsForResourceCommand,
+  TagResourceCommand,
+  UntagResourceCommand,
 } from "@aws-sdk/client-sfn";
 
 const router = new Hono();
@@ -153,6 +165,134 @@ router.get("/activities", async (c: Context) => {
   const result = await client.send(new ListActivitiesCommand({}));
   const activities = result.activities || [];
   return c.json({ activities, total: activities.length });
+});
+
+router.post("/activities", async (c: Context) => {
+  const body = await c.req.json();
+  if (!body.name) return c.json({ error: "Activity name is required" }, 400);
+  const client = getClient();
+  const result = await client.send(new CreateActivityCommand({ name: body.name }));
+  return c.json(result.activityArn ? { activity: result } : { activity: null });
+});
+
+router.delete("/activities/:arn", async (c: Context) => {
+  const client = getClient();
+  await client.send(new DeleteActivityCommand({ activityArn: decodeURIComponent(c.req.param("arn")!) }));
+  return c.json({ deleted: true });
+});
+
+router.get("/activities/:arn", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new DescribeActivityCommand({ activityArn: decodeURIComponent(c.req.param("arn")!) }));
+  return c.json(result.activityArn ? { activity: result } : { activity: null });
+});
+
+router.post("/activities/:arn/tasks", async (c: Context) => {
+  const body = await c.req.json();
+  if (!body.workerName) return c.json({ error: "Worker name is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new GetActivityTaskCommand({ activityArn: decodeURIComponent(c.req.param("arn")!), workerName: body.workerName })
+  );
+  return c.json(result.taskToken ? { task: result } : { task: null });
+});
+
+router.post("/activities/:arn/tasks/success", async (c: Context) => {
+  const body = await c.req.json();
+  if (!body.taskToken) return c.json({ error: "Task token is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new SendTaskSuccessCommand({
+      taskToken: body.taskToken,
+      output: body.output ?? "{}",
+    })
+  );
+  return c.json({ success: true });
+});
+
+router.post("/activities/:arn/tasks/failure", async (c: Context) => {
+  const body = await c.req.json();
+  if (!body.taskToken) return c.json({ error: "Task token is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new SendTaskFailureCommand({
+      taskToken: body.taskToken,
+      error: body.error || undefined,
+      cause: body.cause || undefined,
+    })
+  );
+  return c.json({ success: true });
+});
+
+router.post("/activities/:arn/tasks/heartbeat", async (c: Context) => {
+  const body = await c.req.json();
+  if (!body.taskToken) return c.json({ error: "Task token is required" }, 400);
+  const client = getClient();
+  await client.send(new SendTaskHeartbeatCommand({ taskToken: body.taskToken }));
+  return c.json({ success: true });
+});
+
+// ── Sync executions + validation + tags ───────────────────
+
+router.post("/state-machines/:arn/sync-executions", async (c: Context) => {
+  const body = await c.req.json();
+  const client = getClient();
+  const result = await client.send(
+    new StartSyncExecutionCommand({
+      stateMachineArn: decodeURIComponent(c.req.param("arn")!),
+      name: body.name || undefined,
+      input: body.input || undefined,
+    })
+  );
+  return c.json(result.executionArn ? { execution: result } : { execution: null });
+});
+
+router.post("/state-machines/validate", async (c: Context) => {
+  const body = await c.req.json();
+  if (!body.definition) return c.json({ error: "Definition is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new ValidateStateMachineDefinitionCommand({
+      definition: body.definition,
+      type: body.type || undefined,
+    })
+  );
+  return c.json({
+    valid: result.result ? result.result === "OK" : null,
+    errors: result.diagnostics || [],
+  });
+});
+
+router.get("/state-machines/:arn/tags", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(
+    new ListTagsForResourceCommand({ resourceArn: decodeURIComponent(c.req.param("arn")!) })
+  );
+  return c.json(result.tags || []);
+});
+
+router.put("/state-machines/:arn/tags", async (c: Context) => {
+  const body = await c.req.json();
+  if (!body.tags || !Array.isArray(body.tags) || body.tags.length === 0) {
+    return c.json({ error: "At least one tag is required" }, 400);
+  }
+  const client = getClient();
+  await client.send(
+    new TagResourceCommand({ resourceArn: decodeURIComponent(c.req.param("arn")!), tags: body.tags })
+  );
+  return c.json({ success: true });
+});
+
+router.delete("/state-machines/:arn/tags", async (c: Context) => {
+  const body = await c.req.json();
+  if (!body.tagKeys || !Array.isArray(body.tagKeys) || body.tagKeys.length === 0) {
+    return c.json({ error: "At least one tag key is required" }, 400);
+  }
+  const client = getClient();
+  await client.send(
+    new UntagResourceCommand({ resourceArn: decodeURIComponent(c.req.param("arn")!), tagKeys: body.tagKeys })
+  );
+  return c.json({ success: true });
 });
 
 export default router;

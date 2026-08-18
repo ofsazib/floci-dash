@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor, within, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -8,6 +8,7 @@ import React from "react";
 const deleteSmState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
 const stopState = vi.hoisted(() => ({ isPending: false, variables: null as any | null }));
 const deleteVersionState = vi.hoisted(() => ({ isPending: false, variables: null as any | null }));
+const deleteActState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
 
 const mockStateMachines = vi.fn();
 const mockDeleteSm = vi.fn();
@@ -18,6 +19,17 @@ const mockStopExecution = vi.fn().mockResolvedValue({});
 const mockVersions = vi.fn();
 const mockPublishVersion = vi.fn();
 const mockDeleteVersion = vi.fn();
+const mockCreateActivity = vi.fn().mockResolvedValue({});
+const mockDeleteActivity = vi.fn().mockResolvedValue({});
+const mockGetActivityTask = vi.fn().mockResolvedValue({ task: null });
+const mockSendTaskSuccess = vi.fn().mockResolvedValue({});
+const mockSendTaskFailure = vi.fn().mockResolvedValue({});
+const mockSendTaskHeartbeat = vi.fn().mockResolvedValue({});
+const mockStartSyncExecution = vi.fn().mockResolvedValue({ execution: null });
+const mockValidateDefinition = vi.fn().mockResolvedValue({ valid: true, errors: [] });
+const mockStateMachineTags = vi.fn();
+const mockTagStateMachine = vi.fn().mockResolvedValue({});
+const mockUntagStateMachine = vi.fn().mockResolvedValue({});
 
 vi.mock("../../hooks/useStepFunctions", () => ({
   useStateMachines: (...args: any[]) => mockStateMachines(...args),
@@ -40,6 +52,25 @@ vi.mock("../../hooks/useStepFunctions", () => ({
     reset: vi.fn(),
   }),
   useStartExecution: () => ({ mutate: vi.fn(), mutateAsync: mockStartExecution, isPending: false, variables: null, isError: false, error: null, reset: vi.fn() }),
+  useCreateActivity: () => ({ mutate: vi.fn(), mutateAsync: mockCreateActivity, isPending: false, variables: null, isError: false, error: null, reset: vi.fn() }),
+  useDeleteActivity: () => ({
+    mutate: vi.fn(),
+    mutateAsync: mockDeleteActivity,
+    get isPending() { return deleteActState.isPending; },
+    get variables() { return deleteActState.variables; },
+    isError: false,
+    error: null,
+    reset: vi.fn(),
+  }),
+  useGetActivityTask: () => ({ mutate: vi.fn(), mutateAsync: mockGetActivityTask, isPending: false, variables: null, isError: false, error: null, reset: vi.fn() }),
+  useSendTaskSuccess: () => ({ mutate: vi.fn(), mutateAsync: mockSendTaskSuccess, isPending: false, variables: null, isError: false, error: null, reset: vi.fn() }),
+  useSendTaskFailure: () => ({ mutate: vi.fn(), mutateAsync: mockSendTaskFailure, isPending: false, variables: null, isError: false, error: null, reset: vi.fn() }),
+  useSendTaskHeartbeat: () => ({ mutate: vi.fn(), mutateAsync: mockSendTaskHeartbeat, isPending: false, variables: null, isError: false, error: null, reset: vi.fn() }),
+  useStartSyncExecution: () => ({ mutate: vi.fn(), mutateAsync: mockStartSyncExecution, isPending: false, variables: null, isError: false, error: null, reset: vi.fn() }),
+  useValidateStateMachineDefinition: () => ({ mutate: vi.fn(), mutateAsync: mockValidateDefinition, isPending: false, variables: null, isError: false, error: null, reset: vi.fn() }),
+  useStateMachineTags: (...args: any[]) => mockStateMachineTags(...args),
+  useTagStateMachine: () => ({ mutate: vi.fn(), mutateAsync: mockTagStateMachine, isPending: false, variables: null, isError: false, error: null, reset: vi.fn() }),
+  useUntagStateMachine: () => ({ mutate: vi.fn(), mutateAsync: mockUntagStateMachine, isPending: false, variables: null, isError: false, error: null, reset: vi.fn() }),
   useStopExecution: () => ({
     mutate: vi.fn(),
     mutateAsync: mockStopExecution,
@@ -61,12 +92,15 @@ beforeEach(() => {
   stopState.variables = null;
   deleteVersionState.isPending = false;
   deleteVersionState.variables = null;
+  deleteActState.isPending = false;
+  deleteActState.variables = null;
   mockStateMachines.mockReturnValue({ data: { stateMachines: [], total: 0 }, isLoading: false });
   mockExecutions.mockReturnValue({ data: { executions: [], total: 0 } });
   mockActivities.mockReturnValue({ data: { activities: [], total: 0 } });
   mockVersions.mockReturnValue({ data: { versions: [], total: 0 }, isLoading: false, isError: false, error: null });
   mockPublishVersion.mockResolvedValue({});
   mockDeleteVersion.mockResolvedValue({});
+  mockStateMachineTags.mockReturnValue({ data: [] });
 });
 
 // ── Helper: select state machine from Cloudscape Select dropdown ──
@@ -652,3 +686,479 @@ describe("StepFunctionsDashboard — versions tab", () => {
     await waitFor(() => expect(screen.queryByText(SM_ARN + ":1")).toBeNull());
   });
 });
+
+/** True when every dialog containing the given text has a hidden class. */
+function modalHidden(text: string): boolean {
+  const headers = screen.queryAllByText(text).filter((h) => h.closest('[role="dialog"]'));
+  if (headers.length === 0) return true; // unmounted entirely
+  return headers.every((h) => h.closest('[role="dialog"]')!.className.includes("hidden"));
+}
+
+/** Click a button inside the visible dialog whose header contains the given text. */
+async function clickDialogButton(user: ReturnType<typeof userEvent.setup>, headerText: string | RegExp, name: RegExp | string) {
+  const header = screen
+    .getAllByText(headerText)
+    .find((h) => {
+      const d = h.closest('[role="dialog"]');
+      return d && !d.className.includes("hidden");
+    });
+  const dialog = header!.closest('[role="dialog"]') as HTMLElement;
+  await user.click(within(dialog).getByRole("button", { name }));
+}
+
+describe("StepFunctionsDashboard — G.84 activities, task callbacks, sync runs, validation, tags", () => {
+  const SM = { stateMachineArn: "arn:aws:states:us-east-1:123:stateMachine:my-sm", name: "my-sm", type: "STANDARD", creationDate: "2024-01-15T00:00:00Z" };
+  const ACT = { activityArn: "arn:aws:states:us-east-1:123:activity:act-1", name: "act-1", creationDate: "2024-01-15T00:00:00Z" };
+
+  async function openActivities(user: ReturnType<typeof userEvent.setup>) {
+    render(<StepFunctionsDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Activities/i }));
+    await waitFor(() => expect(screen.getByText("act-1")).toBeTruthy());
+  }
+
+  it("creates an activity via the modal", async () => {
+    mockActivities.mockReturnValue({ data: { activities: [ACT], total: 1 } });
+    const user = userEvent.setup();
+    render(<StepFunctionsDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Activities/i }));
+    await waitFor(() => expect(screen.getByText("act-1")).toBeTruthy());
+    await clickButton(user, /Create activity/i);
+    await waitFor(() => expect(screen.getAllByText("Create activity").length).toBeGreaterThanOrEqual(2));
+    // Create stays disabled without a name
+    expect(screen.getByRole("button", { name: /Create$/i }).hasAttribute("disabled")).toBe(true);
+    await user.type(screen.getByPlaceholderText("my-activity"), "act-2");
+    await clickButton(user, /Create$/i);
+    await waitFor(() => expect(mockCreateActivity).toHaveBeenCalledWith("act-2"));
+    await waitFor(() => expect(modalHidden("Create activity")).toBe(true));
+  });
+
+  it("creates an activity with a trimmed name", async () => {
+    mockActivities.mockReturnValue({ data: { activities: [ACT], total: 1 } });
+    const user = userEvent.setup();
+    render(<StepFunctionsDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Activities/i }));
+    await waitFor(() => expect(screen.getByText("act-1")).toBeTruthy());
+    await clickButton(user, /Create activity/i);
+    await waitFor(() => expect(screen.getAllByText("Create activity").length).toBeGreaterThanOrEqual(2));
+    await user.type(screen.getByPlaceholderText("my-activity"), "  padded  ");
+    await clickButton(user, /Create$/i);
+    await waitFor(() => expect(mockCreateActivity).toHaveBeenCalledWith("padded"));
+    await waitFor(() => expect(modalHidden("Create activity")).toBe(true));
+  });
+
+  it("shows create-activity error and cancels", async () => {
+    mockActivities.mockReturnValue({ data: { activities: [ACT], total: 1 } });
+    mockCreateActivity.mockRejectedValueOnce(new Error("boom"));
+    const user = userEvent.setup();
+    render(<StepFunctionsDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Activities/i }));
+    await waitFor(() => expect(screen.getByText("act-1")).toBeTruthy());
+    await clickButton(user, /Create activity/i);
+    await waitFor(() => expect(screen.getAllByText("Create activity").length).toBeGreaterThanOrEqual(2));
+    await user.type(screen.getByPlaceholderText("my-activity"), "act-2");
+    await clickButton(user, /Create$/i);
+    await waitFor(() => expect(screen.getByText("boom")).toBeTruthy());
+    await clickButton(user, /Cancel/i);
+    await waitFor(() => expect(modalHidden("Create activity")).toBe(true));
+  });
+
+  it("deletes an activity", async () => {
+    mockActivities.mockReturnValue({ data: { activities: [ACT], total: 1 } });
+    const user = userEvent.setup();
+    render(<StepFunctionsDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Activities/i }));
+    await waitFor(() => expect(screen.getByText("act-1")).toBeTruthy());
+    // DeleteButton opens a confirm dialog with a Delete confirm button
+    const deleteBtn = screen.getAllByRole("button", { name: /Delete/i })[0];
+    await user.click(deleteBtn);
+    await waitFor(() => expect(screen.getAllByRole("button", { name: /Delete/i }).length).toBeGreaterThan(1));
+    const confirms = screen.getAllByRole("button", { name: /Delete/i });
+    await user.click(confirms[confirms.length - 1]);
+    await waitFor(() =>
+      expect(mockDeleteActivity).toHaveBeenCalledWith("arn:aws:states:us-east-1:123:activity:act-1")
+    );
+  });
+
+  it("polls for a task and sends success", async () => {
+    mockActivities.mockReturnValue({ data: { activities: [ACT], total: 1 } });
+    mockGetActivityTask.mockResolvedValue({ task: { taskToken: "tok-1", input: '{"x":1}' } });
+    const user = userEvent.setup();
+    await openActivities(user);
+    await clickButton(user, /Task callbacks/i);
+    await waitFor(() => expect(screen.getByText(/Task callbacks:/)).toBeTruthy());
+    expect(screen.getByText(/No task fetched yet/)).toBeTruthy();
+    await user.type(screen.getByPlaceholderText("Worker name"), "w1");
+    await clickButton(user, /Poll for task/i);
+    await waitFor(() =>
+      expect(mockGetActivityTask).toHaveBeenCalledWith({
+        arn: "arn:aws:states:us-east-1:123:activity:act-1",
+        workerName: "w1",
+      })
+    );
+    await waitFor(() => expect(screen.getByText("tok-1")).toBeTruthy());
+    await clickButton(user, /Send success/i);
+    await waitFor(() =>
+      expect(mockSendTaskSuccess).toHaveBeenCalledWith({
+        arn: "arn:aws:states:us-east-1:123:activity:act-1",
+        taskToken: "tok-1",
+        output: "{}",
+      })
+    );
+  });
+
+  it("polls with no task available and sends failure + heartbeat", async () => {
+    mockActivities.mockReturnValue({ data: { activities: [ACT], total: 1 } });
+    mockGetActivityTask.mockResolvedValue({ task: { taskToken: "tok-2", input: "{}" } });
+    const user = userEvent.setup();
+    await openActivities(user);
+    await clickButton(user, /Task callbacks/i);
+    await waitFor(() => expect(screen.getByText(/Task callbacks:/)).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("Worker name"), "w2");
+    await clickButton(user, /Poll for task/i);
+    await waitFor(() => expect(screen.getByText("tok-2")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("Error name"), "TaskFailed");
+    await user.type(screen.getByPlaceholderText("Cause"), "bad input");
+    await clickButton(user, /Send failure/i);
+    await waitFor(() =>
+      expect(mockSendTaskFailure).toHaveBeenCalledWith({
+        arn: "arn:aws:states:us-east-1:123:activity:act-1",
+        taskToken: "tok-2",
+        error: "TaskFailed",
+        cause: "bad input",
+      })
+    );
+    // reopen and heartbeat
+    await clickButton(user, /Task callbacks/i);
+    await waitFor(() => expect(screen.getByText(/Task callbacks:/)).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("Worker name"), "w3");
+    await clickButton(user, /Poll for task/i);
+    await waitFor(() => expect(screen.getByText("tok-2")).toBeTruthy());
+    await clickButton(user, /Heartbeat/i);
+    await waitFor(() =>
+      expect(mockSendTaskHeartbeat).toHaveBeenCalledWith({
+        arn: "arn:aws:states:us-east-1:123:activity:act-1",
+        taskToken: "tok-2",
+      })
+    );
+    await clickButton(user, /Close/i);
+  });
+
+  it("shows task-callback errors and the sparse no-task state", async () => {
+    mockActivities.mockReturnValue({ data: { activities: [ACT], total: 1 } });
+    mockGetActivityTask.mockRejectedValueOnce(new Error("no work"));
+    const user = userEvent.setup();
+    await openActivities(user);
+    await clickButton(user, /Task callbacks/i);
+    await waitFor(() => expect(screen.getByText(/Task callbacks:/)).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("Worker name"), "w1");
+    await clickButton(user, /Poll for task/i);
+    await waitFor(() => expect(screen.getByText("no work")).toBeTruthy());
+    // sparse: no task token → task: null → stays in the no-task state
+    mockGetActivityTask.mockResolvedValue({});
+    await clickButton(user, /Poll for task/i);
+    await waitFor(() => expect(screen.getByText(/No task fetched yet/)).toBeTruthy());
+    await clickButton(user, /Close/i);
+  });
+
+  it("manages state machine tags — add, remove, empty, close", async () => {
+    mockStateMachines.mockReturnValue({ data: { stateMachines: [SM], total: 1 }, isLoading: false });
+    mockStateMachineTags.mockReturnValue({ data: [{ key: "env", value: "prod" }] });
+    const user = userEvent.setup();
+    render(<StepFunctionsDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-sm")).toBeTruthy());
+    await clickButton(user, /^Tags$/i);
+    await waitFor(() => expect(screen.getByText(/Tags for state machine/)).toBeTruthy());
+    const tagsDialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden")) as HTMLElement;
+    expect(within(tagsDialog).getByText("env:")).toBeTruthy();
+    await user.click(within(tagsDialog).getByRole("button", { name: /Remove/i }));
+    await waitFor(() => expect(mockUntagStateMachine).toHaveBeenCalledWith(["env"]));
+    await user.type(within(tagsDialog).getByPlaceholderText("Key"), "team");
+    await user.type(within(tagsDialog).getByPlaceholderText("Value"), "core");
+    await user.click(within(tagsDialog).getByRole("button", { name: /Add tag/i }));
+    await waitFor(() =>
+      expect(mockTagStateMachine).toHaveBeenCalledWith([{ key: "team", value: "core" }])
+    );
+    await user.click(within(tagsDialog).getByRole("button", { name: /Close/i }));
+  });
+
+  it("shows the no-tags state and keeps Add tag disabled without a key", async () => {
+    mockStateMachines.mockReturnValue({ data: { stateMachines: [SM], total: 1 }, isLoading: false });
+    mockStateMachineTags.mockReturnValue({ data: [] });
+    const user = userEvent.setup();
+    render(<StepFunctionsDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-sm")).toBeTruthy());
+    await clickButton(user, /^Tags$/i);
+    await waitFor(() => expect(screen.getByText("No tags found.")).toBeTruthy());
+    const tagsDialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden")) as HTMLElement;
+    expect(within(tagsDialog).getByRole("button", { name: /Add tag/i }).hasAttribute("disabled")).toBe(true);
+    await user.type(within(tagsDialog).getByPlaceholderText("Key"), "k");
+    await user.type(within(tagsDialog).getByPlaceholderText("Value"), "v");
+    await user.click(within(tagsDialog).getByRole("button", { name: /Add tag/i }));
+    await waitFor(() => expect(mockTagStateMachine).toHaveBeenCalledWith([{ key: "k", value: "v" }]));
+  });
+
+  it("runs a sync execution and shows the result", async () => {
+    mockStateMachines.mockReturnValue({ data: { stateMachines: [SM], total: 1 }, isLoading: false });
+    mockStartSyncExecution.mockResolvedValue({
+      execution: { executionArn: "arn:exec:1", status: "SUCCEEDED" },
+    });
+    const user = userEvent.setup();
+    render(<StepFunctionsDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-sm")).toBeTruthy());
+    await clickButton(user, /Sync run/i);
+    await waitFor(() => expect(screen.getByText(/Sync run:/)).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-sync-run"), "run-1");
+    await clickButton(user, /Run$/i, { last: true });
+    await waitFor(() =>
+      expect(mockStartSyncExecution).toHaveBeenCalledWith({
+        arn: "arn:aws:states:us-east-1:123:stateMachine:my-sm",
+        name: "run-1",
+        input: "{}",
+      })
+    );
+    await waitFor(() => expect(screen.getByText(/SUCCEEDED/)).toBeTruthy());
+    await clickButton(user, /Cancel/i);
+  });
+
+  it("shows sync-run error and sparse result", async () => {
+    mockStateMachines.mockReturnValue({ data: { stateMachines: [SM], total: 1 }, isLoading: false });
+    mockStartSyncExecution.mockRejectedValueOnce(new Error("sync boom"));
+    const user = userEvent.setup();
+    render(<StepFunctionsDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-sm")).toBeTruthy());
+    await clickButton(user, /Sync run/i);
+    await waitFor(() => expect(screen.getByText(/Sync run:/)).toBeTruthy());
+    await clickButton(user, /Run$/i, { last: true });
+    await waitFor(() => expect(screen.getByText("sync boom")).toBeTruthy());
+    // sparse execution → no success alert, error cleared on retry
+    mockStartSyncExecution.mockResolvedValue({});
+    await clickButton(user, /Run$/i, { last: true });
+    await waitFor(() => expect(screen.queryByText("sync boom")).toBeNull());
+  });
+
+  it("validates a definition — valid, invalid with diagnostics, error, cancel", async () => {
+    mockStateMachines.mockReturnValue({ data: { stateMachines: [SM], total: 1 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<StepFunctionsDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-sm")).toBeTruthy());
+    await clickButton(user, /Validate definition/i);
+    await waitFor(() => expect(screen.getByText("Validate state machine definition")).toBeTruthy());
+    // disabled without definition
+    expect(screen.getByRole("button", { name: /Validate$/i }).hasAttribute("disabled")).toBe(true);
+    fireEvent.change(screen.getByLabelText(/Definition/), { target: { value: "{}" } });
+    await clickButton(user, /Validate$/i);
+    await waitFor(() => expect(mockValidateDefinition).toHaveBeenCalledWith({ definition: "{}" }));
+    await waitFor(() => expect(screen.getByText("Definition is valid.")).toBeTruthy());
+    // invalid with diagnostics
+    mockValidateDefinition.mockResolvedValueOnce({
+      valid: false,
+      errors: [{ code: "NO_START_STATE", message: "missing start" }],
+    });
+    await clickButton(user, /Validate$/i);
+    await waitFor(() => expect(screen.getByText(/NO_START_STATE missing start/)).toBeTruthy());
+    // invalid without diagnostics
+    mockValidateDefinition.mockResolvedValueOnce({ valid: false, errors: [] });
+    await clickButton(user, /Validate$/i);
+    await waitFor(() => expect(screen.getByText("Definition is invalid.")).toBeTruthy());
+    // error
+    mockValidateDefinition.mockRejectedValueOnce(new Error("validate boom"));
+    await clickButton(user, /Validate$/i);
+    await waitFor(() => expect(screen.getByText("validate boom")).toBeTruthy());
+    await clickDialogButton(user, "Validate state machine definition", /Close/i);
+    await waitFor(() => expect(modalHidden("Validate state machine definition")).toBe(true));
+  });
+
+  it("shows message-less fallback errors across the new modals", async () => {
+    mockActivities.mockReturnValue({ data: { activities: [ACT], total: 1 } });
+    mockStateMachines.mockReturnValue({ data: { stateMachines: [SM], total: 1 }, isLoading: false });
+    mockCreateActivity.mockRejectedValueOnce({});
+    mockGetActivityTask.mockRejectedValueOnce({});
+    mockSendTaskSuccess.mockRejectedValueOnce({});
+    mockSendTaskFailure.mockRejectedValueOnce({});
+    mockSendTaskHeartbeat.mockRejectedValueOnce({});
+    mockStartSyncExecution.mockRejectedValueOnce({});
+    mockValidateDefinition.mockRejectedValueOnce({});
+    const user = userEvent.setup();
+    // create fallback
+    render(<StepFunctionsDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Activities/i }));
+    await waitFor(() => expect(screen.getByText("act-1")).toBeTruthy());
+    await clickButton(user, /Create activity/i);
+    await waitFor(() => expect(screen.getAllByText("Create activity").length).toBeGreaterThanOrEqual(2));
+    await user.type(screen.getByPlaceholderText("my-activity"), "a1");
+    await clickButton(user, /Create$/i);
+    await waitFor(() => expect(screen.getByText("Failed to create activity")).toBeTruthy());
+    await clickButton(user, /Cancel/i);
+    await waitFor(() => expect(modalHidden("Create activity")).toBe(true));
+    // task-callback fallbacks
+    await clickButton(user, /Task callbacks/i);
+    await waitFor(() => expect(screen.getByText(/Task callbacks:/)).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("Worker name"), "w1");
+    await clickButton(user, /Poll for task/i);
+    await waitFor(() => expect(screen.getByText("Failed to get activity task")).toBeTruthy());
+    // poll succeeds with a sparse task
+    mockGetActivityTask.mockResolvedValue({ task: {} });
+    await clickButton(user, /Poll for task/i);
+    await waitFor(() => expect(screen.getByText("—")).toBeTruthy());
+    // send success failure
+    await clickButton(user, /Send success/i);
+    await waitFor(() => expect(screen.getByText("Failed to send task success")).toBeTruthy());
+    // send failure failure
+    await clickButton(user, /Send failure/i);
+    await waitFor(() => expect(screen.getByText("Failed to send task failure")).toBeTruthy());
+    // heartbeat failure
+    await clickButton(user, /Heartbeat/i);
+    await waitFor(() => expect(screen.getByText("Failed to send heartbeat")).toBeTruthy());
+    await clickButton(user, /Close/i);
+    // sync-run + validate fallbacks on the state machines tab
+    await user.click(screen.getByRole("tab", { name: /State Machines/i }));
+    await waitFor(() => expect(screen.getByText("my-sm")).toBeTruthy());
+    await clickButton(user, /Sync run/i);
+    await waitFor(() => expect(screen.getByText(/Sync run:/)).toBeTruthy());
+    await clickButton(user, /Run$/i, { last: true });
+    await waitFor(() => expect(screen.getByText("Failed to run sync execution")).toBeTruthy());
+    await clickDialogButton(user, /Sync run:/, /Cancel/i);
+    await waitFor(() => expect(modalHidden("Sync run: arn:aws:states:us-east-1:123:stateMachine:my-sm")).toBe(true));
+    await clickButton(user, /Validate definition/i);
+    await waitFor(() => expect(screen.getByText("Validate state machine definition")).toBeTruthy());
+    fireEvent.change(screen.getByLabelText(/Definition/), { target: { value: "{}" } });
+    await clickButton(user, /Validate$/i);
+    await waitFor(() => expect(screen.getByText("Failed to validate definition")).toBeTruthy());
+  });
+
+  it("sends failure with empty optional fields and types output before success", async () => {
+    mockActivities.mockReturnValue({ data: { activities: [ACT], total: 1 } });
+    mockGetActivityTask.mockResolvedValue({ task: { taskToken: "tok-3", input: "{}" } });
+    mockSendTaskSuccess.mockResolvedValue({});
+    const user = userEvent.setup();
+    await openActivities(user);
+    await clickButton(user, /Task callbacks/i);
+    await waitFor(() => expect(screen.getByText(/Task callbacks:/)).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("Worker name"), "w1");
+    await clickButton(user, /Poll for task/i);
+    await waitFor(() => expect(screen.getByText("tok-3")).toBeTruthy());
+    // type a custom output, then clear it back to {} default is covered elsewhere; type non-empty
+    const outputInput = screen.getByPlaceholderText('{"result": "ok"}');
+    await user.type(outputInput, "x");
+    await clickButton(user, /Send success/i);
+    await waitFor(() =>
+      expect(mockSendTaskSuccess).toHaveBeenCalledWith({
+        arn: "arn:aws:states:us-east-1:123:activity:act-1",
+        taskToken: "tok-3",
+        output: "{}x",
+      })
+    );
+    // reopen, poll, send failure with empty error/cause → undefined
+    mockGetActivityTask.mockResolvedValue({ task: { taskToken: "tok-4", input: "{}" } });
+    await clickButton(user, /Task callbacks/i);
+    await waitFor(() => expect(screen.getByText(/Task callbacks:/)).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("Worker name"), "w2");
+    await clickButton(user, /Poll for task/i);
+    await waitFor(() => expect(screen.getByText("tok-4")).toBeTruthy());
+    await clickButton(user, /Send failure/i);
+    await waitFor(() =>
+      expect(mockSendTaskFailure).toHaveBeenCalledWith({
+        arn: "arn:aws:states:us-east-1:123:activity:act-1",
+        taskToken: "tok-4",
+        error: undefined,
+        cause: undefined,
+      })
+    );
+  });
+
+  it("dismisses every new modal with Escape and shows the activity delete loading state", async () => {
+    mockActivities.mockReturnValue({ data: { activities: [ACT], total: 1 } });
+    mockStateMachines.mockReturnValue({ data: { stateMachines: [SM], total: 1 }, isLoading: false });
+    deleteActState.isPending = true;
+    deleteActState.variables = ACT.activityArn;
+    const user = userEvent.setup();
+    render(<StepFunctionsDashboard />, { wrapper: createWrapper() });
+    // activity delete loading state renders
+    await user.click(screen.getByRole("tab", { name: /Activities/i }));
+    await waitFor(() => expect(screen.getByText("act-1")).toBeTruthy());
+    // Escape-dismiss the create modal
+    await clickButton(user, /Create activity/i);
+    await waitFor(() => expect(screen.getAllByText("Create activity").length).toBeGreaterThanOrEqual(2));
+    dismissWithEscape();
+    await waitFor(() => expect(modalHidden("Create activity")).toBe(true));
+    // Escape-dismiss the task-callbacks modal
+    await clickButton(user, /Task callbacks/i);
+    await waitFor(() => expect(screen.getByText(/Task callbacks:/)).toBeTruthy());
+    dismissWithEscape();
+    await waitFor(() => expect(modalHidden("Task callbacks: " + ACT.activityArn)).toBe(true));
+    // Escape-dismiss the validate modal
+    await user.click(screen.getByRole("tab", { name: /State Machines/i }));
+    await waitFor(() => expect(screen.getByText("my-sm")).toBeTruthy());
+    await clickButton(user, /Validate definition/i);
+    await waitFor(() => expect(screen.getByText("Validate state machine definition")).toBeTruthy());
+    dismissWithEscape();
+    await waitFor(() => expect(modalHidden("Validate state machine definition")).toBe(true));
+    // Escape-dismiss the sync modal (from the row button)
+    await clickButton(user, /Sync run/i);
+    await waitFor(() => expect(screen.getByText(/Sync run:/)).toBeTruthy());
+    dismissWithEscape();
+    await waitFor(() => expect(modalHidden("Sync run: " + SM.stateMachineArn)).toBe(true));
+    // Escape-dismiss the tags modal and show the sparse no-tags state
+    mockStateMachineTags.mockReturnValue({ data: undefined });
+    await clickButton(user, /^Tags$/i);
+    await waitFor(() => expect(screen.getByText("No tags found.")).toBeTruthy());
+    dismissWithEscape();
+    await waitFor(() => expect(modalHidden("Tags for state machine")).toBe(true));
+  });
+
+  it("sync run omits empty input and shows dashes for a sparse execution", async () => {
+    mockStateMachines.mockReturnValue({ data: { stateMachines: [SM], total: 1 }, isLoading: false });
+    mockStartSyncExecution.mockResolvedValue({ execution: {} });
+    const user = userEvent.setup();
+    render(<StepFunctionsDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-sm")).toBeTruthy());
+    await clickButton(user, /Sync run/i);
+    await waitFor(() => expect(screen.getByText(/Sync run:/)).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-sync-run"), "only-name");
+    const inputArea = screen.getByLabelText(/Input/);
+    await user.clear(inputArea);
+    await clickButton(user, /Run$/i, { last: true });
+    await waitFor(() =>
+      expect(mockStartSyncExecution).toHaveBeenCalledWith({
+        arn: SM.stateMachineArn,
+        name: "only-name",
+        input: undefined,
+      })
+    );
+    await waitFor(() =>
+      expect(document.querySelectorAll('[class*="awsui_alert"]').length).toBeGreaterThanOrEqual(1)
+    );
+    expect(
+      Array.from(document.querySelectorAll('[class*="awsui_alert"]')).some((a) =>
+        a.textContent?.includes("Execution ARN: —")
+      )
+    ).toBe(true);
+  });
+
+  it("validate diagnostics without code or message render as blank pieces", async () => {
+    mockStateMachines.mockReturnValue({ data: { stateMachines: [SM], total: 1 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<StepFunctionsDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-sm")).toBeTruthy());
+    await clickButton(user, /Validate definition/i);
+    await waitFor(() => expect(screen.getByText("Validate state machine definition")).toBeTruthy());
+    fireEvent.change(screen.getByLabelText(/Definition/), { target: { value: "{}" } });
+    mockValidateDefinition.mockResolvedValueOnce({ valid: false, errors: [{ message: "only message" }] });
+    await clickButton(user, /Validate$/i);
+    await waitFor(() => expect(screen.getByText(/only message/)).toBeTruthy());
+    mockValidateDefinition.mockResolvedValueOnce({ valid: false, errors: [{ code: "ONLY_CODE" }] });
+    await clickButton(user, /Validate$/i);
+    await waitFor(() => expect(screen.getByText("ONLY_CODE")).toBeTruthy());
+    // result without an errors key falls back to the invalid message
+    mockValidateDefinition.mockResolvedValueOnce({ valid: false });
+    await clickButton(user, /Validate$/i);
+    await waitFor(() => expect(screen.getByText("Definition is invalid.")).toBeTruthy());
+  });
+});
+
+/** Fire Escape on every Cloudscape dialog (dismisses whichever is open). */
+function dismissWithEscape() {
+  document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+    fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27 });
+  });
+}

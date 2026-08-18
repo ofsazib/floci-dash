@@ -23,6 +23,18 @@ import {
   useDeleteStateMachineVersion,
   useStartExecution,
   useStopExecution,
+  useCreateActivity,
+  useDeleteActivity,
+  useDescribeActivity,
+  useGetActivityTask,
+  useSendTaskSuccess,
+  useSendTaskFailure,
+  useSendTaskHeartbeat,
+  useStartSyncExecution,
+  useValidateStateMachineDefinition,
+  useStateMachineTags,
+  useTagStateMachine,
+  useUntagStateMachine,
 } from "./useStepFunctions";
 
 beforeEach(() => mockApi.mockReset());
@@ -152,5 +164,128 @@ describe("useStepFunctions hooks", () => {
       `/aws/stepfunctions/executions/${encodeURIComponent(execArn)}/stop`,
       { method: "POST", body: JSON.stringify({ cause: "manual", error: undefined }) }
     );
+  });
+});
+
+describe("G.84 — activities, sync executions, validation, tags", () => {
+  const ACT = "arn:aws:states:us-east-1:123:activity:my-act";
+
+  it("useCreateActivity POSTs and invalidates", async () => {
+    mockApi.mockResolvedValueOnce({ activity: { activityArn: ACT } });
+    const { result } = renderHook(() => useCreateActivity(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("my-act");
+    expect(mockApi).toHaveBeenCalledWith("/aws/stepfunctions/activities", {
+      method: "POST",
+      body: JSON.stringify({ name: "my-act" }),
+    });
+  });
+
+  it("useDeleteActivity DELETEs the encoded arn", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useDeleteActivity(), { wrapper: createWrapper() });
+    await result.current.mutateAsync(ACT);
+    expect(mockApi).toHaveBeenCalledWith(`/aws/stepfunctions/activities/${encodeURIComponent(ACT)}`, {
+      method: "DELETE",
+    });
+  });
+
+  it("useDescribeActivity GETs the encoded arn", async () => {
+    mockApi.mockResolvedValueOnce({ activity: { activityArn: ACT } });
+    const { result } = renderHook(() => useDescribeActivity(), { wrapper: createWrapper() });
+    await result.current.mutateAsync(ACT);
+    expect(mockApi).toHaveBeenCalledWith(`/aws/stepfunctions/activities/${encodeURIComponent(ACT)}`);
+  });
+
+  it("useGetActivityTask POSTs worker name", async () => {
+    mockApi.mockResolvedValueOnce({ task: { taskToken: "tok" } });
+    const { result } = renderHook(() => useGetActivityTask(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ arn: ACT, workerName: "w1" });
+    expect(mockApi).toHaveBeenCalledWith(`/aws/stepfunctions/activities/${encodeURIComponent(ACT)}/tasks`, {
+      method: "POST",
+      body: JSON.stringify({ workerName: "w1" }),
+    });
+  });
+
+  it("useSendTaskSuccess POSTs token + output", async () => {
+    mockApi.mockResolvedValueOnce({ success: true });
+    const { result } = renderHook(() => useSendTaskSuccess(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ arn: ACT, taskToken: "tok", output: "{}" });
+    expect(mockApi).toHaveBeenCalledWith(`/aws/stepfunctions/activities/${encodeURIComponent(ACT)}/tasks/success`, {
+      method: "POST",
+      body: JSON.stringify({ taskToken: "tok", output: "{}" }),
+    });
+  });
+
+  it("useSendTaskFailure POSTs error + cause", async () => {
+    mockApi.mockResolvedValueOnce({ success: true });
+    const { result } = renderHook(() => useSendTaskFailure(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ arn: ACT, taskToken: "tok", error: "E", cause: "C" });
+    expect(mockApi).toHaveBeenCalledWith(`/aws/stepfunctions/activities/${encodeURIComponent(ACT)}/tasks/failure`, {
+      method: "POST",
+      body: JSON.stringify({ taskToken: "tok", error: "E", cause: "C" }),
+    });
+  });
+
+  it("useSendTaskHeartbeat POSTs token", async () => {
+    mockApi.mockResolvedValueOnce({ success: true });
+    const { result } = renderHook(() => useSendTaskHeartbeat(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ arn: ACT, taskToken: "tok" });
+    expect(mockApi).toHaveBeenCalledWith(`/aws/stepfunctions/activities/${encodeURIComponent(ACT)}/tasks/heartbeat`, {
+      method: "POST",
+      body: JSON.stringify({ taskToken: "tok" }),
+    });
+  });
+
+  it("useStartSyncExecution POSTs name + input", async () => {
+    mockApi.mockResolvedValueOnce({ execution: { executionArn: "arn:exec" } });
+    const { result } = renderHook(() => useStartSyncExecution(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ arn: ARN, name: "run1", input: "{}" });
+    expect(mockApi).toHaveBeenCalledWith(`/aws/stepfunctions/state-machines/${encodeURIComponent(ARN)}/sync-executions`, {
+      method: "POST",
+      body: JSON.stringify({ name: "run1", input: "{}" }),
+    });
+  });
+
+  it("useValidateStateMachineDefinition POSTs definition + type", async () => {
+    mockApi.mockResolvedValueOnce({ valid: true, errors: [] });
+    const { result } = renderHook(() => useValidateStateMachineDefinition(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ definition: "{}", type: "STANDARD" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/stepfunctions/state-machines/validate", {
+      method: "POST",
+      body: JSON.stringify({ definition: "{}", type: "STANDARD" }),
+    });
+  });
+
+  it("useStateMachineTags fetches when arn set", async () => {
+    mockApi.mockResolvedValueOnce([{ key: "env", value: "prod" }]);
+    const { result } = renderHook(() => useStateMachineTags(ARN), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(`/aws/stepfunctions/state-machines/${encodeURIComponent(ARN)}/tags`);
+  });
+
+  it("useStateMachineTags skips when arn null", async () => {
+    const { result } = renderHook(() => useStateMachineTags(null), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.fetchStatus).toBe("idle"));
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("useTagStateMachine PUTs tags", async () => {
+    mockApi.mockResolvedValueOnce({ success: true });
+    const { result } = renderHook(() => useTagStateMachine(ARN), { wrapper: createWrapper() });
+    await result.current.mutateAsync([{ key: "env", value: "prod" }]);
+    expect(mockApi).toHaveBeenCalledWith(`/aws/stepfunctions/state-machines/${encodeURIComponent(ARN)}/tags`, {
+      method: "PUT",
+      body: JSON.stringify({ tags: [{ key: "env", value: "prod" }] }),
+    });
+  });
+
+  it("useUntagStateMachine DELETEs tag keys", async () => {
+    mockApi.mockResolvedValueOnce({ success: true });
+    const { result } = renderHook(() => useUntagStateMachine(ARN), { wrapper: createWrapper() });
+    await result.current.mutateAsync(["env"]);
+    expect(mockApi).toHaveBeenCalledWith(`/aws/stepfunctions/state-machines/${encodeURIComponent(ARN)}/tags`, {
+      method: "DELETE",
+      body: JSON.stringify({ tagKeys: ["env"] }),
+    });
   });
 });
