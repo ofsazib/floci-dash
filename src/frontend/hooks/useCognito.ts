@@ -463,3 +463,185 @@ export function useDeleteUserPoolClientSecret(userPoolId: string) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cognito", "client-secrets", userPoolId] }),
   });
 }
+
+// ── G.86 Admin User Ops ─────────────────────────────────
+
+export function useCognitoUser(userPoolId: string | null, username: string | null) {
+  return useQuery<{ user: any }>({
+    queryKey: ["aws", "cognito", "users", userPoolId, username],
+    queryFn: () =>
+      api(`/aws/cognito/user-pools/${encodeURIComponent(userPoolId!)}/users/${encodeURIComponent(username!)}`),
+    enabled: !!userPoolId && !!username,
+  });
+}
+
+export function useAdminRemoveUserFromGroup(userPoolId: string) {
+  const qc = useQueryClient();
+  return useMutation<{ removed: boolean }, Error, { username: string; groupName: string }>({
+    mutationFn: (params) =>
+      api(`/aws/cognito/user-pools/${encodeURIComponent(userPoolId)}/users/${encodeURIComponent(params.username)}/groups/${encodeURIComponent(params.groupName)}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cognito"] }),
+  });
+}
+
+export function useAdminResetUserPassword(userPoolId: string) {
+  const qc = useQueryClient();
+  return useMutation<{ reset: boolean }, Error, { username: string }>({
+    mutationFn: (params) =>
+      api(`/aws/cognito/user-pools/${encodeURIComponent(userPoolId)}/users/${encodeURIComponent(params.username)}/reset-password`, {
+        method: "POST",
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cognito"] }),
+  });
+}
+
+export function useAdminUpdateUserAttributes(userPoolId: string) {
+  const qc = useQueryClient();
+  return useMutation<{ result: any }, Error, { username: string; userAttributes: { Name: string; Value: string }[] }>({
+    mutationFn: (params) =>
+      api(`/aws/cognito/user-pools/${encodeURIComponent(userPoolId)}/users/${encodeURIComponent(params.username)}/attributes`, {
+        method: "POST",
+        body: JSON.stringify({ userAttributes: params.userAttributes }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cognito"] }),
+  });
+}
+
+export function useCognitoGroup(userPoolId: string | null, groupName: string | null) {
+  return useQuery<{ group: any }>({
+    queryKey: ["aws", "cognito", "groups", userPoolId, groupName],
+    queryFn: () =>
+      api(`/aws/cognito/user-pools/${encodeURIComponent(userPoolId!)}/groups/${encodeURIComponent(groupName!)}`),
+    enabled: !!userPoolId && !!groupName,
+  });
+}
+
+export function useUpdateCognitoGroup(userPoolId: string) {
+  const qc = useQueryClient();
+  return useMutation<{ group: any }, Error, { groupName: string; description?: string; roleArn?: string; precedence?: number }>({
+    mutationFn: (params) =>
+      api(`/aws/cognito/user-pools/${encodeURIComponent(userPoolId)}/groups/${encodeURIComponent(params.groupName)}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          description: params.description,
+          roleArn: params.roleArn,
+          precedence: params.precedence,
+        }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cognito"] }),
+  });
+}
+
+export function useUpdateCognitoUserPool(userPoolId: string) {
+  const qc = useQueryClient();
+  return useMutation<{ result: any }, Error, {
+    name?: string;
+    mfaConfiguration?: string;
+    autoVerifiedAttributes?: string[];
+  }>({
+    mutationFn: (params) =>
+      api(`/aws/cognito/user-pools/${encodeURIComponent(userPoolId)}`, {
+        method: "PUT",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cognito"] }),
+  });
+}
+
+export function useUpdateCognitoUserPoolClient(userPoolId: string) {
+  const qc = useQueryClient();
+  return useMutation<{ result: any }, Error, {
+    clientId: string;
+    name?: string;
+    refreshTokenValidity?: number;
+    callbackURLs?: string[];
+  }>({
+    mutationFn: (params) =>
+      api(`/aws/cognito/user-pools/${encodeURIComponent(userPoolId)}/clients/${encodeURIComponent(params.clientId)}`, {
+        method: "PUT",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cognito"] }),
+  });
+}
+
+export function useCognitoTags(userPoolId: string | null) {
+  return useQuery<{ tags: Record<string, string> }>({
+    queryKey: ["aws", "cognito", "tags", userPoolId],
+    queryFn: () => api(`/aws/cognito/user-pools/${encodeURIComponent(userPoolId!)}/tags`),
+    enabled: !!userPoolId,
+  });
+}
+
+export function useTagCognitoUserPool(userPoolId: string) {
+  const qc = useQueryClient();
+  return useMutation<{ tagged: boolean }, Error, { tags: Record<string, string> }>({
+    mutationFn: (params) =>
+      api(`/aws/cognito/user-pools/${encodeURIComponent(userPoolId)}/tags`, {
+        method: "POST",
+        body: JSON.stringify({ tags: params.tags }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cognito"] }),
+  });
+}
+
+export function useUntagCognitoUserPool(userPoolId: string) {
+  const qc = useQueryClient();
+  return useMutation<{ untagged: boolean }, Error, { tagKeys: string[] }>({
+    mutationFn: (params) =>
+      api(`/aws/cognito/user-pools/${encodeURIComponent(userPoolId)}/tags`, {
+        method: "DELETE",
+        body: JSON.stringify({ tagKeys: params.tagKeys }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cognito"] }),
+  });
+}
+
+export function useChangePassword() {
+  const qc = useQueryClient();
+  return useMutation<{ result: any }, Error, { accessToken: string; previousPassword: string; proposedPassword: string }>({
+    mutationFn: (params) =>
+      api("/aws/cognito/auth/change-password", {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cognito"] }),
+  });
+}
+
+export function useSignUp() {
+  const qc = useQueryClient();
+  return useMutation<{ result: any }, Error, {
+    clientId: string;
+    username: string;
+    password: string;
+    userAttributes?: { Name: string; Value: string }[];
+    secretHash?: string;
+  }>({
+    mutationFn: (params) =>
+      api("/aws/cognito/auth/sign-up", {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cognito"] }),
+  });
+}
+
+export function useRespondToAuthChallenge() {
+  const qc = useQueryClient();
+  return useMutation<{ result: any }, Error, {
+    clientId: string;
+    challengeName: string;
+    challengeResponses?: Record<string, string>;
+    session?: string;
+  }>({
+    mutationFn: (params) =>
+      api("/aws/cognito/auth/respond-challenge", {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cognito"] }),
+  });
+}

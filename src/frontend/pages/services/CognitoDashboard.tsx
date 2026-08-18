@@ -252,6 +252,18 @@ import {
   useAddUserPoolClientSecret,
   useDeleteUserPoolClientSecret,
   useUserPoolClientSecrets,
+  useCognitoUser,
+  useAdminRemoveUserFromGroup,
+  useAdminResetUserPassword,
+  useUpdateCognitoGroup,
+  useUpdateCognitoUserPoolClient,
+  useUpdateCognitoUserPool,
+  useCognitoTags,
+  useTagCognitoUserPool,
+  useUntagCognitoUserPool,
+  useChangePassword,
+  useSignUp,
+  useRespondToAuthChallenge,
 } from "../../hooks/useCognito";
 import {
   useApiGatewayV2Apis,
@@ -565,6 +577,9 @@ export function CognitoDashboard() {
     | "get-user"
     | "update-user-attributes"
     | "delete-user-attributes"
+    | "change-password"
+    | "sign-up"
+    | "respond-challenge"
   >("initiate");
   const [authFlowAccessToken, setAuthFlowAccessToken] = useState("");
   const [authFlowSession, setAuthFlowSession] = useState("");
@@ -574,6 +589,39 @@ export function CognitoDashboard() {
   const [authFlowSecretHash, setAuthFlowSecretHash] = useState("");
   const [secretsClientId, setSecretsClientId] = useState<string | null>(null);
   const [newClientSecret, setNewClientSecret] = useState("");
+
+  // G.86 state — user detail, group edit, client edit, pool edit, tags
+  const [detailUsername, setDetailUsername] = useState<string | null>(null);
+  const [editGroupName, setEditGroupName] = useState<string | null>(null);
+  const [editGroupDesc, setEditGroupDesc] = useState("");
+  const [editGroupRole, setEditGroupRole] = useState("");
+  const [editGroupPrecedence, setEditGroupPrecedence] = useState("");
+  const [editClientId, setEditClientId] = useState<string | null>(null);
+  const [editClientName, setEditClientName] = useState("");
+  const [editClientRefresh, setEditClientRefresh] = useState("");
+  const [showEditPool, setShowEditPool] = useState(false);
+  const [editPoolName, setEditPoolName] = useState("");
+  const [editPoolMfa, setEditPoolMfa] = useState("");
+  const [showPoolTags, setShowPoolTags] = useState(false);
+  const [newTagKey, setNewTagKey] = useState("");
+  const [newTagValue, setNewTagValue] = useState("");
+
+  // G.86 hooks
+  const { data: detailUserData, isLoading: detailUserLoading } = useCognitoUser(selectedPool, detailUsername);
+  const adminRemoveFromGroup = useAdminRemoveUserFromGroup(selectedPool!);
+  const adminResetPassword = useAdminResetUserPassword(selectedPool!);
+  const updateCognitoGroup = useUpdateCognitoGroup(selectedPool!);
+  const updateCognitoClient = useUpdateCognitoUserPoolClient(selectedPool!);
+  const updateCognitoPool = useUpdateCognitoUserPool(selectedPool!);
+  const { data: poolTagsData } = useCognitoTags(selectedPool);
+  const tagPool = useTagCognitoUserPool(selectedPool!);
+  const untagPool = useUntagCognitoUserPool(selectedPool!);
+  const changePassword = useChangePassword();
+  const signUp = useSignUp();
+  const respondChallenge = useRespondToAuthChallenge();
+  const [flowPreviousPassword, setFlowPreviousPassword] = useState("");
+  const [flowProposedPassword, setFlowProposedPassword] = useState("");
+  const [flowNewPassword, setFlowNewPassword] = useState("");
 
   const initiateAuth = useInitiateAuth(selectedPool!);
   const adminInitiateAuth = useAdminInitiateAuth(selectedPool!);
@@ -597,9 +645,21 @@ export function CognitoDashboard() {
     return (
       <>
         <Box margin={{ bottom: "s" }}>
-          <Button iconName="arrow-left" onClick={() => setSelectedPool(null)}>
-            Back to user pools
-          </Button>
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button iconName="arrow-left" onClick={() => setSelectedPool(null)}>
+              Back to user pools
+            </Button>
+            <Button variant="link" onClick={() => {
+              setShowEditPool(true);
+              setEditPoolName(data?.userPools?.find((p: any) => p.Id === selectedPool)?.Name || "");
+              setEditPoolMfa(data?.userPools?.find((p: any) => p.Id === selectedPool)?.Status || "");
+            }}>
+              Edit pool
+            </Button>
+            <Button variant="link" onClick={() => setShowPoolTags(true)}>
+              Tags
+            </Button>
+          </SpaceBetween>
         </Box>
         <Tabs
           tabs={[
@@ -626,6 +686,15 @@ export function CognitoDashboard() {
                     { id: "status", header: "Status", cell: (i: any) => i.status },
                     { id: "enabled", header: "Enabled", cell: (i: any) => (i.enabled ? "Yes" : "No") },
                     { id: "created", header: "Created", cell: (i: any) => i.created },
+                    {
+                      id: "actions",
+                      header: "",
+                      cell: (i: any) => (
+                        <Button variant="link" onClick={() => setDetailUsername(i.username)}>
+                          View
+                        </Button>
+                      ),
+                    },
                   ]}
                   filterEnabled
                   filterPlaceholder="Find users"
@@ -654,6 +723,23 @@ export function CognitoDashboard() {
                     { id: "description", header: "Description", cell: (i: any) => i.description },
                     { id: "precedence", header: "Precedence", cell: (i: any) => i.precedence },
                     { id: "role", header: "Role ARN", cell: (i: any) => i.role },
+                    {
+                      id: "actions",
+                      header: "",
+                      cell: (i: any) => (
+                        <Button
+                          variant="link"
+                          onClick={() => {
+                            setEditGroupName(i.name);
+                            setEditGroupDesc(i.description === "-" ? "" : i.description);
+                            setEditGroupRole(i.role === "-" ? "" : i.role);
+                            setEditGroupPrecedence(i.precedence === "-" ? "" : String(i.precedence));
+                          }}
+                        >
+                          Edit
+                        </Button>
+                      ),
+                    },
                   ]}
                   filterEnabled
                   filterPlaceholder="Find groups"
@@ -686,15 +772,27 @@ export function CognitoDashboard() {
                       id: "actions",
                       header: "Actions",
                       cell: (i: any) => (
-                        <Button
-                          variant="link"
-                          onClick={() => {
-                            setSecretsClientId(i.id);
-                            setNewClientSecret("");
-                          }}
-                        >
-                          Manage Secrets
-                        </Button>
+                        <SpaceBetween direction="horizontal" size="xs">
+                          <Button
+                            variant="link"
+                            onClick={() => {
+                              setEditClientId(i.id);
+                              setEditClientName(i.name);
+                              setEditClientRefresh("");
+                            }}
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            variant="link"
+                            onClick={() => {
+                              setSecretsClientId(i.id);
+                              setNewClientSecret("");
+                            }}
+                          >
+                            Manage Secrets
+                          </Button>
+                        </SpaceBetween>
                       ),
                     },
                   ]}
@@ -727,6 +825,9 @@ export function CognitoDashboard() {
                             { label: "Get User", value: "get-user" },
                             { label: "Update User Attributes", value: "update-user-attributes" },
                             { label: "Delete User Attributes", value: "delete-user-attributes" },
+                            { label: "Change Password", value: "change-password" },
+                            { label: "Sign Up", value: "sign-up" },
+                            { label: "Respond to Challenge", value: "respond-challenge" },
                           ]}
                           selectedAriaLabel="Selected flow type"
                         />
@@ -748,7 +849,8 @@ export function CognitoDashboard() {
                       ) : null}
                       {activeAuthFlowType !== "get-user" &&
                         activeAuthFlowType !== "update-user-attributes" &&
-                        activeAuthFlowType !== "delete-user-attributes" && (
+                        activeAuthFlowType !== "delete-user-attributes" &&
+                        activeAuthFlowType !== "change-password" && (
                         <FormField label="Client ID" description="App client ID for the selected user pool">
                           <Input
                             value={authFlowClientId}
@@ -759,7 +861,8 @@ export function CognitoDashboard() {
                       )}
                       {activeAuthFlowType !== "get-user" &&
                         activeAuthFlowType !== "update-user-attributes" &&
-                        activeAuthFlowType !== "delete-user-attributes" && (
+                        activeAuthFlowType !== "delete-user-attributes" &&
+                        activeAuthFlowType !== "change-password" && (
                         <FormField label="Username">
                           <Input
                             value={authFlowUsername}
@@ -770,7 +873,8 @@ export function CognitoDashboard() {
                       )}
                       {(activeAuthFlowType === "initiate" ||
                         activeAuthFlowType === "admin-initiate" ||
-                        activeAuthFlowType === "confirm-forgot-password") && (
+                        activeAuthFlowType === "confirm-forgot-password" ||
+                        activeAuthFlowType === "sign-up") && (
                         <FormField label="Password">
                           <Input
                             type="password"
@@ -790,7 +894,8 @@ export function CognitoDashboard() {
                           />
                         </FormField>
                       )}
-                      {activeAuthFlowType === "admin-respond-challenge" && (
+                      {(activeAuthFlowType === "admin-respond-challenge" ||
+                        activeAuthFlowType === "respond-challenge") && (
                         <>
                           <FormField label="Challenge Name">
                             <Select
@@ -824,7 +929,8 @@ export function CognitoDashboard() {
                       )}
                       {(activeAuthFlowType === "get-user" ||
                         activeAuthFlowType === "update-user-attributes" ||
-                        activeAuthFlowType === "delete-user-attributes") && (
+                        activeAuthFlowType === "delete-user-attributes" ||
+                        activeAuthFlowType === "change-password") && (
                         <FormField label="Access Token">
                           <Input
                             value={authFlowAccessToken}
@@ -832,6 +938,26 @@ export function CognitoDashboard() {
                             placeholder="Access token from successful authentication"
                           />
                         </FormField>
+                      )}
+                      {activeAuthFlowType === "change-password" && (
+                        <>
+                          <FormField label="Previous Password">
+                            <Input
+                              type="password"
+                              value={flowPreviousPassword}
+                              onChange={({ detail }) => setFlowPreviousPassword(detail.value)}
+                              placeholder="Current password"
+                            />
+                          </FormField>
+                          <FormField label="Proposed Password">
+                            <Input
+                              type="password"
+                              value={flowProposedPassword}
+                              onChange={({ detail }) => setFlowProposedPassword(detail.value)}
+                              placeholder="New password"
+                            />
+                          </FormField>
+                        </>
                       )}
                       {activeAuthFlowType === "update-user-attributes" && (
                         <FormField label="User Attributes (JSON)">
@@ -853,7 +979,8 @@ export function CognitoDashboard() {
                       )}
                       {(activeAuthFlowType === "confirm-sign-up" ||
                         activeAuthFlowType === "forgot-password" ||
-                        activeAuthFlowType === "confirm-forgot-password") && (
+                        activeAuthFlowType === "confirm-forgot-password" ||
+                        activeAuthFlowType === "sign-up") && (
                         <FormField label="Secret Hash (optional)">
                           <Input
                             value={authFlowSecretHash}
@@ -873,10 +1000,13 @@ export function CognitoDashboard() {
                           confirmForgotPassword.isPending ||
                           getUser.isPending ||
                           updateUserAttributes.isPending ||
-                          deleteUserAttributes.isPending
+                          deleteUserAttributes.isPending ||
+                          changePassword.isPending ||
+                          signUp.isPending ||
+                          respondChallenge.isPending
                         }
                         disabled={
-                          // The flow-operation Select offers exactly these nine types — the object
+                          // The flow-operation Select offers exactly these twelve types — the object
                           // lookup below covers every one, so no fallback arm exists.
                           ({
                             initiate: !authFlowClientId || !authFlowUsername || !authFlowPassword,
@@ -888,6 +1018,9 @@ export function CognitoDashboard() {
                             "get-user": !authFlowAccessToken,
                             "delete-user-attributes": !authFlowAccessToken,
                             "update-user-attributes": !authFlowAccessToken || !authFlowUserAttributes,
+                            "change-password": !authFlowAccessToken || !flowPreviousPassword || !flowProposedPassword,
+                            "sign-up": !authFlowClientId || !authFlowUsername || !authFlowPassword,
+                            "respond-challenge": !authFlowClientId || !authFlowChallengeName,
                           } as Record<string, boolean>)[activeAuthFlowType]
                         }
                         onClick={async () => {
@@ -944,6 +1077,29 @@ export function CognitoDashboard() {
                               result = await updateUserAttributes.mutateAsync({
                                 accessToken: authFlowAccessToken,
                                 userAttributes,
+                              });
+                            } else if (activeAuthFlowType === "change-password") {
+                              result = await changePassword.mutateAsync({
+                                accessToken: authFlowAccessToken,
+                                previousPassword: flowPreviousPassword,
+                                proposedPassword: flowProposedPassword,
+                              });
+                            } else if (activeAuthFlowType === "sign-up") {
+                              result = await signUp.mutateAsync({
+                                clientId: authFlowClientId,
+                                username: authFlowUsername,
+                                password: authFlowPassword,
+                                secretHash: authFlowSecretHash || undefined,
+                              });
+                            } else if (activeAuthFlowType === "respond-challenge") {
+                              const challengeResponses = authFlowChallengeResponses.trim()
+                                ? JSON.parse(authFlowChallengeResponses)
+                                : undefined;
+                              result = await respondChallenge.mutateAsync({
+                                clientId: authFlowClientId,
+                                challengeName: authFlowChallengeName,
+                                challengeResponses,
+                                session: authFlowSession || undefined,
                               });
                             } else {
                               // delete-user-attributes — the only flow type left unhandled above
@@ -1260,11 +1416,241 @@ export function CognitoDashboard() {
             </Button>
           </SpaceBetween>
         </Modal>
+
+        {/* G.86 — User Detail Modal */}
+        <Modal
+          visible={!!detailUsername}
+          onDismiss={() => setDetailUsername(null)}
+          header={`User: ${detailUsername || ""}`}
+          size="large"
+        >
+          {detailUserLoading ? (
+            <Spinner />
+          ) : detailUserData?.user ? (
+            <SpaceBetween size="s">
+              <ColumnLayout columns={2} variant="text-grid">
+                <div><b>Username:</b> {detailUserData.user.Username}</div>
+                <div><b>Status:</b> {detailUserData.user.UserStatus || "-"}</div>
+                <div><b>Enabled:</b> {detailUserData.user.Enabled ? "Yes" : "No"}</div>
+                <div><b>Created:</b> {detailUserData.user.UserCreateDate ? new Date(detailUserData.user.UserCreateDate * 1000).toLocaleString() : "-"}</div>
+              </ColumnLayout>
+              <Container header={<Header variant="h3">Attributes</Header>}>
+                {(detailUserData.user.Attributes || []).length === 0 ? (
+                  <Box color="text-body-secondary">No attributes</Box>
+                ) : (
+                  <SpaceBetween size="xs">
+                    {detailUserData.user.Attributes.map((a: any) => (
+                      <Box key={a.Name} variant="small"><b>{a.Name}:</b> {a.Value}</Box>
+                    ))}
+                  </SpaceBetween>
+                )}
+              </Container>
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button
+                  loading={adminResetPassword.isPending}
+                  onClick={async () => {
+                    await adminResetPassword.mutateAsync({ username: detailUsername! });
+                  }}
+                >
+                  Reset password
+                </Button>
+                <Button variant="link" onClick={() => setDetailUsername(null)}>
+                  Close
+                </Button>
+              </SpaceBetween>
+            </SpaceBetween>
+          ) : (
+            <Box color="text-body-secondary">User not found</Box>
+          )}
+        </Modal>
+
+        {/* G.86 — Edit Group Modal */}
+        <Modal
+          visible={!!editGroupName}
+          onDismiss={() => setEditGroupName(null)}
+          header={`Edit group: ${editGroupName || ""}`}
+        >
+          <Form
+            actions={
+              <>
+                <Button variant="link" onClick={() => setEditGroupName(null)}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  loading={updateCognitoGroup.isPending}
+                  onClick={async () => {
+                    await updateCognitoGroup.mutateAsync({
+                      groupName: editGroupName!,
+                      description: editGroupDesc || undefined,
+                      roleArn: editGroupRole || undefined,
+                      precedence: editGroupPrecedence ? Number(editGroupPrecedence) : undefined,
+                    });
+                    setEditGroupName(null);
+                  }}
+                >
+                  Save
+                </Button>
+              </>
+            }
+          >
+            <SpaceBetween size="s">
+              <FormField label="Description">
+                <Input value={editGroupDesc} onChange={({ detail }) => setEditGroupDesc(detail.value)} placeholder="Group description" />
+              </FormField>
+              <FormField label="Role ARN">
+                <Input value={editGroupRole} onChange={({ detail }) => setEditGroupRole(detail.value)} placeholder="arn:aws:iam::123:role/example" />
+              </FormField>
+              <FormField label="Precedence">
+                <Input value={editGroupPrecedence} onChange={({ detail }) => setEditGroupPrecedence(detail.value)} placeholder="0" />
+              </FormField>
+            </SpaceBetween>
+          </Form>
+        </Modal>
+
+        {/* G.86 — Edit Client Modal */}
+        <Modal
+          visible={!!editClientId}
+          onDismiss={() => setEditClientId(null)}
+          header={`Edit client: ${editClientName || ""}`}
+        >
+          <Form
+            actions={
+              <>
+                <Button variant="link" onClick={() => setEditClientId(null)}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  loading={updateCognitoClient.isPending}
+                  onClick={async () => {
+                    await updateCognitoClient.mutateAsync({
+                      clientId: editClientId!,
+                      name: editClientName || undefined,
+                      refreshTokenValidity: editClientRefresh ? Number(editClientRefresh) : undefined,
+                    });
+                    setEditClientId(null);
+                  }}
+                >
+                  Save
+                </Button>
+              </>
+            }
+          >
+            <SpaceBetween size="s">
+              <FormField label="Client name">
+                <Input value={editClientName} onChange={({ detail }) => setEditClientName(detail.value)} />
+              </FormField>
+              <FormField label="Refresh token validity (days)">
+                <Input value={editClientRefresh} onChange={({ detail }) => setEditClientRefresh(detail.value)} placeholder="30" />
+              </FormField>
+            </SpaceBetween>
+          </Form>
+        </Modal>
+
+      {/* G.86 — Edit Pool Modal */}
+        <Modal
+          visible={showEditPool}
+          onDismiss={() => setShowEditPool(false)}
+          header="Edit user pool"
+        >
+          <Form
+            actions={
+              <>
+                <Button variant="link" onClick={() => setShowEditPool(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  loading={updateCognitoPool.isPending}
+                  onClick={async () => {
+                    await updateCognitoPool.mutateAsync({
+                      name: editPoolName || undefined,
+                      mfaConfiguration: editPoolMfa || undefined,
+                    });
+                    setShowEditPool(false);
+                  }}
+                >
+                  Save
+                </Button>
+              </>
+            }
+          >
+            <SpaceBetween size="s">
+              <FormField label="Pool name">
+                <Input value={editPoolName} onChange={({ detail }) => setEditPoolName(detail.value)} />
+              </FormField>
+              <FormField label="MFA configuration">
+                <Select
+                  selectedOption={editPoolMfa ? { label: editPoolMfa, value: editPoolMfa } : null}
+                  onChange={({ detail }) => setEditPoolMfa(detail.selectedOption.value!)}
+                  options={[
+                    { label: "OFF", value: "OFF" },
+                    { label: "ON", value: "ON" },
+                    { label: "OPTIONAL", value: "OPTIONAL" },
+                  ]}
+                  placeholder="Select MFA configuration"
+                  selectedAriaLabel="Selected MFA configuration"
+                />
+              </FormField>
+            </SpaceBetween>
+          </Form>
+        </Modal>
+
+        {/* G.86 — Pool Tags Modal */}
+        <Modal
+          visible={showPoolTags}
+          onDismiss={() => setShowPoolTags(false)}
+          header={`Tags for ${selectedPool}`}
+        >
+          <SpaceBetween size="s">
+            {Object.keys(poolTagsData?.tags || {}).length === 0 ? (
+              <Box color="text-body-secondary">No tags</Box>
+            ) : (
+              <SpaceBetween size="xs">
+                {Object.entries(poolTagsData?.tags as Record<string, string>).map(([k, v]) => (
+                  <SpaceBetween key={k} direction="horizontal" size="xs">
+                    <Box variant="small"><b>{k}:</b> {v}</Box>
+                    <Button
+                      variant="link"
+                      onClick={async () => {
+                        await untagPool.mutateAsync({ tagKeys: [k] });
+                      }}
+                    >
+                      Remove
+                    </Button>
+                  </SpaceBetween>
+                ))}
+              </SpaceBetween>
+            )}
+            <SpaceBetween direction="horizontal" size="xs">
+              <Input placeholder="Key" value={newTagKey} onChange={({ detail }) => setNewTagKey(detail.value)} />
+              <Input placeholder="Value" value={newTagValue} onChange={({ detail }) => setNewTagValue(detail.value)} />
+              <Button
+                variant="primary"
+                disabled={!newTagKey}
+                loading={tagPool.isPending}
+                onClick={async () => {
+                  await tagPool.mutateAsync({ tags: { [newTagKey]: newTagValue } });
+                  setNewTagKey("");
+                  setNewTagValue("");
+                }}
+              >
+                Add tag
+              </Button>
+            </SpaceBetween>
+            <Button variant="link" onClick={() => setShowPoolTags(false)}>
+              Close
+            </Button>
+          </SpaceBetween>
+        </Modal>
+
       </>
     );
   }
 
   return (
+    <>
     <ResourceTable
       resourceName="User Pool"
       headerTitle="Cognito User Pools"
@@ -1295,12 +1681,14 @@ export function CognitoDashboard() {
           id: "actions",
           header: "",
           cell: (i: any) => (
-            <DeleteButton
-              itemName={i.name}
-              resourceType="user pool"
-              loading={deletePool.isPending && deletePool.variables === i.id}
-              onDelete={() => deletePool.mutateAsync(i.id)}
-            />
+            <SpaceBetween direction="horizontal" size="xs">
+              <DeleteButton
+                itemName={i.name}
+                resourceType="user pool"
+                loading={deletePool.isPending && deletePool.variables === i.id}
+                onDelete={() => deletePool.mutateAsync(i.id)}
+              />
+            </SpaceBetween>
           ),
         },
       ]}
@@ -1308,6 +1696,7 @@ export function CognitoDashboard() {
       filterPlaceholder="Find user pools"
       filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
     />
+      </>
   );
 }
 

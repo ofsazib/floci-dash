@@ -56,6 +56,20 @@ import {
   useUserPoolClientSecrets,
   useAddUserPoolClientSecret,
   useDeleteUserPoolClientSecret,
+  useCognitoUser,
+  useAdminRemoveUserFromGroup,
+  useAdminResetUserPassword,
+  useAdminUpdateUserAttributes,
+  useCognitoGroup,
+  useUpdateCognitoGroup,
+  useUpdateCognitoUserPool,
+  useUpdateCognitoUserPoolClient,
+  useCognitoTags,
+  useTagCognitoUserPool,
+  useUntagCognitoUserPool,
+  useChangePassword,
+  useSignUp,
+  useRespondToAuthChallenge,
 } from "./useCognito";
 
 beforeEach(() => mockApi.mockReset());
@@ -494,6 +508,155 @@ describe("useCognito hooks", () => {
     expect(mockApi).toHaveBeenCalledWith(
       `/aws/cognito/user-pools/${POOL_ID}/clients/client-1/secrets/secret-1`,
       { method: "DELETE" }
+    );
+  });
+
+  it("useCognitoUser is disabled when username is null", async () => {
+    const { result } = renderHook(() => useCognitoUser(POOL_ID, null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+
+  it("useCognitoUser calls GET", async () => {
+    mockApi.mockResolvedValueOnce({ user: { Username: "alice" } });
+    const { result } = renderHook(() => useCognitoUser(POOL_ID, "alice"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(`/aws/cognito/user-pools/${POOL_ID}/users/alice`);
+  });
+
+  it("useAdminRemoveUserFromGroup calls DELETE", async () => {
+    mockApi.mockResolvedValueOnce({ removed: true });
+    const { result } = renderHook(() => useAdminRemoveUserFromGroup(POOL_ID), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ username: "alice", groupName: "admins" });
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/cognito/user-pools/${POOL_ID}/users/alice/groups/admins`,
+      { method: "DELETE" }
+    );
+  });
+
+  it("useAdminResetUserPassword calls POST", async () => {
+    mockApi.mockResolvedValueOnce({ reset: true });
+    const { result } = renderHook(() => useAdminResetUserPassword(POOL_ID), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ username: "alice" });
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/cognito/user-pools/${POOL_ID}/users/alice/reset-password`,
+      { method: "POST" }
+    );
+  });
+
+  it("useAdminUpdateUserAttributes calls POST with body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useAdminUpdateUserAttributes(POOL_ID), { wrapper: createWrapper() });
+    await result.current.mutateAsync({
+      username: "alice",
+      userAttributes: [{ Name: "email", Value: "alice@x.com" }],
+    });
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/cognito/user-pools/${POOL_ID}/users/alice/attributes`,
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ userAttributes: [{ Name: "email", Value: "alice@x.com" }] }) })
+    );
+  });
+
+  it("useCognitoGroup is disabled when groupName is null", async () => {
+    const { result } = renderHook(() => useCognitoGroup(POOL_ID, null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+
+  it("useCognitoGroup calls GET", async () => {
+    mockApi.mockResolvedValueOnce({ group: { GroupName: "admins" } });
+    const { result } = renderHook(() => useCognitoGroup(POOL_ID, "admins"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(`/aws/cognito/user-pools/${POOL_ID}/groups/admins`);
+  });
+
+  it("useUpdateCognitoGroup calls PUT with body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useUpdateCognitoGroup(POOL_ID), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ groupName: "admins", description: "New desc", precedence: 5 });
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/cognito/user-pools/${POOL_ID}/groups/admins`,
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ description: "New desc", roleArn: undefined, precedence: 5 }) })
+    );
+  });
+
+  it("useUpdateCognitoUserPool calls PUT with body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useUpdateCognitoUserPool(POOL_ID), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ name: "renamed", mfaConfiguration: "ON" });
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/cognito/user-pools/${POOL_ID}`,
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ name: "renamed", mfaConfiguration: "ON" }) })
+    );
+  });
+
+  it("useUpdateCognitoUserPoolClient calls PUT with body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useUpdateCognitoUserPoolClient(POOL_ID), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ clientId: "client-1", name: "renamed", refreshTokenValidity: 30 });
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/cognito/user-pools/${POOL_ID}/clients/client-1`,
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ clientId: "client-1", name: "renamed", refreshTokenValidity: 30 }) })
+    );
+  });
+
+  it("useCognitoTags is disabled when userPoolId is null", async () => {
+    const { result } = renderHook(() => useCognitoTags(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+
+  it("useCognitoTags calls GET", async () => {
+    mockApi.mockResolvedValueOnce({ tags: { env: "prod" } });
+    const { result } = renderHook(() => useCognitoTags(POOL_ID), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(`/aws/cognito/user-pools/${POOL_ID}/tags`);
+  });
+
+  it("useTagCognitoUserPool calls POST with body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useTagCognitoUserPool(POOL_ID), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ tags: { env: "prod" } });
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/cognito/user-pools/${POOL_ID}/tags`,
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ tags: { env: "prod" } }) })
+    );
+  });
+
+  it("useUntagCognitoUserPool calls DELETE with body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useUntagCognitoUserPool(POOL_ID), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ tagKeys: ["env"] });
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/cognito/user-pools/${POOL_ID}/tags`,
+      expect.objectContaining({ method: "DELETE", body: JSON.stringify({ tagKeys: ["env"] }) })
+    );
+  });
+
+  it("useChangePassword calls POST with body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useChangePassword(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ accessToken: "tok", previousPassword: "old", proposedPassword: "new" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/cognito/auth/change-password",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ accessToken: "tok", previousPassword: "old", proposedPassword: "new" }) })
+    );
+  });
+
+  it("useSignUp calls POST with body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useSignUp(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ clientId: "client-1", username: "bob", password: "Passw0rd!" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/cognito/auth/sign-up",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ clientId: "client-1", username: "bob", password: "Passw0rd!" }) })
+    );
+  });
+
+  it("useRespondToAuthChallenge calls POST with body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useRespondToAuthChallenge(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ clientId: "client-1", challengeName: "NEW_PASSWORD_REQUIRED" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/cognito/auth/respond-challenge",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ clientId: "client-1", challengeName: "NEW_PASSWORD_REQUIRED" }) })
     );
   });
 });

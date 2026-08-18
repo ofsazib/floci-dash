@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
+import type { UserEvent } from "@testing-library/user-event";
 import React from "react";
 
 // ─── vi.hoisted states ─────────────────────────────────
@@ -32,6 +33,9 @@ const advancedStates = vi.hoisted(() => ({
   deleteUserAttributes: { isPending: false },
   addClientSecret: { isPending: false },
   deleteClientSecret: { isPending: false },
+  changePassword: { isPending: false },
+  signUp: { isPending: false },
+  respondChallenge: { isPending: false },
 }));
 
 // ─── Mock hooks ─────────────────────────────────────────
@@ -59,6 +63,19 @@ const mockDeleteUserAttributes = vi.fn();
 const mockAddClientSecret = vi.fn();
 const mockDeleteClientSecret = vi.fn();
 const mockClientSecrets = vi.fn();
+const mockCognitoUser = vi.fn();
+let cognitoUserLoading = false;
+const mockAdminRemoveUserFromGroup = vi.fn();
+const mockAdminResetUserPassword = vi.fn();
+const mockUpdateCognitoGroup = vi.fn();
+const mockUpdateCognitoClient = vi.fn();
+const mockUpdateCognitoPool = vi.fn();
+const mockCognitoTags = vi.fn();
+const mockTagPool = vi.fn();
+const mockUntagPool = vi.fn();
+const mockChangePassword = vi.fn();
+const mockSignUp = vi.fn();
+const mockRespondChallenge = vi.fn();
 
 vi.mock("../../hooks/useCognito", () => ({
   useCognitoUserPools: (...args: any[]) => mockPools(...args),
@@ -169,6 +186,54 @@ vi.mock("../../hooks/useCognito", () => ({
     mutateAsync: mockDeleteClientSecret,
     get isPending() { return advancedStates.deleteClientSecret.isPending; },
   }),
+  useCognitoUser: (...args: any[]) => ({
+    data: mockCognitoUser(args[0], args[1]) || null,
+    isLoading: cognitoUserLoading,
+  }),
+  useAdminRemoveUserFromGroup: () => ({
+    mutateAsync: mockAdminRemoveUserFromGroup,
+    isPending: false,
+  }),
+  useAdminResetUserPassword: () => ({
+    mutateAsync: mockAdminResetUserPassword,
+    isPending: false,
+  }),
+  useUpdateCognitoGroup: () => ({
+    mutateAsync: mockUpdateCognitoGroup,
+    isPending: false,
+  }),
+  useUpdateCognitoUserPoolClient: () => ({
+    mutateAsync: mockUpdateCognitoClient,
+    isPending: false,
+  }),
+  useUpdateCognitoUserPool: () => ({
+    mutateAsync: mockUpdateCognitoPool,
+    isPending: false,
+  }),
+  useCognitoTags: (...args: any[]) => ({
+    data: mockCognitoTags(args[0]) || { tags: {} },
+    isLoading: false,
+  }),
+  useTagCognitoUserPool: () => ({
+    mutateAsync: mockTagPool,
+    isPending: false,
+  }),
+  useUntagCognitoUserPool: () => ({
+    mutateAsync: mockUntagPool,
+    isPending: false,
+  }),
+  useChangePassword: () => ({
+    mutateAsync: mockChangePassword,
+    get isPending() { return advancedStates.changePassword.isPending; },
+  }),
+  useSignUp: () => ({
+    mutateAsync: mockSignUp,
+    get isPending() { return advancedStates.signUp.isPending; },
+  }),
+  useRespondToAuthChallenge: () => ({
+    mutateAsync: mockRespondChallenge,
+    get isPending() { return advancedStates.respondChallenge.isPending; },
+  }),
 }));
 
 import { CognitoDashboard } from "./CognitoDashboard";
@@ -188,9 +253,27 @@ function dialogOf(headerText: string): HTMLElement {
   return header!.closest('[role="dialog"]') as HTMLElement;
 }
 
-/** Assert the modal with the given header is hidden (Cloudscape uses display:none). */
+/** Assert the modal with the given header is hidden or fully unmounted. */
 function expectModalHidden(headerText: string) {
-  expect(dialogOf(headerText).className).toContain("hidden");
+  const headers = screen.queryAllByText(headerText).filter((h) => h.closest('[role="dialog"]'));
+  if (headers.length === 0) return; // unmounted entirely
+  headers.forEach((h) => expect(h.closest('[role="dialog"]')!.className).toContain("hidden"));
+}
+
+/** Find the dialog with the given header that is currently visible. */
+function visibleDialogOf(headerText: string): HTMLElement {
+  const header = screen
+    .getAllByText(headerText)
+    .find((h) => {
+      const d = h.closest('[role="dialog"]');
+      return d && !d.className.includes("hidden");
+    });
+  return header!.closest('[role="dialog"]') as HTMLElement;
+}
+
+/** Click a button inside the visible dialog with the given header. */
+async function clickDialogButton(user: UserEvent, headerText: string, name: RegExp | string) {
+  await user.click(within(visibleDialogOf(headerText)).getByRole("button", { name }));
 }
 
 // ─── Setup ──────────────────────────────────────────────
@@ -233,6 +316,7 @@ beforeEach(() => {
   mockUpdateUserAttributes.mockResolvedValue({});
   mockDeleteUserAttributes.mockResolvedValue({});
   Object.values(advancedStates).forEach((s: any) => { s.isPending = false; s.variables = null; });
+  cognitoUserLoading = false;
 });
 
 // ─── Tests ──────────────────────────────────────────────
@@ -1724,5 +1808,391 @@ describe("CognitoDashboard — sparse fixture arms", () => {
     await waitFor(() => expect(screen.getByText("Resource Servers")).toBeTruthy());
     expect(screen.getByText(/No resource servers found/i)).toBeTruthy();
     mockResourceServers.mockReturnValue(null);
+  });
+});
+
+describe("CognitoDashboard — G.86 admin user ops, updates, tags", () => {
+  const pool = { Id: "pool-1", Name: "my-pool", Status: "Enabled", CreationDate: 1705000000 };
+
+  function setupPool() {
+    mockPools.mockReturnValue({ data: { userPools: [pool], total: 1 }, isLoading: false });
+  }
+
+  async function openPool(user: ReturnType<typeof userEvent.setup>) {
+    render(<CognitoDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-pool")).toBeTruthy());
+    await user.click(screen.getByText("my-pool"));
+    await waitFor(() => expect(screen.getByText(/Users in pool-1/i)).toBeTruthy());
+  }
+
+  it("opens user detail modal with attributes and resets password", async () => {
+    const user = userEvent.setup();
+    setupPool();
+    mockUsers.mockReturnValue({ data: { users: [{ Username: "alice", UserStatus: "CONFIRMED", Enabled: true }], total: 1 } });
+    mockCognitoUser.mockReturnValue({
+      user: {
+        Username: "alice",
+        UserStatus: "CONFIRMED",
+        Enabled: true,
+        UserCreateDate: 1705000000,
+        Attributes: [{ Name: "email", Value: "alice@x.com" }],
+      },
+    });
+    mockAdminResetUserPassword.mockResolvedValue({});
+    await openPool(user);
+    await waitFor(() => expect(screen.getAllByText("alice").length).toBeGreaterThan(0));
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText(/User: alice/)).toBeTruthy());
+    expect(screen.getByText(/alice@x.com/)).toBeTruthy();
+    await clickButton(user, /Reset password/i);
+    await waitFor(() => expect(mockAdminResetUserPassword).toHaveBeenCalledWith({ username: "alice" }));
+    await clickButton(user, /Close/i);
+    await waitFor(() => expect(screen.queryByText(/User: alice/)).toBeNull());
+  });
+
+  it("shows user-not-found and loading states in the detail modal", async () => {
+    const user = userEvent.setup();
+    setupPool();
+    mockUsers.mockReturnValue({ data: { users: [{ Username: "ghost" }], total: 1 } });
+    mockCognitoUser.mockReturnValue(null);
+    await openPool(user);
+    await waitFor(() => expect(screen.getAllByText("ghost").length).toBeGreaterThan(0));
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText("User not found")).toBeTruthy());
+  });
+
+  it("shows no-attributes fallback in the user detail modal", async () => {
+    const user = userEvent.setup();
+    setupPool();
+    mockUsers.mockReturnValue({ data: { users: [{ Username: "alice" }], total: 1 } });
+    mockCognitoUser.mockReturnValue({ user: { Username: "alice", Enabled: false } });
+    await openPool(user);
+    await waitFor(() => expect(screen.getAllByText("alice").length).toBeGreaterThan(0));
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText("No attributes")).toBeTruthy());
+    expect(screen.getAllByText("No").length).toBeGreaterThan(0);
+  });
+
+  it("edits a group with description, role, precedence", async () => {
+    const user = userEvent.setup();
+    setupPool();
+    mockGroups.mockReturnValue({
+      data: {
+        groups: [{ GroupName: "admins", Description: "Old", Precedence: 1, RoleArn: "arn:old" }],
+        total: 1,
+      },
+    });
+    mockUpdateCognitoGroup.mockResolvedValue({});
+    await openPool(user);
+    await user.click(screen.getByRole("tab", { name: /Groups/i }));
+    await waitFor(() => expect(screen.getByText("admins")).toBeTruthy());
+    await clickButton(user, /^Edit$/i);
+    await waitFor(() => expect(screen.getByText(/Edit group: admins/)).toBeTruthy());
+    const desc = screen.getByPlaceholderText("Group description");
+    await user.clear(desc);
+    await user.type(desc, "New desc");
+    const role = screen.getByPlaceholderText("arn:aws:iam::123:role/example");
+    await user.clear(role);
+    await user.type(role, "arn:new");
+    const prec = screen.getByPlaceholderText("0");
+    await user.clear(prec);
+    await user.type(prec, "5");
+    await clickButton(user, /Save/i);
+    await waitFor(() =>
+      expect(mockUpdateCognitoGroup).toHaveBeenCalledWith({
+        groupName: "admins",
+        description: "New desc",
+        roleArn: "arn:new",
+        precedence: 5,
+      })
+    );
+  });
+
+  it("edits a group with dash fallbacks and cancels", async () => {
+    const user = userEvent.setup();
+    setupPool();
+    mockGroups.mockReturnValue({ data: { groups: [{ GroupName: "admins" }], total: 1 } });
+    mockUpdateCognitoGroup.mockResolvedValue({});
+    await openPool(user);
+    await user.click(screen.getByRole("tab", { name: /Groups/i }));
+    await waitFor(() => expect(screen.getByText("admins")).toBeTruthy());
+    await clickButton(user, /^Edit$/i);
+    await waitFor(() => expect(screen.getByText(/Edit group: admins/)).toBeTruthy());
+    // empty optional fields → undefined
+    await clickButton(user, /Save/i);
+    await waitFor(() =>
+      expect(mockUpdateCognitoGroup).toHaveBeenCalledWith({
+        groupName: "admins",
+        description: undefined,
+        roleArn: undefined,
+        precedence: undefined,
+      })
+    );
+    // reopen and cancel
+    await clickButton(user, /^Edit$/i);
+    await waitFor(() => expect(screen.getByText(/Edit group: admins/)).toBeTruthy());
+    await clickDialogButton(user, "Edit group: admins", /Cancel/i);
+    await waitFor(() => expectModalHidden("Edit group: admins"));
+  });
+
+  it("edits a client with name and refresh validity", async () => {
+    const user = userEvent.setup();
+    setupPool();
+    mockClients.mockReturnValue({
+      data: { clients: [{ ClientId: "client-1", ClientName: "app", CreationDate: 1705000000 }], total: 1 },
+    });
+    mockUpdateCognitoClient.mockResolvedValue({});
+    await openPool(user);
+    await user.click(screen.getByRole("tab", { name: /App Clients/i }));
+    await waitFor(() => expect(screen.getByText("app")).toBeTruthy());
+    await clickButton(user, /^Edit$/i);
+    await waitFor(() => expect(screen.getByText(/Edit client: app/)).toBeTruthy());
+    const nameInput = screen.getByRole("textbox", { name: /Client name/i });
+    await user.clear(nameInput);
+    await user.type(nameInput, "renamed");
+    await user.type(screen.getByRole("textbox", { name: /Refresh token validity/i }), "30");
+    await clickDialogButton(user, "Edit client: renamed", /Save/i);
+    await waitFor(() =>
+      expect(mockUpdateCognitoClient).toHaveBeenCalledWith({
+        clientId: "client-1",
+        name: "renamed",
+        refreshTokenValidity: 30,
+      })
+    );
+    // reopen, leave refresh empty, cancel
+    await clickButton(user, /^Edit$/i);
+    await waitFor(() => expect(screen.getByText(/Edit client: app/)).toBeTruthy());
+    await clickDialogButton(user, "Edit client: app", /Cancel/i);
+    await waitFor(() => expectModalHidden("Edit client: app"));
+  });
+
+  it("edits a pool with name and mfa configuration", async () => {
+    const user = userEvent.setup();
+    setupPool();
+    mockUpdateCognitoPool.mockResolvedValue({});
+    await openPool(user);
+    await clickButton(user, /Edit pool/i);
+    await waitFor(() => expect(screen.getByText("Edit user pool")).toBeTruthy());
+    const nameInput = screen.getByRole("textbox", { name: /Pool name/i });
+    await user.clear(nameInput);
+    await user.type(nameInput, "renamed-pool");
+    // select MFA via the Select trigger (pre-filled with the pool Status "Enabled")
+    await clickDialogButton(user, "Edit user pool", /Enabled/);
+    await waitFor(() => expect(screen.getAllByText("ON").length).toBeGreaterThan(0));
+    await user.click(screen.getAllByText("ON")[0]);
+    await clickDialogButton(user, "Edit user pool", /Save/i);
+    await waitFor(() =>
+      expect(mockUpdateCognitoPool).toHaveBeenCalledWith({
+        name: "renamed-pool",
+        mfaConfiguration: "ON",
+      })
+    );
+    // reopen and cancel
+    await clickButton(user, /Edit pool/i);
+    await waitFor(() => expect(screen.getByText("Edit user pool")).toBeTruthy());
+    await clickDialogButton(user, "Edit user pool", /Cancel/i);
+    await waitFor(() => expectModalHidden("Edit user pool"));
+  });
+
+  it("manages pool tags — add, remove, empty state", async () => {
+    const user = userEvent.setup();
+    setupPool();
+    mockCognitoTags.mockReturnValue({ tags: { env: "prod" } });
+    mockTagPool.mockResolvedValue({});
+    mockUntagPool.mockResolvedValue({});
+    await openPool(user);
+    await clickButton(user, /Tags/i);
+    await waitFor(() => expect(screen.getByText(/Tags for pool-1/)).toBeTruthy());
+    const tagsDialog = visibleDialogOf("Tags for pool-1");
+    expect(within(tagsDialog).getByText("env:")).toBeTruthy();
+    expect(within(tagsDialog).getByText("prod")).toBeTruthy();
+    const tagsDialog2 = visibleDialogOf("Tags for pool-1");
+    await user.click(within(tagsDialog2).getByRole("button", { name: /Remove/i }));
+    await waitFor(() => expect(mockUntagPool).toHaveBeenCalledWith({ tagKeys: ["env"] }));
+    const inputs = within(tagsDialog2).getAllByRole("textbox");
+    await user.type(inputs[0], "team");
+    await user.type(inputs[1], "core");
+    await user.click(within(tagsDialog2).getByRole("button", { name: /Add tag/i }));
+    await waitFor(() => expect(mockTagPool).toHaveBeenCalledWith({ tags: { team: "core" } }));
+    const tagsDialog3 = visibleDialogOf("Tags for pool-1");
+    await user.click(within(tagsDialog3).getByRole("button", { name: /Close/i }));
+    await waitFor(() => expectModalHidden("Tags for pool-1"));
+  });
+
+  it("shows the empty pool-tags state and keeps Add tag disabled without key", async () => {
+    const user = userEvent.setup();
+    setupPool();
+    mockCognitoTags.mockReturnValue({ tags: {} });
+    await openPool(user);
+    await clickButton(user, /Tags/i);
+    await waitFor(() => expect(screen.getByText("No tags")).toBeTruthy());
+    const addTag = screen.getByRole("button", { name: /Add tag/i });
+    expect(addTag.hasAttribute("disabled")).toBe(true);
+    const tagsDialog = visibleDialogOf("Tags for pool-1");
+    const inputs = within(tagsDialog).getAllByRole("textbox");
+    await user.type(inputs[0], "k");
+    await user.type(inputs[1], "v");
+    await user.click(within(tagsDialog).getByRole("button", { name: /Add tag/i }));
+    await waitFor(() => expect(mockTagPool).toHaveBeenCalledWith({ tags: { k: "v" } }));
+  });
+
+  it("runs the change-password auth flow", async () => {
+    const user = userEvent.setup();
+    setupPool();
+    mockUsers.mockReturnValue({ data: { users: [], total: 0 } });
+    mockChangePassword.mockResolvedValue({ CodeDeliveryDetails: {} });
+    await openPool(user);
+    await user.click(screen.getByRole("tab", { name: /Auth Flows/i }));
+    await waitFor(() => expect(screen.getByText("Authentication Flow Tester")).toBeTruthy());
+    await user.click(screen.getAllByText("initiate")[0]);
+    await user.click(await screen.findByText("Change Password"));
+    await waitFor(() => expect(screen.getByText("Previous Password")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("Access token from successful authentication"), "tok");
+    await user.type(screen.getByPlaceholderText("Current password"), "old");
+    await user.type(screen.getByPlaceholderText("New password"), "new");
+    await clickButton(user, /Run Flow/i);
+    await waitFor(() =>
+      expect(mockChangePassword).toHaveBeenCalledWith(
+        expect.objectContaining({ accessToken: "tok", previousPassword: "old", proposedPassword: "new" })
+      )
+    );
+    await waitFor(() => expect(screen.getByText(/CodeDeliveryDetails/)).toBeTruthy());
+  });
+
+  it("runs the sign-up auth flow", async () => {
+    const user = userEvent.setup();
+    setupPool();
+    mockUsers.mockReturnValue({ data: { users: [], total: 0 } });
+    mockSignUp.mockResolvedValue({ UserConfirmed: false });
+    await openPool(user);
+    await user.click(screen.getByRole("tab", { name: /Auth Flows/i }));
+    await waitFor(() => expect(screen.getByText("Authentication Flow Tester")).toBeTruthy());
+    await user.click(screen.getAllByText("initiate")[0]);
+    await user.click(await screen.findByText("Sign Up"));
+    await waitFor(() => expect(screen.getByText("Secret Hash (optional)")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("Client ID"), "client-1");
+    await user.type(screen.getByPlaceholderText("Username"), "bob");
+    await user.type(screen.getByPlaceholderText("Password"), "Passw0rd!");
+    await clickButton(user, /Run Flow/i);
+    await waitFor(() =>
+      expect(mockSignUp).toHaveBeenCalledWith(
+        expect.objectContaining({ clientId: "client-1", username: "bob", password: "Passw0rd!" })
+      )
+    );
+    await waitFor(() => expect(screen.getByText(/UserConfirmed/)).toBeTruthy());
+  });
+
+  it("runs the respond-to-challenge auth flow", async () => {
+    const user = userEvent.setup();
+    setupPool();
+    mockUsers.mockReturnValue({ data: { users: [], total: 0 } });
+    mockRespondChallenge.mockResolvedValue({ AuthenticationResult: {} });
+    await openPool(user);
+    await user.click(screen.getByRole("tab", { name: /Auth Flows/i }));
+    await waitFor(() => expect(screen.getByText("Authentication Flow Tester")).toBeTruthy());
+    await user.click(screen.getAllByText("initiate")[0]);
+    await user.click(await screen.findByText("Respond to Challenge"));
+    await waitFor(() => expect(screen.getByText("Challenge Name")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("Client ID"), "client-1");
+    await clickButton(user, /Run Flow/i);
+    await waitFor(() =>
+      expect(mockRespondChallenge).toHaveBeenCalledWith(
+        expect.objectContaining({ clientId: "client-1", challengeName: "NEW_PASSWORD_REQUIRED" })
+      )
+    );
+    await waitFor(() => expect(screen.getByText(/AuthenticationResult/)).toBeTruthy());
+  });
+
+  it("parses JSON challenge responses in the respond-to-challenge flow", async () => {
+    const user = userEvent.setup();
+    setupPool();
+    mockUsers.mockReturnValue({ data: { users: [], total: 0 } });
+    mockRespondChallenge.mockResolvedValue({ AuthenticationResult: {} });
+    await openPool(user);
+    await user.click(screen.getByRole("tab", { name: /Auth Flows/i }));
+    await waitFor(() => expect(screen.getByText("Authentication Flow Tester")).toBeTruthy());
+    await user.click(screen.getAllByText("initiate")[0]);
+    await user.click(await screen.findByText("Respond to Challenge"));
+    await waitFor(() => expect(screen.getByText("Challenge Name")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("Client ID"), "client-1");
+    fireEvent.change(screen.getByPlaceholderText('{"NEW_PASSWORD": "Password123!"}'), {
+      target: { value: '{"NEW_PASSWORD": "Password123!"}' },
+    });
+    await clickButton(user, /Run Flow/i);
+    await waitFor(() =>
+      expect(mockRespondChallenge).toHaveBeenCalledWith(
+        expect.objectContaining({ challengeResponses: { NEW_PASSWORD: "Password123!" } })
+      )
+    );
+  });
+
+  it("shows the loading spinner in the user detail modal", async () => {
+    const user = userEvent.setup();
+    setupPool();
+    mockUsers.mockReturnValue({ data: { users: [{ Username: "alice" }], total: 1 } });
+    cognitoUserLoading = true;
+    await openPool(user);
+    await waitFor(() => expect(screen.getAllByText("alice").length).toBeGreaterThan(0));
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText(/User: alice/)).toBeTruthy());
+    expect(document.querySelector('[class*="awsui_circle"]')).toBeTruthy();
+  });
+
+  it("saves an empty pool edit when the pool is missing from the list", async () => {
+    const user = userEvent.setup();
+    mockPools.mockReturnValue({
+      data: { userPools: [{ Id: "pool-1", Name: "my-pool", Status: "Enabled" }], total: 1 },
+      isLoading: false,
+    });
+    mockUpdateCognitoPool.mockResolvedValue({});
+    const { rerender } = render(<CognitoDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-pool")).toBeTruthy());
+    await user.click(screen.getByText("my-pool"));
+    await waitFor(() => expect(screen.getByText(/Users in pool-1/i)).toBeTruthy());
+    // Sparse refetch: the pool disappears from the list data
+    mockPools.mockReturnValue({ data: { total: 0 }, isLoading: false });
+    rerender(<CognitoDashboard />);
+    await user.click(screen.getByRole("button", { name: /Edit pool/i }));
+    await waitFor(() => expect(screen.getByText("Edit user pool")).toBeTruthy());
+    const poolDialog = visibleDialogOf("Edit user pool");
+    await user.click(within(poolDialog).getByRole("button", { name: /Save/i }));
+    await waitFor(() =>
+      expect(mockUpdateCognitoPool).toHaveBeenCalledWith({ name: undefined, mfaConfiguration: undefined })
+    );
+  });
+
+  it("saves a client edit with empty optional fields", async () => {
+    const user = userEvent.setup();
+    setupPool();
+    mockClients.mockReturnValue({
+      data: { clients: [{ ClientId: "client-1", ClientName: "app", CreationDate: 1705000000 }], total: 1 },
+    });
+    mockUpdateCognitoClient.mockResolvedValue({});
+    await openPool(user);
+    await user.click(screen.getByRole("tab", { name: /App Clients/i }));
+    await waitFor(() => expect(screen.getByText("app")).toBeTruthy());
+    await clickButton(user, /^Edit$/i);
+    await waitFor(() => expect(screen.getByText(/Edit client: app/)).toBeTruthy());
+    const clientDialog = visibleDialogOf("Edit client: app");
+    await user.clear(within(clientDialog).getByRole("textbox", { name: /Client name/i }));
+    await user.clear(within(clientDialog).getByRole("textbox", { name: /Refresh token validity/i }));
+    await user.click(within(clientDialog).getByRole("button", { name: /Save/i }));
+    await waitFor(() =>
+      expect(mockUpdateCognitoClient).toHaveBeenCalledWith({
+        clientId: "client-1",
+        name: undefined,
+        refreshTokenValidity: undefined,
+      })
+    );
+  });
+
+  it("shows the no-tags state when the tags payload is sparse", async () => {
+    const user = userEvent.setup();
+    setupPool();
+    mockCognitoTags.mockReturnValue({});
+    await openPool(user);
+    await user.click(screen.getByRole("button", { name: /Tags/i }));
+    await waitFor(() => expect(screen.getByText("No tags")).toBeTruthy());
+    expect(screen.getByRole("button", { name: /Add tag/i }).hasAttribute("disabled")).toBe(true);
   });
 });

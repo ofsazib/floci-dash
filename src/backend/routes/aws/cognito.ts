@@ -45,6 +45,20 @@ import {
   GetUserCommand,
   UpdateUserAttributesCommand,
   DeleteUserAttributesCommand,
+  AdminGetUserCommand,
+  AdminRemoveUserFromGroupCommand,
+  AdminResetUserPasswordCommand,
+  AdminUpdateUserAttributesCommand,
+  ChangePasswordCommand,
+  SignUpCommand,
+  RespondToAuthChallengeCommand,
+  GetGroupCommand,
+  UpdateGroupCommand,
+  UpdateUserPoolCommand,
+  UpdateUserPoolClientCommand,
+  ListTagsForResourceCommand,
+  TagResourceCommand,
+  UntagResourceCommand,
 } from "@aws-sdk/client-cognito-identity-provider";
 
 const router = new Hono();
@@ -573,6 +587,199 @@ router.post("/user-pools/:id/auth/delete-user-attributes", async (c: Context) =>
   const result = await client.send(new DeleteUserAttributesCommand({
     AccessToken: body.accessToken,
     UserAttributeNames: body.userAttributeNames,
+  }));
+  return c.json({ result });
+});
+
+// ── G.86 Admin User Ops ─────────────────────────────────
+
+router.get("/user-pools/:id/users/:username", async (c: Context) => {
+  const id = c.req.param("id");
+  const username = c.req.param("username");
+  const client = getClient();
+  const result = await client.send(new AdminGetUserCommand({ UserPoolId: id, Username: username }));
+  return c.json({ user: result });
+});
+
+router.delete("/user-pools/:id/users/:username/groups/:groupName", async (c: Context) => {
+  const id = c.req.param("id");
+  const username = c.req.param("username");
+  const groupName = c.req.param("groupName");
+  const client = getClient();
+  await client.send(
+    new AdminRemoveUserFromGroupCommand({ UserPoolId: id, Username: username, GroupName: groupName })
+  );
+  return c.json({ removed: true });
+});
+
+router.post("/user-pools/:id/users/:username/reset-password", async (c: Context) => {
+  const id = c.req.param("id");
+  const username = c.req.param("username");
+  const client = getClient();
+  await client.send(new AdminResetUserPasswordCommand({ UserPoolId: id, Username: username }));
+  return c.json({ reset: true });
+});
+
+router.post("/user-pools/:id/users/:username/attributes", async (c: Context) => {
+  const id = c.req.param("id");
+  const username = c.req.param("username");
+  const body = await c.req.json<{ userAttributes: { Name: string; Value: string }[] }>();
+  if (!body.userAttributes?.length) {
+    return c.json({ error: "userAttributes are required" }, 400);
+  }
+  const client = getClient();
+  const result = await client.send(new AdminUpdateUserAttributesCommand({
+    UserPoolId: id,
+    Username: username,
+    UserAttributes: body.userAttributes as any,
+  }));
+  return c.json({ result });
+});
+
+router.get("/user-pools/:id/groups/:groupName", async (c: Context) => {
+  const id = c.req.param("id");
+  const groupName = c.req.param("groupName");
+  const client = getClient();
+  const result = await client.send(new GetGroupCommand({ UserPoolId: id, GroupName: groupName }));
+  return c.json({ group: result.Group || null });
+});
+
+router.put("/user-pools/:id/groups/:groupName", async (c: Context) => {
+  const id = c.req.param("id");
+  const groupName = c.req.param("groupName");
+  const body = await c.req.json<{ description?: string; roleArn?: string; precedence?: number }>();
+  const client = getClient();
+  const result = await client.send(new UpdateGroupCommand({
+    UserPoolId: id,
+    GroupName: groupName,
+    Description: body.description,
+    RoleArn: body.roleArn,
+    Precedence: body.precedence,
+  }));
+  return c.json({ group: result.Group || null });
+});
+
+router.put("/user-pools/:id", async (c: Context) => {
+  const id = c.req.param("id");
+  const body = await c.req.json<{
+    name?: string;
+    policies?: any;
+    autoVerifiedAttributes?: string[];
+    mfaConfiguration?: string;
+    smsVerificationMessage?: string;
+    emailVerificationMessage?: string;
+    emailVerificationSubject?: string;
+  }>();
+  if (body.name === "") return c.json({ error: "name cannot be empty" }, 400);
+  const client = getClient();
+  const result = await client.send(new UpdateUserPoolCommand({
+    UserPoolId: id,
+    PoolName: body.name,
+    Policies: body.policies,
+    AutoVerifiedAttributes: body.autoVerifiedAttributes as any,
+    MfaConfiguration: body.mfaConfiguration as any,
+    SmsVerificationMessage: body.smsVerificationMessage,
+    EmailVerificationMessage: body.emailVerificationMessage,
+    EmailVerificationSubject: body.emailVerificationSubject,
+  }));
+  return c.json({ result });
+});
+
+router.put("/user-pools/:id/clients/:clientId", async (c: Context) => {
+  const id = c.req.param("id");
+  const clientId = c.req.param("clientId");
+  const body = await c.req.json<{ name?: string; refreshTokenValidity?: number; logoutURLs?: string[]; callbackURLs?: string[] }>();
+  if (body.name === "") return c.json({ error: "name cannot be empty" }, 400);
+  const client = getClient();
+  const result = await client.send(new UpdateUserPoolClientCommand({
+    UserPoolId: id,
+    ClientId: clientId,
+    ClientName: body.name,
+    RefreshTokenValidity: body.refreshTokenValidity,
+    LogoutURLs: body.logoutURLs,
+    CallbackURLs: body.callbackURLs,
+  }));
+  return c.json({ result });
+});
+
+router.get("/user-pools/:id/tags", async (c: Context) => {
+  const id = c.req.param("id");
+  const client = getClient();
+  const result = await client.send(new ListTagsForResourceCommand({ ResourceArn: id }));
+  return c.json({ tags: result.Tags || {} });
+});
+
+router.post("/user-pools/:id/tags", async (c: Context) => {
+  const id = c.req.param("id");
+  const body = await c.req.json<{ tags: Record<string, string> }>();
+  const tags = Object.entries(body.tags || {}).filter(([, v]) => v !== "");
+  if (tags.length === 0) return c.json({ error: "tags must be a non-empty object" }, 400);
+  const client = getClient();
+  await client.send(new TagResourceCommand({ ResourceArn: id, Tags: body.tags }));
+  return c.json({ tagged: true });
+});
+
+router.delete("/user-pools/:id/tags", async (c: Context) => {
+  const id = c.req.param("id");
+  const body = await c.req.json<{ tagKeys: string[] }>();
+  if (!body.tagKeys?.length) return c.json({ error: "tagKeys must be a non-empty array" }, 400);
+  const client = getClient();
+  await client.send(new UntagResourceCommand({ ResourceArn: id, TagKeys: body.tagKeys }));
+  return c.json({ untagged: true });
+});
+
+router.post("/auth/change-password", async (c: Context) => {
+  const body = await c.req.json<{ accessToken: string; previousPassword: string; proposedPassword: string }>();
+  if (!body.accessToken || !body.previousPassword || !body.proposedPassword) {
+    return c.json({ error: "accessToken, previousPassword, and proposedPassword are required" }, 400);
+  }
+  const client = getClient();
+  const result = await client.send(new ChangePasswordCommand({
+    AccessToken: body.accessToken,
+    PreviousPassword: body.previousPassword,
+    ProposedPassword: body.proposedPassword,
+  }));
+  return c.json({ result });
+});
+
+router.post("/auth/sign-up", async (c: Context) => {
+  const body = await c.req.json<{
+    clientId: string;
+    username: string;
+    password: string;
+    userAttributes?: { Name: string; Value: string }[];
+    secretHash?: string;
+  }>();
+  if (!body.clientId || !body.username || !body.password) {
+    return c.json({ error: "clientId, username, and password are required" }, 400);
+  }
+  const client = getClient();
+  const result = await client.send(new SignUpCommand({
+    ClientId: body.clientId,
+    Username: body.username,
+    Password: body.password,
+    UserAttributes: body.userAttributes as any,
+    SecretHash: body.secretHash,
+  }));
+  return c.json({ result });
+});
+
+router.post("/auth/respond-challenge", async (c: Context) => {
+  const body = await c.req.json<{
+    clientId: string;
+    challengeName: string;
+    challengeResponses?: Record<string, string>;
+    session?: string;
+  }>();
+  if (!body.clientId || !body.challengeName) {
+    return c.json({ error: "clientId and challengeName are required" }, 400);
+  }
+  const client = getClient();
+  const result = await client.send(new RespondToAuthChallengeCommand({
+    ClientId: body.clientId,
+    ChallengeName: body.challengeName as any,
+    ChallengeResponses: body.challengeResponses,
+    Session: body.session,
   }));
   return c.json({ result });
 });

@@ -56,6 +56,20 @@ vi.mock("@aws-sdk/client-cognito-identity-provider", () => ({
   GetUserCommand: createCmd("GetUserCommand"),
   UpdateUserAttributesCommand: createCmd("UpdateUserAttributesCommand"),
   DeleteUserAttributesCommand: createCmd("DeleteUserAttributesCommand"),
+  AdminGetUserCommand: createCmd("AdminGetUserCommand"),
+  AdminRemoveUserFromGroupCommand: createCmd("AdminRemoveUserFromGroupCommand"),
+  AdminResetUserPasswordCommand: createCmd("AdminResetUserPasswordCommand"),
+  AdminUpdateUserAttributesCommand: createCmd("AdminUpdateUserAttributesCommand"),
+  ChangePasswordCommand: createCmd("ChangePasswordCommand"),
+  SignUpCommand: createCmd("SignUpCommand"),
+  RespondToAuthChallengeCommand: createCmd("RespondToAuthChallengeCommand"),
+  GetGroupCommand: createCmd("GetGroupCommand"),
+  UpdateGroupCommand: createCmd("UpdateGroupCommand"),
+  UpdateUserPoolCommand: createCmd("UpdateUserPoolCommand"),
+  UpdateUserPoolClientCommand: createCmd("UpdateUserPoolClientCommand"),
+  ListTagsForResourceCommand: createCmd("ListTagsForResourceCommand"),
+  TagResourceCommand: createCmd("TagResourceCommand"),
+  UntagResourceCommand: createCmd("UntagResourceCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -701,6 +715,190 @@ describe("Cognito Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.deleted).toBe(true);
+    });
+  });
+
+  describe("G.86 — admin user ops + updates + tags", () => {
+    it("GET /user-pools/:id/users/:username — gets admin user", async () => {
+      mockSend.mockResolvedValueOnce({ Username: "alice", UserStatus: "CONFIRMED", Enabled: true });
+      const res = await get("/user-pools/us-east-1_abc/users/alice");
+      const body = await res.json();
+      expect(body.user.Username).toBe("alice");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("AdminGetUserCommand");
+      expect(mockSend.mock.calls[0][0].UserPoolId).toBe("us-east-1_abc");
+    });
+
+    it("DELETE /user-pools/:id/users/:username/groups/:groupName — removes user from group", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/user-pools/us-east-1_abc/users/alice/groups/admins");
+      const body = await res.json();
+      expect(body.removed).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("AdminRemoveUserFromGroupCommand");
+      expect(mockSend.mock.calls[0][0].GroupName).toBe("admins");
+    });
+
+    it("POST /user-pools/:id/users/:username/reset-password — resets password", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/user-pools/us-east-1_abc/users/alice/reset-password");
+      const body = await res.json();
+      expect(body.reset).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("AdminResetUserPasswordCommand");
+    });
+
+    it("POST /user-pools/:id/users/:username/attributes — updates attributes", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/user-pools/us-east-1_abc/users/alice/attributes", {
+        userAttributes: [{ Name: "email", Value: "alice@x.com" }],
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("AdminUpdateUserAttributesCommand");
+      const res400 = await post("/user-pools/us-east-1_abc/users/alice/attributes", { userAttributes: [] });
+      expect(res400.status).toBe(400);
+    });
+
+    it("GET /user-pools/:id/groups/:groupName — gets a group", async () => {
+      mockSend.mockResolvedValueOnce({ Group: { GroupName: "admins", Description: "Admins" } });
+      const res = await get("/user-pools/us-east-1_abc/groups/admins");
+      const body = await res.json();
+      expect(body.group.GroupName).toBe("admins");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetGroupCommand");
+      mockSend.mockResolvedValueOnce({});
+      const resNull = await get("/user-pools/us-east-1_abc/groups/none");
+      expect((await resNull.json()).group).toBeNull();
+    });
+
+    it("PUT /user-pools/:id/groups/:groupName — updates a group", async () => {
+      mockSend.mockResolvedValueOnce({ Group: { GroupName: "admins" } });
+      const res = await put("/user-pools/us-east-1_abc/groups/admins", {
+        description: "New desc",
+        roleArn: "arn:aws:iam::123:role/r",
+        precedence: 5,
+      });
+      const body = await res.json();
+      expect(body.group.GroupName).toBe("admins");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("UpdateGroupCommand");
+      expect(mockSend.mock.calls[0][0].Description).toBe("New desc");
+      mockSend.mockResolvedValueOnce({});
+      const resNull = await put("/user-pools/us-east-1_abc/groups/none", { description: "x" });
+      expect((await resNull.json()).group).toBeNull();
+    });
+
+    it("PUT /user-pools/:id — updates a pool", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/user-pools/us-east-1_abc", {
+        name: "renamed",
+        mfaConfiguration: "ON",
+        autoVerifiedAttributes: ["email"],
+      });
+      const body = await res.json();
+      expect(body.result).toBeDefined();
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("UpdateUserPoolCommand");
+      expect(mockSend.mock.calls[0][0].PoolName).toBe("renamed");
+      const res400 = await put("/user-pools/us-east-1_abc", { name: "" });
+      expect(res400.status).toBe(400);
+    });
+
+    it("PUT /user-pools/:id/clients/:clientId — updates a client", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/user-pools/us-east-1_abc/clients/client-1", {
+        name: "renamed",
+        refreshTokenValidity: 30,
+        callbackURLs: ["https://x.com/cb"],
+      });
+      const body = await res.json();
+      expect(body.result).toBeDefined();
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("UpdateUserPoolClientCommand");
+      expect(mockSend.mock.calls[0][0].ClientName).toBe("renamed");
+      const res400 = await put("/user-pools/us-east-1_abc/clients/client-1", { name: "" });
+      expect(res400.status).toBe(400);
+    });
+
+    it("GET /user-pools/:id/tags — lists tags", async () => {
+      mockSend.mockResolvedValueOnce({ Tags: { env: "prod" } });
+      const res = await get("/user-pools/us-east-1_abc/tags");
+      const body = await res.json();
+      expect(body.tags).toEqual({ env: "prod" });
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("ListTagsForResourceCommand");
+      mockSend.mockResolvedValueOnce({});
+      const resEmpty = await get("/user-pools/us-east-1_abc/tags");
+      expect((await resEmpty.json()).tags).toEqual({});
+    });
+
+    it("POST /user-pools/:id/tags — tags a pool", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/user-pools/us-east-1_abc/tags", { tags: { env: "prod", empty: "" } });
+      const body = await res.json();
+      expect(body.tagged).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("TagResourceCommand");
+      const res400 = await post("/user-pools/us-east-1_abc/tags", { tags: {} });
+      expect(res400.status).toBe(400);
+      const res400b = await post("/user-pools/us-east-1_abc/tags", {});
+      expect(res400b.status).toBe(400);
+    });
+
+    it("DELETE /user-pools/:id/tags — untags a pool", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await router.request("/user-pools/us-east-1_abc/tags", {
+        method: "DELETE",
+        body: JSON.stringify({ tagKeys: ["env"] }),
+        headers: { "content-type": "application/json" },
+      });
+      const body = await res.json();
+      expect(body.untagged).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("UntagResourceCommand");
+      expect(mockSend.mock.calls[0][0].TagKeys).toEqual(["env"]);
+      const res400 = await router.request("/user-pools/us-east-1_abc/tags", {
+        method: "DELETE",
+        body: JSON.stringify({ tagKeys: [] }),
+        headers: { "content-type": "application/json" },
+      });
+      expect(res400.status).toBe(400);
+    });
+
+    it("POST /auth/change-password — changes password", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/auth/change-password", {
+        accessToken: "tok",
+        previousPassword: "old",
+        proposedPassword: "new",
+      });
+      const body = await res.json();
+      expect(body.result).toBeDefined();
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("ChangePasswordCommand");
+      const res400 = await post("/auth/change-password", { accessToken: "tok" });
+      expect(res400.status).toBe(400);
+    });
+
+    it("POST /auth/sign-up — signs up a user", async () => {
+      mockSend.mockResolvedValueOnce({ UserConfirmed: false });
+      const res = await post("/auth/sign-up", {
+        clientId: "client-1",
+        username: "bob",
+        password: "Passw0rd!",
+        userAttributes: [{ Name: "email", Value: "bob@x.com" }],
+        secretHash: "hash",
+      });
+      const body = await res.json();
+      expect(body.result.UserConfirmed).toBe(false);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("SignUpCommand");
+      expect(mockSend.mock.calls[0][0].Username).toBe("bob");
+      const res400 = await post("/auth/sign-up", { clientId: "c" });
+      expect(res400.status).toBe(400);
+    });
+
+    it("POST /auth/respond-challenge — responds to a challenge", async () => {
+      mockSend.mockResolvedValueOnce({ AuthenticationResult: {} });
+      const res = await post("/auth/respond-challenge", {
+        clientId: "client-1",
+        challengeName: "NEW_PASSWORD_REQUIRED",
+        challengeResponses: { USERNAME: "bob" },
+        session: "sess",
+      });
+      const body = await res.json();
+      expect(body.result.AuthenticationResult).toBeDefined();
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("RespondToAuthChallengeCommand");
+      const res400 = await post("/auth/respond-challenge", { clientId: "c" });
+      expect(res400.status).toBe(400);
     });
   });
 });
