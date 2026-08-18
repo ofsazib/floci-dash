@@ -98,6 +98,14 @@ import {
   useCreateECSTaskSet,
   useSetPrimaryECSTaskSet,
   useDeleteECSTaskSet,
+  useECSContainerInstances,
+  useDeregisterECSContainerInstance,
+  useUpdateECSContainerInstancesState,
+  useUpdateECSContainerAgent,
+  useStartECSTask,
+  useECSTaskProtection,
+  useUpdateECSTaskProtection,
+  useDiscoverECSPollEndpoint,
 } from "../../hooks/useECS";
 import {
   useSSMParameters,
@@ -769,9 +777,25 @@ function ECSClusterDetail({ clusterName, onBack }: { clusterName: string; onBack
   const deleteService = useDeleteECSService();
   const stopTask = useStopECSTask();
   const runTask = useRunECSTask();
+  const containerInstancesQuery = useECSContainerInstances(clusterName);
+  const deregisterInstance = useDeregisterECSContainerInstance();
+  const updateInstanceState = useUpdateECSContainerInstancesState();
+  const updateContainerAgent = useUpdateECSContainerAgent();
+  const startTask = useStartECSTask();
   const [showRunTask, setShowRunTask] = useState(false);
   const [showCreateService, setShowCreateService] = useState(false);
   const [taskDefInput, setTaskDefInput] = useState("");
+  const [showStartTask, setShowStartTask] = useState(false);
+  const [startTaskForm, setStartTaskForm] = useState({ taskDefinition: "", containerInstances: "", group: "", startedBy: "" });
+  const [stateTarget, setStateTarget] = useState<{ arn: string; status: string } | null>(null);
+  const [stateError, setStateError] = useState<string | null>(null);
+  const [startTaskError, setStartTaskError] = useState<string | null>(null);
+  const [protectionTaskId, setProtectionTaskId] = useState<string | null>(null);
+  const [protectEnabled, setProtectEnabled] = useState(true);
+  const [protectExpires, setProtectExpires] = useState("");
+  const taskProtectionQuery = useECSTaskProtection(clusterName, protectionTaskId);
+  const updateTaskProtection = useUpdateECSTaskProtection();
+  const discoverPollEndpoint = useDiscoverECSPollEndpoint();
   const { showToast } = useToast();
 
   const [serviceForm, setServiceForm] = useState({
@@ -943,21 +967,27 @@ function ECSClusterDetail({ clusterName, onBack }: { clusterName: string; onBack
               {
                 id: "actions",
                 header: "",
-                cell: (item: any) =>
-                  item.lastStatus !== "STOPPED" ? (
-                    <Button
-                      variant="link"
-                      onClick={() =>
-                        stopTask.mutateAsync({
-                          cluster: clusterName,
-                          task: item.taskArn,
-                          reason: "Stopped via dashboard",
-                        })
-                      }
-                    >
-                      Stop
+                cell: (item: any) => (
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <Button variant="link" onClick={() => { setProtectionTaskId(item.taskArn); setProtectEnabled(true); setProtectExpires(""); }}>
+                      Protection
                     </Button>
-                  ) : null,
+                    {item.lastStatus !== "STOPPED" && (
+                      <Button
+                        variant="link"
+                        onClick={() =>
+                          stopTask.mutateAsync({
+                            cluster: clusterName,
+                            task: item.taskArn,
+                            reason: "Stopped via dashboard",
+                          })
+                        }
+                      >
+                        Stop
+                      </Button>
+                    )}
+                  </SpaceBetween>
+                ),
               },
             ]}
             loading={tasksQuery.isLoading}
@@ -1034,7 +1064,232 @@ function ECSClusterDetail({ clusterName, onBack }: { clusterName: string; onBack
       id: "task-sets",
       content: <ECSTaskSetsTab clusterName={clusterName} services={servicesQuery.data?.services || []} />,
     },
+    {
+      label: `Container Instances (${containerInstancesQuery.data?.total || 0})`,
+      id: "container-instances",
+      content: (
+        <>
+          <ResourceTable
+            resourceName="Container Instance"
+            headerTitle="Container Instances"
+            headerCounter={containerInstancesQuery.data?.total}
+            items={containerInstancesQuery.data?.containerInstances || []}
+            columns={[
+              { id: "arn", header: "Container Instance ARN", cell: (item: any) => item.containerInstanceArn?.split("/").pop() || "—", isRowHeader: true },
+              { id: "status", header: "Status", cell: (item: any) => <StatusBadge status={item.status || "ACTIVE"} /> },
+              { id: "agent", header: "Agent", cell: (item: any) => (item.agentConnected ? "Connected" : "Disconnected") },
+              { id: "running", header: "Running Tasks", cell: (item: any) => item.runningTasksCount ?? 0 },
+              { id: "pending", header: "Pending Tasks", cell: (item: any) => item.pendingTasksCount ?? 0 },
+              {
+                id: "actions",
+                header: "",
+                cell: (item: any) => (
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <Button variant="link" onClick={() => setStateTarget({ arn: item.containerInstanceArn, status: item.status || "ACTIVE" })}>
+                      Update state
+                    </Button>
+                    <Button
+                      variant="link"
+                      onClick={() =>
+                        updateContainerAgent
+                          .mutateAsync({ cluster: clusterName, containerInstance: item.containerInstanceArn })
+                          .then(
+                            () => showToast("success", "Container agent updated"),
+                            (err) => showToast("error", (err as Error)?.message || "Failed to update agent"),
+                          )
+                      }
+                    >
+                      Update agent
+                    </Button>
+                    <Button
+                      variant="link"
+                      onClick={() =>
+                        discoverPollEndpoint
+                          .mutateAsync(item.containerInstanceArn)
+                          .then(
+                            (d: any) => showToast("success", `Poll endpoint: ${d?.endpoint || "—"}`),
+                            (err) => showToast("error", (err as Error)?.message || "Failed to discover poll endpoint"),
+                          )
+                      }
+                    >
+                      Poll endpoint
+                    </Button>
+                    <DeleteButton
+                      itemName={item.containerInstanceArn?.split("/").pop() || "instance"}
+                      resourceType="container instance"
+                      loading={deregisterInstance.isPending}
+                      onDelete={() =>
+                        deregisterInstance
+                          .mutateAsync({ cluster: clusterName, containerInstance: item.containerInstanceArn, force: true })
+                          .then(
+                            () => showToast("success", "Container instance deregistered"),
+                            (err) => showToast("error", (err as Error)?.message || "Failed to deregister container instance"),
+                          )
+                      }
+                    />
+                  </SpaceBetween>
+                ),
+              },
+            ]}
+            loading={containerInstancesQuery.isLoading}
+            emptyMessage="No container instances in this cluster."
+            filterEnabled
+            filterPlaceholder="Find container instances"
+            filterFunction={(item: any, s: string) =>
+              (item.containerInstanceArn || "").toLowerCase().includes(s.toLowerCase())
+            }
+            onCreate={() => setShowStartTask(true)}
+          />
+          <Modal
+            visible={showStartTask}
+            onDismiss={() => { setShowStartTask(false); setStartTaskForm({ taskDefinition: "", containerInstances: "", group: "", startedBy: "" }); }}
+            header="Start task on instances"
+            footer={
+              <Box float="right">
+                <SpaceBetween direction="horizontal" size="xs">
+                  <Button variant="link" onClick={() => setShowStartTask(false)}>Cancel</Button>
+                  <Button
+                    variant="primary"
+                    loading={startTask.isPending}
+                    disabled={!startTaskForm.taskDefinition.trim()}
+                    onClick={() => {
+                      setStartTaskError(null);
+                      startTask.mutate(
+                        {
+                          cluster: clusterName,
+                          taskDefinition: startTaskForm.taskDefinition.trim(),
+                          containerInstances: startTaskForm.containerInstances
+                            .split(",")
+                            .map((s: string) => s.trim())
+                            .filter(Boolean),
+                          group: startTaskForm.group.trim() || undefined,
+                          startedBy: startTaskForm.startedBy.trim() || undefined,
+                        },
+                        {
+                          onSuccess: () => {
+                            setShowStartTask(false);
+                            setStartTaskForm({ taskDefinition: "", containerInstances: "", group: "", startedBy: "" });
+                            showToast("success", "Task started");
+                          },
+                          onError: (err) => setStartTaskError((err as Error)?.message || "Failed to start task"),
+                        }
+                      );
+                    }}
+                  >
+                    Start
+                  </Button>
+                </SpaceBetween>
+              </Box>
+            }
+          >
+            <Form>
+              {startTaskError && (
+                <Alert type="error" dismissible onDismiss={() => setStartTaskError(null)}>
+                  {startTaskError}
+                </Alert>
+              )}
+              <SpaceBetween size="m">
+                <FormField label="Task definition" description="Family:revision or ARN.">
+                  <Input
+                    value={startTaskForm.taskDefinition}
+                    onChange={({ detail }) => setStartTaskForm((p) => ({ ...p, taskDefinition: detail.value }))}
+                    placeholder="my-task:1"
+                  />
+                </FormField>
+                <FormField
+                  label="Container instances"
+                  description="Comma-separated ARNs. Leave empty to let ECS pick."
+                >
+                  <Input
+                    value={startTaskForm.containerInstances}
+                    onChange={({ detail }) => setStartTaskForm((p) => ({ ...p, containerInstances: detail.value }))}
+                    placeholder="arn:aws:ecs:...:container-instance/..."
+                  />
+                </FormField>
+                <FormField label="Group">
+                  <Input
+                    value={startTaskForm.group}
+                    onChange={({ detail }) => setStartTaskForm((p) => ({ ...p, group: detail.value }))}
+                    placeholder="family:my-task"
+                  />
+                </FormField>
+                <FormField label="Started by">
+                  <Input
+                    value={startTaskForm.startedBy}
+                    onChange={({ detail }) => setStartTaskForm((p) => ({ ...p, startedBy: detail.value }))}
+                    placeholder="dashboard"
+                  />
+                </FormField>
+              </SpaceBetween>
+            </Form>
+          </Modal>
+          <Modal
+            visible={!!stateTarget}
+            onDismiss={() => setStateTarget(null)}
+            header="Update container instance state"
+            footer={
+              <Box float="right">
+                <SpaceBetween direction="horizontal" size="xs">
+                  <Button variant="link" onClick={() => setStateTarget(null)}>Cancel</Button>
+                  <Button
+                    variant="primary"
+                    loading={updateInstanceState.isPending}
+                    onClick={() => {
+                      setStateError(null);
+                      updateInstanceState.mutate(
+                        {
+                          cluster: clusterName,
+                          containerInstances: [stateTarget!.arn],
+                          status: stateTarget!.status,
+                        },
+                        {
+                          onSuccess: () => {
+                            setStateTarget(null);
+                            showToast("success", `Instance state updated to ${stateTarget!.status}`);
+                          },
+                          onError: (err) => setStateError((err as Error)?.message || "Failed to update instance state"),
+                        }
+                      );
+                    }}
+                  >
+                    Save
+                  </Button>
+                </SpaceBetween>
+              </Box>
+            }
+          >
+            <Form>
+              {stateError && (
+                <Alert type="error" dismissible onDismiss={() => setStateError(null)}>
+                  {stateError}
+                </Alert>
+              )}
+              <FormField label="New status">
+                <Select
+                  selectedOption={{ label: stateTarget?.status || "", value: stateTarget?.status || "" }}
+                  onChange={({ detail }) =>
+                    setStateTarget((p) => ({ ...p!, status: detail.selectedOption?.value! }))
+                  }
+                  options={[
+                    { label: "ACTIVE", value: "ACTIVE" },
+                    { label: "DRAINING", value: "DRAINING" },
+                    { label: "STOPPED", value: "STOPPED" },
+                  ]}
+                />
+              </FormField>
+            </Form>
+          </Modal>
+        </>
+      ),
+    },
   ];
+
+  const currentTask = (tasksQuery.data?.tasks || []).find((t: any) => t.taskArn === protectionTaskId);
+  const protection = (taskProtectionQuery.data?.protections || [])[0];
+  const protectionLoading = taskProtectionQuery.isLoading;
+  const protectionError = taskProtectionQuery.isError
+    ? (taskProtectionQuery.error as Error)?.message || "Failed to load protection"
+    : null;
 
   return (
     <SpaceBetween size="l">
@@ -1047,6 +1302,77 @@ function ECSClusterDetail({ clusterName, onBack }: { clusterName: string; onBack
           </Button>
         }
       />
+      <Modal
+        visible={!!protectionTaskId}
+        onDismiss={() => setProtectionTaskId(null)}
+        header={`Task protection — ${currentTask?.taskArn?.split("/").pop() || protectionTaskId?.split("/").pop() || ""}`}
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setProtectionTaskId(null)}>Cancel</Button>
+              <Button
+                variant="primary"
+                loading={updateTaskProtection.isPending}
+                disabled={!protectionTaskId}
+                onClick={() => {
+                  updateTaskProtection.mutate(
+                    {
+                      cluster: clusterName,
+                      tasks: [protectionTaskId!],
+                      protectionEnabled: protectEnabled,
+                      expiresInMinutes: protectExpires ? Number(protectExpires) : undefined,
+                    },
+                    {
+                      onSuccess: () => {
+                        setProtectionTaskId(null);
+                        showToast("success", protectEnabled ? "Task protection enabled" : "Task protection disabled");
+                      },
+                      onError: (err) => showToast("error", (err as Error)?.message || "Failed to update task protection"),
+                    }
+                  );
+                }}
+              >
+                Save
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          {protectionError && (
+            <Alert type="error" dismissible>
+              {protectionError}
+            </Alert>
+          )}
+          <SpaceBetween size="m">
+            <FormField label="Current protection">
+              {protectionLoading ? (
+                <Spinner />
+              ) : (
+                <StatusIndicator type={protection?.protectionEnabled ? "success" : "pending"}>
+                  {protection?.protectionEnabled ? "Enabled" : "Not protected"}
+                </StatusIndicator>
+              )}
+            </FormField>
+            <FormField label="Protection status">
+              <Checkbox
+                checked={protectEnabled}
+                onChange={({ detail }) => setProtectEnabled(detail.checked)}
+              >
+                Enable scale-in protection for this task
+              </Checkbox>
+            </FormField>
+            <FormField label="Expires in (minutes)" description="Optional — how long protection lasts.">
+              <Input
+                type="number"
+                value={protectExpires}
+                onChange={({ detail }) => setProtectExpires(detail.value)}
+                placeholder="120"
+              />
+            </FormField>
+          </SpaceBetween>
+        </Form>
+      </Modal>
     </SpaceBetween>
   );
 }

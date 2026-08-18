@@ -42,6 +42,14 @@ import {
   useSetPrimaryECSTaskSet,
   useDeleteECSTaskSet,
   useECSServiceDeployments,
+  useECSContainerInstanceDetail,
+  useDeregisterECSContainerInstance,
+  useUpdateECSContainerInstancesState,
+  useUpdateECSContainerAgent,
+  useStartECSTask,
+  useECSTaskProtection,
+  useUpdateECSTaskProtection,
+  useDiscoverECSPollEndpoint,
 } from "./useECS";
 
 function createWrapper() {
@@ -519,5 +527,98 @@ describe("useECSServiceDeployments", () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith("/aws/ecs/service-deployments?service=svc1");
+  });
+});
+
+describe("G.89 — container instances, task protection, poll endpoint", () => {
+  const CLUSTER = "my-cluster";
+  const INST = "arn:aws:ecs:us-east-1:123:container-instance/my-cluster/abc123";
+  const TASK = "arn:aws:ecs:us-east-1:123:task/my-cluster/task-1";
+
+  it("useECSContainerInstanceDetail fetches with encoded ids", async () => {
+    mockApi.mockResolvedValueOnce({ instance: { containerInstanceArn: INST } });
+    const { result } = renderHook(() => useECSContainerInstanceDetail(CLUSTER, INST), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/ecs/container-instances/${encodeURIComponent(INST)}?cluster=${encodeURIComponent(CLUSTER)}`
+    );
+  });
+
+  it("useECSContainerInstanceDetail skips when cluster or id is null", async () => {
+    const { result } = renderHook(() => useECSContainerInstanceDetail(null, INST), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.fetchStatus).toBe("idle"));
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("useDeregisterECSContainerInstance POSTs and invalidates", async () => {
+    mockApi.mockResolvedValueOnce({ instance: null });
+    const { result } = renderHook(() => useDeregisterECSContainerInstance(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ cluster: CLUSTER, containerInstance: INST, force: true });
+    expect(mockApi).toHaveBeenCalledWith("/aws/ecs/container-instances/deregister", {
+      method: "POST",
+      body: JSON.stringify({ cluster: CLUSTER, containerInstance: INST, force: true }),
+    });
+  });
+
+  it("useUpdateECSContainerInstancesState POSTs the new state", async () => {
+    mockApi.mockResolvedValueOnce({ instances: [] });
+    const { result } = renderHook(() => useUpdateECSContainerInstancesState(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ cluster: CLUSTER, containerInstances: [INST], status: "DRAINING" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/ecs/container-instances/state", {
+      method: "POST",
+      body: JSON.stringify({ cluster: CLUSTER, containerInstances: [INST], status: "DRAINING" }),
+    });
+  });
+
+  it("useUpdateECSContainerAgent POSTs cluster + instance", async () => {
+    mockApi.mockResolvedValueOnce({ instance: null });
+    const { result } = renderHook(() => useUpdateECSContainerAgent(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ cluster: CLUSTER, containerInstance: INST });
+    expect(mockApi).toHaveBeenCalledWith("/aws/ecs/container-instances/agent", {
+      method: "POST",
+      body: JSON.stringify({ cluster: CLUSTER, containerInstance: INST }),
+    });
+  });
+
+  it("useStartECSTask POSTs the start body", async () => {
+    mockApi.mockResolvedValueOnce({ tasks: [] });
+    const { result } = renderHook(() => useStartECSTask(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ cluster: CLUSTER, taskDefinition: "my-task:1", group: "g" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/ecs/tasks/start", {
+      method: "POST",
+      body: JSON.stringify({ cluster: CLUSTER, taskDefinition: "my-task:1", group: "g" }),
+    });
+  });
+
+  it("useECSTaskProtection fetches when cluster + task set", async () => {
+    mockApi.mockResolvedValueOnce({ protections: [] });
+    const { result } = renderHook(() => useECSTaskProtection(CLUSTER, TASK), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/ecs/tasks/${encodeURIComponent(TASK)}/protection?cluster=${encodeURIComponent(CLUSTER)}`
+    );
+  });
+
+  it("useECSTaskProtection skips when task is null", async () => {
+    const { result } = renderHook(() => useECSTaskProtection(CLUSTER, null), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.fetchStatus).toBe("idle"));
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("useUpdateECSTaskProtection PUTs protection", async () => {
+    mockApi.mockResolvedValueOnce({ protections: [] });
+    const { result } = renderHook(() => useUpdateECSTaskProtection(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ cluster: CLUSTER, tasks: [TASK], protectionEnabled: false });
+    expect(mockApi).toHaveBeenCalledWith("/aws/ecs/tasks/protection", {
+      method: "PUT",
+      body: JSON.stringify({ cluster: CLUSTER, tasks: [TASK], protectionEnabled: false }),
+    });
+  });
+
+  it("useDiscoverECSPollEndpoint GETs the endpoint", async () => {
+    mockApi.mockResolvedValueOnce({ endpoint: "https://agent" });
+    const { result } = renderHook(() => useDiscoverECSPollEndpoint(), { wrapper: createWrapper() });
+    await result.current.mutateAsync(INST);
+    expect(mockApi).toHaveBeenCalledWith(`/aws/ecs/poll-endpoint?containerInstance=${encodeURIComponent(INST)}`);
   });
 });

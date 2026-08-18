@@ -25,6 +25,33 @@ const mockTaskSets = vi.fn();
 const mockCreateTaskSet = vi.fn();
 const mockSetPrimaryTaskSet = vi.fn();
 const mockDeleteTaskSet = vi.fn();
+const mockContainerInstances = vi.fn();
+const mockDeregisterInstance = vi.fn();
+const mockUpdateContainerAgent = vi.fn();
+const mockDiscoverPollEndpoint = vi.fn();
+const mockUpdateInstanceState = vi.fn();
+const mockStartTask = vi.fn();
+const mockTaskProtection = vi.fn();
+const mockUpdateTaskProtection = vi.fn();
+
+const updateInstanceStateState = vi.hoisted(() => ({
+  isError: false,
+  error: null as Error | null,
+  isPending: false,
+}));
+const startTaskState = vi.hoisted(() => ({
+  isError: false,
+  error: null as Error | null,
+  isPending: false,
+}));
+const mockUpdateInstanceStateReset = vi.fn(() => {
+  updateInstanceStateState.isError = false;
+  updateInstanceStateState.error = null;
+});
+const mockStartTaskReset = vi.fn(() => {
+  startTaskState.isError = false;
+  startTaskState.error = null;
+});
 
 const createClusterState = vi.hoisted(() => ({
   isError: false,
@@ -98,6 +125,26 @@ vi.mock("../../hooks/useECS", () => ({
   useCreateECSTaskSet: () => ({ mutate: mockCreateTaskSet, isPending: false }),
   useSetPrimaryECSTaskSet: () => ({ mutateAsync: mockSetPrimaryTaskSet, isPending: false }),
   useDeleteECSTaskSet: () => ({ mutateAsync: mockDeleteTaskSet, isPending: false }),
+  useECSContainerInstances: (...args: any[]) => mockContainerInstances(...args),
+  useDeregisterECSContainerInstance: () => ({ mutateAsync: mockDeregisterInstance, isPending: false }),
+  useUpdateECSContainerInstancesState: () => ({
+    mutate: mockUpdateInstanceState,
+    isPending: updateInstanceStateState.isPending,
+    isError: updateInstanceStateState.isError,
+    error: updateInstanceStateState.error,
+    reset: mockUpdateInstanceStateReset,
+  }),
+  useUpdateECSContainerAgent: () => ({ mutateAsync: mockUpdateContainerAgent, isPending: false }),
+  useStartECSTask: () => ({
+    mutate: mockStartTask,
+    isPending: startTaskState.isPending,
+    isError: startTaskState.isError,
+    error: startTaskState.error,
+    reset: mockStartTaskReset,
+  }),
+  useECSTaskProtection: (...args: any[]) => mockTaskProtection(...args),
+  useUpdateECSTaskProtection: () => ({ mutate: mockUpdateTaskProtection, isPending: false }),
+  useDiscoverECSPollEndpoint: () => ({ mutateAsync: mockDiscoverPollEndpoint, isPending: false }),
 }));
 
 import { ECSDashboard } from "./ECSDashboard";
@@ -145,6 +192,12 @@ beforeEach(() => {
   deleteClusterState.variables = null;
   deleteServiceState.isPending = false;
   deleteServiceState.variables = null;
+  updateInstanceStateState.isError = false;
+  updateInstanceStateState.error = null;
+  updateInstanceStateState.isPending = false;
+  startTaskState.isError = false;
+  startTaskState.error = null;
+  startTaskState.isPending = false;
 
   mockClusters.mockReturnValue({
     data: { clusters: [], total: 0 },
@@ -176,9 +229,25 @@ beforeEach(() => {
     data: { taskSets: [], total: 0 },
     isLoading: false,
   });
+  mockContainerInstances.mockReturnValue({
+    data: { containerInstances: [], total: 0 },
+    isLoading: false,
+  });
+  mockTaskProtection.mockReturnValue({
+    data: { protections: [] },
+    isLoading: false,
+    isError: false,
+    error: null,
+  });
   mockDeleteAccountSetting.mockResolvedValue({});
   mockSetPrimaryTaskSet.mockResolvedValue({});
   mockDeleteTaskSet.mockResolvedValue({});
+  mockDeregisterInstance.mockResolvedValue({});
+  mockUpdateContainerAgent.mockResolvedValue({});
+  mockDiscoverPollEndpoint.mockResolvedValue({ endpoint: "https://agent.example.com" });
+  mockUpdateInstanceState.mockImplementation((_body, opts) => opts?.onSuccess?.());
+  mockStartTask.mockImplementation((_body, opts) => opts?.onSuccess?.());
+  mockUpdateTaskProtection.mockImplementation((_body, opts) => opts?.onSuccess?.());
 });
 
 // ─── Tests ──────────────────────────────────────────────
@@ -669,7 +738,7 @@ describe("ECSDashboard — cluster detail", () => {
     await user.click(screen.getByRole("tab", { name: /tasks/i }));
     await clickButton(user, /Run/i);
     await waitFor(() => expect(screen.getByText("Run task")).toBeTruthy());
-    await clickButton(user, /Cancel/i);
+    await clickButton(user, /Cancel/i, { last: true });
     await waitFor(() => {
       expect(mockRunTask).not.toHaveBeenCalled();
     });
@@ -912,7 +981,7 @@ describe("ECSDashboard — Task Sets", () => {
     await user.click(await screen.findByText("svc1"));
     await clickButton(user, /Create/i);
     await waitFor(() => expect(screen.getByText("Create task set")).toBeTruthy());
-    await clickButton(user, /Cancel/i);
+    await clickButton(user, /Cancel/i, { last: true });
     await waitFor(() => expect(mockCreateTaskSet).not.toHaveBeenCalled());
   });
 
@@ -1881,5 +1950,511 @@ describe("ECSDashboard — modal dismiss & success paths", () => {
       expect(toastMock).toHaveBeenCalledWith("success", "Task set created"),
     );
     await waitFor(() => expectModalHidden("Create task set"));
+  });
+});
+
+describe("ECSDashboard — G.89 container instances + task protection", () => {
+  const INST_ARN = "arn:aws:ecs:us-east-1:123:container-instance/my-cluster/inst-1";
+
+  beforeEach(() => {
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [{ clusterName: "my-cluster", status: "ACTIVE", clusterArn: "arn:aws:ecs:::cluster/my-cluster" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    mockContainerInstances.mockReturnValue({
+      data: {
+        containerInstances: [
+          {
+            containerInstanceArn: INST_ARN,
+            status: "ACTIVE",
+            agentConnected: true,
+            runningTasksCount: 2,
+            pendingTasksCount: 1,
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+  });
+
+  async function openCluster(user: ReturnType<typeof userEvent.setup>) {
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("tab", { name: /container instances/i })).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /container instances/i }));
+  }
+
+  it("lists container instances with status and counts", async () => {
+    const user = userEvent.setup();
+    await openCluster(user);
+    await waitFor(() => expect(screen.getByText("inst-1")).toBeTruthy());
+    expect(screen.getAllByText("Connected")).toHaveLength(2);
+    expect(screen.getAllByText("2").length).toBeGreaterThan(0);
+    expect(screen.getByText("1")).toBeTruthy();
+  });
+
+  it("updates container instance state via modal", async () => {
+    const user = userEvent.setup();
+    await openCluster(user);
+    await waitFor(() => expect(screen.getByText("inst-1")).toBeTruthy());
+    await clickButton(user, /Update state/i);
+    await waitFor(() => expect(screen.getByText("Update container instance state")).toBeTruthy());
+    const dlg = dialogOf("Update container instance state");
+    await user.click(within(dlg).getAllByText("ACTIVE")[0]);
+    await user.click(await screen.findByText("DRAINING"));
+    await clickButton(user, /Save/i, { last: true });
+    await waitFor(() =>
+      expect(mockUpdateInstanceState).toHaveBeenCalledWith(
+        { cluster: "my-cluster", containerInstances: [INST_ARN], status: "DRAINING" },
+        expect.any(Object),
+      ),
+    );
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("success", "Instance state updated to DRAINING"));
+  });
+
+  it("shows update-state error alert dismissible", async () => {
+    const user = userEvent.setup();
+    mockUpdateInstanceState.mockImplementationOnce((_body: any, opts: any) =>
+      opts?.onError?.(new Error("state boom")),
+    );
+    await openCluster(user);
+    await waitFor(() => expect(screen.getByText("inst-1")).toBeTruthy());
+    await clickButton(user, /Update state/i);
+    await waitFor(() => expect(screen.getByText("Update container instance state")).toBeTruthy());
+    await clickButton(user, /Save/i, { last: true });
+    await waitFor(() => expect(screen.getByText("state boom")).toBeTruthy());
+    fireEvent.click(document.querySelector('[class*="awsui_dismiss-button"]') as HTMLElement);
+    await waitFor(() => expect(screen.queryByText("state boom")).toBeNull());
+  });
+
+  it("updates the container agent with a success toast", async () => {
+    const user = userEvent.setup();
+    await openCluster(user);
+    await waitFor(() => expect(screen.getByText("inst-1")).toBeTruthy());
+    await clickButton(user, /Update agent/i);
+    await waitFor(() => expect(mockUpdateContainerAgent).toHaveBeenCalledWith({ cluster: "my-cluster", containerInstance: INST_ARN }));
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("success", "Container agent updated"));
+  });
+
+  it("updates the container agent with an error toast", async () => {
+    const user = userEvent.setup();
+    mockUpdateContainerAgent.mockRejectedValueOnce(new Error("agent boom"));
+    await openCluster(user);
+    await waitFor(() => expect(screen.getByText("inst-1")).toBeTruthy());
+    await clickButton(user, /Update agent/i);
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("error", "agent boom"));
+  });
+
+  it("discovers the poll endpoint with a success toast", async () => {
+    const user = userEvent.setup();
+    await openCluster(user);
+    await waitFor(() => expect(screen.getByText("inst-1")).toBeTruthy());
+    await clickButton(user, /Poll endpoint/i);
+    await waitFor(() => expect(mockDiscoverPollEndpoint).toHaveBeenCalledWith(INST_ARN));
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("success", "Poll endpoint: https://agent.example.com"));
+  });
+
+  it("discovers the poll endpoint with an error toast", async () => {
+    const user = userEvent.setup();
+    mockDiscoverPollEndpoint.mockRejectedValueOnce(new Error("poll boom"));
+    await openCluster(user);
+    await waitFor(() => expect(screen.getByText("inst-1")).toBeTruthy());
+    await clickButton(user, /Poll endpoint/i);
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("error", "poll boom"));
+  });
+
+  it("deregisters a container instance with confirm + success toast", async () => {
+    const user = userEvent.setup();
+    await openCluster(user);
+    await waitFor(() => expect(screen.getByText("inst-1")).toBeTruthy());
+    const del = screen.getByRole("button", { name: /Delete inst-1/i });
+    await user.click(del);
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() =>
+      expect(mockDeregisterInstance).toHaveBeenCalledWith({
+        cluster: "my-cluster",
+        containerInstance: INST_ARN,
+        force: true,
+      }),
+    );
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("success", "Container instance deregistered"));
+  });
+
+  it("deregisters a container instance with an error toast", async () => {
+    const user = userEvent.setup();
+    mockDeregisterInstance.mockRejectedValueOnce(new Error("dereg boom"));
+    await openCluster(user);
+    await waitFor(() => expect(screen.getByText("inst-1")).toBeTruthy());
+    const del = screen.getByRole("button", { name: /Delete inst-1/i });
+    await user.click(del);
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("error", "dereg boom"));
+  });
+
+  it("starts a task on instances via modal", async () => {
+    const user = userEvent.setup();
+    await openCluster(user);
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Start task on instances")).toBeTruthy());
+    const dlg = dialogOf("Start task on instances");
+    await user.type(within(dlg).getByPlaceholderText("my-task:1"), "my-task:1");
+    await user.type(within(dlg).getByPlaceholderText("arn:aws:ecs:...:container-instance/..."), INST_ARN);
+    await user.type(within(dlg).getByPlaceholderText("family:my-task"), "family:my-task");
+    await user.type(within(dlg).getByPlaceholderText("dashboard"), "cli");
+    await clickButton(user, /Start/i, { last: true });
+    await waitFor(() =>
+      expect(mockStartTask).toHaveBeenCalledWith(
+        {
+          cluster: "my-cluster",
+          taskDefinition: "my-task:1",
+          containerInstances: [INST_ARN],
+          group: "family:my-task",
+          startedBy: "cli",
+        },
+        expect.any(Object),
+      ),
+    );
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("success", "Task started"));
+    await waitFor(() => expectModalHidden("Start task on instances"));
+  });
+
+  it("starts a task with empty optional fields and cancel closes", async () => {
+    const user = userEvent.setup();
+    await openCluster(user);
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Start task on instances")).toBeTruthy());
+    const dlg = dialogOf("Start task on instances");
+    await user.type(within(dlg).getByPlaceholderText("my-task:1"), "solo:2");
+    await clickButton(user, /Start/i, { last: true });
+    await waitFor(() =>
+      expect(mockStartTask).toHaveBeenCalledWith(
+        {
+          cluster: "my-cluster",
+          taskDefinition: "solo:2",
+          containerInstances: [],
+          group: undefined,
+          startedBy: undefined,
+        },
+        expect.any(Object),
+      ),
+    );
+    // Reopen and cancel
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Start task on instances")).toBeTruthy());
+    const reopened = dialogOf("Start task on instances");
+    await user.click(within(reopened).getByRole("button", { name: /Cancel/i }));
+    await waitFor(() => expectModalHidden("Start task on instances"));
+  });
+
+  it("shows start-task error alert dismissible", async () => {
+    const user = userEvent.setup();
+    mockStartTask.mockImplementationOnce((_body: any, opts: any) =>
+      opts?.onError?.(new Error("start boom")),
+    );
+    await openCluster(user);
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Start task on instances")).toBeTruthy());
+    const dlg = dialogOf("Start task on instances");
+    await user.type(within(dlg).getByPlaceholderText("my-task:1"), "boom-task");
+    await clickButton(user, /Start/i, { last: true });
+    await waitFor(() => expect(screen.getByText("start boom")).toBeTruthy());
+    fireEvent.click(document.querySelector('[class*="awsui_dismiss-button"]') as HTMLElement);
+    await waitFor(() => expect(screen.queryByText("start boom")).toBeNull());
+  });
+
+  it("shows task protection enabled in the protection modal and saves", async () => {
+    const user = userEvent.setup();
+    mockTaskProtection.mockReturnValue({
+      data: { protections: [{ taskArn: "arn:aws:ecs:us-east-1:123:task/my-cluster/task-1", protectionEnabled: true, expirationDate: "2026-09-01T00:00:00Z" }] },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockTasks.mockReturnValue({
+      data: {
+        tasks: [{ taskArn: "arn:aws:ecs:us-east-1:123:task/my-cluster/task-1", lastStatus: "RUNNING" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("tab", { name: /tasks/i })).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /tasks/i }));
+    await waitFor(() => expect(screen.getByText("task-1")).toBeTruthy());
+    await clickButton(user, /Protection/i);
+    await waitFor(() => expect(screen.getByText("Task protection — task-1")).toBeTruthy());
+    expect(screen.getByText("Enabled")).toBeTruthy();
+    const dlg1 = dialogOf("Task protection — task-1");
+    await user.click(within(dlg1).getByRole("button", { name: /Cancel/i }));
+    await waitFor(() => expect(screen.queryByText("Task protection — task-1")).toBeNull());
+    await clickButton(user, /Protection/i);
+    await waitFor(() => expect(screen.getByText("Task protection — task-1")).toBeTruthy());
+    const dlg = dialogOf("Task protection — task-1");
+    await user.type(within(dlg).getByPlaceholderText("120"), "90");
+    await clickButton(user, /Save/i, { last: true });
+    await waitFor(() =>
+      expect(mockUpdateTaskProtection).toHaveBeenCalledWith(
+        {
+          cluster: "my-cluster",
+          tasks: ["arn:aws:ecs:us-east-1:123:task/my-cluster/task-1"],
+          protectionEnabled: true,
+          expiresInMinutes: 90,
+        },
+        expect.any(Object),
+      ),
+    );
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("success", "Task protection enabled"));
+  });
+
+  it("disables protection and shows the loading/error paths", async () => {
+    const user = userEvent.setup();
+    mockTaskProtection.mockReturnValue({
+      data: { protections: [] },
+      isLoading: true,
+      isError: false,
+      error: null,
+    });
+    mockTasks.mockReturnValue({
+      data: {
+        tasks: [{ taskArn: "arn:aws:ecs:us-east-1:123:task/my-cluster/task-2", lastStatus: "RUNNING" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("tab", { name: /tasks/i })).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /tasks/i }));
+    await waitFor(() => expect(screen.getByText("task-2")).toBeTruthy());
+    await clickButton(user, /Protection/i);
+    await waitFor(() => expect(screen.getByText("Task protection — task-2")).toBeTruthy());
+    // Uncheck protection and save
+    const dlg = dialogOf("Task protection — task-2");
+    await user.click(within(dlg).getByRole("checkbox"));
+    await clickButton(user, /Save/i, { last: true });
+    await waitFor(() =>
+      expect(mockUpdateTaskProtection).toHaveBeenCalledWith(
+        {
+          cluster: "my-cluster",
+          tasks: ["arn:aws:ecs:us-east-1:123:task/my-cluster/task-2"],
+          protectionEnabled: false,
+          expiresInMinutes: undefined,
+        },
+        expect.any(Object),
+      ),
+    );
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("success", "Task protection disabled"));
+  });
+
+  it("shows task protection error alert", async () => {
+    const user = userEvent.setup();
+    mockTaskProtection.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new Error("protection boom"),
+    });
+    mockTasks.mockReturnValue({
+      data: {
+        tasks: [{ taskArn: "arn:aws:ecs:us-east-1:123:task/my-cluster/task-3", lastStatus: "RUNNING" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("tab", { name: /tasks/i })).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /tasks/i }));
+    await waitFor(() => expect(screen.getByText("task-3")).toBeTruthy());
+    await clickButton(user, /Protection/i);
+    await waitFor(() => expect(screen.getByText("protection boom")).toBeTruthy());
+  });
+});
+
+describe("ECSDashboard — G.89 coverage edge cases", () => {
+  const INST_ARN = "arn:aws:ecs:us-east-1:123:container-instance/my-cluster/inst-1";
+
+  beforeEach(() => {
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [{ clusterName: "my-cluster", status: "ACTIVE", clusterArn: "arn:aws:ecs:::cluster/my-cluster" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+  });
+
+  async function openInstances(user: ReturnType<typeof userEvent.setup>) {
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("tab", { name: /container instances/i })).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /container instances/i }));
+  }
+
+  it("renders sparse container instances with fallbacks", async () => {
+    const user = userEvent.setup();
+    mockContainerInstances.mockReturnValue({
+      data: { containerInstances: [{}, { containerInstanceArn: INST_ARN, agentConnected: false }], total: 2 },
+      isLoading: false,
+    });
+    await openInstances(user);
+    await waitFor(() => expect(screen.getByText("inst-1")).toBeTruthy());
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Disconnected").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("0").length).toBeGreaterThan(0);
+  });
+
+  it("renders the empty container-instances state when data lacks the key", async () => {
+    const user = userEvent.setup();
+    mockContainerInstances.mockReturnValue({
+      data: { total: 0 },
+      isLoading: false,
+    });
+    await openInstances(user);
+    await waitFor(() => expect(screen.getByText("No container instances in this cluster.")).toBeTruthy());
+  });
+
+  it("filters container instances by ARN", async () => {
+    const user = userEvent.setup();
+    mockContainerInstances.mockReturnValue({
+      data: {
+        containerInstances: [
+          { containerInstanceArn: INST_ARN, agentConnected: true },
+          {},
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    await openInstances(user);
+    await waitFor(() => expect(screen.getByText("inst-1")).toBeTruthy());
+    const filter = screen.getByPlaceholderText("Find container instances");
+    await user.type(filter, "inst-1");
+    await waitFor(() => expect(screen.queryByText("inst-1")).toBeTruthy());
+  });
+
+  it("shows a dash poll endpoint when none is returned", async () => {
+    const user = userEvent.setup();
+    mockContainerInstances.mockReturnValue({
+      data: { containerInstances: [{ containerInstanceArn: INST_ARN, agentConnected: true }], total: 1 },
+      isLoading: false,
+    });
+    mockDiscoverPollEndpoint.mockResolvedValueOnce({ endpoint: null });
+    await openInstances(user);
+    await waitFor(() => expect(screen.getByText("inst-1")).toBeTruthy());
+    await clickButton(user, /Poll endpoint/i);
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("success", "Poll endpoint: —"));
+  });
+
+  it("shows fallback error toasts for agent, poll, and deregister failures", async () => {
+    const user = userEvent.setup();
+    mockContainerInstances.mockReturnValue({
+      data: { containerInstances: [{ containerInstanceArn: INST_ARN, agentConnected: true }], total: 1 },
+      isLoading: false,
+    });
+    mockUpdateContainerAgent.mockRejectedValueOnce("agent boom");
+    mockDiscoverPollEndpoint.mockRejectedValueOnce("poll boom");
+    mockDeregisterInstance.mockRejectedValueOnce("dereg boom");
+    await openInstances(user);
+    await waitFor(() => expect(screen.getByText("inst-1")).toBeTruthy());
+    await clickButton(user, /Update agent/i);
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("error", "Failed to update agent"));
+    await clickButton(user, /Poll endpoint/i);
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("error", "Failed to discover poll endpoint"));
+    const del = screen.getByRole("button", { name: /Delete inst-1/i });
+    await user.click(del);
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("error", "Failed to deregister container instance"));
+  });
+
+  it("dismisses the start-task modal via Escape", async () => {
+    const user = userEvent.setup();
+    mockContainerInstances.mockReturnValue({
+      data: { containerInstances: [{ containerInstanceArn: INST_ARN, agentConnected: true }], total: 1 },
+      isLoading: false,
+    });
+    await openInstances(user);
+    await waitFor(() => expect(screen.getByText("inst-1")).toBeTruthy());
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Start task on instances")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Start task on instances"));
+  });
+
+  it("dismisses the update-state modal via Escape and Cancel", async () => {
+    const user = userEvent.setup();
+    mockContainerInstances.mockReturnValue({
+      data: { containerInstances: [{ containerInstanceArn: INST_ARN, agentConnected: true }], total: 1 },
+      isLoading: false,
+    });
+    await openInstances(user);
+    await waitFor(() => expect(screen.getByText("inst-1")).toBeTruthy());
+    await clickButton(user, /Update state/i);
+    await waitFor(() => expect(screen.getByText("Update container instance state")).toBeTruthy());
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Update container instance state"));
+    await clickButton(user, /Update state/i);
+    await waitFor(() => expect(screen.getByText("Update container instance state")).toBeTruthy());
+    await clickButton(user, /Cancel/i, { last: true });
+    await waitFor(() => expectModalHidden("Update container instance state"));
+  });
+
+  it("shows fallback error alerts for start task and update state", async () => {
+    const user = userEvent.setup();
+    mockContainerInstances.mockReturnValue({
+      data: { containerInstances: [{ containerInstanceArn: INST_ARN, agentConnected: true }], total: 1 },
+      isLoading: false,
+    });
+    mockStartTask.mockImplementationOnce((_body: any, opts: any) => opts?.onError?.("start boom"));
+    mockUpdateInstanceState.mockImplementationOnce((_body: any, opts: any) => opts?.onError?.("state boom"));
+    await openInstances(user);
+    await waitFor(() => expect(screen.getByText("inst-1")).toBeTruthy());
+    // Start-task fallback alert
+    await clickButton(user, /Create/i);
+    await waitFor(() => expect(screen.getByText("Start task on instances")).toBeTruthy());
+    const startDlg = dialogOf("Start task on instances");
+    await user.type(within(startDlg).getByPlaceholderText("my-task:1"), "boom-task");
+    await clickButton(user, /Start/i, { last: true });
+    await waitFor(() => expect(screen.getByText("Failed to start task")).toBeTruthy());
+    // Update-state fallback alert
+    await clickButton(user, /Update state/i);
+    await waitFor(() => expect(screen.getByText("Update container instance state")).toBeTruthy());
+    await clickButton(user, /Save/i, { last: true });
+    await waitFor(() => expect(screen.getByText("Failed to update instance state")).toBeTruthy());
+  });
+
+  it("shows fallback protection error alerts for load and save", async () => {
+    const user = userEvent.setup();
+    mockTaskProtection.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: "protection boom",
+    });
+    mockTasks.mockReturnValue({
+      data: {
+        tasks: [{ taskArn: "arn:aws:ecs:us-east-1:123:task/my-cluster/task-4", lastStatus: "RUNNING" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    mockUpdateTaskProtection.mockImplementation((_body: any, opts: any) => opts?.onError?.("save boom"));
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("tab", { name: /tasks/i })).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /tasks/i }));
+    await waitFor(() => expect(screen.getByText("task-4")).toBeTruthy());
+    await clickButton(user, /Protection/i);
+    await waitFor(() => expect(screen.getByText("Failed to load protection")).toBeTruthy());
+    await clickButton(user, /Save/i, { last: true });
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("error", "Failed to update task protection"));
   });
 });

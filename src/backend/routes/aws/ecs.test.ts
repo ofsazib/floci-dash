@@ -57,6 +57,13 @@ vi.mock("@aws-sdk/client-ecs", () => ({
   ListServiceDeploymentsCommand: createCmd("ListServiceDeploymentsCommand"),
   DescribeServiceDeploymentsCommand: createCmd("DescribeServiceDeploymentsCommand"),
   DescribeServiceRevisionsCommand: createCmd("DescribeServiceRevisionsCommand"),
+  DeregisterContainerInstanceCommand: createCmd("DeregisterContainerInstanceCommand"),
+  UpdateContainerInstancesStateCommand: createCmd("UpdateContainerInstancesStateCommand"),
+  UpdateContainerAgentCommand: createCmd("UpdateContainerAgentCommand"),
+  StartTaskCommand: createCmd("StartTaskCommand"),
+  GetTaskProtectionCommand: createCmd("GetTaskProtectionCommand"),
+  UpdateTaskProtectionCommand: createCmd("UpdateTaskProtectionCommand"),
+  DiscoverPollEndpointCommand: createCmd("DiscoverPollEndpointCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -837,5 +844,212 @@ describe("ECS routes — Service Deployments & Revisions", () => {
   it("GET /service-revisions — 400 when no arns", async () => {
     const res = await get("/service-revisions");
     expect(res.status).toBe(400);
+  });
+});
+
+describe("G.89 — container instances, task protection, poll endpoint", () => {
+  const CLUSTER = "my-cluster";
+  const INST = "arn:aws:ecs:us-east-1:123:container-instance/my-cluster/abc123";
+  const INST_ENC = encodeURIComponent(INST);
+  const TASK = "arn:aws:ecs:us-east-1:123:task/my-cluster/task-1";
+  const TASK_ENC = encodeURIComponent(TASK);
+
+  it("GET /container-instances/:instanceId — describes a single instance", async () => {
+    mockSend.mockResolvedValueOnce({ containerInstances: [{ containerInstanceArn: INST, status: "ACTIVE" }] });
+    const res = await get(`/container-instances/${INST_ENC}?cluster=${CLUSTER}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.instance.containerInstanceArn).toBe(INST);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("DescribeContainerInstancesCommand");
+    expect(mockSend.mock.calls[0][0].containerInstances).toEqual([INST]);
+  });
+
+  it("GET /container-instances/:instanceId — 400 without cluster", async () => {
+    const res = await get(`/container-instances/${INST_ENC}`);
+    expect(res.status).toBe(400);
+  });
+
+  it("GET /container-instances/:instanceId — null when sparse", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get(`/container-instances/${INST_ENC}?cluster=${CLUSTER}`);
+    const body = await res.json();
+    expect(body.instance).toBeNull();
+  });
+
+  it("POST /container-instances/deregister — deregisters", async () => {
+    mockSend.mockResolvedValueOnce({ containerInstance: { containerInstanceArn: INST } });
+    const res = await post("/container-instances/deregister", { cluster: CLUSTER, containerInstance: INST });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.instance.containerInstanceArn).toBe(INST);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeregisterContainerInstanceCommand");
+    expect(mockSend.mock.calls[0][0].force).toBe(false);
+  });
+
+  it("POST /container-instances/deregister — 400 without cluster or instance", async () => {
+    const res = await post("/container-instances/deregister", { cluster: CLUSTER });
+    expect(res.status).toBe(400);
+  });
+
+  it("POST /container-instances/deregister — null when sparse and force passthrough", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/container-instances/deregister", { cluster: CLUSTER, containerInstance: INST, force: true });
+    const body = await res.json();
+    expect(body.instance).toBeNull();
+    expect(mockSend.mock.calls[0][0].force).toBe(true);
+  });
+
+  it("POST /container-instances/state — updates instance state", async () => {
+    mockSend.mockResolvedValueOnce({ containerInstances: [{ containerInstanceArn: INST, status: "DRAINING" }] });
+    const res = await post("/container-instances/state", {
+      cluster: CLUSTER,
+      containerInstances: [INST],
+      status: "DRAINING",
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.instances[0].status).toBe("DRAINING");
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("UpdateContainerInstancesStateCommand");
+    expect(mockSend.mock.calls[0][0].status).toBe("DRAINING");
+  });
+
+  it("POST /container-instances/state — 400 without required fields", async () => {
+    const res = await post("/container-instances/state", { cluster: CLUSTER, containerInstances: [] });
+    expect(res.status).toBe(400);
+    const res2 = await post("/container-instances/state", { cluster: CLUSTER, containerInstances: [INST] });
+    expect(res2.status).toBe(400);
+  });
+
+  it("POST /container-instances/state — empty when sparse", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/container-instances/state", {
+      cluster: CLUSTER,
+      containerInstances: [INST],
+      status: "ACTIVE",
+    });
+    const body = await res.json();
+    expect(body.instances).toEqual([]);
+  });
+
+  it("POST /container-instances/agent — updates the agent", async () => {
+    mockSend.mockResolvedValueOnce({ containerInstance: { containerInstanceArn: INST, agentConnected: true } });
+    const res = await post("/container-instances/agent", { cluster: CLUSTER, containerInstance: INST });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.instance.agentConnected).toBe(true);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("UpdateContainerAgentCommand");
+  });
+
+  it("POST /container-instances/agent — 400 without cluster or instance", async () => {
+    const res = await post("/container-instances/agent", { cluster: CLUSTER });
+    expect(res.status).toBe(400);
+  });
+
+  it("POST /container-instances/agent — null when sparse", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/container-instances/agent", { cluster: CLUSTER, containerInstance: INST });
+    const body = await res.json();
+    expect(body.instance).toBeNull();
+  });
+
+  it("POST /tasks/start — starts a task", async () => {
+    mockSend.mockResolvedValueOnce({ tasks: [{ taskArn: TASK }] });
+    const res = await post("/tasks/start", {
+      cluster: CLUSTER,
+      taskDefinition: "my-task:1",
+      containerInstances: [INST],
+      group: "g",
+      startedBy: "dash",
+    });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.tasks[0].taskArn).toBe(TASK);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("StartTaskCommand");
+    expect(mockSend.mock.calls[0][0].containerInstances).toEqual([INST]);
+  });
+
+  it("POST /tasks/start — 400 without cluster or taskDefinition", async () => {
+    const res = await post("/tasks/start", { cluster: CLUSTER });
+    expect(res.status).toBe(400);
+  });
+
+  it("POST /tasks/start — omits empty optionals", async () => {
+    mockSend.mockResolvedValueOnce({});
+    await post("/tasks/start", { cluster: CLUSTER, taskDefinition: "my-task:1" });
+    expect(mockSend.mock.calls[0][0].containerInstances).toBeUndefined();
+    expect(mockSend.mock.calls[0][0].group).toBeUndefined();
+    expect(mockSend.mock.calls[0][0].startedBy).toBeUndefined();
+  });
+
+  it("GET /tasks/:taskId/protection — gets protection", async () => {
+    mockSend.mockResolvedValueOnce({ protectedTasks: [{ taskArn: TASK, protectionEnabled: true }] });
+    const res = await get(`/tasks/${TASK_ENC}/protection?cluster=${CLUSTER}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.protections[0].protectionEnabled).toBe(true);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetTaskProtectionCommand");
+    expect(mockSend.mock.calls[0][0].tasks).toEqual([TASK]);
+  });
+
+  it("GET /tasks/:taskId/protection — 400 without cluster", async () => {
+    const res = await get(`/tasks/${TASK_ENC}/protection`);
+    expect(res.status).toBe(400);
+  });
+
+  it("GET /tasks/:taskId/protection — sparse empty protections", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get(`/tasks/${TASK_ENC}/protection?cluster=${CLUSTER}`);
+    const body = await res.json();
+    expect(body.protections).toEqual([]);
+  });
+
+  it("PUT /tasks/protection — updates protection", async () => {
+    mockSend.mockResolvedValueOnce({ protectedTasks: [{ taskArn: TASK, protectionEnabled: false }] });
+    const res = await put("/tasks/protection", {
+      cluster: CLUSTER,
+      tasks: [TASK],
+      protectionEnabled: false,
+      expiresInMinutes: 30,
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.protections[0].protectionEnabled).toBe(false);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("UpdateTaskProtectionCommand");
+    expect(mockSend.mock.calls[0][0].expiresInMinutes).toBe(30);
+  });
+
+  it("PUT /tasks/protection — 400 without required fields", async () => {
+    const res = await put("/tasks/protection", { cluster: CLUSTER, tasks: [] });
+    expect(res.status).toBe(400);
+    const res2 = await put("/tasks/protection", { cluster: CLUSTER, tasks: [TASK] });
+    expect(res2.status).toBe(400);
+  });
+
+  it("PUT /tasks/protection — omits empty expiresInMinutes", async () => {
+    mockSend.mockResolvedValueOnce({});
+    await put("/tasks/protection", { cluster: CLUSTER, tasks: [TASK], protectionEnabled: true });
+    expect(mockSend.mock.calls[0][0].expiresInMinutes).toBeUndefined();
+  });
+
+  it("GET /poll-endpoint — discovers the poll endpoint", async () => {
+    mockSend.mockResolvedValueOnce({ endpoint: "https://ecs-agent.example.com" });
+    const res = await get(`/poll-endpoint?containerInstance=${INST_ENC}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.endpoint).toBe("https://ecs-agent.example.com");
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("DiscoverPollEndpointCommand");
+    expect(mockSend.mock.calls[0][0].containerInstance).toBe(INST);
+  });
+
+  it("GET /poll-endpoint — 400 without containerInstance", async () => {
+    const res = await get("/poll-endpoint");
+    expect(res.status).toBe(400);
+  });
+
+  it("GET /poll-endpoint — null when sparse", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get(`/poll-endpoint?containerInstance=${INST_ENC}`);
+    const body = await res.json();
+    expect(body.endpoint).toBeNull();
   });
 });

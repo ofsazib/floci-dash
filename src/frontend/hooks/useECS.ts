@@ -184,6 +184,81 @@ export function useECSContainerInstances(cluster: string | null) {
   });
 }
 
+export function useECSContainerInstanceDetail(cluster: string | null, instanceId: string | null) {
+  return useQuery({
+    queryKey: ["aws", "ecs", "container-instances", cluster, instanceId],
+    queryFn: () =>
+      api<{ instance: any }>(
+        `/aws/ecs/container-instances/${encodeURIComponent(instanceId!)}?cluster=${encodeURIComponent(cluster!)}`
+      ),
+    enabled: !!cluster && !!instanceId,
+  });
+}
+
+export function useDeregisterECSContainerInstance() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: any) =>
+      api("/aws/ecs/container-instances/deregister", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ["aws", "ecs", "container-instances", vars.cluster] }),
+  });
+}
+
+export function useUpdateECSContainerInstancesState() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: any) =>
+      api("/aws/ecs/container-instances/state", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ["aws", "ecs", "container-instances", vars.cluster] }),
+  });
+}
+
+export function useUpdateECSContainerAgent() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: any) =>
+      api("/aws/ecs/container-instances/agent", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ["aws", "ecs", "container-instances", vars.cluster] }),
+  });
+}
+
+export function useStartECSTask() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: any) =>
+      api("/aws/ecs/tasks/start", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ecs", "tasks"] }),
+  });
+}
+
+export function useECSTaskProtection(cluster: string | null, taskId: string | null) {
+  return useQuery({
+    queryKey: ["aws", "ecs", "tasks", "protection", cluster, taskId],
+    queryFn: () =>
+      api<{ protections: any[] }>(
+        `/aws/ecs/tasks/${encodeURIComponent(taskId!)}/protection?cluster=${encodeURIComponent(cluster!)}`
+      ),
+    enabled: !!cluster && !!taskId,
+  });
+}
+
+export function useUpdateECSTaskProtection() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: any) =>
+      api("/aws/ecs/tasks/protection", { method: "PUT", body: JSON.stringify(body) }),
+    onSuccess: (_d, vars) =>
+      qc.invalidateQueries({ queryKey: ["aws", "ecs", "tasks", "protection", vars.cluster] }),
+  });
+}
+
+export function useDiscoverECSPollEndpoint() {
+  return useMutation({
+    mutationFn: (containerInstance: string) =>
+      api(`/aws/ecs/poll-endpoint?containerInstance=${encodeURIComponent(containerInstance)}`),
+  });
+}
+
 // ─── Tags ────────────────────────────────────────────────
 
 export function useECSTags(resourceArn: string | null) {

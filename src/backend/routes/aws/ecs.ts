@@ -42,6 +42,13 @@ import {
   ListServiceDeploymentsCommand,
   DescribeServiceDeploymentsCommand,
   DescribeServiceRevisionsCommand,
+  DeregisterContainerInstanceCommand,
+  UpdateContainerInstancesStateCommand,
+  UpdateContainerAgentCommand,
+  StartTaskCommand,
+  GetTaskProtectionCommand,
+  UpdateTaskProtectionCommand,
+  DiscoverPollEndpointCommand,
 } from "@aws-sdk/client-ecs";
 
 const router = new Hono();
@@ -526,6 +533,124 @@ router.get("/service-revisions", async (c: Context) => {
     new DescribeServiceRevisionsCommand({ serviceRevisionArns: arns })
   );
   return c.json({ serviceRevisions: result.serviceRevisions || [] });
+});
+
+// ── G.89: container-instance ops + task protection + poll endpoint ──
+
+router.get("/container-instances/:instanceId", async (c: Context) => {
+  const cluster = c.req.query("cluster");
+  if (!cluster) return c.json({ error: "cluster query parameter required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new DescribeContainerInstancesCommand({
+      cluster,
+      containerInstances: [decodeURIComponent(c.req.param("instanceId")!)],
+    })
+  );
+  return c.json(result.containerInstances?.[0] ? { instance: result.containerInstances[0] } : { instance: null });
+});
+
+router.post("/container-instances/deregister", async (c: Context) => {
+  const body = await c.req.json();
+  if (!body.cluster || !body.containerInstance) return c.json({ error: "cluster and containerInstance are required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new DeregisterContainerInstanceCommand({
+      cluster: body.cluster,
+      containerInstance: body.containerInstance,
+      force: body.force ?? false,
+    })
+  );
+  return c.json({ instance: result.containerInstance || null });
+});
+
+router.post("/container-instances/state", async (c: Context) => {
+  const body = await c.req.json();
+  if (!body.cluster || !body.containerInstances?.length || !body.status) {
+    return c.json({ error: "cluster, containerInstances, and status are required" }, 400);
+  }
+  const client = getClient();
+  const result = await client.send(
+    new UpdateContainerInstancesStateCommand({
+      cluster: body.cluster,
+      containerInstances: body.containerInstances,
+      status: body.status,
+    })
+  );
+  return c.json({ instances: result.containerInstances || [] });
+});
+
+router.post("/container-instances/agent", async (c: Context) => {
+  const body = await c.req.json();
+  if (!body.cluster || !body.containerInstance) {
+    return c.json({ error: "cluster and containerInstance are required" }, 400);
+  }
+  const client = getClient();
+  const result = await client.send(
+    new UpdateContainerAgentCommand({
+      cluster: body.cluster,
+      containerInstance: body.containerInstance,
+    })
+  );
+  return c.json({ instance: result.containerInstance || null });
+});
+
+router.post("/tasks/start", async (c: Context) => {
+  const body = await c.req.json();
+  if (!body.cluster || !body.taskDefinition) {
+    return c.json({ error: "cluster and taskDefinition are required" }, 400);
+  }
+  const client = getClient();
+  const result = await client.send(
+    new StartTaskCommand({
+      cluster: body.cluster,
+      taskDefinition: body.taskDefinition,
+      containerInstances: body.containerInstances || undefined,
+      group: body.group || undefined,
+      startedBy: body.startedBy || undefined,
+    })
+  );
+  return c.json({ tasks: result.tasks || [] }, 201);
+});
+
+router.get("/tasks/:taskId/protection", async (c: Context) => {
+  const cluster = c.req.query("cluster");
+  if (!cluster) return c.json({ error: "cluster query parameter required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new GetTaskProtectionCommand({
+      cluster,
+      tasks: [decodeURIComponent(c.req.param("taskId")!)],
+    })
+  );
+  return c.json({ protections: result.protectedTasks || [] });
+});
+
+router.put("/tasks/protection", async (c: Context) => {
+  const body = await c.req.json();
+  if (!body.cluster || !body.tasks?.length || body.protectionEnabled === undefined) {
+    return c.json({ error: "cluster, tasks, and protectionEnabled are required" }, 400);
+  }
+  const client = getClient();
+  const result = await client.send(
+    new UpdateTaskProtectionCommand({
+      cluster: body.cluster,
+      tasks: body.tasks,
+      protectionEnabled: body.protectionEnabled,
+      expiresInMinutes: body.expiresInMinutes || undefined,
+    })
+  );
+  return c.json({ protections: result.protectedTasks || [] });
+});
+
+router.get("/poll-endpoint", async (c: Context) => {
+  const containerInstance = c.req.query("containerInstance");
+  if (!containerInstance) return c.json({ error: "containerInstance query parameter required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new DiscoverPollEndpointCommand({ containerInstance })
+  );
+  return c.json({ endpoint: result.endpoint || null });
 });
 
 export default router;
