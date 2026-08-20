@@ -216,3 +216,250 @@ export function useApiGatewayV2WebSocketRoutes(apiId: string | null) {
     enabled: !!apiId,
   });
 }
+
+// ── G.96: authorizers, models, responses, tags ──────────
+
+export function useApiGatewayV2Authorizers(apiId: string | null) {
+  return useQuery<{ authorizers: any[]; total: number }>({
+    queryKey: ["aws", "apigatewayv2", "authorizers", apiId],
+    queryFn: () => api(`/aws/apigatewayv2/apis/${encodeURIComponent(apiId!)}/authorizers`),
+    enabled: !!apiId,
+  });
+}
+
+export function useCreateApiGatewayV2Authorizer(apiId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: any) =>
+      api(`/aws/apigatewayv2/apis/${encodeURIComponent(apiId)}/authorizers`, {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "apigatewayv2", "authorizers", apiId] }),
+  });
+}
+
+export function useUpdateApiGatewayV2Authorizer(apiId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { authorizerId: string } & Record<string, any>) =>
+      api(
+        `/aws/apigatewayv2/apis/${encodeURIComponent(apiId)}/authorizers/${encodeURIComponent(params.authorizerId)}`,
+        { method: "PUT", body: JSON.stringify(params) }
+      ),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "apigatewayv2", "authorizers", apiId] }),
+  });
+}
+
+export function useDeleteApiGatewayV2Authorizer(apiId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (authorizerId: string) =>
+      api(
+        `/aws/apigatewayv2/apis/${encodeURIComponent(apiId)}/authorizers/${encodeURIComponent(authorizerId)}`,
+        { method: "DELETE" }
+      ),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "apigatewayv2", "authorizers", apiId] }),
+  });
+}
+
+export function useApiGatewayV2Models(apiId: string | null) {
+  return useQuery<{ models: any[]; total: number }>({
+    queryKey: ["aws", "apigatewayv2", "models", apiId],
+    queryFn: () => api(`/aws/apigatewayv2/apis/${encodeURIComponent(apiId!)}/models`),
+    enabled: !!apiId,
+  });
+}
+
+export function useCreateApiGatewayV2Model(apiId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: any) =>
+      api(`/aws/apigatewayv2/apis/${encodeURIComponent(apiId)}/models`, {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "apigatewayv2", "models", apiId] }),
+  });
+}
+
+export function useUpdateApiGatewayV2Model(apiId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { modelId: string } & Record<string, any>) =>
+      api(
+        `/aws/apigatewayv2/apis/${encodeURIComponent(apiId)}/models/${encodeURIComponent(params.modelId)}`,
+        { method: "PUT", body: JSON.stringify(params) }
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "apigatewayv2", "models", apiId] }),
+  });
+}
+
+export function useDeleteApiGatewayV2Model(apiId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (modelId: string) =>
+      api(
+        `/aws/apigatewayv2/apis/${encodeURIComponent(apiId)}/models/${encodeURIComponent(modelId)}`,
+        { method: "DELETE" }
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "apigatewayv2", "models", apiId] }),
+  });
+}
+
+export function useApiGatewayV2IntegrationResponses(apiId: string | null, integrationId: string | null) {
+  return useQuery<{ integrationResponses: any[]; total: number }>({
+    queryKey: ["aws", "apigatewayv2", "integration-responses", apiId, integrationId],
+    queryFn: () =>
+      api(
+        `/aws/apigatewayv2/apis/${encodeURIComponent(apiId!)}/integrations/${encodeURIComponent(integrationId!)}/integrationresponses`
+      ),
+    enabled: !!apiId && !!integrationId,
+  });
+}
+
+export function useCreateApiGatewayV2IntegrationResponse(apiId: string, integrationId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: any) =>
+      api(
+        `/aws/apigatewayv2/apis/${encodeURIComponent(apiId)}/integrations/${encodeURIComponent(integrationId)}/integrationresponses`,
+        { method: "POST", body: JSON.stringify(params) }
+      ),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "apigatewayv2", "integration-responses", apiId, integrationId] }),
+  });
+}
+
+export function useDeleteApiGatewayV2IntegrationResponse(apiId: string, integrationId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (responseId: string) =>
+      api(
+        `/aws/apigatewayv2/apis/${encodeURIComponent(apiId)}/integrations/${encodeURIComponent(integrationId)}/integrationresponses/${encodeURIComponent(responseId)}`,
+        { method: "DELETE" }
+      ),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "apigatewayv2", "integration-responses", apiId, integrationId] }),
+  });
+}
+
+export function useApiGatewayV2RouteResponses(apiId: string | null, routeId: string | null) {
+  return useQuery<{ routeResponses: any[]; total: number }>({
+    queryKey: ["aws", "apigatewayv2", "route-responses", apiId, routeId],
+    queryFn: () =>
+      api(
+        `/aws/apigatewayv2/apis/${encodeURIComponent(apiId!)}/routes/${encodeURIComponent(routeId!)}/routeresponses`
+      ),
+    enabled: !!apiId && !!routeId,
+  });
+}
+
+export function useCreateApiGatewayV2RouteResponse(apiId: string, routeId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: any) =>
+      api(
+        `/aws/apigatewayv2/apis/${encodeURIComponent(apiId)}/routes/${encodeURIComponent(routeId)}/routeresponses`,
+        { method: "POST", body: JSON.stringify(params) }
+      ),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "apigatewayv2", "route-responses", apiId, routeId] }),
+  });
+}
+
+export function useDeleteApiGatewayV2RouteResponse(apiId: string, routeId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (responseId: string) =>
+      api(
+        `/aws/apigatewayv2/apis/${encodeURIComponent(apiId)}/routes/${encodeURIComponent(routeId)}/routeresponses/${encodeURIComponent(responseId)}`,
+        { method: "DELETE" }
+      ),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "apigatewayv2", "route-responses", apiId, routeId] }),
+  });
+}
+
+export function useUpdateApiGatewayV2Route(apiId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { routeId: string } & Record<string, any>) =>
+      api(
+        `/aws/apigatewayv2/apis/${encodeURIComponent(apiId)}/routes/${encodeURIComponent(params.routeId)}`,
+        { method: "PUT", body: JSON.stringify(params) }
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "apigatewayv2", "routes", apiId] }),
+  });
+}
+
+export function useUpdateApiGatewayV2Integration(apiId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { integrationId: string } & Record<string, any>) =>
+      api(
+        `/aws/apigatewayv2/apis/${encodeURIComponent(apiId)}/integrations/${encodeURIComponent(params.integrationId)}`,
+        { method: "PUT", body: JSON.stringify(params) }
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "apigatewayv2", "integrations", apiId] }),
+  });
+}
+
+export function useUpdateApiGatewayV2Stage(apiId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { stageName: string } & Record<string, any>) =>
+      api(
+        `/aws/apigatewayv2/apis/${encodeURIComponent(apiId)}/stages/${encodeURIComponent(params.stageName)}`,
+        { method: "PUT", body: JSON.stringify(params) }
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "apigatewayv2", "stages", apiId] }),
+  });
+}
+
+export function useUpdateApiGatewayV2Deployment(apiId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { deploymentId: string } & Record<string, any>) =>
+      api(
+        `/aws/apigatewayv2/apis/${encodeURIComponent(apiId)}/deployments/${encodeURIComponent(params.deploymentId)}`,
+        { method: "PUT", body: JSON.stringify(params) }
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "apigatewayv2", "deployments", apiId] }),
+  });
+}
+
+export function useApiGatewayV2Tags(apiId: string | null) {
+  return useQuery<{ tags: Record<string, string> }>({
+    queryKey: ["aws", "apigatewayv2", "tags", apiId],
+    queryFn: () => api(`/aws/apigatewayv2/apis/${encodeURIComponent(apiId!)}/tags`),
+    enabled: !!apiId,
+  });
+}
+
+export function useTagApiGatewayV2Resource(apiId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (tags: Record<string, string>) =>
+      api(`/aws/apigatewayv2/apis/${encodeURIComponent(apiId)}/tags`, {
+        method: "PUT",
+        body: JSON.stringify({ tags }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "apigatewayv2", "tags", apiId] }),
+  });
+}
+
+export function useUntagApiGatewayV2Resource(apiId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (tagKeys: string[]) =>
+      api(`/aws/apigatewayv2/apis/${encodeURIComponent(apiId)}/tags`, {
+        method: "DELETE",
+        body: JSON.stringify({ tagKeys }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "apigatewayv2", "tags", apiId] }),
+  });
+}

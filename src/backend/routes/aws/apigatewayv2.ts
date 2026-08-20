@@ -19,6 +19,37 @@ import {
   GetDeploymentsCommand,
   CreateDeploymentCommand,
   DeleteDeploymentCommand,
+  GetAuthorizersCommand,
+  GetAuthorizerCommand,
+  CreateAuthorizerCommand,
+  UpdateAuthorizerCommand,
+  DeleteAuthorizerCommand,
+  GetModelsCommand,
+  GetModelCommand,
+  CreateModelCommand,
+  UpdateModelCommand,
+  DeleteModelCommand,
+  GetIntegrationResponsesCommand,
+  GetIntegrationResponseCommand,
+  CreateIntegrationResponseCommand,
+  UpdateIntegrationResponseCommand,
+  DeleteIntegrationResponseCommand,
+  GetRouteResponsesCommand,
+  GetRouteResponseCommand,
+  CreateRouteResponseCommand,
+  UpdateRouteResponseCommand,
+  DeleteRouteResponseCommand,
+  GetRouteCommand,
+  UpdateRouteCommand,
+  GetIntegrationCommand,
+  UpdateIntegrationCommand,
+  GetDeploymentCommand,
+  UpdateDeploymentCommand,
+  GetStageCommand,
+  UpdateStageCommand,
+  GetTagsCommand,
+  TagResourceCommand,
+  UntagResourceCommand,
 } from "@aws-sdk/client-apigatewayv2";
 
 const router = new Hono();
@@ -277,6 +308,415 @@ router.get("/apis/:apiId/websocket-routes", async (c: Context) => {
     };
   });
   return c.json({ routes, total: routes.length });
+});
+
+// ── G.96: authorizers, models, sub-resources, tags ──────
+
+// Authorizers
+
+router.get("/apis/:apiId/authorizers", async (c: Context) => {
+  const apiId = c.req.param("apiId");
+  const client = getClient();
+  const result = await client.send(new GetAuthorizersCommand({ ApiId: apiId }));
+  const authorizers = result.Items || [];
+  return c.json({ authorizers, total: authorizers.length });
+});
+
+router.get("/apis/:apiId/authorizers/:authorizerId", async (c: Context) => {
+  const apiId = c.req.param("apiId");
+  const authorizerId = c.req.param("authorizerId");
+  const client = getClient();
+  const result = await client.send(new GetAuthorizerCommand({ ApiId: apiId, AuthorizerId: authorizerId }));
+  return c.json({ authorizer: result });
+});
+
+router.post("/apis/:apiId/authorizers", async (c: Context) => {
+  const apiId = c.req.param("apiId");
+  const body = await c.req.json<any>();
+  if (!body.name) return c.json({ error: "name is required" }, 400);
+  if (!body.authorizerType) return c.json({ error: "authorizerType is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new CreateAuthorizerCommand({
+      ApiId: apiId,
+      Name: body.name,
+      AuthorizerType: body.authorizerType,
+      IdentitySource: body.identitySource || undefined,
+      AuthorizerUri: body.authorizerUri || undefined,
+      AuthorizerCredentialsArn: body.authorizerCredentialsArn || undefined,
+      AuthorizerPayloadFormatVersion: body.authorizerPayloadFormatVersion || undefined,
+      EnableSimpleResponses: body.enableSimpleResponses ?? undefined,
+    })
+  );
+  return c.json({ authorizer: result }, 201);
+});
+
+router.put("/apis/:apiId/authorizers/:authorizerId", async (c: Context) => {
+  const apiId = c.req.param("apiId");
+  const authorizerId = c.req.param("authorizerId");
+  const body = await c.req.json<any>();
+  if (!body.name || !body.authorizerType) return c.json({ error: "name and authorizerType are required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new UpdateAuthorizerCommand({
+      ApiId: apiId,
+      AuthorizerId: authorizerId,
+      Name: body.name,
+      AuthorizerType: body.authorizerType,
+      IdentitySource: body.identitySource || undefined,
+      AuthorizerUri: body.authorizerUri || undefined,
+      AuthorizerCredentialsArn: body.authorizerCredentialsArn || undefined,
+      AuthorizerPayloadFormatVersion: body.authorizerPayloadFormatVersion || undefined,
+      EnableSimpleResponses: body.enableSimpleResponses ?? undefined,
+    })
+  );
+  return c.json({ authorizer: result });
+});
+
+router.delete("/apis/:apiId/authorizers/:authorizerId", async (c: Context) => {
+  const apiId = c.req.param("apiId");
+  const authorizerId = c.req.param("authorizerId");
+  const client = getClient();
+  await client.send(new DeleteAuthorizerCommand({ ApiId: apiId, AuthorizerId: authorizerId }));
+  return c.json({ deleted: true });
+});
+
+// Models
+
+router.get("/apis/:apiId/models", async (c: Context) => {
+  const apiId = c.req.param("apiId");
+  const client = getClient();
+  const result = await client.send(new GetModelsCommand({ ApiId: apiId }));
+  const models = result.Items || [];
+  return c.json({ models, total: models.length });
+});
+
+router.get("/apis/:apiId/models/:modelId", async (c: Context) => {
+  const apiId = c.req.param("apiId");
+  const modelId = c.req.param("modelId");
+  const client = getClient();
+  const result = await client.send(new GetModelCommand({ ApiId: apiId, ModelId: modelId }));
+  return c.json({ model: result });
+});
+
+router.post("/apis/:apiId/models", async (c: Context) => {
+  const apiId = c.req.param("apiId");
+  const body = await c.req.json<any>();
+  if (!body.name) return c.json({ error: "name is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new CreateModelCommand({
+      ApiId: apiId,
+      Name: body.name,
+      ContentType: body.contentType || undefined,
+      Description: body.description || undefined,
+      Schema: body.schema || undefined,
+    })
+  );
+  return c.json({ model: result }, 201);
+});
+
+router.put("/apis/:apiId/models/:modelId", async (c: Context) => {
+  const apiId = c.req.param("apiId");
+  const modelId = c.req.param("modelId");
+  const body = await c.req.json<any>();
+  if (!body.name) return c.json({ error: "name is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new UpdateModelCommand({
+      ApiId: apiId,
+      ModelId: modelId,
+      Name: body.name,
+      ContentType: body.contentType || undefined,
+      Description: body.description || undefined,
+      Schema: body.schema || undefined,
+    })
+  );
+  return c.json({ model: result });
+});
+
+router.delete("/apis/:apiId/models/:modelId", async (c: Context) => {
+  const apiId = c.req.param("apiId");
+  const modelId = c.req.param("modelId");
+  const client = getClient();
+  await client.send(new DeleteModelCommand({ ApiId: apiId, ModelId: modelId }));
+  return c.json({ deleted: true });
+});
+
+// Integration responses
+
+router.get("/apis/:apiId/integrations/:integrationId/integrationresponses", async (c: Context) => {
+  const apiId = c.req.param("apiId");
+  const integrationId = c.req.param("integrationId");
+  const client = getClient();
+  const result = await client.send(new GetIntegrationResponsesCommand({ ApiId: apiId, IntegrationId: integrationId }));
+  const items = result.Items || [];
+  return c.json({ integrationResponses: items, total: items.length });
+});
+
+router.get("/apis/:apiId/integrations/:integrationId/integrationresponses/:responseId", async (c: Context) => {
+  const apiId = c.req.param("apiId");
+  const integrationId = c.req.param("integrationId");
+  const responseId = c.req.param("responseId");
+  const client = getClient();
+  const result = await client.send(
+    new GetIntegrationResponseCommand({ ApiId: apiId, IntegrationId: integrationId, IntegrationResponseId: responseId })
+  );
+  return c.json({ integrationResponse: result });
+});
+
+router.post("/apis/:apiId/integrations/:integrationId/integrationresponses", async (c: Context) => {
+  const apiId = c.req.param("apiId");
+  const integrationId = c.req.param("integrationId");
+  const body = await c.req.json<any>();
+  if (!body.integrationResponseKey) return c.json({ error: "integrationResponseKey is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new CreateIntegrationResponseCommand({
+      ApiId: apiId,
+      IntegrationId: integrationId,
+      IntegrationResponseKey: body.integrationResponseKey,
+      ContentHandlingStrategy: body.contentHandlingStrategy || undefined,
+      ResponseTemplates: body.responseTemplates || undefined,
+      ResponseParameters: body.responseParameters || undefined,
+      TemplateSelectionExpression: body.templateSelectionExpression || undefined,
+    })
+  );
+  return c.json({ integrationResponse: result }, 201);
+});
+
+router.put("/apis/:apiId/integrations/:integrationId/integrationresponses/:responseId", async (c: Context) => {
+  const apiId = c.req.param("apiId");
+  const integrationId = c.req.param("integrationId");
+  const responseId = c.req.param("responseId");
+  const body = await c.req.json<any>();
+  if (!body.integrationResponseKey) return c.json({ error: "integrationResponseKey is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new UpdateIntegrationResponseCommand({
+      ApiId: apiId,
+      IntegrationId: integrationId,
+      IntegrationResponseId: responseId,
+      IntegrationResponseKey: body.integrationResponseKey,
+      ContentHandlingStrategy: body.contentHandlingStrategy || undefined,
+      ResponseTemplates: body.responseTemplates || undefined,
+      ResponseParameters: body.responseParameters || undefined,
+      TemplateSelectionExpression: body.templateSelectionExpression || undefined,
+    })
+  );
+  return c.json({ integrationResponse: result });
+});
+
+router.delete("/apis/:apiId/integrations/:integrationId/integrationresponses/:responseId", async (c: Context) => {
+  const apiId = c.req.param("apiId");
+  const integrationId = c.req.param("integrationId");
+  const responseId = c.req.param("responseId");
+  const client = getClient();
+  await client.send(
+    new DeleteIntegrationResponseCommand({ ApiId: apiId, IntegrationId: integrationId, IntegrationResponseId: responseId })
+  );
+  return c.json({ deleted: true });
+});
+
+// Route responses
+
+router.get("/apis/:apiId/routes/:routeId/routeresponses", async (c: Context) => {
+  const apiId = c.req.param("apiId");
+  const routeId = c.req.param("routeId");
+  const client = getClient();
+  const result = await client.send(new GetRouteResponsesCommand({ ApiId: apiId, RouteId: routeId }));
+  const items = result.Items || [];
+  return c.json({ routeResponses: items, total: items.length });
+});
+
+router.get("/apis/:apiId/routes/:routeId/routeresponses/:responseId", async (c: Context) => {
+  const apiId = c.req.param("apiId");
+  const routeId = c.req.param("routeId");
+  const responseId = c.req.param("responseId");
+  const client = getClient();
+  const result = await client.send(
+    new GetRouteResponseCommand({ ApiId: apiId, RouteId: routeId, RouteResponseId: responseId })
+  );
+  return c.json({ routeResponse: result });
+});
+
+router.post("/apis/:apiId/routes/:routeId/routeresponses", async (c: Context) => {
+  const apiId = c.req.param("apiId");
+  const routeId = c.req.param("routeId");
+  const body = await c.req.json<any>();
+  if (!body.routeResponseKey) return c.json({ error: "routeResponseKey is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new CreateRouteResponseCommand({
+      ApiId: apiId,
+      RouteId: routeId,
+      RouteResponseKey: body.routeResponseKey,
+      ModelSelectionExpression: body.modelSelectionExpression || undefined,
+      ResponseModels: body.responseModels || undefined,
+      ResponseParameters: body.responseParameters || undefined,
+    })
+  );
+  return c.json({ routeResponse: result }, 201);
+});
+
+router.put("/apis/:apiId/routes/:routeId/routeresponses/:responseId", async (c: Context) => {
+  const apiId = c.req.param("apiId");
+  const routeId = c.req.param("routeId");
+  const responseId = c.req.param("responseId");
+  const body = await c.req.json<any>();
+  if (!body.routeResponseKey) return c.json({ error: "routeResponseKey is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new UpdateRouteResponseCommand({
+      ApiId: apiId,
+      RouteId: routeId,
+      RouteResponseId: responseId,
+      RouteResponseKey: body.routeResponseKey,
+      ModelSelectionExpression: body.modelSelectionExpression || undefined,
+      ResponseModels: body.responseModels || undefined,
+      ResponseParameters: body.responseParameters || undefined,
+    })
+  );
+  return c.json({ routeResponse: result });
+});
+
+router.delete("/apis/:apiId/routes/:routeId/routeresponses/:responseId", async (c: Context) => {
+  const apiId = c.req.param("apiId");
+  const routeId = c.req.param("routeId");
+  const responseId = c.req.param("responseId");
+  const client = getClient();
+  await client.send(
+    new DeleteRouteResponseCommand({ ApiId: apiId, RouteId: routeId, RouteResponseId: responseId })
+  );
+  return c.json({ deleted: true });
+});
+
+// Single get / update for routes, integrations, stages, deployments
+
+router.get("/apis/:apiId/routes/:routeId", async (c: Context) => {
+  const apiId = c.req.param("apiId");
+  const routeId = c.req.param("routeId");
+  const client = getClient();
+  const result = await client.send(new GetRouteCommand({ ApiId: apiId, RouteId: routeId }));
+  return c.json({ route: result });
+});
+
+router.put("/apis/:apiId/routes/:routeId", async (c: Context) => {
+  const apiId = c.req.param("apiId");
+  const routeId = c.req.param("routeId");
+  const body = await c.req.json<any>();
+  if (!body.routeKey) return c.json({ error: "routeKey is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new UpdateRouteCommand({
+      ApiId: apiId,
+      RouteId: routeId,
+      RouteKey: body.routeKey,
+      AuthorizationType: body.authorizationType || undefined,
+      Target: body.target || undefined,
+      AuthorizerId: body.authorizerId || undefined,
+    })
+  );
+  return c.json({ route: result });
+});
+
+router.get("/apis/:apiId/integrations/:integrationId", async (c: Context) => {
+  const apiId = c.req.param("apiId");
+  const integrationId = c.req.param("integrationId");
+  const client = getClient();
+  const result = await client.send(new GetIntegrationCommand({ ApiId: apiId, IntegrationId: integrationId }));
+  return c.json({ integration: result });
+});
+
+router.put("/apis/:apiId/integrations/:integrationId", async (c: Context) => {
+  const apiId = c.req.param("apiId");
+  const integrationId = c.req.param("integrationId");
+  const body = await c.req.json<any>();
+  if (!body.integrationType) return c.json({ error: "integrationType is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new UpdateIntegrationCommand({
+      ApiId: apiId,
+      IntegrationId: integrationId,
+      IntegrationType: body.integrationType,
+      IntegrationUri: body.integrationUri || undefined,
+      IntegrationMethod: body.integrationMethod || undefined,
+      PayloadFormatVersion: body.payloadFormatVersion || undefined,
+      ConnectionType: body.connectionType || undefined,
+    })
+  );
+  return c.json({ integration: result });
+});
+
+router.get("/apis/:apiId/deployments/:deploymentId", async (c: Context) => {
+  const apiId = c.req.param("apiId");
+  const deploymentId = c.req.param("deploymentId");
+  const client = getClient();
+  const result = await client.send(new GetDeploymentCommand({ ApiId: apiId, DeploymentId: deploymentId }));
+  return c.json({ deployment: result });
+});
+
+router.put("/apis/:apiId/deployments/:deploymentId", async (c: Context) => {
+  const apiId = c.req.param("apiId");
+  const deploymentId = c.req.param("deploymentId");
+  const body = await c.req.json<{ description?: string }>();
+  const client = getClient();
+  const result = await client.send(
+    new UpdateDeploymentCommand({ ApiId: apiId, DeploymentId: deploymentId, Description: body.description })
+  );
+  return c.json({ deployment: result });
+});
+
+router.get("/apis/:apiId/stages/:stageName", async (c: Context) => {
+  const apiId = c.req.param("apiId");
+  const stageName = c.req.param("stageName");
+  const client = getClient();
+  const result = await client.send(new GetStageCommand({ ApiId: apiId, StageName: stageName }));
+  return c.json({ stage: result });
+});
+
+router.put("/apis/:apiId/stages/:stageName", async (c: Context) => {
+  const apiId = c.req.param("apiId");
+  const stageName = c.req.param("stageName");
+  const body = await c.req.json<any>();
+  const client = getClient();
+  const result = await client.send(
+    new UpdateStageCommand({
+      ApiId: apiId,
+      StageName: stageName,
+      AutoDeploy: body.autoDeploy ?? undefined,
+      DeploymentId: body.deploymentId || undefined,
+      Description: body.description || undefined,
+    })
+  );
+  return c.json({ stage: result });
+});
+
+// Tags
+
+router.get("/apis/:apiId/tags", async (c: Context) => {
+  const apiId = c.req.param("apiId");
+  const client = getClient();
+  const result = await client.send(new GetTagsCommand({ ResourceArn: apiId }));
+  return c.json({ tags: result.Tags || {} });
+});
+
+router.put("/apis/:apiId/tags", async (c: Context) => {
+  const apiId = c.req.param("apiId");
+  const body = await c.req.json<{ tags?: Record<string, string> }>();
+  if (!body.tags) return c.json({ error: "tags is required" }, 400);
+  const client = getClient();
+  await client.send(new TagResourceCommand({ ResourceArn: apiId, Tags: body.tags }));
+  return c.json({ tagged: true });
+});
+
+router.delete("/apis/:apiId/tags", async (c: Context) => {
+  const apiId = c.req.param("apiId");
+  const body = await c.req.json<{ tagKeys?: string[] }>();
+  if (!body.tagKeys?.length) return c.json({ error: "tagKeys is required" }, 400);
+  const client = getClient();
+  await client.send(new UntagResourceCommand({ ResourceArn: apiId, TagKeys: body.tagKeys }));
+  return c.json({ untagged: true });
 });
 
 export default router;
