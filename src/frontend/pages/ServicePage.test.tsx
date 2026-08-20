@@ -111,6 +111,7 @@ vi.mock("../hooks/useBCMDataExports", () => ({
 vi.mock("../hooks/useWafV2", () => ({
   useWebACLs: () => ({ data: { webAcls: [], total: 0 }, isLoading: false, isError: false, error: null }),
   useCreateWebACL: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
+  useUpdateWebACL: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null, reset: vi.fn() }),
   useDeleteWebACL: () => ({ mutateAsync: vi.fn(), isPending: false, variables: null }),
   useIPSets: () => ({ data: { ipSets: [], total: 0 }, isLoading: false, isError: false, error: null }),
   useCreateIPSet: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
@@ -132,6 +133,7 @@ vi.mock("../hooks/useWafV2", () => ({
   useGetWebACLForResource: () => ({ data: null, isLoading: false, isError: false, error: null }),
   useResourcesForWebACL: () => ({ data: null, isLoading: false, isError: false, error: null }),
   usePermissionPolicy: () => ({ data: null, isLoading: false, isError: false, error: null }),
+  useCheckCapacity: () => ({ data: null, isLoading: false, isError: false, error: null, mutateAsync: vi.fn().mockResolvedValue({ CapacityItems: [] }) }),
 }));
 
 vi.mock("../hooks/useSystem", () => ({ useHealth: () => ({ data: { services: { logs: "available" } } }),
