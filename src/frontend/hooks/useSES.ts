@@ -90,6 +90,16 @@ export function useSESVerifyEmailAddress() {
   });
 }
 
+export function useSESDeleteVerifiedEmail() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (emailAddress: string) =>
+      api(`/aws/email/verified-emails/${encodeURIComponent(emailAddress)}`, { method: "DELETE" }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "ses", "verified-emails"] }),
+  });
+}
+
 export interface SESSendQuota {
   max24HourSend: number | undefined;
   maxSendRate: number | undefined;

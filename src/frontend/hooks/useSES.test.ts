@@ -17,6 +17,7 @@ import {
   useSESSendEmail,
   useSESVerifiedEmails,
   useSESVerifyEmailAddress,
+  useSESDeleteVerifiedEmail,
   useSESSendingEnabled,
   useSESSetSendingEnabled,
   useSESSendQuota,
@@ -208,6 +209,18 @@ describe("useSESVerifyEmailAddress", () => {
         method: "POST",
         body: JSON.stringify({ emailAddress: "new@b.com" }),
       }),
+    );
+  });
+});
+
+describe("useSESDeleteVerifiedEmail", () => {
+  it("calls api with DELETE method and encoded email", async () => {
+    mockApi.mockResolvedValueOnce({ emailAddress: "a@b.com", deleted: true });
+    const { result } = renderHook(() => useSESDeleteVerifiedEmail(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("a@b.com");
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/email/verified-emails/a%40b.com",
+      expect.objectContaining({ method: "DELETE" }),
     );
   });
 });

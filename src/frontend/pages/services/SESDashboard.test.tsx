@@ -78,6 +78,7 @@ const mockSendQuota = vi.fn();
 const mockSendStats = vi.fn();
 const mockSendRawEmail = vi.fn();
 const mockDeleteIdentity = vi.fn();
+const mockDeleteVerifiedEmail = vi.fn();
 const mockSendEmail = vi.fn();
 const mockConfigSets = vi.fn();
 const mockCreateConfigSet = vi.fn();
@@ -105,6 +106,10 @@ vi.mock("../../hooks/useSES", () => ({
   useSESVerifyEmailAddress: () => ({
     mutate: mockVerifyEmailAddress,
     get isPending() { return verifyEmailAddressState.isPending; },
+  }),
+  useSESDeleteVerifiedEmail: () => ({
+    mutate: (...args: any[]) => mockDeleteVerifiedEmail(...args),
+    isPending: false,
   }),
   useSESSendingEnabled: (...args: any[]) => mockSendingEnabled(...args),
   useSESSetSendingEnabled: () => ({
@@ -441,6 +446,23 @@ describe("SESDashboard — rendering", () => {
     });
     render(<SESDashboard />, { wrapper: createWrapper() });
     expect(screen.queryByText("Verified Emails")).toBeNull();
+  });
+
+  it("deletes a verified email via delete button", async () => {
+    mockVerifiedEmails.mockReturnValue({
+      data: { emails: ["del@example.com"], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("del@example.com")).toBeTruthy());
+    const deleteBtn = screen.getByRole("button", { name: /Delete del@example.com/i });
+    await user.click(deleteBtn);
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() => {
+      expect(mockDeleteVerifiedEmail).toHaveBeenCalledWith("del@example.com");
+    });
   });
 
   it("filters identities by text", async () => {

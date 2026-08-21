@@ -37,6 +37,7 @@ import {
   GetSendStatisticsCommand,
   SendRawEmailCommand,
   VerifyEmailAddressCommand,
+  DeleteVerifiedEmailAddressCommand,
 } from "@aws-sdk/client-ses";
 
 const router = new Hono();
@@ -469,6 +470,13 @@ router.post("/verified-emails", async (c: Context) => {
   const client = getClient();
   await client.send(new VerifyEmailAddressCommand({ EmailAddress: body.emailAddress.trim() }));
   return c.json({ emailAddress: body.emailAddress.trim(), verified: true }, 201);
+});
+
+router.delete("/verified-emails/:email", async (c: Context) => {
+  const email = decodeURIComponent(c.req.param("email")!);
+  const client = getClient();
+  await client.send(new DeleteVerifiedEmailAddressCommand({ EmailAddress: email }));
+  return c.json({ emailAddress: email, deleted: true });
 });
 
 // ── Account sending stats ─────────────────────────────────

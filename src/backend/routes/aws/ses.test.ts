@@ -29,6 +29,7 @@ vi.mock("@aws-sdk/client-ses", () => ({
   SetIdentityMailFromDomainCommand: createCmd("SetIdentityMailFromDomainCommand"),
   GetIdentityMailFromDomainAttributesCommand: createCmd("GetIdentityMailFromDomainAttributesCommand"),
   ListVerifiedEmailAddressesCommand: createCmd("ListVerifiedEmailAddressesCommand"),
+  DeleteVerifiedEmailAddressCommand: createCmd("DeleteVerifiedEmailAddressCommand"),
   GetAccountSendingEnabledCommand: createCmd("GetAccountSendingEnabledCommand"),
   UpdateAccountSendingEnabledCommand: createCmd("UpdateAccountSendingEnabledCommand"),
   GetSendQuotaCommand: createCmd("GetSendQuotaCommand"),
@@ -325,6 +326,15 @@ describe("SES Routes", () => {
     it("POST /verified-emails — 400 for blank emailAddress", async () => {
       const res = await post("/verified-emails", { emailAddress: "   " });
       expect(res.status).toBe(400);
+    });
+
+    it("DELETE /verified-emails/:email — deletes a verified email", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del(`/verified-emails/${encodeURIComponent("test@example.com")}`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.emailAddress).toBe("test@example.com");
+      expect(body.deleted).toBe(true);
     });
   });
 

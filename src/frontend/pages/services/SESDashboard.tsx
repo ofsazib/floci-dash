@@ -174,6 +174,7 @@ import {
   useSESSendEmail,
   useSESVerifiedEmails,
   useSESVerifyEmailAddress,
+  useSESDeleteVerifiedEmail,
   useSESSendingEnabled,
   useSESSetSendingEnabled,
   useSESSendQuota,
@@ -538,6 +539,7 @@ export function SESDashboard() {
   const sendEmail = useSESSendEmail();
   const { data: verifiedEmails } = useSESVerifiedEmails();
   const verifyEmailAddress = useSESVerifyEmailAddress();
+  const deleteVerifiedEmail = useSESDeleteVerifiedEmail();
   const { data: sendingEnabled } = useSESSendingEnabled();
   const accountSetSendingEnabled = useSESSetSendingEnabled();
   const { data: sendQuota } = useSESSendQuota();
@@ -664,11 +666,19 @@ export function SESDashboard() {
             </Header>
           }
         >
-          <Box>
+          <SpaceBetween direction="vertical" size="xs">
             {verifiedEmails.emails.map((email: string) => (
-              <div key={email}>{email}</div>
+              <SpaceBetween key={email} direction="horizontal" size="xs">
+                <span>{email}</span>
+                <DeleteButton
+                  itemName={email}
+                  resourceType="verified email"
+                  onDelete={() => deleteVerifiedEmail.mutate(email)}
+                  loading={deleteVerifiedEmail.isPending}
+                />
+              </SpaceBetween>
             ))}
-          </Box>
+          </SpaceBetween>
         </Container>
       )}
 
