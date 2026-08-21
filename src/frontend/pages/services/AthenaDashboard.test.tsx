@@ -12,6 +12,7 @@ const mockDeleteWg = vi.fn();
 const mockQueryExecutions = vi.fn();
 const mockCreateWg = vi.fn();
 const mockStopQuery = vi.fn();
+const mockStartQuery = vi.fn();
 
 const deleteWgState = vi.hoisted(() => ({
   isPending: false,
@@ -60,6 +61,14 @@ const createWgState = vi.hoisted(() => ({
 const stopQueryState = vi.hoisted(() => ({
   isPending: false,
   variables: null as string | null,
+}));
+
+const startQueryState = vi.hoisted(() => ({
+  isPending: false,
+  isSuccess: false,
+  isError: false,
+  error: null as any,
+  data: null as any,
 }));
 
 vi.mock("../../hooks/useAthena", () => ({
@@ -111,6 +120,14 @@ vi.mock("../../hooks/useAthena", () => ({
   useAthenaTableMetadata: () => ({
     get data() { return tableMetaState.data; },
     get isLoading() { return tableMetaState.isLoading; },
+  }),
+  useAthenaStartQueryExecution: () => ({
+    mutate: mockStartQuery,
+    get isPending() { return startQueryState.isPending; },
+    get isSuccess() { return startQueryState.isSuccess; },
+    get isError() { return startQueryState.isError; },
+    get error() { return startQueryState.error; },
+    get data() { return startQueryState.data; },
   }),
 }));
 
@@ -1122,5 +1139,87 @@ describe("AthenaDashboard — catalogs tab", () => {
       expect(screen.getAllByText("0").length).toBeGreaterThanOrEqual(2);
       expect(screen.queryByText("Primary key")).toBeNull();
     });
+  });
+});
+
+describe("RunQueryTab", () => {
+  beforeEach(() => {
+    startQueryState.isPending = false;
+    startQueryState.isSuccess = false;
+    startQueryState.isError = false;
+    startQueryState.error = null;
+    startQueryState.data = null;
+    mockStartQuery.mockReset();
+  });
+
+  it("renders the run query form", async () => {
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Run Query/i }));
+    expect(screen.getByPlaceholderText("SELECT * FROM my_table LIMIT 10")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Run Query/i })).toBeTruthy();
+  });
+
+  it("disables the Run Query button when query is empty", async () => {
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Run Query/i }));
+    const btn = screen.getByRole("button", { name: /Run Query/i });
+    expect(btn).toBeDisabled();
+  });
+
+  it("enables the Run Query button when query is entered", async () => {
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Run Query/i }));
+    await user.type(screen.getByPlaceholderText("SELECT * FROM my_table LIMIT 10"), "SELECT 1");
+    const btn = screen.getByRole("button", { name: /Run Query/i });
+    expect(btn).not.toBeDisabled();
+  });
+
+  it("calls mutate with query and database", async () => {
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Run Query/i }));
+    await user.type(screen.getByPlaceholderText("mydb"), "testdb");
+    await user.type(screen.getByPlaceholderText("SELECT * FROM my_table LIMIT 10"), "SELECT 1");
+    await user.click(screen.getByRole("button", { name: /Run Query/i }));
+    expect(mockStartQuery).toHaveBeenCalledWith({ query: "SELECT 1", database: "testdb" });
+  });
+
+  it("calls mutate without database when database is empty", async () => {
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Run Query/i }));
+    await user.type(screen.getByPlaceholderText("SELECT * FROM my_table LIMIT 10"), "SELECT 1");
+    await user.click(screen.getByRole("button", { name: /Run Query/i }));
+    expect(mockStartQuery).toHaveBeenCalledWith({ query: "SELECT 1", database: undefined });
+  });
+
+  it("shows success message after query starts", async () => {
+    startQueryState.isSuccess = true;
+    startQueryState.data = { queryExecutionId: "exec-123" };
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Run Query/i }));
+    expect(screen.getByText(/Query started: exec-123/)).toBeTruthy();
+  });
+
+  it("shows error message when query fails", async () => {
+    startQueryState.isError = true;
+    startQueryState.error = { message: "Something went wrong" };
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Run Query/i }));
+    expect(screen.getByText(/Error: Something went wrong/)).toBeTruthy();
+  });
+
+  it("shows default error when no error message", async () => {
+    startQueryState.isError = true;
+    startQueryState.error = { message: null };
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Run Query/i }));
+    expect(screen.getByText(/Error: Failed to start query/)).toBeTruthy();
   });
 });

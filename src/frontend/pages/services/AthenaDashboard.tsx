@@ -293,6 +293,7 @@ import {
   useAthenaDatabases,
   useAthenaTables,
   useAthenaTableMetadata,
+  useAthenaStartQueryExecution,
 } from "../../hooks/useAthena";
 import {
   useGlueDatabases,
@@ -565,6 +566,11 @@ export function AthenaDashboard() {
           content: <QueryResultsView executionId={selectedExecution} onBack={() => setActiveTab("query-executions")} />,
         }] : []),
         {
+          id: "run-query",
+          label: "Run Query",
+          content: <RunQueryTab />,
+        },
+        {
           id: "catalogs",
           label: "Catalogs & Databases",
           content: <CatalogsTab />,
@@ -810,6 +816,42 @@ function QueryResultsView({ executionId, onBack }: { executionId: string; onBack
             </SpaceBetween>
           </Container>
         )}
+      </Container>
+    </SpaceBetween>
+  );
+}
+
+// ── Run Query Tab ────────────────────────────────────────
+
+function RunQueryTab() {
+  const [query, setQuery] = useState("");
+  const [database, setDatabase] = useState("");
+  const startQuery = useAthenaStartQueryExecution();
+
+  const handleSubmit = () => {
+    startQuery.mutate({ query, database: database || undefined });
+  };
+
+  return (
+    <SpaceBetween size="l">
+      <Container header={<Header variant="h2">Run Query</Header>}>
+        <SpaceBetween size="m">
+          <FormField label="Database (optional)">
+            <Input value={database} onChange={({ detail }) => setDatabase(detail.value)} placeholder="mydb" />
+          </FormField>
+          <FormField label="SQL Query">
+            <Textarea value={query} onChange={({ detail }) => setQuery(detail.value)} placeholder="SELECT * FROM my_table LIMIT 10" rows={6} />
+          </FormField>
+          <Button variant="primary" onClick={handleSubmit} loading={startQuery.isPending} disabled={!query.trim()}>
+            Run Query
+          </Button>
+          {startQuery.isSuccess && (
+            <Box>Query started: {startQuery.data.queryExecutionId}</Box>
+          )}
+          {startQuery.isError && (
+            <Box color="text-status-error">Error: {startQuery.error?.message || "Failed to start query"}</Box>
+          )}
+        </SpaceBetween>
       </Container>
     </SpaceBetween>
   );

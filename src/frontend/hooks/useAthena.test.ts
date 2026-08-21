@@ -23,6 +23,7 @@ import {
   useAthenaDatabases,
   useAthenaTables,
   useAthenaTableMetadata,
+  useAthenaStartQueryExecution,
 } from "./useAthena";
 
 beforeEach(() => mockApi.mockReset());
@@ -141,5 +142,20 @@ describe("useAthena hooks", () => {
     const { result } = renderHook(() => useAthenaTableMetadata("mydb", "t1"), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith("/aws/athena/databases/mydb/tables/t1");
+  });
+});
+
+describe("useAthenaStartQueryExecution", () => {
+  it("calls api with POST method and query body", async () => {
+    mockApi.mockResolvedValueOnce({ queryExecutionId: "exec-1" });
+    const { result } = renderHook(() => useAthenaStartQueryExecution(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ query: "SELECT 1", database: "mydb" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/athena/start-query",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ query: "SELECT 1", database: "mydb" }),
+      }),
+    );
   });
 });

@@ -1938,7 +1938,7 @@ Full 66-service diff of Floci-supported operations vs. dashboard UI-reachable op
 | # | Service | Missing Operations | Dashboard Impact |
 |---|---------|-------------------|------------------|
 | G.46 | **SSM** (Run Command) | SendCommand, ListCommands, ListCommandInvocations, GetCommandInvocation, CancelCommand | No remote command execution; dashboard is Parameter Store only |
-| G.47 | **Athena** (Run query) | StartQueryExecution | Can view/stop queries but cannot actually run one |
+| G.47 | **Athena** (Run query) | StartQueryExecution | Can view/stop queries but cannot actually run one | **Done** |
 | G.48 | **IoT** (Thing Groups) | CreateThingGroup, DescribeThingGroup, ListThingGroups, UpdateThingGroup, DeleteThingGroup, AddThingToThingGroup, RemoveThingFromThingGroup | Entire thing-group feature absent |
 | G.49 | **ECS** (Capacity Providers) | CreateCapacityProvider, DeleteCapacityProvider, UpdateCapacityProvider, DescribeCapacityProviders, PutClusterCapacityProviders | Core Fargate/EC2 capacity management absent |
 | G.50 | **EC2** (Spot Instances) | RequestSpotInstances, DescribeSpotInstanceRequests, CancelSpotInstanceRequests | No spot support anywhere |

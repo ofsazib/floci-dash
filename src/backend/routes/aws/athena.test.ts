@@ -15,6 +15,7 @@ vi.mock("@aws-sdk/client-athena", () => ({
   ListQueryExecutionsCommand: createCmd("ListQueryExecutionsCommand"),
   GetQueryExecutionCommand: createCmd("GetQueryExecutionCommand"),
   StopQueryExecutionCommand: createCmd("StopQueryExecutionCommand"),
+  StartQueryExecutionCommand: createCmd("StartQueryExecutionCommand"),
   GetQueryResultsCommand: createCmd("GetQueryResultsCommand"),
   GetWorkGroupCommand: createCmd("GetWorkGroupCommand"),
   GetTableMetadataCommand: createCmd("GetTableMetadataCommand"),
@@ -224,5 +225,20 @@ describe("Athena Routes", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.tableMetadata.Name).toBe("my_table");
+  });
+
+  describe("Run Query", () => {
+    it("POST /start-query — starts query execution", async () => {
+      mockSend.mockResolvedValueOnce({ QueryExecutionId: "exec-123" });
+      const res = await post("/start-query", { query: "SELECT 1", database: "mydb", workGroup: "primary" });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.queryExecutionId).toBe("exec-123");
+    });
+
+    it("POST /start-query — 400 when query missing", async () => {
+      const res = await post("/start-query", { query: "" });
+      expect(res.status).toBe(400);
+    });
   });
 });

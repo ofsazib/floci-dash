@@ -16,6 +16,7 @@ import {
   ListDatabasesCommand,
   ListTableMetadataCommand,
   GetTableMetadataCommand,
+  StartQueryExecutionCommand,
 } from "@aws-sdk/client-athena";
 
 const router = new Hono();
@@ -156,6 +157,22 @@ router.get("/databases/:dbName/tables/:tableName", async (c: Context) => {
     new GetTableMetadataCommand({ CatalogName: "AwsDataCatalog", DatabaseName: dbName, TableName: tableName })
   );
   return c.json({ tableMetadata: result.TableMetadata });
+});
+
+// ── Run Query ──────────────────────────────────────────────
+
+router.post("/start-query", async (c: Context) => {
+  const body = await c.req.json<{ query: string; database?: string; workGroup?: string }>();
+  if (!body.query?.trim()) return c.json({ error: "query is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new StartQueryExecutionCommand({
+      QueryString: body.query.trim(),
+      QueryExecutionContext: body.database ? { Database: body.database } : undefined,
+      WorkGroup: body.workGroup || "primary",
+    })
+  );
+  return c.json({ queryExecutionId: result.QueryExecutionId }, 201);
 });
 
 export default router;

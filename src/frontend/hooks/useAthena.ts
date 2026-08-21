@@ -134,3 +134,17 @@ export function useAthenaTableMetadata(dbName: string | null, tableName: string 
     enabled: !!dbName && !!tableName,
   });
 }
+
+export function useAthenaStartQueryExecution() {
+  return useMutation<
+    { queryExecutionId: string },
+    Error,
+    { query: string; database?: string; workGroup?: string }
+  >({
+    mutationFn: (body) =>
+      api("/aws/athena/start-query", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+  });
+}
