@@ -52,6 +52,7 @@ import {
   useDeleteSubscriptionFilter,
   useLogGroupTags,
   useTagLogGroup,
+  useDataProtectionPolicy,
   useUntagLogGroup,
 } from "../../hooks/useLogs";
 import {
@@ -733,6 +734,11 @@ function CloudWatchLogGroupDetail({
       label: "Tags",
       content: <CloudWatchLogGroupTags logGroupName={name} />,
     },
+    {
+      id: "data-protection",
+      label: "Data Protection",
+      content: <CloudWatchDataProtection logGroupName={name} />,
+    },
   ];
 
   return (
@@ -1378,11 +1384,41 @@ function CloudWatchSubscriptionFilterList({
       </Modal>
     </>
   );
+}// ─── Data Protection Policy ────────────────────────────
+function CloudWatchDataProtection({ logGroupName }: { logGroupName: string }) {
+  const { data, isLoading } = useDataProtectionPolicy(logGroupName);
+
+  if (isLoading) return <Spinner />;
+
+  const policyDoc = (data as any)?.policyDocument;
+  let parsed: any = null;
+  try {
+    parsed = policyDoc ? JSON.parse(policyDoc) : null;
+  } catch {
+    parsed = null;
+  }
+
+  if (!parsed) {
+    return (
+      <Box>
+        <StatusIndicator type="info">No data protection policy configured for this log group.</StatusIndicator>
+      </Box>
+    );
+  }
+
+  return (
+    <SpaceBetween size="m">
+      <Header variant="h3">Data Protection Policy</Header>
+      <Container>
+        <pre style={{ whiteSpace: "pre-wrap", margin: 0, fontSize: 13 }}>
+          {JSON.stringify(parsed, null, 2)}
+        </pre>
+      </Container>
+    </SpaceBetween>
+  );
 }
 
 // ─── Log Group Tags ────────────────────────────────────
-
-
 function CloudWatchLogGroupTags({ logGroupName }: { logGroupName: string }) {
   const { data, isLoading, isError, error } = useLogGroupTags(logGroupName);
   const tagMutation = useTagLogGroup();

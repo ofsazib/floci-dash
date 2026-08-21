@@ -19,6 +19,7 @@ import {
   TagLogGroupCommand,
   UntagLogGroupCommand,
   ListTagsLogGroupCommand,
+  GetDataProtectionPolicyCommand,
 } from "@aws-sdk/client-cloudwatch-logs";
 import { getAwsConfig } from "../../clients/aws";
 
@@ -334,6 +335,16 @@ router.delete("/log-groups/:name/tags", async (c: Context) => {
     new UntagLogGroupCommand({ logGroupName: name, tags: body.tags })
   );
   return c.json({ logGroupName: name, removedTags: body.tags, updated: true });
+});
+
+// ── Data Protection Policy ───────────────────────────────
+
+router.get("/log-groups/:name/data-protection", async (c: Context) => {
+  const name = c.req.param("name");
+  const result = await logs().send(
+    new GetDataProtectionPolicyCommand({ logGroupIdentifier: name })
+  );
+  return c.json({ logGroupIdentifier: result.logGroupIdentifier, policyDocument: result.policyDocument });
 });
 
 export default router;

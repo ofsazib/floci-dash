@@ -35,6 +35,7 @@ vi.mock("@aws-sdk/client-cloudwatch-logs", () => ({
   TagLogGroupCommand: createCmd("TagLogGroupCommand"),
   UntagLogGroupCommand: createCmd("UntagLogGroupCommand"),
   ListTagsLogGroupCommand: createCmd("ListTagsLogGroupCommand"),
+  GetDataProtectionPolicyCommand: createCmd("GetDataProtectionPolicyCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -441,6 +442,18 @@ describe("CloudWatch Logs Routes", () => {
         headers: { "content-type": "application/json" },
       });
       expect(res.status).toBe(400);
+    });
+
+    it("GET /log-groups/:name/data-protection — returns policy", async () => {
+      mockSend.mockResolvedValueOnce({
+        logGroupIdentifier: "/aws/test",
+        policyDocument: "{\"Name\":\"test-policy\"}",
+      });
+      const res = await get("/log-groups/%2Faws%2Ftest/data-protection");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.logGroupIdentifier).toBe("/aws/test");
+      expect(body.policyDocument).toBe("{\"Name\":\"test-policy\"}");
     });
   });
 });

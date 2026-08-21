@@ -27,6 +27,7 @@ import {
   useLogGroupTags,
   useTagLogGroup,
   useUntagLogGroup,
+  useDataProtectionPolicy,
 } from "./useLogs";
 
 function createWrapper() {
@@ -399,5 +400,20 @@ describe("useUntagLogGroup", () => {
         body: JSON.stringify({ tags: ["env", "team"] }),
       })
     );
+  });
+});
+
+describe("useDataProtectionPolicy", () => {
+  it("calls api with correct URL and enabled when logGroupName provided", async () => {
+    mockApi.mockResolvedValueOnce({ logGroupIdentifier: "/aws/test", policy: "{}" });
+    const { result } = renderHook(() => useDataProtectionPolicy("/aws/test"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(`/aws/logs/log-groups/${encodeURIComponent("/aws/test")}/data-protection`);
+  });
+
+  it("is disabled when logGroupName is null", () => {
+    const { result } = renderHook(() => useDataProtectionPolicy(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+    expect(mockApi).not.toHaveBeenCalled();
   });
 });

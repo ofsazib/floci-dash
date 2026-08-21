@@ -75,6 +75,7 @@ const mockDeleteFilter = vi.fn();
 const mockTags = vi.fn();
 const mockTagGroup = vi.fn();
 const mockUntagGroup = vi.fn();
+const mockDataProtection = vi.fn();
 
 vi.mock("../../hooks/useLogs", () => ({
   useLogGroups: (...args: any[]) => mockLogGroups(...args),
@@ -133,6 +134,7 @@ vi.mock("../../hooks/useLogs", () => ({
     mutate: mockUntagGroup,
     get isPending() { return untagGroupState.isPending; },
   }),
+  useDataProtectionPolicy: (...args: any[]) => mockDataProtection(...args),
 }));
 
 import { CloudWatchLogsDashboard } from "./CloudWatchLogsDashboard";
@@ -180,6 +182,7 @@ beforeEach(() => {
   deleteFilterState.variables = { filterName: "" };
   tagGroupState.isPending = false;
   untagGroupState.isPending = false;
+  mockDataProtection.mockReturnValue({ data: { logGroupIdentifier: "", policyDocument: "" }, isLoading: false });
 
   mockLogGroups.mockReturnValue({ data: { logGroups: [], total: 0 }, isLoading: false, isError: false, error: null });
   mockLogStreams.mockReturnValue({ data: { logStreams: [], total: 0 }, isLoading: false, isError: false, error: null });
@@ -1620,5 +1623,68 @@ describe("CloudWatchLogsDashboard", () => {
     await user.click(screen.getAllByRole("option", { name: /Never expire/i })[0]);
     await clickButton(user, /Save retention/i);
     await waitFor(() => expect(mockDeleteRetention).toHaveBeenCalledWith("/aws/lambda/test"));
+  });
+});
+
+describe("CloudWatchLogsDashboard — Data Protection tab", () => {
+  beforeEach(() => {
+    mockLogGroups.mockReturnValue({
+      data: { logGroups: [{ logGroupName: "/aws/lambda/test" }], total: 1 },
+      isLoading: false,
+    });
+  });
+
+  it("shows loading state for data protection policy", async () => {
+    mockDataProtection.mockReturnValue({ data: undefined, isLoading: true });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("/aws/lambda/test"));
+    await user.click(screen.getByText("/aws/lambda/test"));
+    await waitFor(() => expect(screen.getByText(/Back to Log Groups/i)).toBeTruthy());
+    const dpTab = screen.getByRole("tab", { name: /Data Protection/i });
+    await user.click(dpTab);
+    await waitFor(() => expect(screen.getByText("Data Protection")).toBeTruthy());
+  });
+
+  it("shows no policy message when policyDocument is empty", async () => {
+    mockDataProtection.mockReturnValue({ data: { logGroupIdentifier: "", policyDocument: "" }, isLoading: false });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("/aws/lambda/test"));
+    await user.click(screen.getByText("/aws/lambda/test"));
+    await waitFor(() => expect(screen.getByText(/Back to Log Groups/i)).toBeTruthy());
+    const dpTab = screen.getByRole("tab", { name: /Data Protection/i });
+    await user.click(dpTab);
+    await waitFor(() => expect(screen.getByText(/No data protection policy configured/i)).toBeTruthy());
+  });
+
+  it("renders parsed policy JSON when policyDocument is valid", async () => {
+    mockDataProtection.mockReturnValue({
+      data: { logGroupIdentifier: "/aws/lambda/test", policyDocument: JSON.stringify({ Name: "my-policy" }) },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("/aws/lambda/test"));
+    await user.click(screen.getByText("/aws/lambda/test"));
+    await waitFor(() => expect(screen.getByText(/Back to Log Groups/i)).toBeTruthy());
+    const dpTab = screen.getByRole("tab", { name: /Data Protection/i });
+    await user.click(dpTab);
+    await waitFor(() => expect(screen.getByText(/my-policy/)).toBeTruthy());
+  });
+
+  it("shows no policy message when policyDocument is invalid JSON", async () => {
+    mockDataProtection.mockReturnValue({
+      data: { logGroupIdentifier: "/aws/lambda/test", policyDocument: "not-json" },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("/aws/lambda/test"));
+    await user.click(screen.getByText("/aws/lambda/test"));
+    await waitFor(() => expect(screen.getByText(/Back to Log Groups/i)).toBeTruthy());
+    const dpTab = screen.getByRole("tab", { name: /Data Protection/i });
+    await user.click(dpTab);
+    await waitFor(() => expect(screen.getByText(/No data protection policy configured/i)).toBeTruthy());
   });
 });

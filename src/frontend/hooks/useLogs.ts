@@ -355,3 +355,14 @@ export function useUntagLogGroup() {
       }),
   });
 }
+
+export function useDataProtectionPolicy(logGroupName: string | null) {
+  return useQuery<{
+    logGroupIdentifier: string;
+    policyDocument: string;
+  }>({
+    queryKey: ["aws", "logs", "data-protection", logGroupName],
+    queryFn: () => api(`/aws/logs/log-groups/${encodeURIComponent(logGroupName!)}/data-protection`),
+    enabled: !!logGroupName,
+  });
+}
