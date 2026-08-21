@@ -8,10 +8,20 @@ import React from "react";
 const mockMemoryDBClusters = vi.fn();
 const mockCreateCluster = vi.fn();
 const mockDeleteCluster = vi.fn();
+const mockMemoryDBUsers = vi.fn();
+const mockCreateUser = vi.fn();
+const mockDeleteUser = vi.fn();
+const mockMemoryDBACLs = vi.fn();
+const mockCreateACL = vi.fn();
+const mockDeleteACL = vi.fn();
 const mockShowToast = vi.fn();
 
 let mockDeleteIsPending = false;
 let mockDeleteVariables: string | null = null;
+let mockDeleteACLIsPending = false;
+let mockDeleteACLVariables: string | null = null;
+let mockDeleteUserIsPending = false;
+let mockDeleteUserVariables: string | null = null;
 
 vi.mock("../../components/Toast", () => ({
   useToast: () => ({ showToast: mockShowToast }),
@@ -25,6 +35,20 @@ vi.mock("../../hooks/useMemoryDB", () => ({
     isPending: mockDeleteIsPending,
     variables: mockDeleteVariables,
   }),
+  useMemoryDBUsers: (...args: any[]) => mockMemoryDBUsers(...args),
+  useCreateMemoryDBUser: () => ({ mutate: mockCreateUser, isPending: false }),
+  useDeleteMemoryDBUser: () => ({
+    mutateAsync: mockDeleteUser,
+    isPending: mockDeleteUserIsPending,
+    variables: mockDeleteUserVariables,
+  }),
+  useMemoryDBACLs: (...args: any[]) => mockMemoryDBACLs(...args),
+  useCreateMemoryDBACL: () => ({ mutate: mockCreateACL, isPending: false }),
+  useDeleteMemoryDBACL: () => ({
+    mutateAsync: mockDeleteACL,
+    isPending: mockDeleteACLIsPending,
+    variables: mockDeleteACLVariables,
+  }),
 }));
 
 import { MemoryDBDashboard } from "./MemoryDBDashboard";
@@ -33,7 +57,13 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockDeleteIsPending = false;
   mockDeleteVariables = null;
+  mockDeleteACLIsPending = false;
+  mockDeleteACLVariables = null;
+  mockDeleteUserIsPending = false;
+  mockDeleteUserVariables = null;
   mockMemoryDBClusters.mockReturnValue({ data: { clusters: [], total: 0 }, isLoading: false });
+  mockMemoryDBUsers.mockReturnValue({ data: { users: [], total: 0 }, isLoading: false });
+  mockMemoryDBACLs.mockReturnValue({ data: { acls: [], total: 0 }, isLoading: false });
 });
 
 describe("MemoryDBDashboard", () => {
@@ -239,5 +269,201 @@ describe("MemoryDBDashboard", () => {
     const filterInput = screen.getByPlaceholderText("Find by name");
     await user.type(filterInput, "beta");
     await waitFor(() => expect(screen.queryByText("alpha")).toBeNull());
+  });
+});
+
+describe("UsersTab", () => {
+  beforeEach(() => {
+    mockMemoryDBUsers.mockReturnValue({ data: { users: [], total: 0 }, isLoading: false });
+  });
+
+  it("switches to Users tab", async () => {
+    const user = userEvent.setup();
+    render(<MemoryDBDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Users/i }));
+    expect(screen.getAllByText("Users").length).toBeGreaterThan(0);
+  });
+
+  it("shows users list", async () => {
+    mockMemoryDBUsers.mockReturnValue({
+      data: { users: [{ UserName: "u1", Status: "active", AccessString: "on ~* +@all" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<MemoryDBDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Users/i }));
+    await waitFor(() => expect(screen.getByText("u1")).toBeTruthy());
+  });
+
+  it("creates a user", async () => {
+    mockCreateUser.mockImplementation((_args: any, opts: any) => { opts?.onSuccess?.(); });
+    const user = userEvent.setup();
+    render(<MemoryDBDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Users/i }));
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => expect(screen.getByRole("dialog")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-user"), "new-user");
+    await user.type(screen.getByPlaceholderText("on ~\* +@all"), "on ~* +@all");
+    const submitBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(submitBtns[submitBtns.length - 1]);
+    await waitFor(() => expect(mockCreateUser).toHaveBeenCalled());
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("success", expect.stringContaining("created")));
+  });
+
+  it("deletes a user", async () => {
+    mockDeleteUser.mockResolvedValueOnce(undefined);
+    mockMemoryDBUsers.mockReturnValue({
+      data: { users: [{ UserName: "u1", Status: "active", AccessString: "on ~*" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<MemoryDBDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Users/i }));
+    await waitFor(() => expect(screen.getByText("u1")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Delete u1/i }));
+    await waitFor(() => {
+      const dialogs = screen.getAllByRole("dialog");
+      expect(dialogs.length).toBeGreaterThanOrEqual(1);
+    });
+    const deleteBtns = screen.getAllByRole("button", { name: /^Delete$/i });
+    await user.click(deleteBtns[deleteBtns.length - 1]);
+    await waitFor(() => expect(mockDeleteUser).toHaveBeenCalledWith("u1"));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("success", expect.stringContaining("deleted")));
+  });
+
+  it("shows error toast when user delete fails", async () => {
+    mockDeleteUser.mockRejectedValueOnce(new Error("delete failed"));
+    mockMemoryDBUsers.mockReturnValue({
+      data: { users: [{ UserName: "u1", Status: "active", AccessString: "on ~*" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<MemoryDBDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Users/i }));
+    await waitFor(() => expect(screen.getByText("u1")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Delete u1/i }));
+    await waitFor(() => {
+      const dialogs = screen.getAllByRole("dialog");
+      expect(dialogs.length).toBeGreaterThanOrEqual(1);
+    });
+    const deleteBtns = screen.getAllByRole("button", { name: /^Delete$/i });
+    await user.click(deleteBtns[deleteBtns.length - 1]);
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "delete failed"));
+  });
+
+  it("shows error toast when user creation fails", async () => {
+    mockCreateUser.mockImplementation((_args: any, opts: any) => { opts?.onError?.(new Error("create failed")); });
+    const user = userEvent.setup();
+    render(<MemoryDBDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Users/i }));
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => expect(screen.getByRole("dialog")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-user"), "new-user");
+    const submitBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(submitBtns[submitBtns.length - 1]);
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "create failed"));
+  });
+
+  it("handles users data without users key", async () => {
+    mockMemoryDBUsers.mockReturnValue({ data: {}, isLoading: false });
+    render(<MemoryDBDashboard />, { wrapper: createWrapper() });
+    await screen.getByRole("tab", { name: /Users/i }).click();
+    await waitFor(() => expect(screen.getAllByText("Users").length).toBeGreaterThan(0));
+  });
+});
+
+describe("ACLsTab", () => {
+  beforeEach(() => {
+    mockMemoryDBACLs.mockReturnValue({ data: { acls: [], total: 0 }, isLoading: false });
+  });
+
+  it("switches to ACLs tab", async () => {
+    const user = userEvent.setup();
+    render(<MemoryDBDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /ACLs/i }));
+    expect(screen.getAllByText("ACLs").length).toBeGreaterThan(0);
+  });
+
+  it("shows ACLs list", async () => {
+    mockMemoryDBACLs.mockReturnValue({
+      data: { acls: [{ ACLName: "a1", Status: "active", UserNames: ["u1"] }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<MemoryDBDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /ACLs/i }));
+    await waitFor(() => expect(screen.getByText("a1")).toBeTruthy());
+  });
+
+  it("creates an ACL", async () => {
+    mockCreateACL.mockImplementation((_args: any, opts: any) => { opts?.onSuccess?.(); });
+    const user = userEvent.setup();
+    render(<MemoryDBDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /ACLs/i }));
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => expect(screen.getByRole("dialog")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-acl"), "new-acl");
+    const submitBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(submitBtns[submitBtns.length - 1]);
+    await waitFor(() => expect(mockCreateACL).toHaveBeenCalled());
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("success", expect.stringContaining("created")));
+  });
+
+  it("deletes an ACL", async () => {
+    mockDeleteACL.mockResolvedValueOnce(undefined);
+    mockMemoryDBACLs.mockReturnValue({
+      data: { acls: [{ ACLName: "a1", Status: "active", UserNames: ["u1"] }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<MemoryDBDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /ACLs/i }));
+    await waitFor(() => expect(screen.getByText("a1")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Delete a1/i }));
+    await waitFor(() => {
+      const dialogs = screen.getAllByRole("dialog");
+      expect(dialogs.length).toBeGreaterThanOrEqual(1);
+    });
+    const deleteBtns = screen.getAllByRole("button", { name: /^Delete$/i });
+    await user.click(deleteBtns[deleteBtns.length - 1]);
+    await waitFor(() => expect(mockDeleteACL).toHaveBeenCalledWith("a1"));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("success", expect.stringContaining("deleted")));
+  });
+
+  it("shows error toast when ACL delete fails", async () => {
+    mockDeleteACL.mockRejectedValueOnce(new Error("acl delete failed"));
+    mockMemoryDBACLs.mockReturnValue({
+      data: { acls: [{ ACLName: "a1", Status: "active", UserNames: ["u1"] }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<MemoryDBDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /ACLs/i }));
+    await waitFor(() => expect(screen.getByText("a1")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Delete a1/i }));
+    await waitFor(() => {
+      const dialogs = screen.getAllByRole("dialog");
+      expect(dialogs.length).toBeGreaterThanOrEqual(1);
+    });
+    const deleteBtns = screen.getAllByRole("button", { name: /^Delete$/i });
+    await user.click(deleteBtns[deleteBtns.length - 1]);
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "acl delete failed"));
+  });
+
+  it("shows error toast when ACL creation fails", async () => {
+    mockCreateACL.mockImplementation((_args: any, opts: any) => { opts?.onError?.(new Error("acl create failed")); });
+    const user = userEvent.setup();
+    render(<MemoryDBDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /ACLs/i }));
+    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(createBtns[createBtns.length - 1]);
+    await waitFor(() => expect(screen.getByRole("dialog")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("my-acl"), "new-acl");
+    const submitBtns = screen.getAllByRole("button", { name: /^Create$/i });
+    await user.click(submitBtns[submitBtns.length - 1]);
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "acl create failed"));
   });
 });

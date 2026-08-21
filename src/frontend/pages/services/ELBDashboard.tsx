@@ -1062,8 +1062,8 @@ export function ELBDashboard() {
                         <Box>
                           <Header variant="h3">Capacity Reservation</Header>
                           <SpaceBetween size="xs">
-                            {(capacityReservation.data.reservationState || []).map((s: any, i: number) => (
-                              <Box key={i}>Zone: {s.AvailabilityZone || "—"} — State: {s.State?.State || "—"}</Box>
+                            {capacityReservation.data.reservationState.map((s: any, i: number) => (
+                              <Box key={i}>Zone: {s.AvailabilityZone} — State: {s.State?.State}</Box>
                             ))}
                             {(!capacityReservation.data.reservationState || capacityReservation.data.reservationState.length === 0) && (
                               <Box>No capacity reservation data</Box>

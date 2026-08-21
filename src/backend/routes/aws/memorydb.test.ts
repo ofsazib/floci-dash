@@ -25,6 +25,12 @@ vi.mock("@aws-sdk/client-memorydb", () => ({
   ListTagsCommand: createCmd("ListTagsCommand"),
   TagResourceCommand: createCmd("TagResourceCommand"),
   UntagResourceCommand: createCmd("UntagResourceCommand"),
+  CreateUserCommand: createCmd("CreateUserCommand"),
+  DescribeUsersCommand: createCmd("DescribeUsersCommand"),
+  DeleteUserCommand: createCmd("DeleteUserCommand"),
+  CreateACLCommand: createCmd("CreateACLCommand"),
+  DescribeACLsCommand: createCmd("DescribeACLsCommand"),
+  DeleteACLCommand: createCmd("DeleteACLCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -246,5 +252,117 @@ describe("MemoryDB — Tags", () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.tags).toEqual([]);
+  });
+});
+
+// ─── Users ──────────────────────────────────────────────
+
+describe("MemoryDB Users routes", () => {
+  beforeEach(() => mockSend.mockReset());
+
+  it("GET /users — lists users", async () => {
+    mockSend.mockResolvedValueOnce({ Users: [{ UserName: "u1" }, { UserName: "u2" }] });
+    const res = await get("/users");
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.users).toHaveLength(2);
+    expect(json.total).toBe(2);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("DescribeUsersCommand");
+  });
+
+  it("GET /users — sparse response defaults", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/users");
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.users).toEqual([]);
+    expect(json.total).toBe(0);
+  });
+
+  it("GET /users?userName=u1 — filters by name", async () => {
+    mockSend.mockResolvedValueOnce({ Users: [{ UserName: "u1" }] });
+    const res = await get("/users?userName=u1");
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].UserName).toBe("u1");
+  });
+
+  it("POST /users — creates user", async () => {
+    mockSend.mockResolvedValueOnce({ User: { UserName: "u1" } });
+    const res = await post("/users", { userName: "u1", authenticationMode: { Type: "password", Passwords: ["pass"] }, accessString: "on ~* +@all" });
+    expect(res.status).toBe(201);
+    const json = await res.json();
+    expect(json.user.UserName).toBe("u1");
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("CreateUserCommand");
+  });
+
+  it("POST /users — 400 when userName missing", async () => {
+    const res = await post("/users", {});
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("userName is required");
+  });
+
+  it("DELETE /users/:userName — deletes user", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await del("/users/u1");
+    expect(res.status).toBe(200);
+    expect((await res.json()).deleted).toBe(true);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteUserCommand");
+    expect(mockSend.mock.calls[0][0].UserName).toBe("u1");
+  });
+});
+
+// ─── ACLs ────────────────────────────────────────────────
+
+describe("MemoryDB ACLs routes", () => {
+  beforeEach(() => mockSend.mockReset());
+
+  it("GET /acls — lists ACLs", async () => {
+    mockSend.mockResolvedValueOnce({ ACLs: [{ ACLName: "a1" }, { ACLName: "a2" }] });
+    const res = await get("/acls");
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.acls).toHaveLength(2);
+    expect(json.total).toBe(2);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("DescribeACLsCommand");
+  });
+
+  it("GET /acls — sparse response defaults", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/acls");
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.acls).toEqual([]);
+    expect(json.total).toBe(0);
+  });
+
+  it("GET /acls?aclName=a1 — filters by name", async () => {
+    mockSend.mockResolvedValueOnce({ ACLs: [{ ACLName: "a1" }] });
+    const res = await get("/acls?aclName=a1");
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].ACLName).toBe("a1");
+  });
+
+  it("POST /acls — creates ACL", async () => {
+    mockSend.mockResolvedValueOnce({ ACL: { ACLName: "a1" } });
+    const res = await post("/acls", { aclName: "a1", userNames: ["u1"] });
+    expect(res.status).toBe(201);
+    const json = await res.json();
+    expect(json.acl.ACLName).toBe("a1");
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("CreateACLCommand");
+  });
+
+  it("POST /acls — 400 when aclName missing", async () => {
+    const res = await post("/acls", {});
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("aclName is required");
+  });
+
+  it("DELETE /acls/:aclName — deletes ACL", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await del("/acls/a1");
+    expect(res.status).toBe(200);
+    expect((await res.json()).deleted).toBe(true);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteACLCommand");
+    expect(mockSend.mock.calls[0][0].ACLName).toBe("a1");
   });
 });

@@ -240,5 +240,13 @@ describe("Athena Routes", () => {
       const res = await post("/start-query", { query: "" });
       expect(res.status).toBe(400);
     });
+
+    it("POST /start-query — defaults workGroup to primary when omitted", async () => {
+      mockSend.mockResolvedValueOnce({ QueryExecutionId: "exec-456" });
+      const res = await post("/start-query", { query: "SELECT 1" });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.queryExecutionId).toBe("exec-456");
+    });
   });
 });

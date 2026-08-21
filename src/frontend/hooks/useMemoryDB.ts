@@ -75,6 +75,66 @@ export function useTagMemoryDBResource() {
   });
 }
 
+// ─── Users ──────────────────────────────────────────────
+
+export function useMemoryDBUsers(userName?: string) {
+  return useQuery({
+    queryKey: ["aws", "memorydb", "users", userName],
+    queryFn: () =>
+      api<{ users: any[]; total: number }>(
+        `/aws/memorydb/users${userName ? `?userName=${encodeURIComponent(userName)}` : ""}`
+      ),
+  });
+}
+
+export function useCreateMemoryDBUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: any) =>
+      api("/aws/memorydb/users", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "memorydb"] }),
+  });
+}
+
+export function useDeleteMemoryDBUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (userName: string) =>
+      api(`/aws/memorydb/users/${encodeURIComponent(userName)}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "memorydb"] }),
+  });
+}
+
+// ─── ACLs ────────────────────────────────────────────────
+
+export function useMemoryDBACLs(aclName?: string) {
+  return useQuery({
+    queryKey: ["aws", "memorydb", "acls", aclName],
+    queryFn: () =>
+      api<{ acls: any[]; total: number }>(
+        `/aws/memorydb/acls${aclName ? `?aclName=${encodeURIComponent(aclName)}` : ""}`
+      ),
+  });
+}
+
+export function useCreateMemoryDBACL() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: any) =>
+      api("/aws/memorydb/acls", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "memorydb"] }),
+  });
+}
+
+export function useDeleteMemoryDBACL() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (aclName: string) =>
+      api(`/aws/memorydb/acls/${encodeURIComponent(aclName)}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "memorydb"] }),
+  });
+}
+
 export function useUntagMemoryDBResource() {
   const qc = useQueryClient();
   return useMutation({

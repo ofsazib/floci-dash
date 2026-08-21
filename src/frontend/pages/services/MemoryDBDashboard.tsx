@@ -465,7 +465,7 @@ import {
 } from "../../hooks/useRDSData";
 import { useEc2Messages, useAcknowledgeMessage } from "../../hooks/useEc2Messages";
 import { useStartConfigurationSession, useGetLatestConfiguration } from "../../hooks/useAppConfigData";
-import { useMemoryDBClusters, useCreateMemoryDBCluster, useDeleteMemoryDBCluster } from "../../hooks/useMemoryDB";
+import { useMemoryDBClusters, useCreateMemoryDBCluster, useDeleteMemoryDBCluster, useMemoryDBUsers, useCreateMemoryDBUser, useDeleteMemoryDBUser, useMemoryDBACLs, useCreateMemoryDBACL, useDeleteMemoryDBACL } from "../../hooks/useMemoryDB";
 
 const KEY_TYPE_OPTIONS: SelectProps.Option[] = [
   { label: "String (S)", value: "S" },
@@ -505,7 +505,7 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
   { label: "aurora-mysql8", value: "aurora-mysql8" },
 ];
 
-export function MemoryDBDashboard() {
+function ClustersTab() {
   const { showToast } = useToast();
   const { data, isLoading } = useMemoryDBClusters();
   const createCluster = useCreateMemoryDBCluster();
@@ -613,6 +613,215 @@ export function MemoryDBDashboard() {
           </FormField>
         </SpaceBetween>
       </Modal>
+    </SpaceBetween>
+  );
+}
+
+function UsersTab() {
+  const { showToast } = useToast();
+  const { data, isLoading } = useMemoryDBUsers();
+  const createUser = useCreateMemoryDBUser();
+  const deleteUser = useDeleteMemoryDBUser();
+  const [showCreate, setShowCreate] = useState(false);
+  const [userName, setUserName] = useState("");
+  const [accessString, setAccessString] = useState("on ~* +@all");
+
+  const users = (data as any)?.users || [];
+
+  const handleDeleteUser = async (name: string) => {
+    try {
+      await deleteUser.mutateAsync(name);
+      showToast("success", `User ${name} deleted`);
+    } catch (e: any) { showToast("error", e.message); }
+  };
+
+  const handleCreateUser = () => {
+    createUser.mutate(
+      { userName: userName.trim(), accessString },
+      {
+        onSuccess: () => {
+          setShowCreate(false);
+          setUserName("");
+          setAccessString("on ~* +@all");
+          showToast("success", `User ${userName} created`);
+        },
+        onError: (e: any) => showToast("error", e.message),
+      }
+    );
+  };
+
+  /* v8 ignore start */
+  return (
+    <SpaceBetween size="l">
+      <ResourceTable
+        resourceName="User"
+        headerTitle="Users"
+        headerCounter={users.length}
+        items={users.map((u: any) => ({
+          name: u.UserName,
+          status: u.Status || "-",
+          accessString: u.AccessString || "-",
+        }))}
+        columns={[
+          { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+          { id: "status", header: "Status", cell: (i: any) => i.status },
+          { id: "accessString", header: "Access String", cell: (i: any) => i.accessString },
+          { id: "actions", header: "", cell: (i: any) => (
+            <DeleteButton
+              itemName={i.name}
+              resourceType="user"
+              loading={deleteUser.isPending && deleteUser.variables === i.name}
+              onDelete={() => handleDeleteUser(i.name)}
+            />
+          )},
+        ]}
+        loading={isLoading}
+        filterEnabled
+        filterPlaceholder="Find by name"
+        filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+        onCreate={() => setShowCreate(true)}
+      />
+
+      <Modal
+        visible={showCreate}
+        onDismiss={() => setShowCreate(false)}
+        header="Create User"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreate(false)}>Cancel</Button>
+              <Button variant="primary" loading={createUser.isPending} disabled={!userName.trim()} onClick={handleCreateUser}>
+                Create
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <SpaceBetween size="s">
+          <FormField label="User name">
+            <Input value={userName} onChange={({ detail }) => setUserName(detail.value)} placeholder="my-user" />
+          </FormField>
+          <FormField label="Access string">
+            <Input value={accessString} onChange={({ detail }) => setAccessString(detail.value)} placeholder="on ~* +@all" />
+          </FormField>
+        </SpaceBetween>
+      </Modal>
+    </SpaceBetween>
+  );
+  /* v8 ignore end */
+}
+
+function ACLsTab() {
+  const { showToast } = useToast();
+  const { data, isLoading } = useMemoryDBACLs();
+  const createACL = useCreateMemoryDBACL();
+  const deleteACL = useDeleteMemoryDBACL();
+  const [showCreate, setShowCreate] = useState(false);
+  const [aclName, setACLName] = useState("");
+  const [userNames, setUserNames] = useState("");
+
+  const acls = (data as any)?.acls || [];
+
+  const handleDeleteACL = async (name: string) => {
+    try {
+      await deleteACL.mutateAsync(name);
+      showToast("success", `ACL ${name} deleted`);
+    } catch (e: any) { showToast("error", e.message); }
+  };
+
+  const handleCreateACL = () => {
+    const names = userNames.split(",").map((s) => s.trim()).filter(Boolean);
+    createACL.mutate(
+      { aclName: aclName.trim(), userNames: names.length ? names : undefined },
+      {
+        onSuccess: () => {
+          setShowCreate(false);
+          setACLName("");
+          setUserNames("");
+          showToast("success", `ACL ${aclName} created`);
+        },
+        onError: (e: any) => showToast("error", e.message),
+      }
+    );
+  };
+
+  /* v8 ignore start */
+  return (
+    <SpaceBetween size="l">
+      <ResourceTable
+        resourceName="ACL"
+        headerTitle="ACLs"
+        headerCounter={acls.length}
+        items={acls.map((a: any) => ({
+          name: a.ACLName,
+          status: a.Status || "-",
+          userNames: (a.UserNames || []).join(", ") || "-",
+        }))}
+        columns={
+          [
+            { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+            { id: "status", header: "Status", cell: (i: any) => i.status },
+            { id: "userNames", header: "Users", cell: (i: any) => i.userNames },
+            { id: "actions", header: "", cell: (i: any) => (
+              <DeleteButton
+                itemName={i.name}
+                resourceType="ACL"
+                loading={deleteACL.isPending && deleteACL.variables === i.name}
+                onDelete={() => handleDeleteACL(i.name)}
+              />
+            )},
+          ]
+        }
+        loading={isLoading}
+        filterEnabled
+        filterPlaceholder="Find by name"
+        filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+        onCreate={() => setShowCreate(true)}
+      />
+
+      <Modal
+        visible={showCreate}
+        onDismiss={() => setShowCreate(false)}
+        header="Create ACL"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreate(false)}>Cancel</Button>
+              <Button variant="primary" loading={createACL.isPending} disabled={!aclName.trim()} onClick={handleCreateACL}>
+                Create
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <SpaceBetween size="s">
+          <FormField label="ACL name">
+            <Input value={aclName} onChange={({ detail }) => setACLName(detail.value)} placeholder="my-acl" />
+          </FormField>
+          <FormField label="User names (comma-separated)">
+            <Input value={userNames} onChange={({ detail }) => setUserNames(detail.value)} placeholder="user1, user2" />
+          </FormField>
+        </SpaceBetween>
+      </Modal>
+    </SpaceBetween>
+  );
+  /* v8 ignore end */
+}
+
+export function MemoryDBDashboard() {
+  const [activeTab, setActiveTab] = useState("clusters");
+
+  return (
+    <SpaceBetween size="l">
+      <Tabs
+        activeTabId={activeTab}
+        onChange={({ detail }) => setActiveTab(detail.activeTabId)}
+        tabs={[
+          { id: "clusters", label: "Clusters", content: <ClustersTab /> },
+          { id: "users", label: "Users", content: <UsersTab /> },
+          { id: "acls", label: "ACLs", content: <ACLsTab /> },
+        ]}
+      />
     </SpaceBetween>
   );
 }

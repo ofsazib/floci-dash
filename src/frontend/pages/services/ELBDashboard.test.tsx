@@ -57,6 +57,10 @@ const setRulePrioritiesState = vi.hoisted(() => ({
   isPending: false,
 }));
 
+const capResState = vi.hoisted(() => ({
+  data: null as any,
+  isLoading: false,
+}));
 const sslPoliciesState = vi.hoisted(() => ({
   data: { sslPolicies: [] as any[], total: 0 },
   isLoading: false,
@@ -278,6 +282,12 @@ vi.mock("../../hooks/useELB", () => ({
     error: null,
     reset: vi.fn(),
   }),
+  useELBCapacityReservation: () => ({
+    data: capResState.data,
+    isLoading: capResState.isLoading,
+    isError: false,
+    error: null,
+  }),
 }));
 
 import { ELBDashboard } from "./ELBDashboard";
@@ -305,6 +315,8 @@ beforeEach(() => {
   listenerCertsState.isLoading = false;
   listenerCertsState.isError = false;
   listenerCertsState.error = null;
+  capResState.data = null;
+  capResState.isLoading = false;
   tgAttrsState.data = { targetGroupArn: "", attributes: {} };
   tgAttrsState.isLoading = false;
   tgAttrsState.isError = false;
@@ -1718,6 +1730,30 @@ describe("ELBDashboard — advanced settings", () => {
   }
 
   // ── SSL Policies ──
+
+  it("renders capacity reservation data", async () => {
+    capResState.data = {
+      reservationState: [
+        { AvailabilityZone: "us-east-1a", State: { State: "active" } },
+      ],
+    };
+    const user = userEvent.setup();
+    await navigateToAdvancedTab(user);
+    await waitFor(() => {
+      expect(screen.getByText("Capacity Reservation")).toBeTruthy();
+      expect(screen.getByText(/us-east-1a/)).toBeTruthy();
+    });
+  });
+
+  it("shows no capacity reservation data when reservationState is empty", async () => {
+    capResState.data = { reservationState: [] };
+    const user = userEvent.setup();
+    await navigateToAdvancedTab(user);
+    await waitFor(() => {
+      expect(screen.getByText("Capacity Reservation")).toBeTruthy();
+      expect(screen.getByText("No capacity reservation data")).toBeTruthy();
+    });
+  });
 
   it("renders SSL policies with data", async () => {
     sslPoliciesState.data = {

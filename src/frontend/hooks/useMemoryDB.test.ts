@@ -18,6 +18,12 @@ import {
   useDeleteMemoryDBCluster,
   useTagMemoryDBResource,
   useUntagMemoryDBResource,
+  useMemoryDBUsers,
+  useCreateMemoryDBUser,
+  useDeleteMemoryDBUser,
+  useMemoryDBACLs,
+  useCreateMemoryDBACL,
+  useDeleteMemoryDBACL,
 } from "./useMemoryDB";
 
 function createWrapper() {
@@ -134,5 +140,79 @@ describe("useUntagMemoryDBResource", () => {
       method: "DELETE",
       body: JSON.stringify({ tagKeys: ["env"] }),
     });
+  });
+});
+
+describe("useMemoryDBUsers", () => {
+  it("fetches users list", async () => {
+    mockApi.mockResolvedValueOnce({ users: [], total: 0 });
+    const { result } = renderHook(() => useMemoryDBUsers(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(mockApi).toHaveBeenCalledWith("/aws/memorydb/users");
+  });
+
+  it("fetches with userName filter", async () => {
+    mockApi.mockResolvedValueOnce({ users: [{ UserName: "u1" }], total: 1 });
+    const { result } = renderHook(() => useMemoryDBUsers("u1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(mockApi).toHaveBeenCalledWith("/aws/memorydb/users?userName=u1");
+  });
+});
+
+describe("useCreateMemoryDBUser", () => {
+  it("POSTs with user body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useCreateMemoryDBUser(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ userName: "u1", accessString: "on ~* +@all" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/memorydb/users", {
+      method: "POST",
+      body: JSON.stringify({ userName: "u1", accessString: "on ~* +@all" }),
+    });
+  });
+});
+
+describe("useDeleteMemoryDBUser", () => {
+  it("DELETEs user by name", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useDeleteMemoryDBUser(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("u1");
+    expect(mockApi).toHaveBeenCalledWith("/aws/memorydb/users/u1", { method: "DELETE" });
+  });
+});
+
+describe("useMemoryDBACLs", () => {
+  it("fetches ACLs list", async () => {
+    mockApi.mockResolvedValueOnce({ acls: [], total: 0 });
+    const { result } = renderHook(() => useMemoryDBACLs(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(mockApi).toHaveBeenCalledWith("/aws/memorydb/acls");
+  });
+
+  it("fetches with aclName filter", async () => {
+    mockApi.mockResolvedValueOnce({ acls: [{ ACLName: "a1" }], total: 1 });
+    const { result } = renderHook(() => useMemoryDBACLs("a1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(mockApi).toHaveBeenCalledWith("/aws/memorydb/acls?aclName=a1");
+  });
+});
+
+describe("useCreateMemoryDBACL", () => {
+  it("POSTs with ACL body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useCreateMemoryDBACL(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ aclName: "a1", userNames: ["u1"] });
+    expect(mockApi).toHaveBeenCalledWith("/aws/memorydb/acls", {
+      method: "POST",
+      body: JSON.stringify({ aclName: "a1", userNames: ["u1"] }),
+    });
+  });
+});
+
+describe("useDeleteMemoryDBACL", () => {
+  it("DELETEs ACL by name", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useDeleteMemoryDBACL(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("a1");
+    expect(mockApi).toHaveBeenCalledWith("/aws/memorydb/acls/a1", { method: "DELETE" });
   });
 });

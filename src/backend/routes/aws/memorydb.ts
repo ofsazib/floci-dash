@@ -9,6 +9,12 @@ import {
   ListTagsCommand,
   TagResourceCommand,
   UntagResourceCommand,
+  CreateUserCommand,
+  DescribeUsersCommand,
+  DeleteUserCommand,
+  CreateACLCommand,
+  DescribeACLsCommand,
+  DeleteACLCommand,
 } from "@aws-sdk/client-memorydb";
 import { create } from "../../clients/aws";
 
@@ -93,6 +99,67 @@ router.delete("/tags/:arn", async (c: Context) => {
   if (!tagKeys || !Array.isArray(tagKeys)) return c.json({ error: "tagKeys array is required" }, 400);
   const result = await getClient().send(new UntagResourceCommand({ ResourceArn: arn, TagKeys: tagKeys }));
   return c.json({ tags: result.TagList || [] });
+});
+
+// ─── Users ──────────────────────────────────────────────
+
+router.get("/users", async (c: Context) => {
+  const userName = c.req.query("userName");
+  const result = await getClient().send(
+    new DescribeUsersCommand(userName ? { UserName: userName } : {})
+  );
+  const users = result.Users || [];
+  return c.json({ users, total: users.length });
+});
+
+router.post("/users", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.userName) return c.json({ error: "userName is required" }, 400);
+  const result = await getClient().send(
+    new CreateUserCommand({
+      UserName: body.userName,
+      AuthenticationMode: body.authenticationMode,
+      AccessString: body.accessString,
+      Tags: body.tags,
+    })
+  );
+  return c.json({ user: result.User }, 201);
+});
+
+router.delete("/users/:userName", async (c: Context) => {
+  const userName = c.req.param("userName");
+  await getClient().send(new DeleteUserCommand({ UserName: userName }));
+  return c.json({ deleted: true });
+});
+
+// ─── ACLs ────────────────────────────────────────────────
+
+router.get("/acls", async (c: Context) => {
+  const aclName = c.req.query("aclName");
+  const result = await getClient().send(
+    new DescribeACLsCommand(aclName ? { ACLName: aclName } : {})
+  );
+  const acls = result.ACLs || [];
+  return c.json({ acls, total: acls.length });
+});
+
+router.post("/acls", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.aclName) return c.json({ error: "aclName is required" }, 400);
+  const result = await getClient().send(
+    new CreateACLCommand({
+      ACLName: body.aclName,
+      UserNames: body.userNames,
+      Tags: body.tags,
+    })
+  );
+  return c.json({ acl: result.ACL }, 201);
+});
+
+router.delete("/acls/:aclName", async (c: Context) => {
+  const aclName = c.req.param("aclName");
+  await getClient().send(new DeleteACLCommand({ ACLName: aclName }));
+  return c.json({ deleted: true });
 });
 
 export default router;
