@@ -18,6 +18,8 @@ import {
   useCreateRoute53RecordSet,
   useDeleteRoute53RecordSet,
   useRoute53HealthChecks,
+  useCreateRoute53HealthCheck,
+  useDeleteRoute53HealthCheck,
 } from "./useRoute53";
 
 function createWrapper() {
@@ -128,5 +130,29 @@ describe("useRoute53HealthChecks", () => {
     const { result } = renderHook(() => useRoute53HealthChecks(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith("/aws/route53/health-checks");
+  });
+});
+
+describe("useCreateRoute53HealthCheck", () => {
+  it("calls api with POST and body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useCreateRoute53HealthCheck(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ IPAddr: "1.2.3.4", Port: 80, Type: "HTTP" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/route53/health-checks",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+});
+
+describe("useDeleteRoute53HealthCheck", () => {
+  it("calls api with DELETE and encoded id", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useDeleteRoute53HealthCheck(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("hc-123");
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/route53/health-checks/hc-123",
+      expect.objectContaining({ method: "DELETE" })
+    );
   });
 });

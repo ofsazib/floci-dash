@@ -25,6 +25,8 @@ vi.mock("@aws-sdk/client-route-53", () => ({
   ListResourceRecordSetsCommand: createCmd("ListResourceRecordSetsCommand"),
   ChangeResourceRecordSetsCommand: createCmd("ChangeResourceRecordSetsCommand"),
   ListHealthChecksCommand: createCmd("ListHealthChecksCommand"),
+  CreateHealthCheckCommand: createCmd("CreateHealthCheckCommand"),
+  DeleteHealthCheckCommand: createCmd("DeleteHealthCheckCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -216,5 +218,32 @@ describe("Route53 routes — Health Checks", () => {
     const json = await res.json();
     expect(json.healthChecks).toEqual([]);
     expect(json.total).toBe(0);
+  });
+
+  it("POST /health-checks — creates health check", async () => {
+    mockSend.mockResolvedValueOnce({
+      HealthCheck: { Id: "hc2", CallerReference: "ref2" },
+    });
+    const res = await post("/health-checks", {
+      IPAddr: "1.2.3.4",
+      Port: 80,
+      Type: "HTTP",
+      ResourcePath: "/",
+    });
+    expect(res.status).toBe(200);
+    const cmd = mockSend.mock.calls[0][0];
+    expect(cmd.__cmdName).toBe("CreateHealthCheckCommand");
+    expect(cmd.HealthCheckConfig.Type).toBe("HTTP");
+    const json = await res.json();
+    expect(json.healthCheck.Id).toBe("hc2");
+  });
+
+  it("DELETE /health-checks/:id — deletes health check", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await del("/health-checks/hc2");
+    expect(res.status).toBe(200);
+    const cmd = mockSend.mock.calls[0][0];
+    expect(cmd.__cmdName).toBe("DeleteHealthCheckCommand");
+    expect(cmd.HealthCheckId).toBe("hc2");
   });
 });

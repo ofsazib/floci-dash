@@ -106,6 +106,9 @@ import {
   useRoute53RecordSets,
   useCreateRoute53RecordSet,
   useDeleteRoute53RecordSet,
+  useRoute53HealthChecks,
+  useCreateRoute53HealthCheck,
+  useDeleteRoute53HealthCheck,
 } from "../../hooks/useRoute53";
 import {
   useAPIGatewayApis,
@@ -513,6 +516,23 @@ export function Route53Dashboard() {
   const [showCreate, setShowCreate] = useState(false);
   const [selectedZone, setSelectedZone] = useState<string | null>(null);
 
+  // Health Checks
+  const { data: hcData, isLoading: hcLoading } = useRoute53HealthChecks();
+  const createHealthCheck = useCreateRoute53HealthCheck();
+  const deleteHealthCheck = useDeleteRoute53HealthCheck();
+  const [showCreateHC, setShowCreateHC] = useState(false);
+  const [hcForm, setHcForm] = useState({
+    IPAddr: "",
+    Port: 80,
+    Type: "HTTP",
+    ResourcePath: "/",
+    FullyQualifiedDomainName: "",
+    RequestInterval: 30,
+    FailureThreshold: 3,
+  });
+
+  function handleHcTypeChange({ detail }: any) { setHcForm((p) => ({ ...p, Type: String(detail.selectedOption?.value) })); }
+
   const [form, setForm] = useState({ name: "", comment: "" });
 
   const zones = data?.hostedZones || [];
@@ -622,6 +642,92 @@ export function Route53Dashboard() {
                         value={form.comment}
                         onChange={({ detail }) => setForm((p) => ({ ...p, comment: detail.value }))}
                       />
+                    </FormField>
+                  </SpaceBetween>
+                </Form>
+              </Modal>
+            </>
+          ),
+        },
+        {
+          id: "health-checks",
+          label: "Health Checks",
+          content: (
+            <>
+              <ResourceTable
+                resourceName="Health Check"
+                headerTitle="Route 53 Health Checks"
+                headerCounter={hcData?.total}
+                items={hcData?.healthChecks || []}
+                columns={[
+                  { id: "id", header: "Health Check ID", cell: (item: any) => item.Id, isRowHeader: true },
+                  { id: "type", header: "Type", cell: (item: any) => item.HealthCheckConfig?.Type || "—" },
+                  { id: "target", header: "Target", cell: (item: any) => item.HealthCheckConfig?.FullyQualifiedDomainName || item.HealthCheckConfig?.IPAddr || "—" },
+                  { id: "status", header: "Status", cell: (item: any) => <StatusBadge status={item.Status?.Status === "Healthy" ? "available" : "error"} /> },
+                  {
+                    id: "actions",
+                    header: "Actions",
+                    cell: (item: any) => (
+                      <DeleteButton
+                        onDelete={() => deleteHealthCheck.mutate(item.Id)}
+                        itemName={item.Id}
+                        resourceType="health check"
+                      />
+                    ),
+                  },
+                ]}
+                loading={hcLoading}
+                emptyMessage="No health checks found. Create one to get started."
+                onCreate={() => setShowCreateHC(true)}
+              />
+
+              <Modal
+                visible={showCreateHC}
+                onDismiss={() => setShowCreateHC(false)}
+                header="Create health check"
+                footer={
+                  <Box float="right">
+                    <SpaceBetween direction="horizontal" size="xs">
+                      <Button variant="link" onClick={() => setShowCreateHC(false)}>Cancel</Button>
+                      <Button
+                        variant="primary"
+                        loading={createHealthCheck.isPending}
+                        disabled={!hcForm.IPAddr.trim() && !hcForm.FullyQualifiedDomainName.trim()}
+                        onClick={() => {
+                          createHealthCheck.mutate(hcForm, {
+                            onSuccess: () => {
+                              setShowCreateHC(false);
+                              setHcForm({ IPAddr: "", Port: 80, Type: "HTTP", ResourcePath: "/", FullyQualifiedDomainName: "", RequestInterval: 30, FailureThreshold: 3 });
+                            },
+                          });
+                        }}
+                      >
+                        Create
+                      </Button>
+                    </SpaceBetween>
+                  </Box>
+                }
+              >
+                <Form>
+                  <SpaceBetween direction="vertical" size="m">
+                    <FormField label="Type">
+                      <Select
+                        selectedOption={{ label: hcForm.Type, value: hcForm.Type }}
+                        onChange={handleHcTypeChange}
+                        options={[{ label: "HTTP", value: "HTTP" }, { label: "HTTPS", value: "HTTPS" }, { label: "TCP", value: "TCP" }]}
+                      />
+                    </FormField>
+                    <FormField label="IP Address">
+                      <Input value={hcForm.IPAddr} onChange={({ detail }) => setHcForm((p) => ({ ...p, IPAddr: detail.value }))} placeholder="54.239.28.85" />
+                    </FormField>
+                    <FormField label="Port">
+                      <Input type="number" value={String(hcForm.Port)} onChange={({ detail }) => setHcForm((p) => ({ ...p, Port: Number(detail.value) }))} />
+                    </FormField>
+                    <FormField label="Resource Path">
+                      <Input value={hcForm.ResourcePath} onChange={({ detail }) => setHcForm((p) => ({ ...p, ResourcePath: detail.value }))} placeholder="/" />
+                    </FormField>
+                    <FormField label="Fully Qualified Domain Name">
+                      <Input value={hcForm.FullyQualifiedDomainName} onChange={({ detail }) => setHcForm((p) => ({ ...p, FullyQualifiedDomainName: detail.value }))} placeholder="example.com" />
                     </FormField>
                   </SpaceBetween>
                 </Form>

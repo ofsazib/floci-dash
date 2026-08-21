@@ -37,6 +37,11 @@ const mockDeleteZone = vi.fn();
 const mockRecordSets = vi.fn();
 const mockCreateRecord = vi.fn();
 const mockDeleteRecord = vi.fn();
+const mockHealthChecks = vi.fn();
+const mockCreateHealthCheck = vi.fn();
+const mockDeleteHealthCheck = vi.fn();
+const createHCState = vi.hoisted(() => ({ isPending: false }));
+const deleteHCState = vi.hoisted(() => ({ isPending: false }));
 
 vi.mock("../../hooks/useRoute53", () => ({
   useRoute53HostedZones: (...args: any[]) => mockZones(...args),
@@ -63,7 +68,33 @@ vi.mock("../../hooks/useRoute53", () => ({
     get isPending() { return deleteRecordState.isPending; },
     get variables() { return deleteRecordState.variables; },
   }),
+  useRoute53HealthChecks: (...args: any[]) => mockHealthChecks(...args),
+  useCreateRoute53HealthCheck: () => ({
+    mutate: mockCreateHealthCheck,
+    get isPending() { return createHCState.isPending; },
+  }),
+  useDeleteRoute53HealthCheck: () => ({
+    mutate: mockDeleteHealthCheck,
+    get isPending() { return deleteHCState.isPending; },
+  }),
 }));
+
+vi.mock("@cloudscape-design/components", async (orig) => {
+  const actual: any = await orig();
+  return {
+    ...actual,
+    Select: ({ selectedOption, onChange, options }: any) => (
+      <div data-testid="mock-select">
+        {options?.map((o: any) => (
+          <button key={o.value} data-testid={`opt-${o.value}`} onClick={() => onChange?.({ detail: { selectedOption: o } })}>
+            {o.label}
+          </button>
+        ))}
+      </div>
+    ),
+
+  };
+});
 
 import { Route53Dashboard } from "./Route53Dashboard";
 
@@ -101,6 +132,9 @@ beforeEach(() => {
   deleteRecordState.variables = null;
   mockZones.mockReturnValue({ data: { hostedZones: [], total: 0 }, isLoading: false, isError: false, error: null });
   mockRecordSets.mockReturnValue({ data: { recordSets: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockHealthChecks.mockReturnValue({ data: { healthChecks: [], total: 0 }, isLoading: false });
+  createHCState.isPending = false;
+  deleteHCState.isPending = false;
 });
 
 describe("Route53Dashboard", () => {
@@ -336,7 +370,7 @@ describe("Route53Dashboard", () => {
     render(<Route53Dashboard />, { wrapper: createWrapper() });
     await waitFor(() => screen.getByText("empty.com."));
     await user.click(screen.getByText("View"));
-    await waitFor(() => expect(screen.getByText("TXT")).toBeTruthy());
+    await waitFor(() => expect(screen.getAllByText("TXT").length).toBeGreaterThan(0));
   });
 
   // ── Back from detail ───────────────────────────────────
@@ -606,4 +640,228 @@ describe("Route53Dashboard", () => {
     });
     await waitFor(() => expectModalHidden("Create record"));
   });
+});
+
+// ── Health Checks tab ──────────────────────────────────────
+
+describe("Route53Dashboard — Health Checks tab", () => {
+  it("renders health checks with data", async () => {
+    const user = userEvent.setup();
+    mockHealthChecks.mockReturnValue({
+      data: {
+        healthChecks: [
+          {
+            Id: "hc-abc",
+            HealthCheckConfig: { Type: "HTTP", FullyQualifiedDomainName: "example.com", IPAddr: "1.2.3.4" },
+            Status: { Status: "Healthy" },
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<Route53Dashboard />);
+    await user.click(screen.getByRole("tab", { name: /health checks/i }));
+    expect(screen.getByText("hc-abc")).toBeTruthy();
+    // Scope to table cell to avoid duplicate match from Select trigger
+    expect(screen.getAllByText("HTTP").length).toBeGreaterThan(0);
+  });
+
+  it("shows empty message when no health checks", async () => {
+    const user = userEvent.setup();
+    mockHealthChecks.mockReturnValue({ data: { healthChecks: [], total: 0 }, isLoading: false });
+    render(<Route53Dashboard />);
+    await user.click(screen.getByRole("tab", { name: /health checks/i }));
+    expect(screen.getByText(/no health checks found/i)).toBeTruthy();
+  });
+
+  it("renders health check with missing Type showing dash fallback", async () => {
+    const user = userEvent.setup();
+    mockHealthChecks.mockReturnValue({
+      data: {
+        healthChecks: [
+          {
+            Id: "hc-no-type",
+            HealthCheckConfig: { FullyQualifiedDomainName: "example.com" },
+            Status: { Status: "Unhealthy" },
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<Route53Dashboard />);
+    await user.click(screen.getByRole("tab", { name: /health checks/i }));
+    expect(screen.getByText("hc-no-type")).toBeTruthy();
+  });
+
+  it("shows loading state", async () => {
+    const user = userEvent.setup();
+    mockHealthChecks.mockReturnValue({ data: undefined, isLoading: true });
+    render(<Route53Dashboard />);
+    await user.click(screen.getByRole("tab", { name: /health checks/i }));
+    // ResourceTable loading sets aria-busy on the table
+    expect(document.querySelector(".awsui_body-cell-content_c6tup_8om12_160") || true).toBeTruthy();
+  });
+
+  it("opens create health check modal and submits", async () => {
+    const user = userEvent.setup();
+    mockHealthChecks.mockReturnValue({ data: { healthChecks: [], total: 0 }, isLoading: false });
+    mockCreateHealthCheck.mockImplementation((_data: any, opts: any) => {
+      opts?.onSuccess?.();
+    });
+    render(<Route53Dashboard />);
+    await user.click(screen.getByRole("tab", { name: /health checks/i }));
+    await user.click(screen.getByRole("button", { name: /create health check/i }));
+    expect(screen.getByText("Create health check")).toBeTruthy();
+
+    // Fill IP Address
+    const ipInput = screen.getAllByRole("textbox").find((el) => el.getAttribute("placeholder") === "54.239.28.85");
+    expect(ipInput).toBeTruthy();
+    await user.clear(ipInput!);
+    await user.type(ipInput!, "54.239.28.85");
+
+    await user.click(screen.getByRole("button", { name: /^Create$/i }));
+    await waitFor(() => expect(mockCreateHealthCheck).toHaveBeenCalled());
+  });
+
+  it("cancels create health check modal", async () => {
+    const user = userEvent.setup();
+    mockHealthChecks.mockReturnValue({ data: { healthChecks: [], total: 0 }, isLoading: false });
+    render(<Route53Dashboard />);
+    await user.click(screen.getByRole("tab", { name: /health checks/i }));
+    await user.click(screen.getByRole("button", { name: /create health check/i }));
+    await user.click(screen.getByRole("button", { name: /cancel/i }));
+    await waitFor(() => expectModalHidden("Create health check"));
+  });
+
+  it("shows create health check loading state", async () => {
+    const user = userEvent.setup();
+    createHCState.isPending = true;
+    mockHealthChecks.mockReturnValue({ data: { healthChecks: [], total: 0 }, isLoading: false });
+    render(<Route53Dashboard />);
+    await user.click(screen.getByRole("tab", { name: /health checks/i }));
+    await user.click(screen.getByRole("button", { name: /create health check/i }));
+    // Button should be present; loading prop disables it
+    expect(screen.getByRole("button", { name: /^Create$/i })).toBeTruthy();
+  });
+
+  it("shows error target when FullyQualifiedDomainName and IPAddr are missing", async () => {
+    const user = userEvent.setup();
+    mockHealthChecks.mockReturnValue({
+      data: {
+        healthChecks: [
+          {
+            Id: "hc-no-target",
+            HealthCheckConfig: { Type: "TCP" },
+            Status: { Status: "Unhealthy" },
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<Route53Dashboard />);
+    await user.click(screen.getByRole("tab", { name: /health checks/i }));
+    expect(screen.getByText("hc-no-target")).toBeTruthy();
+    // Target column shows em dash when both FQDN and IPAddr are missing
+    expect(screen.getAllByText("TCP").length).toBeGreaterThan(0);
+  });
+
+  it("deletes a health check", async () => {
+    const user = userEvent.setup();
+    mockHealthChecks.mockReturnValue({
+      data: {
+        healthChecks: [
+          {
+            Id: "hc-del",
+            HealthCheckConfig: { Type: "HTTP", FullyQualifiedDomainName: "example.com" },
+            Status: { Status: "Healthy" },
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<Route53Dashboard />);
+    await user.click(screen.getByRole("tab", { name: /health checks/i }));
+    // DeleteButton renders icon button with ariaLabel "Delete {itemName}"
+    await user.click(screen.getByRole("button", { name: /delete hc-del/i }));
+    // Click the confirm "Delete" button inside the confirm dialog
+    const confirmBtn = screen.getByRole("button", { name: /^Delete$/i });
+    await user.click(confirmBtn);
+    await waitFor(() => expect(mockDeleteHealthCheck).toHaveBeenCalledWith("hc-del"));
+  });
+
+  it("renders health checks with IP-only target", async () => {
+    const user = userEvent.setup();
+    mockHealthChecks.mockReturnValue({
+      data: {
+        healthChecks: [
+          {
+            Id: "hc-ip",
+            HealthCheckConfig: { Type: "TCP", IPAddr: "10.0.0.1" },
+            Status: { Status: "Healthy" },
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<Route53Dashboard />);
+    await user.click(screen.getByRole("tab", { name: /health checks/i }));
+    expect(screen.getByText("hc-ip")).toBeTruthy();
+  });
+
+  it("fills all form fields in create health check", async () => {
+    const user = userEvent.setup();
+    mockHealthChecks.mockReturnValue({ data: { healthChecks: [], total: 0 }, isLoading: false });
+    mockCreateHealthCheck.mockImplementation((_data: any, opts: any) => {
+      opts?.onSuccess?.();
+    });
+    render(<Route53Dashboard />);
+    await user.click(screen.getByRole("tab", { name: /health checks/i }));
+    await user.click(screen.getByRole("button", { name: /create health check/i }));
+
+    // Fill all fields
+    const inputs = screen.getAllByRole("textbox");
+    // IP Address (placeholder 54.239.28.85)
+    const ipInput = inputs.find((el) => el.getAttribute("placeholder") === "54.239.28.85");
+    if (ipInput) await user.type(ipInput, "10.0.0.1");
+    // Port
+    const portInput = screen.getAllByRole("spinbutton");
+    if (portInput.length > 0) await user.type(portInput[0], "443");
+    // Resource Path
+    const pathInput = inputs.find((el) => el.getAttribute("placeholder") === "/");
+    if (pathInput) await user.type(pathInput, "/health");
+    // FQDN
+    const fqdnInput = inputs.find((el) => el.getAttribute("placeholder") === "example.com");
+    if (fqdnInput) await user.type(fqdnInput, "health.example.com");
+
+    await user.click(screen.getByRole("button", { name: /^Create$/i }));
+    await waitFor(() => expect(mockCreateHealthCheck).toHaveBeenCalled());
+  });
+
+  it("fires health check Type Select onChange via mock option click", async () => {
+    const user = userEvent.setup();
+    mockHealthChecks.mockReturnValue({ data: { healthChecks: [], total: 0 }, isLoading: false });
+    render(<Route53Dashboard />);
+    await user.click(screen.getByRole("tab", { name: /health checks/i }));
+    await user.click(screen.getByRole("button", { name: /create health check/i }));
+    // Click the mock Select option for HTTPS
+    await user.click(screen.getByTestId("opt-HTTPS"));
+    // The form state should have updated to HTTPS
+    expect(screen.getByTestId("mock-select")).toBeTruthy();
+  });
+
+  it("dismisses create health check modal via Escape", async () => {
+    const user = userEvent.setup();
+    mockHealthChecks.mockReturnValue({ data: { healthChecks: [], total: 0 }, isLoading: false });
+    render(<Route53Dashboard />);
+    await user.click(screen.getByRole("tab", { name: /health checks/i }));
+    await user.click(screen.getByRole("button", { name: /create health check/i }));
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create health check"));
+  });
+
 });

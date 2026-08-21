@@ -10,6 +10,8 @@ import {
   ListResourceRecordSetsCommand,
   ChangeResourceRecordSetsCommand,
   ListHealthChecksCommand,
+  CreateHealthCheckCommand,
+  DeleteHealthCheckCommand,
 } from "@aws-sdk/client-route-53";
 
 const router = new Hono();
@@ -145,6 +147,33 @@ router.get("/health-checks", async (c: Context) => {
     healthChecks: result.HealthChecks || [],
     total: result.HealthChecks?.length || 0,
   });
+});
+
+router.post("/health-checks", async (c: Context) => {
+  const client = getClient();
+  const body = await c.req.json();
+  const result = await client.send(
+    new CreateHealthCheckCommand({
+      CallerReference: body.CallerReference || `hc-${Date.now()}`,
+      HealthCheckConfig: {
+        IPAddress: body.IPAddr,
+        Port: body.Port,
+        Type: body.Type,
+        ResourcePath: body.ResourcePath,
+        FullyQualifiedDomainName: body.FullyQualifiedDomainName,
+        RequestInterval: body.RequestInterval,
+        FailureThreshold: body.FailureThreshold,
+      },
+    })
+  );
+  return c.json({ healthCheck: result.HealthCheck });
+});
+
+router.delete("/health-checks/:id", async (c: Context) => {
+  const client = getClient();
+  const id = c.req.param("id");
+  await client.send(new DeleteHealthCheckCommand({ HealthCheckId: id }));
+  return c.json({});
 });
 
 export default router;

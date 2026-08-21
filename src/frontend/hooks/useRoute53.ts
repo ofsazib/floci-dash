@@ -84,3 +84,24 @@ export function useRoute53HealthChecks() {
       api<{ healthChecks: any[]; total: number }>("/aws/route53/health-checks"),
   });
 }
+
+export function useCreateRoute53HealthCheck() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: any) =>
+      api("/aws/route53/health-checks", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "route53", "health-checks"] }),
+  });
+}
+
+export function useDeleteRoute53HealthCheck() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api(`/aws/route53/health-checks/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "route53", "health-checks"] }),
+  });
+}
