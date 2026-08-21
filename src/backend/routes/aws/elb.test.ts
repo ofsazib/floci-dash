@@ -54,6 +54,7 @@ vi.mock("@aws-sdk/client-elastic-load-balancing-v2", () => ({
   DescribeTagsCommand: createCmd("DescribeTagsCommand"),
   ModifyListenerCommand: createCmd("ModifyListenerCommand"),
   ModifyTargetGroupCommand: createCmd("ModifyTargetGroupCommand"),
+  DescribeCapacityReservationCommand: createCmd("DescribeCapacityReservationCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -972,6 +973,24 @@ describe("ELB Routes", () => {
       const cmd = mockSend.mock.calls[0][0];
       expect(cmd.__cmdName).toBe("ModifyTargetGroupCommand");
       expect(cmd.HealthCheckPath).toBeUndefined();
+    });
+  });
+
+  describe("Capacity Reservation", () => {
+    it("GET /capacity-reservation — returns reservation data", async () => {
+      mockSend.mockResolvedValueOnce({
+        CapacityReservationState: [{ AvailabilityZone: "us-east-1a", State: { State: "available" } }],
+      });
+      const res = await get("/capacity-reservation?loadBalancerArn=arn:lb1");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.reservationState).toHaveLength(1);
+      expect(body.reservationState[0].AvailabilityZone).toBe("us-east-1a")
+    });
+
+    it("GET /capacity-reservation — 400 when loadBalancerArn missing", async () => {
+      const res = await get("/capacity-reservation");
+      expect(res.status).toBe(400);
     });
   });
 });

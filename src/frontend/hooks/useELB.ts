@@ -412,3 +412,14 @@ export function useELBAccountLimits() {
     queryFn: () => api("/aws/elasticloadbalancing/account-limits"),
   });
 }
+
+export function useELBCapacityReservation(loadBalancerArn: string | null) {
+  return useQuery<{
+    loadBalancerArn: string;
+    reservationState: any[];
+  }>({
+    queryKey: ["aws", "elb", "capacity-reservation", loadBalancerArn],
+    queryFn: () => api(`/aws/elasticloadbalancing/capacity-reservation?loadBalancerArn=${encodeURIComponent(loadBalancerArn!)}`),
+    enabled: !!loadBalancerArn,
+  });
+}

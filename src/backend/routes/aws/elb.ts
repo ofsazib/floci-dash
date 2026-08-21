@@ -39,6 +39,7 @@ import {
   DescribeTagsCommand,
   ModifyListenerCommand,
   ModifyTargetGroupCommand,
+  DescribeCapacityReservationCommand,
 } from "@aws-sdk/client-elastic-load-balancing-v2";
 
 const router = new Hono();
@@ -620,6 +621,21 @@ router.delete("/tags", async (c: Context) => {
     })
   );
   return c.json({ updated: true });
+});
+
+// ── Capacity Reservation ─────────────────────────────────
+
+router.get("/capacity-reservation", async (c: Context) => {
+  const lbArn = c.req.query("loadBalancerArn");
+  if (!lbArn) return c.json({ error: "loadBalancerArn is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new DescribeCapacityReservationCommand({ LoadBalancerArn: lbArn })
+  );
+  return c.json({
+    loadBalancerArn: lbArn,
+    reservationState: result.CapacityReservationState,
+  });
 });
 
 export default router;

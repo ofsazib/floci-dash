@@ -176,6 +176,7 @@ import {
   useELBTargetGroupAttributes,
   useELBModifyTargetGroupAttributes,
   useELBAccountLimits,
+  useELBCapacityReservation,
   useELBListenerRules,
   useELBCreateRule,
   useELBModifyRule,
@@ -542,6 +543,7 @@ export function ELBDashboard() {
 
   // ── Advanced Settings State ──
   const [selectedLBArn, setSelectedLBArn] = useState<string | null>(null);
+  const capacityReservation = useELBCapacityReservation(selectedLBArn);
   const [selectedListenerArn, setSelectedListenerArn] = useState<string | null>(null);
   const [selectedTGArn, setSelectedTGArn] = useState<string | null>(null);
   const [sgList, setSgList] = useState("");
@@ -1054,6 +1056,21 @@ export function ELBDashboard() {
                           </Button>
                         </SpaceBetween>
                       </Box>
+
+                      {/* Capacity Reservation */}
+                      {capacityReservation.data && (
+                        <Box>
+                          <Header variant="h3">Capacity Reservation</Header>
+                          <SpaceBetween size="xs">
+                            {(capacityReservation.data.reservationState || []).map((s: any, i: number) => (
+                              <Box key={i}>Zone: {s.AvailabilityZone || "—"} — State: {s.State?.State || "—"}</Box>
+                            ))}
+                            {(!capacityReservation.data.reservationState || capacityReservation.data.reservationState.length === 0) && (
+                              <Box>No capacity reservation data</Box>
+                            )}
+                          </SpaceBetween>
+                        </Box>
+                      )}
 
                       {/* Listeners + Certificates */}
                       <Box>

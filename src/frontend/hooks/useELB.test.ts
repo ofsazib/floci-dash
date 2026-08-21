@@ -42,6 +42,7 @@ import {
   useELBSetRulePriorities,
   useELBDescribeTags,
   useELBModifyListener,
+  useELBCapacityReservation,
   useELBModifyTargetGroup,
 } from "./useELB";
 
@@ -551,5 +552,21 @@ describe("useELBModifyTargetGroup", () => {
         }),
       })
     );
+  });
+});
+
+describe("useELBCapacityReservation", () => {
+  it("calls api with correct URL when arn provided", async () => {
+    mockApi.mockResolvedValueOnce({ loadBalancerArn: "arn:lb1", reservation: null, rules: [] });
+    const { result } = renderHook(() => useELBCapacityReservation("arn:lb1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(
+      expect.stringContaining("/aws/elasticloadbalancing/capacity-reservation?loadBalancerArn="),
+    );
+  });
+
+  it("is disabled when arn is null", () => {
+    const { result } = renderHook(() => useELBCapacityReservation(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
   });
 });
