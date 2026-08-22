@@ -42,6 +42,12 @@ import {
   PutFunctionEventInvokeConfigCommand,
   DeleteFunctionEventInvokeConfigCommand,
   ListFunctionEventInvokeConfigsCommand,
+  GetPolicyCommand,
+  AddPermissionCommand,
+  RemovePermissionCommand,
+  CreateEventSourceMappingCommand,
+  UpdateEventSourceMappingCommand,
+  UpdateAliasCommand,
 } from "@aws-sdk/client-lambda";
 import { getAwsConfig } from "../../clients/aws";
 import { sanitizeName, sanitizeText } from "../../clients/sanitize";
@@ -288,6 +294,139 @@ router.delete("/event-source-mappings/:uuid", async (c: Context) => {
   const uuid = c.req.param("uuid");
   await lambda().send(new DeleteEventSourceMappingCommand({ UUID: uuid }));
   return c.json({ uuid, deleted: true });
+});
+
+router.post("/event-source-mappings", async (c: Context) => {
+  const body = await c.req.json<{
+    eventSourceArn?: string;
+    functionName?: string;
+    startingPosition?: string;
+    batchSize?: number;
+    maximumConcurrency?: number;
+  }>();
+  if (!body.eventSourceArn)
+    return c.json({ error: "eventSourceArn is required" }, 400);
+  if (!body.functionName)
+    return c.json({ error: "functionName is required" }, 400);
+
+  const result = await lambda().send(
+    new CreateEventSourceMappingCommand({
+      EventSourceArn: body.eventSourceArn,
+      FunctionName: body.functionName,
+      StartingPosition: (body.startingPosition || "TRIM_HORIZON") as any,
+      BatchSize: body.batchSize,
+      ScalingConfig: body.maximumConcurrency
+        ? { MaximumConcurrency: body.maximumConcurrency }
+        : undefined,
+    })
+  );
+  return c.json({ eventSourceMapping: (result as any).EventSourceMapping || result }, 202);
+});
+
+router.put("/event-source-mappings/:uuid", async (c: Context) => {
+  const uuid = c.req.param("uuid");
+  const body = await c.req.json<{
+    batchSize?: number;
+    enabled?: boolean;
+    maximumConcurrency?: number;
+  }>();
+  const result = await lambda().send(
+    new UpdateEventSourceMappingCommand({
+      UUID: uuid,
+      BatchSize: body.batchSize,
+      Enabled: body.enabled,
+      ScalingConfig: body.maximumConcurrency
+        ? { MaximumConcurrency: body.maximumConcurrency }
+        : undefined,
+    })
+  );
+  return c.json({ eventSourceMapping: (result as any).EventSourceMapping || result });
+});
+
+// ─── RESOURCE-BASED POLICY ──────────────────────────────
+
+router.get("/functions/:name/policy", async (c: Context) => {
+  const name = c.req.param("name");
+  const client = lambda();
+  try {
+    const result = await client.send(new GetPolicyCommand({ FunctionName: name }));
+    return c.json({
+      policy: result.Policy ? JSON.parse(result.Policy) : null,
+      revisionId: result.RevisionId ?? null,
+    });
+  } catch (e: any) {
+    // No policy attached yet — surface as an empty policy, not an error
+    if (e?.name === "ResourceNotFoundException") {
+      return c.json({ policy: null, revisionId: null });
+    }
+    throw e;
+  }
+});
+
+router.post("/functions/:name/policy", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<{
+    statementId?: string;
+    principal?: string;
+    action?: string;
+    sourceArn?: string;
+    sourceAccount?: string;
+  }>();
+  if (!body.statementId)
+    return c.json({ error: "statementId is required" }, 400);
+  if (!body.principal) return c.json({ error: "principal is required" }, 400);
+  if (!body.action) return c.json({ error: "action is required" }, 400);
+
+  const result = await lambda().send(
+    new AddPermissionCommand({
+      FunctionName: name,
+      StatementId: body.statementId,
+      Principal: body.principal,
+      Action: body.action,
+      SourceArn: body.sourceArn || undefined,
+      SourceAccount: body.sourceAccount || undefined,
+    })
+  );
+  return c.json(
+    { statement: result.Statement ? JSON.parse(result.Statement) : null },
+    201
+  );
+});
+
+router.delete("/functions/:name/policy/:statementId", async (c: Context) => {
+  const name = c.req.param("name");
+  const statementId = c.req.param("statementId");
+  await lambda().send(
+    new RemovePermissionCommand({ FunctionName: name, StatementId: statementId })
+  );
+  return c.json({ statementId, removed: true });
+});
+
+router.put("/functions/:name/aliases/:aliasName", async (c: Context) => {
+  const name = c.req.param("name");
+  const aliasName = c.req.param("aliasName");
+  const body = await c.req.json<{
+    functionVersion?: string;
+    description?: string;
+    routingAdditionalVersion?: string;
+    routingWeight?: number;
+  }>();
+  const result = await lambda().send(
+    new UpdateAliasCommand({
+      FunctionName: name,
+      Name: aliasName,
+      FunctionVersion: body.functionVersion,
+      Description: body.description,
+      RoutingConfig: body.routingAdditionalVersion
+        ? {
+            AdditionalVersionWeights: {
+              [body.routingAdditionalVersion]: body.routingWeight ?? 0,
+            },
+          }
+        : undefined,
+    })
+  );
+  return c.json({ alias: (result as any).Alias || result });
 });
 
 // ─── LAYERS ─────────────────────────────────────────────

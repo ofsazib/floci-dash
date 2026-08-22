@@ -105,6 +105,116 @@ export function useDeleteEventSourceMapping() {
   });
 }
 
+export function useCreateEventSourceMapping(functionName?: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: {
+      eventSourceArn: string;
+      functionName: string;
+      startingPosition?: string;
+      batchSize?: number;
+      maximumConcurrency?: number;
+    }) =>
+      api("/aws/lambda/event-source-mappings", {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "lambda", "event-source-mappings", functionName] }),
+  });
+}
+
+export function useUpdateEventSourceMapping(functionName?: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: {
+      uuid: string;
+      batchSize?: number;
+      enabled?: boolean;
+      maximumConcurrency?: number;
+    }) =>
+      api(`/aws/lambda/event-source-mappings/${params.uuid}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          batchSize: params.batchSize,
+          enabled: params.enabled,
+          maximumConcurrency: params.maximumConcurrency,
+        }),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "lambda", "event-source-mappings", functionName] }),
+  });
+}
+
+// ─── RESOURCE-BASED POLICY ──────────────────────────────
+
+export interface LambdaPolicyStatement {
+  Sid: string;
+  Effect: string;
+  Principal: any;
+  Action: string | string[];
+  Resource?: string;
+  Condition?: any;
+}
+
+export function useLambdaPolicy(name: string | null) {
+  return useQuery<{ policy: { Statement: LambdaPolicyStatement[] } | null; revisionId: string | null }>({
+    queryKey: ["aws", "lambda", "functions", name, "policy"],
+    queryFn: () => api(`/aws/lambda/functions/${name}/policy`),
+    enabled: !!name,
+  });
+}
+
+export function useAddLambdaPermission(name: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: {
+      statementId: string;
+      principal: string;
+      action: string;
+      sourceArn?: string;
+      sourceAccount?: string;
+    }) =>
+      api(`/aws/lambda/functions/${encodeURIComponent(name)}/policy`, {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "lambda", "functions", name, "policy"] }),
+  });
+}
+
+export function useRemoveLambdaPermission(name: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (statementId: string) =>
+      api(`/aws/lambda/functions/${encodeURIComponent(name)}/policy/${encodeURIComponent(statementId)}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "lambda", "functions", name, "policy"] }),
+  });
+}
+
+// ─── ALIAS UPDATE ───────────────────────────────────────
+
+export function useUpdateLambdaAlias(name: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: {
+      aliasName: string;
+      functionVersion?: string;
+      description?: string;
+    }) =>
+      api(
+        `/aws/lambda/functions/${encodeURIComponent(name)}/aliases/${encodeURIComponent(params.aliasName)}`,
+        { method: "PUT", body: JSON.stringify(params) }
+      ),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "lambda", "functions", name, "aliases"] }),
+  });
+}
+
 // ─── LAYERS ─────────────────────────────────────────────
 
 export function useLambdaLayers() {

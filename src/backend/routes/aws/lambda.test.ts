@@ -58,6 +58,12 @@ vi.mock("@aws-sdk/client-lambda", () => ({
   CreateCodeSigningConfigCommand: createCmd("CreateCodeSigningConfigCommand"),
   DeleteCodeSigningConfigCommand: createCmd("DeleteCodeSigningConfigCommand"),
   ListFunctionEventInvokeConfigsCommand: createCmd("ListFunctionEventInvokeConfigsCommand"),
+  GetPolicyCommand: createCmd("GetPolicyCommand"),
+  AddPermissionCommand: createCmd("AddPermissionCommand"),
+  RemovePermissionCommand: createCmd("RemovePermissionCommand"),
+  CreateEventSourceMappingCommand: createCmd("CreateEventSourceMappingCommand"),
+  UpdateEventSourceMappingCommand: createCmd("UpdateEventSourceMappingCommand"),
+  UpdateAliasCommand: createCmd("UpdateAliasCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -896,5 +902,293 @@ describe("Code Signing Config", () => {
     const body = await res.json();
     expect(body.deleted).toBe(true);
     expect(mockSend.mock.calls[0][0].CodeSigningConfigArn).toBe("arn:aws:lambda:us-east-1::csc:001");
+  });
+
+  describe("Resource-based policy (G.63)", () => {
+    it("GET /functions/:name/policy — returns parsed policy", async () => {
+      const policy = { Version: "2012-10-17", Statement: [{ Sid: "s1", Effect: "Allow" }] };
+      mockSend.mockResolvedValueOnce({
+        Policy: JSON.stringify(policy),
+        RevisionId: "rev-1",
+      });
+      const res = await get("/functions/my-fn/policy");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.policy).toEqual(policy);
+      expect(body.revisionId).toBe("rev-1");
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          __cmdName: "GetPolicyCommand",
+          FunctionName: "my-fn",
+        })
+      );
+    });
+
+    it("GET /functions/:name/policy — null when no Policy key", async () => {
+      mockSend.mockResolvedValueOnce({ RevisionId: "rev-2" });
+      const res = await get("/functions/my-fn/policy");
+      const body = await res.json();
+      expect(body.policy).toBeNull();
+      expect(body.revisionId).toBe("rev-2");
+    });
+
+    it("GET /functions/:name/policy — null on ResourceNotFoundException", async () => {
+      mockSend.mockRejectedValueOnce(
+        Object.assign(new Error("not found"), { name: "ResourceNotFoundException" })
+      );
+      const res = await get("/functions/my-fn/policy");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.policy).toBeNull();
+      expect(body.revisionId).toBeNull();
+    });
+
+    it("GET /functions/:name/policy — rethrows unexpected errors as 500", async () => {
+      mockSend.mockRejectedValueOnce(new Error("boom"));
+      const res = await get("/functions/my-fn/policy");
+      expect(res.status).toBe(500);
+    });
+
+    it("POST /functions/:name/policy — adds permission (201) with parsed statement", async () => {
+      const statement = { Sid: "s1", Effect: "Allow", Principal: { Service: "s3.amazonaws.com" } };
+      mockSend.mockResolvedValueOnce({ Statement: JSON.stringify(statement) });
+      const res = await post("/functions/my-fn/policy", {
+        statementId: "s1",
+        principal: "s3.amazonaws.com",
+        action: "lambda:InvokeFunction",
+        sourceArn: "arn:aws:s3:::bucket",
+        sourceAccount: "123456789012",
+      });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.statement).toEqual(statement);
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          __cmdName: "AddPermissionCommand",
+          FunctionName: "my-fn",
+          StatementId: "s1",
+          Principal: "s3.amazonaws.com",
+          Action: "lambda:InvokeFunction",
+          SourceArn: "arn:aws:s3:::bucket",
+          SourceAccount: "123456789012",
+        })
+      );
+    });
+
+    it("POST /functions/:name/policy — omits optional source fields", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/functions/my-fn/policy", {
+        statementId: "s2",
+        principal: "arn:aws:iam::123:role/r",
+        action: "lambda:InvokeFunction",
+      });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.statement).toBeNull();
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.not.objectContaining({ SourceArn: expect.anything() })
+      );
+    });
+
+    it("POST /functions/:name/policy — 400 when statementId missing", async () => {
+      const res = await post("/functions/my-fn/policy", {
+        principal: "s3.amazonaws.com",
+        action: "lambda:InvokeFunction",
+      });
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("POST /functions/:name/policy — 400 when principal missing", async () => {
+      const res = await post("/functions/my-fn/policy", {
+        statementId: "s1",
+        action: "lambda:InvokeFunction",
+      });
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("POST /functions/:name/policy — 400 when action missing", async () => {
+      const res = await post("/functions/my-fn/policy", {
+        statementId: "s1",
+        principal: "s3.amazonaws.com",
+      });
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("DELETE /functions/:name/policy/:statementId — removes permission", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/functions/my-fn/policy/s1");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.removed).toBe(true);
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          __cmdName: "RemovePermissionCommand",
+          FunctionName: "my-fn",
+          StatementId: "s1",
+        })
+      );
+    });
+
+    it("POST /event-source-mappings — creates mapping (202)", async () => {
+      mockSend.mockResolvedValueOnce({ EventSourceMapping: { UUID: "u1", State: "Creating" } });
+      const res = await post("/event-source-mappings", {
+        eventSourceArn: "arn:aws:sqs:us-east-1::q1",
+        functionName: "my-fn",
+        batchSize: 5,
+        maximumConcurrency: 3,
+      });
+      expect(res.status).toBe(202);
+      const body = await res.json();
+      expect(body.eventSourceMapping.UUID).toBe("u1");
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          __cmdName: "CreateEventSourceMappingCommand",
+          EventSourceArn: "arn:aws:sqs:us-east-1::q1",
+          FunctionName: "my-fn",
+          StartingPosition: "TRIM_HORIZON",
+          BatchSize: 5,
+          ScalingConfig: { MaximumConcurrency: 3 },
+        })
+      );
+    });
+
+    it("POST /event-source-mappings — explicit starting position, no scaling", async () => {
+      mockSend.mockResolvedValueOnce({ EventSourceMapping: { UUID: "u2" } });
+      const res = await post("/event-source-mappings", {
+        eventSourceArn: "arn:aws:kinesis:us-east-1::s1",
+        functionName: "my-fn",
+        startingPosition: "LATEST",
+      });
+      expect(res.status).toBe(202);
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          StartingPosition: "LATEST",
+          BatchSize: undefined,
+          ScalingConfig: undefined,
+        })
+      );
+    });
+
+    it("POST /event-source-mappings — 400 when eventSourceArn missing", async () => {
+      const res = await post("/event-source-mappings", { functionName: "my-fn" });
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("POST /event-source-mappings — 400 when functionName missing", async () => {
+      const res = await post("/event-source-mappings", {
+        eventSourceArn: "arn:aws:sqs:us-east-1::q1",
+      });
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("PUT /event-source-mappings/:uuid — updates mapping", async () => {
+      mockSend.mockResolvedValueOnce({ EventSourceMapping: { UUID: "u1", BatchSize: 10 } });
+      const res = await put("/event-source-mappings/u1", {
+        batchSize: 10,
+        enabled: false,
+        maximumConcurrency: 7,
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.eventSourceMapping.BatchSize).toBe(10);
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          __cmdName: "UpdateEventSourceMappingCommand",
+          UUID: "u1",
+          BatchSize: 10,
+          Enabled: false,
+          ScalingConfig: { MaximumConcurrency: 7 },
+        })
+      );
+    });
+
+    it("PUT /event-source-mappings/:uuid — no scaling when maxConcurrency absent", async () => {
+      mockSend.mockResolvedValueOnce({ EventSourceMapping: { UUID: "u1" } });
+      const res = await put("/event-source-mappings/u1", { enabled: true });
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({ ScalingConfig: undefined, BatchSize: undefined })
+      );
+    });
+
+    it("PUT /functions/:name/aliases/:aliasName — updates alias", async () => {
+      mockSend.mockResolvedValueOnce({ Alias: { Name: "prod", FunctionVersion: "3" } });
+      const res = await put("/functions/my-fn/aliases/prod", {
+        functionVersion: "3",
+        description: "prod alias",
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.alias.Name).toBe("prod");
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          __cmdName: "UpdateAliasCommand",
+          FunctionName: "my-fn",
+          Name: "prod",
+          FunctionVersion: "3",
+          Description: "prod alias",
+          RoutingConfig: undefined,
+        })
+      );
+    });
+
+    it("PUT /functions/:name/aliases/:aliasName — routing config when additional version set", async () => {
+      mockSend.mockResolvedValueOnce({ Alias: { Name: "canary" } });
+      const res = await put("/functions/my-fn/aliases/canary", {
+        routingAdditionalVersion: "2",
+        routingWeight: 0.1,
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          RoutingConfig: { AdditionalVersionWeights: { "2": 0.1 } },
+        })
+      );
+    });
+
+    it("PUT /functions/:name/aliases/:aliasName — routing weight defaults to 0", async () => {
+      mockSend.mockResolvedValueOnce({ Alias: { Name: "canary" } });
+      await put("/functions/my-fn/aliases/canary", { routingAdditionalVersion: "2" });
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          RoutingConfig: { AdditionalVersionWeights: { "2": 0 } },
+        })
+      );
+    });
+
+    it("POST /event-source-mappings — falls back to raw result when mapping key missing", async () => {
+      mockSend.mockResolvedValueOnce({ UUID: "u9", State: "Creating" });
+      const res = await post("/event-source-mappings", {
+        eventSourceArn: "arn:aws:sqs:us-east-1::q1",
+        functionName: "my-fn",
+      });
+      const body = await res.json();
+      expect(body.eventSourceMapping.UUID).toBe("u9");
+    });
+
+    it("PUT /event-source-mappings/:uuid — falls back to raw result when key missing", async () => {
+      mockSend.mockResolvedValueOnce({ UUID: "u1" });
+      const res = await put("/event-source-mappings/u1", {});
+      const body = await res.json();
+      expect(body.eventSourceMapping.UUID).toBe("u1");
+    });
+
+    it("GET /functions/:name/policy — revisionId null when missing", async () => {
+      mockSend.mockResolvedValueOnce({ Policy: "{}" });
+      const res = await get("/functions/my-fn/policy");
+      const body = await res.json();
+      expect(body.revisionId).toBeNull();
+    });
+
+    it("PUT /functions/:name/aliases/:aliasName — falls back to raw result when alias key missing", async () => {
+      mockSend.mockResolvedValueOnce({ Name: "prod" });
+      const res = await put("/functions/my-fn/aliases/prod", {});
+      const body = await res.json();
+      expect(body.alias.Name).toBe("prod");
+    });
   });
 });

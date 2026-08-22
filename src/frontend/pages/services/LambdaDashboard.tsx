@@ -17,6 +17,7 @@ import {
   ColumnLayout,
   Tabs,
   Textarea,
+  Checkbox,
   type TabsProps,
 } from "@cloudscape-design/components";
 import {
@@ -32,6 +33,12 @@ import {
   useDeleteLayerVersion,
   useCreateLayerVersion,
   useInvokeFunction,
+  useLambdaPolicy,
+  useAddLambdaPermission,
+  useRemoveLambdaPermission,
+  useCreateEventSourceMapping,
+  useUpdateEventSourceMapping,
+  useUpdateLambdaAlias,
 } from "../../hooks/useLambda";
 import ResourceTable from "../../components/ResourceTable";
 import DeleteButton from "../../components/DeleteButton";
@@ -315,8 +322,39 @@ function LambdaFunctionDetail({
   const { data: esm } = useEventSourceMappings(name);
   const publishVersion = usePublishVersion();
   const invokeFunction = useInvokeFunction();
+
+  // Permissions (resource-based policy)
+  const { data: policyData } = useLambdaPolicy(name);
+  const addPermission = useAddLambdaPermission(name);
+  const removePermission = useRemoveLambdaPermission(name);
+  const [showAddPermission, setShowAddPermission] = useState(false);
+  const [permForm, setPermForm] = useState({ statementId: "", principal: "", sourceArn: "", sourceAccount: "" });
+  const permStatements = (policyData?.policy?.Statement || []).map((s) => ({
+    sid: s.Sid,
+    effect: s.Effect,
+    principal: typeof s.Principal === "string"
+      ? s.Principal
+      : s.Principal?.Service || s.Principal?.AWS || JSON.stringify(s.Principal),
+    action: Array.isArray(s.Action) ? s.Action.join(", ") : s.Action,
+  }));
+
+  // Event source mappings — create + edit
+  const createEsm = useCreateEventSourceMapping(name);
+  const updateEsm = useUpdateEventSourceMapping(name);
+  const [showCreateTrigger, setShowCreateTrigger] = useState(false);
+  const [triggerForm, setTriggerForm] = useState({ eventSourceArn: "", startingPosition: "TRIM_HORIZON", batchSize: "" });
+  const [editEsmUuid, setEditEsmUuid] = useState<string | null>(null);
+  const [esmEdit, setEsmEdit] = useState({ batchSize: "", enabled: true, maximumConcurrency: "" });
+
+  // Alias edit
+  const updateAlias = useUpdateLambdaAlias(name);
+  const [editAliasName, setEditAliasName] = useState<string | null>(null);
+  const [aliasEdit, setAliasEdit] = useState({ functionVersion: "", description: "" });
+
+  const invokePayloadState = useState('{\n  "key": "value"\n}');
+  const invokePayload = invokePayloadState[0];
+  const setInvokePayload = invokePayloadState[1];
   const [tab, setTab] = useState("config");
-  const [invokePayload, setInvokePayload] = useState('{\n  "key": "value"\n}');
 
   if (isLoading)
     return (
@@ -466,39 +504,368 @@ function LambdaFunctionDetail({
       id: "aliases",
       label: `Aliases${aliases?.total ? ` (${aliases.total})` : ""}`,
       content: (
-        <ResourceTable
-          resourceName="Alias"
-          headerTitle="Aliases"
-          items={aliases?.aliases || []}
-          columns={[
-            { id: "name", header: "Name", cell: (item: any) => item.name || "—", isRowHeader: true },
-            { id: "version", header: "Function version", cell: (item: any) => item.functionVersion || "—" },
-            { id: "description", header: "Description", cell: (item: any) => item.description || "—" },
-          ]}
-          emptyMessage="No aliases"
-          loading={false}
-        />
+        <>
+          {updateAlias.isError && (
+            <Alert type="error" dismissible onDismiss={() => updateAlias.reset()}>
+              {(updateAlias.error as Error)?.message || "Failed to update alias"}
+            </Alert>
+          )}
+          <ResourceTable
+            resourceName="Alias"
+            headerTitle="Aliases"
+            items={aliases?.aliases || []}
+            columns={[
+              { id: "name", header: "Name", cell: (item: any) => item.name || "—", isRowHeader: true },
+              { id: "version", header: "Function version", cell: (item: any) => item.functionVersion || "—" },
+              { id: "description", header: "Description", cell: (item: any) => item.description || "—" },
+              {
+                id: "actions",
+                header: "",
+                cell: (item: any) => (
+                  <Button
+                    onClick={() => {
+                      setEditAliasName(item.name);
+                      setAliasEdit({
+                        functionVersion: item.functionVersion ? String(item.functionVersion) : "",
+                        description: item.description || "",
+                      });
+                    }}
+                  >
+                    Edit
+                  </Button>
+                ),
+              },
+            ]}
+            emptyMessage="No aliases"
+            loading={false}
+          />
+          <Modal
+            visible={editAliasName !== null}
+            onDismiss={() => setEditAliasName(null)}
+            header={`Edit alias — ${editAliasName}`}
+            footer={
+              <Box>
+                <Button
+                  variant="primary"
+                  loading={updateAlias.isPending}
+                  onClick={() =>
+                    updateAlias
+                      .mutateAsync({
+                        aliasName: editAliasName!,
+                        functionVersion: aliasEdit.functionVersion.trim() || undefined,
+                        description: aliasEdit.description.trim() || undefined,
+                      })
+                      .then(() => setEditAliasName(null))
+                  }
+                >
+                  Save
+                </Button>
+                <Button onClick={() => setEditAliasName(null)}>Cancel</Button>
+              </Box>
+            }
+          >
+            <Form>
+              <FormField label="Function version">
+                <Input
+                  value={aliasEdit.functionVersion}
+                  onChange={({ detail }) => setAliasEdit((p) => ({ ...p, functionVersion: detail.value }))}
+                  placeholder="$LATEST"
+                />
+              </FormField>
+              <FormField label="Description">
+                <Input
+                  value={aliasEdit.description}
+                  onChange={({ detail }) => setAliasEdit((p) => ({ ...p, description: detail.value }))}
+                  placeholder="Production alias"
+                />
+              </FormField>
+            </Form>
+          </Modal>
+        </>
       ),
     },
     {
       id: "esm",
       label: `Triggers${esm?.total ? ` (${esm.total})` : ""}`,
       content: (
-        <ResourceTable
-          resourceName="Trigger"
-          headerTitle="Event source mappings"
-          items={esm?.eventSourceMappings || []}
-          columns={[
-            { id: "source", header: "Event source", cell: (item: any) => item.eventSourceArn || "—", isRowHeader: true },
-            { id: "state", header: "State", cell: (item: any) => (
-              <StatusIndicator type={item.state === "Enabled" ? "success" : "in-progress"}>{item.state || "Enabling"}</StatusIndicator>
-            )},
-            { id: "batchSize", header: "Batch size", cell: (item: any) => item.batchSize || "—" },
-            { id: "lastResult", header: "Last processing result", cell: (item: any) => item.lastProcessingResult || "—" },
-          ]}
-          emptyMessage="No event source mappings"
-          loading={false}
-        />
+        <>
+          {createEsm.isError && (
+            <Alert type="error" dismissible onDismiss={() => createEsm.reset()}>
+              {(createEsm.error as Error)?.message || "Failed to create trigger"}
+            </Alert>
+          )}
+          {updateEsm.isError && (
+            <Alert type="error" dismissible onDismiss={() => updateEsm.reset()}>
+              {(updateEsm.error as Error)?.message || "Failed to update trigger"}
+            </Alert>
+          )}
+          <ResourceTable
+            resourceName="Trigger"
+            headerTitle="Event source mappings"
+            onCreate={() => {
+              setTriggerForm({ eventSourceArn: "", startingPosition: "TRIM_HORIZON", batchSize: "" });
+              setShowCreateTrigger(true);
+            }}
+            items={esm?.eventSourceMappings || []}
+            columns={[
+              { id: "source", header: "Event source", cell: (item: any) => item.eventSourceArn || "—", isRowHeader: true },
+              { id: "state", header: "State", cell: (item: any) => (
+                <StatusIndicator type={item.state === "Enabled" ? "success" : "in-progress"}>{item.state || "Enabling"}</StatusIndicator>
+              )},
+              { id: "batchSize", header: "Batch size", cell: (item: any) => item.batchSize || "—" },
+              { id: "lastResult", header: "Last processing result", cell: (item: any) => item.lastProcessingResult || "—" },
+              {
+                id: "actions",
+                header: "",
+                cell: (item: any) => (
+                  <Button
+                    onClick={() => {
+                      setEditEsmUuid(item.uuid);
+                      setEsmEdit({
+                        batchSize: item.batchSize ? String(item.batchSize) : "",
+                        enabled: item.state !== "Disabled",
+                        maximumConcurrency: "",
+                      });
+                    }}
+                  >
+                    Edit
+                  </Button>
+                ),
+              },
+            ]}
+            emptyMessage="No event source mappings"
+            loading={false}
+          />
+          <Modal
+            visible={showCreateTrigger}
+            onDismiss={() => setShowCreateTrigger(false)}
+            header="Create event source mapping"
+            footer={
+              <Box>
+                <Button
+                  variant="primary"
+                  loading={createEsm.isPending}
+                  disabled={!triggerForm.eventSourceArn.trim()}
+                  onClick={() =>
+                    createEsm
+                      .mutateAsync({
+                        eventSourceArn: triggerForm.eventSourceArn.trim(),
+                        functionName: name,
+                        startingPosition: triggerForm.startingPosition,
+                        batchSize: parseInt(triggerForm.batchSize) || undefined,
+                      })
+                      .then(() => setShowCreateTrigger(false))
+                  }
+                >
+                  Create
+                </Button>
+                <Button onClick={() => setShowCreateTrigger(false)}>Cancel</Button>
+              </Box>
+            }
+          >
+            <Form>
+              <FormField label="Event source ARN">
+                <Input
+                  value={triggerForm.eventSourceArn}
+                  onChange={({ detail }) =>
+                    setTriggerForm((p) => ({ ...p, eventSourceArn: detail.value }))
+                  }
+                  placeholder="arn:aws:sqs:us-east-1:123456789012:my-queue"
+                />
+              </FormField>
+              <FormField label="Starting position">
+                <Select
+                  selectedOption={
+                    triggerForm.startingPosition === "LATEST"
+                      ? { label: "LATEST", value: "LATEST" }
+                      : { label: "TRIM_HORIZON (oldest)", value: "TRIM_HORIZON" }
+                  }
+                  onChange={({ detail }) =>
+                    setTriggerForm((p) => ({
+                      ...p,
+                      startingPosition: detail.selectedOption.value!,
+                    }))
+                  }
+                  options={[
+                    { label: "TRIM_HORIZON (oldest)", value: "TRIM_HORIZON" },
+                    { label: "LATEST", value: "LATEST" },
+                  ]}
+                />
+              </FormField>
+              <FormField label="Batch size">
+                <Input
+                  type="number"
+                  value={triggerForm.batchSize}
+                  onChange={({ detail }) => setTriggerForm((p) => ({ ...p, batchSize: detail.value }))}
+                  placeholder="10"
+                />
+              </FormField>
+            </Form>
+          </Modal>
+          <Modal
+            visible={editEsmUuid !== null}
+            onDismiss={() => setEditEsmUuid(null)}
+            header="Edit event source mapping"
+            footer={
+              <Box>
+                <Button
+                  variant="primary"
+                  loading={updateEsm.isPending}
+                  onClick={() =>
+                    updateEsm
+                      .mutateAsync({
+                        uuid: editEsmUuid!,
+                        batchSize: parseInt(esmEdit.batchSize) || undefined,
+                        enabled: esmEdit.enabled,
+                        maximumConcurrency: parseInt(esmEdit.maximumConcurrency) || undefined,
+                      })
+                      .then(() => setEditEsmUuid(null))
+                  }
+                >
+                  Save
+                </Button>
+                <Button onClick={() => setEditEsmUuid(null)}>Cancel</Button>
+              </Box>
+            }
+          >
+            <Form>
+              <FormField label="Batch size">
+                <Input
+                  type="number"
+                  value={esmEdit.batchSize}
+                  onChange={({ detail }) => setEsmEdit((p) => ({ ...p, batchSize: detail.value }))}
+                  placeholder="10"
+                />
+              </FormField>
+              <FormField label="Enabled">
+                <Checkbox
+                  checked={esmEdit.enabled}
+                  onChange={({ detail }) => setEsmEdit((p) => ({ ...p, enabled: detail.checked }))}
+                >
+                  Mapping enabled
+                </Checkbox>
+              </FormField>
+              <FormField label="Maximum concurrency (optional)">
+                <Input
+                  type="number"
+                  value={esmEdit.maximumConcurrency}
+                  onChange={({ detail }) => setEsmEdit((p) => ({ ...p, maximumConcurrency: detail.value }))}
+                  placeholder="10"
+                />
+              </FormField>
+            </Form>
+          </Modal>
+        </>
+      ),
+    },
+    {
+      id: "permissions",
+      label: `Permissions${permStatements.length ? ` (${permStatements.length})` : ""}`,
+      content: (
+        <>
+          {addPermission.isError && (
+            <Alert type="error" dismissible onDismiss={() => addPermission.reset()}>
+              {(addPermission.error as Error)?.message || "Failed to add permission"}
+            </Alert>
+          )}
+          {removePermission.isError && (
+            <Alert type="error" dismissible onDismiss={() => removePermission.reset()}>
+              {(removePermission.error as Error)?.message || "Failed to remove permission"}
+            </Alert>
+          )}
+          <ResourceTable
+            resourceName="Permission"
+            headerTitle="Resource-based policy"
+            headerCounter={policyData?.policy ? permStatements.length : undefined}
+            onCreate={() => {
+              setPermForm({ statementId: "", principal: "", sourceArn: "", sourceAccount: "" });
+              setShowAddPermission(true);
+            }}
+            items={permStatements}
+            columns={[
+              { id: "sid", header: "Statement ID", cell: (i: any) => i.sid, isRowHeader: true },
+              { id: "effect", header: "Effect", cell: (i: any) => i.effect },
+              { id: "principal", header: "Principal", cell: (i: any) => i.principal || "—" },
+              { id: "action", header: "Action", cell: (i: any) => i.action },
+              {
+                id: "actions",
+                header: "",
+                cell: (i: any) => (
+                  <DeleteButton
+                    itemName={i.sid}
+                    resourceType="permission"
+                    loading={removePermission.isPending && removePermission.variables === i.sid}
+                    onDelete={() => removePermission.mutateAsync(i.sid)}
+                  />
+                ),
+              },
+            ]}
+            emptyMessage="No policy statements. Add a permission to allow other AWS services to invoke this function."
+            loading={false}
+          />
+          <Modal
+            visible={showAddPermission}
+            onDismiss={() => setShowAddPermission(false)}
+            header="Add permission"
+            footer={
+              <Box>
+                <Button
+                  variant="primary"
+                  loading={addPermission.isPending}
+                  disabled={!permForm.statementId.trim() || !permForm.principal.trim()}
+                  onClick={() =>
+                    addPermission
+                      .mutateAsync({
+                        statementId: permForm.statementId.trim(),
+                        principal: permForm.principal.trim(),
+                        action: "lambda:InvokeFunction",
+                        sourceArn: permForm.sourceArn.trim() || undefined,
+                        sourceAccount: permForm.sourceAccount.trim() || undefined,
+                      })
+                      .then(() => setShowAddPermission(false))
+                  }
+                >
+                  Add
+                </Button>
+                <Button onClick={() => setShowAddPermission(false)}>Cancel</Button>
+              </Box>
+            }
+          >
+            <Form>
+              <FormField label="Statement ID">
+                <Input
+                  value={permForm.statementId}
+                  onChange={({ detail }) => setPermForm((p) => ({ ...p, statementId: detail.value }))}
+                  placeholder="s3-invoke-access"
+                />
+              </FormField>
+              <FormField label="Principal">
+                <Input
+                  value={permForm.principal}
+                  onChange={({ detail }) => setPermForm((p) => ({ ...p, principal: detail.value }))}
+                  placeholder="s3.amazonaws.com"
+                />
+              </FormField>
+              <FormField label="Action">
+                <Box>lambda:InvokeFunction</Box>
+              </FormField>
+              <FormField label="Source ARN (optional)">
+                <Input
+                  value={permForm.sourceArn}
+                  onChange={({ detail }) => setPermForm((p) => ({ ...p, sourceArn: detail.value }))}
+                  placeholder="arn:aws:s3:::my-bucket"
+                />
+              </FormField>
+              <FormField label="Source account (optional)">
+                <Input
+                  value={permForm.sourceAccount}
+                  onChange={({ detail }) => setPermForm((p) => ({ ...p, sourceAccount: detail.value }))}
+                  placeholder="123456789012"
+                />
+              </FormField>
+            </Form>
+          </Modal>
+        </>
       ),
     },
   ];

@@ -42,6 +42,12 @@ import {
   useCodeSigningConfigs,
   useCreateCodeSigningConfig,
   useDeleteCodeSigningConfig,
+  useLambdaPolicy,
+  useAddLambdaPermission,
+  useRemoveLambdaPermission,
+  useCreateEventSourceMapping,
+  useUpdateEventSourceMapping,
+  useUpdateLambdaAlias,
 } from "./useLambda";
 
 function createWrapper() {
@@ -238,6 +244,137 @@ describe("useDeleteEventSourceMapping", () => {
     expect(mockApi).toHaveBeenCalledWith(
       "/aws/lambda/event-source-mappings/uuid-123",
       expect.objectContaining({ method: "DELETE" })
+    );
+  });
+});
+
+describe("useCreateEventSourceMapping", () => {
+  it("posts mapping body and invalidates on success", async () => {
+    mockApi.mockResolvedValueOnce({ eventSourceMapping: { UUID: "u1" } });
+    const { result } = renderHook(() => useCreateEventSourceMapping("my-fn"), {
+      wrapper: createWrapper(),
+    });
+    const data = await (result.current.mutateAsync as any)({
+      eventSourceArn: "arn:aws:sqs:us-east-1::q1",
+      functionName: "my-fn",
+      startingPosition: "TRIM_HORIZON",
+      batchSize: 5,
+      maximumConcurrency: 3,
+    });
+    expect(data.eventSourceMapping.UUID).toBe("u1");
+    expect(mockApi).toHaveBeenCalledWith("/aws/lambda/event-source-mappings", {
+      method: "POST",
+      body: JSON.stringify({
+        eventSourceArn: "arn:aws:sqs:us-east-1::q1",
+        functionName: "my-fn",
+        startingPosition: "TRIM_HORIZON",
+        batchSize: 5,
+        maximumConcurrency: 3,
+      }),
+    });
+  });
+});
+
+describe("useUpdateEventSourceMapping", () => {
+  it("puts update body with uuid in path", async () => {
+    mockApi.mockResolvedValueOnce({ eventSourceMapping: {} });
+    const { result } = renderHook(() => useUpdateEventSourceMapping("my-fn"), {
+      wrapper: createWrapper(),
+    });
+    await result.current.mutateAsync({
+      uuid: "u1",
+      batchSize: 10,
+      enabled: false,
+      maximumConcurrency: 7,
+    });
+    expect(mockApi).toHaveBeenCalledWith("/aws/lambda/event-source-mappings/u1", {
+      method: "PUT",
+      body: JSON.stringify({ batchSize: 10, enabled: false, maximumConcurrency: 7 }),
+    });
+  });
+});
+
+// ─── RESOURCE-BASED POLICY ──────────────────────────────
+
+describe("useLambdaPolicy", () => {
+  it("fetches policy when name provided", async () => {
+    mockApi.mockResolvedValueOnce({ policy: { Statement: [] }, revisionId: "r1" });
+    const { result } = renderHook(() => useLambdaPolicy("my-fn"), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/lambda/functions/my-fn/policy");
+  });
+
+  it("is idle when name is null", () => {
+    const { result } = renderHook(() => useLambdaPolicy(null), {
+      wrapper: createWrapper(),
+    });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+});
+
+describe("useAddLambdaPermission", () => {
+  it("posts permission body", async () => {
+    mockApi.mockResolvedValueOnce({ statement: { Sid: "s1" } });
+    const { result } = renderHook(() => useAddLambdaPermission("my-fn"), {
+      wrapper: createWrapper(),
+    });
+    await result.current.mutateAsync({
+      statementId: "s1",
+      principal: "s3.amazonaws.com",
+      action: "lambda:InvokeFunction",
+      sourceArn: "arn:aws:s3:::b",
+      sourceAccount: "123",
+    });
+    expect(mockApi).toHaveBeenCalledWith("/aws/lambda/functions/my-fn/policy", {
+      method: "POST",
+      body: JSON.stringify({
+        statementId: "s1",
+        principal: "s3.amazonaws.com",
+        action: "lambda:InvokeFunction",
+        sourceArn: "arn:aws:s3:::b",
+        sourceAccount: "123",
+      }),
+    });
+  });
+});
+
+describe("useRemoveLambdaPermission", () => {
+  it("deletes statement by id", async () => {
+    mockApi.mockResolvedValueOnce({ removed: true });
+    const { result } = renderHook(() => useRemoveLambdaPermission("my-fn"), {
+      wrapper: createWrapper(),
+    });
+    await result.current.mutateAsync("s1");
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/lambda/functions/my-fn/policy/s1",
+      { method: "DELETE" }
+    );
+  });
+});
+
+describe("useUpdateLambdaAlias", () => {
+  it("puts alias body with encoded names", async () => {
+    mockApi.mockResolvedValueOnce({ alias: { Name: "prod" } });
+    const { result } = renderHook(() => useUpdateLambdaAlias("my-fn"), {
+      wrapper: createWrapper(),
+    });
+    await result.current.mutateAsync({
+      aliasName: "prod",
+      functionVersion: "3",
+      description: "prod alias",
+    });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/lambda/functions/my-fn/aliases/prod",
+      {
+        method: "PUT",
+        body: JSON.stringify({
+          aliasName: "prod",
+          functionVersion: "3",
+          description: "prod alias",
+        }),
+      }
     );
   });
 });
