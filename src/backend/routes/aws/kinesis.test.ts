@@ -30,6 +30,17 @@ vi.mock("@aws-sdk/client-kinesis", () => ({
   GetShardIteratorCommand: createCmd("GetShardIteratorCommand"),
   GetRecordsCommand: createCmd("GetRecordsCommand"),
   ListTagsForStreamCommand: createCmd("ListTagsForStreamCommand"),
+  IncreaseStreamRetentionPeriodCommand: createCmd("IncreaseStreamRetentionPeriodCommand"),
+  DecreaseStreamRetentionPeriodCommand: createCmd("DecreaseStreamRetentionPeriodCommand"),
+  StartStreamEncryptionCommand: createCmd("StartStreamEncryptionCommand"),
+  StopStreamEncryptionCommand: createCmd("StopStreamEncryptionCommand"),
+  EnableEnhancedMonitoringCommand: createCmd("EnableEnhancedMonitoringCommand"),
+  DisableEnhancedMonitoringCommand: createCmd("DisableEnhancedMonitoringCommand"),
+  UpdateStreamModeCommand: createCmd("UpdateStreamModeCommand"),
+  SplitShardCommand: createCmd("SplitShardCommand"),
+  MergeShardsCommand: createCmd("MergeShardsCommand"),
+  AddTagsToStreamCommand: createCmd("AddTagsToStreamCommand"),
+  RemoveTagsFromStreamCommand: createCmd("RemoveTagsFromStreamCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -52,6 +63,22 @@ async function post(path: string, body?: any) {
 
 async function del(path: string) {
   return router.request(path, { method: "DELETE" });
+}
+
+async function delBody(path: string, body: any) {
+  return router.request(path, {
+    method: "DELETE",
+    body: JSON.stringify(body),
+    headers: { "content-type": "application/json" },
+  });
+}
+
+async function put(path: string, body?: any) {
+  return router.request(path, {
+    method: "PUT",
+    body: body != null ? JSON.stringify(body) : undefined,
+    headers: body != null ? { "content-type": "application/json" } : undefined,
+  });
 }
 
 beforeEach(() => {
@@ -461,6 +488,297 @@ describe("Kinesis Routes", () => {
       const res = await get("/streams/stream-1/tags");
       const body = await res.json();
       expect(body.tags).toEqual([]);
+    });
+
+    it("PUT /streams/:name/tags — adds tags", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/streams/stream-1/tags", { tags: { env: "prod" } });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.tagged).toBe(true);
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          __cmdName: "AddTagsToStreamCommand",
+          StreamName: "stream-1",
+          Tags: { env: "prod" },
+        })
+      );
+    });
+
+    it("PUT /streams/:name/tags — 400 when tags missing", async () => {
+      const res = await put("/streams/stream-1/tags", {});
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("PUT /streams/:name/tags — 400 when tags empty object", async () => {
+      const res = await put("/streams/stream-1/tags", { tags: {} });
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("DELETE /streams/:name/tags — removes tags", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await delBody("/streams/stream-1/tags", { tagKeys: ["env"] });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.untagged).toBe(true);
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          __cmdName: "RemoveTagsFromStreamCommand",
+          StreamName: "stream-1",
+          TagKeys: ["env"],
+        })
+      );
+    });
+
+    it("DELETE /streams/:name/tags — 400 when tagKeys missing", async () => {
+      const res = await delBody("/streams/stream-1/tags", {});
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("Stream Management", () => {
+    it("POST /streams/:name/retention/increase — increases retention", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/streams/stream-1/retention/increase", { retentionPeriodHours: 48 });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          __cmdName: "IncreaseStreamRetentionPeriodCommand",
+          StreamName: "stream-1",
+          RetentionPeriodHours: 48,
+        })
+      );
+    });
+
+    it("POST /streams/:name/retention/increase — 400 when hours missing", async () => {
+      const res = await post("/streams/stream-1/retention/increase", {});
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("POST /streams/:name/retention/decrease — decreases retention", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/streams/stream-1/retention/decrease", { retentionPeriodHours: 24 });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          __cmdName: "DecreaseStreamRetentionPeriodCommand",
+          RetentionPeriodHours: 24,
+        })
+      );
+    });
+
+    it("POST /streams/:name/retention/decrease — 400 when hours missing", async () => {
+      const res = await post("/streams/stream-1/retention/decrease", {});
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("POST /streams/:name/encryption/start — starts encryption", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/streams/stream-1/encryption/start", {
+        encryptionType: "KMS",
+        keyId: "alias/aws/kinesis",
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          __cmdName: "StartStreamEncryptionCommand",
+          StreamName: "stream-1",
+          EncryptionType: "KMS",
+          KeyId: "alias/aws/kinesis",
+        })
+      );
+    });
+
+    it("POST /streams/:name/encryption/start — 400 when encryptionType missing", async () => {
+      const res = await post("/streams/stream-1/encryption/start", { keyId: "k1" });
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("POST /streams/:name/encryption/start — 400 when keyId missing", async () => {
+      const res = await post("/streams/stream-1/encryption/start", { encryptionType: "KMS" });
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("POST /streams/:name/encryption/stop — stops encryption", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/streams/stream-1/encryption/stop");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          __cmdName: "StopStreamEncryptionCommand",
+          StreamName: "stream-1",
+        })
+      );
+    });
+
+    it("POST /streams/:name/monitoring/enable — enables and maps metrics", async () => {
+      mockSend.mockResolvedValueOnce({
+        StreamName: "stream-1",
+        StreamARN: "arn:aws:kinesis:us-east-1::stream/stream-1",
+        CurrentShardLevelMetrics: ["IncomingBytes"],
+        DesiredShardLevelMetrics: ["IncomingBytes", "OutgoingBytes"],
+      });
+      const res = await post("/streams/stream-1/monitoring/enable", {
+        shardLevelMetrics: ["IncomingBytes"],
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.streamName).toBe("stream-1");
+      expect(body.streamARN).toContain("stream-1");
+      expect(body.currentShardLevelMetrics).toEqual(["IncomingBytes"]);
+      expect(body.desiredShardLevelMetrics).toEqual(["IncomingBytes", "OutgoingBytes"]);
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          __cmdName: "EnableEnhancedMonitoringCommand",
+          ShardLevelMetrics: ["IncomingBytes"],
+        })
+      );
+    });
+
+    it("POST /streams/:name/monitoring/enable — sparse response defaults to empty arrays", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/streams/stream-1/monitoring/enable", { shardLevelMetrics: [] });
+      const body = await res.json();
+      expect(body.currentShardLevelMetrics).toEqual([]);
+      expect(body.desiredShardLevelMetrics).toEqual([]);
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({ ShardLevelMetrics: [] })
+      );
+    });
+
+    it("POST /streams/:name/monitoring/enable — omits metrics field when not provided", async () => {
+      mockSend.mockResolvedValueOnce({ CurrentShardLevelMetrics: [] });
+      const res = await post("/streams/stream-1/monitoring/enable", {});
+      expect(res.status).toBe(200);
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({ ShardLevelMetrics: [] })
+      );
+    });
+
+    it("POST /streams/:name/monitoring/disable — disables and returns metrics", async () => {
+      mockSend.mockResolvedValueOnce({
+        StreamName: "stream-1",
+        CurrentShardLevelMetrics: [],
+        DesiredShardLevelMetrics: [],
+      });
+      const res = await post("/streams/stream-1/monitoring/disable", {
+        shardLevelMetrics: ["IncomingBytes"],
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.streamName).toBe("stream-1");
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          __cmdName: "DisableEnhancedMonitoringCommand",
+        })
+      );
+    });
+
+    it("PUT /streams/:name/stream-mode — updates mode via ARN", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/streams/stream-1/stream-mode", {
+        streamARN: "arn:aws:kinesis:us-east-1::stream/stream-1",
+        streamMode: "ON_DEMAND",
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          __cmdName: "UpdateStreamModeCommand",
+          StreamARN: "arn:aws:kinesis:us-east-1::stream/stream-1",
+          StreamModeDetails: { StreamMode: "ON_DEMAND" },
+        })
+      );
+    });
+
+    it("PUT /streams/:name/stream-mode — 400 when streamARN missing", async () => {
+      const res = await put("/streams/stream-1/stream-mode", { streamMode: "ON_DEMAND" });
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("PUT /streams/:name/stream-mode — 400 when streamMode missing", async () => {
+      const res = await put("/streams/stream-1/stream-mode", {
+        streamARN: "arn:aws:kinesis:us-east-1::stream/stream-1",
+      });
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("POST /streams/:name/shards/split — splits shard", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/streams/stream-1/shards/split", {
+        shardToSplit: "shardId-000000000000",
+        newStartingHashKey: "170141183460469231731687303715884105728",
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.split).toBe(true);
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          __cmdName: "SplitShardCommand",
+          ShardToSplit: "shardId-000000000000",
+          NewStartingHashKey: "170141183460469231731687303715884105728",
+        })
+      );
+    });
+
+    it("POST /streams/:name/shards/split — 400 when shardToSplit missing", async () => {
+      const res = await post("/streams/stream-1/shards/split", { newStartingHashKey: "1" });
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("POST /streams/:name/shards/split — 400 when newStartingHashKey missing", async () => {
+      const res = await post("/streams/stream-1/shards/split", { shardToSplit: "shardId-1" });
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("POST /streams/:name/shards/merge — merges shards", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/streams/stream-1/shards/merge", {
+        shardToMerge: "shardId-1",
+        adjacentShardToMerge: "shardId-2",
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.merged).toBe(true);
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          __cmdName: "MergeShardsCommand",
+          ShardToMerge: "shardId-1",
+          AdjacentShardToMerge: "shardId-2",
+        })
+      );
+    });
+
+    it("POST /streams/:name/shards/merge — 400 when shardToMerge missing", async () => {
+      const res = await post("/streams/stream-1/shards/merge", { adjacentShardToMerge: "s2" });
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("POST /streams/:name/shards/merge — 400 when adjacentShardToMerge missing", async () => {
+      const res = await post("/streams/stream-1/shards/merge", { shardToMerge: "s1" });
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
     });
   });
 });

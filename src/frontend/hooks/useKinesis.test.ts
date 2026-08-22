@@ -34,6 +34,17 @@ import {
   useKinesisRecords,
   useKinesisTags,
   useDescribeKinesisConsumer,
+  useAddKinesisTags,
+  useRemoveKinesisTags,
+  useIncreaseKinesisRetention,
+  useDecreaseKinesisRetention,
+  useStartKinesisEncryption,
+  useStopKinesisEncryption,
+  useEnableKinesisMonitoring,
+  useDisableKinesisMonitoring,
+  useUpdateKinesisStreamMode,
+  useSplitKinesisShard,
+  useMergeKinesisShards,
 } from "./useKinesis";
 
 beforeEach(() => {
@@ -287,6 +298,207 @@ describe("useKinesis hooks", () => {
         { wrapper: createWrapper() }
       );
       expect(result.current.fetchStatus).toBe("idle");
+    });
+  });
+
+  describe("useAddKinesisTags", () => {
+    it("calls PUT with correct URL and body", async () => {
+      mockApi.mockResolvedValueOnce({ tagged: true });
+      const { result } = renderHook(() => useAddKinesisTags("stream-1"), {
+        wrapper: createWrapper(),
+      });
+      await result.current.mutateAsync({ tags: { env: "prod" } });
+      expect(mockApi).toHaveBeenCalledWith("/aws/kinesis/streams/stream-1/tags", {
+        method: "PUT",
+        body: JSON.stringify({ tags: { env: "prod" } }),
+      });
+    });
+  });
+
+  describe("useRemoveKinesisTags", () => {
+    it("calls DELETE with correct URL and body", async () => {
+      mockApi.mockResolvedValueOnce({ untagged: true });
+      const { result } = renderHook(() => useRemoveKinesisTags("stream-1"), {
+        wrapper: createWrapper(),
+      });
+      await result.current.mutateAsync(["env"]);
+      expect(mockApi).toHaveBeenCalledWith("/aws/kinesis/streams/stream-1/tags", {
+        method: "DELETE",
+        body: JSON.stringify({ tagKeys: ["env"] }),
+      });
+    });
+  });
+
+  describe("useIncreaseKinesisRetention", () => {
+    it("calls POST with correct URL and body", async () => {
+      mockApi.mockResolvedValueOnce({ updated: true });
+      const { result } = renderHook(() => useIncreaseKinesisRetention("stream-1"), {
+        wrapper: createWrapper(),
+      });
+      await result.current.mutateAsync(48);
+      expect(mockApi).toHaveBeenCalledWith(
+        "/aws/kinesis/streams/stream-1/retention/increase",
+        { method: "POST", body: JSON.stringify({ retentionPeriodHours: 48 }) }
+      );
+    });
+  });
+
+  describe("useDecreaseKinesisRetention", () => {
+    it("calls POST with correct URL and body", async () => {
+      mockApi.mockResolvedValueOnce({ updated: true });
+      const { result } = renderHook(() => useDecreaseKinesisRetention("stream-1"), {
+        wrapper: createWrapper(),
+      });
+      await result.current.mutateAsync(24);
+      expect(mockApi).toHaveBeenCalledWith(
+        "/aws/kinesis/streams/stream-1/retention/decrease",
+        { method: "POST", body: JSON.stringify({ retentionPeriodHours: 24 }) }
+      );
+    });
+  });
+
+  describe("useStartKinesisEncryption", () => {
+    it("calls POST with correct URL and body", async () => {
+      mockApi.mockResolvedValueOnce({ updated: true });
+      const { result } = renderHook(() => useStartKinesisEncryption("stream-1"), {
+        wrapper: createWrapper(),
+      });
+      await result.current.mutateAsync({ encryptionType: "KMS", keyId: "alias/aws/kinesis" });
+      expect(mockApi).toHaveBeenCalledWith(
+        "/aws/kinesis/streams/stream-1/encryption/start",
+        {
+          method: "POST",
+          body: JSON.stringify({ encryptionType: "KMS", keyId: "alias/aws/kinesis" }),
+        }
+      );
+    });
+  });
+
+  describe("useStopKinesisEncryption", () => {
+    it("calls POST with correct URL", async () => {
+      mockApi.mockResolvedValueOnce({ updated: true });
+      const { result } = renderHook(() => useStopKinesisEncryption("stream-1"), {
+        wrapper: createWrapper(),
+      });
+      await result.current.mutateAsync();
+      expect(mockApi).toHaveBeenCalledWith(
+        "/aws/kinesis/streams/stream-1/encryption/stop",
+        { method: "POST" }
+      );
+    });
+  });
+
+  describe("useEnableKinesisMonitoring", () => {
+    it("calls POST and normalizes populated metrics", async () => {
+      mockApi.mockResolvedValueOnce({
+        streamName: "stream-1",
+        currentShardLevelMetrics: ["IncomingBytes"],
+        desiredShardLevelMetrics: ["IncomingBytes"],
+      });
+      const { result } = renderHook(() => useEnableKinesisMonitoring("stream-1"), {
+        wrapper: createWrapper(),
+      });
+      const data = await result.current.mutateAsync(["IncomingBytes"]);
+      expect(data.currentShardLevelMetrics).toEqual(["IncomingBytes"]);
+      expect(mockApi).toHaveBeenCalledWith(
+        "/aws/kinesis/streams/stream-1/monitoring/enable",
+        {
+          method: "POST",
+          body: JSON.stringify({ shardLevelMetrics: ["IncomingBytes"] }),
+        }
+      );
+    });
+
+    it("normalizes sparse response to empty arrays", async () => {
+      mockApi.mockResolvedValueOnce({});
+      const { result } = renderHook(() => useEnableKinesisMonitoring("stream-1"), {
+        wrapper: createWrapper(),
+      });
+      const data = await result.current.mutateAsync([]);
+      expect(data.currentShardLevelMetrics).toEqual([]);
+    });
+  });
+
+  describe("useDisableKinesisMonitoring", () => {
+    it("calls POST with correct URL and body", async () => {
+      mockApi.mockResolvedValueOnce({
+        currentShardLevelMetrics: [],
+        desiredShardLevelMetrics: [],
+      });
+      const { result } = renderHook(() => useDisableKinesisMonitoring("stream-1"), {
+        wrapper: createWrapper(),
+      });
+      await result.current.mutateAsync(["IncomingBytes"]);
+      expect(mockApi).toHaveBeenCalledWith(
+        "/aws/kinesis/streams/stream-1/monitoring/disable",
+        {
+          method: "POST",
+          body: JSON.stringify({ shardLevelMetrics: ["IncomingBytes"] }),
+        }
+      );
+    });
+  });
+
+  describe("useUpdateKinesisStreamMode", () => {
+    it("calls PUT with correct URL and body", async () => {
+      mockApi.mockResolvedValueOnce({ updated: true });
+      const { result } = renderHook(() => useUpdateKinesisStreamMode("stream-1"), {
+        wrapper: createWrapper(),
+      });
+      await result.current.mutateAsync({
+        streamARN: "arn:aws:kinesis:us-east-1::stream/stream-1",
+        streamMode: "ON_DEMAND",
+      });
+      expect(mockApi).toHaveBeenCalledWith(
+        "/aws/kinesis/streams/stream-1/stream-mode",
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            streamARN: "arn:aws:kinesis:us-east-1::stream/stream-1",
+            streamMode: "ON_DEMAND",
+          }),
+        }
+      );
+    });
+  });
+
+  describe("useSplitKinesisShard", () => {
+    it("calls POST with correct URL and body", async () => {
+      mockApi.mockResolvedValueOnce({ split: true });
+      const { result } = renderHook(() => useSplitKinesisShard("stream-1"), {
+        wrapper: createWrapper(),
+      });
+      await result.current.mutateAsync({
+        shardToSplit: "shardId-1",
+        newStartingHashKey: "170141183460469231731687303715884105728",
+      });
+      expect(mockApi).toHaveBeenCalledWith("/aws/kinesis/streams/stream-1/shards/split", {
+        method: "POST",
+        body: JSON.stringify({
+          shardToSplit: "shardId-1",
+          newStartingHashKey: "170141183460469231731687303715884105728",
+        }),
+      });
+    });
+  });
+
+  describe("useMergeKinesisShards", () => {
+    it("calls POST with correct URL and body", async () => {
+      mockApi.mockResolvedValueOnce({ merged: true });
+      const { result } = renderHook(() => useMergeKinesisShards("stream-1"), {
+        wrapper: createWrapper(),
+      });
+      await result.current.mutateAsync({
+        shardToMerge: "shardId-1",
+        adjacentShardToMerge: "shardId-2",
+      });
+      expect(mockApi).toHaveBeenCalledWith("/aws/kinesis/streams/stream-1/shards/merge", {
+        method: "POST",
+        body: JSON.stringify({
+          shardToMerge: "shardId-1",
+          adjacentShardToMerge: "shardId-2",
+        }),
+      });
     });
   });
 });

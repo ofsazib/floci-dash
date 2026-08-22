@@ -18,12 +18,55 @@ const mockRegisterConsumer = vi.fn();
 const mockDeregisterConsumer = vi.fn();
 const mockSubscribeToShard = vi.fn();
 
+const mockStreamDetail = vi.fn();
+const mockTagsQuery = vi.fn();
+const mockAddTags = vi.fn();
+const mockRemoveTags = vi.fn();
+const mockIncreaseRetention = vi.fn();
+const mockDecreaseRetention = vi.fn();
+const mockStartEncryption = vi.fn();
+const mockStopEncryption = vi.fn();
+const mockEnableMonitoring = vi.fn();
+const mockDisableMonitoring = vi.fn();
+const mockUpdateStreamMode = vi.fn();
+const mockSplitShard = vi.fn();
+const mockMergeShards = vi.fn();
+
 const createStreamState = vi.hoisted(() => ({ isPending: false }));
 const deleteStreamState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
 const putRecordState = vi.hoisted(() => ({ isPending: false }));
 const registerConsumerState = vi.hoisted(() => ({ isPending: false }));
 const deregisterConsumerState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
 const subscribeState = vi.hoisted(() => ({ isPending: false, isError: false, error: null as Error | null }));
+
+function makeMutationMock(fn: ReturnType<typeof vi.fn>, state: { isPending: boolean; variables?: any; isError?: boolean; error?: Error | null }) {
+  return {
+    mutateAsync: fn,
+    isPending: state.isPending,
+    get isError() {
+      return !!state.isError;
+    },
+    get error() {
+      return state.error ?? null;
+    },
+    reset: vi.fn(),
+    get variables() {
+      return state.variables;
+    },
+  };
+}
+
+const addTagsState = vi.hoisted(() => ({ isPending: false, isError: false, error: null as Error | null }));
+const removeTagsState = vi.hoisted(() => ({ isPending: false, variables: null as string | null, isError: false, error: null as Error | null }));
+const increaseRetentionState = vi.hoisted(() => ({ isPending: false, isError: false, error: null as Error | null }));
+const decreaseRetentionState = vi.hoisted(() => ({ isPending: false, isError: false, error: null as Error | null }));
+const startEncryptionState = vi.hoisted(() => ({ isPending: false, isError: false, error: null as Error | null }));
+const stopEncryptionState = vi.hoisted(() => ({ isPending: false, isError: false, error: null as Error | null }));
+const enableMonitoringState = vi.hoisted(() => ({ isPending: false, isError: false, error: null as Error | null }));
+const disableMonitoringState = vi.hoisted(() => ({ isPending: false, isError: false, error: null as Error | null }));
+const updateModeState = vi.hoisted(() => ({ isPending: false, isError: false, error: null as Error | null }));
+const splitState = vi.hoisted(() => ({ isPending: false, isError: false, error: null as Error | null }));
+const mergeState = vi.hoisted(() => ({ isPending: false, isError: false, error: null as Error | null }));
 
 vi.mock("../../hooks/useKinesis", () => ({
   useKinesisStreams: (...args: any[]) => mockStreams(...args),
@@ -57,6 +100,19 @@ vi.mock("../../hooks/useKinesis", () => ({
     isError: subscribeState.isError,
     error: subscribeState.error,
   }),
+  useKinesisStream: (...args: any[]) => mockStreamDetail(...args),
+  useKinesisTags: (...args: any[]) => mockTagsQuery(...args),
+  useAddKinesisTags: () => makeMutationMock(mockAddTags, addTagsState),
+  useRemoveKinesisTags: () => makeMutationMock(mockRemoveTags, removeTagsState),
+  useIncreaseKinesisRetention: () => makeMutationMock(mockIncreaseRetention, increaseRetentionState),
+  useDecreaseKinesisRetention: () => makeMutationMock(mockDecreaseRetention, decreaseRetentionState),
+  useStartKinesisEncryption: () => makeMutationMock(mockStartEncryption, startEncryptionState),
+  useStopKinesisEncryption: () => makeMutationMock(mockStopEncryption, stopEncryptionState),
+  useEnableKinesisMonitoring: () => makeMutationMock(mockEnableMonitoring, enableMonitoringState),
+  useDisableKinesisMonitoring: () => makeMutationMock(mockDisableMonitoring, disableMonitoringState),
+  useUpdateKinesisStreamMode: () => makeMutationMock(mockUpdateStreamMode, updateModeState),
+  useSplitKinesisShard: () => makeMutationMock(mockSplitShard, splitState),
+  useMergeKinesisShards: () => makeMutationMock(mockMergeShards, mergeState),
 }));
 
 import { KinesisDashboard } from "./KinesisDashboard";
@@ -111,6 +167,54 @@ beforeEach(() => {
   mockRegisterConsumer.mockResolvedValue({});
   mockDeregisterConsumer.mockResolvedValue({});
   mockSubscribeToShard.mockResolvedValue({ events: [] });
+  mockStreamDetail.mockReturnValue({
+    data: {
+      stream: {
+        StreamName: "stream-1",
+        StreamARN: "arn:aws:kinesis:us-east-1::stream/stream-1",
+        RetentionPeriodHours: 24,
+        EncryptionType: "NONE",
+      },
+    },
+    isLoading: false,
+  });
+  mockTagsQuery.mockReturnValue({ data: { tags: [] }, isLoading: false });
+  const settingsStates = [
+    addTagsState,
+    removeTagsState,
+    increaseRetentionState,
+    decreaseRetentionState,
+    startEncryptionState,
+    stopEncryptionState,
+    enableMonitoringState,
+    disableMonitoringState,
+    updateModeState,
+    splitState,
+    mergeState,
+  ];
+  for (const s of settingsStates) {
+    s.isPending = false;
+    (s as any).isError = false;
+    (s as any).error = null;
+  }
+  removeTagsState.variables = null;
+  mockAddTags.mockResolvedValue({});
+  mockRemoveTags.mockResolvedValue({});
+  mockIncreaseRetention.mockResolvedValue({});
+  mockDecreaseRetention.mockResolvedValue({});
+  mockStartEncryption.mockResolvedValue({});
+  mockStopEncryption.mockResolvedValue({});
+  mockEnableMonitoring.mockResolvedValue({
+    currentShardLevelMetrics: ["IncomingBytes"],
+    desiredShardLevelMetrics: ["IncomingBytes"],
+  });
+  mockDisableMonitoring.mockResolvedValue({
+    currentShardLevelMetrics: [],
+    desiredShardLevelMetrics: [],
+  });
+  mockUpdateStreamMode.mockResolvedValue({});
+  mockSplitShard.mockResolvedValue({});
+  mockMergeShards.mockResolvedValue({});
 });
 
 // ─── Tests ──────────────────────────────────────────────
@@ -1281,5 +1385,521 @@ describe("KinesisDashboard — data edge cases", () => {
     await waitFor(() => expect(screen.getByText(/Subscribe to Shard/)).toBeTruthy());
     dismissModalWithEscape();
     await waitFor(() => expectModalHidden("Subscribe to Shard — my-stream"));
+  });
+});
+
+// ─── Settings tab ────────────────────────────────────────
+
+describe("KinesisDashboard — settings tab", () => {
+  function setupSettings() {
+    mockStreams.mockReturnValue({
+      data: { streams: [{ StreamName: "my-stream", StreamStatus: "ACTIVE", OpenShardCount: 1, RetentionPeriodHours: 24 }], total: 1 },
+      isLoading: false,
+    });
+    mockStreamDetail.mockReturnValue({
+      data: {
+        stream: {
+          StreamName: "my-stream",
+          StreamARN: "arn:aws:kinesis:us-east-1::stream/my-stream",
+          RetentionPeriodHours: 24,
+          EncryptionType: "NONE",
+        },
+      },
+      isLoading: false,
+    });
+    mockShards.mockReturnValue({
+      data: {
+        shards: [
+          {
+            ShardId: "shardId-000000000001",
+            HashKeyRange: { StartingHashKey: "0", EndingHashKey: "340" },
+            SequenceNumberRange: { StartingSequenceNumber: "49" },
+          },
+        ],
+        total: 1,
+      },
+    });
+    return { user: userEvent.setup() };
+  }
+
+  async function openSettings(user: ReturnType<typeof userEvent.setup>) {
+    render(<KinesisDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-stream"));
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: /Settings: my-stream/i })).toBeTruthy()
+    );
+    await user.click(screen.getByRole("tab", { name: /Settings: my-stream/i }));
+    await waitFor(() =>
+      expect(screen.getByText(/Retention period \(current:/i)).toBeTruthy()
+    );
+  }
+
+  it("renders all settings sections with current values", async () => {
+    const { user } = setupSettings();
+    await openSettings(user);
+    expect(screen.getByText(/current: 24 hrs/i)).toBeTruthy();
+    expect(screen.getByText(/Server-side encryption \(current: NONE\)/i)).toBeTruthy();
+    expect(screen.getByText(/Enhanced monitoring/i)).toBeTruthy();
+    expect(screen.getByText(/Stream mode/i)).toBeTruthy();
+    expect(screen.getByText(/Resharding/i)).toBeTruthy();
+    expect(screen.getByText(/Tags for my-stream/i)).toBeTruthy();
+  });
+
+  it("shows encryption current type from stream detail", async () => {
+    const { user } = setupSettings();
+    mockStreamDetail.mockReturnValue({
+      data: {
+        stream: {
+          StreamName: "my-stream",
+          StreamARN: "arn:aws:kinesis:us-east-1::stream/my-stream",
+          RetentionPeriodHours: 48,
+          EncryptionType: "KMS",
+        },
+      },
+      isLoading: false,
+    });
+    await openSettings(user);
+    expect(screen.getByText(/current: 48 hrs/i)).toBeTruthy();
+    expect(screen.getByText(/current: KMS\)/i)).toBeTruthy();
+  });
+
+  it("increases retention and clears the input", async () => {
+    const { user } = setupSettings();
+    await openSettings(user);
+    const input = screen.getByPlaceholderText("24");
+    await user.type(input, "48");
+    await clickButton(user, /^Increase$/i);
+    await waitFor(() => expect(mockIncreaseRetention).toHaveBeenCalledWith(48));
+    await waitFor(() => expect((screen.getByPlaceholderText("24") as HTMLInputElement).value).toBe(""));
+  });
+
+  it("decreases retention", async () => {
+    const { user } = setupSettings();
+    await openSettings(user);
+    await user.type(screen.getByPlaceholderText("24"), "12");
+    await clickButton(user, /^Decrease$/i);
+    await waitFor(() => expect(mockDecreaseRetention).toHaveBeenCalledWith(12));
+  });
+
+  it("disables retention buttons when input empty", async () => {
+    const { user } = setupSettings();
+    await openSettings(user);
+    expect(
+      (screen.getByRole("button", { name: /^Increase$/i }) as HTMLButtonElement).disabled
+    ).toBe(true);
+    expect(
+      (screen.getByRole("button", { name: /^Decrease$/i }) as HTMLButtonElement).disabled
+    ).toBe(true);
+  });
+
+  it("shows retention error alert and dismisses it", async () => {
+    const { user } = setupSettings();
+    increaseRetentionState.isError = true;
+    increaseRetentionState.error = new Error("retention boom");
+    await openSettings(user);
+    expect(screen.getByText(/retention boom/i)).toBeTruthy();
+    const dismiss = document.querySelector(
+      '[class*="awsui_dismiss-button"]'
+    ) as HTMLElement;
+    await user.click(dismiss);
+  });
+
+  it("starts encryption with KMS type and clears key input", async () => {
+    const { user } = setupSettings();
+    await openSettings(user);
+    const input = screen.getByPlaceholderText("alias/aws/kinesis");
+    await user.type(input, "alias/my-key");
+    await clickButton(user, /Start encryption/i);
+    await waitFor(() =>
+      expect(mockStartEncryption).toHaveBeenCalledWith({
+        encryptionType: "KMS",
+        keyId: "alias/my-key",
+      })
+    );
+    await waitFor(
+      () =>
+        expect(
+          (screen.getByPlaceholderText("alias/aws/kinesis") as HTMLInputElement).value
+        ).toBe("")
+    );
+  });
+
+  it("disables start-encryption button until key typed", async () => {
+    const { user } = setupSettings();
+    await openSettings(user);
+    expect(
+      (screen.getByRole("button", { name: /Start encryption/i }) as HTMLButtonElement)
+        .disabled
+    ).toBe(true);
+  });
+
+  it("stops encryption", async () => {
+    const { user } = setupSettings();
+    await openSettings(user);
+    await clickButton(user, /Stop encryption/i);
+    await waitFor(() => expect(mockStopEncryption).toHaveBeenCalled());
+  });
+
+  it("shows encryption error alert and dismisses it", async () => {
+    const { user } = setupSettings();
+    startEncryptionState.isError = true;
+    startEncryptionState.error = new Error("kms denied");
+    await openSettings(user);
+    expect(screen.getByText(/kms denied/i)).toBeTruthy();
+    const dismiss = document.querySelector(
+      '[class*="awsui_dismiss-button"]'
+    ) as HTMLElement;
+    await user.click(dismiss);
+  });
+
+  it("enables monitoring and shows the result alert", async () => {
+    const { user } = setupSettings();
+    await openSettings(user);
+    await user.type(screen.getByPlaceholderText(/IncomingBytes/), "IncomingBytes");
+    await clickButton(user, /^Enable$/i);
+    await waitFor(() =>
+      expect(mockEnableMonitoring).toHaveBeenCalledWith(["IncomingBytes"])
+    );
+    await waitFor(() =>
+      expect(screen.getByText(/Current metrics: IncomingBytes/i)).toBeTruthy()
+    );
+  });
+
+  it("disables monitoring and shows fallback for sparse metrics", async () => {
+    const { user } = setupSettings();
+    mockDisableMonitoring.mockResolvedValue({});
+    await openSettings(user);
+    await clickButton(user, /^Disable$/i);
+    await waitFor(() => expect(mockDisableMonitoring).toHaveBeenCalledWith([]));
+    await waitFor(() =>
+      expect(screen.getByText(/Current metrics: none/i)).toBeTruthy()
+    );
+  });
+
+  it("splits metrics input on commas and drops blanks", async () => {
+    const { user } = setupSettings();
+    await openSettings(user);
+    await user.type(
+      screen.getByPlaceholderText(/IncomingBytes/),
+      "IncomingBytes, OutgoingBytes, "
+    );
+    await clickButton(user, /^Enable$/i);
+    await waitFor(() =>
+      expect(mockEnableMonitoring).toHaveBeenCalledWith([
+        "IncomingBytes",
+        "OutgoingBytes",
+      ])
+    );
+  });
+
+  it("shows monitoring error alert and dismisses it", async () => {
+    const { user } = setupSettings();
+    disableMonitoringState.isError = true;
+    disableMonitoringState.error = new Error("monitor boom");
+    await openSettings(user);
+    expect(screen.getByText(/monitor boom/i)).toBeTruthy();
+    const dismiss = document.querySelector(
+      '[class*="awsui_dismiss-button"]'
+    ) as HTMLElement;
+    await user.click(dismiss);
+  });
+
+  it("updates the stream mode after selecting ON_DEMAND", async () => {
+    const { user } = setupSettings();
+    await openSettings(user);
+    await user.click(screen.getAllByText("Select a mode...")[0]);
+    await waitFor(() => expect(screen.getAllByText("ON_DEMAND").length).toBeGreaterThan(0));
+    await user.click(screen.getAllByText("ON_DEMAND")[0]);
+    await clickButton(user, /Update mode/i);
+    await waitFor(() =>
+      expect(mockUpdateStreamMode).toHaveBeenCalledWith({
+        streamARN: "arn:aws:kinesis:us-east-1::stream/my-stream",
+        streamMode: "ON_DEMAND",
+      })
+    );
+  });
+
+  it("disables update-mode until a mode is selected", async () => {
+    const { user } = setupSettings();
+    await openSettings(user);
+    expect(
+      (screen.getByRole("button", { name: /Update mode/i }) as HTMLButtonElement).disabled
+    ).toBe(true);
+  });
+
+  it("disables update-mode when stream ARN is missing", async () => {
+    const { user } = setupSettings();
+    mockStreamDetail.mockReturnValue({ data: { stream: {} }, isLoading: false });
+    await openSettings(user);
+    await user.click(screen.getAllByText("Select a mode...")[0]);
+    await waitFor(() => expect(screen.getAllByText("ON_DEMAND").length).toBeGreaterThan(0));
+    await user.click(screen.getAllByText("ON_DEMAND")[0]);
+    expect(
+      (screen.getByRole("button", { name: /Update mode/i }) as HTMLButtonElement).disabled
+    ).toBe(true);
+  });
+
+  it("shows stream-mode error alert and dismisses it", async () => {
+    const { user } = setupSettings();
+    updateModeState.isError = true;
+    updateModeState.error = new Error("mode boom");
+    await openSettings(user);
+    expect(screen.getByText(/mode boom/i)).toBeTruthy();
+    const dismiss = document.querySelector(
+      '[class*="awsui_dismiss-button"]'
+    ) as HTMLElement;
+    await user.click(dismiss);
+  });
+
+  it("splits a shard after selecting shard and hash key", async () => {
+    const { user } = setupSettings();
+    await openSettings(user);
+    // Split trigger is the first "Select a shard..." on the page
+    await user.click(screen.getAllByText("Select a shard...")[0]);
+    await waitFor(() => expect(screen.getAllByText("shardId-000000000001").length).toBeGreaterThan(0));
+    await user.click(screen.getAllByText("shardId-000000000001")[0]);
+    await user.type(
+      screen.getByPlaceholderText("170141183460469231731687303715884105728"),
+      "170"
+    );
+    await clickButton(user, /^Split$/i);
+    await waitFor(() =>
+      expect(mockSplitShard).toHaveBeenCalledWith({
+        shardToSplit: "shardId-000000000001",
+        newStartingHashKey: "170",
+      })
+    );
+  });
+
+  it("disables split until shard and hash key are set", async () => {
+    const { user } = setupSettings();
+    await openSettings(user);
+    expect(
+      (screen.getByRole("button", { name: /^Split$/i }) as HTMLButtonElement).disabled
+    ).toBe(true);
+  });
+
+  it("merges two shards", async () => {
+    const { user } = setupSettings();
+    await openSettings(user);
+    // Three selects share the "Select a shard..." trigger label: split, merge, merge-adjacent.
+    // Option lists render twice (hidden + open) — always click the LAST matching option.
+    await user.click(screen.getAllByText("Select a shard...")[0]); // split
+    await waitFor(() => expect(screen.getAllByText("shardId-000000000001").length).toBeGreaterThan(0));
+    await user.click(screen.getAllByText("shardId-000000000001").slice(-1)[0]);
+    await user.click(screen.getAllByText("Select a shard...")[0]); // now the merge select
+    await waitFor(() => expect(screen.getAllByText("shardId-000000000001").length).toBeGreaterThan(0));
+    await user.click(screen.getAllByText("shardId-000000000001").slice(-1)[0]);
+    await user.click(screen.getAllByText("Select a shard...")[0]); // now the adjacent-merge select
+    await waitFor(() => expect(screen.getAllByText("shardId-000000000001").length).toBeGreaterThan(0));
+    await user.click(screen.getAllByText("shardId-000000000001").slice(-1)[0]);
+    await clickButton(user, /^Merge$/i);
+    await waitFor(() =>
+      expect(mockMergeShards).toHaveBeenCalledWith({
+        shardToMerge: "shardId-000000000001",
+        adjacentShardToMerge: "shardId-000000000001",
+      })
+    );
+  });
+
+  it("disables merge until both shards selected", async () => {
+    const { user } = setupSettings();
+    await openSettings(user);
+    expect(
+      (screen.getByRole("button", { name: /^Merge$/i }) as HTMLButtonElement).disabled
+    ).toBe(true);
+  });
+
+  it("shows resharding error alert and dismisses it", async () => {
+    const { user } = setupSettings();
+    splitState.isError = true;
+    splitState.error = new Error("split boom");
+    await openSettings(user);
+    expect(screen.getByText(/split boom/i)).toBeTruthy();
+    const dismiss = document.querySelector(
+      '[class*="awsui_dismiss-button"]'
+    ) as HTMLElement;
+    await user.click(dismiss);
+  });
+
+  it("renders tags and adds a new one", async () => {
+    const { user } = setupSettings();
+    mockTagsQuery.mockReturnValue({
+      data: { tags: [{ Key: "env", Value: "prod" }] },
+      isLoading: false,
+    });
+    await openSettings(user);
+    expect(screen.getByText("env")).toBeTruthy();
+    await user.type(screen.getByPlaceholderText("env"), "team");
+    await user.type(screen.getByPlaceholderText("dev"), "core");
+    await clickButton(user, /Add tag/i);
+    await waitFor(() =>
+      expect(mockAddTags).toHaveBeenCalledWith({ tags: { team: "core" } })
+    );
+    await waitFor(() => {
+      expect((screen.getByPlaceholderText("env") as HTMLInputElement).value).toBe("");
+      expect((screen.getByPlaceholderText("dev") as HTMLInputElement).value).toBe("");
+    });
+  });
+
+  it("disables add-tag until key typed", async () => {
+    const { user } = setupSettings();
+    await openSettings(user);
+    expect(
+      (screen.getByRole("button", { name: /Add tag/i }) as HTMLButtonElement).disabled
+    ).toBe(true);
+  });
+
+  it("removes a tag via delete confirmation", async () => {
+    const { user } = setupSettings();
+    mockTagsQuery.mockReturnValue({
+      data: { tags: [{ Key: "env", Value: "prod" }] },
+      isLoading: false,
+    });
+    await openSettings(user);
+    await user.click(screen.getByRole("button", { name: /Delete env/i }));
+    const confirm = await screen.findByRole("button", { name: /Delete$/i });
+    await user.click(confirm);
+    await waitFor(() => expect(mockRemoveTags).toHaveBeenCalledWith(["env"]));
+  });
+
+  it("shows tag remove not-loading state when variables differ", async () => {
+    const { user } = setupSettings();
+    removeTagsState.isPending = true;
+    removeTagsState.variables = "other-key";
+    mockTagsQuery.mockReturnValue({
+      data: { tags: [{ Key: "env", Value: "prod" }] },
+      isLoading: false,
+    });
+    await openSettings(user);
+    expect(screen.getByText("env")).toBeTruthy();
+  });
+
+  it("shows add/remove tag error alerts and dismisses them", async () => {
+    const { user } = setupSettings();
+    addTagsState.isError = true;
+    addTagsState.error = new Error("add tag boom");
+    removeTagsState.isError = true;
+    removeTagsState.error = new Error("remove tag boom");
+    await openSettings(user);
+    expect(screen.getByText(/add tag boom/i)).toBeTruthy();
+    expect(screen.getByText(/remove tag boom/i)).toBeTruthy();
+    const buttons = document.querySelectorAll('[class*="awsui_dismiss-button"]');
+    await user.click(buttons[0] as HTMLElement);
+    await user.click(buttons[1] as HTMLElement);
+  });
+});
+
+describe("KinesisDashboard — settings fallbacks", () => {
+  function setupSettings2() {
+    mockStreams.mockReturnValue({
+      data: { streams: [{ StreamName: "my-stream", StreamStatus: "ACTIVE", OpenShardCount: 1, RetentionPeriodHours: 24 }], total: 1 },
+      isLoading: false,
+    });
+    mockStreamDetail.mockReturnValue({
+      data: {
+        stream: {
+          StreamName: "my-stream",
+          StreamARN: "arn:aws:kinesis:us-east-1::stream/my-stream",
+          RetentionPeriodHours: 24,
+          EncryptionType: "NONE",
+        },
+      },
+      isLoading: false,
+    });
+  }
+
+  async function open(user: ReturnType<typeof userEvent.setup>) {
+    render(<KinesisDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("my-stream"));
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: /Settings: my-stream/i })).toBeTruthy()
+    );
+    await user.click(screen.getByRole("tab", { name: /Settings: my-stream/i }));
+    await waitFor(() =>
+      expect(screen.getByText(/Retention period \(current:/i)).toBeTruthy()
+    );
+  }
+
+  it("shows the decrease-retention error alert with fallback message", async () => {
+    setupSettings2();
+    decreaseRetentionState.isError = true;
+    decreaseRetentionState.error = new Error("");
+    const user = userEvent.setup();
+    await open(user);
+    expect(screen.getByText(/Failed to decrease retention/i)).toBeTruthy();
+    const dismiss = document.querySelector(
+      '[class*="awsui_dismiss-button"]'
+    ) as HTMLElement;
+    await user.click(dismiss);
+  });
+
+  it("shows the increase-retention fallback message for message-less errors", async () => {
+    setupSettings2();
+    increaseRetentionState.isError = true;
+    increaseRetentionState.error = new Error("");
+    const user = userEvent.setup();
+    await open(user);
+    expect(screen.getByText(/Failed to increase retention/i)).toBeTruthy();
+  });
+
+  it("shows the encryption fallback message for message-less errors", async () => {
+    setupSettings2();
+    startEncryptionState.isError = true;
+    startEncryptionState.error = new Error("");
+    const user = userEvent.setup();
+    await open(user);
+    expect(screen.getByText(/Failed to update encryption/i)).toBeTruthy();
+  });
+
+  it("shows the monitoring fallback message for message-less errors", async () => {
+    setupSettings2();
+    enableMonitoringState.isError = true;
+    enableMonitoringState.error = new Error("");
+    const user = userEvent.setup();
+    await open(user);
+    expect(screen.getByText(/Failed to update monitoring/i)).toBeTruthy();
+  });
+
+  it("shows the stream-mode fallback message for message-less errors", async () => {
+    setupSettings2();
+    updateModeState.isError = true;
+    updateModeState.error = new Error("");
+    const user = userEvent.setup();
+    await open(user);
+    expect(screen.getByText(/Failed to update stream mode/i)).toBeTruthy();
+  });
+
+  it("shows the resharding fallback message for message-less errors", async () => {
+    setupSettings2();
+    mergeShardsStateFallback();
+    const user = userEvent.setup();
+    await open(user);
+    expect(screen.getByText(/Resharding failed/i)).toBeTruthy();
+  });
+
+  function mergeShardsStateFallback() {
+    mergeState.isError = true;
+    mergeState.error = new Error("");
+  }
+
+  it("shows add/remove tag fallback messages for message-less errors", async () => {
+    setupSettings2();
+    addTagsState.isError = true;
+    addTagsState.error = new Error("");
+    removeTagsState.isError = true;
+    removeTagsState.error = new Error("");
+    const user = userEvent.setup();
+    await open(user);
+    expect(screen.getByText(/Failed to add tags/i)).toBeTruthy();
+    expect(screen.getByText(/Failed to remove tag/i)).toBeTruthy();
+  });
+
+  it("renders empty tags table when tags data is missing", async () => {
+    setupSettings2();
+    mockTagsQuery.mockReturnValue({ data: undefined, isLoading: false });
+    const user = userEvent.setup();
+    await open(user);
+    expect(screen.getByText(/No tags/i)).toBeTruthy();
   });
 });

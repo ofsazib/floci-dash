@@ -209,6 +209,19 @@ import {
   useDeregisterKinesisConsumer,
   useSubscribeToShard,
   usePutKinesisRecord,
+  useKinesisStream,
+  useKinesisTags,
+  useAddKinesisTags,
+  useRemoveKinesisTags,
+  useIncreaseKinesisRetention,
+  useDecreaseKinesisRetention,
+  useStartKinesisEncryption,
+  useStopKinesisEncryption,
+  useEnableKinesisMonitoring,
+  useDisableKinesisMonitoring,
+  useUpdateKinesisStreamMode,
+  useSplitKinesisShard,
+  useMergeKinesisShards,
 } from "../../hooks/useKinesis";
 import {
   useNeptuneClusters,
@@ -538,6 +551,33 @@ export function KinesisDashboard() {
   const [subscribeStartingPos, setSubscribeStartingPos] = useState<string>("TRIM_HORIZON");
   const [subscribeConsumerArn, setSubscribeConsumerArn] = useState("");
   const [subscribeEvents, setSubscribeEvents] = useState<any[] | null>(null);
+
+  // Stream settings (retention / encryption / monitoring / mode / resharding / tags)
+  const { data: streamDetail } = useKinesisStream(selectedStream);
+  const tagsQuery = useKinesisTags(selectedStream);
+  const addTags = useAddKinesisTags(selectedStream || "");
+  const removeTags = useRemoveKinesisTags(selectedStream || "");
+  const increaseRetention = useIncreaseKinesisRetention(selectedStream || "");
+  const decreaseRetention = useDecreaseKinesisRetention(selectedStream || "");
+  const startEncryption = useStartKinesisEncryption(selectedStream || "");
+  const stopEncryption = useStopKinesisEncryption(selectedStream || "");
+  const enableMonitoring = useEnableKinesisMonitoring(selectedStream || "");
+  const disableMonitoring = useDisableKinesisMonitoring(selectedStream || "");
+  const updateStreamMode = useUpdateKinesisStreamMode(selectedStream || "");
+  const splitShard = useSplitKinesisShard(selectedStream || "");
+  const mergeShards = useMergeKinesisShards(selectedStream || "");
+
+  const [retentionHours, setRetentionHours] = useState("");
+  const [encKeyId, setEncKeyId] = useState("");
+  const [monitorMetrics, setMonitorMetrics] = useState("");
+  const [monitorResult, setMonitorResult] = useState<{ current: string[]; desired: string[] } | null>(null);
+  const [streamMode, setStreamMode] = useState("");
+  const [splitShardId, setSplitShardId] = useState("");
+  const [splitHashKey, setSplitHashKey] = useState("");
+  const [mergeShardA, setMergeShardA] = useState("");
+  const [mergeShardB, setMergeShardB] = useState("");
+  const [newTagKey, setNewTagKey] = useState("");
+  const [newTagValue, setNewTagValue] = useState("");
 
   if (isLoading) return <TableSkeleton />;
 
@@ -943,6 +983,398 @@ export function KinesisDashboard() {
             </>
           ) : (
             <Alert type="info">Select a stream to view and manage its consumers.</Alert>
+          ),
+        },
+        {
+          id: "settings",
+          label: selectedStream ? `Settings: ${selectedStream}` : "Settings",
+          disabled: !selectedStream,
+          content: selectedStream ? (
+            <SpaceBetween size="l">
+              {/* Retention */}
+              <Container
+                header={
+                  <Header
+                    variant="h3"
+                    actions={
+                      <>
+                        <Button
+                          loading={increaseRetention.isPending}
+                          disabled={!parseInt(retentionHours)}
+                          onClick={() =>
+                            increaseRetention
+                              .mutateAsync(parseInt(retentionHours))
+                              .then(() => setRetentionHours(""))
+                          }
+                        >
+                          Increase
+                        </Button>
+                        <Button
+                          loading={decreaseRetention.isPending}
+                          disabled={!parseInt(retentionHours)}
+                          onClick={() =>
+                            decreaseRetention
+                              .mutateAsync(parseInt(retentionHours))
+                              .then(() => setRetentionHours(""))
+                          }
+                        >
+                          Decrease
+                        </Button>
+                      </>
+                    }
+                  >
+                    Retention period (current: {streamDetail?.stream?.RetentionPeriodHours ?? "—"} hrs)
+                  </Header>
+                }
+              >
+                {increaseRetention.isError && (
+                  <Alert type="error" dismissible onDismiss={() => increaseRetention.reset()}>
+                    {increaseRetention.error?.message || "Failed to increase retention"}
+                  </Alert>
+                )}
+                {decreaseRetention.isError && (
+                  <Alert type="error" dismissible onDismiss={() => decreaseRetention.reset()}>
+                    {decreaseRetention.error?.message || "Failed to decrease retention"}
+                  </Alert>
+                )}
+                <FormField label="Retention period (hours)">
+                  <Input
+                    value={retentionHours}
+                    onChange={({ detail }) => setRetentionHours(detail.value)}
+                    placeholder="24"
+                    type="number"
+                  />
+                </FormField>
+              </Container>
+
+              {/* Encryption */}
+              <Container
+                header={
+                  <Header
+                    variant="h3"
+                    actions={
+                      <>
+                        <Button
+                          loading={startEncryption.isPending}
+                          disabled={!encKeyId.trim()}
+                          onClick={() =>
+                            startEncryption
+                              .mutateAsync({ encryptionType: "KMS", keyId: encKeyId.trim() })
+                              .then(() => setEncKeyId(""))
+                          }
+                        >
+                          Start encryption
+                        </Button>
+                        <Button loading={stopEncryption.isPending} onClick={() => stopEncryption.mutateAsync()}>
+                          Stop encryption
+                        </Button>
+                      </>
+                    }
+                  >
+                    Server-side encryption (current: {streamDetail?.stream?.EncryptionType || "NONE"})
+                  </Header>
+                }
+              >
+                {(startEncryption.isError || stopEncryption.isError) && (
+                  <Alert
+                    type="error"
+                    dismissible
+                    onDismiss={() => {
+                      startEncryption.reset();
+                      stopEncryption.reset();
+                    }}
+                  >
+                    {startEncryption.error?.message ||
+                      stopEncryption.error?.message ||
+                      "Failed to update encryption"}
+                  </Alert>
+                )}
+                <FormField label="KMS key ID (alias, key ID, or ARN)">
+                  <Input
+                    value={encKeyId}
+                    onChange={({ detail }) => setEncKeyId(detail.value)}
+                    placeholder="alias/aws/kinesis"
+                  />
+                </FormField>
+              </Container>
+
+              {/* Enhanced monitoring */}
+              <Container
+                header={<Header variant="h3">Enhanced monitoring (shard-level metrics)</Header>}
+              >
+                {monitorResult && (
+                  <Alert type="success">
+                    Current metrics: {monitorResult.current.length ? monitorResult.current.join(", ") : "none"} ·
+                    Desired: {monitorResult.desired.length ? monitorResult.desired.join(", ") : "none"}
+                  </Alert>
+                )}
+                {(enableMonitoring.isError || disableMonitoring.isError) && (
+                  <Alert
+                    type="error"
+                    dismissible
+                    onDismiss={() => {
+                      enableMonitoring.reset();
+                      disableMonitoring.reset();
+                    }}
+                  >
+                    {enableMonitoring.error?.message ||
+                      disableMonitoring.error?.message ||
+                      "Failed to update monitoring"}
+                  </Alert>
+                )}
+                <SpaceBetween direction="horizontal" size="xs">
+                  <FormField label="Shard-level metrics (comma-separated)">
+                    <Input
+                      value={monitorMetrics}
+                      onChange={({ detail }) => setMonitorMetrics(detail.value)}
+                      placeholder="IncomingBytes, OutgoingBytes"
+                    />
+                  </FormField>
+                  <Button
+                    loading={enableMonitoring.isPending}
+                    onClick={() =>
+                      enableMonitoring
+                        .mutateAsync(
+                          monitorMetrics.split(",").map((m) => m.trim()).filter(Boolean)
+                        )
+                        .then((r) =>
+                          setMonitorResult({
+                            current: r.currentShardLevelMetrics,
+                            desired: r.desiredShardLevelMetrics,
+                          })
+                        )
+                    }
+                  >
+                    Enable
+                  </Button>
+                  <Button
+                    loading={disableMonitoring.isPending}
+                    onClick={() =>
+                      disableMonitoring
+                        .mutateAsync(
+                          monitorMetrics.split(",").map((m) => m.trim()).filter(Boolean)
+                        )
+                        .then((r) =>
+                          setMonitorResult({
+                            current: r.currentShardLevelMetrics || [],
+                            desired: r.desiredShardLevelMetrics || [],
+                          })
+                        )
+                    }
+                  >
+                    Disable
+                  </Button>
+                </SpaceBetween>
+              </Container>
+
+              {/* Stream mode */}
+              <Container header={<Header variant="h3">Stream mode</Header>}>
+                {updateStreamMode.isError && (
+                  <Alert type="error" dismissible onDismiss={() => updateStreamMode.reset()}>
+                    {updateStreamMode.error?.message || "Failed to update stream mode"}
+                  </Alert>
+                )}
+                <SpaceBetween direction="horizontal" size="xs">
+                  <FormField label="Mode">
+                    <Select
+                      selectedOption={
+                        streamMode
+                          ? { label: streamMode, value: streamMode }
+                          : { label: "Select a mode...", value: "" }
+                      }
+                      onChange={({ detail }) => setStreamMode(detail.selectedOption.value!)}
+                      options={[
+                        { label: "PROVISIONED", value: "PROVISIONED" },
+                        { label: "ON_DEMAND", value: "ON_DEMAND" },
+                      ]}
+                      placeholder="Select a mode"
+                    />
+                  </FormField>
+                  <Button
+                    variant="primary"
+                    loading={updateStreamMode.isPending}
+                    disabled={!streamMode || !streamDetail?.stream?.StreamARN}
+                    onClick={() =>
+                      updateStreamMode.mutateAsync({
+                        streamARN: streamDetail!.stream!.StreamARN!,
+                        streamMode,
+                      })
+                    }
+                  >
+                    Update mode
+                  </Button>
+                </SpaceBetween>
+              </Container>
+
+              {/* Resharding */}
+              <Container header={<Header variant="h3">Resharding</Header>}>
+                {(splitShard.isError || mergeShards.isError) && (
+                  <Alert
+                    type="error"
+                    dismissible
+                    onDismiss={() => {
+                      splitShard.reset();
+                      mergeShards.reset();
+                    }}
+                  >
+                    {splitShard.error?.message || mergeShards.error?.message || "Resharding failed"}
+                  </Alert>
+                )}
+                <SpaceBetween size="s">
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <FormField label="Split shard">
+                      <Select
+                        selectedOption={
+                          splitShardId
+                            ? { label: splitShardId, value: splitShardId }
+                            : { label: "Select a shard...", value: "" }
+                        }
+                        onChange={({ detail }) => setSplitShardId(detail.selectedOption.value!)}
+                        options={(shardsData?.shards || []).map((sh: any) => ({
+                          label: sh.ShardId,
+                          value: sh.ShardId,
+                        }))}
+                        placeholder="Select a shard"
+                      />
+                    </FormField>
+                    <FormField label="New starting hash key">
+                      <Input
+                        value={splitHashKey}
+                        onChange={({ detail }) => setSplitHashKey(detail.value)}
+                        placeholder="170141183460469231731687303715884105728"
+                      />
+                    </FormField>
+                    <Button
+                      loading={splitShard.isPending}
+                      disabled={!splitShardId || !splitHashKey.trim()}
+                      onClick={() =>
+                        splitShard
+                          .mutateAsync({ shardToSplit: splitShardId, newStartingHashKey: splitHashKey.trim() })
+                          .then(() => {
+                            setSplitShardId("");
+                            setSplitHashKey("");
+                          })
+                      }
+                    >
+                      Split
+                    </Button>
+                  </SpaceBetween>
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <FormField label="Merge shard">
+                      <Select
+                        selectedOption={
+                          mergeShardA
+                            ? { label: mergeShardA, value: mergeShardA }
+                            : { label: "Select a shard...", value: "" }
+                        }
+                        onChange={({ detail }) => setMergeShardA(detail.selectedOption.value!)}
+                        options={(shardsData?.shards || []).map((sh: any) => ({
+                          label: sh.ShardId,
+                          value: sh.ShardId,
+                        }))}
+                        placeholder="Select a shard"
+                      />
+                    </FormField>
+                    <FormField label="Adjacent shard">
+                      <Select
+                        selectedOption={
+                          mergeShardB
+                            ? { label: mergeShardB, value: mergeShardB }
+                            : { label: "Select a shard...", value: "" }
+                        }
+                        onChange={({ detail }) => setMergeShardB(detail.selectedOption.value!)}
+                        options={(shardsData?.shards || []).map((sh: any) => ({
+                          label: sh.ShardId,
+                          value: sh.ShardId,
+                        }))}
+                        placeholder="Select an adjacent shard"
+                      />
+                    </FormField>
+                    <Button
+                      loading={mergeShards.isPending}
+                      disabled={!mergeShardA || !mergeShardB}
+                      onClick={() =>
+                        mergeShards
+                          .mutateAsync({ shardToMerge: mergeShardA, adjacentShardToMerge: mergeShardB })
+                          .then(() => {
+                            setMergeShardA("");
+                            setMergeShardB("");
+                          })
+                      }
+                    >
+                      Merge
+                    </Button>
+                  </SpaceBetween>
+                </SpaceBetween>
+              </Container>
+
+              {/* Tags */}
+              <Container header={<Header variant="h3">Tags</Header>}>
+                {addTags.isError && (
+                  <Alert type="error" dismissible onDismiss={() => addTags.reset()}>
+                    {addTags.error?.message || "Failed to add tags"}
+                  </Alert>
+                )}
+                {removeTags.isError && (
+                  <Alert type="error" dismissible onDismiss={() => removeTags.reset()}>
+                    {removeTags.error?.message || "Failed to remove tag"}
+                  </Alert>
+                )}
+                <SpaceBetween size="s">
+                  <ResourceTable
+                    resourceName="Tag"
+                    headerTitle={`Tags for ${selectedStream}`}
+                    items={(tagsQuery.data?.tags || []).map((t: any) => ({
+                      key: t.Key,
+                      value: t.Value,
+                    }))}
+                    loading={false}
+                    emptyMessage="No tags"
+                    columns={[
+                      { id: "key", header: "Key", cell: (i: any) => i.key, isRowHeader: true },
+                      { id: "value", header: "Value", cell: (i: any) => i.value },
+                      {
+                        id: "actions",
+                        header: "",
+                        cell: (i: any) => (
+                          <DeleteButton
+                            itemName={i.key}
+                            resourceType="tag"
+                            loading={removeTags.isPending && removeTags.variables === i.key}
+                            onDelete={() => removeTags.mutateAsync([i.key])}
+                          />
+                        ),
+                      },
+                    ]}
+                  />
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <FormField label="Key">
+                      <Input value={newTagKey} onChange={({ detail }) => setNewTagKey(detail.value)} placeholder="env" />
+                    </FormField>
+                    <FormField label="Value">
+                      <Input value={newTagValue} onChange={({ detail }) => setNewTagValue(detail.value)} placeholder="dev" />
+                    </FormField>
+                    <Button
+                      variant="primary"
+                      loading={addTags.isPending}
+                      disabled={!newTagKey.trim()}
+                      onClick={() =>
+                        addTags
+                          .mutateAsync({ tags: { [newTagKey.trim()]: newTagValue.trim() } })
+                          .then(() => {
+                            setNewTagKey("");
+                            setNewTagValue("");
+                          })
+                      }
+                    >
+                      Add tag
+                    </Button>
+                  </SpaceBetween>
+                </SpaceBetween>
+              </Container>
+            </SpaceBetween>
+          ) : (
+            <Alert type="info">Select a stream to manage its settings.</Alert>
           ),
         },
       ]}

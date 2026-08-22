@@ -19,6 +19,17 @@ import {
   GetShardIteratorCommand,
   GetRecordsCommand,
   ListTagsForStreamCommand,
+  IncreaseStreamRetentionPeriodCommand,
+  DecreaseStreamRetentionPeriodCommand,
+  StartStreamEncryptionCommand,
+  StopStreamEncryptionCommand,
+  EnableEnhancedMonitoringCommand,
+  DisableEnhancedMonitoringCommand,
+  UpdateStreamModeCommand,
+  SplitShardCommand,
+  MergeShardsCommand,
+  AddTagsToStreamCommand,
+  RemoveTagsFromStreamCommand,
 } from "@aws-sdk/client-kinesis";
 
 const router = new Hono();
@@ -281,6 +292,156 @@ router.get("/streams/:name/tags", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new ListTagsForStreamCommand({ StreamName: name }));
   return c.json({ tags: result.Tags || [] });
+});
+
+router.put("/streams/:name/tags", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<{ tags?: Record<string, string> }>();
+  if (!body.tags || !Object.keys(body.tags).length)
+    return c.json({ error: "tags is required" }, 400);
+
+  const client = getClient();
+  await client.send(new AddTagsToStreamCommand({ StreamName: name, Tags: body.tags }));
+  return c.json({ tagged: true });
+});
+
+router.delete("/streams/:name/tags", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<{ tagKeys?: string[] }>();
+  if (!body.tagKeys?.length) return c.json({ error: "tagKeys is required" }, 400);
+
+  const client = getClient();
+  await client.send(
+    new RemoveTagsFromStreamCommand({ StreamName: name, TagKeys: body.tagKeys })
+  );
+  return c.json({ untagged: true });
+});
+
+// ── Retention ────────────────────────────────────────────
+
+async function changeRetention(c: Context, command: any) {
+  const name = c.req.param("name");
+  const body = await c.req.json<{ retentionPeriodHours?: number }>();
+  if (!body.retentionPeriodHours)
+    return c.json({ error: "retentionPeriodHours is required" }, 400);
+
+  const client = getClient();
+  await client.send(new command({ StreamName: name, RetentionPeriodHours: body.retentionPeriodHours }));
+  return c.json({ updated: true });
+}
+
+router.post("/streams/:name/retention/increase", (c: Context) => changeRetention(c, IncreaseStreamRetentionPeriodCommand));
+router.post("/streams/:name/retention/decrease", (c: Context) => changeRetention(c, DecreaseStreamRetentionPeriodCommand));
+
+// ── Encryption ───────────────────────────────────────────
+
+router.post("/streams/:name/encryption/start", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<{ encryptionType?: string; keyId?: string }>();
+  if (!body.encryptionType) return c.json({ error: "encryptionType is required" }, 400);
+  if (!body.keyId) return c.json({ error: "keyId is required" }, 400);
+
+  const client = getClient();
+  await client.send(
+    new StartStreamEncryptionCommand({
+      StreamName: name,
+      EncryptionType: body.encryptionType as any,
+      KeyId: body.keyId,
+    })
+  );
+  return c.json({ updated: true });
+});
+
+router.post("/streams/:name/encryption/stop", async (c: Context) => {
+  const name = c.req.param("name");
+  const client = getClient();
+  // AWS requires EncryptionType/KeyId on StopStreamEncryption; Floci ignores them
+  await client.send(
+    new StopStreamEncryptionCommand({
+      StreamName: name,
+      EncryptionType: "NONE",
+      KeyId: "",
+    })
+  );
+  return c.json({ updated: true });
+});
+
+// ── Enhanced Monitoring ──────────────────────────────────
+
+async function changeMonitoring(c: Context, command: any) {
+  const name = c.req.param("name");
+  const body = await c.req.json<{ shardLevelMetrics?: string[] }>();
+
+  const client = getClient();
+  const result: any = await client.send(
+    new command({ StreamName: name, ShardLevelMetrics: body.shardLevelMetrics || [] })
+  );
+  return c.json({
+    streamName: result.StreamName,
+    streamARN: result.StreamARN,
+    currentShardLevelMetrics: result.CurrentShardLevelMetrics || [],
+    desiredShardLevelMetrics: result.DesiredShardLevelMetrics || [],
+  });
+}
+
+router.post("/streams/:name/monitoring/enable", (c: Context) => changeMonitoring(c, EnableEnhancedMonitoringCommand));
+router.post("/streams/:name/monitoring/disable", (c: Context) => changeMonitoring(c, DisableEnhancedMonitoringCommand));
+
+// ── Stream Mode ──────────────────────────────────────────
+
+router.put("/streams/:name/stream-mode", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<{ streamARN?: string; streamMode?: string }>();
+  if (!body.streamARN) return c.json({ error: "streamARN is required" }, 400);
+  if (!body.streamMode) return c.json({ error: "streamMode is required" }, 400);
+
+  const client = getClient();
+  await client.send(
+    new UpdateStreamModeCommand({
+      // Floci requires StreamARN only — StreamName is not valid per the AWS API
+      StreamARN: body.streamARN,
+      StreamModeDetails: { StreamMode: body.streamMode as any },
+    })
+  );
+  return c.json({ updated: true });
+});
+
+// ── Resharding ───────────────────────────────────────────
+
+router.post("/streams/:name/shards/split", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<{ shardToSplit?: string; newStartingHashKey?: string }>();
+  if (!body.shardToSplit) return c.json({ error: "shardToSplit is required" }, 400);
+  if (!body.newStartingHashKey)
+    return c.json({ error: "newStartingHashKey is required" }, 400);
+
+  const client = getClient();
+  await client.send(
+    new SplitShardCommand({
+      StreamName: name,
+      ShardToSplit: body.shardToSplit,
+      NewStartingHashKey: body.newStartingHashKey,
+    })
+  );
+  return c.json({ split: true });
+});
+
+router.post("/streams/:name/shards/merge", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<{ shardToMerge?: string; adjacentShardToMerge?: string }>();
+  if (!body.shardToMerge) return c.json({ error: "shardToMerge is required" }, 400);
+  if (!body.adjacentShardToMerge)
+    return c.json({ error: "adjacentShardToMerge is required" }, 400);
+
+  const client = getClient();
+  await client.send(
+    new MergeShardsCommand({
+      StreamName: name,
+      ShardToMerge: body.shardToMerge,
+      AdjacentShardToMerge: body.adjacentShardToMerge,
+    })
+  );
+  return c.json({ merged: true });
 });
 
 export default router;

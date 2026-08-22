@@ -222,3 +222,157 @@ export function useKinesisTags(streamName: string | null) {
     enabled: !!streamName,
   });
 }
+
+export function useAddKinesisTags(streamName: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { tags: Record<string, string> }) =>
+      api(`/aws/kinesis/streams/${encodeURIComponent(streamName)}/tags`, {
+        method: "PUT",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "kinesis", "tags", streamName] }),
+  });
+}
+
+export function useRemoveKinesisTags(streamName: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (tagKeys: string[]) =>
+      api(`/aws/kinesis/streams/${encodeURIComponent(streamName)}/tags`, {
+        method: "DELETE",
+        body: JSON.stringify({ tagKeys }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "kinesis", "tags", streamName] }),
+  });
+}
+
+// ── Stream Management (retention / encryption / mode) ────
+
+function useInvalidateKinesis() {
+  const qc = useQueryClient();
+  return () => {
+    qc.invalidateQueries({ queryKey: ["aws", "kinesis", "streams"] });
+    qc.invalidateQueries({ queryKey: ["aws", "kinesis", "stream"] });
+  };
+}
+
+export function useIncreaseKinesisRetention(streamName: string) {
+  const invalidate = useInvalidateKinesis();
+  return useMutation({
+    mutationFn: (retentionPeriodHours: number) =>
+      api(`/aws/kinesis/streams/${encodeURIComponent(streamName)}/retention/increase`, {
+        method: "POST",
+        body: JSON.stringify({ retentionPeriodHours }),
+      }),
+    onSuccess: invalidate,
+  });
+}
+
+export function useDecreaseKinesisRetention(streamName: string) {
+  const invalidate = useInvalidateKinesis();
+  return useMutation({
+    mutationFn: (retentionPeriodHours: number) =>
+      api(`/aws/kinesis/streams/${encodeURIComponent(streamName)}/retention/decrease`, {
+        method: "POST",
+        body: JSON.stringify({ retentionPeriodHours }),
+      }),
+    onSuccess: invalidate,
+  });
+}
+
+export function useStartKinesisEncryption(streamName: string) {
+  const invalidate = useInvalidateKinesis();
+  return useMutation({
+    mutationFn: (params: { encryptionType: string; keyId: string }) =>
+      api(`/aws/kinesis/streams/${encodeURIComponent(streamName)}/encryption/start`, {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: invalidate,
+  });
+}
+
+export function useStopKinesisEncryption(streamName: string) {
+  const invalidate = useInvalidateKinesis();
+  return useMutation({
+    mutationFn: () =>
+      api(`/aws/kinesis/streams/${encodeURIComponent(streamName)}/encryption/stop`, {
+        method: "POST",
+      }),
+    onSuccess: invalidate,
+  });
+}
+
+export interface KinesisMonitoringResult {
+  streamName?: string;
+  streamARN?: string;
+  currentShardLevelMetrics: string[];
+  desiredShardLevelMetrics: string[];
+}
+
+export function useEnableKinesisMonitoring(streamName: string) {
+  const invalidate = useInvalidateKinesis();
+  return useMutation({
+    mutationFn: async (shardLevelMetrics: string[]) => {
+      const res = await api<KinesisMonitoringResult>(
+        `/aws/kinesis/streams/${encodeURIComponent(streamName)}/monitoring/enable`,
+        { method: "POST", body: JSON.stringify({ shardLevelMetrics }) }
+      );
+      return { ...res, currentShardLevelMetrics: res.currentShardLevelMetrics || [] };
+    },
+    onSuccess: invalidate,
+  });
+}
+
+export function useDisableKinesisMonitoring(streamName: string) {
+  const invalidate = useInvalidateKinesis();
+  return useMutation({
+    mutationFn: (shardLevelMetrics: string[]) =>
+      api<KinesisMonitoringResult>(
+        `/aws/kinesis/streams/${encodeURIComponent(streamName)}/monitoring/disable`,
+        { method: "POST", body: JSON.stringify({ shardLevelMetrics }) }
+      ),
+    onSuccess: invalidate,
+  });
+}
+
+export function useUpdateKinesisStreamMode(streamName: string) {
+  const invalidate = useInvalidateKinesis();
+  return useMutation({
+    mutationFn: (params: { streamARN: string; streamMode: string }) =>
+      api(`/aws/kinesis/streams/${encodeURIComponent(streamName)}/stream-mode`, {
+        method: "PUT",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: invalidate,
+  });
+}
+
+// ── Resharding ───────────────────────────────────────────
+
+export function useSplitKinesisShard(streamName: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { shardToSplit: string; newStartingHashKey: string }) =>
+      api(`/aws/kinesis/streams/${encodeURIComponent(streamName)}/shards/split`, {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "kinesis", "shards", streamName] }),
+  });
+}
+
+export function useMergeKinesisShards(streamName: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { shardToMerge: string; adjacentShardToMerge: string }) =>
+      api(`/aws/kinesis/streams/${encodeURIComponent(streamName)}/shards/merge`, {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "kinesis", "shards", streamName] }),
+  });
+}
