@@ -34,6 +34,9 @@ import {
   useDeleteDBSubnetGroup,
   useOrderableDBInstanceOptions,
   useModifyDBSubnetGroup,
+  useRDSTags,
+  useRDSAddTags,
+  useRDSRemoveTags,
 } from "./useRDS";
 
 function createWrapper() {
@@ -409,5 +412,47 @@ describe("useModifyDBSubnetGroup", () => {
         body: JSON.stringify({ dbSubnetGroupDescription: "Updated", subnetIds: ["subnet-1"] }),
       }),
     );
+  });
+});
+
+describe("useRDSTags", () => {
+  it("fetches tags with encoded arn", async () => {
+    mockApi.mockResolvedValueOnce({ tags: [{ key: "env", value: "prod" }] });
+    const { result } = renderHook(() => useRDSTags("arn:aws:rds:db:pg1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/rds/tags?arn=arn%3Aaws%3Ards%3Adb%3Apg1");
+    expect(result.current.data?.tags).toEqual([{ key: "env", value: "prod" }]);
+  });
+
+  it("is disabled when arn is null", () => {
+    const { result } = renderHook(() => useRDSTags(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+});
+
+describe("useRDSAddTags", () => {
+  it("posts tags and invalidates on success", async () => {
+    mockApi.mockResolvedValueOnce({ tagged: true });
+    const { result } = renderHook(() => useRDSAddTags(), { wrapper: createWrapper() });
+    result.current.mutate({ arn: "arn:x", tags: { env: "prod" } });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/rds/tags", {
+      method: "POST",
+      body: JSON.stringify({ arn: "arn:x", tags: { env: "prod" } }),
+    });
+  });
+});
+
+describe("useRDSRemoveTags", () => {
+  it("deletes tagKeys and invalidates on success", async () => {
+    mockApi.mockResolvedValueOnce({ untagged: true });
+    const { result } = renderHook(() => useRDSRemoveTags(), { wrapper: createWrapper() });
+    result.current.mutate({ arn: "arn:x", tagKeys: ["env"] });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/rds/tags", {
+      method: "DELETE",
+      body: JSON.stringify({ arn: "arn:x", tagKeys: ["env"] }),
+    });
   });
 });

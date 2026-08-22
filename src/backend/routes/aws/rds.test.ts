@@ -36,6 +36,9 @@ vi.mock("@aws-sdk/client-rds", () => ({
   ModifyDBSubnetGroupCommand: createCmd("ModifyDBSubnetGroupCommand"),
   DeleteDBSubnetGroupCommand: createCmd("DeleteDBSubnetGroupCommand"),
   DescribeOrderableDBInstanceOptionsCommand: createCmd("DescribeOrderableDBInstanceOptionsCommand"),
+  ListTagsForResourceCommand: createCmd("ListTagsForResourceCommand"),
+  AddTagsToResourceCommand: createCmd("AddTagsToResourceCommand"),
+  RemoveTagsFromResourceCommand: createCmd("RemoveTagsFromResourceCommand"),
 }));
 
 import router from "./rds";
@@ -730,3 +733,88 @@ describe("RDS Routes", () => {
     });
   });
 });
+
+  describe("Tags", () => {
+    it("GET /tags — maps TagList", async () => {
+      mockSend.mockResolvedValueOnce({
+        TagList: [{ Key: "env", Value: "prod" }],
+      });
+      const res = await get("/tags?arn=arn:aws:rds:us-east-1:000000000000:db:pg1");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.tags).toEqual([{ key: "env", value: "prod" }]);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("ListTagsForResourceCommand");
+      expect(cmd.ResourceName).toBe("arn:aws:rds:us-east-1:000000000000:db:pg1");
+    });
+
+    it("GET /tags — empty TagList falls back to []", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/tags?arn=arn:x");
+      const body = await res.json();
+      expect(body.tags).toEqual([]);
+    });
+
+    it("GET /tags — 400 when arn missing", async () => {
+      const res = await get("/tags");
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /tags — sends AddTagsToResourceCommand", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/tags", {
+        arn: "arn:x",
+        tags: { env: "prod", team: "db" },
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.tagged).toBe(true);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("AddTagsToResourceCommand");
+      expect(cmd.Tags).toEqual([
+        { Key: "env", Value: "prod" },
+        { Key: "team", Value: "db" },
+      ]);
+    });
+
+    it("POST /tags — 400 when arn missing", async () => {
+      const res = await post("/tags", { tags: { a: "b" } });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /tags — 400 when tags empty", async () => {
+      const res = await post("/tags", { arn: "arn:x", tags: {} });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /tags — 400 when tags missing", async () => {
+      const res = await post("/tags", { arn: "arn:x" });
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE /tags — sends RemoveTagsFromResourceCommand", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/tags", { arn: "arn:x", tagKeys: ["env"] });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.untagged).toBe(true);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("RemoveTagsFromResourceCommand");
+      expect(cmd.TagKeys).toEqual(["env"]);
+    });
+
+    it("DELETE /tags — 400 when arn missing", async () => {
+      const res = await del("/tags", { tagKeys: ["env"] });
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE /tags — 400 when tagKeys empty", async () => {
+      const res = await del("/tags", { arn: "arn:x", tagKeys: [] });
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE /tags — 400 when tagKeys missing", async () => {
+      const res = await del("/tags", { arn: "arn:x" });
+      expect(res.status).toBe(400);
+    });
+  });

@@ -64,6 +64,9 @@ vi.mock("../hooks/useRDS", () => ({
   useRDSClusterParameterGroups: (...args: any[]) => mockRDSClusterParameterGroups(...args),
   useRDSCreateClusterParameterGroup: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
   useRDSDeleteClusterParameterGroup: () => ({ mutateAsync: vi.fn(), isPending: false, variables: null }),
+  useRDSTags: () => ({ data: { tags: [] }, isLoading: false, isError: false, error: null }),
+  useRDSAddTags: () => ({ mutateAsync: vi.fn(), reset: vi.fn(), isPending: false, isError: false, error: null }),
+  useRDSRemoveTags: () => ({ mutateAsync: vi.fn(), reset: vi.fn(), isPending: false, isError: false, error: null, variables: null }),
 }));
 
 vi.mock("../hooks/useDynamoDB", () => ({

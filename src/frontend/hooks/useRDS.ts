@@ -490,3 +490,36 @@ export function useRDSModifyClusterParameterGroupParameters() {
     },
   });
 }
+
+// ── Tags ─────────────────────────────────────────────────
+
+export interface RDSTag {
+  key: string;
+  value: string;
+}
+
+export function useRDSTags(arn: string | null) {
+  return useQuery<{ tags: RDSTag[] }>({
+    queryKey: ["aws", "rds", "tags", arn],
+    queryFn: () => api(`/aws/rds/tags?arn=${encodeURIComponent(arn!)}`),
+    enabled: !!arn,
+  });
+}
+
+export function useRDSAddTags() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { arn: string; tags: Record<string, string> }) =>
+      api("/aws/rds/tags", { method: "POST", body: JSON.stringify(params) }),
+    onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: ["aws", "rds", "tags", v.arn] }),
+  });
+}
+
+export function useRDSRemoveTags() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { arn: string; tagKeys: string[] }) =>
+      api("/aws/rds/tags", { method: "DELETE", body: JSON.stringify(params) }),
+    onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: ["aws", "rds", "tags", v.arn] }),
+  });
+}

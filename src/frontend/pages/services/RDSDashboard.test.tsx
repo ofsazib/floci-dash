@@ -77,6 +77,22 @@ const deleteSGState = vi.hoisted(() => ({
   variables: null as string | null,
 }));
 
+const addTagsState = vi.hoisted(() => ({
+  isPending: false,
+  isError: false,
+  error: null as Error | null,
+}));
+
+const removeTagsState = vi.hoisted(() => ({
+  isPending: false,
+  isError: false,
+  error: null as Error | null,
+  variables: null as any,
+}));
+
+const mockAddTagsReset = vi.hoisted(() => vi.fn());
+const mockRemoveTagsReset = vi.hoisted(() => vi.fn());
+
 const mockApi = vi.hoisted(() => vi.fn());
 
 // ─── Mock hooks ─────────────────────────────────────────
@@ -101,6 +117,9 @@ const mockCreateSubnetGroup = vi.fn();
 const mockDeleteSubnetGroup = vi.fn();
 const mockModifyParams = vi.fn();
 const mockModifyClusterParams = vi.fn();
+const mockTags = vi.fn();
+const mockAddTags = vi.fn();
+const mockRemoveTags = vi.fn();
 
 vi.mock("../../lib/client", () => ({ api: (...args: any[]) => mockApi(...args) }));
 
@@ -175,6 +194,22 @@ vi.mock("../../hooks/useRDS", () => ({
     get isPending() { return deleteSGState.isPending; },
     get variables() { return deleteSGState.variables; },
   }),
+  useRDSTags: (...args: any[]) => mockTags(...args),
+  useRDSAddTags: () => ({
+    mutateAsync: mockAddTags,
+    reset: mockAddTagsReset,
+    get isPending() { return addTagsState.isPending; },
+    get isError() { return addTagsState.isError; },
+    get error() { return addTagsState.error; },
+  }),
+  useRDSRemoveTags: () => ({
+    mutateAsync: mockRemoveTags,
+    reset: mockRemoveTagsReset,
+    get isPending() { return removeTagsState.isPending; },
+    get isError() { return removeTagsState.isError; },
+    get error() { return removeTagsState.error; },
+    get variables() { return removeTagsState.variables; },
+  }),
 }));
 
 import { RDSDashboard } from "./RDSDashboard";
@@ -210,6 +245,15 @@ beforeEach(() => {
   createSGState.error = null;
   deleteSGState.isPending = false;
   deleteSGState.variables = null;
+  addTagsState.isPending = false;
+  addTagsState.isError = false;
+  addTagsState.error = null;
+  removeTagsState.isPending = false;
+  removeTagsState.isError = false;
+  removeTagsState.error = null;
+  removeTagsState.variables = null;
+  mockAddTagsReset.mockClear();
+  mockRemoveTagsReset.mockClear();
 
   mockApi.mockReset();
 
@@ -220,6 +264,7 @@ beforeEach(() => {
   mockSubnetGroups.mockReturnValue({ data: { subnetGroups: [], total: 0 }, isLoading: false, isError: false, error: null });
   mockInstanceDetail.mockReturnValue({ data: undefined, isLoading: false, isError: false, error: null });
   mockClusterDetail.mockReturnValue({ data: undefined, isLoading: false, isError: false, error: null });
+  mockTags.mockReturnValue({ data: undefined, isLoading: false, isError: false, error: null });
   mockCreateInstance.mockImplementation((_body, opts) => opts?.onSuccess?.());
   mockCreateCluster.mockImplementation((_body, opts) => opts?.onSuccess?.());
   mockCreateParamGroup.mockImplementation((_body, opts) => opts?.onSuccess?.());
@@ -2113,5 +2158,158 @@ describe("RDSDashboard — cluster parameter group drill-down", () => {
         expect.any(Object),
       );
     });
+  });
+});
+
+describe("RDSDashboard — tags editor", () => {
+  function setupInstanceDetail(arn?: string) {
+    mockInstances.mockReturnValue({
+      data: { instances: [{ id: "my-db", engine: "postgres", status: "available", dbInstanceClass: "db.t3.micro", allocatedStorage: 20 }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockInstanceDetail.mockReturnValue({
+      data: { id: "my-db", engine: "postgres", status: "available", dbInstanceClass: "db.t3.micro", allocatedStorage: 20, arn },
+      isLoading: false, isError: false, error: null,
+    });
+  }
+
+  it("renders tags for the instance ARN", async () => {
+    setupInstanceDetail("arn:aws:rds:db:my-db");
+    mockTags.mockReturnValue({ data: { tags: [{ key: "env", value: "prod" }] } });
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "my-db" }));
+    expect(await screen.findByText("Tags (1)")).toBeTruthy();
+    expect(screen.getByText("env")).toBeTruthy();
+    expect(screen.getByText("prod")).toBeTruthy();
+    expect(mockTags).toHaveBeenCalledWith("arn:aws:rds:db:my-db");
+  });
+
+  it("shows No tags when the list is empty", async () => {
+    setupInstanceDetail("arn:x");
+    mockTags.mockReturnValue({ data: { tags: [] } });
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "my-db" }));
+    expect(await screen.findByText("No tags")).toBeTruthy();
+  });
+
+  it("adds a tag and clears the inputs on success", async () => {
+    setupInstanceDetail("arn:x");
+    mockTags.mockReturnValue({ data: { tags: [] } });
+    mockAddTags.mockResolvedValue({});
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "my-db" }));
+    await screen.findByText("No tags");
+    await user.type(screen.getByRole("textbox", { name: /^Key$/i }), "team");
+    await user.type(screen.getByRole("textbox", { name: /^Value$/i }), "db");
+    await user.click(screen.getByRole("button", { name: /Add tag/i }));
+    await waitFor(() => expect(mockAddTags).toHaveBeenCalledWith({ arn: "arn:x", tags: { team: "db" } }));
+    await waitFor(() => {
+      expect((screen.getByRole("textbox", { name: /^Key$/i }) as HTMLInputElement).value).toBe("");
+      expect((screen.getByRole("textbox", { name: /^Value$/i }) as HTMLInputElement).value).toBe("");
+    });
+  });
+
+  it("keeps Add tag disabled until a key is entered", async () => {
+    setupInstanceDetail("arn:x");
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "my-db" }));
+    const btn = await screen.findByRole("button", { name: /Add tag/i });
+    expect(btn.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("removes a tag after confirmation", async () => {
+    setupInstanceDetail("arn:x");
+    mockTags.mockReturnValue({ data: { tags: [{ key: "env", value: "prod" }] } });
+    mockRemoveTags.mockResolvedValue({});
+    removeTagsState.variables = { tagKeys: ["env"] };
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "my-db" }));
+    await screen.findByText("env");
+    await user.click(screen.getByRole("button", { name: /Delete env/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() => expect(mockRemoveTags).toHaveBeenCalledWith({ arn: "arn:x", tagKeys: ["env"] }));
+  });
+
+  it("shows the add-tags error message and dismisses it", async () => {
+    setupInstanceDetail("arn:x");
+    addTagsState.isError = true;
+    addTagsState.error = new Error("add failed");
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "my-db" }));
+    expect(await screen.findByText("add failed")).toBeTruthy();
+    const dismiss = document.querySelector('[class*="awsui_dismiss-button"]') as HTMLElement;
+    fireEvent.click(dismiss);
+    await waitFor(() => expect(mockAddTagsReset).toHaveBeenCalled());
+  });
+
+  it("falls back to a generic add-tags error message", async () => {
+    setupInstanceDetail("arn:x");
+    addTagsState.isError = true;
+    addTagsState.error = null;
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "my-db" }));
+    expect(await screen.findByText("Failed to add tags")).toBeTruthy();
+  });
+
+  it("shows the remove-tags error message and dismisses it", async () => {
+    setupInstanceDetail("arn:x");
+    removeTagsState.isError = true;
+    removeTagsState.error = new Error("remove failed");
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "my-db" }));
+    expect(await screen.findByText("remove failed")).toBeTruthy();
+    const dismiss = document.querySelector('[class*="awsui_dismiss-button"]') as HTMLElement;
+    fireEvent.click(dismiss);
+    await waitFor(() => expect(mockRemoveTagsReset).toHaveBeenCalled());
+  });
+
+  it("falls back to a generic remove-tags error message", async () => {
+    setupInstanceDetail("arn:x");
+    removeTagsState.isError = true;
+    removeTagsState.error = null;
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "my-db" }));
+    expect(await screen.findByText("Failed to remove tag")).toBeTruthy();
+  });
+
+  it("disables the tag delete button while that tag removal is pending", async () => {
+    setupInstanceDetail("arn:x");
+    mockTags.mockReturnValue({ data: { tags: [{ key: "env", value: "prod" }] } });
+    removeTagsState.isPending = true;
+    removeTagsState.variables = { tagKeys: ["env"] };
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "my-db" }));
+    const btn = await screen.findByRole("button", { name: /Delete env/i });
+    expect(btn.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("renders tags editor in cluster detail too", async () => {
+    mockClusters.mockReturnValue({
+      data: { clusters: [{ id: "my-cluster", engine: "aurora-postgresql", status: "available", clusterMembers: [] }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockClusterDetail.mockReturnValue({
+      data: { id: "my-cluster", engine: "aurora-postgresql", status: "available", arn: "arn:cluster", clusterMembers: [] },
+      isLoading: false, isError: false, error: null,
+    });
+    mockTags.mockReturnValue({ data: { tags: [{ key: "k", value: "v" }] } });
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    const tabs = screen.getAllByRole("tab");
+    await user.click(tabs[1]);
+    await user.click(screen.getByRole("button", { name: "my-cluster" }));
+    expect(await screen.findByText("k")).toBeTruthy();
+    expect(mockTags).toHaveBeenCalledWith("arn:cluster");
   });
 });

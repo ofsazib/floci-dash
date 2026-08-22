@@ -74,6 +74,9 @@ import {
   useRDSCreateClusterParameterGroup,
   useRDSDeleteClusterParameterGroup,
   useRDSModifyClusterParameterGroupParameters,
+  useRDSTags,
+  useRDSAddTags,
+  useRDSRemoveTags,
   useDBSubnetGroups,
   useCreateDBSubnetGroup,
   useDeleteDBSubnetGroup,
@@ -864,6 +867,76 @@ function RDSDBInstanceList({ onSelect }: { onSelect: (id: string) => void }) {
 // ─── DB Instance Detail ────────────────────────────────
 
 
+function RDSTagsEditor({ arn }: { arn: string }) {
+  const { data } = useRDSTags(arn);
+  const addTags = useRDSAddTags();
+  const removeTags = useRDSRemoveTags();
+  const [newKey, setNewKey] = useState("");
+  const [newValue, setNewValue] = useState("");
+  const tags = data?.tags || [];
+
+  return (
+    <Container header={<Header variant="h3">Tags</Header>}>
+      {addTags.isError && (
+        <Alert type="error" dismissible onDismiss={() => addTags.reset()}>
+          {(addTags.error as Error)?.message || "Failed to add tags"}
+        </Alert>
+      )}
+      {removeTags.isError && (
+        <Alert type="error" dismissible onDismiss={() => removeTags.reset()}>
+          {(removeTags.error as Error)?.message || "Failed to remove tag"}
+        </Alert>
+      )}
+      <ResourceTable
+        resourceName="Tag"
+        headerTitle={`Tags (${tags.length})`}
+        items={tags}
+        columns={[
+          { id: "key", header: "Key", cell: (t: any) => t.key, isRowHeader: true },
+          { id: "value", header: "Value", cell: (t: any) => t.value },
+          {
+            id: "actions",
+            header: "",
+            cell: (t: any) => (
+              <DeleteButton
+                itemName={t.key}
+                resourceType="tag"
+                loading={removeTags.isPending && removeTags.variables?.tagKeys?.[0] === t.key}
+                onDelete={() => removeTags.mutateAsync({ arn, tagKeys: [t.key] })}
+              />
+            ),
+          },
+        ]}
+        emptyMessage="No tags"
+        loading={false}
+      />
+      <SpaceBetween direction="horizontal" size="xs">
+        <FormField label="Key">
+          <Input value={newKey} onChange={({ detail }) => setNewKey(detail.value)} placeholder="env" />
+        </FormField>
+        <FormField label="Value">
+          <Input value={newValue} onChange={({ detail }) => setNewValue(detail.value)} placeholder="prod" />
+        </FormField>
+        <Button
+          variant="primary"
+          loading={addTags.isPending}
+          disabled={!newKey.trim()}
+          onClick={() =>
+            addTags
+              .mutateAsync({ arn, tags: { [newKey.trim()]: newValue.trim() } })
+              .then(() => {
+                setNewKey("");
+                setNewValue("");
+              })
+          }
+        >
+          Add tag
+        </Button>
+      </SpaceBetween>
+    </Container>
+  );
+}
+
 function RDSDBInstanceDetail({
   id,
   onBack,
@@ -940,6 +1013,7 @@ function RDSDBInstanceDetail({
           { label: "ARN", value: data.arn || "N/A" },
         ]}
       />
+      <RDSTagsEditor arn={data.arn!} />
     </SpaceBetween>
   );
 }
@@ -1249,6 +1323,7 @@ function RDSDBClusterDetail({
           { label: "ARN", value: data.arn || "N/A" },
         ]}
       />
+      <RDSTagsEditor arn={data.arn!} />
     </SpaceBetween>
   );
 }
