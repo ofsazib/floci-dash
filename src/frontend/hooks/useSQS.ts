@@ -101,6 +101,59 @@ export function useSQSMoveDLQMessages() {
   });
 }
 
+// ── Message Move Tasks (native DLQ redrive) ─────────────
+
+export interface SQSMoveTask {
+  taskHandle: string;
+  sourceArn: string;
+  destinationArn: string | null;
+  maxRate?: number;
+  status: string;
+  moved?: number;
+  toMove?: number;
+  startedTimestamp?: number;
+  failureReason: string | null;
+}
+
+export function useSQSStartMoveTask() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: {
+      sourceArn: string;
+      destinationArn?: string;
+      maxNumberOfMessagesPerSecond?: number;
+    }) =>
+      api<{ taskHandle: string }>("/aws/sqs/queues/move-tasks", {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "sqs", "move-tasks"] }),
+  });
+}
+
+export function useSQSMoveTasks(sourceArn: string | null) {
+  return useQuery<{ tasks: SQSMoveTask[]; total: number }>({
+    queryKey: ["aws", "sqs", "move-tasks", sourceArn],
+    queryFn: () =>
+      api(`/aws/sqs/queues/move-tasks?sourceArn=${encodeURIComponent(sourceArn!)}`),
+    enabled: !!sourceArn,
+  });
+}
+
+export function useSQSCancelMoveTask() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (taskHandle: string) =>
+      api<{ moved: number }>("/aws/sqs/queues/move-tasks/cancel", {
+        method: "POST",
+        body: JSON.stringify({ taskHandle }),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "sqs", "move-tasks"] }),
+  });
+}
+
 export function useCreateSQSQueue() {
   const qc = useQueryClient();
   return useMutation({

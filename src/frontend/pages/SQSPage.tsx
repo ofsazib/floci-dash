@@ -35,6 +35,9 @@ import {
   useSQSMessages,
   useSQSQueueTags,
   useSQSDLQSources,
+  useSQSStartMoveTask,
+  useSQSMoveTasks,
+  useSQSCancelMoveTask,
   useCreateSQSQueue,
   useDeleteSQSQueue,
   usePurgeSQSQueue,
@@ -925,38 +928,197 @@ function TagsTab({
 function DLQTab({ queueUrl }: { queueUrl: string }) {
   const { data, isLoading } = useSQSDLQSources(queueUrl);
   const sources = data?.queueUrls || [];
+  const { showToast } = useToast();
+
+  // Native redrive (message move tasks) — SourceArn is this queue's ARN
+  const dlqArn = queueUrlToArn(queueUrl);
+  const { data: tasksData } = useSQSMoveTasks(dlqArn);
+  const startTask = useSQSStartMoveTask();
+  const cancelTask = useSQSCancelMoveTask();
+  const [showStartRedrive, setShowStartRedrive] = useState(false);
+  const [redriveForm, setRedriveForm] = useState({ destinationUrl: "", maxRate: "" });
+  const tasks = tasksData?.tasks || [];
 
   return (
-    <Container header={<Header variant="h2">Dead Letter Queue Sources</Header>}>
-      {isLoading ? (
-        <Spinner />
-      ) : sources.length === 0 ? (
-        <Box textAlign="center" padding={{ top: "l", bottom: "l" }}>
-          <StatusIndicator type="info">
-            No queues are using this queue as a dead letter queue
-          </StatusIndicator>
-        </Box>
-      ) : (
+    <SpaceBetween size="l">
+      <Container header={<Header variant="h2">Dead Letter Queue Sources</Header>}>
+        {isLoading ? (
+          <Spinner />
+        ) : sources.length === 0 ? (
+          <Box textAlign="center" padding={{ top: "l", bottom: "l" }}>
+            <StatusIndicator type="info">
+              No queues are using this queue as a dead letter queue
+            </StatusIndicator>
+          </Box>
+        ) : (
+          <Table
+            items={sources.map((url) => ({ url, name: extractQueueName(url) }))}
+            columnDefinitions={[
+              {
+                id: "name",
+                header: "Source queue",
+                cell: (item: { url: string; name: string }) => item.name,
+              },
+              {
+                id: "url",
+                header: "Queue URL",
+                cell: (item: { url: string }) => (
+                  <Box fontSize="body-s" color="text-body-secondary">
+                    {item.url}
+                  </Box>
+                ),
+              },
+            ]}
+          />
+        )}
+      </Container>
+
+      <Container
+        header={
+          <Header
+            variant="h2"
+            actions={
+              <Button onClick={() => setShowStartRedrive(true)}>Start redrive</Button>
+            }
+          >
+            Message move tasks ({tasks.length})
+          </Header>
+        }
+      >
         <Table
-          items={sources.map((url) => ({ url, name: extractQueueName(url) }))}
+          items={tasks}
           columnDefinitions={[
             {
-              id: "name",
-              header: "Source queue",
-              cell: (item: { url: string; name: string }) => item.name,
-            },
-            {
-              id: "url",
-              header: "Queue URL",
-              cell: (item: { url: string }) => (
-                <Box fontSize="body-s" color="text-body-secondary">
-                  {item.url}
+              id: "handle",
+              header: "Task handle",
+              cell: (t: any) => (
+                <Box fontSize="body-s">
+                  {(t.taskHandle || "").slice(0, 24)}
+                  {(t.taskHandle || "").length > 24 ? "…" : ""}
                 </Box>
               ),
             },
+            {
+              id: "status",
+              header: "Status",
+              cell: (t: any) => (
+                <StatusIndicator type={t.status === "COMPLETED" ? "success" : t.status === "FAILED" ? "error" : "in-progress"}>
+                  {t.status || "RUNNING"}
+                </StatusIndicator>
+              ),
+            },
+            {
+              id: "destination",
+              header: "Destination",
+              cell: (t: any) =>
+                t.destinationArn
+                  ? t.destinationArn.split(":").pop()!
+                  : t.sourceArn
+                  ? t.sourceArn.split(":").pop()!
+                  : "—",
+            },
+            { id: "moved", header: "Moved", cell: (t: any) => String(t.moved ?? 0) },
+            { id: "toMove", header: "To move", cell: (t: any) => String(t.toMove ?? 0) },
+            {
+              id: "started",
+              header: "Started",
+              cell: (t: any) =>
+                t.startedTimestamp ? new Date(t.startedTimestamp).toLocaleString() : "—",
+            },
+            { id: "failure", header: "Failure reason", cell: (t: any) => t.failureReason || "—" },
+            {
+              id: "actions",
+              header: "",
+              cell: (t: any) =>
+                t.status === "CANCELLED" || t.status === "COMPLETED" || t.status === "FAILED" ? null : (
+                  <Button
+                    loading={cancelTask.isPending && cancelTask.variables === t.taskHandle}
+                    onClick={() =>
+                      cancelTask
+                        .mutateAsync(t.taskHandle)
+                        .then((r) => showToast("success", `Redrive cancelled — ${r.moved} messages moved`))
+                        .catch((e) => showToast("error", (e as Error)?.message || "Failed to cancel task"))
+                    }
+                  >
+                    Cancel
+                  </Button>
+                ),
+            },
           ]}
+          empty={
+            <Box textAlign="center" padding={{ top: "l", bottom: "l" }}>
+              <StatusIndicator type="info">No message move tasks</StatusIndicator>
+            </Box>
+          }
         />
-      )}
-    </Container>
+      </Container>
+
+      <Modal
+        visible={showStartRedrive}
+        onDismiss={() => setShowStartRedrive(false)}
+        header="Start redrive from this DLQ"
+        footer={
+          <Box>
+            <Button
+              variant="primary"
+              loading={startTask.isPending}
+              disabled={!redriveForm.destinationUrl.trim()}
+              onClick={() =>
+                startTask
+                  .mutateAsync({
+                    sourceArn: dlqArn,
+                    destinationArn: queueUrlToArn(redriveForm.destinationUrl.trim()),
+                    maxNumberOfMessagesPerSecond:
+                      parseInt(redriveForm.maxRate) || undefined,
+                  })
+                  .then(() => {
+                    setShowStartRedrive(false);
+                    setRedriveForm({ destinationUrl: "", maxRate: "" });
+                    showToast("success", "Redrive task started");
+                  })
+                  .catch((e) => showToast("error", (e as Error)?.message || "Failed to start redrive"))
+              }
+            >
+              Start
+            </Button>
+            <Button onClick={() => setShowStartRedrive(false)}>Cancel</Button>
+          </Box>
+        }
+      >
+        <Form>
+          <FormField label="Destination queue URL (empty = original source queue)">
+            <Input
+              value={redriveForm.destinationUrl}
+              onChange={({ detail }) =>
+                setRedriveForm((p) => ({ ...p, destinationUrl: detail.value }))
+              }
+              placeholder="http://localhost:4566/000000000000/source-queue"
+            />
+          </FormField>
+          <FormField label="Max messages per second (optional)">
+            <Input
+              type="number"
+              value={redriveForm.maxRate}
+              onChange={({ detail }) => setRedriveForm((p) => ({ ...p, maxRate: detail.value }))}
+              placeholder="10"
+            />
+          </FormField>
+        </Form>
+      </Modal>
+    </SpaceBetween>
   );
+}
+
+/** Derive a queue ARN from its endpoint URL (Floci URLs carry account + name in the path). */
+export function queueUrlToArn(url: string): string {
+  try {
+    const u = new URL(url);
+    const parts = u.pathname.split("/").filter(Boolean);
+    const account = parts.length >= 2 ? parts[parts.length - 2] : "000000000000";
+    const name = parts[parts.length - 1] || "";
+    const regionMatch = u.hostname.match(/^sqs[.-]([a-z0-9-]+)\./i);
+    return `arn:aws:sqs:${regionMatch?.[1] || "us-east-1"}:${account}:${name}`;
+  } catch {
+    return `arn:aws:sqs:us-east-1:000000000000:${url}`;
+  }
 }

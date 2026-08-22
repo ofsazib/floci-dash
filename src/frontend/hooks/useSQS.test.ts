@@ -25,6 +25,9 @@ import {
   useDeleteSQSMessage,
   useChangeSQSVisibility,
   useSQSMoveDLQMessages,
+  useSQSStartMoveTask,
+  useSQSMoveTasks,
+  useSQSCancelMoveTask,
   extractQueueName,
 } from "./useSQS";
 
@@ -319,5 +322,58 @@ describe("useSQSMoveDLQMessages", () => {
         body: JSON.stringify({ dlqUrl: "dlq", sourceUrl: "src" }),
       }),
     );
+  });
+});
+
+describe("useSQSStartMoveTask", () => {
+  it("posts move-task params and returns the handle", async () => {
+    mockApi.mockResolvedValueOnce({ taskHandle: "h1" });
+    const { result } = renderHook(() => useSQSStartMoveTask(), { wrapper: createWrapper() });
+    const data = await result.current.mutateAsync({
+      sourceArn: "arn:aws:sqs:us-east-1:000:dq",
+      destinationArn: "arn:aws:sqs:us-east-1:000:sq",
+      maxNumberOfMessagesPerSecond: 5,
+    });
+    expect(data.taskHandle).toBe("h1");
+    expect(mockApi).toHaveBeenCalledWith("/aws/sqs/queues/move-tasks", {
+      method: "POST",
+      body: JSON.stringify({
+        sourceArn: "arn:aws:sqs:us-east-1:000:dq",
+        destinationArn: "arn:aws:sqs:us-east-1:000:sq",
+        maxNumberOfMessagesPerSecond: 5,
+      }),
+    });
+  });
+});
+
+describe("useSQSMoveTasks", () => {
+  it("fetches tasks for the encoded source ARN", async () => {
+    mockApi.mockResolvedValueOnce({ tasks: [], total: 0 });
+    const { result } = renderHook(
+      () => useSQSMoveTasks("arn:aws:sqs:us-east-1:000:dq"),
+      { wrapper: createWrapper() }
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/sqs/queues/move-tasks?sourceArn=arn%3Aaws%3Asqs%3Aus-east-1%3A000%3Adq"
+    );
+  });
+
+  it("is idle when sourceArn is null", () => {
+    const { result } = renderHook(() => useSQSMoveTasks(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+});
+
+describe("useSQSCancelMoveTask", () => {
+  it("posts the task handle and returns moved count", async () => {
+    mockApi.mockResolvedValueOnce({ moved: 7 });
+    const { result } = renderHook(() => useSQSCancelMoveTask(), { wrapper: createWrapper() });
+    const data = await result.current.mutateAsync("h1");
+    expect(data.moved).toBe(7);
+    expect(mockApi).toHaveBeenCalledWith("/aws/sqs/queues/move-tasks/cancel", {
+      method: "POST",
+      body: JSON.stringify({ taskHandle: "h1" }),
+    });
   });
 });

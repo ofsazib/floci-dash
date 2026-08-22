@@ -39,6 +39,9 @@ vi.mock("@aws-sdk/client-sqs", () => ({
   ListDeadLetterSourceQueuesCommand: createCmd("ListDeadLetterSourceQueuesCommand"),
   AddPermissionCommand: createCmd("AddPermissionCommand"),
   RemovePermissionCommand: createCmd("RemovePermissionCommand"),
+  StartMessageMoveTaskCommand: createCmd("StartMessageMoveTaskCommand"),
+  ListMessageMoveTasksCommand: createCmd("ListMessageMoveTasksCommand"),
+  CancelMessageMoveTaskCommand: createCmd("CancelMessageMoveTaskCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -627,5 +630,142 @@ describe("SQS Routes", () => {
       const res = await del("/queues/permissions?queueUrl=only-url");
       expect(res.status).toBe(400);
     });
+  });
+});
+
+describe("Message Move Tasks (native redrive, G.73)", () => {
+  it("POST /queues/move-tasks — starts a task (201)", async () => {
+    mockSend.mockResolvedValueOnce({ TaskHandle: "handle-1" });
+    const res = await post("/queues/move-tasks", {
+      sourceArn: "arn:aws:sqs:us-east-1:000:dq",
+      destinationArn: "arn:aws:sqs:us-east-1:000:sq",
+      maxNumberOfMessagesPerSecond: 5,
+    });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.taskHandle).toBe("handle-1");
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        __cmdName: "StartMessageMoveTaskCommand",
+        SourceArn: "arn:aws:sqs:us-east-1:000:dq",
+        DestinationArn: "arn:aws:sqs:us-east-1:000:sq",
+        MaxNumberOfMessagesPerSecond: 5,
+      })
+    );
+  });
+
+  it("POST /queues/move-tasks — omits optional destination and rate", async () => {
+    mockSend.mockResolvedValueOnce({ TaskHandle: "h2" });
+    const res = await post("/queues/move-tasks", {
+      sourceArn: "arn:aws:sqs:us-east-1:000:dq",
+    });
+    expect(res.status).toBe(201);
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        DestinationArn: undefined,
+        MaxNumberOfMessagesPerSecond: undefined,
+      })
+    );
+  });
+
+  it("POST /queues/move-tasks — 400 when sourceArn missing", async () => {
+    const res = await post("/queues/move-tasks", {});
+    expect(res.status).toBe(400);
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  it("GET /queues/move-tasks — lists tasks with mapped fields", async () => {
+    mockSend.mockResolvedValueOnce({
+      Results: [
+        {
+          TaskHandle: "h1",
+          SourceArn: "arn:aws:sqs:us-east-1:000:dq",
+          DestinationArn: "arn:aws:sqs:us-east-1:000:sq",
+          MaxNumberOfMessagesPerSecond: 3,
+          Status: "RUNNING",
+          ApproximateNumberOfMessagesMoved: 12,
+          ApproximateNumberOfMessagesToMove: 88,
+          StartedTimestamp: 1700000000000,
+        },
+        {
+          TaskHandle: "h2",
+          SourceArn: "arn:aws:sqs:us-east-1:000:dq",
+          Status: "FAILED",
+          ApproximateNumberOfMessagesMoved: 1,
+          FailureReason: "boom",
+        },
+      ],
+    });
+    const res = await get(
+      "/queues/move-tasks?sourceArn=arn%3Aaws%3Asqs%3Aus-east-1%3A000%3Adq&maxResults=5"
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.total).toBe(2);
+    expect(body.tasks[0]).toEqual({
+      taskHandle: "h1",
+      sourceArn: "arn:aws:sqs:us-east-1:000:dq",
+      destinationArn: "arn:aws:sqs:us-east-1:000:sq",
+      maxRate: 3,
+      status: "RUNNING",
+      moved: 12,
+      toMove: 88,
+      startedTimestamp: 1700000000000,
+      failureReason: null,
+    });
+    expect(body.tasks[1].failureReason).toBe("boom");
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        __cmdName: "ListMessageMoveTasksCommand",
+        SourceArn: "arn:aws:sqs:us-east-1:000:dq",
+        MaxResults: 5,
+      })
+    );
+  });
+
+  it("GET /queues/move-tasks — sparse response and no maxResults passthrough", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get(
+      "/queues/move-tasks?sourceArn=arn%3Aaws%3Asqs%3Aus-east-1%3A000%3Adq"
+    );
+    const body = await res.json();
+    expect(body.tasks).toEqual([]);
+    expect(body.total).toBe(0);
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({ MaxResults: undefined })
+    );
+  });
+
+  it("GET /queues/move-tasks — 400 when sourceArn missing", async () => {
+    const res = await get("/queues/move-tasks");
+    expect(res.status).toBe(400);
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  it("POST /queues/move-tasks/cancel — cancels and returns moved count", async () => {
+    mockSend.mockResolvedValueOnce({ ApproximateNumberOfMessagesMoved: 42 });
+    const res = await post("/queues/move-tasks/cancel", { taskHandle: "h1" });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.moved).toBe(42);
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        __cmdName: "CancelMessageMoveTaskCommand",
+        TaskHandle: "h1",
+      })
+    );
+  });
+
+  it("POST /queues/move-tasks/cancel — defaults moved to 0 when missing", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/queues/move-tasks/cancel", { taskHandle: "h1" });
+    const body = await res.json();
+    expect(body.moved).toBe(0);
+  });
+
+  it("POST /queues/move-tasks/cancel — 400 when taskHandle missing", async () => {
+    const res = await post("/queues/move-tasks/cancel", {});
+    expect(res.status).toBe(400);
+    expect(mockSend).not.toHaveBeenCalled();
   });
 });

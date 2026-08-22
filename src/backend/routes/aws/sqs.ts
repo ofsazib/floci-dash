@@ -23,6 +23,9 @@ import {
   ListDeadLetterSourceQueuesCommand,
   AddPermissionCommand,
   RemovePermissionCommand,
+  StartMessageMoveTaskCommand,
+  ListMessageMoveTasksCommand,
+  CancelMessageMoveTaskCommand,
 } from "@aws-sdk/client-sqs";
 import type { QueueAttributeName } from "@aws-sdk/client-sqs";
 import { flociFetch } from "../../clients/floci";
@@ -241,9 +244,65 @@ router.get("/queues/dlq-sources", async (c: Context) => {
   return c.json({ queueUrls: result.queueUrls || [] });
 });
 
+// ── Message Move Tasks (native DLQ redrive) ─────────────
+
+router.post("/queues/move-tasks", async (c: Context) => {
+  const body = await c.req.json<{
+    sourceArn?: string;
+    destinationArn?: string;
+    maxNumberOfMessagesPerSecond?: number;
+  }>();
+  if (!body.sourceArn) return c.json({ error: "sourceArn is required" }, 400);
+
+  const client = getClient();
+  const result = await client.send(
+    new StartMessageMoveTaskCommand({
+      SourceArn: body.sourceArn,
+      DestinationArn: body.destinationArn || undefined,
+      MaxNumberOfMessagesPerSecond: body.maxNumberOfMessagesPerSecond || undefined,
+    })
+  );
+  return c.json({ taskHandle: result.TaskHandle }, 201);
+});
+
+router.get("/queues/move-tasks", async (c: Context) => {
+  const sourceArn = c.req.query("sourceArn");
+  if (!sourceArn) return c.json({ error: "sourceArn query parameter required" }, 400);
+
+  const client = getClient();
+  const result = await client.send(
+    new ListMessageMoveTasksCommand({
+      SourceArn: sourceArn,
+      MaxResults: c.req.query("maxResults") ? parseInt(c.req.query("maxResults")!) : undefined,
+    })
+  );
+  const tasks = (result.Results || []).map((t: any) => ({
+    taskHandle: t.TaskHandle,
+    sourceArn: t.SourceArn,
+    destinationArn: t.DestinationArn || null,
+    maxRate: t.MaxNumberOfMessagesPerSecond,
+    status: t.Status,
+    moved: t.ApproximateNumberOfMessagesMoved,
+    toMove: t.ApproximateNumberOfMessagesToMove,
+    startedTimestamp: t.StartedTimestamp,
+    failureReason: t.FailureReason || null,
+  }));
+  return c.json({ tasks, total: tasks.length });
+});
+
+router.post("/queues/move-tasks/cancel", async (c: Context) => {
+  const body = await c.req.json<{ taskHandle?: string }>();
+  if (!body.taskHandle) return c.json({ error: "taskHandle is required" }, 400);
+
+  const client = getClient();
+  const result = await client.send(
+    new CancelMessageMoveTaskCommand({ TaskHandle: body.taskHandle })
+  );
+  return c.json({ moved: result.ApproximateNumberOfMessagesMoved ?? 0 });
+});
+
 // Move messages from a DLQ to a source queue
-router.post("/queues/dlq/move-tasks", async (c: Context) => {
-  const body = await c.req.json();
+router.post("/queues/dlq/move-tasks", async (c: Context) => {  const body = await c.req.json();
   const { dlqUrl, sourceUrl, maxMessages = 10 } = body;
   if (!dlqUrl || !sourceUrl)
     return c.json({ error: "dlqUrl and sourceUrl are required" }, 400);

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../test/helpers";
 import React from "react";
@@ -10,6 +10,10 @@ const mockSQSAttributes = vi.fn();
 const mockSQSMessages = vi.fn();
 const mockSQSQueueTags = vi.fn();
 const mockSQSDLQSources = vi.fn();
+const mockMoveTasksQuery = vi.fn();
+const mockStartMoveTask = vi.fn();
+const mockCancelMoveTask = vi.fn();
+const cancelMoveState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
 const mockCreateQueueMutate = vi.fn();
 const mockDeleteQueueMutate = vi.fn();
 const mockPurgeQueueMutate = vi.fn();
@@ -29,6 +33,16 @@ vi.mock("../hooks/useSQS", () => ({
   useSQSMessages: (...args: any[]) => mockSQSMessages(...args),
   useSQSQueueTags: (...args: any[]) => mockSQSQueueTags(...args),
   useSQSDLQSources: (...args: any[]) => mockSQSDLQSources(...args),
+  useSQSStartMoveTask: () => ({
+    mutateAsync: mockStartMoveTask,
+    isPending: false,
+  }),
+  useSQSMoveTasks: (...args: any[]) => mockMoveTasksQuery(...args),
+  useSQSCancelMoveTask: () => ({
+    mutateAsync: mockCancelMoveTask,
+    get isPending() { return cancelMoveState.isPending; },
+    get variables() { return cancelMoveState.variables; },
+  }),
   useCreateSQSQueue: () => ({ mutate: mockCreateQueueMutate, isPending: false }),
   useDeleteSQSQueue: () => ({ mutate: mockDeleteQueueMutate, isPending: false }),
   usePurgeSQSQueue: () => ({ mutate: mockPurgeQueueMutate, isPending: false }),
@@ -56,7 +70,7 @@ vi.mock("react-router-dom", () => ({
   useSearchParams: (...args: any[]) => mockSearchParams(...args),
 }));
 
-import SQSPage from "./SQSPage";
+import SQSPage, { queueUrlToArn } from "./SQSPage";
 describe("SQSPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -68,6 +82,9 @@ describe("SQSPage", () => {
     mockSQSMessages.mockReturnValue({ data: { messages: [] }, isLoading: false });
     mockSQSQueueTags.mockReturnValue({ data: { tags: {} }, isLoading: false });
     mockSQSDLQSources.mockReturnValue({ data: { queueUrls: [] }, isLoading: false });
+    mockMoveTasksQuery.mockReturnValue({ data: { tasks: [], total: 0 } });
+    mockStartMoveTask.mockResolvedValue({ taskHandle: "h-new" });
+    mockCancelMoveTask.mockResolvedValue({ moved: 5 });
     mockSearchParams.mockReturnValue([new URLSearchParams(), mockSetSearchParams]);
     mockConfirm.mockResolvedValue(true);
     mockCreateQueueMutate.mockImplementation((_args: any, opts: any) => opts?.onSuccess?.({}));
@@ -1054,5 +1071,313 @@ describe("SQSPage", () => {
     await waitFor(() => {
       expect(mockShowToast).toHaveBeenCalledWith("error", "Remove failed: boom");
     });
+  });
+});
+
+// ─── G.73: native redrive (message move tasks) ──────────
+
+const RUNNING_TASK = {
+  taskHandle: "handle-abcdefghijklmnopqrstuvwxyz",
+  sourceArn: "arn:aws:sqs:us-east-1:000000000000:my-queue",
+  destinationArn: "arn:aws:sqs:us-east-1:000000000000:source-queue",
+  maxRate: 3,
+  status: "RUNNING",
+  moved: 12,
+  toMove: 88,
+  startedTimestamp: 1700000000000,
+  failureReason: null,
+};
+
+function dialogOf(headerText: string | RegExp): HTMLElement {
+  const header = screen
+    .getAllByText(headerText)
+    .find((h) => h.closest('[role="dialog"]'));
+  return header!.closest('[role="dialog"]') as HTMLElement;
+}
+
+/** Row-level Cancel buttons live outside dialogs (hidden modals keep theirs mounted). */
+function rowCancelButtons() {
+  return screen
+    .queryAllByRole("button", { name: /^Cancel$/i })
+    .filter((b) => !b.closest('[role="dialog"]'));
+}
+
+describe("SQSPage — DLQ redrive (G.73)", () => {
+  let user: ReturnType<typeof userEvent.setup>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    user = userEvent.setup();
+    mockSQSQueues.mockReturnValue({
+      data: { queueUrls: ["http://localhost:4566/000000000000/my-queue"] },
+      isLoading: false, isError: false, error: null,
+    });
+    mockSQSAttributes.mockReturnValue({ data: { attributes: {} }, isLoading: false });
+    mockSQSMessages.mockReturnValue({ data: { messages: [] }, isLoading: false });
+    mockSQSQueueTags.mockReturnValue({ data: { tags: {} }, isLoading: false });
+    mockSQSDLQSources.mockReturnValue({ data: { queueUrls: [] }, isLoading: false });
+    mockMoveTasksQuery.mockReturnValue({ data: { tasks: [], total: 0 } });
+    mockStartMoveTask.mockResolvedValue({ taskHandle: "h-new" });
+    mockCancelMoveTask.mockResolvedValue({ moved: 5 });
+    cancelMoveState.isPending = false;
+    cancelMoveState.variables = null;
+    mockSearchParams.mockReturnValue([
+      new URLSearchParams("?queueUrl=http://localhost:4566/000000000000/my-queue"),
+      vi.fn(),
+    ]);
+    mockConfirm.mockResolvedValue(true);
+  });
+
+  async function openDlqTab() {
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("DLQ"));
+    await waitFor(() =>
+      expect(screen.getByText(/Message move tasks/)).toBeTruthy()
+    );
+  }
+
+  it("renders the move-tasks container with count and empty state", async () => {
+    await openDlqTab();
+    expect(screen.getByText(/Message move tasks \(0\)/)).toBeTruthy();
+    expect(screen.getByText(/No message move tasks/i)).toBeTruthy();
+  });
+
+  it("renders running task rows with all mapped fields", async () => {
+    mockMoveTasksQuery.mockReturnValue({ data: { tasks: [RUNNING_TASK], total: 1 } });
+    await openDlqTab();
+    expect(screen.getByText(/Message move tasks \(1\)/)).toBeTruthy();
+    expect(screen.getByText("RUNNING")).toBeTruthy();
+    expect(screen.getByText("source-queue")).toBeTruthy();
+    expect(screen.getByText("12")).toBeTruthy();
+    expect(screen.getByText("88")).toBeTruthy();
+    expect(screen.getByText(/handle-abcdefghijklmnop/)).toBeTruthy();
+    expect(screen.getByText(new Date(1700000000000).toLocaleString())).toBeTruthy();
+    // failureReason null -> dash
+    expect(rowCancelButtons().length).toBe(1);
+  });
+
+  it("shows dashes and zero fallbacks for sparse task rows", async () => {
+    mockMoveTasksQuery.mockReturnValue({
+      data: { tasks: [{ taskHandle: "short", status: "" }], total: 1 },
+    });
+    await openDlqTab();
+    expect(screen.getByText("short")).toBeTruthy();
+    expect(screen.getAllByText("0").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("RUNNING")).toBeTruthy(); // status || "RUNNING"
+  });
+
+  it("shows terminal-status rows without a row Cancel button", async () => {
+    mockMoveTasksQuery.mockReturnValue({
+      data: {
+        tasks: [
+          { ...RUNNING_TASK, status: "COMPLETED" },
+          { ...RUNNING_TASK, taskHandle: "h-failed", status: "FAILED", failureReason: "boom" },
+        ],
+        total: 2,
+      },
+    });
+    await openDlqTab();
+    expect(screen.getByText("COMPLETED")).toBeTruthy();
+    expect(screen.getByText("FAILED")).toBeTruthy();
+    expect(screen.getByText("boom")).toBeTruthy();
+    expect(rowCancelButtons().length).toBe(0);
+  });
+
+  it("cancels a running task and shows a success toast", async () => {
+    mockMoveTasksQuery.mockReturnValue({ data: { tasks: [RUNNING_TASK], total: 1 } });
+    await openDlqTab();
+    await user.click(rowCancelButtons()[0]);
+    await waitFor(() => {
+      expect(mockCancelMoveTask).toHaveBeenCalledWith(
+        "handle-abcdefghijklmnopqrstuvwxyz"
+      );
+      expect(mockShowToast).toHaveBeenCalledWith(
+        "success",
+        "Redrive cancelled — 5 messages moved"
+      );
+    });
+  });
+
+  it("shows an error toast when cancel fails", async () => {
+    mockMoveTasksQuery.mockReturnValue({ data: { tasks: [RUNNING_TASK], total: 1 } });
+    mockCancelMoveTask.mockRejectedValueOnce(new Error(""));
+    await openDlqTab();
+    await user.click(rowCancelButtons()[0]);
+    await waitFor(() =>
+      expect(mockShowToast).toHaveBeenCalledWith("error", "Failed to cancel task")
+    );
+  });
+
+  it("opens the start-redrive modal, validates, submits full payload, and toasts", async () => {
+    await openDlqTab();
+    await user.click(screen.getByRole("button", { name: /Start redrive/i }));
+    await waitFor(() =>
+      expect(screen.getByText("Start redrive from this DLQ")).toBeTruthy()
+    );
+    const startBtn = screen.getByRole("button", { name: /^Start$/i }) as HTMLButtonElement;
+    expect(startBtn.disabled).toBe(true);
+    await user.type(
+      screen.getByPlaceholderText("http://localhost:4566/000000000000/source-queue"),
+      "http://localhost:4566/000000000000/src"
+    );
+    await user.type(screen.getByPlaceholderText("10"), "9");
+    expect(startBtn.disabled).toBe(false);
+    await user.click(startBtn);
+    await waitFor(() => {
+      expect(mockStartMoveTask).toHaveBeenCalledWith({
+        sourceArn: "arn:aws:sqs:us-east-1:000000000000:my-queue",
+        destinationArn: "arn:aws:sqs:us-east-1:000000000000:src",
+        maxNumberOfMessagesPerSecond: 9,
+      });
+      expect(mockShowToast).toHaveBeenCalledWith("success", "Redrive task started");
+    });
+  });
+
+  it("submits redrive without a max rate and closes via modal Cancel", async () => {
+    await openDlqTab();
+    await user.click(screen.getByRole("button", { name: /Start redrive/i }));
+    await user.type(
+      screen.getByPlaceholderText("http://localhost:4566/000000000000/source-queue"),
+      "http://localhost:4566/000000000000/src"
+    );
+    await user.click(screen.getByRole("button", { name: /^Start$/i }));
+    await waitFor(() =>
+      expect(mockStartMoveTask).toHaveBeenCalledWith({
+        sourceArn: "arn:aws:sqs:us-east-1:000000000000:my-queue",
+        destinationArn: "arn:aws:sqs:us-east-1:000000000000:src",
+        maxNumberOfMessagesPerSecond: undefined,
+      })
+    );
+    // reopen and close with the modal-scoped Cancel
+    await user.click(screen.getByRole("button", { name: /Start redrive/i }));
+    await waitFor(() =>
+      expect(screen.getByText("Start redrive from this DLQ")).toBeTruthy()
+    );
+    await user.click(
+      within(dialogOf("Start redrive from this DLQ")).getByRole("button", { name: /^Cancel$/i })
+    );
+  });
+
+  it("shows an error toast when starting redrive fails", async () => {
+    mockStartMoveTask.mockRejectedValueOnce(new Error("redrive boom"));
+    await openDlqTab();
+    await user.click(screen.getByRole("button", { name: /Start redrive/i }));
+    await user.type(
+      screen.getByPlaceholderText("http://localhost:4566/000000000000/source-queue"),
+      "x"
+    );
+    await user.click(screen.getByRole("button", { name: /^Start$/i }));
+    await waitFor(() =>
+      expect(mockShowToast).toHaveBeenCalledWith("error", "redrive boom")
+    );
+  });
+});
+
+describe("SQSPage — redrive remaining branches", () => {
+  let user: ReturnType<typeof userEvent.setup>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    user = userEvent.setup();
+    mockSQSQueues.mockReturnValue({
+      data: { queueUrls: ["http://localhost:4566/000000000000/my-queue"] },
+      isLoading: false, isError: false, error: null,
+    });
+    mockSQSAttributes.mockReturnValue({ data: { attributes: {} }, isLoading: false });
+    mockSQSMessages.mockReturnValue({ data: { messages: [] }, isLoading: false });
+    mockSQSQueueTags.mockReturnValue({ data: { tags: {} }, isLoading: false });
+    mockSQSDLQSources.mockReturnValue({ data: { queueUrls: [] }, isLoading: false });
+    mockMoveTasksQuery.mockReturnValue({ data: { tasks: [], total: 0 } });
+    mockStartMoveTask.mockResolvedValue({ taskHandle: "h" });
+    mockCancelMoveTask.mockResolvedValue({ moved: 0 });
+    cancelMoveState.isPending = false;
+    cancelMoveState.variables = null;
+    mockSearchParams.mockReturnValue([
+      new URLSearchParams("?queueUrl=http://localhost:4566/000000000000/my-queue"),
+      vi.fn(),
+    ]);
+    mockConfirm.mockResolvedValue(true);
+  });
+
+  async function openDlq() {
+    render(<SQSPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("DLQ"));
+    await waitFor(() => expect(screen.getByText(/Message move tasks/)).toBeTruthy());
+  }
+
+  it("handles undefined move-tasks data", async () => {
+    mockMoveTasksQuery.mockReturnValue({ data: undefined });
+    await openDlq();
+    expect(screen.getByText(/Message move tasks \(0\)/)).toBeTruthy();
+  });
+
+  it("renders a task without taskHandle and with sourceArn-only destination", async () => {
+    mockMoveTasksQuery.mockReturnValue({
+      data: {
+        tasks: [{ sourceArn: "arn:aws:sqs:us-east-1:000000000000:my-queue", status: "RUNNING" }],
+        total: 1,
+      },
+    });
+    await openDlq();
+    expect(screen.getAllByText("my-queue").length).toBeGreaterThanOrEqual(2);
+    const cancels = screen
+      .queryAllByRole("button", { name: /^Cancel$/i })
+      .filter((b) => !b.closest('[role="dialog"]'));
+    expect(cancels.length).toBe(1);
+  });
+
+  it("shows cancel not-loading when pending with a different handle", async () => {
+    cancelMoveState.isPending = true;
+    cancelMoveState.variables = "other-handle";
+    mockMoveTasksQuery.mockReturnValue({
+      data: {
+        tasks: [{ taskHandle: "h1", sourceArn: "arn:1", status: "RUNNING" }],
+        total: 1,
+      },
+    });
+    await openDlq();
+    const cancels = screen
+      .queryAllByRole("button", { name: /^Cancel$/i })
+      .filter((b) => !b.closest('[role="dialog"]'));
+    expect(cancels.length).toBe(1);
+  });
+
+  it("closes the start-redrive modal with Escape", async () => {
+    await openDlq();
+    await user.click(screen.getByRole("button", { name: /Start redrive/i }));
+    await waitFor(() =>
+      expect(screen.getByText("Start redrive from this DLQ")).toBeTruthy()
+    );
+    document.querySelectorAll('[class*="awsui_dialog"]').forEach((d) => {
+      fireEvent.keyDown(d as HTMLElement, { keyCode: 27 });
+    });
+    await waitFor(() => {
+      const dlg = screen
+        .getAllByText("Start redrive from this DLQ")
+        .map((h) => h.closest('[role="dialog"]'))
+        .find(Boolean) as HTMLElement | undefined;
+      expect(dlg?.className.includes("hidden")).toBe(true);
+    });
+  });
+
+  it("shows the fallback toast when start fails without a message", async () => {
+    mockStartMoveTask.mockRejectedValueOnce(new Error(""));
+    await openDlq();
+    await user.click(screen.getByRole("button", { name: /Start redrive/i }));
+    await user.type(
+      screen.getByPlaceholderText("http://localhost:4566/000000000000/source-queue"),
+      "http://localhost:4566/000000000000/src"
+    );
+    await user.click(screen.getByRole("button", { name: /^Start$/i }));
+    await waitFor(() =>
+      expect(mockShowToast).toHaveBeenCalledWith("error", "Failed to start redrive")
+    );
+  });
+
+  it("falls back to account and empty name for root-path URLs", () => {
+    expect(queueUrlToArn("http://localhost:4566/")).toBe(
+      "arn:aws:sqs:us-east-1:000000000000:"
+    );
   });
 });
