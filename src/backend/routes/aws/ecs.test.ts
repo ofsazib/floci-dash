@@ -64,6 +64,11 @@ vi.mock("@aws-sdk/client-ecs", () => ({
   GetTaskProtectionCommand: createCmd("GetTaskProtectionCommand"),
   UpdateTaskProtectionCommand: createCmd("UpdateTaskProtectionCommand"),
   DiscoverPollEndpointCommand: createCmd("DiscoverPollEndpointCommand"),
+  DescribeCapacityProvidersCommand: createCmd("DescribeCapacityProvidersCommand"),
+  CreateCapacityProviderCommand: createCmd("CreateCapacityProviderCommand"),
+  UpdateCapacityProviderCommand: createCmd("UpdateCapacityProviderCommand"),
+  DeleteCapacityProviderCommand: createCmd("DeleteCapacityProviderCommand"),
+  PutClusterCapacityProvidersCommand: createCmd("PutClusterCapacityProvidersCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -1051,5 +1056,151 @@ describe("G.89 — container instances, task protection, poll endpoint", () => {
     const res = await get(`/poll-endpoint?containerInstance=${INST_ENC}`);
     const body = await res.json();
     expect(body.endpoint).toBeNull();
+  });
+
+  describe("Capacity Providers", () => {
+    it("GET /capacity-providers — maps providers", async () => {
+      mockSend.mockResolvedValueOnce({
+        capacityProviders: [{
+          name: "cp-1",
+          status: "ACTIVE",
+          autoScalingGroupProvider: { autoScalingGroupArn: "arn:asg" },
+          tags: [{ key: "env", value: "prod" }],
+        }],
+      });
+      const res = await get("/capacity-providers");
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(body.capacityProviders[0]).toEqual({
+        name: "cp-1",
+        status: "ACTIVE",
+        autoScalingGroupProvider: { autoScalingGroupArn: "arn:asg" },
+        tags: [{ key: "env", value: "prod" }],
+      });
+    });
+
+    it("GET /capacity-providers — sparse fallbacks", async () => {
+      mockSend.mockResolvedValueOnce({ capacityProviders: [{ name: "cp-1" }] });
+      const res = await get("/capacity-providers");
+      const body = await res.json();
+      expect(body.capacityProviders[0].autoScalingGroupProvider).toBeNull();
+      expect(body.capacityProviders[0].tags).toEqual([]);
+    });
+
+    it("GET /capacity-providers — passes cluster filter", async () => {
+      mockSend.mockResolvedValueOnce({});
+      await get("/capacity-providers?cluster=c1");
+      expect(mockSend.mock.calls[0][0].cluster).toBe("c1");
+    });
+
+    it("POST /capacity-providers — creates with defaults", async () => {
+      mockSend.mockResolvedValueOnce({ capacityProvider: { name: "cp-1" } });
+      const res = await post("/capacity-providers", {
+        name: "cp-1",
+        autoScalingGroupArn: "arn:asg",
+        managedScaling: {},
+      });
+      expect(res.status).toBe(201);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("CreateCapacityProviderCommand");
+      expect(cmd.autoScalingGroupProvider.managedScaling.status).toBe("ENABLED");
+      expect(cmd.autoScalingGroupProvider.managedTerminationProtection).toBe("DISABLED");
+    });
+
+    it("POST /capacity-providers — 400 without name", async () => {
+      const res = await post("/capacity-providers", { autoScalingGroupArn: "arn" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /capacity-providers — 400 without ASG arn", async () => {
+      const res = await post("/capacity-providers", { name: "cp-1" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /capacity-providers — null provider on sparse response", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/capacity-providers", { name: "cp-1", autoScalingGroupArn: "arn" });
+      expect((await res.json()).capacityProvider).toBeNull();
+    });
+
+    it("POST /capacity-providers — uses explicit managed scaling status", async () => {
+      mockSend.mockResolvedValueOnce({});
+      await post("/capacity-providers", {
+        name: "cp-1",
+        autoScalingGroupArn: "arn",
+        managedScaling: { status: "DISABLED", targetCapacity: 20 },
+      });
+      expect(mockSend.mock.calls[0][0].autoScalingGroupProvider.managedScaling.status).toBe("DISABLED");
+    });
+
+    it("POST /capacity-providers — omits managed scaling when absent", async () => {
+      mockSend.mockResolvedValueOnce({});
+      await post("/capacity-providers", { name: "cp-1", autoScalingGroupArn: "arn" });
+      expect(mockSend.mock.calls[0][0].autoScalingGroupProvider.managedScaling).toBeUndefined();
+    });
+
+    it("PUT /capacity-providers/:name — defaults status when only capacity set", async () => {
+      mockSend.mockResolvedValueOnce({});
+      await put("/capacity-providers/cp-1", {
+        autoScalingGroupArn: "arn",
+        managedScaling: { targetCapacity: 75 },
+      });
+      expect(mockSend.mock.calls[0][0].autoScalingGroupProvider.managedScaling.status).toBe("ENABLED");
+      expect(mockSend.mock.calls[0][0].autoScalingGroupProvider.managedScaling.targetCapacity).toBe(75);
+    });
+
+    it("PUT /capacity-providers/:name — omits managed scaling when absent", async () => {
+      mockSend.mockResolvedValueOnce({});
+      await put("/capacity-providers/cp-1", { autoScalingGroupArn: "arn" });
+      expect(mockSend.mock.calls[0][0].autoScalingGroupProvider.managedScaling).toBeUndefined();
+    });
+
+    it("PUT /capacity-providers/:name — updates managed scaling", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/capacity-providers/cp-1", {
+        autoScalingGroupArn: "arn:asg",
+        managedScaling: { status: "DISABLED", targetCapacity: 50 },
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("UpdateCapacityProviderCommand");
+      expect(cmd.autoScalingGroupProvider.managedScaling.targetCapacity).toBe(50);
+    });
+
+    it("PUT /capacity-providers/:name — null cluster on sparse put-cluster response", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/clusters/c1/capacity-providers", { capacityProviders: ["FARGATE"] });
+      expect((await res.json()).cluster).toBeNull();
+    });
+
+    it("PUT /capacity-providers/:name — 400 without ASG arn", async () => {
+      const res = await put("/capacity-providers/cp-1", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE /capacity-providers/:name — deletes", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/capacity-providers/cp-1");
+      expect((await res.json()).deleted).toBe(true);
+      expect(mockSend.mock.calls[0][0].capacityProvider).toBe("cp-1");
+    });
+
+    it("PUT /clusters/:name/capacity-providers — associates providers", async () => {
+      mockSend.mockResolvedValueOnce({ cluster: { clusterName: "c1" } });
+      const res = await put("/clusters/c1/capacity-providers", {
+        capacityProviders: ["FARGATE", "cp-1"],
+        defaultCapacityProviderStrategy: [{ capacityProvider: "cp-1", weight: 1 }],
+      });
+      const body = await res.json();
+      expect(body.cluster.clusterName).toBe("c1");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("PutClusterCapacityProvidersCommand");
+      expect(cmd.capacityProviders).toEqual(["FARGATE", "cp-1"]);
+    });
+
+    it("PUT /clusters/:name/capacity-providers — 400 without providers", async () => {
+      const res = await put("/clusters/c1/capacity-providers", {});
+      expect(res.status).toBe(400);
+    });
   });
 });

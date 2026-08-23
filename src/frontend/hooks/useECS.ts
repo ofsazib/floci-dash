@@ -439,3 +439,43 @@ export function useECSServiceDeployments(service: string | null, cluster: string
     enabled: !!service,
   });
 }
+
+// ── Capacity Providers ─────────────────────────────────
+
+export interface ECSCapacityProvider {
+  name: string;
+  status?: string;
+  autoScalingGroupProvider?: { autoScalingGroupArn?: string } | null;
+  tags: { key: string; value: string }[];
+}
+
+export function useECSCapacityProviders(cluster: string | null) {
+  return useQuery<{ capacityProviders: ECSCapacityProvider[]; total: number }>({
+    queryKey: ["aws", "ecs", "capacity-providers", cluster],
+    queryFn: () =>
+      api(`/aws/ecs/capacity-providers${cluster ? `?cluster=${encodeURIComponent(cluster)}` : ""}`),
+  });
+}
+
+export function useCreateECSCapacityProvider() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      name: string;
+      autoScalingGroupArn: string;
+      managedScaling?: { status?: string; targetCapacity?: number };
+      managedTerminationProtection?: string;
+      tags?: any[];
+    }) => api("/aws/ecs/capacity-providers", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ecs", "capacity-providers"] }),
+  });
+}
+
+export function useDeleteECSCapacityProvider() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api(`/aws/ecs/capacity-providers/${encodeURIComponent(name)}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ecs", "capacity-providers"] }),
+  });
+}

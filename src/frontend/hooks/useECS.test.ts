@@ -50,6 +50,9 @@ import {
   useECSTaskProtection,
   useUpdateECSTaskProtection,
   useDiscoverECSPollEndpoint,
+  useECSCapacityProviders,
+  useCreateECSCapacityProvider,
+  useDeleteECSCapacityProvider,
 } from "./useECS";
 
 function createWrapper() {
@@ -620,5 +623,40 @@ describe("G.89 — container instances, task protection, poll endpoint", () => {
     const { result } = renderHook(() => useDiscoverECSPollEndpoint(), { wrapper: createWrapper() });
     await result.current.mutateAsync(INST);
     expect(mockApi).toHaveBeenCalledWith(`/aws/ecs/poll-endpoint?containerInstance=${encodeURIComponent(INST)}`);
+  });
+});
+
+describe("ECS capacity provider hooks", () => {
+  it("useECSCapacityProviders fetches without cluster", async () => {
+    mockApi.mockResolvedValueOnce({ capacityProviders: [], total: 0 });
+    const { result } = renderHook(() => useECSCapacityProviders(null), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ecs/capacity-providers");
+  });
+
+  it("useECSCapacityProviders passes encoded cluster", async () => {
+    mockApi.mockResolvedValueOnce({ capacityProviders: [], total: 0 });
+    const { result } = renderHook(() => useECSCapacityProviders("my cluster"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ecs/capacity-providers?cluster=my%20cluster");
+  });
+
+  it("useCreateECSCapacityProvider posts the body", async () => {
+    mockApi.mockResolvedValueOnce({ capacityProvider: {} });
+    const { result } = renderHook(() => useCreateECSCapacityProvider(), { wrapper: createWrapper() });
+    result.current.mutate({ name: "cp-1", autoScalingGroupArn: "arn" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ecs/capacity-providers", {
+      method: "POST",
+      body: JSON.stringify({ name: "cp-1", autoScalingGroupArn: "arn" }),
+    });
+  });
+
+  it("useDeleteECSCapacityProvider deletes by name", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useDeleteECSCapacityProvider(), { wrapper: createWrapper() });
+    result.current.mutate("cp 1");
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ecs/capacity-providers/cp%201", { method: "DELETE" });
   });
 });

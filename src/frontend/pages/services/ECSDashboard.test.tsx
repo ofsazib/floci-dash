@@ -24,6 +24,12 @@ const mockDeleteAccountSetting = vi.fn();
 const mockTaskSets = vi.fn();
 const mockCreateTaskSet = vi.fn();
 const mockSetPrimaryTaskSet = vi.fn();
+const mockCapacityProviders = vi.fn();
+const mockCreateCapacityProvider = vi.fn();
+
+const createCpState = vi.hoisted(() => ({ isError: false, error: null as Error | null }));
+const deleteCpState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
+const mockDeleteCapacityProvider = vi.fn();
 const mockDeleteTaskSet = vi.fn();
 const mockContainerInstances = vi.fn();
 const mockDeregisterInstance = vi.fn();
@@ -124,6 +130,18 @@ vi.mock("../../hooks/useECS", () => ({
   useECSTaskSets: (...args: any[]) => mockTaskSets(...args),
   useCreateECSTaskSet: () => ({ mutate: mockCreateTaskSet, isPending: false }),
   useSetPrimaryECSTaskSet: () => ({ mutateAsync: mockSetPrimaryTaskSet, isPending: false }),
+  useECSCapacityProviders: (...args: any[]) => mockCapacityProviders(...args),
+  useCreateECSCapacityProvider: () => ({
+    mutate: mockCreateCapacityProvider,
+    isPending: false,
+    get isError() { return createCpState.isError; },
+    get error() { return createCpState.error; },
+  }),
+  useDeleteECSCapacityProvider: () => ({
+    mutateAsync: mockDeleteCapacityProvider,
+    get isPending() { return deleteCpState.isPending; },
+    get variables() { return deleteCpState.variables; },
+  }),
   useDeleteECSTaskSet: () => ({ mutateAsync: mockDeleteTaskSet, isPending: false }),
   useECSContainerInstances: (...args: any[]) => mockContainerInstances(...args),
   useDeregisterECSContainerInstance: () => ({ mutateAsync: mockDeregisterInstance, isPending: false }),
@@ -178,6 +196,11 @@ function expectModalHidden(headerText: string) {
 // ─── Setup ──────────────────────────────────────────────
 
 beforeEach(() => {
+  createCpState.isError = false;
+  createCpState.error = null;
+  deleteCpState.isPending = false;
+  deleteCpState.variables = null;
+  mockCapacityProviders.mockReturnValue({ data: { capacityProviders: [], total: 0 }, isLoading: false });
   vi.clearAllMocks();
   createClusterState.isError = false;
   createClusterState.error = null;
@@ -398,6 +421,11 @@ describe("ECSDashboard — cluster list", () => {
 
 describe("ECSDashboard — cluster detail", () => {
   beforeEach(() => {
+  createCpState.isError = false;
+  createCpState.error = null;
+  deleteCpState.isPending = false;
+  deleteCpState.variables = null;
+  mockCapacityProviders.mockReturnValue({ data: { capacityProviders: [], total: 0 }, isLoading: false });
     mockClusters.mockReturnValue({
       data: {
         clusters: [{ clusterName: "my-cluster", status: "ACTIVE", clusterArn: "arn:aws:ecs:::cluster/my-cluster" }],
@@ -869,6 +897,11 @@ describe("ECSDashboard — Account Settings", () => {
 
 describe("ECSDashboard — Task Sets", () => {
   beforeEach(() => {
+  createCpState.isError = false;
+  createCpState.error = null;
+  deleteCpState.isPending = false;
+  deleteCpState.variables = null;
+  mockCapacityProviders.mockReturnValue({ data: { capacityProviders: [], total: 0 }, isLoading: false });
     mockClusters.mockReturnValue({
       data: {
         clusters: [{ clusterName: "my-cluster", status: "ACTIVE", clusterArn: "arn:aws:ecs:::cluster/my-cluster" }],
@@ -1045,6 +1078,11 @@ describe("ECSDashboard — error states", () => {
 
   describe("detail-level errors", () => {
     beforeEach(() => {
+  createCpState.isError = false;
+  createCpState.error = null;
+  deleteCpState.isPending = false;
+  deleteCpState.variables = null;
+  mockCapacityProviders.mockReturnValue({ data: { capacityProviders: [], total: 0 }, isLoading: false });
       mockClusters.mockReturnValue({
         data: {
           clusters: [{ clusterName: "my-cluster", status: "ACTIVE", clusterArn: "arn:aws:ecs:::cluster/my-cluster" }],
@@ -1102,6 +1140,11 @@ describe("ECSDashboard — modal disabled buttons", () => {
 
   describe("detail-level disabled buttons", () => {
     beforeEach(() => {
+  createCpState.isError = false;
+  createCpState.error = null;
+  deleteCpState.isPending = false;
+  deleteCpState.variables = null;
+  mockCapacityProviders.mockReturnValue({ data: { capacityProviders: [], total: 0 }, isLoading: false });
       mockClusters.mockReturnValue({
         data: {
           clusters: [{ clusterName: "my-cluster", status: "ACTIVE", clusterArn: "arn:aws:ecs:::cluster/my-cluster" }],
@@ -1131,6 +1174,11 @@ describe("ECSDashboard — modal disabled buttons", () => {
 
 describe("ECSDashboard — services filter", () => {
   beforeEach(() => {
+  createCpState.isError = false;
+  createCpState.error = null;
+  deleteCpState.isPending = false;
+  deleteCpState.variables = null;
+  mockCapacityProviders.mockReturnValue({ data: { capacityProviders: [], total: 0 }, isLoading: false });
     mockClusters.mockReturnValue({
       data: {
         clusters: [{ clusterName: "my-cluster", status: "ACTIVE", clusterArn: "arn:aws:ecs:::cluster/my-cluster" }],
@@ -1259,6 +1307,11 @@ describe("ECSDashboard — account settings toast errors", () => {
 
 describe("ECSDashboard — task set toast errors", () => {
   beforeEach(() => {
+  createCpState.isError = false;
+  createCpState.error = null;
+  deleteCpState.isPending = false;
+  deleteCpState.variables = null;
+  mockCapacityProviders.mockReturnValue({ data: { capacityProviders: [], total: 0 }, isLoading: false });
     mockClusters.mockReturnValue({
       data: {
         clusters: [{ clusterName: "my-cluster", status: "ACTIVE", clusterArn: "arn:aws:ecs:::cluster/my-cluster" }],
@@ -1590,6 +1643,11 @@ describe("ECSDashboard — sparse data fallbacks", () => {
 
 describe("ECSDashboard — service form interactions", () => {
   beforeEach(() => {
+  createCpState.isError = false;
+  createCpState.error = null;
+  deleteCpState.isPending = false;
+  deleteCpState.variables = null;
+  mockCapacityProviders.mockReturnValue({ data: { capacityProviders: [], total: 0 }, isLoading: false });
     mockClusters.mockReturnValue({
       data: {
         clusters: [{ clusterName: "my-cluster", status: "ACTIVE", clusterArn: "arn:aws:ecs:::cluster/my-cluster" }],
@@ -1957,6 +2015,11 @@ describe("ECSDashboard — G.89 container instances + task protection", () => {
   const INST_ARN = "arn:aws:ecs:us-east-1:123:container-instance/my-cluster/inst-1";
 
   beforeEach(() => {
+  createCpState.isError = false;
+  createCpState.error = null;
+  deleteCpState.isPending = false;
+  deleteCpState.variables = null;
+  mockCapacityProviders.mockReturnValue({ data: { capacityProviders: [], total: 0 }, isLoading: false });
     mockClusters.mockReturnValue({
       data: {
         clusters: [{ clusterName: "my-cluster", status: "ACTIVE", clusterArn: "arn:aws:ecs:::cluster/my-cluster" }],
@@ -2282,6 +2345,11 @@ describe("ECSDashboard — G.89 coverage edge cases", () => {
   const INST_ARN = "arn:aws:ecs:us-east-1:123:container-instance/my-cluster/inst-1";
 
   beforeEach(() => {
+  createCpState.isError = false;
+  createCpState.error = null;
+  deleteCpState.isPending = false;
+  deleteCpState.variables = null;
+  mockCapacityProviders.mockReturnValue({ data: { capacityProviders: [], total: 0 }, isLoading: false });
     mockClusters.mockReturnValue({
       data: {
         clusters: [{ clusterName: "my-cluster", status: "ACTIVE", clusterArn: "arn:aws:ecs:::cluster/my-cluster" }],
@@ -2456,5 +2524,139 @@ describe("ECSDashboard — G.89 coverage edge cases", () => {
     await waitFor(() => expect(screen.getByText("Failed to load protection")).toBeTruthy());
     await clickButton(user, /Save/i, { last: true });
     await waitFor(() => expect(toastMock).toHaveBeenCalledWith("error", "Failed to update task protection"));
+  });
+});
+
+describe("ECSDashboard — capacity providers tab", () => {
+  it("renders providers with dash fallbacks", async () => {
+    mockCapacityProviders.mockReturnValue({
+      data: { capacityProviders: [{ name: "cp-1", tags: [] }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Capacity Providers/i }));
+    expect(await screen.findByText("cp-1")).toBeTruthy();
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("shows the empty message", async () => {
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Capacity Providers/i }));
+    expect(await screen.findByText("No capacity providers")).toBeTruthy();
+  });
+
+  it("creates a capacity provider", async () => {
+    mockCreateCapacityProvider.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Capacity Providers/i }));
+    const createBtn = await screen.findByRole("button", { name: /Create capacity provider/i });
+    await user.click(createBtn);
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const inputs = dialog.querySelectorAll("input");
+    await user.type(inputs[0], "my-provider");
+    await user.type(inputs[1], "arn:aws:autoscaling:asg-1");
+    const submit = screen.getAllByRole("button", { name: /^Create$/ }).at(-1)!;
+    await user.click(submit);
+    await waitFor(() =>
+      expect(mockCreateCapacityProvider).toHaveBeenCalledWith(
+        { name: "my-provider", autoScalingGroupArn: "arn:aws:autoscaling:asg-1" },
+        expect.objectContaining({ onSuccess: expect.any(Function) })
+      )
+    );
+  });
+
+  it("shows empty table while providers still loading", async () => {
+    mockCapacityProviders.mockReturnValue({ data: undefined, isLoading: false });
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Capacity Providers/i }));
+    expect(await screen.findByText("No capacity providers")).toBeTruthy();
+  });
+
+  it("shows fallback create error when message absent", async () => {
+    createCpState.isError = true;
+    createCpState.error = null;
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Capacity Providers/i }));
+    await user.click(await screen.findByRole("button", { name: /Create capacity provider/i }));
+    expect(await screen.findByText("Failed to create capacity provider")).toBeTruthy();
+  });
+
+  it("disables Delete while that provider deletion is pending", async () => {
+    mockCapacityProviders.mockReturnValue({
+      data: { capacityProviders: [{ name: "cp-1", tags: [] }], total: 1 },
+      isLoading: false,
+    });
+    deleteCpState.isPending = true;
+    deleteCpState.variables = "cp-1";
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Capacity Providers/i }));
+    const btn = await screen.findByRole("button", { name: /Delete cp-1/i });
+    expect(btn.className).toMatch(/disabled/);
+  });
+
+  it("shows the create capacity provider error alert", async () => {
+    createCpState.isError = true;
+    createCpState.error = new Error("cp failed");
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Capacity Providers/i }));
+    await user.click(await screen.findByRole("button", { name: /Create capacity provider/i }));
+    expect(await screen.findByText("cp failed")).toBeTruthy();
+  });
+
+  it("covers create-modal cancel and Escape-dismiss arms", async () => {
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Capacity Providers/i }));
+    await user.click(await screen.findByRole("button", { name: /Create capacity provider/i }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(mockCreateCapacityProvider).not.toHaveBeenCalled();
+    // reopen and Escape-dismiss
+    await user.click(screen.getByRole("button", { name: /Create capacity provider/i }));
+    document.querySelectorAll('[class*="awsui_dialog"]').forEach((d) => fireEvent.keyDown(d as HTMLElement, { keyCode: 27 }));
+    expect(mockCreateCapacityProvider).not.toHaveBeenCalled();
+  });
+
+  it("keeps Create disabled until both fields are filled", async () => {
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Capacity Providers/i }));
+    await user.click(await screen.findByRole("button", { name: /Create capacity provider/i }));
+    const submit = screen.getAllByRole("button", { name: /^Create$/ }).at(-1)!;
+    expect(submit.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("deletes a capacity provider after confirmation", async () => {
+    mockDeleteCapacityProvider.mockResolvedValue({});
+    mockCapacityProviders.mockReturnValue({
+      data: { capacityProviders: [{ name: "cp-1", tags: [] }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Capacity Providers/i }));
+    await user.click(await screen.findByRole("button", { name: /Delete cp-1/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() => expect(mockDeleteCapacityProvider).toHaveBeenCalledWith("cp-1"));
+  });
+
+  it("renders tags as key=value strings", async () => {
+    mockCapacityProviders.mockReturnValue({
+      data: { capacityProviders: [{ name: "cp-1", status: "ACTIVE", tags: [{ key: "env", value: "prod" }] }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Capacity Providers/i }));
+    expect(await screen.findByText("env=prod")).toBeTruthy();
+    expect(screen.getByText("ACTIVE")).toBeTruthy();
   });
 });

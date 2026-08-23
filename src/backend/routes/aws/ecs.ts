@@ -3,6 +3,13 @@ import type { Context } from "hono";
 import { create } from "../../clients/aws";
 import { ECSClient } from "@aws-sdk/client-ecs";
 import {
+  DescribeCapacityProvidersCommand,
+  CreateCapacityProviderCommand,
+  UpdateCapacityProviderCommand,
+  DeleteCapacityProviderCommand,
+  PutClusterCapacityProvidersCommand,
+} from "@aws-sdk/client-ecs";
+import {
   ListClustersCommand,
   DescribeClustersCommand,
   CreateClusterCommand,
@@ -651,6 +658,91 @@ router.get("/poll-endpoint", async (c: Context) => {
     new DiscoverPollEndpointCommand({ containerInstance })
   );
   return c.json({ endpoint: result.endpoint || null });
+});
+
+
+// ── Capacity Providers ─────────────────────────────────
+
+router.get("/capacity-providers", async (c: Context) => {
+  const cluster = c.req.query("cluster");
+  const client = getClient();
+  const result = await client.send(
+    new DescribeCapacityProvidersCommand(cluster ? { cluster } : {})
+  );
+  const providers = (result.capacityProviders || []).map((cp: any) => ({
+    name: cp.name,
+    status: cp.status,
+    autoScalingGroupProvider: cp.autoScalingGroupProvider
+      ? { autoScalingGroupArn: cp.autoScalingGroupProvider.autoScalingGroupArn }
+      : null,
+    tags: (cp.tags || []).map((t: any) => ({ key: t.key, value: t.value })),
+  }));
+  return c.json({ capacityProviders: providers, total: providers.length });
+});
+
+router.post("/capacity-providers", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.name) return c.json({ error: "name is required" }, 400);
+  if (!body.autoScalingGroupArn)
+    return c.json({ error: "autoScalingGroupArn is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new CreateCapacityProviderCommand({
+      name: body.name,
+      autoScalingGroupProvider: {
+        autoScalingGroupArn: body.autoScalingGroupArn,
+        managedScaling: body.managedScaling
+          ? { status: (body.managedScaling.status ?? "ENABLED") as any, targetCapacity: body.managedScaling.targetCapacity }
+          : undefined,
+        managedTerminationProtection: (body.managedTerminationProtection || "DISABLED") as any,
+      },
+      tags: body.tags,
+    })
+  );
+  return c.json({ capacityProvider: result.capacityProvider || null }, 201);
+});
+
+router.put("/capacity-providers/:name", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const body = await c.req.json<any>();
+  if (!body.autoScalingGroupArn)
+    return c.json({ error: "autoScalingGroupArn is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new UpdateCapacityProviderCommand({
+      name,
+      autoScalingGroupProvider: {
+        managedScaling: body.managedScaling
+          ? { status: (body.managedScaling.status ?? "ENABLED") as any, targetCapacity: body.managedScaling.targetCapacity }
+          : undefined,
+        managedTerminationProtection: (body.managedTerminationProtection || "DISABLED") as any,
+      } as any,
+    })
+  );
+  return c.json({ capacityProvider: result.capacityProvider || null });
+});
+
+router.delete("/capacity-providers/:name", async (c: Context) => {
+  const name = c.req.param("name");
+  const client = getClient();
+  await client.send(new DeleteCapacityProviderCommand({ capacityProvider: name }));
+  return c.json({ deleted: true });
+});
+
+router.put("/clusters/:name/capacity-providers", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const body = await c.req.json<any>();
+  if (!body.capacityProviders?.length)
+    return c.json({ error: "capacityProviders is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new PutClusterCapacityProvidersCommand({
+      cluster: name,
+      capacityProviders: body.capacityProviders,
+      defaultCapacityProviderStrategy: body.defaultCapacityProviderStrategy,
+    })
+  );
+  return c.json({ cluster: result.cluster || null });
 });
 
 export default router;

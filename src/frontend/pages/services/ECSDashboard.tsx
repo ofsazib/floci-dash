@@ -81,6 +81,9 @@ import DeleteButton from "../../components/DeleteButton";
 import DynamoDBTableDetail from "../../components/DynamoDBTableDetail";
 import {
   useECSClusters,
+  useECSCapacityProviders,
+  useCreateECSCapacityProvider,
+  useDeleteECSCapacityProvider,
   useCreateECSCluster,
   useDeleteECSCluster,
   useECSServices,
@@ -635,6 +638,7 @@ export function ECSDashboard() {
     <Tabs
       tabs={[
         { label: "Clusters", id: "clusters", content: clustersTab },
+        { label: "Capacity Providers", id: "capacity-providers", content: <ECSCapacityProvidersTab /> },
         { label: "Account Settings", id: "account-settings", content: <ECSAccountSettingsTab /> },
       ]}
     />
@@ -653,6 +657,95 @@ const ECS_ACCOUNT_SETTING_NAMES: SelectProps.Option[] = [
   { label: "awsvpcTrunking", value: "awsvpcTrunking" },
   { label: "tagResourceAuthorization", value: "tagResourceAuthorization" },
 ];
+
+function ECSCapacityProvidersTab() {
+  const { data, isLoading } = useECSCapacityProviders(null);
+  const createProvider = useCreateECSCapacityProvider();
+  const deleteProvider = useDeleteECSCapacityProvider();
+  const [showCreate, setShowCreate] = useState(false);
+  const [cpName, setCpName] = useState("");
+  const [asgArn, setAsgArn] = useState("");
+
+  const providers = data?.capacityProviders || [];
+
+  return (
+    <>
+      <ResourceTable
+        resourceName="Capacity provider"
+        headerTitle="Capacity Providers"
+        headerCounter={data?.total}
+        items={providers.map((cp) => ({
+          name: cp.name,
+          status: cp.status || "—",
+          asg: cp.autoScalingGroupProvider?.autoScalingGroupArn || "—",
+          tags: cp.tags.map((t) => `${t.key}=${t.value}`).join(", ") || "—",
+        }))}
+        loading={isLoading}
+        emptyMessage="No capacity providers"
+        columns={[
+          { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+          { id: "status", header: "Status", cell: (i: any) => i.status },
+          { id: "asg", header: "Auto Scaling Group", cell: (i: any) => i.asg },
+          { id: "tags", header: "Tags", cell: (i: any) => i.tags },
+          {
+            id: "actions",
+            header: "",
+            cell: (i: any) => (
+              <DeleteButton
+                itemName={i.name}
+                resourceType="capacity provider"
+                loading={deleteProvider.isPending && deleteProvider.variables === i.name}
+                onDelete={() => deleteProvider.mutateAsync(i.name)}
+              />
+            ),
+          },
+        ]}
+        onCreate={() => setShowCreate(true)}
+      />
+      <Modal
+        visible={showCreate}
+        onDismiss={() => setShowCreate(false)}
+        header="Create capacity provider"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreate(false)}>Cancel</Button>
+              <Button
+                variant="primary"
+                loading={createProvider.isPending}
+                disabled={!cpName.trim() || !asgArn.trim()}
+                onClick={() => {
+                  createProvider.mutate(
+                    { name: cpName.trim(), autoScalingGroupArn: asgArn.trim() },
+                    { onSuccess: () => { setShowCreate(false); setCpName(""); setAsgArn(""); } }
+                  );
+                }}
+              >
+                Create
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          {createProvider.isError && (
+            <Alert type="error" dismissible>
+              {(createProvider.error as Error)?.message || "Failed to create capacity provider"}
+            </Alert>
+          )}
+          <SpaceBetween size="m">
+            <FormField label="Name">
+              <Input value={cpName} onChange={({ detail }) => setCpName(detail.value)} placeholder="my-provider" />
+            </FormField>
+            <FormField label="Auto Scaling Group ARN">
+              <Input value={asgArn} onChange={({ detail }) => setAsgArn(detail.value)} placeholder="arn:aws:autoscaling:..." />
+            </FormField>
+          </SpaceBetween>
+        </Form>
+      </Modal>
+    </>
+  );
+}
 
 function ECSAccountSettingsTab() {
   const { showToast } = useToast();
