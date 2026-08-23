@@ -314,6 +314,9 @@ import {
 import {
   useTranscriptionJobs,
   useDeleteTranscriptionJob,
+  useTranscribeVocabularies,
+  useCreateTranscribeVocabulary,
+  useDeleteTranscribeVocabulary,
 } from "../../hooks/useTranscribe";
 import {
   useCostAndUsage,
@@ -508,10 +511,23 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
 export function TranscribeDashboard() {
   const { data, isLoading } = useTranscriptionJobs();
   const deleteJob = useDeleteTranscriptionJob();
+  const { data: vocabData } = useTranscribeVocabularies();
+  const createVocab = useCreateTranscribeVocabulary();
+  const deleteVocab = useDeleteTranscribeVocabulary();
+  const [showCreateVocab, setShowCreateVocab] = useState(false);
+  const [vocabName, setVocabName] = useState("");
+  const [vocabLang, setVocabLang] = useState("en-US");
 
   if (isLoading) return <TableSkeleton />;
 
+  const vocabs = (vocabData?.vocabularies || []).map((v: any) => ({
+    name: v.VocabularyName,
+    language: v.LanguageCode || "-",
+    status: v.VocabularyState || "-",
+  }));
+
   return (
+    <>
     <ResourceTable
       resourceName="Job"
       headerTitle="Transcription Jobs"
@@ -548,6 +564,75 @@ export function TranscribeDashboard() {
       filterPlaceholder="Find jobs by name"
       filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
     />
+
+    <ResourceTable
+      resourceName="Vocabulary"
+      headerTitle="Custom Vocabularies"
+      headerCounter={vocabs.length}
+      items={vocabs}
+      columns={[
+        { id: "name", header: "Vocabulary Name", cell: (i: any) => i.name, isRowHeader: true },
+        { id: "language", header: "Language", cell: (i: any) => i.language },
+        { id: "status", header: "Status", cell: (i: any) => i.status },
+        {
+          id: "actions",
+          header: "",
+          cell: (i: any) => (
+            <DeleteButton
+              itemName={i.name}
+              resourceType="vocabulary"
+              loading={deleteVocab.isPending && deleteVocab.variables === i.name}
+              onDelete={() => deleteVocab.mutateAsync(i.name)}
+            />
+          ),
+        },
+      ]}
+      emptyMessage="No custom vocabularies"
+      onCreate={() => setShowCreateVocab(true)}
+    />
+
+    <Modal
+      visible={showCreateVocab}
+      onDismiss={() => setShowCreateVocab(false)}
+      header="Create vocabulary"
+      footer={
+        <Box float="right">
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button variant="link" onClick={() => setShowCreateVocab(false)}>Cancel</Button>
+            <Button
+              variant="primary"
+              loading={createVocab.isPending}
+              disabled={!vocabName.trim()}
+              onClick={() => {
+                createVocab.mutate(
+                  { vocabularyName: vocabName.trim(), languageCode: vocabLang },
+                  { onSuccess: () => { setShowCreateVocab(false); setVocabName(""); } }
+                );
+              }}
+            >
+              Create
+            </Button>
+          </SpaceBetween>
+        </Box>
+      }
+    >
+      <Form>
+        {createVocab.isError && (
+          <Alert type="error" dismissible>
+            {(createVocab.error as Error)?.message || "Failed to create vocabulary"}
+          </Alert>
+        )}
+        <SpaceBetween size="m">
+          <FormField label="Vocabulary name">
+            <Input value={vocabName} onChange={({ detail }) => setVocabName(detail.value)} placeholder="my-vocab" />
+          </FormField>
+          <FormField label="Language code">
+            <Input value={vocabLang} onChange={({ detail }) => setVocabLang(detail.value)} placeholder="en-US" />
+          </FormField>
+        </SpaceBetween>
+      </Form>
+    </Modal>
+    </>
   );
 }
 

@@ -3,6 +3,9 @@ import type { Context } from "hono";
 import { create } from "../../clients/aws";
 import { TranscribeClient } from "@aws-sdk/client-transcribe";
 import {
+  CreateVocabularyCommand,
+  GetVocabularyCommand,
+  DeleteVocabularyCommand,
   ListTranscriptionJobsCommand,
   GetTranscriptionJobCommand,
   StartTranscriptionJobCommand,
@@ -70,6 +73,35 @@ router.get("/vocabularies", async (c: Context) => {
   const result = await client.send(new ListVocabulariesCommand({}));
   const vocabularies = result.Vocabularies || [];
   return c.json({ vocabularies, total: vocabularies.length });
+});
+
+
+router.get("/vocabularies/:name", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const client = getClient();
+  const result: any = await client.send(new GetVocabularyCommand({ VocabularyName: name }));
+  return c.json({ vocabulary: result.VocabularyInfo || null });
+});
+
+router.post("/vocabularies", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.vocabularyName) return c.json({ error: "vocabularyName is required" }, 400);
+  if (!body.languageCode) return c.json({ error: "languageCode is required" }, 400);
+  const client = getClient();
+  const result: any = await client.send(
+    new CreateVocabularyCommand({
+      VocabularyName: body.vocabularyName,
+      LanguageCode: body.languageCode,
+    })
+  );
+  return c.json({ vocabulary: result.VocabularyInfo || null }, 201);
+});
+
+router.delete("/vocabularies/:name", async (c: Context) => {
+  const name = c.req.param("name");
+  const client = getClient();
+  await client.send(new DeleteVocabularyCommand({ VocabularyName: name }));
+  return c.json({ deleted: true });
 });
 
 export default router;

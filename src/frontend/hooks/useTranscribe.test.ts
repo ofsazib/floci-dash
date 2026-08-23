@@ -16,6 +16,9 @@ import {
   useStartTranscriptionJob,
   useDeleteTranscriptionJob,
   useTranscribeVocabularies,
+  useTranscribeVocabulary,
+  useCreateTranscribeVocabulary,
+  useDeleteTranscribeVocabulary,
 } from "./useTranscribe";
 
 beforeEach(() => mockApi.mockReset());
@@ -62,5 +65,42 @@ describe("useTranscribe hooks", () => {
     const { result } = renderHook(() => useTranscribeVocabularies(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith("/aws/transcribe/vocabularies");
+  });
+});
+
+describe("useTranscribeVocabulary", () => {
+  it("fetches a vocabulary by encoded name", async () => {
+    mockApi.mockResolvedValueOnce({ vocabulary: { VocabularyName: "v 1" } });
+    const { result } = renderHook(() => useTranscribeVocabulary("v 1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/transcribe/vocabularies/v%201");
+  });
+
+  it("is disabled without a name", () => {
+    const { result } = renderHook(() => useTranscribeVocabulary(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+});
+
+describe("useCreateTranscribeVocabulary", () => {
+  it("posts the vocabulary body", async () => {
+    mockApi.mockResolvedValueOnce({ vocabulary: {} });
+    const { result } = renderHook(() => useCreateTranscribeVocabulary(), { wrapper: createWrapper() });
+    result.current.mutate({ vocabularyName: "v1", languageCode: "en-US" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/transcribe/vocabularies", {
+      method: "POST",
+      body: JSON.stringify({ vocabularyName: "v1", languageCode: "en-US" }),
+    });
+  });
+});
+
+describe("useDeleteTranscribeVocabulary", () => {
+  it("deletes by encoded name", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useDeleteTranscribeVocabulary(), { wrapper: createWrapper() });
+    result.current.mutate("v 1");
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/transcribe/vocabularies/v%201", { method: "DELETE" });
   });
 });

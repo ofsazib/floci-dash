@@ -14,6 +14,9 @@ vi.mock("@aws-sdk/client-transcribe", () => ({
   StartTranscriptionJobCommand: createCmd("StartTranscriptionJobCommand"),
   DeleteTranscriptionJobCommand: createCmd("DeleteTranscriptionJobCommand"),
   ListVocabulariesCommand: createCmd("ListVocabulariesCommand"),
+  CreateVocabularyCommand: createCmd("CreateVocabularyCommand"),
+  GetVocabularyCommand: createCmd("GetVocabularyCommand"),
+  DeleteVocabularyCommand: createCmd("DeleteVocabularyCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({ create: (Ctor: any, extra?: any) => new Ctor(extra) }));
@@ -86,5 +89,61 @@ describe("Transcribe Routes", () => {
     const res = await get("/vocabularies");
     const body = await res.json();
     expect(body.total).toBe(0);
+  });
+
+  describe("Vocabulary CRUD", () => {
+    it("GET /vocabularies/:name — returns the vocabulary", async () => {
+      mockSend.mockResolvedValueOnce({ VocabularyInfo: { VocabularyName: "vocab-1", LanguageCode: "en-US" } });
+      const res = await get("/vocabularies/vocab-1");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.vocabulary.VocabularyName).toBe("vocab-1");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("GetVocabularyCommand");
+    });
+
+    it("GET /vocabularies/:name — null when missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/vocabularies/none");
+      const body = await res.json();
+      expect(body.vocabulary).toBeNull();
+    });
+
+    it("POST /vocabularies — creates a vocabulary", async () => {
+      mockSend.mockResolvedValueOnce({ VocabularyInfo: { VocabularyName: "vocab-1" } });
+      const res = await post("/vocabularies", { vocabularyName: "vocab-1", languageCode: "en-US" });
+      expect(res.status).toBe(201);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("CreateVocabularyCommand");
+      expect(cmd.VocabularyName).toBe("vocab-1");
+      expect(cmd.LanguageCode).toBe("en-US");
+    });
+
+    it("POST /vocabularies — 400 without vocabularyName", async () => {
+      const res = await post("/vocabularies", { languageCode: "en-US" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /vocabularies — 400 without languageCode", async () => {
+      const res = await post("/vocabularies", { vocabularyName: "vocab-1" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /vocabularies — null info on sparse response", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/vocabularies", { vocabularyName: "vocab-1", languageCode: "en-US" });
+      const body = await res.json();
+      expect(body.vocabulary).toBeNull();
+    });
+
+    it("DELETE /vocabularies/:name — deletes the vocabulary", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/vocabularies/vocab-1");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deleted).toBe(true);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("DeleteVocabularyCommand");
+    });
   });
 });

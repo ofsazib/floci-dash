@@ -64,3 +64,29 @@ export function useTranscribeVocabularies() {
     queryFn: () => api("/aws/transcribe/vocabularies"),
   });
 }
+
+export function useTranscribeVocabulary(name: string | null) {
+  return useQuery({
+    queryKey: ["aws", "transcribe", "vocabularies", name],
+    queryFn: () => api<any>(`/aws/transcribe/vocabularies/${encodeURIComponent(name!)}`),
+    enabled: !!name,
+  });
+}
+
+export function useCreateTranscribeVocabulary() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { vocabularyName: string; languageCode: string }) =>
+      api("/aws/transcribe/vocabularies", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "transcribe", "vocabularies"] }),
+  });
+}
+
+export function useDeleteTranscribeVocabulary() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api(`/aws/transcribe/vocabularies/${encodeURIComponent(name)}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "transcribe", "vocabularies"] }),
+  });
+}
