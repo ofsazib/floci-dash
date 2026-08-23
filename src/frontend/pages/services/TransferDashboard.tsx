@@ -394,6 +394,9 @@ import {
   useCreateTransferUser,
   useTransferUser,
   useDeleteTransferUser,
+  useUpdateTransferServer,
+  useUpdateTransferUser,
+  useImportTransferSshKey,
   useTransferTags,
 } from "../../hooks/useTransfer";
 import {
@@ -517,6 +520,13 @@ export function TransferDashboard() {
   const deleteUser = useDeleteTransferUser();
   const [showCreateServer, setShowCreateServer] = useState(false);
   const [showCreateUser, setShowCreateUser] = useState(false);
+  const updateServer = useUpdateTransferServer();
+  const [editServerId, setEditServerId] = useState<string | null>(null);
+  const [editPolicy, setEditPolicy] = useState("");
+  const updateServerUser = useUpdateTransferUser();
+  const importSshKey = useImportTransferSshKey();
+  const [sshUser, setSshUser] = useState<string | null>(null);
+  const [sshBody, setSshBody] = useState("");
   const [serverDomain, setServerDomain] = useState<SelectProps.Option>({ label: "S3", value: "S3" });
   const [userName, setUserName] = useState("");
   const [userRole, setUserRole] = useState("");
@@ -584,6 +594,14 @@ export function TransferDashboard() {
                     Stop
                   </Button>
                 )}
+                <Button
+                  onClick={() => {
+                    setEditServerId(i.serverId === editServerId ? null : i.serverId);
+                    setEditPolicy("");
+                  }}
+                >
+                  Edit
+                </Button>
                 <DeleteButton
                   itemName={i.serverId}
                   resourceType="server"
@@ -613,6 +631,15 @@ export function TransferDashboard() {
               { id: "homeDirectory", header: "Home Directory", cell: (i: any) => i.homeDirectory },
               { id: "sshKeys", header: "SSH Keys", cell: (i: any) => i.sshKeys },
               {
+                id: "sshKeys",
+                header: "",
+                cell: (i: any) => (
+                  <Button onClick={() => { setSshUser(i.userName === sshUser ? null : i.userName); setSshBody(""); }}>
+                    {i.userName === sshUser ? "Hide key form" : "Add SSH key"}
+                  </Button>
+                ),
+              },
+              {
                 id: "actions",
                 header: "",
                 cell: (i: any) => (
@@ -627,6 +654,36 @@ export function TransferDashboard() {
             ]}
             emptyMessage="No users for this server"
           />
+          {sshUser && (
+            <Container header={<Header variant="h3">Import SSH key for {sshUser}</Header>}>
+              <SpaceBetween size="s">
+                <Textarea
+                  value={sshBody}
+                  onChange={({ detail }) => setSshBody(detail.value)}
+                  rows={3}
+                  placeholder="ssh-ed25519 AAAA..."
+                />
+                <Button
+                  variant="primary"
+                  disabled={!sshBody.trim()}
+                  loading={importSshKey.isPending}
+                  onClick={() =>
+                    importSshKey.mutate(
+                      { serverId: selectedServerId!, userName: sshUser, sshPublicKeyBody: sshBody.trim() },
+                      { onSuccess: () => { setSshUser(null); setSshBody(""); } }
+                    )
+                  }
+                >
+                  Import key
+                </Button>
+                {importSshKey.isError && (
+                  <Alert type="error" dismissible>
+                    {(importSshKey.error as Error)?.message || "Failed to import SSH key"}
+                  </Alert>
+                )}
+              </SpaceBetween>
+            </Container>
+          )}
         </Container>
       )}
 
@@ -720,11 +777,46 @@ export function TransferDashboard() {
         </Form>
       </Modal>
       )}
+          {editServerId && (
+        <Modal
+          visible
+          onDismiss={() => setEditServerId(null)}
+          header={`Edit server — ${editServerId}`}
+          footer={
+            <Box float="right">
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button variant="link" onClick={() => setEditServerId(null)}>Cancel</Button>
+                <Button
+                  variant="primary"
+                  loading={updateServer.isPending}
+                  onClick={() => {
+                    updateServer.mutate(
+                      {
+                        serverId: editServerId,
+                        securityPolicyName: editPolicy.trim() || undefined,
+                      },
+                      { onSuccess: () => setEditServerId(null) }
+                    );
+                  }}
+                >
+                  Save
+                </Button>
+              </SpaceBetween>
+            </Box>
+          }
+        >
+          <Form>
+            {updateServer.isError && (
+              <Alert type="error" dismissible>
+                {(updateServer.error as Error)?.message || "Failed to update server"}
+              </Alert>
+            )}
+            <FormField label="Security policy name">
+              <Input value={editPolicy} onChange={({ detail }) => setEditPolicy(detail.value)} placeholder="TransferSecurityPolicy-2024-03" />
+            </FormField>
+          </Form>
+        </Modal>
+      )}
     </SpaceBetween>
   );
 }
-
-// ────────────────────────────────────────────────────────
-//  CUR (Cost & Usage Report)
-// ────────────────────────────────────────────────────────
-

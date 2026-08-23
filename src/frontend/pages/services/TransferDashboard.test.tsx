@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -49,6 +49,10 @@ const mockStartServer = vi.fn();
 const mockStopServer = vi.fn();
 const mockCreateUser = vi.fn();
 const mockDeleteUser = vi.fn();
+const mockUpdateServer = vi.fn();
+const mockImportSshKey = vi.fn();
+const importKeyState = vi.hoisted(() => ({ isError: false, error: null as Error | null }));
+const updateServerState = vi.hoisted(() => ({ isError: false, error: null as Error | null }));
 
 vi.mock("../../hooks/useTransfer", () => ({
   useTransferServers: (...args: any[]) => mockServers(...args),
@@ -87,6 +91,20 @@ vi.mock("../../hooks/useTransfer", () => ({
     get variables() { return deleteUserState.variables; },
   }),
   useTransferTags: (...args: any[]) => ({ data: undefined, isLoading: false }),
+  useUpdateTransferServer: () => ({
+    mutate: mockUpdateServer,
+    isPending: false,
+    get isError() { return updateServerState.isError; },
+    get error() { return updateServerState.error; },
+  }),
+  useUpdateTransferUser: () => ({ mutate: vi.fn(), isPending: false }),
+  useImportTransferSshKey: () => ({
+    mutate: mockImportSshKey,
+    isPending: false,
+    get isError() { return importKeyState.isError; },
+    get error() { return importKeyState.error; },
+  }),
+  useDeleteTransferSshKey: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 import { TransferDashboard } from "./TransferDashboard";
@@ -106,6 +124,10 @@ function dismissModalWithEscape() {
 }
 
 beforeEach(() => {
+  importKeyState.isError = false;
+  importKeyState.error = null;
+  updateServerState.isError = false;
+  updateServerState.error = null;
   vi.clearAllMocks();
   createServerState.isPending = false;
   createServerState.isError = false;
@@ -629,5 +651,178 @@ describe("TransferDashboard — users", () => {
     await waitFor(() => {
       expect(screen.getByText("Failed to create user")).toBeTruthy();
     });
+  });
+});
+
+describe("TransferDashboard — server edit + SSH keys", () => {
+  function setupOnlineServer(users: any[]) {
+    mockServers.mockReturnValue({
+      data: { servers: [{ ServerId: "s-001", Domain: "S3", State: "ONLINE", Protocols: ["SFTP"], IdentityProviderType: "SERVICE_MANAGED" }], total: 1 },
+      isLoading: false,
+    });
+    mockUsers.mockReturnValue({ data: { users, total: users.length }, isLoading: false });
+    return (async () => {
+      const user = userEvent.setup();
+      render(<TransferDashboard />, { wrapper: createWrapper() });
+      await waitFor(() => expect(screen.getByText("s-001")).toBeTruthy());
+      await user.click(screen.getByText("s-001"));
+      await waitFor(() => expect(screen.getByText("Users for s-001")).toBeTruthy());
+      return user;
+    })();
+  }
+
+  it("edits the server security policy", async () => {
+    mockUpdateServer.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
+    const user = await setupOnlineServer([]);
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const input = dialog.querySelector("input") as HTMLInputElement;
+    await user.type(input, "TransferSecurityPolicy-2024-03");
+    await user.click(within(dialog).getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(mockUpdateServer).toHaveBeenCalledWith(
+        { serverId: "s-001", securityPolicyName: "TransferSecurityPolicy-2024-03" },
+        expect.objectContaining({ onSuccess: expect.any(Function) })
+      )
+    );
+  });
+
+  it("imports an SSH key for a user", async () => {
+    mockImportSshKey.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
+    const user = await setupOnlineServer([
+      { UserName: "bob", Role: "arn:role", HomeDirectory: "/bucket/bob" },
+    ]);
+    await user.click(await screen.findByRole("button", { name: /Add SSH key/i }));
+    const area = await screen.findByRole("textbox");
+    fireEvent.change(area, { target: { value: "ssh-ed25519 AAAA" } });
+    await user.click(screen.getByRole("button", { name: /Import key/i }));
+    await waitFor(() =>
+      expect(mockImportSshKey).toHaveBeenCalledWith(
+        { serverId: "s-001", userName: "bob", sshPublicKeyBody: "ssh-ed25519 AAAA" },
+        expect.objectContaining({ onSuccess: expect.any(Function) })
+      )
+    );
+  });
+
+  it("keeps Import key disabled without a body and toggles off", async () => {
+    const user = await setupOnlineServer([
+      { UserName: "bob", Role: "arn:role", HomeDirectory: "/bucket/bob" },
+    ]);
+    await user.click(await screen.findByRole("button", { name: /Add SSH key/i }));
+    expect((await screen.findByRole("button", { name: /Import key/i })).hasAttribute("disabled")).toBe(true);
+    await user.click(screen.getByRole("button", { name: /Hide key form/i }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: /Import key/i })).toBeNull());
+  });
+
+  it("shows the SSH import error and fallback", async () => {
+    importKeyState.isError = true;
+    importKeyState.error = new Error("key failed");
+    const user = await setupOnlineServer([
+      { UserName: "bob", Role: "arn:role", HomeDirectory: "/bucket/bob" },
+    ]);
+    await user.click(await screen.findByRole("button", { name: /Add SSH key/i }));
+    expect(await screen.findByText("key failed")).toBeTruthy();
+  });
+});
+
+describe("TransferDashboard — edit modal error + fallback arms", () => {
+  function setupOnlineServer() {
+    mockServers.mockReturnValue({
+      data: { servers: [{ ServerId: "s-001", Domain: "S3", State: "ONLINE", Protocols: ["SFTP"], IdentityProviderType: "SERVICE_MANAGED" }], total: 1 },
+      isLoading: false,
+    });
+    mockUsers.mockReturnValue({ data: { users: [], total: 0 }, isLoading: false });
+    return (async () => {
+      const user = userEvent.setup();
+      render(<TransferDashboard />, { wrapper: createWrapper() });
+      await waitFor(() => expect(screen.getByText("s-001")).toBeTruthy());
+      return user;
+    })();
+  }
+
+  it("shows the edit-server error and fallback", async () => {
+    updateServerState.isError = true;
+    updateServerState.error = new Error("edit failed");
+    const user = await setupOnlineServer();
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    expect(await screen.findByText("edit failed")).toBeTruthy();
+  });
+
+  it("shows the generic edit-server error", async () => {
+    updateServerState.isError = true;
+    updateServerState.error = null;
+    const user = await setupOnlineServer();
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    expect(await screen.findByText("Failed to update server")).toBeTruthy();
+  });
+
+  it("shows the generic SSH import error", async () => {
+    importKeyState.isError = true;
+    importKeyState.error = null;
+    mockServers.mockReturnValue({
+      data: { servers: [{ ServerId: "s-001", Domain: "S3", State: "ONLINE", Protocols: ["SFTP"], IdentityProviderType: "SERVICE_MANAGED" }], total: 1 },
+      isLoading: false,
+    });
+    mockUsers.mockReturnValue({
+      data: { users: [{ UserName: "bob", Role: "r", HomeDirectory: "/b" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<TransferDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("s-001")).toBeTruthy());
+    await user.click(screen.getByText("s-001"));
+    await user.click(await screen.findByRole("button", { name: /Add SSH key/i }));
+    expect(await screen.findByText("Failed to import SSH key")).toBeTruthy();
+  });
+
+  it("cancels the edit modal and Escape-dismisses", async () => {
+    const user = await setupOnlineServer();
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(mockUpdateServer).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    document.querySelectorAll('[class*="awsui_dialog"]').forEach((d) =>
+      fireEvent.keyDown(d as HTMLElement, { keyCode: 27 })
+    );
+    expect(mockUpdateServer).not.toHaveBeenCalled();
+  });
+});
+
+describe("TransferDashboard — edit toggle + blank-policy arms", () => {
+  function setupOnlineServer() {
+    mockServers.mockReturnValue({
+      data: { servers: [{ ServerId: "s-001", Domain: "S3", State: "ONLINE", Protocols: ["SFTP"], IdentityProviderType: "SERVICE_MANAGED" }], total: 1 },
+      isLoading: false,
+    });
+    mockUsers.mockReturnValue({ data: { users: [], total: 0 }, isLoading: false });
+    return (async () => {
+      const user = userEvent.setup();
+      render(<TransferDashboard />, { wrapper: createWrapper() });
+      await waitFor(() => expect(screen.getByText("s-001")).toBeTruthy());
+      return user;
+    })();
+  }
+
+  it("saves with an undefined policy when blank", async () => {
+    mockUpdateServer.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
+    const user = await setupOnlineServer();
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    await user.click(within(dialog).getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(mockUpdateServer).toHaveBeenCalledWith(
+        { serverId: "s-001", securityPolicyName: undefined },
+        expect.anything()
+      )
+    );
+  });
+
+  it("toggles the Edit button off on second click", async () => {
+    const user = await setupOnlineServer();
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await screen.findAllByRole("dialog");
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    expect(mockUpdateServer).not.toHaveBeenCalled();
   });
 });

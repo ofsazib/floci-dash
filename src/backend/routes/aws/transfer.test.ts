@@ -31,6 +31,10 @@ vi.mock("@aws-sdk/client-transfer", () => ({
   ListTagsForResourceCommand: createCmd("ListTagsForResourceCommand"),
   TagResourceCommand: createCmd("TagResourceCommand"),
   UntagResourceCommand: createCmd("UntagResourceCommand"),
+  UpdateServerCommand: createCmd("UpdateServerCommand"),
+  UpdateUserCommand: createCmd("UpdateUserCommand"),
+  ImportSshPublicKeyCommand: createCmd("ImportSshPublicKeyCommand"),
+  DeleteSshPublicKeyCommand: createCmd("DeleteSshPublicKeyCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -46,6 +50,14 @@ async function get(path: string) {
 async function post(path: string, body?: any) {
   return router.request(path, {
     method: "POST",
+    body: body != null ? JSON.stringify(body) : undefined,
+    headers: body != null ? { "content-type": "application/json" } : undefined,
+  });
+}
+
+async function put(path: string, body?: any) {
+  return router.request(path, {
+    method: "PUT",
     body: body != null ? JSON.stringify(body) : undefined,
     headers: body != null ? { "content-type": "application/json" } : undefined,
   });
@@ -296,6 +308,75 @@ describe("Transfer Family Routes", () => {
     it("DELETE /tags — 400 when no resourceArn", async () => {
       const res = await del("/tags");
       expect(res.status).toBe(400);
+    });
+  });
+
+  describe("Update + SSH keys", () => {
+    it("PUT /servers/:id — updates server settings", async () => {
+      mockSend.mockResolvedValueOnce({ ServerId: "s-1" });
+      const res = await put("/servers/s-1", {
+        protocols: ["SFTP"],
+        endpointType: "PUBLIC",
+        loggingRole: "arn:role",
+        securityPolicyName: "TransferSecurityPolicy-2024-03",
+      });
+      const body = await res.json();
+      expect(body.serverId).toBe("s-1");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("UpdateServerCommand");
+      expect(cmd.Protocols).toEqual(["SFTP"]);
+      expect(cmd.SecurityPolicyName).toBe("TransferSecurityPolicy-2024-03");
+    });
+
+    it("PUT /servers/:id — sparse response falls back to id", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/servers/s-1", {});
+      expect((await res.json()).serverId).toBe("s-1");
+    });
+
+    it("PUT /servers/:id/users/:userName — updates user", async () => {
+      mockSend.mockResolvedValueOnce({ ServerId: "s-1", UserName: "bob" });
+      const res = await put("/servers/s-1/users/bob", {
+        role: "arn:role",
+        homeDirectory: "/bucket/user",
+        homeDirectoryType: "PATH",
+      });
+      const body = await res.json();
+      expect(body.userName).toBe("bob");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("UpdateUserCommand");
+      expect(cmd.HomeDirectory).toBe("/bucket/user");
+    });
+
+    it("PUT /servers/:id/users/:userName — sparse response falls back to params", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/servers/s-1/users/bob", {});
+      const body = await res.json();
+      expect(body).toEqual({ serverId: "s-1", userName: "bob" });
+    });
+
+    it("POST .../ssh-keys — imports a key", async () => {
+      mockSend.mockResolvedValueOnce({ SshPublicKeyId: "key-1" });
+      const res = await post("/servers/s-1/users/bob/ssh-keys", {
+        sshPublicKeyBody: "ssh-ed25519 AAAA",
+      });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.sshPublicKeyId).toBe("key-1");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("ImportSshPublicKeyCommand");
+    });
+
+    it("POST .../ssh-keys — 400 without body", async () => {
+      const res = await post("/servers/s-1/users/bob/ssh-keys", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE .../ssh-keys/:keyId — deletes the key", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/servers/s-1/users/bob/ssh-keys/key-1");
+      expect((await res.json()).deleted).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteSshPublicKeyCommand");
     });
   });
 });

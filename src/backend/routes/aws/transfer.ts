@@ -3,6 +3,12 @@ import type { Context } from "hono";
 import { create } from "../../clients/aws";
 import { TransferClient } from "@aws-sdk/client-transfer";
 import {
+  UpdateServerCommand,
+  UpdateUserCommand,
+  ImportSshPublicKeyCommand,
+  DeleteSshPublicKeyCommand,
+} from "@aws-sdk/client-transfer";
+import {
   ListServersCommand,
   CreateServerCommand,
   DescribeServerCommand,
@@ -170,6 +176,71 @@ router.delete("/tags", async (c: Context) => {
     new UntagResourceCommand({ Arn: resourceArn, TagKeys: tagKeys })
   );
   return c.json({ untagged: true });
+});
+
+
+router.put("/servers/:id", async (c: Context) => {
+  const id = c.req.param("id")!;
+  const body = await c.req.json<any>();
+  const client = getClient();
+  const result = await client.send(
+    new UpdateServerCommand({
+      ServerId: id,
+      Protocols: body.protocols,
+      EndpointType: body.endpointType,
+      LoggingRole: body.loggingRole,
+      SecurityPolicyName: body.securityPolicyName,
+    })
+  );
+  return c.json({ serverId: result.ServerId || id });
+});
+
+router.put("/servers/:id/users/:userName", async (c: Context) => {
+  const id = c.req.param("id")!;
+  const userName = c.req.param("userName")!;
+  const body = await c.req.json<any>();
+  const client = getClient();
+  const result = await client.send(
+    new UpdateUserCommand({
+      ServerId: id,
+      UserName: userName,
+      Role: body.role,
+      HomeDirectory: body.homeDirectory,
+      HomeDirectoryType: body.homeDirectoryType,
+    })
+  );
+  return c.json({ serverId: result.ServerId || id, userName: result.UserName || userName });
+});
+
+router.post("/servers/:id/users/:userName/ssh-keys", async (c: Context) => {
+  const id = c.req.param("id")!;
+  const userName = c.req.param("userName")!;
+  const body = await c.req.json<any>();
+  if (!body.sshPublicKeyBody) return c.json({ error: "sshPublicKeyBody is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new ImportSshPublicKeyCommand({
+      ServerId: id,
+      UserName: userName,
+      SshPublicKeyBody: body.sshPublicKeyBody,
+    })
+  );
+  return c.json({ sshPublicKeyId: result.SshPublicKeyId }, 201);
+});
+
+router.delete("/servers/:id/users/:userName/ssh-keys/:keyId", async (c: Context) => {
+  const id = c.req.param("id")!;
+  const userName = c.req.param("userName")!;
+  const keyId = c.req.param("keyId")!;
+  const client = getClient();
+  await client.send(
+    new DeleteSshPublicKeyCommand({
+      ServerId: id,
+      UserName: userName,
+      SshPublicKeyId: keyId,
+    })
+  );
+  return c.json({ deleted: true });
 });
 
 export default router;

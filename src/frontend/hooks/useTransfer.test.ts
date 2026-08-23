@@ -21,6 +21,10 @@ import {
   useTransferUser,
   useDeleteTransferUser,
   useTransferTags,
+  useUpdateTransferServer,
+  useUpdateTransferUser,
+  useImportTransferSshKey,
+  useDeleteTransferSshKey,
 } from "./useTransfer";
 
 function createWrapper() {
@@ -197,5 +201,50 @@ describe("useTransferTags", () => {
     expect(mockApi).toHaveBeenCalledWith(
       "/aws/transfer/tags?resourceArn=arn%3Aaws%3Atransfer%3Aus-east-1%3A123%3Aserver%2Fs-1",
     );
+  });
+});
+
+describe("Transfer update + SSH key hooks", () => {
+  it("useUpdateTransferServer puts by server id", async () => {
+    mockApi.mockResolvedValueOnce({ serverId: "s 1" });
+    const { result } = renderHook(() => useUpdateTransferServer(), { wrapper: createWrapper() });
+    result.current.mutate({ serverId: "s 1", securityPolicyName: "p" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/transfer/servers/s%201", {
+      method: "PUT",
+      body: JSON.stringify({ protocols: undefined, endpointType: undefined, loggingRole: undefined, securityPolicyName: "p" }),
+    });
+  });
+
+  it("useUpdateTransferUser puts role and home", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useUpdateTransferUser(), { wrapper: createWrapper() });
+    result.current.mutate({ serverId: "s1", userName: "u 1", role: "r" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/transfer/servers/s1/users/u%201", {
+      method: "PUT",
+      body: JSON.stringify({ role: "r", homeDirectory: undefined, homeDirectoryType: undefined }),
+    });
+  });
+
+  it("useImportTransferSshKey posts the body", async () => {
+    mockApi.mockResolvedValueOnce({ sshPublicKeyId: "k1" });
+    const { result } = renderHook(() => useImportTransferSshKey(), { wrapper: createWrapper() });
+    result.current.mutate({ serverId: "s1", userName: "bob", sshPublicKeyBody: "ssh-key" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/transfer/servers/s1/users/bob/ssh-keys", {
+      method: "POST",
+      body: JSON.stringify({ sshPublicKeyBody: "ssh-key" }),
+    });
+  });
+
+  it("useDeleteTransferSshKey deletes all ids encoded", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useDeleteTransferSshKey(), { wrapper: createWrapper() });
+    result.current.mutate({ serverId: "s/1", userName: "u 1", sshPublicKeyId: "k 1" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/transfer/servers/s%2F1/users/u%201/ssh-keys/k%201", {
+      method: "DELETE",
+    });
   });
 });

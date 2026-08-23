@@ -117,3 +117,75 @@ export function useTransferTags(resourceArn: string | null) {
     enabled: !!resourceArn,
   });
 }
+
+export function useUpdateTransferServer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: {
+      serverId: string;
+      protocols?: string[];
+      endpointType?: string;
+      loggingRole?: string;
+      securityPolicyName?: string;
+    }) =>
+      api(`/aws/transfer/servers/${encodeURIComponent(params.serverId)}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          protocols: params.protocols,
+          endpointType: params.endpointType,
+          loggingRole: params.loggingRole,
+          securityPolicyName: params.securityPolicyName,
+        }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "transfer"] }),
+  });
+}
+
+export function useUpdateTransferUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: {
+      serverId: string;
+      userName: string;
+      role?: string;
+      homeDirectory?: string;
+      homeDirectoryType?: string;
+    }) =>
+      api(
+        `/aws/transfer/servers/${encodeURIComponent(params.serverId)}/users/${encodeURIComponent(params.userName)}`,
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            role: params.role,
+            homeDirectory: params.homeDirectory,
+            homeDirectoryType: params.homeDirectoryType,
+          }),
+        }
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "transfer"] }),
+  });
+}
+
+export function useImportTransferSshKey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { serverId: string; userName: string; sshPublicKeyBody: string }) =>
+      api(
+        `/aws/transfer/servers/${encodeURIComponent(params.serverId)}/users/${encodeURIComponent(params.userName)}/ssh-keys`,
+        { method: "POST", body: JSON.stringify({ sshPublicKeyBody: params.sshPublicKeyBody }) }
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "transfer"] }),
+  });
+}
+
+export function useDeleteTransferSshKey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { serverId: string; userName: string; sshPublicKeyId: string }) =>
+      api(
+        `/aws/transfer/servers/${encodeURIComponent(params.serverId)}/users/${encodeURIComponent(params.userName)}/ssh-keys/${encodeURIComponent(params.sshPublicKeyId)}`,
+        { method: "DELETE" }
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "transfer"] }),
+  });
+}
