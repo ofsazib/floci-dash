@@ -99,6 +99,10 @@ import {
   useDeleteSSMParameter,
   useSSMGetParameters,
   useSSMParametersByPath,
+  useSSMCommands,
+  useSSMSendCommand,
+  useSSMCommandInvocations,
+  useSSMCancelCommand,
   useSSMDeleteParameters,
   useSSMLabelParameter,
   useSSMInstanceInformation,
@@ -512,6 +516,7 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
 ];
 
 export function SSMDashboard() {
+  const { showToast } = useToast();
   const { data, isLoading, isError, error } = useSSMParameters();
   const putParam = usePutSSMParameter();
   const deleteParam = useDeleteSSMParameter();
@@ -860,6 +865,11 @@ export function SSMDashboard() {
           ),
         },
         {
+          id: "run-command",
+          label: "Run Command",
+          content: <SSMRunCommandTab showToast={showToast} />,
+        },
+        {
           id: "instances",
           label: "Managed Instances",
           content: (
@@ -887,6 +897,147 @@ export function SSMDashboard() {
   );
 }
 
+
+function SSMRunCommandTab({ showToast }: { showToast: (t: "success" | "error", m: string) => void }) {
+  const commandsQuery = useSSMCommands();
+  const sendCommand = useSSMSendCommand();
+  const cancelCommand = useSSMCancelCommand();
+  const [selectedCommand, setSelectedCommand] = useState<string | null>(null);
+  const invocationsQuery = useSSMCommandInvocations(selectedCommand);
+  const [showSend, setShowSend] = useState(false);
+  const [documentName, setDocumentName] = useState("AWS-RunShellScript");
+  const [instanceIds, setInstanceIds] = useState("");
+  const [commandsText, setCommandsText] = useState("");
+  const [comment, setComment] = useState("");
+
+  const commands = commandsQuery.data?.commands || [];
+
+  return (
+    <SpaceBetween size="l">
+      <ResourceTable
+        resourceName="Command"
+        headerTitle="Run Command History"
+        headerCounter={commandsQuery.data?.total}
+        items={commands.map((c) => ({
+          id: c.commandId,
+          documentName: c.documentName || "—",
+          status: c.status || "—",
+          comment: c.comment || "—",
+          targets: c.targetCount ?? "—",
+        }))}
+        loading={commandsQuery.isLoading}
+        emptyMessage="No commands sent yet"
+        columns={[
+          { id: "id", header: "Command ID", cell: (i: any) => i.id, isRowHeader: true },
+          { id: "doc", header: "Document", cell: (i: any) => i.documentName },
+          { id: "status", header: "Status", cell: (i: any) => <StatusBadge status={i.status} /> },
+          { id: "comment", header: "Comment", cell: (i: any) => i.comment },
+          { id: "targets", header: "Targets", cell: (i: any) => i.targets },
+          {
+            id: "actions",
+            header: "",
+            cell: (i: any) => (
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button onClick={() => setSelectedCommand(i.id === selectedCommand ? null : i.id)}>
+                  {i.id === selectedCommand ? "Hide" : "Invocations"}
+                </Button>
+                <Button
+                  disabled={i.status === "Success" || i.status === "Cancelled"}
+                  onClick={() =>
+                    cancelCommand.mutate(i.id, {
+                      onSuccess: () => showToast("success", "Command cancelled"),
+                      onError: (e) => showToast("error", (e as Error).message || "Cancel failed"),
+                    })
+                  }
+                >
+                  Cancel
+                </Button>
+              </SpaceBetween>
+            ),
+          },
+        ]}
+        onCreate={() => setShowSend(true)}
+      />
+
+      {selectedCommand && (
+        <Container header={<Header variant="h3" counter={invocationsQuery.data?.total}>Invocations</Header>}>
+          <ResourceTable
+            resourceName="Invocation"
+            items={(invocationsQuery.data?.invocations || []).map((inv: any) => ({
+              instanceId: inv.instanceId || "—",
+              status: inv.status || "—",
+              output: inv.standardOutputContent || "—",
+            }))}
+            columns={[
+              { id: "instance", header: "Instance", cell: (i: any) => i.instanceId, isRowHeader: true },
+              { id: "status", header: "Status", cell: (i: any) => i.status },
+              { id: "output", header: "Output", cell: (i: any) => (
+                <pre className="fd-code-bg" style={{ fontSize: 11, padding: 6, borderRadius: 4, margin: 0, whiteSpace: "pre-wrap" }}>{i.output}</pre>
+              ) },
+            ]}
+            emptyMessage="No invocations"
+            loading={invocationsQuery.isLoading}
+          />
+        </Container>
+      )}
+
+      <Modal
+        visible={showSend}
+        onDismiss={() => setShowSend(false)}
+        header="Send command"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowSend(false)}>Cancel</Button>
+              <Button
+                variant="primary"
+                loading={sendCommand.isPending}
+                disabled={!documentName.trim() || !instanceIds.trim()}
+                onClick={() => {
+                  sendCommand.mutate(
+                    {
+                      documentName: documentName.trim(),
+                      instanceIds: instanceIds.split(",").map((s) => s.trim()).filter(Boolean),
+                      parameters: commandsText.trim() ? { commands: commandsText.trim().split("\n") } : undefined,
+                      comment: comment.trim() || undefined,
+                    },
+                    {
+                      onSuccess: () => {
+                        setShowSend(false);
+                        setInstanceIds(""); setCommandsText(""); setComment("");
+                        showToast("success", "Command sent");
+                      },
+                      onError: (e) => showToast("error", (e as Error).message || "Send failed"),
+                    }
+                  );
+                }}
+              >
+                Send
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          <SpaceBetween size="m">
+            <FormField label="Document name">
+              <Input value={documentName} onChange={({ detail }) => setDocumentName(detail.value)} placeholder="AWS-RunShellScript" />
+            </FormField>
+            <FormField label="Instance IDs (comma-separated)">
+              <Input value={instanceIds} onChange={({ detail }) => setInstanceIds(detail.value)} placeholder="i-123,i-456" />
+            </FormField>
+            <FormField label="Commands (one per line)">
+              <Textarea value={commandsText} onChange={({ detail }) => setCommandsText(detail.value)} rows={4} placeholder="echo hello" />
+            </FormField>
+            <FormField label="Comment (optional)">
+              <Input value={comment} onChange={({ detail }) => setComment(detail.value)} />
+            </FormField>
+          </SpaceBetween>
+        </Form>
+      </Modal>
+    </SpaceBetween>
+  );
+}
 
 function SSMParameterDetail({ name, onBack }: { name: string; onBack: () => void }) {
   const { data: paramData, isLoading, isError, error } = useSSMParameter(name);

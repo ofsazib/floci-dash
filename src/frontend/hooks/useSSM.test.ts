@@ -23,6 +23,10 @@ import {
   useSSMTags,
   useAddSSMTags,
   useRemoveSSMTags,
+  useSSMCommands,
+  useSSMSendCommand,
+  useSSMCommandInvocations,
+  useSSMCancelCommand,
 } from "./useSSM";
 
 function createWrapper() {
@@ -208,5 +212,43 @@ describe("useRemoveSSMTags", () => {
       "/aws/ssm/tags?resourceId=%2Fapp%2Fx&tagKeys=env,team",
       expect.objectContaining({ method: "DELETE" })
     );
+  });
+});
+
+describe("SSM run command hooks", () => {
+  it("useSSMCommands fetches the history", async () => {
+    mockApi.mockResolvedValueOnce({ commands: [], total: 0 });
+    const { result } = renderHook(() => useSSMCommands(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ssm/commands");
+  });
+
+  it("useSSMSendCommand posts the body", async () => {
+    mockApi.mockResolvedValueOnce({ command: {} });
+    const { result } = renderHook(() => useSSMSendCommand(), { wrapper: createWrapper() });
+    result.current.mutate({ documentName: "d", instanceIds: ["i-1"] });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ssm/commands", {
+      method: "POST",
+      body: JSON.stringify({ documentName: "d", instanceIds: ["i-1"] }),
+    });
+  });
+
+  it("useSSMCommandInvocations is gated on id", async () => {
+    mockApi.mockResolvedValueOnce({ invocations: [], total: 0 });
+    const { result } = renderHook(() => useSSMCommandInvocations("c 1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ssm/commands/c%201/invocations");
+
+    const idle = renderHook(() => useSSMCommandInvocations(null), { wrapper: createWrapper() });
+    expect(idle.result.current.fetchStatus).toBe("idle");
+  });
+
+  it("useSSMCancelCommand deletes by id", async () => {
+    mockApi.mockResolvedValueOnce({ cancelled: true });
+    const { result } = renderHook(() => useSSMCancelCommand(), { wrapper: createWrapper() });
+    result.current.mutate("c-1");
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ssm/commands/c-1", { method: "DELETE" });
   });
 });

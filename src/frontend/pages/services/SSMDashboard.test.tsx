@@ -14,6 +14,10 @@ const mockPutParam = vi.fn();
 const mockDeleteParam = vi.fn();
 const mockGetParamsBatch = vi.fn();
 const mockPathResults = vi.fn();
+const mockCommands = vi.fn();
+const mockSendCommand = vi.fn();
+const mockInvocations = vi.fn();
+const mockCancelCommand = vi.fn();
 const mockDeleteParamsBatch = vi.fn();
 const mockLabelParam = vi.fn();
 const mockInstances = vi.fn();
@@ -50,6 +54,15 @@ vi.mock("../../hooks/useSSM", () => ({
   useSSMDeleteParameters: () => ({ mutateAsync: mockDeleteParamsBatch, isPending: false, isError: false, error: null, reset: vi.fn() }),
   useSSMLabelParameter: () => ({ mutate: mockLabelParam, isPending: false, isError: false, error: null, reset: vi.fn() }),
   useSSMInstanceInformation: (...args: any[]) => mockInstances(...args),
+  useSSMCommands: (...args: any[]) => mockCommands(...args),
+  useSSMSendCommand: () => ({
+    mutate: mockSendCommand,
+    isPending: false,
+    isError: false,
+    error: null,
+  }),
+  useSSMCommandInvocations: (...args: any[]) => mockInvocations(...args),
+  useSSMCancelCommand: () => ({ mutate: mockCancelCommand, isPending: false }),
 }));
 
 import { SSMDashboard } from "./SSMDashboard";
@@ -82,6 +95,8 @@ vi.mock("../../components/Toast", () => ({
 // ─── Setup ──────────────────────────────────────────────
 
 beforeEach(() => {
+  mockCommands.mockReturnValue({ data: { commands: [], total: 0 }, isLoading: false });
+  mockInvocations.mockReturnValue({ data: { invocations: [], total: 0 }, isLoading: false });
   vi.clearAllMocks();
   putParamState.isError = false;
   putParamState.error = null;
@@ -315,6 +330,8 @@ describe("SSMDashboard — parameters list", () => {
 
 describe("SSMDashboard — parameter detail view", () => {
   beforeEach(() => {
+  mockCommands.mockReturnValue({ data: { commands: [], total: 0 }, isLoading: false });
+  mockInvocations.mockReturnValue({ data: { invocations: [], total: 0 }, isLoading: false });
     mockParameters.mockReturnValue({
       data: {
         parameters: [
@@ -974,5 +991,227 @@ describe("SSMDashboard — parameter lookup + managed instances", () => {
     await waitFor(() =>
       expect(screen.getByText("No managed instances found.")).toBeTruthy(),
     );
+  });
+});
+
+describe("SSMDashboard — run command tab", () => {
+  function openTab() {
+    return (async () => {
+      const user = userEvent.setup();
+      render(<SSMDashboard />, { wrapper: createWrapper() });
+      await user.click(screen.getByRole("tab", { name: /Run Command/i }));
+      return user;
+    })();
+  }
+
+  it("renders command history with dash fallbacks", async () => {
+    mockCommands.mockReturnValue({
+      data: { commands: [{ commandId: "c-1", documentName: "AWS-RunShellScript", status: "Success", targetCount: 2 }], total: 1 },
+      isLoading: false,
+    });
+    await openTab();
+    expect(await screen.findByText("c-1")).toBeTruthy();
+    expect(screen.getByText("AWS-RunShellScript")).toBeTruthy();
+  });
+
+  it("shows the empty message", async () => {
+    await openTab();
+    expect(await screen.findByText("No commands sent yet")).toBeTruthy();
+  });
+
+  it("sends a command from the modal", async () => {
+    mockSendCommand.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
+    const user = await openTab();
+    await user.click(await screen.findByRole("button", { name: /Create command/i }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const inputs = dialog.querySelectorAll("input");
+    await user.type(inputs[1], "i-1, i-2");
+    const areas = dialog.querySelectorAll("textarea");
+    fireEvent.change(areas[0], { target: { value: "echo hi" } });
+    const sendBtn = screen.getAllByRole("button", { name: /^Send$/ }).at(-1)!;
+    await user.click(sendBtn);
+    await waitFor(() =>
+      expect(mockSendCommand).toHaveBeenCalledWith(
+        {
+          documentName: "AWS-RunShellScript",
+          instanceIds: ["i-1", "i-2"],
+          parameters: { commands: ["echo hi"] },
+          comment: undefined,
+        },
+        expect.objectContaining({ onSuccess: expect.any(Function) })
+      )
+    );
+  });
+
+  it("keeps Send disabled without instances", async () => {
+    const user = await openTab();
+    await user.click(await screen.findByRole("button", { name: /Create command/i }));
+    const sendBtn = screen.getAllByRole("button", { name: /^Send$/ }).at(-1)!;
+    expect(sendBtn.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("shows invocations when the row button is clicked", async () => {
+    mockCommands.mockReturnValue({
+      data: { commands: [{ commandId: "c-1", documentName: "d", status: "Pending", targetCount: 1 }], total: 1 },
+      isLoading: false,
+    });
+    mockInvocations.mockReturnValue({
+      data: { invocations: [{ instanceId: "i-1", status: "Success", standardOutputContent: "hello" }], total: 1 },
+      isLoading: false,
+    });
+    const user = await openTab();
+    await user.click(await screen.findByRole("button", { name: "Invocations" }));
+    expect(await screen.findByText("hello")).toBeTruthy();
+    expect(mockInvocations).toHaveBeenCalledWith("c-1");
+    await user.click(screen.getByRole("button", { name: "Hide" }));
+    await waitFor(() => expect(screen.queryByText("hello")).toBeNull());
+  });
+
+  it("cancels a pending command", async () => {
+    mockCancelCommand.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
+    mockCommands.mockReturnValue({
+      data: { commands: [{ commandId: "c-1", documentName: "d", status: "Pending", targetCount: 1 }], total: 1 },
+      isLoading: false,
+    });
+    const user = await openTab();
+    await screen.findByText("c-1");
+    const rowCancel = screen.getAllByRole("button", { name: "Cancel" })[0];
+    await user.click(rowCancel);
+    await waitFor(() => expect(mockCancelCommand).toHaveBeenCalledWith("c-1", expect.anything()));
+  });
+
+  it("disables Cancel for terminal statuses", async () => {
+    mockCommands.mockReturnValue({
+      data: { commands: [{ commandId: "c-1", documentName: "d", status: "Success", targetCount: 1 }], total: 1 },
+      isLoading: false,
+    });
+    await openTab();
+    await screen.findByText("c-1");
+    const btn = screen.getAllByRole("button", { name: "Cancel" })[0];
+    expect(btn.hasAttribute("disabled")).toBe(true);
+  });
+});
+
+describe("SSMDashboard — run command tab edge arms", () => {
+  async function openTab() {
+    const user = userEvent.setup();
+    render(<SSMDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Run Command/i }));
+    return user;
+  }
+
+  it("covers send-error toast, cancel-error toast, and fallbacks", async () => {
+    mockSendCommand.mockImplementation((_b: any, opts: any) => opts?.onError?.(new Error("send failed")));
+    const user = await openTab();
+    await user.click(await screen.findByRole("button", { name: /Create command/i }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const inputs = dialog.querySelectorAll("input");
+    await user.type(inputs[1], "i-1");
+    await user.click(screen.getAllByRole("button", { name: /^Send$/ }).at(-1)!);
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("error", "send failed"));
+
+    mockSendCommand.mockImplementation((_b: any, opts: any) => opts?.onError?.(new Error("")));
+    await user.click(screen.getAllByRole("button", { name: /^Send$/ }).at(-1)!);
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("error", "Send failed"));
+
+  });
+
+  it("covers the cancel-error toast", async () => {
+    mockCancelCommand.mockImplementation((_b: any, opts: any) => opts?.onError?.(new Error("")));
+    mockCommands.mockReturnValue({
+      data: { commands: [{ commandId: "c-9", documentName: "d", status: "Pending", targetCount: 1 }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<SSMDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Run Command/i }));
+    await screen.findByText("c-9");
+    await user.click(screen.getAllByRole("button", { name: "Cancel" })[0]);
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("error", "Cancel failed"));
+  });
+
+  it("covers modal Cancel, Escape-dismiss, doc/comment typing, and Cancelled-status row", async () => {
+    mockCommands.mockReturnValue({
+      data: { commands: [{ commandId: "c-1", documentName: "d", status: "Cancelled", comment: "", targetCount: 0 }], total: 1 },
+      isLoading: false,
+    });
+    const user = await openTab();
+    expect(await screen.findByText("c-1")).toBeTruthy();
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(1);
+
+    await user.click(screen.getByRole("button", { name: /Create command/i }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const inputs = dialog.querySelectorAll("input");
+    await user.clear(inputs[0]);
+    await user.type(inputs[0], "AWS-RunPowerShellScript");
+    await user.type(inputs[2], "my comment");
+    await user.click(screen.getAllByRole("button", { name: "Cancel" }).at(-1)!);
+
+    await user.click(screen.getByRole("button", { name: /Create command/i }));
+    document.querySelectorAll('[class*="awsui_dialog"]').forEach((d) => fireEvent.keyDown(d as HTMLElement, { keyCode: 27 }));
+    expect(mockSendCommand).not.toHaveBeenCalled();
+  });
+
+  it("sends with comment but no commands text", async () => {
+    mockSendCommand.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
+    const user = await openTab();
+    await user.click(await screen.findByRole("button", { name: /Create command/i }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const inputs = dialog.querySelectorAll("input");
+    await user.type(inputs[1], "i-9");
+    await user.type(inputs[2], "hello");
+    await user.click(screen.getAllByRole("button", { name: /^Send$/ }).at(-1)!);
+    await waitFor(() =>
+      expect(mockSendCommand).toHaveBeenCalledWith(
+        expect.objectContaining({ comment: "hello", parameters: undefined }),
+        expect.anything()
+      )
+    );
+  });
+});
+
+describe("SSMDashboard — run command sparse arms", () => {
+  it("renders dash fallbacks for sparse commands and invocations", async () => {
+    mockCommands.mockReturnValue({
+      data: { commands: [{ commandId: "c-2" } as any], total: 1 },
+      isLoading: false,
+    });
+    let calls = 0;
+    mockInvocations.mockImplementation(() => {
+      calls += 1;
+      if (calls <= 3) return { data: { invocations: [{} as any], total: 1 }, isLoading: false };
+      return { data: undefined, isLoading: false };
+    });
+    const user = userEvent.setup();
+    render(<SSMDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Run Command/i }));
+    expect(await screen.findByText("c-2")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Invocations" }));
+    await waitFor(() => {
+      expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(3);
+    });
+  });
+
+  it("shows empty invocations and empty tables while loading", async () => {
+    mockCommands.mockReturnValue({ data: undefined, isLoading: false });
+    const user = userEvent.setup();
+    render(<SSMDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Run Command/i }));
+    expect(await screen.findByText("No commands sent yet")).toBeTruthy();
+  });
+});
+
+describe("SSMDashboard — run command invocations undefined arm", () => {
+  it("shows empty invocations table when data is missing", async () => {
+    mockCommands.mockReturnValue({
+      data: { commands: [{ commandId: "c-3", documentName: "d", status: "Pending", targetCount: 1 }], total: 1 },
+      isLoading: false,
+    });
+    mockInvocations.mockReturnValue({ data: undefined, isLoading: false });
+    const user = userEvent.setup();
+    render(<SSMDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Run Command/i }));
+    await user.click(await screen.findByRole("button", { name: "Invocations" }));
+    expect(await screen.findByText("No invocations")).toBeTruthy();
   });
 });

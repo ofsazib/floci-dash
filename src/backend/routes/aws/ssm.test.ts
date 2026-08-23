@@ -31,6 +31,11 @@ vi.mock("@aws-sdk/client-ssm", () => ({
   AddTagsToResourceCommand: createCmd("AddTagsToResourceCommand"),
   ListTagsForResourceCommand: createCmd("ListTagsForResourceCommand"),
   RemoveTagsFromResourceCommand: createCmd("RemoveTagsFromResourceCommand"),
+  SendCommandCommand: createCmd("SendCommandCommand"),
+  ListCommandsCommand: createCmd("ListCommandsCommand"),
+  ListCommandInvocationsCommand: createCmd("ListCommandInvocationsCommand"),
+  GetCommandInvocationCommand: createCmd("GetCommandInvocationCommand"),
+  CancelCommandCommand: createCmd("CancelCommandCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -337,5 +342,123 @@ describe("SSM routes — Tags", () => {
     const json = await res.json();
     expect(json.instances).toEqual([]);
     expect(json.total).toBe(0);
+  });
+
+  describe("Run Command", () => {
+    it("POST /commands — sends a command", async () => {
+      mockSend.mockResolvedValueOnce({
+        Command: { CommandId: "c-1", DocumentName: "AWS-RunShellScript", Status: "Pending", TargetCount: 2 },
+      });
+      const res = await post("/commands", {
+        documentName: "AWS-RunShellScript",
+        instanceIds: ["i-1", "i-2"],
+        parameters: { commands: ["echo hi"] },
+        comment: "run",
+      });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.command.commandId).toBe("c-1");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("SendCommandCommand");
+      expect(cmd.InstanceIds).toEqual(["i-1", "i-2"]);
+      expect(cmd.Parameters).toEqual({ commands: ["echo hi"] });
+    });
+
+    it("POST /commands — 400 without documentName", async () => {
+      const res = await post("/commands", { instanceIds: ["i-1"] });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /commands — 400 without instanceIds", async () => {
+      const res = await post("/commands", { documentName: "d" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /commands — null command on sparse response", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/commands", { documentName: "d", instanceIds: ["i-1"] });
+      expect((await res.json()).command).toBeNull();
+    });
+
+    it("GET /commands — lists commands", async () => {
+      mockSend.mockResolvedValueOnce({
+        Commands: [{ CommandId: "c-1", DocumentName: "d", Status: "Success", TargetCount: 1 }],
+      });
+      const res = await get("/commands");
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(body.commands[0].status).toBe("Success");
+    });
+
+    it("GET /commands — empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/commands");
+      expect((await res.json()).commands).toEqual([]);
+    });
+
+    it("GET /commands — passes instanceId filter", async () => {
+      mockSend.mockResolvedValueOnce({});
+      await get("/commands?instanceId=i-1");
+      expect(mockSend.mock.calls[0][0].InstanceId).toBe("i-1");
+    });
+
+    it("GET /commands/:id/invocations — lists invocations with plugin output", async () => {
+      mockSend.mockResolvedValueOnce({
+        CommandInvocations: [{
+          CommandInvocationId: "inv-1",
+          InstanceId: "i-1",
+          Status: "Success",
+          CommandPlugins: [{ Output: "hello" }],
+        }],
+      });
+      const res = await get("/commands/c-1/invocations");
+      const body = await res.json();
+      expect(body.invocations[0].standardOutputContent).toBe("hello");
+      expect(mockSend.mock.calls[0][0].Details).toBe(true);
+    });
+
+    it("GET /commands/:id/invocations — sparse fallback", async () => {
+      mockSend.mockResolvedValueOnce({ CommandInvocations: [{}] });
+      const res = await get("/commands/c-1/invocations");
+      const body = await res.json();
+      expect(body.invocations[0].standardOutputContent).toBe("");
+    });
+
+    it("GET /commands/:id/invocations — undefined list falls back to []", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/commands/c-1/invocations");
+      const body = await res.json();
+      expect(body.invocations).toEqual([]);
+    });
+
+    it("GET /commands/:id/invocations/:instanceId — sparse content fallbacks", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/commands/c-1/invocations/i-1");
+      const body = await res.json();
+      expect(body.invocation.standardOutputContent).toBe("");
+      expect(body.invocation.standardErrorContent).toBe("");
+    });
+
+    it("GET /commands/:id/invocations/:instanceId — gets invocation detail", async () => {
+      mockSend.mockResolvedValueOnce({
+        CommandInvocationId: "inv-1",
+        InstanceId: "i-1",
+        Status: "Success",
+        StandardOutputContent: "out",
+        StandardErrorContent: "err",
+      });
+      const res = await get("/commands/c-1/invocations/i-1");
+      const body = await res.json();
+      expect(body.invocation.standardOutputContent).toBe("out");
+      expect(body.invocation.standardErrorContent).toBe("err");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetCommandInvocationCommand");
+    });
+
+    it("DELETE /commands/:id — cancels", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/commands/c-1");
+      expect((await res.json()).cancelled).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("CancelCommandCommand");
+    });
   });
 });

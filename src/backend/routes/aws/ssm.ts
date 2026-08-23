@@ -3,6 +3,13 @@ import type { Context } from "hono";
 import { getAwsConfig } from "../../clients/aws";
 import { SSMClient } from "@aws-sdk/client-ssm";
 import {
+  SendCommandCommand,
+  ListCommandsCommand,
+  ListCommandInvocationsCommand,
+  GetCommandInvocationCommand,
+  CancelCommandCommand,
+} from "@aws-sdk/client-ssm";
+import {
   DescribeParametersCommand,
   GetParameterCommand,
   GetParameterHistoryCommand,
@@ -178,6 +185,101 @@ router.delete("/tags", async (c: Context) => {
     })
   );
   return c.json({ untagged: true });
+});
+
+
+// ── Run Command ────────────────────────────────────────
+
+router.post("/commands", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.documentName) return c.json({ error: "documentName is required" }, 400);
+  if (!body.instanceIds?.length) return c.json({ error: "instanceIds is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new SendCommandCommand({
+      DocumentName: body.documentName,
+      InstanceIds: body.instanceIds,
+      Parameters: body.parameters,
+      Comment: body.comment,
+      TimeoutSeconds: body.timeoutSeconds,
+    })
+  );
+  const cmd = result.Command;
+  return c.json(
+    {
+      command: cmd
+        ? {
+            commandId: cmd.CommandId,
+            documentName: cmd.DocumentName,
+            status: cmd.Status,
+            requestedDateTime: cmd.RequestedDateTime,
+            comment: cmd.Comment,
+            targetCount: cmd.TargetCount,
+          }
+        : null,
+    },
+    201
+  );
+});
+
+router.get("/commands", async (c: Context) => {
+  const instanceId = c.req.query("instanceId");
+  const client = getClient();
+  const result = await client.send(
+    new ListCommandsCommand(instanceId ? { InstanceId: instanceId } : {})
+  );
+  const commands = (result.Commands || []).map((cmd: any) => ({
+    commandId: cmd.CommandId,
+    documentName: cmd.DocumentName,
+    status: cmd.Status,
+    requestedDateTime: cmd.RequestedDateTime,
+    comment: cmd.Comment,
+    targetCount: cmd.TargetCount,
+  }));
+  return c.json({ commands, total: commands.length });
+});
+
+router.get("/commands/:id/invocations", async (c: Context) => {
+  const id = c.req.param("id")!;
+  const client = getClient();
+  const result = await client.send(
+    new ListCommandInvocationsCommand({ CommandId: id, Details: true })
+  );
+  const invocations = (result.CommandInvocations || []).map((inv: any) => ({
+    invocationId: inv.CommandInvocationId,
+    instanceId: inv.InstanceId,
+    status: inv.Status,
+    statusDetails: inv.StatusDetails,
+    requestedDateTime: inv.RequestedDateTime,
+    standardOutputContent: inv.CommandPlugins?.[0]?.Output || "",
+  }));
+  return c.json({ invocations, total: invocations.length });
+});
+
+router.get("/commands/:id/invocations/:instanceId", async (c: Context) => {
+  const id = c.req.param("id")!;
+  const instanceId = c.req.param("instanceId")!;
+  const client = getClient();
+  const result: any = await client.send(
+    new GetCommandInvocationCommand({ CommandId: id, InstanceId: instanceId })
+  );
+  return c.json({
+    invocation: {
+      invocationId: result.CommandInvocationId,
+      instanceId: result.InstanceId,
+      status: result.Status,
+      statusDetails: result.StatusDetails,
+      standardOutputContent: result.StandardOutputContent || "",
+      standardErrorContent: result.StandardErrorContent || "",
+    },
+  });
+});
+
+router.delete("/commands/:id", async (c: Context) => {
+  const id = c.req.param("id");
+  const client = getClient();
+  await client.send(new CancelCommandCommand({ CommandId: id }));
+  return c.json({ cancelled: true });
 });
 
 export default router;

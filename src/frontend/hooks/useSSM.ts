@@ -137,3 +137,53 @@ export function useRemoveSSMTags() {
       qc.invalidateQueries({ queryKey: ["aws", "ssm", "tags"] }),
   });
 }
+
+// ── Run Command ────────────────────────────────────────
+
+export interface SSMCommand {
+  commandId: string;
+  documentName?: string;
+  status?: string;
+  requestedDateTime?: string;
+  comment?: string;
+  targetCount?: number;
+}
+
+export function useSSMCommands() {
+  return useQuery<{ commands: SSMCommand[]; total: number }>({
+    queryKey: ["aws", "ssm", "commands"],
+    queryFn: () => api("/aws/ssm/commands"),
+    refetchInterval: 10000,
+  });
+}
+
+export function useSSMSendCommand() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      documentName: string;
+      instanceIds: string[];
+      parameters?: Record<string, string[]>;
+      comment?: string;
+      timeoutSeconds?: number;
+    }) => api("/aws/ssm/commands", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ssm", "commands"] }),
+  });
+}
+
+export function useSSMCommandInvocations(commandId: string | null) {
+  return useQuery<{ invocations: any[]; total: number }>({
+    queryKey: ["aws", "ssm", "commands", commandId, "invocations"],
+    queryFn: () => api(`/aws/ssm/commands/${encodeURIComponent(commandId!)}/invocations`),
+    enabled: !!commandId,
+  });
+}
+
+export function useSSMCancelCommand() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (commandId: string) =>
+      api(`/aws/ssm/commands/${encodeURIComponent(commandId)}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ssm", "commands"] }),
+  });
+}
