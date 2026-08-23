@@ -35,6 +35,8 @@ vi.mock("../../components/ConfirmDialog", () => ({
 }));
 
 const mockClusters = vi.fn();
+const mockSteps = vi.fn();
+const mockInstanceGroups = vi.fn();
 const mockSecConfigs = vi.fn();
 const mockRunJobFlow = vi.fn();
 const mockTerminate = vi.fn();
@@ -49,6 +51,8 @@ const mockCreateSecConfigHook = vi.fn();
 vi.mock("../../hooks/useEMR", () => ({
   useEMRClusters: (...args: any[]) => mockClusters(...args),
   useEMRSecurityConfigurations: (...args: any[]) => mockSecConfigs(...args),
+  useEMRSteps: (...args: any[]) => mockSteps(...args),
+  useEMRInstanceGroups: (...args: any[]) => mockInstanceGroups(...args),
   useRunEMRJobFlow: (...args: any[]) => mockRunJobFlowHook(...args),
   useTerminateEMRJobFlows: () => ({
     mutateAsync: mockTerminate,
@@ -80,6 +84,8 @@ function dismissModalWithEscape() {
 // ─── Setup ──────────────────────────────────────────────
 
 beforeEach(() => {
+  mockSteps.mockReturnValue({ data: undefined });
+  mockInstanceGroups.mockReturnValue({ data: undefined });
   vi.clearAllMocks();
   terminateState.isPending = false;
   terminateState.variables = null;
@@ -761,5 +767,68 @@ describe("EMRDashboard — fallback branches", () => {
     render(<EMRDashboard />, { wrapper: createWrapper() });
     expect(screen.getByText("no-timeline")).toBeTruthy();
     expect(screen.getAllByText("-").length).toBeGreaterThan(0);
+  });
+});
+
+describe("EMRDashboard — cluster detail", () => {
+  function setupCluster() {
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [{ Id: "j-1", Name: "my-cluster", Status: { State: "WAITING", Timeline: { CreationDateTime: 1700000000 } } }],
+      },
+      isLoading: false, isError: false, error: null,
+    });
+  }
+
+  it("shows steps and instance groups for a selected cluster", async () => {
+    setupCluster();
+    mockSteps.mockReturnValue({
+      data: { steps: [{ Name: "hive-step", Status: { State: "COMPLETED" }, Config: { Jar: "command-runner.jar" } }], total: 1 },
+    });
+    mockInstanceGroups.mockReturnValue({
+      data: { instanceGroups: [{ Name: "core", InstanceType: "m5.xlarge", Market: "ON_DEMAND", RequestedInstanceCount: 2, RunningInstanceCount: 2, Status: { State: "RUNNING" } }], total: 1 },
+    });
+    const user = userEvent.setup();
+    render(<EMRDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "Detail" }));
+    expect(await screen.findByText(/Steps — j-1/)).toBeTruthy();
+    expect(screen.getByText("hive-step")).toBeTruthy();
+    expect(screen.getByText("command-runner.jar")).toBeTruthy();
+    expect(screen.getByText("m5.xlarge")).toBeTruthy();
+    expect(screen.getByText("RUNNING")).toBeTruthy();
+    expect(mockSteps).toHaveBeenCalledWith("j-1");
+    expect(mockInstanceGroups).toHaveBeenCalledWith("j-1");
+  });
+
+  it("shows empty steps/groups and toggles off", async () => {
+    setupCluster();
+    mockSteps.mockReturnValue({ data: { steps: [], total: 0 } });
+    mockInstanceGroups.mockReturnValue({ data: { instanceGroups: [], total: 0 } });
+    const user = userEvent.setup();
+    render(<EMRDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "Detail" }));
+    expect(await screen.findByText("No steps")).toBeTruthy();
+    expect(screen.getByText("No instance groups")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: /Hide detail/i }));
+    await waitFor(() => expect(screen.queryByText("No steps")).toBeNull());
+  });
+
+  it("renders tables while steps/groups data is undefined", async () => {
+    setupCluster();
+    const user = userEvent.setup();
+    render(<EMRDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "Detail" }));
+    expect(await screen.findByText("No steps")).toBeTruthy();
+    expect(screen.getByText("No instance groups")).toBeTruthy();
+  });
+
+  it("renders dash fallbacks for sparse steps and groups", async () => {
+    setupCluster();
+    mockSteps.mockReturnValue({ data: { steps: [{}], total: 1 } });
+    mockInstanceGroups.mockReturnValue({ data: { instanceGroups: [{}], total: 1 } });
+    const user = userEvent.setup();
+    render(<EMRDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "Detail" }));
+    expect(await screen.findAllByText("-")).toBeTruthy();
   });
 });

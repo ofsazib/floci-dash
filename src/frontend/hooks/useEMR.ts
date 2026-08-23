@@ -37,7 +37,7 @@ export function useTerminateEMRJobFlows() {
 export function useEMRSteps(clusterId: string | null) {
   return useQuery({
     queryKey: ["aws", "emr", "clusters", clusterId, "steps"],
-    queryFn: () => api<{ steps: any[] }>(`/aws/emr/clusters/${clusterId}/steps`),
+    queryFn: () => api<any>(`/aws/emr/clusters/${clusterId}/steps`),
     enabled: !!clusterId,
   });
 }
@@ -75,5 +75,13 @@ export function useDeleteEMRSecurityConfiguration() {
     mutationFn: (name: string) =>
       api(`/aws/emr/security-configurations/${name}`, { method: "DELETE" }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "emr", "security-configurations"] }),
+  });
+}
+
+export function useEMRInstanceGroups(clusterId: string | null) {
+  return useQuery<any>({
+    queryKey: ["aws", "emr", "clusters", clusterId, "instance-groups"],
+    queryFn: () => api(`/aws/emr/clusters/${encodeURIComponent(clusterId!)}/instance-groups`),
+    enabled: !!clusterId,
   });
 }

@@ -19,6 +19,7 @@ import {
   useEMRSecurityConfigurations,
   useCreateEMRSecurityConfiguration,
   useDeleteEMRSecurityConfiguration,
+  useEMRInstanceGroups,
 } from "./useEMR";
 
 function createWrapper() {
@@ -135,5 +136,19 @@ describe("useDeleteEMRSecurityConfiguration", () => {
       "/aws/emr/security-configurations/sc1",
       expect.objectContaining({ method: "DELETE" }),
     );
+  });
+});
+
+describe("useEMRInstanceGroups", () => {
+  it("fetches groups with encoded cluster id", async () => {
+    mockApi.mockResolvedValueOnce({ instanceGroups: [], total: 0 });
+    const { result } = renderHook(() => useEMRInstanceGroups("j 1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/emr/clusters/j%201/instance-groups");
+  });
+
+  it("is disabled without a cluster id", () => {
+    const { result } = renderHook(() => useEMRInstanceGroups(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
   });
 });

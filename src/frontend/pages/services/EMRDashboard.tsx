@@ -451,6 +451,8 @@ import {
 } from "../../hooks/useDocDB";
 import {
   useEMRClusters,
+  useEMRSteps,
+  useEMRInstanceGroups,
   useRunEMRJobFlow,
   useTerminateEMRJobFlows,
   useEMRSecurityConfigurations,
@@ -516,6 +518,9 @@ export function EMRDashboard() {
   const [clusterName, setClusterName] = useState("");
   const [releaseLabel, setReleaseLabel] = useState("");
   const [showCreateSecConfig, setShowCreateSecConfig] = useState(false);
+  const [selectedCluster, setSelectedCluster] = useState<string | null>(null);
+  const { data: stepsData } = useEMRSteps(selectedCluster);
+  const { data: groupsData } = useEMRInstanceGroups(selectedCluster);
   const [secName, setSecName] = useState("");
   const [secConfigJson, setSecConfigJson] = useState("");
 
@@ -538,15 +543,67 @@ export function EMRDashboard() {
           { id: "name", header: "Name", cell: (i: any) => i.name },
           { id: "status", header: "Status", cell: (i: any) => i.status },
           { id: "created", header: "Created", cell: (i: any) => i.created },
-          { id: "actions", header: "", cell: (i: any) => (
-            <DeleteButton itemName={i.name} resourceType="cluster" loading={terminate.isPending && terminate.variables === i.id} onDelete={() => terminate.mutateAsync(i.id)} />
-          )},
+          {
+            id: "actions",
+            header: "",
+            cell: (i: any) => (
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button onClick={() => setSelectedCluster(i.id === selectedCluster ? null : i.id)}>
+                  {i.id === selectedCluster ? "Hide detail" : "Detail"}
+                </Button>
+                <DeleteButton itemName={i.name} resourceType="cluster" loading={terminate.isPending && terminate.variables === i.id} onDelete={() => terminate.mutateAsync(i.id)} />
+              </SpaceBetween>
+            ),
+          },
         ]}
         filterEnabled
         filterPlaceholder="Find by name"
         filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
         onCreate={() => setShowCreateCluster(true)}
       />
+
+      {selectedCluster && (
+        <Container header={<Header variant="h3" counter={stepsData?.total}>Steps — {selectedCluster}</Header>}>
+          <ResourceTable
+            resourceName="Step"
+            items={(stepsData?.steps || []).map((st: any) => ({
+              name: st.Name,
+              state: st.Status?.State || "-",
+              jar: st.Config?.Jar || "-",
+            }))}
+            columns={[
+              { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+              { id: "state", header: "State", cell: (i: any) => i.state },
+              { id: "jar", header: "Jar", cell: (i: any) => i.jar },
+            ]}
+            emptyMessage="No steps"
+            loading={false}
+          />
+          <ResourceTable
+            resourceName="Instance group"
+            headerTitle="Instance Groups"
+            headerCounter={groupsData?.total}
+            items={(groupsData?.instanceGroups || []).map((g: any) => ({
+              name: g.Name || "-",
+              type: g.InstanceType || "-",
+              market: g.Market || "-",
+              requested: g.RequestedInstanceCount ?? "-",
+              running: g.RunningInstanceCount ?? "-",
+              state: g.Status?.State || "-",
+            }))}
+            columns={[
+              { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+              { id: "type", header: "Type", cell: (i: any) => i.type },
+              { id: "market", header: "Market", cell: (i: any) => i.market },
+              { id: "requested", header: "Requested", cell: (i: any) => i.requested },
+              { id: "running", header: "Running", cell: (i: any) => i.running },
+              { id: "state", header: "State", cell: (i: any) => i.state },
+            ]}
+            emptyMessage="No instance groups"
+            loading={false}
+          />
+        </Container>
+      )}
 
       <ResourceTable
         resourceName="Security Configuration"
