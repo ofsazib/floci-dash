@@ -38,6 +38,9 @@ vi.mock("@aws-sdk/client-backup", () => ({
   ListTagsCommand: createCmd("ListTagsCommand"),
   TagResourceCommand: createCmd("TagResourceCommand"),
   UntagResourceCommand: createCmd("UntagResourceCommand"),
+  ListRecoveryPointsByBackupVaultCommand: createCmd("ListRecoveryPointsByBackupVaultCommand"),
+  DescribeRecoveryPointCommand: createCmd("DescribeRecoveryPointCommand"),
+  DeleteRecoveryPointCommand: createCmd("DeleteRecoveryPointCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -365,5 +368,67 @@ describe("Backup routes — Tags", () => {
   it("GET /tags — 400 when no resourceArn", async () => {
     const res = await get("/tags");
     expect(res.status).toBe(400);
+  });
+
+  describe("Recovery Points", () => {
+    it("GET /backup-vaults/:name/recovery-points — maps recovery points", async () => {
+      mockSend.mockResolvedValueOnce({
+        RecoveryPoints: [{
+          RecoveryPointArn: "arn:rp-1",
+          ResourceArn: "arn:s3",
+          ResourceType: "S3",
+          Status: "COMPLETED",
+          BackupVaultName: "vault-1",
+        }],
+      });
+      const res = await get("/backup-vaults/vault-1/recovery-points");
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(body.recoveryPoints[0]).toEqual({
+        arn: "arn:rp-1",
+        resourceArn: "arn:s3",
+        resourceType: "S3",
+        status: "COMPLETED",
+        creationDate: undefined,
+        vaultName: "vault-1",
+      });
+    });
+
+    it("GET /backup-vaults/:name/recovery-points — sparse fallbacks", async () => {
+      mockSend.mockResolvedValueOnce({ RecoveryPoints: [{}] });
+      const res = await get("/backup-vaults/v1/recovery-points");
+      const body = await res.json();
+      expect(body.recoveryPoints[0].vaultName).toBe("v1");
+      expect(body.recoveryPoints[0].resourceType).toBe("-");
+    });
+
+    it("GET /backup-vaults/:name/recovery-points — empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/backup-vaults/v1/recovery-points");
+      expect((await res.json()).recoveryPoints).toEqual([]);
+    });
+
+    it("GET /backup-vaults/:name/recovery-points/:arn — describes a recovery point", async () => {
+      mockSend.mockResolvedValueOnce({ RecoveryPointArn: "arn:rp-1", Status: "COMPLETED" });
+      const res = await get("/backup-vaults/v1/recovery-points/" + encodeURIComponent("arn:rp-1"));
+      const body = await res.json();
+      expect(body.recoveryPoint.Status).toBe("COMPLETED");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("DescribeRecoveryPointCommand");
+      expect(cmd.RecoveryPointArn).toBe("arn:rp-1");
+    });
+
+    it("GET /backup-vaults/:name/recovery-points/:arn — empty object still maps truthy", async () => {
+      mockSend.mockResolvedValueOnce(undefined);
+      const res = await get("/backup-vaults/v1/recovery-points/" + encodeURIComponent("arn:rp-1"));
+      expect((await res.json()).recoveryPoint).toBeNull();
+    });
+
+    it("DELETE /backup-vaults/:name/recovery-points/:arn — deletes", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/backup-vaults/v1/recovery-points/" + encodeURIComponent("arn:rp-1"));
+      expect((await res.json()).deleted).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteRecoveryPointCommand");
+    });
   });
 });

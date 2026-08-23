@@ -374,6 +374,8 @@ import {
   useCreateBackupVault,
   useBackupVault,
   useDeleteBackupVault,
+  useBackupRecoveryPoints,
+  useDeleteBackupRecoveryPoint,
   useBackupSelections,
   useCreateBackupSelection,
   useDeleteBackupSelection,
@@ -513,6 +515,9 @@ export function BackupDashboard() {
   const deletePlan = useDeleteBackupPlan();
   const createVault = useCreateBackupVault();
   const deleteVault = useDeleteBackupVault();
+  const [recoveryVault, setRecoveryVault] = useState<string | null>(null);
+  const { data: recoveryData } = useBackupRecoveryPoints(recoveryVault);
+  const deleteRecoveryPoint = useDeleteBackupRecoveryPoint();
   const stopJob = useStopBackupJob();
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const { data: selectionsData } = useBackupSelections(selectedPlanId);
@@ -618,12 +623,17 @@ export function BackupDashboard() {
               id: "actions",
               header: "",
               cell: (i: any) => (
-                <DeleteButton
-                  itemName={i.name}
-                  resourceType="vault"
-                  loading={deleteVault.isPending && deleteVault.variables === i.name}
-                  onDelete={() => deleteVault.mutateAsync(i.name)}
-                />
+                <SpaceBetween direction="horizontal" size="xs">
+                  <Button onClick={() => setRecoveryVault(i.name === recoveryVault ? null : i.name)}>
+                    {i.name === recoveryVault ? "Hide points" : "Recovery points"}
+                  </Button>
+                  <DeleteButton
+                    itemName={i.name}
+                    resourceType="vault"
+                    loading={deleteVault.isPending && deleteVault.variables === i.name}
+                    onDelete={() => deleteVault.mutateAsync(i.name)}
+                  />
+                </SpaceBetween>
               ),
             },
           ]}
@@ -632,6 +642,40 @@ export function BackupDashboard() {
           filterPlaceholder="Find vaults"
           filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
         />
+        {recoveryVault && (
+          <ResourceTable
+            resourceName="Recovery point"
+            headerTitle={`Recovery Points — ${recoveryVault}`}
+            headerCounter={recoveryData?.total}
+            items={(recoveryData?.recoveryPoints || []).map((rp) => ({
+              arn: rp.arn,
+              resourceType: rp.resourceType,
+              resourceArn: rp.resourceArn,
+              status: rp.status,
+              created: rp.creationDate ? new Date(rp.creationDate).toLocaleString() : "-",
+            }))}
+            columns={[
+              { id: "arn", header: "Recovery Point ARN", cell: (i: any) => <span style={{ fontSize: 12 }}>{i.arn}</span>, isRowHeader: true },
+              { id: "type", header: "Resource Type", cell: (i: any) => i.resourceType },
+              { id: "status", header: "Status", cell: (i: any) => i.status },
+              { id: "created", header: "Created", cell: (i: any) => i.created },
+              {
+                id: "actions",
+                header: "",
+                cell: (i: any) => (
+                  <DeleteButton
+                    itemName={i.arn.split("/").pop()!}
+                    resourceType="recovery point"
+                    loading={deleteRecoveryPoint.isPending}
+                    onDelete={() => deleteRecoveryPoint.mutateAsync({ vaultName: recoveryVault, arn: i.arn })}
+                  />
+                ),
+              },
+            ]}
+            emptyMessage="No recovery points"
+            loading={false}
+          />
+        )}
       </Container>
 
       <Container header={<Header variant="h3" counter={jobsData?.total}>Backup Jobs</Header>}>

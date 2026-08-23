@@ -159,3 +159,35 @@ export function useBackupTags(resourceArn: string | null) {
     enabled: !!resourceArn,
   });
 }
+
+// ── Recovery Points ────────────────────────────────────
+
+export interface BackupRecoveryPoint {
+  arn: string;
+  resourceArn: string;
+  resourceType: string;
+  status: string;
+  creationDate?: string;
+  vaultName: string;
+}
+
+export function useBackupRecoveryPoints(vaultName: string | null) {
+  return useQuery<{ recoveryPoints: BackupRecoveryPoint[]; total: number }>({
+    queryKey: ["aws", "backup", "vaults", vaultName, "recovery-points"],
+    queryFn: () =>
+      api(`/aws/backup/backup-vaults/${encodeURIComponent(vaultName!)}/recovery-points`),
+    enabled: !!vaultName,
+  });
+}
+
+export function useDeleteBackupRecoveryPoint() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { vaultName: string; arn: string }) =>
+      api(
+        `/aws/backup/backup-vaults/${encodeURIComponent(params.vaultName)}/recovery-points/${encodeURIComponent(params.arn)}`,
+        { method: "DELETE" }
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "backup", "vaults"] }),
+  });
+}

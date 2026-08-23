@@ -26,6 +26,8 @@ import {
   useBackupJob,
   useStopBackupJob,
   useBackupTags,
+  useBackupRecoveryPoints,
+  useDeleteBackupRecoveryPoint,
 } from "./useBackup";
 
 function createWrapper() {
@@ -242,6 +244,33 @@ describe("useBackupTags", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith(
       "/aws/backup/tags?resourceArn=arn%3Aaws%3Abackup%3Aus-east-1%3A123%3Aplan%2Fplan-1",
+    );
+  });
+});
+
+describe("useBackupRecoveryPoints", () => {
+  it("fetches points with encoded vault name", async () => {
+    mockApi.mockResolvedValueOnce({ recoveryPoints: [], total: 0 });
+    const { result } = renderHook(() => useBackupRecoveryPoints("my vault"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/backup/backup-vaults/my%20vault/recovery-points");
+  });
+
+  it("is disabled without a vault name", () => {
+    const { result } = renderHook(() => useBackupRecoveryPoints(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+});
+
+describe("useDeleteBackupRecoveryPoint", () => {
+  it("deletes with double-encoded arn", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useDeleteBackupRecoveryPoint(), { wrapper: createWrapper() });
+    result.current.mutate({ vaultName: "v1", arn: "arn:a/b" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/backup/backup-vaults/v1/recovery-points/arn%3Aa%2Fb",
+      { method: "DELETE" }
     );
   });
 });

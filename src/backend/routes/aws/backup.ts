@@ -3,6 +3,11 @@ import type { Context } from "hono";
 import { create } from "../../clients/aws";
 import { BackupClient } from "@aws-sdk/client-backup";
 import {
+  ListRecoveryPointsByBackupVaultCommand,
+  DescribeRecoveryPointCommand,
+  DeleteRecoveryPointCommand,
+} from "@aws-sdk/client-backup";
+import {
   ListBackupPlansCommand,
   CreateBackupPlanCommand,
   GetBackupPlanCommand,
@@ -210,6 +215,44 @@ router.get("/tags", async (c: Context) => {
     new ListTagsCommand({ ResourceArn: resourceArn })
   );
   return c.json({ tags: result.Tags || {} });
+});
+
+
+router.get("/backup-vaults/:name/recovery-points", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const client = getClient();
+  const result = await client.send(
+    new ListRecoveryPointsByBackupVaultCommand({ BackupVaultName: name })
+  );
+  const recoveryPoints = (result.RecoveryPoints || []).map((rp: any) => ({
+    arn: rp.RecoveryPointArn,
+    resourceArn: rp.ResourceArn || "-",
+    resourceType: rp.ResourceType || "-",
+    status: rp.Status || "-",
+    creationDate: rp.CreationDate,
+    vaultName: rp.BackupVaultName || name,
+  }));
+  return c.json({ recoveryPoints, total: recoveryPoints.length });
+});
+
+router.get("/backup-vaults/:name/recovery-points/:arn", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const arn = decodeURIComponent(c.req.param("arn")!);
+  const client = getClient();
+  const result = await client.send(
+    new DescribeRecoveryPointCommand({ BackupVaultName: name, RecoveryPointArn: arn })
+  );
+  return c.json({ recoveryPoint: result || null });
+});
+
+router.delete("/backup-vaults/:name/recovery-points/:arn", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const arn = decodeURIComponent(c.req.param("arn")!);
+  const client = getClient();
+  await client.send(
+    new DeleteRecoveryPointCommand({ BackupVaultName: name, RecoveryPointArn: arn })
+  );
+  return c.json({ deleted: true });
 });
 
 export default router;

@@ -18,6 +18,8 @@ vi.mock("../../components/ConfirmDialog", () => ({
 
 const mockPlans = vi.fn();
 const mockVaults = vi.fn();
+const mockRecoveryPoints = vi.fn();
+const mockDeleteRecoveryPoint = vi.fn();
 const mockJobs = vi.fn();
 const mockSelections = vi.fn();
 const mockCreatePlan = vi.fn();
@@ -67,6 +69,11 @@ vi.mock("../../hooks/useBackup", () => ({
     isPending: hookState.deleteVaultPending,
     variables: hookState.deleteVaultVariables,
   }),
+  useBackupRecoveryPoints: (...args: any[]) => mockRecoveryPoints(...args),
+  useDeleteBackupRecoveryPoint: () => ({
+    mutateAsync: mockDeleteRecoveryPoint,
+    isPending: false,
+  }),
   useStopBackupJob: () => ({
     mutate: mockStopJob,
     isPending: hookState.stopJobPending,
@@ -99,6 +106,7 @@ function expectModalHidden(headerText: string) {
 // ─── Setup ──────────────────────────────────────────────
 
 beforeEach(() => {
+  mockRecoveryPoints.mockReturnValue({ data: undefined });
   vi.clearAllMocks();
   hookState.deletePlanPending = false;
   hookState.deletePlanVariables = null;
@@ -735,5 +743,117 @@ describe("BackupDashboard — branch coverage", () => {
     render(<BackupDashboard />, { wrapper: createWrapper() });
     await clickButton(user, /Create vault/i);
     await waitFor(() => expect(screen.getByText("Failed to create vault")).toBeTruthy());
+  });
+});
+
+describe("BackupDashboard — recovery points", () => {
+  function setupVault() {
+    mockVaults.mockReturnValue({
+      data: { backupVaults: [{ BackupVaultName: "vault-1", BackupVaultArn: "arn:v1" }] },
+      isLoading: false,
+    });
+  }
+
+  it("lists recovery points for a vault", async () => {
+    setupVault();
+    mockRecoveryPoints.mockReturnValue({
+      data: {
+        recoveryPoints: [{ arn: "arn:rp-1", resourceType: "S3", status: "COMPLETED", resourceArn: "arn:s3" }],
+        total: 1,
+      },
+    });
+    const user = userEvent.setup();
+    render(<BackupDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: /Recovery points/i }));
+    expect(await screen.findByText(/Recovery Points — vault-1/)).toBeTruthy();
+    expect(screen.getByText("S3")).toBeTruthy();
+    expect(mockRecoveryPoints).toHaveBeenCalledWith("vault-1");
+  });
+
+  it("shows empty recovery points", async () => {
+    setupVault();
+    mockRecoveryPoints.mockReturnValue({ data: { recoveryPoints: [], total: 0 } });
+    const user = userEvent.setup();
+    render(<BackupDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: /Recovery points/i }));
+    expect(await screen.findByText("No recovery points")).toBeTruthy();
+  });
+
+  it("hides recovery points on second click", async () => {
+    setupVault();
+    mockRecoveryPoints.mockReturnValue({ data: { recoveryPoints: [], total: 0 } });
+    const user = userEvent.setup();
+    render(<BackupDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: /Recovery points/i }));
+    await screen.findByText("No recovery points");
+    await user.click(screen.getByRole("button", { name: /Hide points/i }));
+    await waitFor(() => expect(screen.queryByText("No recovery points")).toBeNull());
+  });
+
+  it("deletes a recovery point after confirmation", async () => {
+    mockDeleteRecoveryPoint.mockResolvedValue({});
+    setupVault();
+    mockRecoveryPoints.mockReturnValue({
+      data: { recoveryPoints: [{ arn: "arn:vault/rp-1", resourceType: "S3", status: "COMPLETED" }], total: 1 },
+    });
+    const user = userEvent.setup();
+    render(<BackupDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: /Recovery points/i }));
+    await screen.findByText("arn:vault/rp-1");
+    await user.click(screen.getByRole("button", { name: /Delete rp-1/i }));
+    await waitFor(() =>
+      expect(mockDeleteRecoveryPoint).toHaveBeenCalledWith({ vaultName: "vault-1", arn: "arn:vault/rp-1" })
+    );
+  });
+
+  it("renders dash for missing creation date", async () => {
+    setupVault();
+    mockRecoveryPoints.mockReturnValue({
+      data: { recoveryPoints: [{ arn: "arn:rp-2", resourceType: "EBS", status: "COMPLETED" }], total: 1 },
+    });
+    const user = userEvent.setup();
+    render(<BackupDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: /Recovery points/i }));
+    expect(await screen.findByText("arn:rp-2")).toBeTruthy();
+    expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("BackupDashboard — recovery point edge arms", () => {
+  it("renders empty table while recovery data is undefined", async () => {
+    mockVaults.mockReturnValue({
+      data: { backupVaults: [{ BackupVaultName: "vault-1", BackupVaultArn: "arn:v1" }] },
+      isLoading: false,
+    });
+    mockRecoveryPoints.mockReturnValue({ data: undefined });
+    const user = userEvent.setup();
+    render(<BackupDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: /Recovery points/i }));
+    expect(await screen.findByText("No recovery points")).toBeTruthy();
+  });
+
+  function setupVault() {
+    mockVaults.mockReturnValue({
+      data: { backupVaults: [{ BackupVaultName: "vault-1", BackupVaultArn: "arn:v1" }] },
+      isLoading: false,
+    });
+  }
+
+  it("formats a creation date and uses full arn when it has no slash", async () => {
+    setupVault();
+    mockRecoveryPoints.mockReturnValue({
+      data: {
+        recoveryPoints: [
+          { arn: "noslash-arn", resourceType: "S3", status: "COMPLETED", creationDate: new Date(0).toISOString() },
+        ],
+        total: 1,
+      },
+    });
+    const user = userEvent.setup();
+    render(<BackupDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: /Recovery points/i }));
+    expect(await screen.findByText("noslash-arn")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Delete noslash-arn/i })).toBeTruthy();
+    // slash-less ARN still names the delete button after itself
   });
 });
