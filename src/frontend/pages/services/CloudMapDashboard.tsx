@@ -273,6 +273,11 @@ import {
 } from "../../hooks/useAppConfig";
 import {
   useCloudMapNamespaces,
+  useCloudMapOperations,
+  useCloudMapOperation,
+  useCloudMapInstance,
+  useCreateCloudMapPrivateDnsNamespace,
+  useCreateCloudMapPublicDnsNamespace,
   useCreateCloudMapNamespace,
   useDeleteCloudMapNamespace,
   useCloudMapServices,
@@ -510,10 +515,23 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
 export function CloudMapDashboard() {
   const { data: nsData, isLoading } = useCloudMapNamespaces();
   const deleteNs = useDeleteCloudMapNamespace();
+  const createHttpNs = useCreateCloudMapNamespace();
+  const createPrivateDns = useCreateCloudMapPrivateDnsNamespace();
+  const createPublicDns = useCreateCloudMapPublicDnsNamespace();
+  const { data: opsData } = useCloudMapOperations();
+  const [selectedOp, setSelectedOp] = useState<string | null>(null);
+  const { data: opDetail } = useCloudMapOperation(selectedOp);
+  const [detailInstance, setDetailInstance] = useState<string | null>(null);
+  const [showCreateNs, setShowCreateNs] = useState(false);
+  const [nsType, setNsType] = useState("HTTP");
+  const [nsName, setNsName] = useState("");
+  const [nsVpc, setNsVpc] = useState("");
+  const [nsDesc, setNsDesc] = useState("");
   const [selectedNs, setSelectedNs] = useState<string | null>(null);
   const { data: svcData } = useCloudMapServices(selectedNs);
   const deleteSvc = useDeleteCloudMapService();
   const [selectedSvc, setSelectedSvc] = useState<string | null>(null);
+  const { data: instDetail } = useCloudMapInstance(selectedSvc, detailInstance);
   const { data: instData } = useCloudMapInstances(selectedSvc);
   const registerInstance = useRegisterCloudMapInstance();
   const deregisterInstance = useDeregisterCloudMapInstance();
@@ -545,25 +563,53 @@ export function CloudMapDashboard() {
           loading={false}
           emptyMessage="No instances"
           columns={[
-            { id: "id", header: "Instance ID", cell: (i: any) => i.id, isRowHeader: true },
+            {
+              id: "id",
+              header: "Instance ID",
+              cell: (i: any) => (
+                <Button variant="link" onClick={() => setDetailInstance(i.id === detailInstance ? null : i.id)}>
+                  {i.id}
+                </Button>
+              ),
+              isRowHeader: true,
+            },
             { id: "attributes", header: "Attributes", cell: (i: any) => i.attributes },
             {
               id: "actions",
               header: "",
               cell: (i: any) => (
-                <DeleteButton
-                  itemName={i.id}
-                  resourceType="instance registration"
+                <SpaceBetween direction="horizontal" size="xs">
+                  <Button
+                    onClick={() => setDetailInstance(i.id === detailInstance ? null : i.id)}
+                  >
+                    {i.id === detailInstance ? "Hide detail" : "Detail"}
+                  </Button>
+                  <DeleteButton
+                    itemName={i.id}
+                    resourceType="instance registration"
                   loading={deregisterInstance.isPending}
                   onDelete={() =>
                     deregisterInstance.mutateAsync({ serviceId: selectedSvc, instanceId: i.id })
                   }
                 />
+                </SpaceBetween>
               ),
             },
           ]}
           onCreate={() => setShowRegister(true)}
         />
+
+        {detailInstance && instDetail?.instance && (
+          <Container header={<Header variant="h3">Instance — {detailInstance}</Header>}>
+            <ColumnLayout columns={2} variant="text-grid">
+              <div><b>Instance ID:</b> {instDetail.instance.id}</div>
+              <div>
+                <b>Attributes:</b>{" "}
+                {Object.entries(instDetail.instance.attributes || {}).map(([k, v]) => `${k}=${v}`).join(", ") || "-"}
+              </div>
+            </ColumnLayout>
+          </Container>
+        )}
 
         <Modal
           visible={showRegister}
@@ -677,6 +723,7 @@ export function CloudMapDashboard() {
   }
 
   return (
+    <>
     <ResourceTable
       resourceName="Namespace"
       headerTitle="Cloud Map Namespaces"
@@ -718,7 +765,115 @@ export function CloudMapDashboard() {
       filterEnabled
       filterPlaceholder="Find namespaces"
       filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+      onCreate={() => setShowCreateNs(true)}
     />
+
+    <ResourceTable
+      resourceName="Operation"
+      headerTitle="Operations"
+      headerCounter={opsData?.total}
+      items={(opsData?.operations || []).map((op) => ({
+        id: op.id,
+        status: op.status,
+      }))}
+      loading={false}
+      emptyMessage="No operations"
+      columns={[
+        {
+          id: "id",
+          header: "Operation ID",
+          cell: (i: any) => (
+            <Button variant="link" onClick={() => setSelectedOp(i.id === selectedOp ? null : i.id)}>
+              {i.id}
+            </Button>
+          ),
+          isRowHeader: true,
+        },
+        { id: "status", header: "Status", cell: (i: any) => <StatusBadge status={i.status} /> },
+      ]}
+    />
+
+    {selectedOp && opDetail?.operation && (
+      <Container header={<Header variant="h3">Operation — {selectedOp}</Header>}>
+        <ColumnLayout columns={2} variant="text-grid">
+          <div><b>Status:</b> {opDetail.operation.status}</div>
+          <div><b>Created:</b> {opDetail.operation.createDate ? new Date(opDetail.operation.createDate).toLocaleString() : "-"}</div>
+          <div><b>Updated:</b> {opDetail.operation.updateDate ? new Date(opDetail.operation.updateDate).toLocaleString() : "-"}</div>
+          <div><b>Targets:</b> {Object.entries(opDetail.operation.targets || {}).map(([k, v]) => `${k}=${v}`).join(", ") || "-"}</div>
+        </ColumnLayout>
+      </Container>
+    )}
+
+    <Modal
+      visible={showCreateNs}
+      onDismiss={() => setShowCreateNs(false)}
+      header="Create namespace"
+      footer={
+        <Box float="right">
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button variant="link" onClick={() => setShowCreateNs(false)}>Cancel</Button>
+            <Button
+              variant="primary"
+              loading={createPrivateDns.isPending || createPublicDns.isPending}
+              disabled={!nsName.trim() || (nsType === "DNS_PRIVATE" && !nsVpc.trim())}
+              onClick={() => {
+                const opts = {
+                  onSuccess: () => {
+                    setShowCreateNs(false);
+                    setNsName(""); setNsVpc(""); setNsDesc("");
+                  },
+                };
+                if (nsType === "DNS_PRIVATE") {
+                  createPrivateDns.mutate({ name: nsName.trim(), vpc: nsVpc.trim(), description: nsDesc.trim() || undefined }, opts);
+                } else if (nsType === "DNS_PUBLIC") {
+                  createPublicDns.mutate({ name: nsName.trim(), description: nsDesc.trim() || undefined }, opts);
+                } else {
+                  createHttpNs.mutate({ name: nsName.trim(), description: nsDesc.trim() || undefined }, opts);
+                }
+              }}
+            >
+              Create
+            </Button>
+          </SpaceBetween>
+        </Box>
+      }
+    >
+      <Form>
+        {(createHttpNs.isError || createPrivateDns.isError || createPublicDns.isError) && (
+          <Alert type="error" dismissible>
+            {(createHttpNs.error as Error)?.message ||
+              (createPrivateDns.error as Error)?.message ||
+              (createPublicDns.error as Error)?.message ||
+              "Failed to create namespace"}
+          </Alert>
+        )}
+        <SpaceBetween size="m">
+          <FormField label="Type">
+            <Select
+              selectedOption={{ label: nsType === "DNS_PRIVATE" ? "Private DNS" : nsType === "DNS_PUBLIC" ? "Public DNS" : "HTTP", value: nsType }}
+              onChange={({ detail }) => setNsType(detail.selectedOption.value as string)}
+              options={[
+                { label: "HTTP", value: "HTTP" },
+                { label: "Private DNS", value: "DNS_PRIVATE" },
+                { label: "Public DNS", value: "DNS_PUBLIC" },
+              ]}
+            />
+          </FormField>
+          <FormField label="Name">
+            <Input value={nsName} onChange={({ detail }) => setNsName(detail.value)} placeholder="example.com" />
+          </FormField>
+          {nsType === "DNS_PRIVATE" && (
+            <FormField label="VPC ID">
+              <Input value={nsVpc} onChange={({ detail }) => setNsVpc(detail.value)} placeholder="vpc-123" />
+            </FormField>
+          )}
+          <FormField label="Description (optional)">
+            <Input value={nsDesc} onChange={({ detail }) => setNsDesc(detail.value)} />
+          </FormField>
+        </SpaceBetween>
+      </Form>
+    </Modal>
+    </>
   );
 }
 

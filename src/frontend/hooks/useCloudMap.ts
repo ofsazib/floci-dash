@@ -115,3 +115,55 @@ export function useDiscoverCloudMapInstances() {
       api("/aws/servicediscovery/discover", { method: "POST", body: JSON.stringify(body) }),
   });
 }
+
+export interface CloudMapOperation {
+  id: string;
+  status: string;
+  createDate?: string;
+  updateDate?: string;
+  targets?: Record<string, string>;
+}
+
+export function useCloudMapOperations() {
+  return useQuery<{ operations: CloudMapOperation[]; total: number }>({
+    queryKey: ["aws", "cloudmap", "operations"],
+    queryFn: () => api("/aws/servicediscovery/operations"),
+  });
+}
+
+export function useCloudMapOperation(operationId: string | null) {
+  return useQuery<{ operation: CloudMapOperation | null }>({
+    queryKey: ["aws", "cloudmap", "operations", operationId],
+    queryFn: () => api(`/aws/servicediscovery/operations/${encodeURIComponent(operationId!)}`),
+    enabled: !!operationId,
+  });
+}
+
+export function useCloudMapInstance(serviceId: string | null, instanceId: string | null) {
+  return useQuery<any>({
+    queryKey: ["aws", "cloudmap", "instances", serviceId, instanceId],
+    queryFn: () =>
+      api(
+        `/aws/servicediscovery/services/${encodeURIComponent(serviceId!)}/instances/${encodeURIComponent(instanceId!)}`
+      ),
+    enabled: !!serviceId && !!instanceId,
+  });
+}
+
+export function useCreateCloudMapPrivateDnsNamespace() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string; vpc: string; description?: string }) =>
+      api("/aws/servicediscovery/namespaces/private-dns", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cloudmap", "namespaces"] }),
+  });
+}
+
+export function useCreateCloudMapPublicDnsNamespace() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string; description?: string }) =>
+      api("/aws/servicediscovery/namespaces/public-dns", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cloudmap", "namespaces"] }),
+  });
+}

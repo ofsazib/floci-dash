@@ -3,6 +3,13 @@ import type { Context } from "hono";
 import { create } from "../../clients/aws";
 import { ServiceDiscoveryClient } from "@aws-sdk/client-servicediscovery";
 import {
+  CreatePrivateDnsNamespaceCommand,
+  CreatePublicDnsNamespaceCommand,
+  GetOperationCommand,
+  ListOperationsCommand,
+  GetInstanceCommand,
+} from "@aws-sdk/client-servicediscovery";
+import {
   RegisterInstanceCommand,
   DeregisterInstanceCommand,
   DiscoverInstancesCommand,
@@ -168,6 +175,84 @@ router.post("/discover", async (c: Context) => {
     attributes: inst.Attributes || {},
   }));
   return c.json({ instances, total: instances.length });
+});
+
+
+// ── DNS Namespaces ─────────────────────────────────────
+
+router.post("/namespaces/private-dns", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.name) return c.json({ error: "name is required" }, 400);
+  if (!body.vpc) return c.json({ error: "vpc is required" }, 400);
+  const client = getClient();
+  const result: any = await client.send(
+    new CreatePrivateDnsNamespaceCommand({
+      Name: body.name,
+      Vpc: body.vpc,
+      Description: body.description,
+    })
+  );
+  return c.json({ operationId: result.OperationId, namespace: result.Namespace || null }, 201);
+});
+
+router.post("/namespaces/public-dns", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.name) return c.json({ error: "name is required" }, 400);
+  const client = getClient();
+  const result: any = await client.send(
+    new CreatePublicDnsNamespaceCommand({
+      Name: body.name,
+      Description: body.description,
+    })
+  );
+  return c.json({ operationId: result.OperationId, namespace: result.Namespace || null }, 201);
+});
+
+// ── Operations ─────────────────────────────────────────
+
+router.get("/operations", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new ListOperationsCommand({}));
+  const operations = (result.Operations || []).map((op: any) => ({
+    id: op.Id,
+    status: op.Status,
+  }));
+  return c.json({ operations, total: operations.length });
+});
+
+router.get("/operations/:id", async (c: Context) => {
+  const id = c.req.param("id")!;
+  const client = getClient();
+  const result = await client.send(new GetOperationCommand({ OperationId: id }));
+  const op = result.Operation;
+  return c.json({
+    operation: op
+      ? {
+          id: op.Id,
+          status: op.Status,
+          createDate: op.CreateDate,
+          updateDate: op.UpdateDate,
+          targets: op.Targets || {},
+        }
+      : null,
+  });
+});
+
+// ── Instance detail ────────────────────────────────────
+
+router.get("/services/:id/instances/:instanceId", async (c: Context) => {
+  const serviceId = c.req.param("id")!;
+  const instanceId = c.req.param("instanceId")!;
+  const client = getClient();
+  const result = await client.send(
+    new GetInstanceCommand({ ServiceId: serviceId, InstanceId: instanceId })
+  );
+  const inst = result.Instance;
+  return c.json({
+    instance: inst
+      ? { id: inst.Id, attributes: inst.Attributes || {} }
+      : null,
+  });
 });
 
 export default router;

@@ -22,6 +22,11 @@ vi.mock("@aws-sdk/client-servicediscovery", () => ({
   DeregisterInstanceCommand: createCmd("DeregisterInstanceCommand"),
   DiscoverInstancesCommand: createCmd("DiscoverInstancesCommand"),
   GetInstancesHealthStatusCommand: createCmd("GetInstancesHealthStatusCommand"),
+  CreatePrivateDnsNamespaceCommand: createCmd("CreatePrivateDnsNamespaceCommand"),
+  CreatePublicDnsNamespaceCommand: createCmd("CreatePublicDnsNamespaceCommand"),
+  GetOperationCommand: createCmd("GetOperationCommand"),
+  ListOperationsCommand: createCmd("ListOperationsCommand"),
+  GetInstanceCommand: createCmd("GetInstanceCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({ create: (Ctor: any, extra?: any) => new Ctor(extra) }));
@@ -226,6 +231,100 @@ describe("Cloud Map Routes", () => {
     it("POST /discover — 400 without serviceName", async () => {
       const res = await post("/discover", { namespaceName: "ns" });
       expect(res.status).toBe(400);
+    });
+  });
+
+  describe("DNS namespaces + operations + instance detail", () => {
+    it("POST /namespaces/private-dns — creates with VPC", async () => {
+      mockSend.mockResolvedValueOnce({ OperationId: "op-1", Namespace: { Id: "ns-1" } });
+      const res = await post("/namespaces/private-dns", { name: "corp.internal", vpc: "vpc-1", description: "private" });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.operationId).toBe("op-1");
+      expect(body.namespace.Id).toBe("ns-1");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("CreatePrivateDnsNamespaceCommand");
+      expect(cmd.Vpc).toBe("vpc-1");
+    });
+
+    it("POST /namespaces/private-dns — 400s", async () => {
+      expect((await post("/namespaces/private-dns", { vpc: "v" })).status).toBe(400);
+      expect((await post("/namespaces/private-dns", { name: "n" })).status).toBe(400);
+    });
+
+    it("POST /namespaces/private-dns — sparse fallbacks", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/namespaces/private-dns", { name: "n", vpc: "v" });
+      const body = await res.json();
+      expect(body.operationId).toBeUndefined();
+      expect(body.namespace).toBeNull();
+    });
+
+    it("POST /namespaces/public-dns — creates without VPC", async () => {
+      mockSend.mockResolvedValueOnce({ OperationId: "op-2" });
+      const res = await post("/namespaces/public-dns", { name: "example.com" });
+      expect(res.status).toBe(201);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("CreatePublicDnsNamespaceCommand");
+      expect(cmd.Name).toBe("example.com");
+    });
+
+    it("POST /namespaces/public-dns — 400 without name", async () => {
+      expect((await post("/namespaces/public-dns", {})).status).toBe(400);
+    });
+
+    it("GET /operations — lists id/status pairs", async () => {
+      mockSend.mockResolvedValueOnce({ Operations: [{ Id: "op-1", Status: "SUCCESS" }] });
+      const res = await get("/operations");
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(body.operations[0]).toEqual({ id: "op-1", status: "SUCCESS" });
+    });
+
+    it("GET /operations — empty fallback", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/operations");
+      expect((await res.json()).operations).toEqual([]);
+    });
+
+    it("GET /operations/:id — maps operation detail", async () => {
+      mockSend.mockResolvedValueOnce({
+        Operation: { Id: "op-1", Status: "SUCCESS", CreateDate: new Date(0), Targets: { NAMESPACE: "ns-1" } },
+      });
+      const res = await get("/operations/op-1");
+      const body = await res.json();
+      expect(body.operation.targets.NAMESPACE).toBe("ns-1");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetOperationCommand");
+    });
+
+    it("GET /operations/:id — null when missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/operations/none");
+      expect((await res.json()).operation).toBeNull();
+    });
+
+    it("GET /operations/:id — sparse targets fallback", async () => {
+      mockSend.mockResolvedValueOnce({ Operation: { Id: "op-1" } });
+      const res = await get("/operations/op-1");
+      const body = await res.json();
+      expect(body.operation.targets).toEqual({});
+    });
+
+    it("GET /services/:id/instances/:instanceId — maps instance", async () => {
+      mockSend.mockResolvedValueOnce({ Instance: { Id: "i-1", Attributes: { AWS_INSTANCE_IPV4: "10.0.0.1" } } });
+      const res = await get("/services/srv-1/instances/i-1");
+      const body = await res.json();
+      expect(body.instance.attributes.AWS_INSTANCE_IPV4).toBe("10.0.0.1");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetInstanceCommand");
+    });
+
+    it("GET /services/:id/instances/:instanceId — null + sparse attrs", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const resNull = await get("/services/s/instances/none");
+      expect((await resNull.json()).instance).toBeNull();
+      mockSend.mockResolvedValueOnce({ Instance: { Id: "i-1" } });
+      const res = await get("/services/s/instances/i-1");
+      expect((await res.json()).instance.attributes).toEqual({});
     });
   });
 });

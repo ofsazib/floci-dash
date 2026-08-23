@@ -20,6 +20,11 @@ import {
   useRegisterCloudMapInstance,
   useDeregisterCloudMapInstance,
   useDiscoverCloudMapInstances,
+  useCloudMapOperations,
+  useCloudMapOperation,
+  useCloudMapInstance,
+  useCreateCloudMapPrivateDnsNamespace,
+  useCreateCloudMapPublicDnsNamespace,
 } from "./useCloudMap";
 
 beforeEach(() => mockApi.mockReset());
@@ -113,6 +118,61 @@ describe("CloudMap registration hooks", () => {
     expect(mockApi).toHaveBeenCalledWith("/aws/servicediscovery/discover", {
       method: "POST",
       body: JSON.stringify({ namespaceName: "ns", serviceName: "svc" }),
+    });
+  });
+});
+
+describe("CloudMap operations/namespaces hooks", () => {
+  it("useCloudMapOperations fetches", async () => {
+    mockApi.mockResolvedValueOnce({ operations: [], total: 0 });
+    const { result } = renderHook(() => useCloudMapOperations(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/servicediscovery/operations");
+  });
+
+  it("useCloudMapOperation fetches encoded id", async () => {
+    mockApi.mockResolvedValueOnce({ operation: null });
+    const { result } = renderHook(() => useCloudMapOperation("op 1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/servicediscovery/operations/op%201");
+  });
+
+  it("useCloudMapOperation disabled without id", () => {
+    const { result } = renderHook(() => useCloudMapOperation(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+
+  it("useCloudMapInstance fetches both encoded", async () => {
+    mockApi.mockResolvedValueOnce({ instance: null });
+    const { result } = renderHook(() => useCloudMapInstance("s 1", "i 1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/servicediscovery/services/s%201/instances/i%201");
+  });
+
+  it("useCloudMapInstance disabled without ids", () => {
+    const { result } = renderHook(() => useCloudMapInstance("s", null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+
+  it("useCreateCloudMapPrivateDnsNamespace posts name+vpc", async () => {
+    mockApi.mockResolvedValueOnce({ operationId: "op-1" });
+    const { result } = renderHook(() => useCreateCloudMapPrivateDnsNamespace(), { wrapper: createWrapper() });
+    result.current.mutate({ name: "corp.internal", vpc: "vpc-1" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/servicediscovery/namespaces/private-dns", {
+      method: "POST",
+      body: JSON.stringify({ name: "corp.internal", vpc: "vpc-1" }),
+    });
+  });
+
+  it("useCreateCloudMapPublicDnsNamespace posts name", async () => {
+    mockApi.mockResolvedValueOnce({ operationId: "op-2" });
+    const { result } = renderHook(() => useCreateCloudMapPublicDnsNamespace(), { wrapper: createWrapper() });
+    result.current.mutate({ name: "example.com" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/servicediscovery/namespaces/public-dns", {
+      method: "POST",
+      body: JSON.stringify({ name: "example.com" }),
     });
   });
 });
