@@ -81,3 +81,24 @@ export function useElastiCacheDeleteUser() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "elasticache", "users"] }),
   });
 }
+
+export function useModifyElastiCacheReplicationGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { replicationGroupId: string; userGroupIdsToAdd?: string[]; userGroupIdsToRemove?: string[] }) =>
+      api("/aws/elasticache/replication-groups/modify", {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "elasticache"] }),
+  });
+}
+
+export function useModifyElastiCacheUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { userId: string; passwords?: string[] }) =>
+      api("/aws/elasticache/users/modify", { method: "POST", body: JSON.stringify(params) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "elasticache", "users"] }),
+  });
+}

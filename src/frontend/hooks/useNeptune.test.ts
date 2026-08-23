@@ -25,6 +25,8 @@ import {
   useNeptuneInstances,
   useCreateNeptuneInstance,
   useDeleteNeptuneInstance,
+  useModifyNeptuneCluster,
+  useModifyNeptuneInstance,
 } from "./useNeptune";
 
 beforeEach(() => mockApi.mockReset());
@@ -88,5 +90,31 @@ describe("useNeptune hooks", () => {
     const { result } = renderHook(() => useDeleteNeptuneInstance(), { wrapper: createWrapper() });
     await result.current.mutateAsync("i1");
     expect(mockApi).toHaveBeenCalledWith("/aws/neptune/instances/i1", { method: "DELETE" });
+  });
+});
+
+describe("useModifyNeptuneCluster", () => {
+  it("calls api with PATCH and body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useModifyNeptuneCluster(), { wrapper: createWrapper() });
+    result.current.mutate({ id: "c 1", engineVersion: "1.3" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/neptune/clusters/c%201", {
+      method: "PATCH",
+      body: JSON.stringify({"engineVersion":"1.3","iamDatabaseAuthenticationEnabled":undefined}),
+    });
+  });
+});
+
+describe("useModifyNeptuneInstance", () => {
+  it("calls api with PATCH and body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useModifyNeptuneInstance(), { wrapper: createWrapper() });
+    result.current.mutate({ id: "i 1", instanceClass: "db.r5.large" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/neptune/instances/i%201", {
+      method: "PATCH",
+      body: JSON.stringify({"instanceClass":"db.r5.large"}),
+    });
   });
 });

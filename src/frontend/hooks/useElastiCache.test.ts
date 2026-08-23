@@ -19,6 +19,8 @@ import {
   useElastiCacheUsers,
   useElastiCacheCreateUser,
   useElastiCacheDeleteUser,
+  useModifyElastiCacheReplicationGroup,
+  useModifyElastiCacheUser,
 } from "./useElastiCache";
 
 function createWrapper() {
@@ -128,5 +130,31 @@ describe("useElastiCacheDeleteUser", () => {
       "/aws/elasticache/users/delete",
       expect.objectContaining({ method: "POST" }),
     );
+  });
+});
+
+describe("useModifyElastiCacheReplicationGroup", () => {
+  it("calls api with POST and body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useModifyElastiCacheReplicationGroup(), { wrapper: createWrapper() });
+    result.current.mutate({ replicationGroupId: "rg1" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/elasticache/replication-groups/modify", {
+      method: "POST",
+      body: JSON.stringify({"replicationGroupId":"rg1"}),
+    });
+  });
+});
+
+describe("useModifyElastiCacheUser", () => {
+  it("calls api with POST and body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useModifyElastiCacheUser(), { wrapper: createWrapper() });
+    result.current.mutate({ userId: "u1", passwords: ["p"] });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/elasticache/users/modify", {
+      method: "POST",
+      body: JSON.stringify({"userId":"u1","passwords":["p"]}),
+    });
   });
 });

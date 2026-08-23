@@ -1,11 +1,13 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
 
 const mockClusters = vi.fn();
+const mockModifyCluster = vi.fn();
+const modifyClusterState = vi.hoisted(() => ({ isError: false, error: null as Error | null }));
 const mockInstances = vi.fn();
 const mockDeleteCluster = vi.fn();
 const mockDeleteInstance = vi.fn();
@@ -26,11 +28,19 @@ vi.mock("../../hooks/useNeptune", () => ({
     get isPending() { return deleteInstanceState.isPending; },
     get variables() { return deleteInstanceState.variables; },
   }),
+  useModifyNeptuneCluster: () => ({
+    mutate: mockModifyCluster,
+    isPending: false,
+    get isError() { return modifyClusterState.isError; },
+    get error() { return modifyClusterState.error; },
+  }),
 }));
 
 import { NeptuneDashboard } from "./NeptuneDashboard";
 
 beforeEach(() => {
+  modifyClusterState.isError = false;
+  modifyClusterState.error = null;
   vi.clearAllMocks();
   deleteClusterState.isPending = false;
   deleteClusterState.variables = null;
@@ -483,5 +493,91 @@ describe("NeptuneDashboard", () => {
     expect(screen.getByText("null-members")).toBeTruthy();
     // null?.length → undefined → 0
     expect(screen.getByText("0")).toBeTruthy();
+  });
+});
+
+describe("NeptuneDashboard — modify cluster", () => {
+  function setupCluster() {
+    mockClusters.mockReturnValue({
+      data: { clusters: [{ DBClusterIdentifier: "c1", Status: "available", Engine: "neptune" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+  }
+
+  it("modifies a cluster engine version from the modal", async () => {
+    mockModifyCluster.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
+    setupCluster();
+    const user = userEvent.setup();
+    render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "Modify" }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const input = dialog.querySelector("input") as HTMLInputElement;
+    await user.type(input, "1.3.0");
+    await user.click(within(dialog).getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(mockModifyCluster).toHaveBeenCalledWith(
+        { id: "c1", engineVersion: "1.3.0" },
+        expect.objectContaining({ onSuccess: expect.any(Function) })
+      )
+    );
+  });
+
+  it("sends undefined version when blank", async () => {
+    mockModifyCluster.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
+    setupCluster();
+    const user = userEvent.setup();
+    render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "Modify" }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    await user.click(within(dialog).getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(mockModifyCluster).toHaveBeenCalledWith(
+        { id: "c1", engineVersion: undefined },
+        expect.anything()
+      )
+    );
+  });
+
+  it("cancels the modify modal and Escape-dismisses", async () => {
+    setupCluster();
+    const user = userEvent.setup();
+    render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "Modify" }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(mockModifyCluster).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Modify" }));
+    document.querySelectorAll('[class*="awsui_dialog"]').forEach((d) =>
+      fireEvent.keyDown(d as HTMLElement, { keyCode: 27 })
+    );
+    expect(mockModifyCluster).not.toHaveBeenCalled();
+  });
+});
+
+describe("NeptuneDashboard — modify error arms", () => {
+  it("shows the modify error and fallback message", async () => {
+    modifyClusterState.isError = true;
+    modifyClusterState.error = new Error("modify failed");
+    mockClusters.mockReturnValue({
+      data: { clusters: [{ DBClusterIdentifier: "c1", Status: "available", Engine: "neptune" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "Modify" }));
+    expect(await screen.findByText("modify failed")).toBeTruthy();
+  });
+
+  it("falls back to a generic modify error", async () => {
+    modifyClusterState.isError = true;
+    modifyClusterState.error = null;
+    mockClusters.mockReturnValue({
+      data: { clusters: [{ DBClusterIdentifier: "c1", Status: "available", Engine: "neptune" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "Modify" }));
+    expect(await screen.findByText("Failed to modify cluster")).toBeTruthy();
   });
 });

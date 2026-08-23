@@ -21,6 +21,8 @@ vi.mock("@aws-sdk/client-elasticache", () => ({
   DescribeUsersCommand: createCmd("DescribeUsersCommand"),
   CreateUserCommand: createCmd("CreateUserCommand"),
   DeleteUserCommand: createCmd("DeleteUserCommand"),
+  ModifyReplicationGroupCommand: createCmd("ModifyReplicationGroupCommand"),
+  ModifyUserCommand: createCmd("ModifyUserCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -227,6 +229,52 @@ describe("ElastiCache Routes", () => {
       expect(res.status).toBe(400);
       const body = await res.json();
       expect(body.error).toBe("UserId is required");
+    });
+  });
+
+  describe("Modify replication group + user", () => {
+    it("POST /replication-groups/modify — swaps user groups", async () => {
+      mockSend.mockResolvedValueOnce({ ReplicationGroup: { ReplicationGroupId: "rg1" } });
+      const res = await post("/replication-groups/modify", {
+        replicationGroupId: "rg1",
+        userGroupIdsToAdd: ["ug-2"],
+        userGroupIdsToRemove: ["ug-1"],
+      });
+      const body = await res.json();
+      expect(body.replicationGroup.ReplicationGroupId).toBe("rg1");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("ModifyReplicationGroupCommand");
+      expect(cmd.UserGroupIdsToAdd).toEqual(["ug-2"]);
+    });
+
+    it("POST /replication-groups/modify — null on sparse response", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/replication-groups/modify", { replicationGroupId: "rg1" });
+      expect((await res.json()).replicationGroup).toBeNull();
+    });
+
+    it("POST /replication-groups/modify — 400 without id", async () => {
+      const res = await post("/replication-groups/modify", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /users/modify — rotates passwords", async () => {
+      mockSend.mockResolvedValueOnce({ User: { UserId: "u1" } });
+      const res = await post("/users/modify", { userId: "u1", passwords: ["newpass"] });
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("ModifyUserCommand");
+      expect(cmd.AuthenticationMode.Passwords).toEqual(["newpass"]);
+    });
+
+    it("POST /users/modify — omits auth mode without passwords", async () => {
+      mockSend.mockResolvedValueOnce({});
+      await post("/users/modify", { userId: "u1" });
+      expect(mockSend.mock.calls[0][0].AuthenticationMode).toBeUndefined();
+    });
+
+    it("POST /users/modify — 400 without userId", async () => {
+      const res = await post("/users/modify", {});
+      expect(res.status).toBe(400);
     });
   });
 });

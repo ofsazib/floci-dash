@@ -208,6 +208,7 @@ import {
 } from "../../hooks/useKinesis";
 import {
   useNeptuneClusters,
+  useModifyNeptuneCluster,
   useCreateNeptuneCluster,
   useDeleteNeptuneCluster,
   useNeptuneInstances,
@@ -508,10 +509,14 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
 export function NeptuneDashboard() {
   const { data: clustersData, isLoading: clustersLoading } = useNeptuneClusters();
   const deleteCluster = useDeleteNeptuneCluster();
+  const modifyCluster = useModifyNeptuneCluster();
+  const [editCluster, setEditCluster] = useState<string | null>(null);
+  const [editVersion, setEditVersion] = useState("");
   const { data: instancesData, isLoading: instancesLoading } = useNeptuneInstances();
   const deleteInstance = useDeleteNeptuneInstance();
 
   return (
+    <>
     <Tabs
       tabs={[
         {
@@ -543,12 +548,22 @@ export function NeptuneDashboard() {
                   id: "actions",
                   header: "",
                   cell: (i: any) => (
-                    <DeleteButton
-                      itemName={i.id}
-                      resourceType="cluster"
-                      loading={deleteCluster.isPending && deleteCluster.variables === i.id}
-                      onDelete={() => deleteCluster.mutateAsync(i.id)}
-                    />
+                    <SpaceBetween direction="horizontal" size="xs">
+                      <Button
+                        onClick={() => {
+                          setEditCluster(i.id);
+                          setEditVersion("");
+                        }}
+                      >
+                        Modify
+                      </Button>
+                      <DeleteButton
+                        itemName={i.id}
+                        resourceType="cluster"
+                        loading={deleteCluster.isPending && deleteCluster.variables === i.id}
+                        onDelete={() => deleteCluster.mutateAsync(i.id)}
+                      />
+                    </SpaceBetween>
                   ),
                 },
               ]}
@@ -602,10 +617,43 @@ export function NeptuneDashboard() {
         },
       ]}
     />
+    {editCluster && (
+        <Modal
+          visible
+          onDismiss={() => setEditCluster(null)}
+          header={`Modify cluster — ${editCluster}`}
+          footer={
+            <Box float="right">
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button variant="link" onClick={() => setEditCluster(null)}>Cancel</Button>
+                <Button
+                  variant="primary"
+                  loading={modifyCluster.isPending}
+                  onClick={() => {
+                    modifyCluster.mutate(
+                      { id: editCluster, engineVersion: editVersion.trim() || undefined },
+                      { onSuccess: () => setEditCluster(null) }
+                    );
+                  }}
+                >
+                  Save
+                </Button>
+              </SpaceBetween>
+            </Box>
+          }
+        >
+          <Form>
+            {modifyCluster.isError && (
+              <Alert type="error" dismissible>
+                {(modifyCluster.error as Error)?.message || "Failed to modify cluster"}
+              </Alert>
+            )}
+            <FormField label="Engine version">
+              <Input value={editVersion} onChange={({ detail }) => setEditVersion(detail.value)} placeholder="1.3.0" />
+            </FormField>
+          </Form>
+        </Modal>
+      )}
+    </>
   );
 }
-
-// ────────────────────────────────────────────────────────
-//  EventBridge Pipes
-// ────────────────────────────────────────────────────────
-

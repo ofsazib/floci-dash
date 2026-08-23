@@ -3,6 +3,10 @@ import type { Context } from "hono";
 import { create } from "../../clients/aws";
 import { NeptuneClient } from "@aws-sdk/client-neptune";
 import {
+  ModifyDBClusterCommand,
+  ModifyDBInstanceCommand,
+} from "@aws-sdk/client-neptune";
+import {
   DescribeDBClustersCommand,
   CreateDBClusterCommand,
   DeleteDBClusterCommand,
@@ -101,6 +105,34 @@ router.delete("/instances/:id", async (c: Context) => {
   const client = getClient();
   await client.send(new DeleteDBInstanceCommand({ DBInstanceIdentifier: id }));
   return c.json({ deleted: true });
+});
+
+
+router.patch("/clusters/:id", async (c: Context) => {
+  const id = c.req.param("id")!;
+  const body = await c.req.json<any>();
+  const client = getClient();
+  const result = await client.send(
+    new ModifyDBClusterCommand({
+      DBClusterIdentifier: id,
+      EngineVersion: body.engineVersion,
+      EnableIAMDatabaseAuthentication: body.iamDatabaseAuthenticationEnabled,
+    })
+  );
+  return c.json({ cluster: result.DBCluster || null });
+});
+
+router.patch("/instances/:id", async (c: Context) => {
+  const id = c.req.param("id")!;
+  const body = await c.req.json<any>();
+  const client = getClient();
+  const result = await client.send(
+    new ModifyDBInstanceCommand({
+      DBInstanceIdentifier: id,
+      DBInstanceClass: body.instanceClass,
+    })
+  );
+  return c.json({ instance: result.DBInstance || null });
 });
 
 export default router;

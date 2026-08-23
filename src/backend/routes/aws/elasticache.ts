@@ -11,6 +11,8 @@ import {
   DescribeUsersCommand,
   CreateUserCommand,
   DeleteUserCommand,
+  ModifyReplicationGroupCommand,
+  ModifyUserCommand,
 } from "@aws-sdk/client-elasticache";
 import { create } from "../../clients/aws";
 
@@ -115,6 +117,36 @@ router.post("/users/delete", async (c: Context) => {
   }
   await getClient().send(new DeleteUserCommand({ UserId: body.UserId }));
   return c.json({ deleted: true });
+});
+
+
+router.post("/replication-groups/modify", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.replicationGroupId) return c.json({ error: "replicationGroupId is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new ModifyReplicationGroupCommand({
+      ReplicationGroupId: body.replicationGroupId,
+      UserGroupIdsToAdd: body.userGroupIdsToAdd,
+      UserGroupIdsToRemove: body.userGroupIdsToRemove,
+    })
+  );
+  return c.json({ replicationGroup: result.ReplicationGroup || null });
+});
+
+router.post("/users/modify", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.userId) return c.json({ error: "userId is required" }, 400);
+  const client = getClient();
+  const result: any = await client.send(
+    new ModifyUserCommand({
+      UserId: body.userId,
+      AuthenticationMode: body.passwords?.length
+        ? { Passwords: body.passwords, Type: "password" }
+        : undefined,
+    })
+  );
+  return c.json({ user: result.User || null });
 });
 
 export default router;

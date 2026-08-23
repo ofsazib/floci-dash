@@ -20,6 +20,8 @@ vi.mock("@aws-sdk/client-neptune", () => ({
   DescribeDBInstancesCommand: createCmd("DescribeDBInstancesCommand"),
   CreateDBInstanceCommand: createCmd("CreateDBInstanceCommand"),
   DeleteDBInstanceCommand: createCmd("DeleteDBInstanceCommand"),
+  ModifyDBClusterCommand: createCmd("ModifyDBClusterCommand"),
+  ModifyDBInstanceCommand: createCmd("ModifyDBInstanceCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -167,6 +169,55 @@ describe("Neptune Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.deleted).toBe(true);
+    });
+  });
+
+  describe("Modify cluster + instance", () => {
+    it("PATCH /clusters/:id — modifies the cluster", async () => {
+      mockSend.mockResolvedValueOnce({ DBCluster: { DBClusterIdentifier: "c1" } });
+      const res = await router.request("/clusters/c1", {
+        method: "PATCH",
+        body: JSON.stringify({ engineVersion: "1.3.0", iamDatabaseAuthenticationEnabled: true }),
+        headers: { "content-type": "application/json" },
+      });
+      const body = await res.json();
+      expect(body.cluster.DBClusterIdentifier).toBe("c1");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("ModifyDBClusterCommand");
+      expect(cmd.EngineVersion).toBe("1.3.0");
+      expect(cmd.EnableIAMDatabaseAuthentication).toBe(true);
+    });
+
+    it("PATCH /clusters/:id — null on sparse response", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await router.request("/clusters/c1", {
+        method: "PATCH",
+        body: "{}",
+        headers: { "content-type": "application/json" },
+      });
+      expect((await res.json()).cluster).toBeNull();
+    });
+
+    it("PATCH /instances/:id — null on sparse response", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await router.request("/instances/i1", {
+        method: "PATCH",
+        body: "{}",
+        headers: { "content-type": "application/json" },
+      });
+      expect((await res.json()).instance).toBeNull();
+    });
+
+    it("PATCH /instances/:id — modifies the instance class", async () => {
+      mockSend.mockResolvedValueOnce({ DBInstance: { DBInstanceIdentifier: "i1" } });
+      const res = await router.request("/instances/i1", {
+        method: "PATCH",
+        body: JSON.stringify({ instanceClass: "db.r5.large" }),
+        headers: { "content-type": "application/json" },
+      });
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("ModifyDBInstanceCommand");
+      expect(cmd.DBInstanceClass).toBe("db.r5.large");
     });
   });
 });

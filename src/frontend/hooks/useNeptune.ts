@@ -100,3 +100,30 @@ export function useDeleteNeptuneInstance() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "neptune", "instances"] }),
   });
 }
+
+export function useModifyNeptuneCluster() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { id: string; engineVersion?: string; iamDatabaseAuthenticationEnabled?: boolean }) =>
+      api(`/aws/neptune/clusters/${encodeURIComponent(params.id)}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          engineVersion: params.engineVersion,
+          iamDatabaseAuthenticationEnabled: params.iamDatabaseAuthenticationEnabled,
+        }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "neptune"] }),
+  });
+}
+
+export function useModifyNeptuneInstance() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { id: string; instanceClass?: string }) =>
+      api(`/aws/neptune/instances/${encodeURIComponent(params.id)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ instanceClass: params.instanceClass }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "neptune"] }),
+  });
+}
