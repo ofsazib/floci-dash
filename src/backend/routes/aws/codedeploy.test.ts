@@ -42,6 +42,17 @@ vi.mock("@aws-sdk/client-codedeploy", () => ({
   ListTagsForResourceCommand: createCmd("ListTagsForResourceCommand"),
   TagResourceCommand: createCmd("TagResourceCommand"),
   UntagResourceCommand: createCmd("UntagResourceCommand"),
+  RegisterOnPremisesInstanceCommand: createCmd("RegisterOnPremisesInstanceCommand"),
+  DeregisterOnPremisesInstanceCommand: createCmd("DeregisterOnPremisesInstanceCommand"),
+  ListOnPremisesInstancesCommand: createCmd("ListOnPremisesInstancesCommand"),
+  BatchGetOnPremisesInstancesCommand: createCmd("BatchGetOnPremisesInstancesCommand"),
+  GetOnPremisesInstanceCommand: createCmd("GetOnPremisesInstanceCommand"),
+  AddTagsToOnPremisesInstancesCommand: createCmd("AddTagsToOnPremisesInstancesCommand"),
+  RemoveTagsFromOnPremisesInstancesCommand: createCmd("RemoveTagsFromOnPremisesInstancesCommand"),
+  ContinueDeploymentCommand: createCmd("ContinueDeploymentCommand"),
+  PutLifecycleEventHookExecutionStatusCommand: createCmd("PutLifecycleEventHookExecutionStatusCommand"),
+  ListDeploymentTargetsCommand: createCmd("ListDeploymentTargetsCommand"),
+  BatchGetDeploymentTargetsCommand: createCmd("BatchGetDeploymentTargetsCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -469,6 +480,195 @@ describe("CodeDeploy Routes", () => {
 
     it("POST /tags/untag — 400 when fields missing", async () => {
       const res = await post("/tags/untag", {});
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe("On-Premises Instances", () => {
+    it("GET /on-prem-instances — lists and batch-gets details", async () => {
+      mockSend.mockResolvedValueOnce({ instanceNames: ["srv-1"] });
+      mockSend.mockResolvedValueOnce({
+        instanceInfos: [{ instanceName: "srv-1", instanceArn: "arn:srv-1", iamUserArn: "arn:user" }],
+      });
+      const res = await get("/on-prem-instances");
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.total).toBe(1);
+      expect(json.instances[0].instanceName).toBe("srv-1");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("ListOnPremisesInstancesCommand");
+      expect(mockSend.mock.calls[1][0].__cmdName).toBe("BatchGetOnPremisesInstancesCommand");
+    });
+
+    it("GET /on-prem-instances — passes registrationStatus filter when present", async () => {
+      mockSend.mockResolvedValueOnce({ instanceNames: [] });
+      const res = await get("/on-prem-instances?registrationStatus=Registered");
+      const json = await res.json();
+      expect(json.instances).toEqual([]);
+      expect(mockSend.mock.calls[0][0].registrationStatus).toBe("Registered");
+    });
+
+    it("GET /on-prem-instances — undefined names fall back to empty and skip batch-get", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/on-prem-instances");
+      const json = await res.json();
+      expect(json).toEqual({ instances: [], total: 0 });
+      expect(mockSend).toHaveBeenCalledTimes(1);
+    });
+
+    it("GET /on-prem-instances — sparse batch-get falls back to empty instances", async () => {
+      mockSend.mockResolvedValueOnce({ instanceNames: ["srv-1"] });
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/on-prem-instances");
+      const json = await res.json();
+      expect(json).toEqual({ instances: [], total: 0 });
+    });
+
+    it("POST /on-prem-instances — registers with optional IAM fields", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/on-prem-instances", { instanceName: "srv-1", iamUserArn: "arn:user" });
+      expect(res.status).toBe(201);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("RegisterOnPremisesInstanceCommand");
+      expect(cmd.instanceName).toBe("srv-1");
+      expect(cmd.iamUserArn).toBe("arn:user");
+    });
+
+    it("POST /on-prem-instances — 400 without instanceName", async () => {
+      const res = await post("/on-prem-instances", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("GET /on-prem-instances/:name — returns instance info", async () => {
+      mockSend.mockResolvedValueOnce({ instanceInfo: { instanceName: "srv-1" } });
+      const res = await get("/on-prem-instances/srv-1");
+      const json = await res.json();
+      expect(json.instance.instanceName).toBe("srv-1");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetOnPremisesInstanceCommand");
+    });
+
+    it("GET /on-prem-instances/:name — null when missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/on-prem-instances/none");
+      const json = await res.json();
+      expect(json.instance).toBeNull();
+    });
+
+    it("DELETE /on-prem-instances/:name — deregisters", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/on-prem-instances/srv-1");
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.deregistered).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeregisterOnPremisesInstanceCommand");
+    });
+
+    it("POST /on-prem-instances/tags — adds tags", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/on-prem-instances/tags", {
+        instanceNames: ["srv-1"],
+        tags: [{ Key: "env", Value: "prod" }],
+      });
+      const json = await res.json();
+      expect(json.tagged).toBe(true);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("AddTagsToOnPremisesInstancesCommand");
+    });
+
+    it("POST /on-prem-instances/tags — 400 without instanceNames", async () => {
+      const res = await post("/on-prem-instances/tags", { tags: [{ Key: "k", Value: "v" }] });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /on-prem-instances/tags — 400 without tags", async () => {
+      const res = await post("/on-prem-instances/tags", { instanceNames: ["srv-1"] });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /on-prem-instances/untag — removes tags", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/on-prem-instances/untag", {
+        instanceNames: ["srv-1"],
+        tags: [{ Key: "env", Value: "" }],
+      });
+      const json = await res.json();
+      expect(json.untagged).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("RemoveTagsFromOnPremisesInstancesCommand");
+    });
+
+    it("POST /on-prem-instances/untag — 400 without instanceNames", async () => {
+      const res = await post("/on-prem-instances/untag", { tags: [{ Key: "k", Value: "v" }] });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /on-prem-instances/untag — 400 without tags", async () => {
+      const res = await post("/on-prem-instances/untag", { instanceNames: ["srv-1"] });
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe("Deployment Targets & Lifecycle", () => {
+    it("POST /deployments/:id/continue — continues the deployment", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/deployments/d-1/continue");
+      const json = await res.json();
+      expect(json.continued).toBe(true);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("ContinueDeploymentCommand");
+      expect(cmd.deploymentId).toBe("d-1");
+    });
+
+    it("POST /deployments/:id/lifecycle-hook-status — puts status", async () => {
+      mockSend.mockResolvedValueOnce({ lifecycleEventHookExecutionId: "exe-1" });
+      const res = await post("/deployments/d-1/lifecycle-hook-status", {
+        lifecycleEventHookExecutionId: "exe-1",
+        status: "Succeeded",
+      });
+      const json = await res.json();
+      expect(json.lifecycleEventHookExecutionId).toBe("exe-1");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("PutLifecycleEventHookExecutionStatusCommand");
+      expect(cmd.deploymentId).toBe("d-1");
+      expect(cmd.status).toBe("Succeeded");
+    });
+
+    it("POST /deployments/:id/lifecycle-hook-status — 400 without executionId", async () => {
+      const res = await post("/deployments/d-1/lifecycle-hook-status", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("GET /deployments/:id/targets — lists target ids", async () => {
+      mockSend.mockResolvedValueOnce({ targetIds: ["t-1", "t-2"] });
+      const res = await get("/deployments/d-1/targets");
+      const json = await res.json();
+      expect(json.targetIds).toEqual(["t-1", "t-2"]);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("ListDeploymentTargetsCommand");
+    });
+
+    it("GET /deployments/:id/targets — empty fallback", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/deployments/d-1/targets");
+      const json = await res.json();
+      expect(json.targetIds).toEqual([]);
+    });
+
+    it("POST /deployments/:id/targets — batch-gets target details", async () => {
+      mockSend.mockResolvedValueOnce({ deploymentTargets: [{ deploymentTargetId: "t-1" }] });
+      const res = await post("/deployments/d-1/targets", { targetIds: ["t-1"] });
+      const json = await res.json();
+      expect(json.targets[0].deploymentTargetId).toBe("t-1");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("BatchGetDeploymentTargetsCommand");
+    });
+
+    it("POST /deployments/:id/targets — sparse response falls back to empty targets", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/deployments/d-1/targets", { targetIds: ["t-1"] });
+      const json = await res.json();
+      expect(json.targets).toEqual([]);
+    });
+
+    it("POST /deployments/:id/targets — 400 without targetIds", async () => {
+      const res = await post("/deployments/d-1/targets", {});
       expect(res.status).toBe(400);
     });
   });

@@ -103,3 +103,88 @@ export function useCodeDeployDeployments(name: string | null) {
     enabled: !!name,
   });
 }
+
+// ─── On-Premises Instances ─────────────────────────────
+
+export function useCodeDeployOnPremInstances() {
+  return useQuery({
+    queryKey: ["aws", "codedeploy", "on-prem-instances"],
+    queryFn: () => api<{ instances: any[]; total: number }>("/aws/codedeploy/on-prem-instances"),
+  });
+}
+
+export function useRegisterCodeDeployOnPremInstance() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { instanceName: string; iamSessionArn?: string; iamUserArn?: string }) =>
+      api("/aws/codedeploy/on-prem-instances", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "codedeploy", "on-prem-instances"] }),
+  });
+}
+
+export function useDeregisterCodeDeployOnPremInstance() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api(`/aws/codedeploy/on-prem-instances/${encodeURIComponent(name)}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "codedeploy", "on-prem-instances"] }),
+  });
+}
+
+export function useAddCodeDeployOnPremTags() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { instanceNames: string[]; tags: { Key: string; Value: string }[] }) =>
+      api("/aws/codedeploy/on-prem-instances/tags", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "codedeploy", "on-prem-instances"] }),
+  });
+}
+
+export function useRemoveCodeDeployOnPremTags() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { instanceNames: string[]; tags: { Key: string; Value: string }[] }) =>
+      api("/aws/codedeploy/on-prem-instances/untag", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "codedeploy", "on-prem-instances"] }),
+  });
+}
+
+// ─── Deployment Targets & Lifecycle ────────────────────
+
+export function useContinueCodeDeployDeployment() {
+  return useMutation({
+    mutationFn: (id: string) =>
+      api(`/aws/codedeploy/deployments/${encodeURIComponent(id)}/continue`, { method: "POST" }),
+  });
+}
+
+export function usePutCodeDeployLifecycleHookStatus() {
+  return useMutation({
+    mutationFn: (params: { id: string; lifecycleEventHookExecutionId: string; status?: string }) =>
+      api(`/aws/codedeploy/deployments/${encodeURIComponent(params.id)}/lifecycle-hook-status`, {
+        method: "POST",
+        body: JSON.stringify({
+          lifecycleEventHookExecutionId: params.lifecycleEventHookExecutionId,
+          status: params.status,
+        }),
+      }),
+  });
+}
+
+export function useCodeDeployDeploymentTargets(id: string | null) {
+  return useQuery({
+    queryKey: ["aws", "codedeploy", "deployments", id, "targets"],
+    queryFn: async () => {
+      const list = await api<{ targetIds: string[] }>(
+        `/aws/codedeploy/deployments/${id}/targets`
+      );
+      if (!list.targetIds?.length) return { targets: [] as any[] };
+      const detailed = await api<{ targets: any[] }>(
+        `/aws/codedeploy/deployments/${id}/targets`,
+        { method: "POST", body: JSON.stringify({ targetIds: list.targetIds }) }
+      );
+      return { targets: detailed.targets || [] };
+    },
+    enabled: !!id,
+  });
+}

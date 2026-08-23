@@ -94,6 +94,14 @@ vi.mock("../hooks/useCodeDeploy", () => ({
   useCreateCodeDeployDeploymentConfig: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
   useCodeDeployDeployments: vi.fn(() => ({ data: { deployments: [], total: 0 }, isLoading: false, isError: false, error: null })),
   useCreateCodeDeployDeployment: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
+  useCodeDeployOnPremInstances: vi.fn(() => ({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null })),
+  useRegisterCodeDeployOnPremInstance: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
+  useDeregisterCodeDeployOnPremInstance: () => ({ mutateAsync: vi.fn(), isPending: false, variables: null }),
+  useAddCodeDeployOnPremTags: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
+  useRemoveCodeDeployOnPremTags: () => ({ mutate: vi.fn(), isPending: false }),
+  useContinueCodeDeployDeployment: () => ({ mutate: vi.fn(), isPending: false, variables: null }),
+  usePutCodeDeployLifecycleHookStatus: () => ({ mutate: vi.fn(), isPending: false }),
+  useCodeDeployDeploymentTargets: vi.fn(() => ({ data: { targets: [] } })),
 }));
 
 vi.mock("../hooks/useCUR", () => ({

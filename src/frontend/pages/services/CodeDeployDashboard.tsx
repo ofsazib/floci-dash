@@ -364,6 +364,14 @@ import {
   useCreateCodeDeployDeploymentConfig,
   useCodeDeployDeployments,
   useCreateCodeDeployDeployment,
+  useCodeDeployOnPremInstances,
+  useRegisterCodeDeployOnPremInstance,
+  useDeregisterCodeDeployOnPremInstance,
+  useAddCodeDeployOnPremTags,
+  useRemoveCodeDeployOnPremTags,
+  useContinueCodeDeployDeployment,
+  usePutCodeDeployLifecycleHookStatus,
+  useCodeDeployDeploymentTargets,
 } from "../../hooks/useCodeDeploy";
 import {
   useBackupPlans,
@@ -523,6 +531,23 @@ export function CodeDeployDashboard() {
   const [groupRoleArn, setGroupRoleArn] = useState("");
   const [showCreateDeployment, setShowCreateDeployment] = useState(false);
   const [deployGroupName, setDeployGroupName] = useState("");
+  const onPremQuery = useCodeDeployOnPremInstances();
+  const registerInstance = useRegisterCodeDeployOnPremInstance();
+  const deregisterInstance = useDeregisterCodeDeployOnPremInstance();
+  const addOnPremTags = useAddCodeDeployOnPremTags();
+  const removeOnPremTags = useRemoveCodeDeployOnPremTags();
+  const continueDeployment = useContinueCodeDeployDeployment();
+  const putHookStatus = usePutCodeDeployLifecycleHookStatus();
+  const [showRegister, setShowRegister] = useState(false);
+  const [regName, setRegName] = useState("");
+  const [regUserArn, setRegUserArn] = useState("");
+  const [tagInstance, setTagInstance] = useState<string | null>(null);
+  const [tagKey, setTagKey] = useState("");
+  const [tagValue, setTagValue] = useState("");
+  const [targetsDeployment, setTargetsDeployment] = useState<string | null>(null);
+  const [hookExecutionId, setHookExecutionId] = useState("");
+  const [hookStatus, setHookStatus] = useState("Succeeded");
+  const targetsQuery = useCodeDeployDeploymentTargets(targetsDeployment);
   const deploymentGroupsQuery = useCodeDeployDeploymentGroups(selectedApp);
   const deploymentsQuery = useCodeDeployDeployments(selectedApp);
 
@@ -547,6 +572,14 @@ export function CodeDeployDashboard() {
 
   const configs = (deploymentConfigsQuery.data?.deploymentConfigs || []).map((c: any) => ({
     name: typeof c === "string" ? c : c.deploymentConfigName || "—",
+  }));
+
+  const onPremItems = (onPremQuery.data?.instances || []).map((i: any) => ({
+    name: i.instanceName,
+    arn: i.instanceArn || "—",
+    iamUserArn: i.iamUserArn || "—",
+    registered: i.registerTime ? new Date(i.registerTime * 1000).toLocaleDateString() : "—",
+    tags: (i.tags || []) as { Key: string; Value: string }[],
   }));
 
   if (applicationsQuery.isLoading) return <TableSkeleton />;
@@ -649,6 +682,21 @@ export function CodeDeployDashboard() {
                         { id: "group", header: "Group", cell: (i: any) => i.groupName },
                         { id: "status", header: "Status", cell: (i: any) => i.status },
                         { id: "created", header: "Created", cell: (i: any) => i.created },
+                        {
+                          id: "actions",
+                          header: "",
+                          cell: (i: any) => (
+                            <SpaceBetween direction="horizontal" size="xs">
+                              <Button
+                                loading={continueDeployment.isPending && continueDeployment.variables === i.id}
+                                onClick={() => continueDeployment.mutate(i.id)}
+                              >
+                                Continue
+                              </Button>
+                              <Button onClick={() => setTargetsDeployment(i.id)}>Targets</Button>
+                            </SpaceBetween>
+                          ),
+                        },
                       ]}
                       loading={deploymentsQuery.isLoading}
                       emptyMessage="No deployments"
@@ -843,8 +891,236 @@ export function CodeDeployDashboard() {
               </>
             ),
           },
+          {
+            id: "on-premises",
+            label: `On-Premises (${onPremQuery.data?.total || 0})`,
+            content: (
+              <>
+                <ResourceTable
+                  resourceName="On-premises instance"
+                  headerTitle="On-Premises Instances"
+                  headerCounter={onPremQuery.data?.total}
+                  items={onPremItems}
+                  columns={[
+                    { id: "name", header: "Instance Name", cell: (i: any) => i.name, isRowHeader: true },
+                    { id: "iamUserArn", header: "IAM User ARN", cell: (i: any) => i.iamUserArn },
+                    { id: "registered", header: "Registered", cell: (i: any) => i.registered },
+                    {
+                      id: "tags",
+                      header: "Tags",
+                      cell: (i: any) => (
+                        <SpaceBetween direction="horizontal" size="xxs">
+                          {i.tags.map((t: any) => (
+                            <Button key={t.Key} variant="link" onClick={() => {
+                              setTagInstance(i.name);
+                              setTagKey(t.Key);
+                              setTagValue(t.Value);
+                            }}>
+                              {t.Key}
+                            </Button>
+                          ))}
+                        </SpaceBetween>
+                      ),
+                    },
+                    {
+                      id: "actions",
+                      header: "",
+                      cell: (i: any) => (
+                        <SpaceBetween direction="horizontal" size="xs">
+                          <Button
+                            onClick={() => {
+                              setTagInstance(i.name);
+                              setTagKey("");
+                              setTagValue("");
+                            }}
+                          >
+                            Add tag
+                          </Button>
+                          <DeleteButton
+                            itemName={i.name}
+                            resourceType="on-premises instance"
+                            loading={deregisterInstance.isPending && deregisterInstance.variables === i.name}
+                            onDelete={() => deregisterInstance.mutateAsync(i.name)}
+                          />
+                        </SpaceBetween>
+                      ),
+                    },
+                  ]}
+                  loading={onPremQuery.isLoading}
+                  emptyMessage="No on-premises instances"
+                  filterEnabled
+                  filterPlaceholder="Find instances by name"
+                  filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+                  onCreate={() => setShowRegister(true)}
+                />
+
+                {showRegister && (
+                  <Modal
+                    visible
+                    onDismiss={() => setShowRegister(false)}
+                    header="Register on-premises instance"
+                    footer={
+                      <Box float="right">
+                        <SpaceBetween direction="horizontal" size="xs">
+                          <Button variant="link" onClick={() => setShowRegister(false)}>Cancel</Button>
+                          <Button
+                            variant="primary"
+                            loading={registerInstance.isPending}
+                            disabled={!regName.trim()}
+                            onClick={() => {
+                              registerInstance.mutate(
+                                { instanceName: regName.trim(), iamUserArn: regUserArn.trim() || undefined },
+                                { onSuccess: () => { setShowRegister(false); setRegName(""); setRegUserArn(""); } }
+                              );
+                            }}
+                          >
+                            Register
+                          </Button>
+                        </SpaceBetween>
+                      </Box>
+                    }
+                  >
+                    <Form>
+                      {registerInstance.isError && (
+                        <Alert type="error" dismissible>
+                          {(registerInstance.error as Error)?.message || "Failed to register instance"}
+                        </Alert>
+                      )}
+                      <SpaceBetween size="m">
+                        <FormField label="Instance name">
+                          <Input value={regName} onChange={({ detail }) => setRegName(detail.value)} placeholder="srv-1" />
+                        </FormField>
+                        <FormField label="IAM user ARN (optional)">
+                          <Input value={regUserArn} onChange={({ detail }) => setRegUserArn(detail.value)} placeholder="arn:aws:iam::123:user/agent" />
+                        </FormField>
+                      </SpaceBetween>
+                    </Form>
+                  </Modal>
+                )}
+
+                {tagInstance && (
+                  <Modal
+                    visible
+                    onDismiss={() => setTagInstance(null)}
+                    header={tagKey ? `Edit tag on ${tagInstance}` : `Add tag to ${tagInstance}`}
+                    footer={
+                      <Box float="right">
+                        <SpaceBetween direction="horizontal" size="xs">
+                          {tagKey && (
+                            <Button
+                              variant="normal"
+                              loading={removeOnPremTags.isPending}
+                              onClick={() => {
+                                removeOnPremTags.mutate(
+                                  { instanceNames: [tagInstance], tags: [{ Key: tagKey, Value: tagValue }] },
+                                  { onSuccess: () => setTagInstance(null) }
+                                );
+                              }}
+                            >
+                              Remove tag
+                            </Button>
+                          )}
+                          <Button variant="link" onClick={() => setTagInstance(null)}>Cancel</Button>
+                          <Button
+                            variant="primary"
+                            loading={addOnPremTags.isPending}
+                            disabled={!tagKey.trim()}
+                            onClick={() => {
+                              addOnPremTags.mutate(
+                                { instanceNames: [tagInstance], tags: [{ Key: tagKey.trim(), Value: tagValue.trim() }] },
+                                { onSuccess: () => setTagInstance(null) }
+                              );
+                            }}
+                          >
+                            Save tag
+                          </Button>
+                        </SpaceBetween>
+                      </Box>
+                    }
+                  >
+                    <Form>
+                      {addOnPremTags.isError && (
+                        <Alert type="error" dismissible>
+                          {(addOnPremTags.error as Error)?.message || "Failed to tag instance"}
+                        </Alert>
+                      )}
+                      <SpaceBetween size="m">
+                        <FormField label="Key">
+                          <Input value={tagKey} onChange={({ detail }) => setTagKey(detail.value)} placeholder="env" />
+                        </FormField>
+                        <FormField label="Value">
+                          <Input value={tagValue} onChange={({ detail }) => setTagValue(detail.value)} placeholder="prod" />
+                        </FormField>
+                      </SpaceBetween>
+                    </Form>
+                  </Modal>
+                )}
+              </>
+            ),
+          },
         ]}
       />
+
+      {targetsDeployment && (
+        <Modal
+          visible
+          onDismiss={() => setTargetsDeployment(null)}
+          header={`Deployment targets — ${targetsDeployment}`}
+          footer={
+            <Box float="right">
+              <Button variant="link" onClick={() => setTargetsDeployment(null)}>Close</Button>
+            </Box>
+          }
+        >
+          <SpaceBetween size="m">
+            <ResourceTable
+              resourceName="Target"
+              items={(targetsQuery.data?.targets || []).map((t: any) => ({
+                id: t.deploymentTargetId || "—",
+                status: t.targetStatus || t.deploymentTargetStatus || "—",
+                lastUpdated: t.lastUpdatedAt ? new Date(t.lastUpdatedAt).toLocaleString() : "—",
+              }))}
+              columns={[
+                { id: "id", header: "Target ID", cell: (i: any) => i.id, isRowHeader: true },
+                { id: "status", header: "Status", cell: (i: any) => i.status },
+                { id: "lastUpdated", header: "Last Updated", cell: (i: any) => i.lastUpdated },
+              ]}
+              emptyMessage="No targets"
+            />
+            <FormField label="Lifecycle event hook execution ID">
+              <Input
+                value={hookExecutionId}
+                onChange={({ detail }) => setHookExecutionId(detail.value)}
+                placeholder="exe-1"
+              />
+            </FormField>
+            <FormField label="Status">
+              <Select
+                selectedOption={{ label: hookStatus, value: hookStatus }}
+                onChange={({ detail }) => setHookStatus(detail.selectedOption.value as string)}
+                options={[
+                  { label: "Succeeded", value: "Succeeded" },
+                  { label: "Failed", value: "Failed" },
+                  { label: "Pending", value: "Pending" },
+                ]}
+              />
+            </FormField>
+            <Button
+              loading={putHookStatus.isPending}
+              disabled={!hookExecutionId.trim()}
+              onClick={() =>
+                putHookStatus.mutate({
+                  id: targetsDeployment,
+                  lifecycleEventHookExecutionId: hookExecutionId.trim(),
+                  status: hookStatus,
+                })
+              }
+            >
+              Put hook status
+            </Button>
+          </SpaceBetween>
+        </Modal>
+      )}
     </SpaceBetween>
   );
 }

@@ -20,6 +20,14 @@ import {
   useCreateCodeDeployDeploymentConfig,
   useCreateCodeDeployDeployment,
   useCodeDeployDeployments,
+  useCodeDeployOnPremInstances,
+  useRegisterCodeDeployOnPremInstance,
+  useDeregisterCodeDeployOnPremInstance,
+  useAddCodeDeployOnPremTags,
+  useRemoveCodeDeployOnPremTags,
+  useContinueCodeDeployDeployment,
+  usePutCodeDeployLifecycleHookStatus,
+  useCodeDeployDeploymentTargets,
 } from "./useCodeDeploy";
 
 function createWrapper() {
@@ -221,5 +229,126 @@ describe("useCreateCodeDeployDeployment", () => {
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: ["aws", "codedeploy", "applications", "my-app", "deployments"],
     });
+  });
+});
+
+describe("useCodeDeployOnPremInstances", () => {
+  it("fetches the on-prem instance list", async () => {
+    mockApi.mockResolvedValueOnce({ instances: [], total: 0 });
+    const { result } = renderHook(() => useCodeDeployOnPremInstances(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/codedeploy/on-prem-instances");
+  });
+});
+
+describe("useRegisterCodeDeployOnPremInstance", () => {
+  it("posts the registration body", async () => {
+    mockApi.mockResolvedValueOnce({ registered: true });
+    const { result } = renderHook(() => useRegisterCodeDeployOnPremInstance(), { wrapper: createWrapper() });
+    result.current.mutate({ instanceName: "srv-1", iamUserArn: "arn:user" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/codedeploy/on-prem-instances", {
+      method: "POST",
+      body: JSON.stringify({ instanceName: "srv-1", iamUserArn: "arn:user" }),
+    });
+  });
+});
+
+describe("useDeregisterCodeDeployOnPremInstance", () => {
+  it("deletes by encoded name", async () => {
+    mockApi.mockResolvedValueOnce({ deregistered: true });
+    const { result } = renderHook(() => useDeregisterCodeDeployOnPremInstance(), { wrapper: createWrapper() });
+    result.current.mutate("srv 1");
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/codedeploy/on-prem-instances/srv%201", {
+      method: "DELETE",
+    });
+  });
+});
+
+describe("useAddCodeDeployOnPremTags", () => {
+  it("posts tags for the instances", async () => {
+    mockApi.mockResolvedValueOnce({ tagged: true });
+    const { result } = renderHook(() => useAddCodeDeployOnPremTags(), { wrapper: createWrapper() });
+    result.current.mutate({ instanceNames: ["srv-1"], tags: [{ Key: "env", Value: "prod" }] });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/codedeploy/on-prem-instances/tags", {
+      method: "POST",
+      body: JSON.stringify({ instanceNames: ["srv-1"], tags: [{ Key: "env", Value: "prod" }] }),
+    });
+  });
+});
+
+describe("useRemoveCodeDeployOnPremTags", () => {
+  it("posts untag for the instances", async () => {
+    mockApi.mockResolvedValueOnce({ untagged: true });
+    const { result } = renderHook(() => useRemoveCodeDeployOnPremTags(), { wrapper: createWrapper() });
+    result.current.mutate({ instanceNames: ["srv-1"], tags: [{ Key: "env", Value: "" }] });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/codedeploy/on-prem-instances/untag", {
+      method: "POST",
+      body: JSON.stringify({ instanceNames: ["srv-1"], tags: [{ Key: "env", Value: "" }] }),
+    });
+  });
+});
+
+describe("useContinueCodeDeployDeployment", () => {
+  it("posts continue for the deployment", async () => {
+    mockApi.mockResolvedValueOnce({ continued: true });
+    const { result } = renderHook(() => useContinueCodeDeployDeployment(), { wrapper: createWrapper() });
+    result.current.mutate("d-1");
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/codedeploy/deployments/d-1/continue", {
+      method: "POST",
+    });
+  });
+});
+
+describe("usePutCodeDeployLifecycleHookStatus", () => {
+  it("posts the hook status", async () => {
+    mockApi.mockResolvedValueOnce({ lifecycleEventHookExecutionId: "exe-1" });
+    const { result } = renderHook(() => usePutCodeDeployLifecycleHookStatus(), { wrapper: createWrapper() });
+    result.current.mutate({ id: "d-1", lifecycleEventHookExecutionId: "exe-1", status: "Succeeded" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/codedeploy/deployments/d-1/lifecycle-hook-status", {
+      method: "POST",
+      body: JSON.stringify({ lifecycleEventHookExecutionId: "exe-1", status: "Succeeded" }),
+    });
+  });
+});
+
+describe("useCodeDeployDeploymentTargets", () => {
+  it("lists then batch-gets targets", async () => {
+    mockApi.mockResolvedValueOnce({ targetIds: ["t-1"] });
+    mockApi.mockResolvedValueOnce({ targets: [{ deploymentTargetId: "t-1" }] });
+    const { result } = renderHook(() => useCodeDeployDeploymentTargets("d-1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenNthCalledWith(1, "/aws/codedeploy/deployments/d-1/targets");
+    expect(mockApi).toHaveBeenNthCalledWith(2, "/aws/codedeploy/deployments/d-1/targets", {
+      method: "POST",
+      body: JSON.stringify({ targetIds: ["t-1"] }),
+    });
+    expect(result.current.data?.targets).toEqual([{ deploymentTargetId: "t-1" }]);
+  });
+
+  it("skips the batch-get when there are no target ids", async () => {
+    mockApi.mockResolvedValueOnce({ targetIds: [] });
+    const { result } = renderHook(() => useCodeDeployDeploymentTargets("d-1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledTimes(1);
+    expect(result.current.data?.targets).toEqual([]);
+  });
+
+  it("falls back to an empty list when the batch-get returns no targets", async () => {
+    mockApi.mockResolvedValueOnce({ targetIds: ["t-1"] });
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useCodeDeployDeploymentTargets("d-1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.targets).toEqual([]);
+  });
+
+  it("is disabled without an id", () => {
+    const { result } = renderHook(() => useCodeDeployDeploymentTargets(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
   });
 });

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -36,6 +36,36 @@ const createConfigState = vi.hoisted(() => ({
   error: null as Error | null,
 }));
 
+const registerInstanceState = vi.hoisted(() => ({
+  isPending: false,
+  isError: false,
+  error: null as Error | null,
+}));
+
+const deregisterInstanceState = vi.hoisted(() => ({
+  isPending: false,
+  variables: null as string | null,
+}));
+
+const addTagsState = vi.hoisted(() => ({
+  isPending: false,
+  isError: false,
+  error: null as Error | null,
+}));
+
+const removeTagsState = vi.hoisted(() => ({
+  isPending: false,
+}));
+
+const continueState = vi.hoisted(() => ({
+  isPending: false,
+  variables: null as string | null,
+}));
+
+const putHookState = vi.hoisted(() => ({
+  isPending: false,
+}));
+
 // ─── Mock hooks ─────────────────────────────────────────
 
 const mockApps = vi.fn();
@@ -47,6 +77,14 @@ const mockDeployments = vi.fn();
 const mockCreateDeployment = vi.fn();
 const mockDeploymentConfigs = vi.fn();
 const mockCreateConfig = vi.fn();
+const mockOnPrem = vi.fn();
+const mockRegisterInstance = vi.fn();
+const mockDeregisterInstance = vi.fn();
+const mockAddOnPremTags = vi.fn();
+const mockRemoveOnPremTags = vi.fn();
+const mockContinueDeployment = vi.fn();
+const mockPutHookStatus = vi.fn();
+const mockTargets = vi.fn();
 
 vi.mock("../../hooks/useCodeDeploy", () => ({
   useCodeDeployApplications: (...args: any[]) => mockApps(...args),
@@ -76,6 +114,38 @@ vi.mock("../../hooks/useCodeDeploy", () => ({
     get error() { return createDeployState.error; },
   }),
   useCodeDeployDeploymentConfigs: (...args: any[]) => mockDeploymentConfigs(...args),
+  useCodeDeployOnPremInstances: (...args: any[]) => mockOnPrem(...args),
+  useRegisterCodeDeployOnPremInstance: () => ({
+    mutate: mockRegisterInstance,
+    get isPending() { return registerInstanceState.isPending; },
+    get isError() { return registerInstanceState.isError; },
+    get error() { return registerInstanceState.error; },
+  }),
+  useDeregisterCodeDeployOnPremInstance: () => ({
+    mutateAsync: mockDeregisterInstance,
+    get isPending() { return deregisterInstanceState.isPending; },
+    get variables() { return deregisterInstanceState.variables; },
+  }),
+  useAddCodeDeployOnPremTags: () => ({
+    mutate: mockAddOnPremTags,
+    get isPending() { return addTagsState.isPending; },
+    get isError() { return addTagsState.isError; },
+    get error() { return addTagsState.error; },
+  }),
+  useRemoveCodeDeployOnPremTags: () => ({
+    mutate: mockRemoveOnPremTags,
+    get isPending() { return removeTagsState.isPending; },
+  }),
+  useContinueCodeDeployDeployment: () => ({
+    mutate: mockContinueDeployment,
+    get isPending() { return continueState.isPending; },
+    get variables() { return continueState.variables; },
+  }),
+  usePutCodeDeployLifecycleHookStatus: () => ({
+    mutate: mockPutHookStatus,
+    get isPending() { return putHookState.isPending; },
+  }),
+  useCodeDeployDeploymentTargets: (...args: any[]) => mockTargets(...args),
   useCreateCodeDeployDeploymentConfig: () => ({
     mutate: mockCreateConfig,
     get isPending() { return createConfigState.isPending; },
@@ -114,11 +184,28 @@ beforeEach(() => {
   createConfigState.isPending = false;
   createConfigState.isError = false;
   createConfigState.error = null;
+  registerInstanceState.isPending = false;
+  registerInstanceState.isError = false;
+  registerInstanceState.error = null;
+  deregisterInstanceState.isPending = false;
+  deregisterInstanceState.variables = null;
+  addTagsState.isPending = false;
+  addTagsState.isError = false;
+  addTagsState.error = null;
+  removeTagsState.isPending = false;
+  continueState.isPending = false;
+  continueState.variables = null;
+  putHookState.isPending = false;
 
   mockApps.mockReturnValue({ data: { applications: [], total: 0 }, isLoading: false });
   mockDeploymentGroups.mockReturnValue({ data: { deploymentGroups: [], total: 0 }, isLoading: false });
   mockDeployments.mockReturnValue({ data: { deployments: [], total: 0 }, isLoading: false });
   mockDeploymentConfigs.mockReturnValue({ data: { deploymentConfigs: [] }, isLoading: false });
+  mockOnPrem.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false });
+  mockTargets.mockReturnValue({ data: { targets: [] } });
+  mockRegisterInstance.mockImplementation((_body: any, opts: any) => opts?.onSuccess?.());
+  mockAddOnPremTags.mockImplementation((_body: any, opts: any) => opts?.onSuccess?.());
+  mockRemoveOnPremTags.mockImplementation((_body: any, opts: any) => opts?.onSuccess?.());
 
   // Invoke onSuccess so the create modals' close + field-reset branches fire
   mockCreateApp.mockImplementation((_body: any, opts: any) => opts?.onSuccess?.());
@@ -810,5 +897,414 @@ describe("CodeDeployDashboard — deployment configs tab", () => {
     const createBtns = screen.getAllByRole("button", { name: /Create/i });
     await user.click(createBtns[createBtns.length - 1]);
     await waitFor(() => expect(screen.getByText("Failed to create config")).toBeTruthy());
+  });
+});
+
+describe("CodeDeployDashboard — on-premises tab", () => {
+  function setupOnPrem(instances: any[]) {
+    mockOnPrem.mockReturnValue({ data: { instances, total: instances.length }, isLoading: false });
+  }
+
+  it("renders on-premises instances with dash fallbacks", async () => {
+    setupOnPrem([{ instanceName: "srv-1", instanceArn: "arn:srv-1", registerTime: 1700000000, tags: [] }]);
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /On-Premises/i }));
+    expect(await screen.findByText("srv-1")).toBeTruthy();
+    expect(screen.getByText("—")).toBeTruthy();
+  });
+
+  it("shows empty message when there are no on-premises instances", async () => {
+    setupOnPrem([]);
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /On-Premises/i }));
+    expect(await screen.findByText("No on-premises instances")).toBeTruthy();
+  });
+
+  it("registers an on-premises instance", async () => {
+    setupOnPrem([]);
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /On-Premises/i }));
+    await clickButton(user, /Create/i);
+    const dialog = screen.getByRole("dialog", { name: /Register on-premises instance/i });
+    const inputs = dialog.querySelectorAll("input");
+    await user.type(inputs[0], "srv-1");
+    await user.type(inputs[1], "arn:aws:iam::123:user/agent");
+    await user.click(within(dialog).getByRole("button", { name: "Register" }));
+    await waitFor(() =>
+      expect(mockRegisterInstance).toHaveBeenCalledWith(
+        { instanceName: "srv-1", iamUserArn: "arn:aws:iam::123:user/agent" },
+        { onSuccess: expect.any(Function) },
+      )
+    );
+  });
+
+  it("registers without an IAM user ARN when blank", async () => {
+    setupOnPrem([]);
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /On-Premises/i }));
+    await clickButton(user, /Create/i);
+    const dialog = screen.getByRole("dialog", { name: /Register on-premises instance/i });
+    const inputs = dialog.querySelectorAll("input");
+    await user.type(inputs[0], "srv-1");
+    await user.click(within(dialog).getByRole("button", { name: "Register" }));
+    await waitFor(() =>
+      expect(mockRegisterInstance).toHaveBeenCalledWith(
+        { instanceName: "srv-1", iamUserArn: undefined },
+        { onSuccess: expect.any(Function) },
+      )
+    );
+  });
+
+  it("shows the empty table while the on-prem list is still loading", async () => {
+    mockOnPrem.mockReturnValue({ data: undefined, isLoading: false });
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /On-Premises/i }));
+    expect(await screen.findByText("No on-premises instances")).toBeTruthy();
+  });
+
+  it("keeps Register disabled until a name is entered", async () => {
+    setupOnPrem([]);
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /On-Premises/i }));
+    await clickButton(user, /Create/i);
+    const dialog = screen.getByRole("dialog", { name: /Register on-premises instance/i });
+    expect(within(dialog).getByRole("button", { name: "Register" }).hasAttribute("disabled")).toBe(true);
+  });
+
+  it("shows the register error and fallback message", async () => {
+    setupOnPrem([]);
+    registerInstanceState.isError = true;
+    registerInstanceState.error = new Error("register failed");
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /On-Premises/i }));
+    await clickButton(user, /Create/i);
+    expect(await screen.findByText("register failed")).toBeTruthy();
+  });
+
+  it("falls back to a generic register error message", async () => {
+    setupOnPrem([]);
+    registerInstanceState.isError = true;
+    registerInstanceState.error = null;
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /On-Premises/i }));
+    await clickButton(user, /Create/i);
+    expect(await screen.findByText("Failed to register instance")).toBeTruthy();
+  });
+
+  it("deregisters an instance via the confirm dialog", async () => {
+    mockDeregisterInstance.mockResolvedValue({});
+    setupOnPrem([{ instanceName: "srv-1", tags: [] }]);
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /On-Premises/i }));
+    await user.click((await screen.findAllByRole("button", { name: /Delete srv-1/i }))[0]);
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() => expect(mockDeregisterInstance).toHaveBeenCalledWith("srv-1"));
+  });
+
+  it("adds a tag to an instance", async () => {
+    setupOnPrem([{ instanceName: "srv-1", tags: [] }]);
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /On-Premises/i }));
+    await user.click((await screen.findAllByRole("button", { name: "Add tag" }))[0]);
+    const dialog = screen.getByRole("dialog", { name: /Add tag to srv-1/i });
+    const inputs = dialog.querySelectorAll("input");
+    await user.type(inputs[0], "env");
+    await user.type(inputs[1], "prod");
+    await user.click(within(dialog).getByRole("button", { name: "Save tag" }));
+    await waitFor(() =>
+      expect(mockAddOnPremTags).toHaveBeenCalledWith(
+        { instanceNames: ["srv-1"], tags: [{ Key: "env", Value: "prod" }] },
+        { onSuccess: expect.any(Function) },
+      )
+    );
+  });
+
+  it("shows edit-tag header and removes a tag", async () => {
+    mockRemoveOnPremTags.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
+    setupOnPrem([{ instanceName: "srv-1", tags: [{ Key: "env", Value: "prod" }] }]);
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /On-Premises/i }));
+    await user.click((await screen.findAllByRole("button", { name: "env" }))[0]);
+    const dialog = screen.getByRole("dialog", { name: /Edit tag on srv-1/i });
+    await user.click(within(dialog).getByRole("button", { name: "Remove tag" }));
+    await waitFor(() =>
+      expect(mockRemoveOnPremTags).toHaveBeenCalledWith(
+        { instanceNames: ["srv-1"], tags: [{ Key: "env", Value: "prod" }] },
+        { onSuccess: expect.any(Function) },
+      )
+    );
+  });
+
+  it("keeps Save tag disabled until a key is entered", async () => {
+    setupOnPrem([{ instanceName: "srv-1" }]);
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /On-Premises/i }));
+    await user.click((await screen.findAllByRole("button", { name: "Add tag" }))[0]);
+    const dialog = screen.getByRole("dialog", { name: /Add tag to srv-1/i });
+    expect(within(dialog).getByRole("button", { name: "Save tag" }).hasAttribute("disabled")).toBe(true);
+  });
+
+  it("shows the tag error and fallback message", async () => {
+    setupOnPrem([{ instanceName: "srv-1", tags: [] }]);
+    addTagsState.isError = true;
+    addTagsState.error = new Error("tag failed");
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /On-Premises/i }));
+    await user.click((await screen.findAllByRole("button", { name: "Add tag" }))[0]);
+    expect(await screen.findByText("tag failed")).toBeTruthy();
+  });
+
+  it("falls back to a generic tag error message", async () => {
+    setupOnPrem([{ instanceName: "srv-1", tags: [] }]);
+    addTagsState.isError = true;
+    addTagsState.error = null;
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /On-Premises/i }));
+    await user.click((await screen.findAllByRole("button", { name: "Add tag" }))[0]);
+    expect(await screen.findByText("Failed to tag instance")).toBeTruthy();
+  });
+
+  it("dismisses the register modal with Escape", async () => {
+    setupOnPrem([]);
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /On-Premises/i }));
+    await clickButton(user, /Create/i);
+    await screen.findByRole("dialog", { name: /Register on-premises instance/i });
+    dismissModalWithEscape();
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Register" })).toBeNull());
+  });
+
+  it("cancels the register modal", async () => {
+    setupOnPrem([]);
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /On-Premises/i }));
+    await clickButton(user, /Create/i);
+    const dialog = screen.getByRole("dialog", { name: /Register on-premises instance/i });
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Register" })).toBeNull());
+  });
+
+  it("dismisses the tag modal with Escape", async () => {
+    setupOnPrem([{ instanceName: "srv-1", tags: [] }]);
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /On-Premises/i }));
+    await user.click((await screen.findAllByRole("button", { name: "Add tag" }))[0]);
+    await screen.findByRole("dialog", { name: /Add tag to srv-1/i });
+    dismissModalWithEscape();
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Save tag" })).toBeNull());
+  });
+
+  it("filters on-prem instances by name", async () => {
+    setupOnPrem([{ instanceName: "srv-1" }, { instanceName: "web-1" }]);
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /On-Premises/i }));
+    const filter = await screen.findByPlaceholderText("Find instances by name");
+    await user.type(filter, "srv");
+    expect(screen.getByText("srv-1")).toBeTruthy();
+    expect(screen.queryByText("web-1")).toBeNull();
+  });
+
+  it("disables deregister while that instance deletion is pending", async () => {
+    setupOnPrem([{ instanceName: "srv-1", tags: [] }]);
+    deregisterInstanceState.isPending = true;
+    deregisterInstanceState.variables = "srv-1";
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /On-Premises/i }));
+    const btn = (await screen.findAllByRole("button", { name: /Delete srv-1/i }))[0];
+    expect(btn.className).toMatch(/disabled/);
+  });
+
+  it("cancels the tag modal without saving", async () => {
+    setupOnPrem([{ instanceName: "srv-1", tags: [] }]);
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /On-Premises/i }));
+    await user.click((await screen.findAllByRole("button", { name: "Add tag" }))[0]);
+    const dialog = screen.getByRole("dialog", { name: /Add tag to srv-1/i });
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Save tag" })).toBeNull());
+    expect(mockAddOnPremTags).not.toHaveBeenCalled();
+  });
+});
+
+describe("CodeDeployDashboard — deployment actions", () => {
+  function setupDeployment() {
+    mockApps.mockReturnValue({
+      data: { applications: [{ applicationName: "my-app" }], total: 1 },
+      isLoading: false,
+    });
+    mockDeployments.mockReturnValue({
+      data: { deployments: [{ deploymentId: "d-1", deploymentGroupName: "g", status: "Created" }], total: 1 },
+      isLoading: false,
+    });
+  }
+
+  it("continues a deployment from the deployments table", async () => {
+    setupDeployment();
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "my-app" }));
+    await user.click((await screen.findAllByRole("button", { name: "Continue" }))[0]);
+    await waitFor(() => expect(mockContinueDeployment).toHaveBeenCalledWith("d-1"));
+  });
+
+  it("shows continue loading for the in-flight deployment only", async () => {
+    setupDeployment();
+    mockDeployments.mockReturnValue({
+      data: {
+        deployments: [
+          { deploymentId: "d-1", status: "Created" },
+          { deploymentId: "d-2", status: "Created" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    continueState.isPending = true;
+    continueState.variables = "d-1";
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "my-app" }));
+    const buttons = await screen.findAllByRole("button", { name: "Continue" });
+    expect(buttons[0].className).toMatch(/disabled|loading/);
+    expect(buttons[1].className).not.toMatch(/disabled|loading/);
+  });
+
+  it("opens the targets modal and lists targets", async () => {
+    setupDeployment();
+    mockTargets.mockReturnValue({ data: { targets: [{ deploymentTargetId: "t-1", targetStatus: "Ready" }] } });
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "my-app" }));
+    await user.click((await screen.findAllByRole("button", { name: "Targets" }))[0]);
+    expect(await screen.findByText("t-1")).toBeTruthy();
+    expect(mockTargets).toHaveBeenCalledWith("d-1");
+    expect(screen.getByText("Ready")).toBeTruthy();
+  });
+
+  it("puts a lifecycle hook status from the targets modal", async () => {
+    setupDeployment();
+    mockTargets.mockReturnValue({ data: { targets: [] } });
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "my-app" }));
+    await user.click((await screen.findAllByRole("button", { name: "Targets" }))[0]);
+    const dialog = await screen.findByRole("dialog", { name: /Deployment targets — d-1/i });
+    const input = dialog.querySelector("input") as HTMLInputElement;
+    await user.type(input, "exe-1");
+    await user.click(within(dialog).getByRole("button", { name: "Put hook status" }));
+    await waitFor(() =>
+      expect(mockPutHookStatus).toHaveBeenCalledWith({
+        id: "d-1",
+        lifecycleEventHookExecutionId: "exe-1",
+        status: "Succeeded",
+      })
+    );
+  });
+
+  it("selects a different hook status", async () => {
+    setupDeployment();
+    mockTargets.mockReturnValue({ data: { targets: [] } });
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "my-app" }));
+    await user.click((await screen.findAllByRole("button", { name: "Targets" }))[0]);
+    const dialog = await screen.findByRole("dialog", { name: /Deployment targets — d-1/i });
+    await user.click(within(dialog).getByRole("button", { name: /Succeeded/i }));
+    await user.click(await within(dialog).findByRole("option", { name: "Failed" }));
+    const input = dialog.querySelector("input") as HTMLInputElement;
+    await user.type(input, "exe-1");
+    await user.click(within(dialog).getByRole("button", { name: "Put hook status" }));
+    await waitFor(() =>
+      expect(mockPutHookStatus).toHaveBeenCalledWith({
+        id: "d-1",
+        lifecycleEventHookExecutionId: "exe-1",
+        status: "Failed",
+      })
+    );
+  });
+
+  it("keeps Put hook status disabled until an execution id is entered", async () => {
+    setupDeployment();
+    mockTargets.mockReturnValue({ data: { targets: [] } });
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "my-app" }));
+    await user.click((await screen.findAllByRole("button", { name: "Targets" }))[0]);
+    const dialog = await screen.findByRole("dialog", { name: /Deployment targets — d-1/i });
+    expect(within(dialog).getByRole("button", { name: "Put hook status" }).hasAttribute("disabled")).toBe(true);
+  });
+
+  it("dismisses the targets modal with Escape", async () => {
+    setupDeployment();
+    mockTargets.mockReturnValue({ data: { targets: [] } });
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "my-app" }));
+    await user.click((await screen.findAllByRole("button", { name: "Targets" }))[0]);
+    await screen.findByRole("dialog", { name: /Deployment targets — d-1/i });
+    dismissModalWithEscape();
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Put hook status" })).toBeNull());
+  });
+
+  it("shows the empty state while targets are still loading", async () => {
+    setupDeployment();
+    mockTargets.mockReturnValue({ data: undefined });
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "my-app" }));
+    await user.click((await screen.findAllByRole("button", { name: "Targets" }))[0]);
+    await screen.findByRole("dialog", { name: /Deployment targets — d-1/i });
+    expect(screen.getByText("No targets")).toBeTruthy();
+  });
+
+  it("renders targets with dash and status fallbacks", async () => {
+    setupDeployment();
+    mockTargets.mockReturnValue({
+      data: {
+        targets: [
+          { deploymentTargetStatus: "Ready", lastUpdatedAt: 1700000000000 },
+          {},
+        ],
+      },
+    });
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "my-app" }));
+    await user.click((await screen.findAllByRole("button", { name: "Targets" }))[0]);
+    expect(await screen.findByText("Ready")).toBeTruthy();
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("closes the targets modal with the Close button", async () => {
+    setupDeployment();
+    mockTargets.mockReturnValue({ data: { targets: [] } });
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "my-app" }));
+    await user.click((await screen.findAllByRole("button", { name: "Targets" }))[0]);
+    const dialog = await screen.findByRole("dialog", { name: /Deployment targets — d-1/i });
+    await user.click(within(dialog).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Put hook status" })).toBeNull());
   });
 });
