@@ -176,6 +176,10 @@ import {
 import {
   useSTSCallerIdentity,
   useSTSAssumeRole,
+  useSTSAssumeRoleWithSAML,
+  useSTSAssumeRoleWithWebIdentity,
+  useSTSGetFederationToken,
+  useSTSDecodeAuthorizationMessage,
   useSTSGetSessionToken,
 } from "../../hooks/useSTS";
 import {
@@ -518,6 +522,21 @@ export function STSDashboard() {
   const [assumeResult, setAssumeResult] = useState<any>(null);
   const [sessionResult, setSessionResult] = useState<any>(null);
   const [sessionDuration, setSessionDuration] = useState("");
+  const samlMut = useSTSAssumeRoleWithSAML();
+  const webIdentityMut = useSTSAssumeRoleWithWebIdentity();
+  const federationMut = useSTSGetFederationToken();
+  const decodeMut = useSTSDecodeAuthorizationMessage();
+  const [samlRoleArn, setSamlRoleArn] = useState("");
+  const [samlPrincipalArn, setSamlPrincipalArn] = useState("");
+  const [samlAssertion, setSamlAssertion] = useState("");
+  const [samlResult, setSamlResult] = useState<any>(null);
+  const [webRoleArn, setWebRoleArn] = useState("");
+  const [webToken, setWebToken] = useState("");
+  const [webResult, setWebResult] = useState<any>(null);
+  const [fedName, setFedName] = useState("");
+  const [fedResult, setFedResult] = useState<any>(null);
+  const [encodedMsg, setEncodedMsg] = useState("");
+  const [decodedMsg, setDecodedMsg] = useState<string | null>(null);
 
   if (isLoading) return <TableSkeleton />;
 
@@ -726,6 +745,113 @@ export function STSDashboard() {
                   </FormField>
                 </Form>
               </Modal>
+            </SpaceBetween>
+          ),
+        },
+        {
+          id: "federation",
+          label: "Federation",
+          content: (
+            <SpaceBetween size="l">
+              <Container header={<Header variant="h2">Assume Role With SAML</Header>}>
+                <SpaceBetween size="s">
+                  <FormField label="Role ARN">
+                    <Input value={samlRoleArn} onChange={({ detail }) => setSamlRoleArn(detail.value)} placeholder="arn:aws:iam::123:role/my-role" />
+                  </FormField>
+                  <FormField label="Principal ARN">
+                    <Input value={samlPrincipalArn} onChange={({ detail }) => setSamlPrincipalArn(detail.value)} placeholder="arn:aws:iam::123:saml-provider/idp" />
+                  </FormField>
+                  <FormField label="SAML assertion">
+                    <Textarea value={samlAssertion} onChange={({ detail }) => setSamlAssertion(detail.value)} rows={3} />
+                  </FormField>
+                  <Button
+                    variant="primary"
+                    disabled={!samlRoleArn.trim() || !samlPrincipalArn.trim() || !samlAssertion.trim()}
+                    loading={samlMut.isPending}
+                    onClick={() =>
+                      samlMut.mutate(
+                        { roleArn: samlRoleArn.trim(), principalArn: samlPrincipalArn.trim(), samlAssertion: samlAssertion.trim() },
+                        { onSuccess: (data: any) => setSamlResult(data) }
+                      )
+                    }
+                  >
+                    Assume with SAML
+                  </Button>
+                  {samlResult?.credentials && <Alert type="success">Access key: {samlResult.credentials.accessKeyId}</Alert>}
+                  {samlMut.isError && <Alert type="error" dismissible>{(samlMut.error as Error)?.message || "SAML assume failed"}</Alert>}
+                </SpaceBetween>
+              </Container>
+
+              <Container header={<Header variant="h2">Assume Role With Web Identity</Header>}>
+                <SpaceBetween size="s">
+                  <FormField label="Role ARN">
+                    <Input value={webRoleArn} onChange={({ detail }) => setWebRoleArn(detail.value)} placeholder="arn:aws:iam::123:role/my-role" />
+                  </FormField>
+                  <FormField label="Web identity token">
+                    <Textarea value={webToken} onChange={({ detail }) => setWebToken(detail.value)} rows={3} />
+                  </FormField>
+                  <Button
+                    variant="primary"
+                    disabled={!webRoleArn.trim() || !webToken.trim()}
+                    loading={webIdentityMut.isPending}
+                    onClick={() =>
+                      webIdentityMut.mutate(
+                        { roleArn: webRoleArn.trim(), webIdentityToken: webToken.trim() },
+                        { onSuccess: (data: any) => setWebResult(data) }
+                      )
+                    }
+                  >
+                    Assume with web identity
+                  </Button>
+                  {webResult?.credentials && <Alert type="success">Access key: {webResult.credentials.accessKeyId}</Alert>}
+                  {webIdentityMut.isError && <Alert type="error" dismissible>{(webIdentityMut.error as Error)?.message || "Web identity assume failed"}</Alert>}
+                </SpaceBetween>
+              </Container>
+
+              <Container header={<Header variant="h2">Federation Token</Header>}>
+                <SpaceBetween size="s">
+                  <FormField label="Federated user name">
+                    <Input value={fedName} onChange={({ detail }) => setFedName(detail.value)} placeholder="bob" />
+                  </FormField>
+                  <Button
+                    variant="primary"
+                    disabled={!fedName.trim()}
+                    loading={federationMut.isPending}
+                    onClick={() =>
+                      federationMut.mutate(
+                        { name: fedName.trim() },
+                        { onSuccess: (data: any) => setFedResult(data) }
+                      )
+                    }
+                  >
+                    Get federation token
+                  </Button>
+                  {fedResult?.federatedUser && <Alert type="success">Federated ARN: {fedResult.federatedUser.arn}</Alert>}
+                  {fedResult?.credentials && <Box>Access key: {fedResult.credentials.accessKeyId}</Box>}
+                  {federationMut.isError && <Alert type="error" dismissible>{(federationMut.error as Error)?.message || "Federation token failed"}</Alert>}
+                </SpaceBetween>
+              </Container>
+
+              <Container header={<Header variant="h2">Decode Authorization Message</Header>}>
+                <SpaceBetween size="s">
+                  <Textarea value={encodedMsg} onChange={({ detail }) => setEncodedMsg(detail.value)} rows={3} placeholder="Encoded message from an AWS error" />
+                  <Button
+                    disabled={!encodedMsg.trim()}
+                    loading={decodeMut.isPending}
+                    onClick={() =>
+                      decodeMut.mutate(encodedMsg.trim(), {
+                        onSuccess: (data: any) => setDecodedMsg(data.decodedMessage),
+                        onError: () => setDecodedMsg(null),
+                      })
+                    }
+                  >
+                    Decode
+                  </Button>
+                  {decodedMsg !== null && (
+                    <pre className="fd-code-bg" style={{ fontSize: 12, padding: 12, borderRadius: 4, overflow: "auto" }}>{decodedMsg}</pre>
+                  )}
+                </SpaceBetween>
+              </Container>
             </SpaceBetween>
           ),
         },

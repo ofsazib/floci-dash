@@ -13,6 +13,10 @@ import {
   useSTSCallerIdentity,
   useSTSAssumeRole,
   useSTSGetSessionToken,
+  useSTSAssumeRoleWithSAML,
+  useSTSAssumeRoleWithWebIdentity,
+  useSTSGetFederationToken,
+  useSTSDecodeAuthorizationMessage,
 } from "./useSTS";
 
 function createWrapper() {
@@ -74,5 +78,51 @@ describe("useSTSGetSessionToken", () => {
         body: JSON.stringify({ durationSeconds: 3600 }),
       })
     );
+  });
+});
+
+describe("STS federation hooks", () => {
+  it("useSTSAssumeRoleWithSAML posts the body", async () => {
+    mockApi.mockResolvedValueOnce({ credentials: null });
+    const { result } = renderHook(() => useSTSAssumeRoleWithSAML(), { wrapper: createWrapper() });
+    result.current.mutate({ roleArn: "a", principalArn: "b", samlAssertion: "c" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/sts/assume-role-with-saml", {
+      method: "POST",
+      body: JSON.stringify({ roleArn: "a", principalArn: "b", samlAssertion: "c" }),
+    });
+  });
+
+  it("useSTSAssumeRoleWithWebIdentity posts the body", async () => {
+    mockApi.mockResolvedValueOnce({ credentials: null });
+    const { result } = renderHook(() => useSTSAssumeRoleWithWebIdentity(), { wrapper: createWrapper() });
+    result.current.mutate({ roleArn: "a", webIdentityToken: "t" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/sts/assume-role-with-web-identity", {
+      method: "POST",
+      body: JSON.stringify({ roleArn: "a", webIdentityToken: "t" }),
+    });
+  });
+
+  it("useSTSGetFederationToken posts the name", async () => {
+    mockApi.mockResolvedValueOnce({ credentials: null });
+    const { result } = renderHook(() => useSTSGetFederationToken(), { wrapper: createWrapper() });
+    result.current.mutate({ name: "bob" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/sts/federation-token", {
+      method: "POST",
+      body: JSON.stringify({ name: "bob" }),
+    });
+  });
+
+  it("useSTSDecodeAuthorizationMessage posts the message", async () => {
+    mockApi.mockResolvedValueOnce({ decodedMessage: "x" });
+    const { result } = renderHook(() => useSTSDecodeAuthorizationMessage(), { wrapper: createWrapper() });
+    result.current.mutate("enc");
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/sts/decode-authorization-message", {
+      method: "POST",
+      body: JSON.stringify({ encodedMessage: "enc" }),
+    });
   });
 });

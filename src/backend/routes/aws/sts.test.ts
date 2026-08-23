@@ -21,6 +21,10 @@ vi.mock("@aws-sdk/client-sts", () => ({
   GetCallerIdentityCommand: createCmd("GetCallerIdentityCommand"),
   AssumeRoleCommand: createCmd("AssumeRoleCommand"),
   GetSessionTokenCommand: createCmd("GetSessionTokenCommand"),
+  AssumeRoleWithSAMLCommand: createCmd("AssumeRoleWithSAMLCommand"),
+  AssumeRoleWithWebIdentityCommand: createCmd("AssumeRoleWithWebIdentityCommand"),
+  GetFederationTokenCommand: createCmd("GetFederationTokenCommand"),
+  DecodeAuthorizationMessageCommand: createCmd("DecodeAuthorizationMessageCommand"),
 }));
 
 import app from "../../index";
@@ -195,5 +199,125 @@ describe("POST /api/aws/sts/session-token", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.credentials).toBeNull();
+  });
+
+
+async function post(path: string, body?: any) {
+  return app.request("/api/aws/sts" + path, {
+    method: "POST",
+    body: body != null ? JSON.stringify(body) : undefined,
+    headers: body != null ? { "content-type": "application/json" } : undefined,
+  });
+}
+  describe("Federation + decode", () => {
+    const creds = { AccessKeyId: "AKIA1", SecretAccessKey: "s", SessionToken: "t", Expiration: new Date(0) };
+
+    it("POST /assume-role-with-saml — returns credentials", async () => {
+      mockSend.mockResolvedValueOnce({ Credentials: creds });
+      const res = await post("/assume-role-with-saml", {
+        roleArn: "arn:role",
+        principalArn: "arn:saml",
+        samlAssertion: "assertion",
+        durationSeconds: 900,
+      });
+      const body = await res.json();
+      expect(body.credentials.accessKeyId).toBe("AKIA1");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("AssumeRoleWithSAMLCommand");
+      expect(cmd.SAMLAssertion).toBe("assertion");
+    });
+
+    it("POST /assume-role-with-saml — 400 without samlAssertion", async () => {
+      const res = await post("/assume-role-with-saml", { roleArn: "a", principalArn: "b" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /assume-role-with-saml — 400 without roleArn", async () => {
+      const res = await post("/assume-role-with-saml", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /assume-role-with-saml — 400 without principalArn", async () => {
+      const res = await post("/assume-role-with-saml", { roleArn: "a" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /assume-role-with-saml — null creds on sparse", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/assume-role-with-saml", { roleArn: "a", principalArn: "b", samlAssertion: "c" });
+      expect((await res.json()).credentials).toBeNull();
+    });
+
+    it("POST /assume-role-with-web-identity — returns credentials", async () => {
+      mockSend.mockResolvedValueOnce({ Credentials: creds });
+      const res = await post("/assume-role-with-web-identity", {
+        roleArn: "arn:role",
+        webIdentityToken: "token",
+        roleSessionName: "web",
+      });
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("AssumeRoleWithWebIdentityCommand");
+      expect(cmd.WebIdentityToken).toBe("token");
+    });
+
+    it("POST /assume-role-with-web-identity — null creds on sparse", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/assume-role-with-web-identity", { roleArn: "a", webIdentityToken: "t" });
+      expect((await res.json()).credentials).toBeNull();
+    });
+
+    it("POST /assume-role-with-web-identity — 400 without roleArn", async () => {
+      const res = await post("/assume-role-with-web-identity", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /assume-role-with-web-identity — 400 without token", async () => {
+      const res = await post("/assume-role-with-web-identity", { roleArn: "a" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /federation-token — returns creds + federated user", async () => {
+      mockSend.mockResolvedValueOnce({
+        Credentials: creds,
+        FederatedUser: { FederatedUserId: "123:bob", AccountId: "123" },
+      });
+      const res = await post("/federation-token", { name: "bob" });
+      const body = await res.json();
+      expect(body.federatedUser.arn).toBe("123:bob");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("GetFederationTokenCommand");
+    });
+
+    it("POST /federation-token — 400 without name", async () => {
+      const res = await post("/federation-token", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /federation-token — null federated user on sparse", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/federation-token", { name: "bob" });
+      const body = await res.json();
+      expect(body.federatedUser).toBeNull();
+      expect(body.credentials).toBeNull();
+    });
+
+    it("POST /decode-authorization-message — decodes", async () => {
+      mockSend.mockResolvedValueOnce({ DecodedMessage: "denied" });
+      const res = await post("/decode-authorization-message", { encodedMessage: "enc" });
+      const body = await res.json();
+      expect(body.decodedMessage).toBe("denied");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DecodeAuthorizationMessageCommand");
+    });
+
+    it("POST /decode-authorization-message — empty string fallback", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/decode-authorization-message", { encodedMessage: "enc" });
+      expect((await res.json()).decodedMessage).toBe("");
+    });
+
+    it("POST /decode-authorization-message — 400 without message", async () => {
+      const res = await post("/decode-authorization-message", {});
+      expect(res.status).toBe(400);
+    });
   });
 });

@@ -6,6 +6,10 @@ import {
   GetCallerIdentityCommand,
   AssumeRoleCommand,
   GetSessionTokenCommand,
+  AssumeRoleWithSAMLCommand,
+  AssumeRoleWithWebIdentityCommand,
+  GetFederationTokenCommand,
+  DecodeAuthorizationMessageCommand,
 } from "@aws-sdk/client-sts";
 
 const router = new Hono();
@@ -83,6 +87,94 @@ router.post("/session-token", async (c: Context) => {
         }
       : null,
   });
+});
+
+
+router.post("/assume-role-with-saml", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.roleArn) return c.json({ error: "roleArn is required" }, 400);
+  if (!body.principalArn) return c.json({ error: "principalArn is required" }, 400);
+  if (!body.samlAssertion) return c.json({ error: "samlAssertion is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new AssumeRoleWithSAMLCommand({
+      RoleArn: body.roleArn,
+      PrincipalArn: body.principalArn,
+      SAMLAssertion: body.samlAssertion,
+      DurationSeconds: body.durationSeconds,
+    })
+  );
+  return c.json({
+    credentials: result.Credentials
+      ? {
+          accessKeyId: result.Credentials.AccessKeyId,
+          secretAccessKey: result.Credentials.SecretAccessKey,
+          sessionToken: result.Credentials.SessionToken,
+          expiration: result.Credentials.Expiration,
+        }
+      : null,
+  });
+});
+
+router.post("/assume-role-with-web-identity", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.roleArn) return c.json({ error: "roleArn is required" }, 400);
+  if (!body.webIdentityToken) return c.json({ error: "webIdentityToken is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new AssumeRoleWithWebIdentityCommand({
+      RoleArn: body.roleArn,
+      RoleSessionName: body.roleSessionName,
+      WebIdentityToken: body.webIdentityToken,
+      DurationSeconds: body.durationSeconds,
+    })
+  );
+  return c.json({
+    credentials: result.Credentials
+      ? {
+          accessKeyId: result.Credentials.AccessKeyId,
+          secretAccessKey: result.Credentials.SecretAccessKey,
+          sessionToken: result.Credentials.SessionToken,
+          expiration: result.Credentials.Expiration,
+        }
+      : null,
+  });
+});
+
+router.post("/federation-token", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.name) return c.json({ error: "name is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new GetFederationTokenCommand({
+      Name: body.name,
+      DurationSeconds: body.durationSeconds,
+      Policy: body.policy,
+    })
+  );
+  return c.json({
+    credentials: result.Credentials
+      ? {
+          accessKeyId: result.Credentials.AccessKeyId,
+          secretAccessKey: result.Credentials.SecretAccessKey,
+          sessionToken: result.Credentials.SessionToken,
+          expiration: result.Credentials.Expiration,
+        }
+      : null,
+    federatedUser: result.FederatedUser
+      ? { arn: (result.FederatedUser as any).FederatedUserId, accountId: (result.FederatedUser as any).AccountId }
+      : null,
+  });
+});
+
+router.post("/decode-authorization-message", async (c: Context) => {
+  const body = await c.req.json<{ encodedMessage?: string }>();
+  if (!body.encodedMessage) return c.json({ error: "encodedMessage is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new DecodeAuthorizationMessageCommand({ EncodedMessage: body.encodedMessage })
+  );
+  return c.json({ decodedMessage: result.DecodedMessage || "" });
 });
 
 export default router;

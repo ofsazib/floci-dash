@@ -20,6 +20,13 @@ const sessionTokenState = vi.hoisted(() => ({
 const mockCallerIdentity = vi.fn();
 
 // Mutate mocks that call onSuccess with test data
+const mockSamlAssume = vi.fn();
+const samlState = vi.hoisted(() => ({ isError: false, error: null as Error | null }));
+const webState = vi.hoisted(() => ({ isError: false, error: null as Error | null }));
+const fedState = vi.hoisted(() => ({ isError: false, error: null as Error | null }));
+const mockWebIdentityAssume = vi.fn();
+const mockFederationToken = vi.fn();
+const mockDecode = vi.fn();
 const mockAssumeRole = vi.fn((_params: any, options?: { onSuccess?: (data: any) => void }) => {
   options?.onSuccess?.({
     credentials: {
@@ -56,6 +63,28 @@ vi.mock("../../hooks/useSTS", () => ({
     mutate: mockGetSessionToken,
     get isPending() { return sessionTokenState.isPending; },
   }),
+  useSTSAssumeRoleWithSAML: () => ({
+    mutate: mockSamlAssume,
+    isPending: false,
+    get isError() { return samlState.isError; },
+    get error() { return samlState.error; },
+  }),
+  useSTSAssumeRoleWithWebIdentity: () => ({
+    mutate: mockWebIdentityAssume,
+    isPending: false,
+    get isError() { return webState.isError; },
+    get error() { return webState.error; },
+  }),
+  useSTSGetFederationToken: () => ({
+    mutate: mockFederationToken,
+    isPending: false,
+    get isError() { return fedState.isError; },
+    get error() { return fedState.error; },
+  }),
+  useSTSDecodeAuthorizationMessage: () => ({
+    mutate: mockDecode,
+    isPending: false,
+  }),
 }));
 
 import { STSDashboard } from "./STSDashboard";
@@ -83,6 +112,12 @@ function expectModalHidden(headerText: string) {
 // ─── Setup ──────────────────────────────────────────────
 
 beforeEach(() => {
+  samlState.isError = false;
+  samlState.error = null;
+  webState.isError = false;
+  webState.error = null;
+  fedState.isError = false;
+  fedState.error = null;
   vi.clearAllMocks();
   assumeRoleState.isPending = false;
   sessionTokenState.isPending = false;
@@ -401,5 +436,125 @@ describe("STSDashboard — session token tab", () => {
     await user.click(screen.getByRole("button", { name: /Get session token/i }));
     dismissModalWithEscape();
     await waitFor(() => expectModalHidden("Get session token"));
+  });
+});
+
+describe("STSDashboard — federation tab", () => {
+  function openTab() {
+    return (async () => {
+      const user = userEvent.setup();
+      render(<STSDashboard />, { wrapper: createWrapper() });
+      await user.click(screen.getByRole("tab", { name: /Federation/i }));
+      return user;
+    })();
+  }
+
+  it("assumes a role with SAML", async () => {
+    mockSamlAssume.mockImplementation((_b: any, opts: any) =>
+      opts?.onSuccess?.({ credentials: { accessKeyId: "AKIA-SAML" } })
+    );
+    const user = await openTab();
+    const inputs = screen.getAllByRole("textbox");
+    await user.type(inputs[0], "arn:role");
+    await user.type(inputs[1], "arn:principal");
+    const areas = screen.getAllByRole("textbox").filter((el) => el.tagName === "TEXTAREA");
+    fireEvent.change(areas[0], { target: { value: "assertion" } });
+    await user.click(screen.getByRole("button", { name: /Assume with SAML/i }));
+    expect(await screen.findByText(/AKIA-SAML/)).toBeTruthy();
+  });
+
+  it("assumes a role with web identity", async () => {
+    mockWebIdentityAssume.mockImplementation((_b: any, opts: any) =>
+      opts?.onSuccess?.({ credentials: { accessKeyId: "AKIA-WEB" } })
+    );
+    const user = await openTab();
+    await user.type(screen.getAllByPlaceholderText("arn:aws:iam::123:role/my-role")[1], "arn:role");
+    const areas = screen.getAllByRole("textbox").filter((el) => el.tagName === "TEXTAREA");
+    fireEvent.change(areas[1], { target: { value: "token" } });
+    await user.click(screen.getByRole("button", { name: /Assume with web identity/i }));
+    expect(await screen.findByText(/AKIA-WEB/)).toBeTruthy();
+  });
+
+  it("gets a federation token", async () => {
+    mockFederationToken.mockImplementation((_b: any, opts: any) =>
+      opts?.onSuccess?.({
+        credentials: { accessKeyId: "AKIA-FED" },
+        federatedUser: { arn: "123:bob" },
+      })
+    );
+    const user = await openTab();
+    await user.type(screen.getByPlaceholderText("bob"), "bob");
+    await user.click(screen.getByRole("button", { name: /Get federation token/i }));
+    expect(await screen.findByText(/123:bob/)).toBeTruthy();
+    expect(screen.getByText(/AKIA-FED/)).toBeTruthy();
+  });
+
+  it("decodes an authorization message", async () => {
+    mockDecode.mockImplementation((_b: any, opts: any) =>
+      opts?.onSuccess?.({ decodedMessage: "was denied" })
+    );
+    const user = await openTab();
+    const areas = screen.getAllByRole("textbox").filter((el) => el.tagName === "TEXTAREA");
+    fireEvent.change(areas[2], { target: { value: "enc-msg" } });
+    await user.click(screen.getByRole("button", { name: "Decode" }));
+    expect(await screen.findByText("was denied")).toBeTruthy();
+  });
+});
+
+describe("STSDashboard — federation error arms", () => {
+  function openTab() {
+    return (async () => {
+      const user = userEvent.setup();
+      render(<STSDashboard />, { wrapper: createWrapper() });
+      await user.click(screen.getByRole("tab", { name: /Federation/i }));
+      return user;
+    })();
+  }
+
+  it("shows error alerts with messages and fallbacks", async () => {
+    samlState.isError = true;
+    samlState.error = new Error("saml fail");
+    webState.isError = true;
+    webState.error = null;
+    fedState.isError = true;
+    fedState.error = new Error("fed fail");
+    const user = await openTab();
+    expect(await screen.findByText("saml fail")).toBeTruthy();
+    expect(screen.getByText("Web identity assume failed")).toBeTruthy();
+    expect(screen.getByText("fed fail")).toBeTruthy();
+  });
+
+  it("covers decode error path", async () => {
+    mockDecode.mockImplementation((_b: any, opts: any) => opts?.onError?.());
+    const user = await openTab();
+    const areas = screen.getAllByRole("textbox").filter((el) => el.tagName === "TEXTAREA");
+    fireEvent.change(areas[2], { target: { value: "enc" } });
+    await user.click(screen.getByRole("button", { name: "Decode" }));
+    await waitFor(() => expect(mockDecode).toHaveBeenCalled());
+  });
+
+  it("shows fallback errors for SAML and federation", async () => {
+    samlState.isError = true;
+    samlState.error = null;
+    fedState.isError = true;
+    fedState.error = null;
+    const user = await openTab();
+    expect(await screen.findByText("SAML assume failed")).toBeTruthy();
+    expect(screen.getByText("Federation token failed")).toBeTruthy();
+  });
+
+  it("shows fed credentials without federated user and vice versa", async () => {
+    mockFederationToken.mockImplementation((_b: any, opts: any) =>
+      opts?.onSuccess?.({ credentials: { accessKeyId: "AKIA-ONLY" } })
+    );
+    const user = await openTab();
+    await user.type(screen.getByPlaceholderText("bob"), "bob");
+    await user.click(screen.getByRole("button", { name: /Get federation token/i }));
+    expect(await screen.findByText(/AKIA-ONLY/)).toBeTruthy();
+  });
+
+  it("shows no SAML result before assuming", async () => {
+    await openTab();
+    expect(screen.queryByText(/Access key:/)).toBeNull();
   });
 });
