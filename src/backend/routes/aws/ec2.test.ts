@@ -93,6 +93,13 @@ vi.mock("@aws-sdk/client-ec2", () => ({
   DescribeVolumesCommand: createCmd("DescribeVolumesCommand"),
   DeleteVolumeCommand: createCmd("DeleteVolumeCommand"),
   DescribeNetworkInterfacesCommand: createCmd("DescribeNetworkInterfacesCommand"),
+  DescribePrefixListsCommand: createCmd("DescribePrefixListsCommand"),
+  RequestSpotInstancesCommand: createCmd("RequestSpotInstancesCommand"),
+  DescribeSpotInstanceRequestsCommand: createCmd("DescribeSpotInstanceRequestsCommand"),
+  CancelSpotInstanceRequestsCommand: createCmd("CancelSpotInstanceRequestsCommand"),
+  DescribeSecurityGroupRulesCommand: createCmd("DescribeSecurityGroupRulesCommand"),
+  ModifySecurityGroupRulesCommand: createCmd("ModifySecurityGroupRulesCommand"),
+  UpdateSecurityGroupRuleDescriptionsIngressCommand: createCmd("UpdateSecurityGroupRuleDescriptionsIngressCommand"),
 }));
 
 // Now import the router after the mock is set up
@@ -107,6 +114,14 @@ async function get(path: string) {
 async function post(path: string, body?: any) {
   return router.request(path, {
     method: "POST",
+    body: body != null ? JSON.stringify(body) : undefined,
+    headers: body != null ? { "content-type": "application/json" } : undefined,
+  });
+}
+
+async function putReq(path: string, body?: any) {
+  return router.request(path, {
+    method: "PUT",
     body: body != null ? JSON.stringify(body) : undefined,
     headers: body != null ? { "content-type": "application/json" } : undefined,
   });
@@ -1959,4 +1974,205 @@ describe("EC2 Routes", () => {
     });
   });
 
+  describe("Prefix Lists + Spot + SG Rules", () => {
+    it("GET /prefix-lists — maps prefix lists", async () => {
+      mockSend.mockResolvedValueOnce({
+        PrefixLists: [{ PrefixListId: "pl-1", PrefixListName: "com.amazonaws", OwnerId: "AWS", Version: 3, MaxEntries: 10, Cidrs: ["10.0.0.0/8"] }],
+      });
+      const res = await get("/prefix-lists");
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(body.prefixLists[0].cidrs).toBe("10.0.0.0/8");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DescribePrefixListsCommand");
+    });
+
+    it("GET /prefix-lists — empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/prefix-lists");
+      expect((await res.json()).prefixLists).toEqual([]);
+    });
+
+    it("GET /prefix-lists — sparse fallbacks", async () => {
+      mockSend.mockResolvedValueOnce({ PrefixLists: [{}] });
+      const res = await get("/prefix-lists");
+      const body = await res.json();
+      expect(body.prefixLists[0].ownerId).toBe("-");
+      expect(body.prefixLists[0].cidrs).toBe("-");
+    });
+
+    it("POST /spot-requests — requests spot capacity", async () => {
+      mockSend.mockResolvedValueOnce({
+        SpotInstanceRequests: [{ SpotInstanceRequestId: "sir-1", State: "open", SpotPrice: "0.05", Status: { Code: "pending-evaluation" } }],
+      });
+      const res = await post("/spot-requests", {
+        instanceCount: 2,
+        spotPrice: "0.05",
+        launchSpecification: { ImageId: "ami-1", InstanceType: "t3.micro" },
+      });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.spotInstanceRequests[0].status).toBe("pending-evaluation");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("RequestSpotInstancesCommand");
+      expect(cmd.InstanceCount).toBe(2);
+    });
+
+    it("POST /spot-requests — sparse request falls back to dashes", async () => {
+      mockSend.mockResolvedValueOnce({ SpotInstanceRequests: [{}] });
+      const res = await post("/spot-requests", { instanceCount: 1, spotPrice: "0.05" });
+      const body = await res.json();
+      expect(body.spotInstanceRequests[0].status).toBe("-");
+      expect(body.spotInstanceRequests[0].price).toBe("-");
+    });
+
+    it("POST /spot-requests — 400 without instanceCount", async () => {
+      const res = await post("/spot-requests", { spotPrice: "0.05" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /spot-requests — 400 without spotPrice", async () => {
+      const res = await post("/spot-requests", { instanceCount: 1 });
+      expect(res.status).toBe(400);
+    });
+
+    it("GET /spot-requests — lists requests", async () => {
+      mockSend.mockResolvedValueOnce({
+        SpotInstanceRequests: [{ SpotInstanceRequestId: "sir-1", State: "active", Type: "one-time", InstanceId: "i-1" }],
+      });
+      const res = await get("/spot-requests");
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(body.spotInstanceRequests[0].instanceId).toBe("i-1");
+    });
+
+    it("GET /spot-requests — sparse fallbacks", async () => {
+      mockSend.mockResolvedValueOnce({ SpotInstanceRequests: [{}] });
+      const res = await get("/spot-requests");
+      const body = await res.json();
+      expect(body.spotInstanceRequests[0].status).toBe("-");
+      expect(body.spotInstanceRequests[0].type).toBe("-");
+    });
+
+    it("POST /spot-requests — undefined list falls back to []", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/spot-requests", { instanceCount: 1, spotPrice: "0.05" });
+      expect((await res.json()).spotInstanceRequests).toEqual([]);
+    });
+
+    it("GET /spot-requests — undefined list falls back to []", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/spot-requests");
+      expect((await res.json()).spotInstanceRequests).toEqual([]);
+    });
+
+    it("GET /spot-requests — create-time arms", async () => {
+      mockSend.mockResolvedValueOnce({ SpotInstanceRequests: [{ CreateTime: new Date(0) }] });
+      const res = await get("/spot-requests");
+      const body = await res.json();
+      expect(body.spotInstanceRequests[0].createTime).toContain("1970");
+      mockSend.mockResolvedValueOnce({ SpotInstanceRequests: [{}] });
+      const res2 = await get("/spot-requests");
+      expect((await res2.json()).spotInstanceRequests[0].createTime).toBe("-");
+    });
+
+    it("DELETE /spot-requests — cancels by ids", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/spot-requests", { spotInstanceRequestIds: ["sir-1"] });
+      const body = await res.json();
+      expect(body.cancelled).toBe(true);
+      expect(mockSend.mock.calls[0][0].SpotInstanceRequestIds).toEqual(["sir-1"]);
+    });
+
+    it("DELETE /spot-requests — 400 without ids", async () => {
+      const res = await del("/spot-requests", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("GET /security-group-rules — maps rules with group filter", async () => {
+      mockSend.mockResolvedValueOnce({
+        SecurityGroupRules: [{
+          SecurityGroupRuleId: "sgr-1",
+          GroupId: "sg-1",
+          IsEgress: false,
+          IpProtocol: "tcp",
+          FromPort: 80,
+          ToPort: 80,
+          CidrIpv4: "0.0.0.0/0",
+          Description: "http",
+        }],
+      });
+      const res = await get("/security-group-rules?groupId=sg-1");
+      const body = await res.json();
+      expect(body.rules[0]).toEqual({
+        id: "sgr-1",
+        groupId: "sg-1",
+        type: "ingress",
+        protocol: "tcp",
+        fromPort: 80,
+        toPort: 80,
+        cidr: "0.0.0.0/0",
+        description: "http",
+      });
+      expect(mockSend.mock.calls[0][0].Filters[0].Values).toEqual(["sg-1"]);
+    });
+
+    it("GET /security-group-rules — sparse fallbacks and egress type", async () => {
+      mockSend.mockResolvedValueOnce({ SecurityGroupRules: [{ SecurityGroupRuleId: "sgr-2", IsEgress: true }] });
+      const res = await get("/security-group-rules");
+      const body = await res.json();
+      expect(body.rules[0].type).toBe("egress");
+      expect(body.rules[0].cidr).toBe("-");
+    });
+
+    it("PUT /security-group-rules/:ruleId — modifies a rule", async () => {
+      mockSend.mockResolvedValueOnce({ Return: true });
+      const putRes = await putReq("/security-group-rules/sgr-1", {
+        groupId: "sg-1",
+        protocol: "tcp",
+        fromPort: 443,
+        toPort: 443,
+        cidr: "0.0.0.0/0",
+        description: "https",
+      });
+      const body = await putRes.json();
+      expect(body.returned).toBe(true);
+      const cmd = mockSend.mock.calls.at(-1)![0];
+      expect(cmd.__cmdName).toBe("ModifySecurityGroupRulesCommand");
+      expect(cmd.SecurityGroupRules[0].SecurityGroupRule.CidrIpv4).toBe("0.0.0.0/0");
+    });
+
+    it("GET /security-group-rules — empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/security-group-rules");
+      expect((await res.json()).rules).toEqual([]);
+    });
+
+    it("PUT /security-group-rules/:ruleId — sparse Return fallback", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await putReq("/security-group-rules/sgr-1", { groupId: "sg-1" });
+      expect((await res.json()).returned).toBe(false);
+    });
+
+    it("PUT /security-group-rules/:ruleId — 400 without groupId", async () => {
+      const res = await putReq("/security-group-rules/sgr-1", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /security-groups/:groupId/rule-descriptions — updates descriptions", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/security-groups/sg-1/rule-descriptions", {
+        description: "updated",
+        ipPermissions: [{ IpProtocol: "tcp", FromPort: 80, ToPort: 80 }],
+      });
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("UpdateSecurityGroupRuleDescriptionsIngressCommand");
+    });
+
+    it("POST /security-groups/:groupId/rule-descriptions — 400 without description", async () => {
+      const res = await post("/security-groups/sg-1/rule-descriptions", {});
+      expect(res.status).toBe(400);
+    });
+  });
 });

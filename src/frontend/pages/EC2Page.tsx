@@ -66,6 +66,11 @@ import {
   useEC2DeleteVolume,
   useEC2NetworkInterfaces,
   useEC2Amis,
+  useEC2PrefixLists,
+  useEC2SpotRequests,
+  useRequestEC2SpotInstances,
+  useCancelEC2SpotRequests,
+  useEC2SecurityGroupRules,
 } from "../hooks/useEC2";
 import {
   useEC2FlowLogs,
@@ -163,6 +168,21 @@ export default function EC2Page() {
       id: "network-interfaces",
       label: "Network Interfaces",
       content: <EC2NetworkInterfaceList />,
+    },
+    {
+      id: "spot-requests",
+      label: "Spot Requests",
+      content: <EC2SpotRequestList />,
+    },
+    {
+      id: "prefix-lists",
+      label: "Prefix Lists",
+      content: <EC2PrefixListList />,
+    },
+    {
+      id: "sg-rules",
+      label: "SG Rules",
+      content: <EC2SecurityGroupRulesTab />,
     },
     {
       id: "flow-logs",
@@ -612,6 +632,177 @@ function EC2SubnetList() {
 }
 
 // ─── SECURITY GROUPS ───────────────────────────────────
+
+function EC2SpotRequestList() {
+  const { data, isLoading } = useEC2SpotRequests();
+  const requestSpot = useRequestEC2SpotInstances();
+  const cancelSpot = useCancelEC2SpotRequests();
+  const [showRequest, setShowRequest] = useState(false);
+  const [instanceCount, setInstanceCount] = useState("1");
+  const [spotPrice, setSpotPrice] = useState("0.05");
+  const [amiId, setAmiId] = useState("");
+  const [instanceType, setInstanceType] = useState("t3.micro");
+
+  const requests = data?.spotInstanceRequests || [];
+
+  return (
+    <>
+      <ResourceTable
+        resourceName="Spot request"
+        headerTitle="Spot Instance Requests"
+        headerCounter={data?.total}
+        items={requests.map((r: any) => ({
+          id: r.id,
+          state: r.state,
+          status: r.status,
+          price: r.price,
+          instanceId: r.instanceId,
+          type: r.type,
+          created: r.createTime,
+        }))}
+        loading={isLoading}
+        emptyMessage="No spot requests"
+        columns={[
+          { id: "id", header: "Request ID", cell: (i: any) => i.id, isRowHeader: true },
+          { id: "state", header: "State", cell: (i: any) => <StatusBadge status={i.state} /> },
+          { id: "status", header: "Status", cell: (i: any) => i.status },
+          { id: "price", header: "Max Price", cell: (i: any) => i.price },
+          { id: "instance", header: "Instance", cell: (i: any) => i.instanceId },
+          { id: "type", header: "Type", cell: (i: any) => i.type },
+          { id: "created", header: "Created", cell: (i: any) => i.created },
+          {
+            id: "actions",
+            header: "",
+            cell: (i: any) => (
+              <Button
+                disabled={i.state === "cancelled" || i.state === "closed"}
+                loading={cancelSpot.isPending}
+                onClick={() => cancelSpot.mutate([i.id])}
+              >
+                Cancel
+              </Button>
+            ),
+          },
+        ]}
+        onCreate={() => setShowRequest(true)}
+      />
+      <Modal
+        visible={showRequest}
+        onDismiss={() => setShowRequest(false)}
+        header="Request spot instances"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowRequest(false)}>Cancel</Button>
+              <Button
+                variant="primary"
+                loading={requestSpot.isPending}
+                disabled={!instanceCount.trim() || !spotPrice.trim()}
+                onClick={() => {
+                  requestSpot.mutate(
+                    {
+                      instanceCount: Number(instanceCount),
+                      spotPrice: spotPrice.trim(),
+                      launchSpecification: {
+                        ImageId: amiId.trim() || undefined,
+                        InstanceType: instanceType.trim() || undefined,
+                      },
+                    },
+                    { onSuccess: () => setShowRequest(false) }
+                  );
+                }}
+              >
+                Request
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          {requestSpot.isError && (
+            <Alert type="error" dismissible>
+              {(requestSpot.error as Error)?.message || "Failed to request spot instances"}
+            </Alert>
+          )}
+          <SpaceBetween size="m">
+            <FormField label="Instance count">
+              <Input value={instanceCount} onChange={({ detail }) => setInstanceCount(detail.value)} inputMode="numeric" />
+            </FormField>
+            <FormField label="Max price (USD/hour)">
+              <Input value={spotPrice} onChange={({ detail }) => setSpotPrice(detail.value)} placeholder="0.05" />
+            </FormField>
+            <FormField label="AMI ID (optional)">
+              <Input value={amiId} onChange={({ detail }) => setAmiId(detail.value)} placeholder="ami-123" />
+            </FormField>
+            <FormField label="Instance type (optional)">
+              <Input value={instanceType} onChange={({ detail }) => setInstanceType(detail.value)} placeholder="t3.micro" />
+            </FormField>
+          </SpaceBetween>
+        </Form>
+      </Modal>
+    </>
+  );
+}
+
+function EC2PrefixListList() {
+  const { data, isLoading } = useEC2PrefixLists();
+  return (
+    <ResourceTable
+      resourceName="Prefix list"
+      headerTitle="Managed Prefix Lists"
+      headerCounter={data?.total}
+      items={(data?.prefixLists || []).map((pl: any) => ({
+        id: pl.id,
+        name: pl.name,
+        ownerId: pl.ownerId,
+        version: pl.version,
+        entries: pl.entries,
+        cidrs: pl.cidrs,
+      }))}
+      loading={isLoading}
+      emptyMessage="No prefix lists"
+      columns={[
+        { id: "id", header: "Prefix List ID", cell: (i: any) => i.id, isRowHeader: true },
+        { id: "name", header: "Name", cell: (i: any) => i.name },
+        { id: "owner", header: "Owner", cell: (i: any) => i.ownerId },
+        { id: "version", header: "Version", cell: (i: any) => i.version },
+        { id: "entries", header: "Max Entries", cell: (i: any) => i.entries },
+        { id: "cidrs", header: "CIDRs", cell: (i: any) => i.cidrs },
+      ]}
+    />
+  );
+}
+
+function EC2SecurityGroupRulesTab() {
+  const { data, isLoading } = useEC2SecurityGroupRules(null);
+  return (
+    <ResourceTable
+      resourceName="Rule"
+      headerTitle="Security Group Rules"
+      headerCounter={data?.total}
+      items={(data?.rules || []).map((r: any) => ({
+        id: r.id,
+        groupId: r.groupId,
+        type: r.type,
+        protocol: r.protocol,
+        port: r.fromPort === r.toPort ? `${r.fromPort}` : `${r.fromPort}-${r.toPort}`,
+        cidr: r.cidr,
+        description: r.description,
+      }))}
+      loading={isLoading}
+      emptyMessage="No security group rules"
+      columns={[
+        { id: "id", header: "Rule ID", cell: (i: any) => i.id, isRowHeader: true },
+        { id: "group", header: "Group", cell: (i: any) => i.groupId },
+        { id: "type", header: "Type", cell: (i: any) => i.type },
+        { id: "protocol", header: "Protocol", cell: (i: any) => i.protocol },
+        { id: "port", header: "Port Range", cell: (i: any) => i.port },
+        { id: "cidr", header: "CIDR", cell: (i: any) => i.cidr },
+        { id: "description", header: "Description", cell: (i: any) => i.description },
+      ]}
+    />
+  );
+}
 
 function EC2SecurityGroupList() {
   const { data, isLoading, isError, error } = useEC2SecurityGroups();

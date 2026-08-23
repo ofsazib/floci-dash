@@ -60,6 +60,11 @@ import {
   useEC2Regions,
   useEC2AvailabilityZones,
   useEC2InstanceTypes,
+  useEC2PrefixLists,
+  useEC2SpotRequests,
+  useRequestEC2SpotInstances,
+  useCancelEC2SpotRequests,
+  useEC2SecurityGroupRules,
 } from "./useEC2";
 
 function createWrapper() {
@@ -601,5 +606,57 @@ describe("useEC2AvailabilityZones", () => {
 describe("useEC2InstanceTypes", () => {
   it("calls api with GET /aws/ec2/instance-types", async () => {
     await expectQuery(() => useEC2InstanceTypes(), "/aws/ec2/instance-types");
+  });
+});
+
+describe("EC2 spot/prefix/rules hooks", () => {
+  it("useEC2PrefixLists fetches", async () => {
+    mockApi.mockResolvedValueOnce({ prefixLists: [], total: 0 });
+    const { result } = renderHook(() => useEC2PrefixLists(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/prefix-lists");
+  });
+
+  it("useEC2SpotRequests fetches", async () => {
+    mockApi.mockResolvedValueOnce({ spotInstanceRequests: [], total: 0 });
+    const { result } = renderHook(() => useEC2SpotRequests(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/spot-requests");
+  });
+
+  it("useRequestEC2SpotInstances posts the body", async () => {
+    mockApi.mockResolvedValueOnce({ spotInstanceRequests: [] });
+    const { result } = renderHook(() => useRequestEC2SpotInstances(), { wrapper: createWrapper() });
+    result.current.mutate({ instanceCount: 1, spotPrice: "0.05" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/spot-requests", {
+      method: "POST",
+      body: JSON.stringify({ instanceCount: 1, spotPrice: "0.05" }),
+    });
+  });
+
+  it("useCancelEC2SpotRequests deletes ids", async () => {
+    mockApi.mockResolvedValueOnce({ cancelled: true });
+    const { result } = renderHook(() => useCancelEC2SpotRequests(), { wrapper: createWrapper() });
+    result.current.mutate(["sir-1"]);
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/spot-requests", {
+      method: "DELETE",
+      body: JSON.stringify({ spotInstanceRequestIds: ["sir-1"] }),
+    });
+  });
+
+  it("useEC2SecurityGroupRules fetches with group filter", async () => {
+    mockApi.mockResolvedValueOnce({ rules: [], total: 0 });
+    const { result } = renderHook(() => useEC2SecurityGroupRules("sg 1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/security-group-rules?groupId=sg%201");
+  });
+
+  it("useEC2SecurityGroupRules fetches all when null", async () => {
+    mockApi.mockResolvedValueOnce({ rules: [], total: 0 });
+    const { result } = renderHook(() => useEC2SecurityGroupRules(null), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/security-group-rules");
   });
 });

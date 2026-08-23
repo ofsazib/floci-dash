@@ -653,3 +653,50 @@ export function useEC2InstanceTypes() {
     queryFn: () => api("/aws/ec2/instance-types"),
   });
 }
+
+export function useEC2PrefixLists() {
+  return useQuery<any>({
+    queryKey: ["aws", "ec2", "prefix-lists"],
+    queryFn: () => api("/aws/ec2/prefix-lists"),
+  });
+}
+
+export function useEC2SpotRequests() {
+  return useQuery<any>({
+    queryKey: ["aws", "ec2", "spot-requests"],
+    queryFn: () => api("/aws/ec2/spot-requests"),
+  });
+}
+
+export function useRequestEC2SpotInstances() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      instanceCount: number;
+      spotPrice: string;
+      launchSpecification?: any;
+    }) => api("/aws/ec2/spot-requests", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ec2", "spot-requests"] }),
+  });
+}
+
+export function useCancelEC2SpotRequests() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (spotInstanceRequestIds: string[]) =>
+      api("/aws/ec2/spot-requests", {
+        method: "DELETE",
+        body: JSON.stringify({ spotInstanceRequestIds }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ec2", "spot-requests"] }),
+  });
+}
+
+export function useEC2SecurityGroupRules(groupId: string | null) {
+  return useQuery<any>({
+    queryKey: ["aws", "ec2", "security-group-rules", groupId],
+    queryFn: () =>
+      api(`/aws/ec2/security-group-rules${groupId ? `?groupId=${encodeURIComponent(groupId)}` : ""}`),
+    enabled: groupId === null || !!groupId,
+  });
+}

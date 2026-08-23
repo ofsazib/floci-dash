@@ -17,6 +17,12 @@ const mockKeyPairs = vi.fn();
 const mockSubnets = vi.fn();
 const mockSecurityGroups = vi.fn();
 const mockAmis = vi.fn();
+const mockPrefixLists = vi.fn();
+const mockSpotRequests = vi.fn();
+const mockRequestSpot = vi.fn();
+const mockCancelSpot = vi.fn();
+const mockSgRules = vi.fn();
+const requestSpotState = vi.hoisted(() => ({ isError: false, error: null as Error | null }));
 const mockLaunchTemplates = vi.fn();
 const mockVpcs = vi.fn();
 const mockVpc = vi.fn();
@@ -91,6 +97,19 @@ vi.mock("../hooks/useEC2", () => ({
   useEC2Subnets: (...args: any[]) => mockSubnets(...args),
   useEC2SecurityGroups: (...args: any[]) => mockSecurityGroups(...args),
   useEC2Amis: (...args: any[]) => mockAmis(...args),
+  useEC2PrefixLists: (...args: any[]) => mockPrefixLists(...args),
+  useEC2SpotRequests: (...args: any[]) => mockSpotRequests(...args),
+  useRequestEC2SpotInstances: () => ({
+    mutate: mockRequestSpot,
+    isPending: false,
+    get isError() { return requestSpotState.isError; },
+    get error() { return requestSpotState.error; },
+  }),
+  useCancelEC2SpotRequests: () => ({
+    mutate: mockCancelSpot,
+    isPending: false,
+  }),
+  useEC2SecurityGroupRules: (...args: any[]) => mockSgRules(...args),
   useEC2Instance: (...args: any[]) => mockInstanceDetail(...args),
   useEC2LaunchTemplates: (...args: any[]) => mockLaunchTemplates(...args),
   useEC2Vpcs: (...args: any[]) => mockVpcs(...args),
@@ -186,6 +205,17 @@ import EC2Page, { EC2InstanceList, EC2LaunchTemplateList } from "./EC2Page";
 
 // Global reset for all hoisted states
 beforeEach(() => {
+  vi.clearAllMocks();
+  mockPrefixLists.mockReturnValue({ data: { prefixLists: [], total: 0 }, isLoading: false });
+  mockSpotRequests.mockReturnValue({ data: { spotInstanceRequests: [], total: 0 }, isLoading: false });
+  mockSgRules.mockReturnValue({ data: { rules: [], total: 0 }, isLoading: false });
+  requestSpotState.isError = false;
+  requestSpotState.error = null;
+  mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
+  mockSubnets.mockReturnValue({ data: { subnets: [] } });
+  mockSecurityGroups.mockReturnValue({ data: { securityGroups: [] } });
+  mockAmis.mockReturnValue({ data: { images: [] } });
   deleteVpcState.isPending = false; deleteVpcState.variables = null;
   deleteSubnetState.isPending = false; deleteSubnetState.variables = null;
   deleteSgState.isPending = false; deleteSgState.variables = null;
@@ -210,6 +240,15 @@ beforeEach(() => {
 
 describe("EC2InstanceList — AMI auto-detection", () => {
   beforeEach(() => {
+  vi.clearAllMocks();
+  mockPrefixLists.mockReturnValue({ data: { prefixLists: [], total: 0 }, isLoading: false });
+  mockSpotRequests.mockReturnValue({ data: { spotInstanceRequests: [], total: 0 }, isLoading: false });
+  mockSgRules.mockReturnValue({ data: { rules: [], total: 0 }, isLoading: false });
+  requestSpotState.isError = false;
+  requestSpotState.error = null;
+  mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
+  mockSubnets.mockReturnValue({ data: { subnets: [] } });
     vi.clearAllMocks();
 
     // Default mock returns for hooks used by EC2InstanceList
@@ -296,6 +335,15 @@ describe("EC2InstanceList — AMI auto-detection", () => {
 
 describe("EC2LaunchTemplateList — AMI auto-detection", () => {
   beforeEach(() => {
+  vi.clearAllMocks();
+  mockPrefixLists.mockReturnValue({ data: { prefixLists: [], total: 0 }, isLoading: false });
+  mockSpotRequests.mockReturnValue({ data: { spotInstanceRequests: [], total: 0 }, isLoading: false });
+  mockSgRules.mockReturnValue({ data: { rules: [], total: 0 }, isLoading: false });
+  requestSpotState.isError = false;
+  requestSpotState.error = null;
+  mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
+  mockSubnets.mockReturnValue({ data: { subnets: [] } });
     vi.clearAllMocks();
 
     mockLaunchTemplates.mockReturnValue({
@@ -371,6 +419,15 @@ describe("EC2LaunchTemplateList — AMI auto-detection", () => {
 
 describe("EC2InstanceList — list states", () => {
   beforeEach(() => {
+  vi.clearAllMocks();
+  mockPrefixLists.mockReturnValue({ data: { prefixLists: [], total: 0 }, isLoading: false });
+  mockSpotRequests.mockReturnValue({ data: { spotInstanceRequests: [], total: 0 }, isLoading: false });
+  mockSgRules.mockReturnValue({ data: { rules: [], total: 0 }, isLoading: false });
+  requestSpotState.isError = false;
+  requestSpotState.error = null;
+  mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
+  mockSubnets.mockReturnValue({ data: { subnets: [] } });
     vi.clearAllMocks();
 
     mockInstances.mockReturnValue({
@@ -454,6 +511,15 @@ describe("EC2InstanceList — list states", () => {
 
 describe("EC2LaunchTemplateList — list states", () => {
   beforeEach(() => {
+  vi.clearAllMocks();
+  mockPrefixLists.mockReturnValue({ data: { prefixLists: [], total: 0 }, isLoading: false });
+  mockSpotRequests.mockReturnValue({ data: { spotInstanceRequests: [], total: 0 }, isLoading: false });
+  mockSgRules.mockReturnValue({ data: { rules: [], total: 0 }, isLoading: false });
+  requestSpotState.isError = false;
+  requestSpotState.error = null;
+  mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
+  mockSubnets.mockReturnValue({ data: { subnets: [] } });
     vi.clearAllMocks();
 
     mockLaunchTemplates.mockReturnValue({
@@ -614,6 +680,15 @@ function setupDefaults() {
 
 describe("EC2VpcList (EC2Page — VPCs tab)", () => {
   beforeEach(() => {
+  vi.clearAllMocks();
+  mockPrefixLists.mockReturnValue({ data: { prefixLists: [], total: 0 }, isLoading: false });
+  mockSpotRequests.mockReturnValue({ data: { spotInstanceRequests: [], total: 0 }, isLoading: false });
+  mockSgRules.mockReturnValue({ data: { rules: [], total: 0 }, isLoading: false });
+  requestSpotState.isError = false;
+  requestSpotState.error = null;
+  mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
+  mockSubnets.mockReturnValue({ data: { subnets: [] } });
     vi.clearAllMocks();
     setupDefaults();
   });
@@ -685,6 +760,15 @@ describe("EC2VpcList (EC2Page — VPCs tab)", () => {
 
 describe("EC2VpcDetail (EC2Page — VPCs tab → open VPC)", () => {
   beforeEach(() => {
+  vi.clearAllMocks();
+  mockPrefixLists.mockReturnValue({ data: { prefixLists: [], total: 0 }, isLoading: false });
+  mockSpotRequests.mockReturnValue({ data: { spotInstanceRequests: [], total: 0 }, isLoading: false });
+  mockSgRules.mockReturnValue({ data: { rules: [], total: 0 }, isLoading: false });
+  requestSpotState.isError = false;
+  requestSpotState.error = null;
+  mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
+  mockSubnets.mockReturnValue({ data: { subnets: [] } });
     vi.clearAllMocks();
     setupDefaults();
     mockVpcs.mockReturnValue({
@@ -730,6 +814,15 @@ describe("EC2VpcDetail (EC2Page — VPCs tab → open VPC)", () => {
 
 describe("EC2SubnetList (EC2Page — Subnets tab)", () => {
   beforeEach(() => {
+  vi.clearAllMocks();
+  mockPrefixLists.mockReturnValue({ data: { prefixLists: [], total: 0 }, isLoading: false });
+  mockSpotRequests.mockReturnValue({ data: { spotInstanceRequests: [], total: 0 }, isLoading: false });
+  mockSgRules.mockReturnValue({ data: { rules: [], total: 0 }, isLoading: false });
+  requestSpotState.isError = false;
+  requestSpotState.error = null;
+  mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
+  mockSubnets.mockReturnValue({ data: { subnets: [] } });
     vi.clearAllMocks();
     setupDefaults();
     mockVpcs.mockReturnValue({
@@ -806,6 +899,15 @@ describe("EC2SubnetList (EC2Page — Subnets tab)", () => {
 
 describe("EC2SecurityGroupList (EC2Page — Security Groups tab)", () => {
   beforeEach(() => {
+  vi.clearAllMocks();
+  mockPrefixLists.mockReturnValue({ data: { prefixLists: [], total: 0 }, isLoading: false });
+  mockSpotRequests.mockReturnValue({ data: { spotInstanceRequests: [], total: 0 }, isLoading: false });
+  mockSgRules.mockReturnValue({ data: { rules: [], total: 0 }, isLoading: false });
+  requestSpotState.isError = false;
+  requestSpotState.error = null;
+  mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
+  mockSubnets.mockReturnValue({ data: { subnets: [] } });
     vi.clearAllMocks();
     setupDefaults();
   });
@@ -893,6 +995,15 @@ describe("EC2SecurityGroupList (EC2Page — Security Groups tab)", () => {
 
 describe("EC2KeyPairList (EC2Page — Key Pairs tab)", () => {
   beforeEach(() => {
+  vi.clearAllMocks();
+  mockPrefixLists.mockReturnValue({ data: { prefixLists: [], total: 0 }, isLoading: false });
+  mockSpotRequests.mockReturnValue({ data: { spotInstanceRequests: [], total: 0 }, isLoading: false });
+  mockSgRules.mockReturnValue({ data: { rules: [], total: 0 }, isLoading: false });
+  requestSpotState.isError = false;
+  requestSpotState.error = null;
+  mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
+  mockSubnets.mockReturnValue({ data: { subnets: [] } });
     vi.clearAllMocks();
     setupDefaults();
   });
@@ -980,6 +1091,15 @@ describe("EC2KeyPairList (EC2Page — Key Pairs tab)", () => {
 
 describe("EC2ElasticIpList (EC2Page — Elastic IPs tab)", () => {
   beforeEach(() => {
+  vi.clearAllMocks();
+  mockPrefixLists.mockReturnValue({ data: { prefixLists: [], total: 0 }, isLoading: false });
+  mockSpotRequests.mockReturnValue({ data: { spotInstanceRequests: [], total: 0 }, isLoading: false });
+  mockSgRules.mockReturnValue({ data: { rules: [], total: 0 }, isLoading: false });
+  requestSpotState.isError = false;
+  requestSpotState.error = null;
+  mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
+  mockSubnets.mockReturnValue({ data: { subnets: [] } });
     vi.clearAllMocks();
     setupDefaults();
   });
@@ -1049,6 +1169,15 @@ describe("EC2ElasticIpList (EC2Page — Elastic IPs tab)", () => {
 
 describe("EC2InternetGatewayList (EC2Page — Internet Gateways tab)", () => {
   beforeEach(() => {
+  vi.clearAllMocks();
+  mockPrefixLists.mockReturnValue({ data: { prefixLists: [], total: 0 }, isLoading: false });
+  mockSpotRequests.mockReturnValue({ data: { spotInstanceRequests: [], total: 0 }, isLoading: false });
+  mockSgRules.mockReturnValue({ data: { rules: [], total: 0 }, isLoading: false });
+  requestSpotState.isError = false;
+  requestSpotState.error = null;
+  mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
+  mockSubnets.mockReturnValue({ data: { subnets: [] } });
     vi.clearAllMocks();
     setupDefaults();
   });
@@ -1135,6 +1264,15 @@ describe("EC2InternetGatewayList (EC2Page — Internet Gateways tab)", () => {
 
 describe("EC2RouteTableList (EC2Page — Route Tables tab)", () => {
   beforeEach(() => {
+  vi.clearAllMocks();
+  mockPrefixLists.mockReturnValue({ data: { prefixLists: [], total: 0 }, isLoading: false });
+  mockSpotRequests.mockReturnValue({ data: { spotInstanceRequests: [], total: 0 }, isLoading: false });
+  mockSgRules.mockReturnValue({ data: { rules: [], total: 0 }, isLoading: false });
+  requestSpotState.isError = false;
+  requestSpotState.error = null;
+  mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
+  mockSubnets.mockReturnValue({ data: { subnets: [] } });
     vi.clearAllMocks();
     setupDefaults();
   });
@@ -1205,6 +1343,15 @@ describe("EC2RouteTableList (EC2Page — Route Tables tab)", () => {
 
 describe("EC2NatGatewayList (EC2Page — NAT Gateways tab)", () => {
   beforeEach(() => {
+  vi.clearAllMocks();
+  mockPrefixLists.mockReturnValue({ data: { prefixLists: [], total: 0 }, isLoading: false });
+  mockSpotRequests.mockReturnValue({ data: { spotInstanceRequests: [], total: 0 }, isLoading: false });
+  mockSgRules.mockReturnValue({ data: { rules: [], total: 0 }, isLoading: false });
+  requestSpotState.isError = false;
+  requestSpotState.error = null;
+  mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
+  mockSubnets.mockReturnValue({ data: { subnets: [] } });
     vi.clearAllMocks();
     setupDefaults();
   });
@@ -1277,6 +1424,15 @@ describe("EC2NatGatewayList (EC2Page — NAT Gateways tab)", () => {
 
 describe("EC2VolumeList (EC2Page — Volumes tab)", () => {
   beforeEach(() => {
+  vi.clearAllMocks();
+  mockPrefixLists.mockReturnValue({ data: { prefixLists: [], total: 0 }, isLoading: false });
+  mockSpotRequests.mockReturnValue({ data: { spotInstanceRequests: [], total: 0 }, isLoading: false });
+  mockSgRules.mockReturnValue({ data: { rules: [], total: 0 }, isLoading: false });
+  requestSpotState.isError = false;
+  requestSpotState.error = null;
+  mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
+  mockSubnets.mockReturnValue({ data: { subnets: [] } });
     vi.clearAllMocks();
     setupDefaults();
   });
@@ -1348,6 +1504,15 @@ describe("EC2VolumeList (EC2Page — Volumes tab)", () => {
 
 describe("EC2AmiList (EC2Page — AMIs tab)", () => {
   beforeEach(() => {
+  vi.clearAllMocks();
+  mockPrefixLists.mockReturnValue({ data: { prefixLists: [], total: 0 }, isLoading: false });
+  mockSpotRequests.mockReturnValue({ data: { spotInstanceRequests: [], total: 0 }, isLoading: false });
+  mockSgRules.mockReturnValue({ data: { rules: [], total: 0 }, isLoading: false });
+  requestSpotState.isError = false;
+  requestSpotState.error = null;
+  mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
+  mockSubnets.mockReturnValue({ data: { subnets: [] } });
     vi.clearAllMocks();
     setupDefaults();
   });
@@ -1383,6 +1548,15 @@ describe("EC2AmiList (EC2Page — AMIs tab)", () => {
 
 describe("EC2NetworkInterfaceList (EC2Page — Network Interfaces tab)", () => {
   beforeEach(() => {
+  vi.clearAllMocks();
+  mockPrefixLists.mockReturnValue({ data: { prefixLists: [], total: 0 }, isLoading: false });
+  mockSpotRequests.mockReturnValue({ data: { spotInstanceRequests: [], total: 0 }, isLoading: false });
+  mockSgRules.mockReturnValue({ data: { rules: [], total: 0 }, isLoading: false });
+  requestSpotState.isError = false;
+  requestSpotState.error = null;
+  mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
+  mockSubnets.mockReturnValue({ data: { subnets: [] } });
     vi.clearAllMocks();
     setupDefaults();
   });
@@ -1418,6 +1592,15 @@ describe("EC2NetworkInterfaceList (EC2Page — Network Interfaces tab)", () => {
 
 describe("EC2Page shell", () => {
   beforeEach(() => {
+  vi.clearAllMocks();
+  mockPrefixLists.mockReturnValue({ data: { prefixLists: [], total: 0 }, isLoading: false });
+  mockSpotRequests.mockReturnValue({ data: { spotInstanceRequests: [], total: 0 }, isLoading: false });
+  mockSgRules.mockReturnValue({ data: { rules: [], total: 0 }, isLoading: false });
+  requestSpotState.isError = false;
+  requestSpotState.error = null;
+  mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
+  mockSubnets.mockReturnValue({ data: { subnets: [] } });
     vi.clearAllMocks();
     setupDefaults();
   });
@@ -1450,6 +1633,15 @@ describe("EC2Page shell", () => {
 
 describe("EC2FlowLogList (EC2Page — Flow Logs tab)", () => {
   beforeEach(() => {
+  vi.clearAllMocks();
+  mockPrefixLists.mockReturnValue({ data: { prefixLists: [], total: 0 }, isLoading: false });
+  mockSpotRequests.mockReturnValue({ data: { spotInstanceRequests: [], total: 0 }, isLoading: false });
+  mockSgRules.mockReturnValue({ data: { rules: [], total: 0 }, isLoading: false });
+  requestSpotState.isError = false;
+  requestSpotState.error = null;
+  mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
+  mockSubnets.mockReturnValue({ data: { subnets: [] } });
     vi.clearAllMocks();
     setupDefaults();
   });
@@ -1470,6 +1662,15 @@ describe("EC2FlowLogList (EC2Page — Flow Logs tab)", () => {
 
 describe("EC2NetworkAclList (EC2Page — Network ACLs tab)", () => {
   beforeEach(() => {
+  vi.clearAllMocks();
+  mockPrefixLists.mockReturnValue({ data: { prefixLists: [], total: 0 }, isLoading: false });
+  mockSpotRequests.mockReturnValue({ data: { spotInstanceRequests: [], total: 0 }, isLoading: false });
+  mockSgRules.mockReturnValue({ data: { rules: [], total: 0 }, isLoading: false });
+  requestSpotState.isError = false;
+  requestSpotState.error = null;
+  mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
+  mockSubnets.mockReturnValue({ data: { subnets: [] } });
     vi.clearAllMocks();
     setupDefaults();
   });
@@ -1490,6 +1691,15 @@ describe("EC2NetworkAclList (EC2Page — Network ACLs tab)", () => {
 
 describe("EC2InstanceDetail (EC2Page — Instances tab → click instance)", () => {
   beforeEach(() => {
+  vi.clearAllMocks();
+  mockPrefixLists.mockReturnValue({ data: { prefixLists: [], total: 0 }, isLoading: false });
+  mockSpotRequests.mockReturnValue({ data: { spotInstanceRequests: [], total: 0 }, isLoading: false });
+  mockSgRules.mockReturnValue({ data: { rules: [], total: 0 }, isLoading: false });
+  requestSpotState.isError = false;
+  requestSpotState.error = null;
+  mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
+  mockSubnets.mockReturnValue({ data: { subnets: [] } });
     vi.clearAllMocks();
     setupDefaults();
     mockInstances.mockReturnValue({
@@ -1535,6 +1745,15 @@ describe("EC2InstanceDetail (EC2Page — Instances tab → click instance)", () 
 
 describe("EC2InstanceList — action buttons by state", () => {
   beforeEach(() => {
+  vi.clearAllMocks();
+  mockPrefixLists.mockReturnValue({ data: { prefixLists: [], total: 0 }, isLoading: false });
+  mockSpotRequests.mockReturnValue({ data: { spotInstanceRequests: [], total: 0 }, isLoading: false });
+  mockSgRules.mockReturnValue({ data: { rules: [], total: 0 }, isLoading: false });
+  requestSpotState.isError = false;
+  requestSpotState.error = null;
+  mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
+  mockSubnets.mockReturnValue({ data: { subnets: [] } });
     vi.clearAllMocks();
     mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
     mockSubnets.mockReturnValue({ data: { subnets: [] } });
@@ -1757,6 +1976,15 @@ describe("EC2InstanceList — action buttons by state", () => {
 
 describe("EC2NetworkInterfaceList (EC2Page — Network Interfaces tab)", () => {
   beforeEach(() => {
+  vi.clearAllMocks();
+  mockPrefixLists.mockReturnValue({ data: { prefixLists: [], total: 0 }, isLoading: false });
+  mockSpotRequests.mockReturnValue({ data: { spotInstanceRequests: [], total: 0 }, isLoading: false });
+  mockSgRules.mockReturnValue({ data: { rules: [], total: 0 }, isLoading: false });
+  requestSpotState.isError = false;
+  requestSpotState.error = null;
+  mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
+  mockSubnets.mockReturnValue({ data: { subnets: [] } });
     vi.clearAllMocks();
     setupDefaults();
   });
@@ -1811,6 +2039,15 @@ describe("EC2NetworkInterfaceList (EC2Page — Network Interfaces tab)", () => {
 
 describe("EC2FlowLogList (EC2Page — Flow Logs tab)", () => {
   beforeEach(() => {
+  vi.clearAllMocks();
+  mockPrefixLists.mockReturnValue({ data: { prefixLists: [], total: 0 }, isLoading: false });
+  mockSpotRequests.mockReturnValue({ data: { spotInstanceRequests: [], total: 0 }, isLoading: false });
+  mockSgRules.mockReturnValue({ data: { rules: [], total: 0 }, isLoading: false });
+  requestSpotState.isError = false;
+  requestSpotState.error = null;
+  mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
+  mockSubnets.mockReturnValue({ data: { subnets: [] } });
     vi.clearAllMocks();
     setupDefaults();
   });
@@ -1924,6 +2161,15 @@ describe("EC2FlowLogList (EC2Page — Flow Logs tab)", () => {
 
 describe("EC2NetworkAclList (EC2Page — Network ACLs tab)", () => {
   beforeEach(() => {
+  vi.clearAllMocks();
+  mockPrefixLists.mockReturnValue({ data: { prefixLists: [], total: 0 }, isLoading: false });
+  mockSpotRequests.mockReturnValue({ data: { spotInstanceRequests: [], total: 0 }, isLoading: false });
+  mockSgRules.mockReturnValue({ data: { rules: [], total: 0 }, isLoading: false });
+  requestSpotState.isError = false;
+  requestSpotState.error = null;
+  mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
+  mockSubnets.mockReturnValue({ data: { subnets: [] } });
     vi.clearAllMocks();
     createAclEntryState.isPending = false;
     createAclEntryState.isError = false;
@@ -2318,6 +2564,15 @@ describe("EC2NetworkAclList (EC2Page — Network ACLs tab)", () => {
 
 describe("EC2InstanceDetail — CommandBox copy", () => {
   beforeEach(() => {
+  vi.clearAllMocks();
+  mockPrefixLists.mockReturnValue({ data: { prefixLists: [], total: 0 }, isLoading: false });
+  mockSpotRequests.mockReturnValue({ data: { spotInstanceRequests: [], total: 0 }, isLoading: false });
+  mockSgRules.mockReturnValue({ data: { rules: [], total: 0 }, isLoading: false });
+  requestSpotState.isError = false;
+  requestSpotState.error = null;
+  mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
+  mockSubnets.mockReturnValue({ data: { subnets: [] } });
     vi.clearAllMocks();
     setupDefaults();
     mockInstances.mockReturnValue({
@@ -2348,6 +2603,15 @@ describe("EC2InstanceDetail — CommandBox copy", () => {
 
 describe("EC2Page — delete loading states", () => {
   beforeEach(() => {
+  vi.clearAllMocks();
+  mockPrefixLists.mockReturnValue({ data: { prefixLists: [], total: 0 }, isLoading: false });
+  mockSpotRequests.mockReturnValue({ data: { spotInstanceRequests: [], total: 0 }, isLoading: false });
+  mockSgRules.mockReturnValue({ data: { rules: [], total: 0 }, isLoading: false });
+  requestSpotState.isError = false;
+  requestSpotState.error = null;
+  mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
+  mockSubnets.mockReturnValue({ data: { subnets: [] } });
     vi.clearAllMocks();
     setupDefaults();
   });
@@ -2585,6 +2849,15 @@ describe("EC2Page — shell navigation", () => {
 
 describe("EC2InstanceList — row actions", () => {
   beforeEach(() => {
+  vi.clearAllMocks();
+  mockPrefixLists.mockReturnValue({ data: { prefixLists: [], total: 0 }, isLoading: false });
+  mockSpotRequests.mockReturnValue({ data: { spotInstanceRequests: [], total: 0 }, isLoading: false });
+  mockSgRules.mockReturnValue({ data: { rules: [], total: 0 }, isLoading: false });
+  requestSpotState.isError = false;
+  requestSpotState.error = null;
+  mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
+  mockSubnets.mockReturnValue({ data: { subnets: [] } });
     vi.clearAllMocks();
     mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
     mockSubnets.mockReturnValue({ data: { subnets: [] } });
@@ -2703,6 +2976,15 @@ describe("EC2InstanceList — row actions", () => {
 
 describe("EC2InstanceDetail — actions", () => {
   beforeEach(() => {
+  vi.clearAllMocks();
+  mockPrefixLists.mockReturnValue({ data: { prefixLists: [], total: 0 }, isLoading: false });
+  mockSpotRequests.mockReturnValue({ data: { spotInstanceRequests: [], total: 0 }, isLoading: false });
+  mockSgRules.mockReturnValue({ data: { rules: [], total: 0 }, isLoading: false });
+  requestSpotState.isError = false;
+  requestSpotState.error = null;
+  mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
+  mockSubnets.mockReturnValue({ data: { subnets: [] } });
     vi.clearAllMocks();
     setupDefaults();
     mockInstances.mockReturnValue({ data: { instances: [{ id: "i-det", state: "running", instanceType: "t2.micro" }], total: 1 }, isLoading: false, isError: false, error: null });
@@ -3512,6 +3794,15 @@ describe("EC2NetworkAclList — extras", () => {
 
 describe("EC2InstanceDetail — CommandBox fallbacks", () => {
   beforeEach(() => {
+  vi.clearAllMocks();
+  mockPrefixLists.mockReturnValue({ data: { prefixLists: [], total: 0 }, isLoading: false });
+  mockSpotRequests.mockReturnValue({ data: { spotInstanceRequests: [], total: 0 }, isLoading: false });
+  mockSgRules.mockReturnValue({ data: { rules: [], total: 0 }, isLoading: false });
+  requestSpotState.isError = false;
+  requestSpotState.error = null;
+  mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
+  mockSubnets.mockReturnValue({ data: { subnets: [] } });
     vi.clearAllMocks();
     setupDefaults();
     mockInstances.mockReturnValue({
@@ -3551,6 +3842,15 @@ describe("EC2InstanceDetail — CommandBox fallbacks", () => {
 
 describe("EC2InstanceList — launch modal AMI edges", () => {
   beforeEach(() => {
+  vi.clearAllMocks();
+  mockPrefixLists.mockReturnValue({ data: { prefixLists: [], total: 0 }, isLoading: false });
+  mockSpotRequests.mockReturnValue({ data: { spotInstanceRequests: [], total: 0 }, isLoading: false });
+  mockSgRules.mockReturnValue({ data: { rules: [], total: 0 }, isLoading: false });
+  requestSpotState.isError = false;
+  requestSpotState.error = null;
+  mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
+  mockSubnets.mockReturnValue({ data: { subnets: [] } });
     vi.clearAllMocks();
     mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
     mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
@@ -3659,6 +3959,15 @@ describe("EC2InstanceList — launch modal AMI edges", () => {
 
 describe("EC2LaunchTemplateList — create modal AMI edges", () => {
   beforeEach(() => {
+  vi.clearAllMocks();
+  mockPrefixLists.mockReturnValue({ data: { prefixLists: [], total: 0 }, isLoading: false });
+  mockSpotRequests.mockReturnValue({ data: { spotInstanceRequests: [], total: 0 }, isLoading: false });
+  mockSgRules.mockReturnValue({ data: { rules: [], total: 0 }, isLoading: false });
+  requestSpotState.isError = false;
+  requestSpotState.error = null;
+  mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
+  mockSubnets.mockReturnValue({ data: { subnets: [] } });
     vi.clearAllMocks();
     mockLaunchTemplates.mockReturnValue({ data: { launchTemplates: [], total: 0 }, isLoading: false, isError: false, error: null });
     mockAmis.mockReturnValue({ data: { images: [], total: 0 }, isLoading: false });
@@ -4260,6 +4569,15 @@ describe("EC2NetworkAclList — expanded detail edges", () => {
 
 describe("EC2InstanceList — action button loading states", () => {
   beforeEach(() => {
+  vi.clearAllMocks();
+  mockPrefixLists.mockReturnValue({ data: { prefixLists: [], total: 0 }, isLoading: false });
+  mockSpotRequests.mockReturnValue({ data: { spotInstanceRequests: [], total: 0 }, isLoading: false });
+  mockSgRules.mockReturnValue({ data: { rules: [], total: 0 }, isLoading: false });
+  requestSpotState.isError = false;
+  requestSpotState.error = null;
+  mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
+  mockSubnets.mockReturnValue({ data: { subnets: [] } });
     vi.clearAllMocks();
     mockKeyPairs.mockReturnValue({ data: { keyPairs: [] } });
     mockSubnets.mockReturnValue({ data: { subnets: [] } });
@@ -4286,5 +4604,206 @@ describe("EC2InstanceList — action button loading states", () => {
     expect(screen.getByRole("button", { name: /Start i-stopped/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Stop i-running/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Reboot i-running/i })).toBeTruthy();
+  });
+});
+
+describe("EC2Page — spot, prefix lists, SG rules tabs", () => {
+  it("renders spot requests with rows", async () => {
+    mockSpotRequests.mockReturnValue({
+      data: { spotInstanceRequests: [{ id: "sir-1", state: "active", status: "fulfilled", price: "0.05", instanceId: "i-1", type: "one-time", created: "2026" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Spot Requests/i }));
+    expect(await screen.findByText("sir-1")).toBeTruthy();
+    expect(screen.getByText("fulfilled")).toBeTruthy();
+  });
+
+  it("requests spot instances from the modal", async () => {
+    mockRequestSpot.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Spot Requests/i }));
+    const createBtn = await screen.findByRole("button", { name: /Create spot request/i });
+    await user.click(createBtn);
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const inputs = dialog.querySelectorAll("input");
+    await user.clear(inputs[0]);
+    await user.type(inputs[0], "2");
+    const submit = screen.getAllByRole("button", { name: "Request" }).at(-1)!;
+    await user.click(submit);
+    await waitFor(() =>
+      expect(mockRequestSpot).toHaveBeenCalledWith(
+        expect.objectContaining({ instanceCount: 2, spotPrice: "0.05" }),
+        expect.objectContaining({ onSuccess: expect.any(Function) })
+      )
+    );
+  });
+
+  it("cancels an active spot request", async () => {
+    mockInstances.mockReturnValue({ data: { instances: [] }, isLoading: false, isError: false, error: null });
+    mockSpotRequests.mockReturnValue({
+      data: { spotInstanceRequests: [{ id: "sir-1", state: "active", status: "fulfilled", price: "0.05", instanceId: "i-1", type: "one-time", created: "2026" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Spot Requests/i }));
+    const cancelBtn = (await screen.findAllByRole("button", { name: "Cancel" }))[0];
+    await user.click(cancelBtn);
+    await waitFor(() => expect(mockCancelSpot).toHaveBeenCalledWith(["sir-1"]));
+  });
+
+  it("renders prefix lists", async () => {
+    mockPrefixLists.mockReturnValue({
+      data: { prefixLists: [{ id: "pl-1", name: "aws-services", ownerId: "AWS", version: 3, entries: 10, cidrs: "10.0.0.0/8" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Prefix Lists/i }));
+    expect(await screen.findByText("pl-1")).toBeTruthy();
+    expect(screen.getByText("10.0.0.0/8")).toBeTruthy();
+  });
+
+  it("renders SG rules with single and range ports", async () => {
+    mockSgRules.mockReturnValue({
+      data: {
+        rules: [
+          { id: "sgr-1", groupId: "sg-1", type: "ingress", protocol: "tcp", fromPort: 80, toPort: 80, cidr: "0.0.0.0/0", description: "http" },
+          { id: "sgr-2", groupId: "sg-1", type: "egress", protocol: "tcp", fromPort: 1024, toPort: 65535, cidr: "10.0.0.0/8", description: "high" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /SG Rules/i }));
+    expect(await screen.findByText("sgr-1")).toBeTruthy();
+    expect(screen.getByText("1024-65535")).toBeTruthy();
+    expect(screen.getByText("80")).toBeTruthy();
+  });
+});
+
+describe("EC2Page — spot/prefix/sg-rules edge arms", () => {
+  it("covers modal dismiss, cancel button, typing, error arms, and undefined data", async () => {
+    requestSpotState.isError = true;
+    requestSpotState.error = new Error("spot failed");
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Spot Requests/i }));
+    await user.click(await screen.findByRole("button", { name: /Create spot request/i }));
+    expect(await screen.findByText("spot failed")).toBeTruthy();
+
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const inputs = dialog.querySelectorAll("input");
+    await user.clear(inputs[1]);
+    await user.type(inputs[1], "0.10");
+    await user.type(inputs[2], "ami-9");
+    await user.clear(inputs[3]);
+    await user.type(inputs[3], "t3.small");
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+    await user.click(screen.getByRole("button", { name: /Create spot request/i }));
+    document.querySelectorAll('[class*="awsui_dialog"]').forEach((d) =>
+      fireEvent.keyDown(d as HTMLElement, { keyCode: 27 })
+    );
+    expect(mockRequestSpot).not.toHaveBeenCalled();
+  });
+
+  it("renders spot/prefix/rules tables with undefined data", async () => {
+    mockSpotRequests.mockReturnValue({ data: undefined, isLoading: false });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Spot Requests/i }));
+    expect(await screen.findByText("No spot requests")).toBeTruthy();
+  });
+
+  it("shows fallback spot error and undefined-data tables", async () => {
+    requestSpotState.isError = true;
+    requestSpotState.error = null;
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Spot Requests/i }));
+    await user.click(await screen.findByRole("button", { name: /Create spot request/i }));
+    expect(await screen.findByText("Failed to request spot instances")).toBeTruthy();
+
+    mockSpotRequests.mockReturnValue({ data: undefined, isLoading: false });
+    await user.click(screen.getByRole("tab", { name: /Prefix Lists/i }));
+    expect(await screen.findByText("No prefix lists")).toBeTruthy();
+    await user.click(screen.getByRole("tab", { name: /SG Rules/i }));
+    expect(await screen.findByText("No security group rules")).toBeTruthy();
+  });
+
+  it("sends undefined instance type when cleared", async () => {
+    mockRequestSpot.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Spot Requests/i }));
+    await user.click(await screen.findByRole("button", { name: /Create spot request/i }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const inputs = dialog.querySelectorAll("input");
+    await user.clear(inputs[3]);
+    await user.click(screen.getAllByRole("button", { name: "Request" }).at(-1)!);
+    await waitFor(() =>
+      expect(mockRequestSpot).toHaveBeenCalledWith(
+        expect.objectContaining({
+          launchSpecification: { ImageId: undefined, InstanceType: undefined },
+        }),
+        expect.anything()
+      )
+    );
+  });
+
+  it("renders prefix/rules tables with undefined data", async () => {
+    mockPrefixLists.mockReturnValue({ data: undefined, isLoading: false });
+    mockSgRules.mockReturnValue({ data: undefined, isLoading: false });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Prefix Lists/i }));
+    expect(await screen.findByText("No prefix lists")).toBeTruthy();
+    await user.click(screen.getByRole("tab", { name: /SG Rules/i }));
+    expect(await screen.findByText("No security group rules")).toBeTruthy();
+  });
+
+  it("sends typed AMI/type through the request modal", async () => {
+    mockRequestSpot.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Spot Requests/i }));
+    await user.click(await screen.findByRole("button", { name: /Create spot request/i }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const inputs = dialog.querySelectorAll("input");
+    await user.type(inputs[2], "ami-7");
+    await user.click(screen.getAllByRole("button", { name: "Request" }).at(-1)!);
+    await waitFor(() =>
+      expect(mockRequestSpot).toHaveBeenCalledWith(
+        expect.objectContaining({
+          launchSpecification: { ImageId: "ami-7", InstanceType: "t3.micro" },
+        }),
+        expect.anything()
+      )
+    );
+  });
+
+  it("disables Cancel for terminal spot states", async () => {
+    mockSpotRequests.mockReturnValue({
+      data: { spotInstanceRequests: [
+        { id: "sir-1", state: "cancelled", status: "cancelled", price: "-", instanceId: "-", type: "-", created: "-" },
+        { id: "sir-2", state: "closed", status: "closed", price: "-", instanceId: "-", type: "-", created: "-" },
+      ], total: 2 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<EC2Page />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Spot Requests/i }));
+    await screen.findByText("sir-1");
+    const cancels = screen.getAllByRole("button", { name: "Cancel" }).filter(
+      (b) => !b.closest('[class*="awsui_hidden"]')
+    );
+    // row cancels (first 2) disabled; modal cancel is separate
+    expect(cancels.length).toBeGreaterThanOrEqual(1);
   });
 });

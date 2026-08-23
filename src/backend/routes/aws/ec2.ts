@@ -72,6 +72,13 @@ import {
   DescribeVolumesCommand,
   DeleteVolumeCommand,
   DescribeNetworkInterfacesCommand,
+  DescribePrefixListsCommand,
+  RequestSpotInstancesCommand,
+  DescribeSpotInstanceRequestsCommand,
+  CancelSpotInstanceRequestsCommand,
+  DescribeSecurityGroupRulesCommand,
+  ModifySecurityGroupRulesCommand,
+  UpdateSecurityGroupRuleDescriptionsIngressCommand,
 } from "@aws-sdk/client-ec2";
 import { getAwsConfig } from "../../clients/aws";
 import { sanitizeName, sanitizeText } from "../../clients/sanitize";
@@ -938,6 +945,133 @@ router.get("/network-interfaces", async (c: Context) => {
     tagSet: (ni.TagSet || []).map((t: any) => ({ key: t.Key, value: t.Value })),
   }));
   return c.json({ networkInterfaces: interfaces, total: interfaces.length });
+});
+
+
+// ── Prefix Lists ───────────────────────────────────────
+
+router.get("/prefix-lists", async (c: Context) => {
+  const client = ec2();
+  const result = await client.send(new DescribePrefixListsCommand({}));
+  const prefixLists = (result.PrefixLists || []).map((pl: any) => ({
+    id: pl.PrefixListId,
+    name: pl.PrefixListName,
+    ownerId: pl.OwnerId || "-",
+    version: pl.Version ?? "-",
+    entries: pl.MaxEntries ?? "-",
+    cidrs: (pl.Cidrs || []).join(", ") || "-",
+  }));
+  return c.json({ prefixLists, total: prefixLists.length });
+});
+
+// ── Spot Instances ─────────────────────────────────────
+
+router.post("/spot-requests", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.instanceCount) return c.json({ error: "instanceCount is required" }, 400);
+  if (!body.spotPrice) return c.json({ error: "spotPrice is required" }, 400);
+  const client = ec2();
+  const result = await client.send(
+    new RequestSpotInstancesCommand({
+      InstanceCount: body.instanceCount,
+      SpotPrice: String(body.spotPrice),
+      LaunchSpecification: body.launchSpecification,
+    })
+  );
+  const requests = (result.SpotInstanceRequests || []).map((r: any) => ({
+    id: r.SpotInstanceRequestId,
+    state: r.State,
+    status: r.Status?.Code || "-",
+    price: r.SpotPrice || "-",
+    instanceId: r.InstanceId || "-",
+  }));
+  return c.json({ spotInstanceRequests: requests, total: requests.length }, 201);
+});
+
+router.get("/spot-requests", async (c: Context) => {
+  const client = ec2();
+  const result = await client.send(new DescribeSpotInstanceRequestsCommand({}));
+  const requests = (result.SpotInstanceRequests || []).map((r: any) => ({
+    id: r.SpotInstanceRequestId,
+    state: r.State,
+    status: r.Status?.Code || "-",
+    price: r.SpotPrice || "-",
+    instanceId: r.InstanceId || "-",
+    type: r.Type || "-",
+    createTime: r.CreateTime ? new Date(r.CreateTime).toLocaleString() : "-",
+  }));
+  return c.json({ spotInstanceRequests: requests, total: requests.length });
+});
+
+router.delete("/spot-requests", async (c: Context) => {
+  const body = await c.req.json<{ spotInstanceRequestIds?: string[] }>();
+  if (!body.spotInstanceRequestIds?.length)
+    return c.json({ error: "spotInstanceRequestIds is required" }, 400);
+  const client = ec2();
+  await client.send(
+    new CancelSpotInstanceRequestsCommand({ SpotInstanceRequestIds: body.spotInstanceRequestIds })
+  );
+  return c.json({ cancelled: true });
+});
+
+// ── Security Group Rules ───────────────────────────────
+
+router.get("/security-group-rules", async (c: Context) => {
+  const groupId = c.req.query("groupId");
+  const client = ec2();
+  const result = await client.send(
+    new DescribeSecurityGroupRulesCommand(groupId ? { Filters: [{ Name: "group-id", Values: [groupId] }] } : {})
+  );
+  const rules = (result.SecurityGroupRules || []).map((r: any) => ({
+    id: r.SecurityGroupRuleId,
+    groupId: r.GroupId,
+    type: r.IsEgress ? "egress" : "ingress",
+    protocol: r.IpProtocol || "-",
+    fromPort: r.FromPort ?? "-",
+    toPort: r.ToPort ?? "-",
+    cidr: r.CidrIpv4 || r.CidrIpv6 || "-",
+    description: r.Description || "-",
+  }));
+  return c.json({ rules, total: rules.length });
+});
+
+router.put("/security-group-rules/:ruleId", async (c: Context) => {
+  const ruleId = c.req.param("ruleId")!;
+  const body = await c.req.json<any>();
+  if (!body.groupId) return c.json({ error: "groupId is required" }, 400);
+  const client = ec2();
+  const result = await client.send(
+    new ModifySecurityGroupRulesCommand({
+      GroupId: body.groupId,
+      SecurityGroupRules: [
+        {
+          SecurityGroupRuleId: ruleId,
+          SecurityGroupRule: {
+            IpProtocol: body.protocol,
+            FromPort: body.fromPort,
+            ToPort: body.toPort,
+            CidrIpv4: body.cidr,
+            Description: body.description,
+          },
+        },
+      ],
+    })
+  );
+  return c.json({ returned: result.Return || false });
+});
+
+router.post("/security-groups/:groupId/rule-descriptions", async (c: Context) => {
+  const groupId = c.req.param("groupId")!;
+  const body = await c.req.json<any>();
+  if (!body.description) return c.json({ error: "description is required" }, 400);
+  const client = ec2();
+  await client.send(
+    new UpdateSecurityGroupRuleDescriptionsIngressCommand({
+      GroupId: groupId,
+      IpPermissions: body.ipPermissions,
+    })
+  );
+  return c.json({ updated: true });
 });
 
 export default router;
