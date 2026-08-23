@@ -1097,6 +1097,8 @@ vi.mock("../hooks/useFirehose", () => ({
 
 vi.mock("../hooks/useACM", () => ({
   useACMCertificates: (...args: any[]) => mockACMCertificates(...args),
+  useImportACMCertificate: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
+  useExportACMCertificate: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteACMCertificate: () => ({ mutateAsync: vi.fn(), isPending: false, variables: null }),
 }));
 
