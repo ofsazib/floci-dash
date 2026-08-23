@@ -120,3 +120,36 @@ export function useStartConfigRulesEvaluation() {
     },
   });
 }
+
+// ── Tags ─────────────────────────────────────────────────
+
+export interface ConfigTag {
+  key: string;
+  value: string;
+}
+
+export function useConfigTags(arn: string | null) {
+  return useQuery<{ tags: ConfigTag[] }>({
+    queryKey: ["aws", "config", "tags", arn],
+    queryFn: () => api(`/aws/config/tags?arn=${encodeURIComponent(arn!)}`),
+    enabled: !!arn,
+  });
+}
+
+export function useAddConfigTags() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { arn: string; tags: Record<string, string> }) =>
+      api("/aws/config/tags", { method: "POST", body: JSON.stringify(params) }),
+    onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: ["aws", "config", "tags", v.arn] }),
+  });
+}
+
+export function useRemoveConfigTags() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { arn: string; tagKeys: string[] }) =>
+      api("/aws/config/tags/untag", { method: "POST", body: JSON.stringify(params) }),
+    onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: ["aws", "config", "tags", v.arn] }),
+  });
+}

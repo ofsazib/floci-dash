@@ -26,9 +26,17 @@ const mockEvalStatus = vi.fn();
 const mockPackStatuses = vi.fn();
 const mockRecorderStatuses = vi.fn();
 const mockStartEval = vi.fn();
+const mockTags = vi.fn();
+const mockAddTags = vi.fn();
+const mockRemoveTags = vi.fn();
 
 const deleteRuleState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
 const deletePackState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
+
+const addTagsState = vi.hoisted(() => ({ isPending: false, isError: false, error: null as Error | null }));
+const removeTagsState = vi.hoisted(() => ({ isPending: false, isError: false, error: null as Error | null, variables: null as any }));
+const mockAddTagsReset = vi.hoisted(() => vi.fn());
+const mockRemoveTagsReset = vi.hoisted(() => vi.fn());
 
 vi.mock("../../hooks/useConfigService", () => ({
   useConfigRules: (...args: any[]) => mockRules(...args),
@@ -56,6 +64,22 @@ vi.mock("../../hooks/useConfigService", () => ({
     isError: false,
     error: null,
     reset: vi.fn(),
+  }),
+  useConfigTags: (...args: any[]) => mockTags(...args),
+  useAddConfigTags: () => ({
+    mutateAsync: mockAddTags,
+    reset: mockAddTagsReset,
+    get isPending() { return addTagsState.isPending; },
+    get isError() { return addTagsState.isError; },
+    get error() { return addTagsState.error; },
+  }),
+  useRemoveConfigTags: () => ({
+    mutateAsync: mockRemoveTags,
+    reset: mockRemoveTagsReset,
+    get isPending() { return removeTagsState.isPending; },
+    get isError() { return removeTagsState.isError; },
+    get error() { return removeTagsState.error; },
+    get variables() { return removeTagsState.variables; },
   }),
 }));
 
@@ -93,6 +117,18 @@ beforeEach(() => {
     data: { compliance: [], total: 0 },
     isLoading: false,
   });
+  mockTags.mockReturnValue({ data: undefined, isLoading: false, isError: false, error: null });
+  addTagsState.isPending = false;
+  addTagsState.isError = false;
+  addTagsState.error = null;
+  removeTagsState.isPending = false;
+  removeTagsState.isError = false;
+  removeTagsState.error = null;
+  removeTagsState.variables = null;
+  mockAddTagsReset.mockClear();
+  mockRemoveTagsReset.mockClear();
+  mockAddTags.mockReset();
+  mockRemoveTags.mockReset();
   mockEvalStatus.mockReturnValue({
     data: { statuses: [], total: 0 },
     isLoading: false,
@@ -922,5 +958,174 @@ describe("ConfigServiceDashboard — branch coverage: loading + sparse data", ()
     await waitFor(() => expect(screen.getByText("rec-status")).toBeTruthy());
     expect(screen.getByText("Yes")).toBeTruthy();
     expect(screen.getAllByText(/2024/).length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("ConfigServiceDashboard — tags modal", () => {
+  function setupRule(arn?: string) {
+    mockRules.mockReturnValue({
+      data: { rules: [{ ConfigRuleName: "rule-1", ConfigRuleArn: arn, ConfigRuleState: "ACTIVE" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+  }
+
+  it("opens the tags modal from a rule row and renders tags", async () => {
+    setupRule("arn:rule-1");
+    mockTags.mockReturnValue({ data: { tags: [{ key: "env", value: "prod" }] } });
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click((await screen.findAllByRole("button", { name: "Tags" }))[0]);
+    expect(await screen.findByText("Tags — rule-1")).toBeTruthy();
+    expect(screen.getByText("env")).toBeTruthy();
+    expect(screen.getByText("prod")).toBeTruthy();
+    expect(mockTags).toHaveBeenCalledWith("arn:rule-1");
+  });
+
+  it("shows No tags for an empty list", async () => {
+    setupRule("arn:rule-1");
+    mockTags.mockReturnValue({ data: { tags: [] } });
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click((await screen.findAllByRole("button", { name: "Tags" }))[0]);
+    expect(await screen.findByText("No tags")).toBeTruthy();
+  });
+
+  it("adds a tag and clears inputs", async () => {
+    setupRule("arn:rule-1");
+    mockTags.mockReturnValue({ data: { tags: [] } });
+    mockAddTags.mockResolvedValue({});
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click((await screen.findAllByRole("button", { name: "Tags" }))[0]);
+    await screen.findByText("No tags");
+    await user.type(screen.getByRole("textbox", { name: /^Key$/i }), "team");
+    await user.type(screen.getByRole("textbox", { name: /^Value$/i }), "cfg");
+    await user.click(screen.getByRole("button", { name: /Add tag/i }));
+    await waitFor(() => expect(mockAddTags).toHaveBeenCalledWith({ arn: "arn:rule-1", tags: { team: "cfg" } }));
+    await waitFor(() => {
+      expect((screen.getByRole("textbox", { name: /^Key$/i }) as HTMLInputElement).value).toBe("");
+      expect((screen.getByRole("textbox", { name: /^Value$/i }) as HTMLInputElement).value).toBe("");
+    });
+  });
+
+  it("keeps Add tag disabled until a key is entered", async () => {
+    setupRule("arn:rule-1");
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click((await screen.findAllByRole("button", { name: "Tags" }))[0]);
+    const btn = await screen.findByRole("button", { name: /Add tag/i });
+    expect(btn.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("removes a tag after confirmation", async () => {
+    mockRemoveTags.mockResolvedValue({});
+    setupRule("arn:rule-1");
+    mockTags.mockReturnValue({ data: { tags: [{ key: "env", value: "prod" }] } });
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click((await screen.findAllByRole("button", { name: "Tags" }))[0]);
+    await screen.findByText("env");
+    await user.click(screen.getByRole("button", { name: /Delete env/i }));
+    await waitFor(() => expect(mockRemoveTags).toHaveBeenCalledWith({ arn: "arn:rule-1", tagKeys: ["env"] }));
+  });
+
+  it("disables the tag delete button while that removal is pending", async () => {
+    setupRule("arn:rule-1");
+    mockTags.mockReturnValue({ data: { tags: [{ key: "env", value: "prod" }] } });
+    removeTagsState.isPending = true;
+    removeTagsState.variables = { tagKeys: ["env"] };
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click((await screen.findAllByRole("button", { name: "Tags" }))[0]);
+    const btn = await screen.findByRole("button", { name: /Delete env/i });
+    expect(btn.className).toMatch(/disabled/);
+  });
+
+  it("shows the add error and dismisses it", async () => {
+    setupRule("arn:rule-1");
+    addTagsState.isError = true;
+    addTagsState.error = new Error("add failed");
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click((await screen.findAllByRole("button", { name: "Tags" }))[0]);
+    expect(await screen.findByText("add failed")).toBeTruthy();
+    const dismiss = document.querySelector('[class*="awsui_dismiss-button"]') as HTMLElement;
+    fireEvent.click(dismiss);
+    await waitFor(() => expect(mockAddTagsReset).toHaveBeenCalled());
+  });
+
+  it("falls back to a generic add error message", async () => {
+    setupRule("arn:rule-1");
+    addTagsState.isError = true;
+    addTagsState.error = null;
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click((await screen.findAllByRole("button", { name: "Tags" }))[0]);
+    expect(await screen.findByText("Failed to add tags")).toBeTruthy();
+  });
+
+  it("shows the remove error and dismisses it", async () => {
+    setupRule("arn:rule-1");
+    removeTagsState.isError = true;
+    removeTagsState.error = new Error("remove failed");
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click((await screen.findAllByRole("button", { name: "Tags" }))[0]);
+    expect(await screen.findByText("remove failed")).toBeTruthy();
+    const dismiss = document.querySelector('[class*="awsui_dismiss-button"]') as HTMLElement;
+    fireEvent.click(dismiss);
+    await waitFor(() => expect(mockRemoveTagsReset).toHaveBeenCalled());
+  });
+
+  it("falls back to a generic remove error message", async () => {
+    setupRule("arn:rule-1");
+    removeTagsState.isError = true;
+    removeTagsState.error = null;
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click((await screen.findAllByRole("button", { name: "Tags" }))[0]);
+    expect(await screen.findByText("Failed to remove tag")).toBeTruthy();
+  });
+
+  it("closes the tags modal with Close", async () => {
+    setupRule("arn:rule-1");
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click((await screen.findAllByRole("button", { name: "Tags" }))[0]);
+    await screen.findByText("Tags — rule-1");
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByText("Tags — rule-1")).toBeNull());
+  });
+
+  it("disables the rule Tags button when the rule has no ARN", async () => {
+    setupRule(undefined);
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    const btn = (await screen.findAllByRole("button", { name: "Tags" }))[0];
+    expect(btn.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("opens the tags modal from a conformance pack row", async () => {
+    mockPacks.mockReturnValue({
+      data: { conformancePacks: [{ ConformancePackName: "pack-1", ConformancePackArn: "arn:pack-1" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Conformance Packs/i }));
+    await user.click((await screen.findAllByRole("button", { name: "Tags" }))[0]);
+    expect(await screen.findByText("Tags — pack-1")).toBeTruthy();
+    expect(mockTags).toHaveBeenCalledWith("arn:pack-1");
+  });
+
+  it("disables the pack Tags button when the pack has no ARN", async () => {
+    mockPacks.mockReturnValue({
+      data: { conformancePacks: [{ ConformancePackName: "pack-1" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Conformance Packs/i }));
+    const btn = (await screen.findAllByRole("button", { name: "Tags" }))[0];
+    expect(btn.hasAttribute("disabled")).toBe(true);
   });
 });

@@ -267,6 +267,9 @@ import {
   useDeleteConformancePack,
   useConformancePackStatuses,
   useComplianceByConfigRule,
+  useConfigTags,
+  useAddConfigTags,
+  useRemoveConfigTags,
   useConfigRuleEvaluationStatus,
   useStartConfigRulesEvaluation,
 } from "../../hooks/useConfigService";
@@ -510,6 +513,93 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
   { label: "aurora-mysql8", value: "aurora-mysql8" },
 ];
 
+function ConfigTagsModal({
+  target,
+  onClose,
+}: {
+  target: { arn: string; name: string };
+  onClose: () => void;
+}) {
+  const { data } = useConfigTags(target.arn);
+  const addTags = useAddConfigTags();
+  const removeTags = useRemoveConfigTags();
+  const [newKey, setNewKey] = useState("");
+  const [newValue, setNewValue] = useState("");
+  const tags = data?.tags || [];
+
+  return (
+    <Modal
+      visible
+      onDismiss={onClose}
+      header={`Tags — ${target.name}`}
+      footer={
+        <Box float="right">
+          <Button variant="link" onClick={onClose}>Close</Button>
+        </Box>
+      }
+    >
+      <SpaceBetween size="m">
+        {addTags.isError && (
+          <Alert type="error" dismissible onDismiss={() => addTags.reset()}>
+            {(addTags.error as Error)?.message || "Failed to add tags"}
+          </Alert>
+        )}
+        {removeTags.isError && (
+          <Alert type="error" dismissible onDismiss={() => removeTags.reset()}>
+            {(removeTags.error as Error)?.message || "Failed to remove tag"}
+          </Alert>
+        )}
+        <ResourceTable
+          resourceName="Tag"
+          headerTitle={`Tags (${tags.length})`}
+          items={tags}
+          columns={[
+            { id: "key", header: "Key", cell: (t: any) => t.key, isRowHeader: true },
+            { id: "value", header: "Value", cell: (t: any) => t.value },
+            {
+              id: "actions",
+              header: "",
+              cell: (t: any) => (
+                <DeleteButton
+                  itemName={t.key}
+                  resourceType="tag"
+                  loading={removeTags.isPending && removeTags.variables?.tagKeys?.[0] === t.key}
+                  onDelete={() => removeTags.mutateAsync({ arn: target.arn, tagKeys: [t.key] })}
+                />
+              ),
+            },
+          ]}
+          emptyMessage="No tags"
+          loading={false}
+        />
+        <SpaceBetween direction="horizontal" size="xs">
+          <FormField label="Key">
+            <Input value={newKey} onChange={({ detail }) => setNewKey(detail.value)} placeholder="env" />
+          </FormField>
+          <FormField label="Value">
+            <Input value={newValue} onChange={({ detail }) => setNewValue(detail.value)} placeholder="prod" />
+          </FormField>
+          <Button
+            variant="primary"
+            loading={addTags.isPending}
+            disabled={!newKey.trim()}
+            onClick={() =>
+              addTags
+                .mutateAsync({ arn: target.arn, tags: { [newKey.trim()]: newValue.trim() } })
+                .then(() => {
+                  setNewKey("");
+                  setNewValue("");
+                })
+            }
+          >
+            Add tag
+          </Button>
+        </SpaceBetween>
+      </SpaceBetween>
+    </Modal>
+  );
+}
+
 export function ConfigServiceDashboard() {
   const { data: rulesData, isLoading } = useConfigRules();
   const deleteRule = useDeleteConfigRule();
@@ -521,10 +611,12 @@ export function ConfigServiceDashboard() {
   const { data: complianceData } = useComplianceByConfigRule();
   const { data: evalStatusData } = useConfigRuleEvaluationStatus();
   const startEval = useStartConfigRulesEvaluation();
+  const [tagsTarget, setTagsTarget] = useState<{ arn: string; name: string } | null>(null);
 
   if (isLoading) return <TableSkeleton />;
 
   return (
+    <>
     <Tabs
       tabs={[
         {
@@ -537,6 +629,7 @@ export function ConfigServiceDashboard() {
               headerCounter={rulesData?.total}
               items={(rulesData?.rules || []).map((r: any) => ({
                 name: r.ConfigRuleName,
+                arn: r.ConfigRuleArn || "",
                 state: r.ConfigRuleState || "ACTIVE",
                 owner: r.Source?.Owner || "-",
                 source: r.Source?.SourceIdentifier || "-",
@@ -552,12 +645,17 @@ export function ConfigServiceDashboard() {
                   id: "actions",
                   header: "",
                   cell: (i: any) => (
-                    <DeleteButton
-                      itemName={i.name}
-                      resourceType="config rule"
-                      loading={deleteRule.isPending && deleteRule.variables === i.name}
-                      onDelete={() => deleteRule.mutateAsync(i.name)}
-                    />
+                    <SpaceBetween direction="horizontal" size="xs">
+                      <Button disabled={!i.arn} onClick={() => setTagsTarget({ arn: i.arn, name: i.name })}>
+                        Tags
+                      </Button>
+                      <DeleteButton
+                        itemName={i.name}
+                        resourceType="config rule"
+                        loading={deleteRule.isPending && deleteRule.variables === i.name}
+                        onDelete={() => deleteRule.mutateAsync(i.name)}
+                      />
+                    </SpaceBetween>
                   ),
                 },
               ]}
@@ -612,12 +710,20 @@ export function ConfigServiceDashboard() {
                   id: "actions",
                   header: "",
                   cell: (i: any) => (
-                    <DeleteButton
-                      itemName={i.name}
-                      resourceType="conformance pack"
-                      loading={deletePack.isPending && deletePack.variables === i.name}
-                      onDelete={() => deletePack.mutateAsync(i.name)}
-                    />
+                    <SpaceBetween direction="horizontal" size="xs">
+                      <Button
+                        disabled={!i.arn || i.arn === "-"}
+                        onClick={() => setTagsTarget({ arn: i.arn, name: i.name })}
+                      >
+                        Tags
+                      </Button>
+                      <DeleteButton
+                        itemName={i.name}
+                        resourceType="conformance pack"
+                        loading={deletePack.isPending && deletePack.variables === i.name}
+                        onDelete={() => deletePack.mutateAsync(i.name)}
+                      />
+                    </SpaceBetween>
                   ),
                 },
               ]}
@@ -779,6 +885,8 @@ export function ConfigServiceDashboard() {
         },
       ]}
     />
+    {tagsTarget && <ConfigTagsModal target={tagsTarget} onClose={() => setTagsTarget(null)} />}
+    </>
   );
 }
 

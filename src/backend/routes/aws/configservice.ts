@@ -20,6 +20,9 @@ import {
   DescribeComplianceByConfigRuleCommand,
   DescribeConfigRuleEvaluationStatusCommand,
   StartConfigRulesEvaluationCommand,
+  ListTagsForResourceCommand,
+  TagResourceCommand,
+  UntagResourceCommand,
 } from "@aws-sdk/client-config-service";
 
 const router = new Hono();
@@ -208,6 +211,43 @@ router.delete("/conformance-packs/:name", async (c: Context) => {
   const client = getClient();
   await client.send(new DeleteConformancePackCommand({ ConformancePackName: name }));
   return c.json({ deleted: true });
+});
+
+// ── Tags ─────────────────────────────────────────────────
+
+router.get("/tags", async (c: Context) => {
+  const arn = c.req.query("arn");
+  if (!arn) return c.json({ error: "arn query parameter required" }, 400);
+  const client = getClient();
+  const result = await client.send(new ListTagsForResourceCommand({ ResourceArn: arn }));
+  const tags = (result.Tags || []).map((t: any) => ({ key: t.Key, value: t.Value }));
+  return c.json({ tags });
+});
+
+router.post("/tags", async (c: Context) => {
+  const body = await c.req.json<{ arn?: string; tags?: Record<string, string> }>();
+  if (!body.arn) return c.json({ error: "arn is required" }, 400);
+  if (!body.tags || !Object.keys(body.tags).length)
+    return c.json({ error: "tags is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new TagResourceCommand({
+      ResourceArn: body.arn,
+      Tags: Object.entries(body.tags).map(([Key, Value]) => ({ Key, Value })),
+    })
+  );
+  return c.json({ tagged: true });
+});
+
+router.post("/tags/untag", async (c: Context) => {
+  const body = await c.req.json<{ arn?: string; tagKeys?: string[] }>();
+  if (!body.arn) return c.json({ error: "arn is required" }, 400);
+  if (!body.tagKeys?.length) return c.json({ error: "tagKeys is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new UntagResourceCommand({ ResourceArn: body.arn, TagKeys: body.tagKeys })
+  );
+  return c.json({ untagged: true });
 });
 
 export default router;

@@ -26,6 +26,9 @@ vi.mock("@aws-sdk/client-config-service", () => ({
   DescribeComplianceByConfigRuleCommand: createCmd("DescribeComplianceByConfigRuleCommand"),
   DescribeConfigRuleEvaluationStatusCommand: createCmd("DescribeConfigRuleEvaluationStatusCommand"),
   StartConfigRulesEvaluationCommand: createCmd("StartConfigRulesEvaluationCommand"),
+  ListTagsForResourceCommand: createCmd("ListTagsForResourceCommand"),
+  TagResourceCommand: createCmd("TagResourceCommand"),
+  UntagResourceCommand: createCmd("UntagResourceCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({ create: (Ctor: any, extra?: any) => new Ctor(extra) }));
@@ -250,5 +253,85 @@ describe("Config Service Routes", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.started).toBe(true);
+  });
+
+  describe("Tags", () => {
+    it("GET /tags — maps Tags list", async () => {
+      mockSend.mockResolvedValueOnce({ Tags: [{ Key: "env", Value: "prod" }] });
+      const res = await get("/tags?arn=arn:aws:config:rule-1");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.tags).toEqual([{ key: "env", value: "prod" }]);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("ListTagsForResourceCommand");
+      expect(cmd.ResourceArn).toBe("arn:aws:config:rule-1");
+    });
+
+    it("GET /tags — sparse response falls back to []", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/tags?arn=arn:x");
+      const body = await res.json();
+      expect(body.tags).toEqual([]);
+    });
+
+    it("GET /tags — 400 without arn", async () => {
+      const res = await get("/tags");
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /tags — sends TagResourceCommand", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/tags", { arn: "arn:x", tags: { env: "prod", team: "cfg" } });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.tagged).toBe(true);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("TagResourceCommand");
+      expect(cmd.Tags).toEqual([
+        { Key: "env", Value: "prod" },
+        { Key: "team", Value: "cfg" },
+      ]);
+    });
+
+    it("POST /tags — 400 without arn", async () => {
+      const res = await post("/tags", { tags: { a: "b" } });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /tags — 400 with empty tags", async () => {
+      const res = await post("/tags", { arn: "arn:x", tags: {} });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /tags — 400 without tags", async () => {
+      const res = await post("/tags", { arn: "arn:x" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /tags/untag — sends UntagResourceCommand", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/tags/untag", { arn: "arn:x", tagKeys: ["env"] });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.untagged).toBe(true);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("UntagResourceCommand");
+      expect(cmd.TagKeys).toEqual(["env"]);
+    });
+
+    it("POST /tags/untag — 400 without arn", async () => {
+      const res = await post("/tags/untag", { tagKeys: ["env"] });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /tags/untag — 400 with empty tagKeys", async () => {
+      const res = await post("/tags/untag", { arn: "arn:x", tagKeys: [] });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /tags/untag — 400 without tagKeys", async () => {
+      const res = await post("/tags/untag", { arn: "arn:x" });
+      expect(res.status).toBe(400);
+    });
   });
 });

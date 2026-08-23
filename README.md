@@ -390,7 +390,7 @@ These services have full CRUD operations in both backend and frontend:
 | **API Gateway V2** | APIs (list, get, create, delete), routes (list, create, delete), integrations (list, create, delete), stages (list, create, delete), deployments (list, create, delete) with drill-down per API |
 | **ACM** | Certificates (list, describe with validation details, request, delete, get PEM), tags (list per certificate) |
 | **CloudTrail** | Trails (list, create, update, delete), start/stop logging, get trail status |
-| **AWS Config** | Config rules (list, create, delete), configuration recorders (list, create, start/stop, status), delivery channels (list, create), conformance packs (list, create, delete) |
+| **AWS Config** | Config rules (list, create, delete, tags), configuration recorders (list, create, start/stop, status), delivery channels (list, create), conformance packs (list, create, delete, tags), compliance by rule, rule evaluation status, pack status |
 | **AppConfig** | Applications (list, get, create, delete), environments (list, create, delete per app), configuration profiles (list, create, delete per app), hosted config versions (list per profile) |
 | **Cloud Map** | Namespaces (list, get, create HTTP, delete), services (list filtered by namespace, get, create, delete), instances (list per service) with drill-down navigation |
 | **Athena** | Work groups (list, create, delete), query executions (list, get, stop), data catalogs (list, get), databases (list), table metadata (list per database) |

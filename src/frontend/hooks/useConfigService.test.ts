@@ -22,6 +22,9 @@ import {
   useComplianceByConfigRule,
   useConfigRuleEvaluationStatus,
   useStartConfigRulesEvaluation,
+  useConfigTags,
+  useAddConfigTags,
+  useRemoveConfigTags,
 } from "./useConfigService";
 
 beforeEach(() => mockApi.mockReset());
@@ -121,6 +124,48 @@ describe("useConfigService hooks", () => {
     expect(mockApi).toHaveBeenCalledWith("/aws/config/rules/evaluate", {
       method: "POST",
       body: JSON.stringify({}),
+    });
+  });
+});
+
+describe("useConfigTags", () => {
+  it("fetches tags with encoded arn", async () => {
+    mockApi.mockResolvedValueOnce({ tags: [{ key: "env", value: "prod" }] });
+    const { result } = renderHook(() => useConfigTags("arn:aws:config:rule-1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/config/tags?arn=arn%3Aaws%3Aconfig%3Arule-1");
+    expect(result.current.data?.tags).toEqual([{ key: "env", value: "prod" }]);
+  });
+
+  it("is disabled when arn is null", () => {
+    const { result } = renderHook(() => useConfigTags(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+});
+
+describe("useAddConfigTags", () => {
+  it("posts tags", async () => {
+    mockApi.mockResolvedValueOnce({ tagged: true });
+    const { result } = renderHook(() => useAddConfigTags(), { wrapper: createWrapper() });
+    result.current.mutate({ arn: "arn:x", tags: { env: "prod" } });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/config/tags", {
+      method: "POST",
+      body: JSON.stringify({ arn: "arn:x", tags: { env: "prod" } }),
+    });
+  });
+});
+
+describe("useRemoveConfigTags", () => {
+  it("posts untag with tag keys", async () => {
+    mockApi.mockResolvedValueOnce({ untagged: true });
+    const { result } = renderHook(() => useRemoveConfigTags(), { wrapper: createWrapper() });
+    result.current.mutate({ arn: "arn:x", tagKeys: ["env"] });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/config/tags/untag", {
+      method: "POST",
+      body: JSON.stringify({ arn: "arn:x", tagKeys: ["env"] }),
     });
   });
 });
