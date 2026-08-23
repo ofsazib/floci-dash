@@ -303,3 +303,48 @@ export function useDeleteEventArchive() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "events", "archives"] }),
   });
 }
+
+// ── Pattern tester ──────────────────────────────────────
+
+export function useTestEventPattern() {
+  return useMutation({
+    mutationFn: (params: { eventPattern: string; event: string }) =>
+      api<{ result: boolean }>("/aws/events/test-event-pattern", {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+  });
+}
+
+// ── Tags ─────────────────────────────────────────────────
+
+export interface EventTag {
+  key: string;
+  value: string;
+}
+
+export function useEventTags(arn: string | null) {
+  return useQuery<{ tags: EventTag[] }>({
+    queryKey: ["aws", "events", "tags", arn],
+    queryFn: () => api(`/aws/events/tags?arn=${encodeURIComponent(arn!)}`),
+    enabled: !!arn,
+  });
+}
+
+export function useAddEventTags() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { arn: string; tags: Record<string, string> }) =>
+      api("/aws/events/tags", { method: "POST", body: JSON.stringify(params) }),
+    onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: ["aws", "events", "tags", v.arn] }),
+  });
+}
+
+export function useRemoveEventTags() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { arn: string; tagKeys: string[] }) =>
+      api("/aws/events/tags", { method: "DELETE", body: JSON.stringify(params) }),
+    onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: ["aws", "events", "tags", v.arn] }),
+  });
+}

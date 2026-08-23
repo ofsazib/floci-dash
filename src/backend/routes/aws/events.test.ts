@@ -47,6 +47,7 @@ vi.mock("@aws-sdk/client-eventbridge", () => ({
   TagResourceCommand: createCmd("TagResourceCommand"),
   UntagResourceCommand: createCmd("UntagResourceCommand"),
   ListTagsForResourceCommand: createCmd("ListTagsForResourceCommand"),
+  TestEventPatternCommand: createCmd("TestEventPatternCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -650,6 +651,138 @@ describe("Events (EventBridge) Routes", () => {
 
     it("DELETE /buses/permissions — 400 when name missing", async () => {
       const res = await del("/buses/permissions");
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe("Pattern tester", () => {
+    it("POST /test-event-pattern — returns result true", async () => {
+      mockSend.mockResolvedValueOnce({ Result: true });
+      const res = await post("/test-event-pattern", {
+        eventPattern: '{"source":["aws.s3"]}',
+        event: '{"source":"aws.s3"}',
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.result).toBe(true);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("TestEventPatternCommand");
+      expect(cmd.EventPattern).toBe('{"source":["aws.s3"]}');
+      expect(cmd.Event).toBe('{"source":"aws.s3"}');
+    });
+
+    it("POST /test-event-pattern — false Result maps to false", async () => {
+      mockSend.mockResolvedValueOnce({ Result: false });
+      const res = await post("/test-event-pattern", {
+        eventPattern: '{"source":["no-match"]}',
+        event: '{"source":"aws.s3"}',
+      });
+      const body = await res.json();
+      expect(body.result).toBe(false);
+    });
+
+    it("POST /test-event-pattern — 400 without eventPattern", async () => {
+      const res = await post("/test-event-pattern", { event: "{}" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /test-event-pattern — 400 without event", async () => {
+      const res = await post("/test-event-pattern", { eventPattern: "{}" });
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe("Tags", () => {
+    it("GET /tags — maps Tags list", async () => {
+      mockSend.mockResolvedValueOnce({ Tags: [{ Key: "env", Value: "prod" }] });
+      const res = await get("/tags?arn=arn:aws:events:bus-1");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.tags).toEqual([{ key: "env", value: "prod" }]);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("ListTagsForResourceCommand");
+      expect(cmd.ResourceARN).toBe("arn:aws:events:bus-1");
+    });
+
+    it("GET /tags — sparse response falls back to []", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/tags?arn=arn:x");
+      const body = await res.json();
+      expect(body.tags).toEqual([]);
+    });
+
+    it("GET /tags — 400 without arn", async () => {
+      const res = await get("/tags");
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /tags — sends TagResourceCommand", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/tags", { arn: "arn:x", tags: { env: "prod" } });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.tagged).toBe(true);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("TagResourceCommand");
+      expect(cmd.ResourceARN).toBe("arn:x");
+      expect(cmd.Tags).toEqual([{ Key: "env", Value: "prod" }]);
+    });
+
+    it("POST /tags — 400 without arn", async () => {
+      const res = await post("/tags", { tags: { a: "b" } });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /tags — 400 with empty tags", async () => {
+      const res = await post("/tags", { arn: "arn:x", tags: {} });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /tags — 400 without tags", async () => {
+      const res = await post("/tags", { arn: "arn:x" });
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE /tags — sends UntagResourceCommand", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await router.request("/tags", {
+        method: "DELETE",
+        body: JSON.stringify({ arn: "arn:x", tagKeys: ["env"] }),
+        headers: { "content-type": "application/json" },
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.untagged).toBe(true);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("UntagResourceCommand");
+      expect(cmd.ResourceARN).toBe("arn:x");
+      expect(cmd.TagKeys).toEqual(["env"]);
+    });
+
+    it("DELETE /tags — 400 without arn", async () => {
+      const res = await router.request("/tags", {
+        method: "DELETE",
+        body: JSON.stringify({ tagKeys: ["env"] }),
+        headers: { "content-type": "application/json" },
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE /tags — 400 with empty tagKeys", async () => {
+      const res = await router.request("/tags", {
+        method: "DELETE",
+        body: JSON.stringify({ arn: "arn:x", tagKeys: [] }),
+        headers: { "content-type": "application/json" },
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE /tags — 400 without tagKeys", async () => {
+      const res = await router.request("/tags", {
+        method: "DELETE",
+        body: JSON.stringify({ arn: "arn:x" }),
+        headers: { "content-type": "application/json" },
+      });
       expect(res.status).toBe(400);
     });
   });

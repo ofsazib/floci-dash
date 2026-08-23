@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../test/helpers";
 import React from "react";
@@ -30,6 +30,10 @@ const mockPutTargetsMutate = vi.fn();
 const mockRemoveTargetMutate = vi.fn();
 const mockDescribeArchive = vi.fn();
 const mockDescribeBus = vi.fn();
+const mockTags = vi.fn();
+const mockAddTagsMutate = vi.fn();
+const mockRemoveTagsMutate = vi.fn();
+const mockTestPatternMutate = vi.fn();
 
 const mockConfirm = vi.fn();
 const mockNavigate = vi.hoisted(() => vi.fn());
@@ -67,6 +71,10 @@ vi.mock("../hooks/useEvents", () => ({
   useDescribeEventBus: (...args: any[]) => mockDescribeBus(...args),
   usePutEventBusPermission: () => ({ mutate: mockPutPermissionMutate, isPending: false }),
   useRemoveEventBusPermission: () => ({ mutate: mockRemovePermissionMutate, isPending: false }),
+  useEventTags: (...args: any[]) => mockTags(...args),
+  useAddEventTags: () => ({ mutate: mockAddTagsMutate, isPending: false }),
+  useRemoveEventTags: () => ({ mutate: mockRemoveTagsMutate, isPending: false }),
+  useTestEventPattern: () => ({ mutate: mockTestPatternMutate, isPending: false }),
 }));
 
 let mockShowToast = vi.fn();
@@ -1942,5 +1950,258 @@ describe("EventsPage", () => {
     // Start and End columns show "—" when times are null
     const dashes = screen.getAllByText("—");
     expect(dashes.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("EventsPage — pattern tester tab", () => {
+  it("tests a pattern and shows the match result", async () => {
+    mockTestPatternMutate.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.({ result: true }));
+    const user = userEvent.setup();
+    render(<EventsPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Pattern Tester"));
+    const buttons = await screen.findAllByRole("button", { name: /Test pattern/i });
+    await user.click(buttons[0]);
+    await waitFor(() => expect(screen.getByText("The event matches the pattern.")).toBeTruthy());
+  });
+
+  it("shows the no-match warning", async () => {
+    mockTestPatternMutate.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.({ result: false }));
+    const user = userEvent.setup();
+    render(<EventsPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Pattern Tester"));
+    const buttons = await screen.findAllByRole("button", { name: /Test pattern/i });
+    await user.click(buttons[0]);
+    await waitFor(() => expect(screen.getByText("The event does not match the pattern.")).toBeTruthy());
+  });
+
+  it("shows an error toast when the test fails", async () => {
+    mockTestPatternMutate.mockImplementation((_b: any, opts: any) =>
+      opts?.onError?.(new Error("bad pattern"))
+    );
+    const user = userEvent.setup();
+    render(<EventsPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Pattern Tester"));
+    const buttons = await screen.findAllByRole("button", { name: /Test pattern/i });
+    await user.click(buttons[0]);
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "bad pattern"));
+  });
+
+  it("shows a fallback error message when the test fails without a message", async () => {
+    mockTestPatternMutate.mockImplementation((_b: any, opts: any) => opts?.onError?.(new Error("")));
+    const user = userEvent.setup();
+    render(<EventsPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Pattern Tester"));
+    const buttons = await screen.findAllByRole("button", { name: /Test pattern/i });
+    await user.click(buttons[0]);
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "Test failed"));
+  });
+});
+
+describe("EventsPage — bus tags", () => {
+  it("opens the tags modal from a bus row and renders tags", async () => {
+    mockEventBuses.mockReturnValue({
+      data: { eventBuses: [{ Name: "custom", Arn: "arn:aws:events:custom" }] },
+      isLoading: false,
+    });
+    mockTags.mockReturnValue({ data: { tags: [{ key: "env", value: "prod" }] } });
+    const user = userEvent.setup();
+    render(<EventsPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Event Buses"));
+    const tagsBtn = await screen.findByRole("button", { name: "Tags", exact: false });
+    await user.click(tagsBtn);
+    expect(await screen.findByText("Tags — custom")).toBeTruthy();
+    expect(screen.getByText("env")).toBeTruthy();
+    expect(mockTags).toHaveBeenCalledWith("arn:aws:events:custom");
+  });
+
+  it("shows No tags in the modal when the list is empty", async () => {
+    mockEventBuses.mockReturnValue({
+      data: { eventBuses: [{ Name: "custom", Arn: "arn:aws:events:custom" }] },
+      isLoading: false,
+    });
+    mockTags.mockReturnValue({ data: { tags: [] } });
+    const user = userEvent.setup();
+    render(<EventsPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Event Buses"));
+    const tagsBtn = await screen.findByRole("button", { name: "Tags", exact: false });
+    await user.click(tagsBtn);
+    expect(await screen.findByText("No tags")).toBeTruthy();
+  });
+
+  it("adds a tag and clears the inputs", async () => {
+    mockEventBuses.mockReturnValue({
+      data: { eventBuses: [{ Name: "custom", Arn: "arn:aws:events:custom" }] },
+      isLoading: false,
+    });
+    mockTags.mockReturnValue({ data: { tags: [] } });
+    mockAddTagsMutate.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    render(<EventsPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Event Buses"));
+    const tagsBtn = await screen.findByRole("button", { name: "Tags", exact: false });
+    await user.click(tagsBtn);
+    await screen.findByText("No tags");
+    const inputs = screen.getAllByRole("textbox");
+    await user.type(inputs[0], "team");
+    await user.type(inputs[1], "events");
+    await user.click(screen.getByRole("button", { name: /Add tag/i }));
+    await waitFor(() =>
+      expect(mockAddTagsMutate).toHaveBeenCalledWith(
+        { arn: "arn:aws:events:custom", tags: { team: "events" } },
+        expect.objectContaining({ onSuccess: expect.any(Function) })
+      )
+    );
+    await waitFor(() =>
+      expect((screen.getAllByRole("textbox")[0] as HTMLInputElement).value).toBe("")
+    );
+  });
+
+  it("keeps Add tag disabled until a key is entered", async () => {
+    mockEventBuses.mockReturnValue({
+      data: { eventBuses: [{ Name: "custom", Arn: "arn:aws:events:custom" }] },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<EventsPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Event Buses"));
+    const tagsBtn = await screen.findByRole("button", { name: "Tags", exact: false });
+    await user.click(tagsBtn);
+    expect((await screen.findAllByRole("button", { name: /Add tag/i }))[0].hasAttribute("disabled")).toBe(true);
+  });
+
+  it("shows error toasts when adding fails", async () => {
+    mockEventBuses.mockReturnValue({
+      data: { eventBuses: [{ Name: "custom", Arn: "arn:aws:events:custom" }] },
+      isLoading: false,
+    });
+    mockAddTagsMutate.mockImplementation((_b: any, opts: any) =>
+      opts?.onError?.(new Error("add failed"))
+    );
+    const user = userEvent.setup();
+    render(<EventsPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Event Buses"));
+    const tagsBtn = await screen.findByRole("button", { name: "Tags", exact: false });
+    await user.click(tagsBtn);
+    await screen.findByText("No tags");
+    const inputs = screen.getAllByRole("textbox");
+    await user.type(inputs[0], "team");
+    await user.click(screen.getByRole("button", { name: /Add tag/i }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "add failed"));
+  });
+
+  it("removes a tag", async () => {
+    mockEventBuses.mockReturnValue({
+      data: { eventBuses: [{ Name: "custom", Arn: "arn:aws:events:custom" }] },
+      isLoading: false,
+    });
+    mockTags.mockReturnValue({ data: { tags: [{ key: "env", value: "prod" }] } });
+    mockRemoveTagsMutate.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    render(<EventsPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Event Buses"));
+    const tagsBtn = await screen.findByRole("button", { name: "Tags", exact: false });
+    await user.click(tagsBtn);
+    await screen.findByText("env");
+    await user.click(screen.getByRole("button", { name: /Delete tag env/i }));
+    await waitFor(() =>
+      expect(mockRemoveTagsMutate).toHaveBeenCalledWith(
+        { arn: "arn:aws:events:custom", tagKeys: ["env"] },
+        expect.objectContaining({ onSuccess: expect.any(Function) })
+      )
+    );
+  });
+
+  it("disables the Tags button when the bus has no ARN", async () => {
+    mockEventBuses.mockReturnValue({
+      data: { eventBuses: [{ Name: "custom" }] },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<EventsPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Event Buses"));
+    const tagsBtn = await screen.findByRole("button", { name: "Tags", exact: false });
+    expect(tagsBtn.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("shows a fallback toast when removing a tag fails without a message", async () => {
+    mockEventBuses.mockReturnValue({
+      data: { eventBuses: [{ Name: "custom", Arn: "arn:aws:events:custom" }] },
+      isLoading: false,
+    });
+    mockTags.mockReturnValue({ data: { tags: [{ key: "env", value: "prod" }] } });
+    mockRemoveTagsMutate.mockImplementation((_b: any, opts: any) =>
+      opts?.onError?.(new Error(""))
+    );
+    const user = userEvent.setup();
+    render(<EventsPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Event Buses"));
+    const tagsBtn = await screen.findByRole("button", { name: "Tags", exact: false });
+    await user.click(tagsBtn);
+    await screen.findByText("env");
+    await user.click(screen.getByRole("button", { name: /Delete tag env/i }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "Failed to remove tag"));
+  });
+
+  it("fires onChange for the pattern and event textareas", async () => {
+    mockTestPatternMutate.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.({ result: true }));
+    const user = userEvent.setup();
+    render(<EventsPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Pattern Tester"));
+    const areas = await screen.findAllByRole("textbox");
+    fireEvent.change(areas[0], { target: { value: "p1" } });
+    fireEvent.change(areas[1], { target: { value: "e1" } });
+    const buttons = screen.getAllByRole("button", { name: /Test pattern/i });
+    await user.click(buttons[0]);
+    await waitFor(() => expect(mockTestPatternMutate).toHaveBeenCalled());
+    expect(mockTestPatternMutate.mock.calls.some((c: any[]) => c[0].eventPattern === "p1")).toBe(true);
+  });
+
+  it("shows No tags while the tags query is still loading", async () => {
+    mockEventBuses.mockReturnValue({
+      data: { eventBuses: [{ Name: "custom", Arn: "arn:aws:events:custom" }] },
+      isLoading: false,
+    });
+    mockTags.mockReturnValue({ data: undefined });
+    const user = userEvent.setup();
+    render(<EventsPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Event Buses"));
+    const tagsBtn = await screen.findByRole("button", { name: "Tags", exact: false });
+    await user.click(tagsBtn);
+    expect(await screen.findByText("No tags")).toBeTruthy();
+  });
+
+  it("shows a fallback toast when adding a tag fails without a message", async () => {
+    mockEventBuses.mockReturnValue({
+      data: { eventBuses: [{ Name: "custom", Arn: "arn:aws:events:custom" }] },
+      isLoading: false,
+    });
+    mockAddTagsMutate.mockImplementation((_b: any, opts: any) =>
+      opts?.onError?.(new Error(""))
+    );
+    const user = userEvent.setup();
+    render(<EventsPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Event Buses"));
+    const tagsBtn = await screen.findByRole("button", { name: "Tags", exact: false });
+    await user.click(tagsBtn);
+    await screen.findByText("No tags");
+    const inputs = screen.getAllByRole("textbox");
+    await user.type(inputs[0], "team");
+    await user.click(screen.getByRole("button", { name: /Add tag/i }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "Failed to add tag"));
+  });
+
+  it("closes the tags modal", async () => {
+    mockEventBuses.mockReturnValue({
+      data: { eventBuses: [{ Name: "custom", Arn: "arn:aws:events:custom" }] },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<EventsPage />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Event Buses"));
+    const tagsBtn = await screen.findByRole("button", { name: "Tags", exact: false });
+    await user.click(tagsBtn);
+    await screen.findByText("Tags — custom");
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByText("Tags — custom")).toBeNull());
   });
 });

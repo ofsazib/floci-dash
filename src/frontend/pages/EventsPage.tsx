@@ -17,6 +17,7 @@ import {
   Tabs,
   Container,
   Textarea,
+  Alert,
   Link,
   Toggle,
 } from "@cloudscape-design/components";
@@ -31,6 +32,10 @@ import {
   useEventTargets,
   useEventArchives,
   useEventReplays,
+  useEventTags,
+  useAddEventTags,
+  useRemoveEventTags,
+  useTestEventPattern,
   useCreateEventBus,
   useUpdateEventBus,
   useDeleteEventBus,
@@ -107,6 +112,11 @@ export default function EventsPage() {
                   </Button>
                 </Box>
               ),
+            },
+            {
+              label: "Pattern Tester",
+              id: "pattern-tester",
+              content: <PatternTesterTab showToast={showToast} />,
             },
             {
               label: "Archives",
@@ -487,6 +497,166 @@ function CreateRuleModal({
   );
 }
 
+function EventTagsModal({
+  arn,
+  name,
+  onClose,
+  showToast,
+}: {
+  arn: string;
+  name: string;
+  onClose: () => void;
+  showToast: (type: "success" | "error" | "info" | "warning", msg: string) => void;
+}) {
+  const { data } = useEventTags(arn);
+  const addTags = useAddEventTags();
+  const removeTags = useRemoveEventTags();
+  const [newKey, setNewKey] = useState("");
+  const [newValue, setNewValue] = useState("");
+  const tags = data?.tags || [];
+
+  return (
+    <Modal
+      visible
+      onDismiss={onClose}
+      header={`Tags — ${name}`}
+      footer={
+        <Box float="right">
+          <Button variant="link" onClick={onClose}>Close</Button>
+        </Box>
+      }
+    >
+      <SpaceBetween size="m">
+        <Table
+          items={tags}
+          columnDefinitions={[
+            { id: "key", header: "Key", cell: (t: any) => t.key },
+            { id: "value", header: "Value", cell: (t: any) => t.value },
+            {
+              id: "actions",
+              header: "",
+              cell: (t: any) => (
+                <Button
+                  variant="icon"
+                  iconName="remove"
+                  ariaLabel={`Delete tag ${t.key}`}
+                  disabled={removeTags.isPending}
+                  onClick={() =>
+                    removeTags.mutate(
+                      { arn, tagKeys: [t.key] },
+                      {
+                        onSuccess: () => showToast("success", "Tag removed"),
+                        onError: (e) => showToast("error", e.message || "Failed to remove tag"),
+                      }
+                    )
+                  }
+                />
+              ),
+            },
+          ]}
+          empty="No tags"
+        />
+        <SpaceBetween direction="horizontal" size="xs">
+          <FormField label="Key">
+            <Input value={newKey} onChange={({ detail }) => setNewKey(detail.value)} placeholder="env" />
+          </FormField>
+          <FormField label="Value">
+            <Input value={newValue} onChange={({ detail }) => setNewValue(detail.value)} placeholder="prod" />
+          </FormField>
+          <Button
+            variant="primary"
+            loading={addTags.isPending}
+            disabled={!newKey.trim()}
+            onClick={() =>
+              addTags.mutate(
+                { arn, tags: { [newKey.trim()]: newValue.trim() } },
+                {
+                  onSuccess: () => {
+                    setNewKey("");
+                    setNewValue("");
+                    showToast("success", "Tag added");
+                  },
+                  onError: (e) => showToast("error", e.message || "Failed to add tag"),
+                }
+              )
+            }
+          >
+            Add tag
+          </Button>
+        </SpaceBetween>
+      </SpaceBetween>
+    </Modal>
+  );
+}
+
+function PatternTesterTab({
+  showToast,
+}: {
+  showToast: (type: "success" | "error" | "info" | "warning", msg: string) => void;
+}) {
+  const [pattern, setPattern] = useState('{"source": ["my.app"]}');
+  const [eventJson, setEventJson] = useState('{"source": "my.app", "detail-type": "OrderCreated"}');
+  const [result, setResult] = useState<boolean | null>(null);
+  const testPattern = useTestEventPattern();
+
+  return (
+    <Container
+      header={
+        <Header
+          variant="h2"
+          description="Check whether an event matches an event pattern before wiring it to a rule."
+        >
+          Pattern Tester
+        </Header>
+      }
+    >
+      <Form
+        actions={
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button
+              variant="primary"
+              loading={testPattern.isPending}
+              disabled={!pattern.trim() || !eventJson.trim()}
+              onClick={() =>
+                testPattern.mutate(
+                  { eventPattern: pattern, event: eventJson },
+                  {
+                    onSuccess: (data) => setResult(data.result),
+                    onError: (e) => showToast("error", e.message || "Test failed"),
+                  }
+                )
+              }
+            >
+              Test pattern
+            </Button>
+          </SpaceBetween>
+        }
+      >
+        <SpaceBetween size="l">
+          {result === true && <Alert type="success">The event matches the pattern.</Alert>}
+          {result === false && <Alert type="warning">The event does not match the pattern.</Alert>}
+          <FormField label="Event pattern" description='JSON pattern, e.g. {"source": ["my.app"]}'>
+            <Textarea
+              value={pattern}
+              onChange={({ detail }) => setPattern(detail.value)}
+              rows={6}
+              placeholder='{"source": ["my.app"]}'
+            />
+          </FormField>
+          <FormField label="Event" description="JSON event to test against the pattern">
+            <Textarea
+              value={eventJson}
+              onChange={({ detail }) => setEventJson(detail.value)}
+              rows={6}
+              placeholder='{"source": "my.app"}'
+            />
+          </FormField>
+        </SpaceBetween>
+      </Form>
+    </Container>
+  );
+}
+
 function BusesTab({
   showToast,
   confirm,
@@ -497,6 +667,7 @@ function BusesTab({
   const [showCreate, setShowCreate] = useState(false);
   const [editBus, setEditBus] = useState<EventBus | null>(null);
   const [selectedBus, setSelectedBus] = useState<string | null>(null);
+  const [tagsBus, setTagsBus] = useState<EventBus | null>(null);
   const { data, isLoading } = useEventBuses();
   const deleteBus = useDeleteEventBus();
   const buses = data?.eventBuses || [];
@@ -538,6 +709,12 @@ function BusesTab({
                 item.Name !== "default" && (
                   <SpaceBetween direction="horizontal" size="xs">
                     <Button
+                      disabled={!item.Arn}
+                      onClick={() => setTagsBus(item)}
+                    >
+                      Tags
+                    </Button>
+                    <Button
                       variant="icon"
                       iconName="edit"
                       ariaLabel={`Edit bus ${item.Name}`}
@@ -574,6 +751,14 @@ function BusesTab({
         )}
         {editBus && (
           <EditBusModal bus={editBus} onDismiss={() => setEditBus(null)} showToast={showToast} />
+        )}
+        {tagsBus && tagsBus.Arn && (
+          <EventTagsModal
+            arn={tagsBus.Arn}
+            name={tagsBus.Name}
+            onClose={() => setTagsBus(null)}
+            showToast={showToast}
+          />
         )}
       </Container>
 

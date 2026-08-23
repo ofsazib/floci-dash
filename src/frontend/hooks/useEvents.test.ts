@@ -34,6 +34,10 @@ import {
   useDescribeEventBus,
   usePutEventBusPermission,
   useRemoveEventBusPermission,
+  useTestEventPattern,
+  useEventTags,
+  useAddEventTags,
+  useRemoveEventTags,
 } from "./useEvents";
 
 function createWrapper() {
@@ -579,5 +583,59 @@ describe("useRemoveEventBusPermission", () => {
       "/aws/events/buses/permissions?name=custom",
       expect.objectContaining({ method: "DELETE" })
     );
+  });
+});
+
+describe("useTestEventPattern", () => {
+  it("posts the pattern and event", async () => {
+    mockApi.mockResolvedValueOnce({ result: true });
+    const { result } = renderHook(() => useTestEventPattern(), { wrapper: createWrapper() });
+    result.current.mutate({ eventPattern: '{"source":["a"]}', event: '{"source":"a"}' });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/events/test-event-pattern", {
+      method: "POST",
+      body: JSON.stringify({ eventPattern: '{"source":["a"]}', event: '{"source":"a"}' }),
+    });
+  });
+});
+
+describe("useEventTags", () => {
+  it("fetches tags with encoded arn", async () => {
+    mockApi.mockResolvedValueOnce({ tags: [{ key: "env", value: "prod" }] });
+    const { result } = renderHook(() => useEventTags("arn:aws:events:bus-1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/events/tags?arn=arn%3Aaws%3Aevents%3Abus-1");
+  });
+
+  it("is disabled when arn is null", () => {
+    const { result } = renderHook(() => useEventTags(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+});
+
+describe("useAddEventTags", () => {
+  it("posts tags", async () => {
+    mockApi.mockResolvedValueOnce({ tagged: true });
+    const { result } = renderHook(() => useAddEventTags(), { wrapper: createWrapper() });
+    result.current.mutate({ arn: "arn:x", tags: { env: "prod" } });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/events/tags", {
+      method: "POST",
+      body: JSON.stringify({ arn: "arn:x", tags: { env: "prod" } }),
+    });
+  });
+});
+
+describe("useRemoveEventTags", () => {
+  it("deletes tag keys", async () => {
+    mockApi.mockResolvedValueOnce({ untagged: true });
+    const { result } = renderHook(() => useRemoveEventTags(), { wrapper: createWrapper() });
+    result.current.mutate({ arn: "arn:x", tagKeys: ["env"] });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/events/tags", {
+      method: "DELETE",
+      body: JSON.stringify({ arn: "arn:x", tagKeys: ["env"] }),
+    });
   });
 });
