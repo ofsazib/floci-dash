@@ -16,6 +16,10 @@ import {
   useCreateOpenSearchDomain,
   useDeleteOpenSearchDomain,
   useOpenSearchVersions,
+  useUpdateOpenSearchDomainConfig,
+  useUpgradeOpenSearchDomain,
+  useOpenSearchDomainTags,
+  useAddOpenSearchDomainTags,
 } from "./useOpenSearch";
 
 beforeEach(() => mockApi.mockReset());
@@ -62,5 +66,52 @@ describe("useOpenSearch hooks", () => {
     const { result } = renderHook(() => useOpenSearchVersions(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith("/aws/opensearch/versions");
+  });
+});
+
+describe("OpenSearch manage hooks", () => {
+  it("useUpdateOpenSearchDomainConfig puts config", async () => {
+    mockApi.mockResolvedValueOnce({ changeId: "ch-1" });
+    const { result } = renderHook(() => useUpdateOpenSearchDomainConfig(), { wrapper: createWrapper() });
+    result.current.mutate({ domainName: "d 1", clusterConfig: { InstanceType: "r6g" } });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/opensearch/domains/d%201/config", {
+      method: "PUT",
+      body: JSON.stringify({ clusterConfig: { InstanceType: "r6g" }, ebsOptions: undefined, accessPolicies: undefined }),
+    });
+  });
+
+  it("useUpgradeOpenSearchDomain posts upgrade", async () => {
+    mockApi.mockResolvedValueOnce({ upgradeStarted: true });
+    const { result } = renderHook(() => useUpgradeOpenSearchDomain(), { wrapper: createWrapper() });
+    result.current.mutate({ domainName: "d1", targetVersion: "OpenSearch_2.11" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/opensearch/domains/d1/upgrade", {
+      method: "POST",
+      body: JSON.stringify({ targetVersion: "OpenSearch_2.11", performCheckOnly: undefined }),
+    });
+  });
+
+  it("useOpenSearchDomainTags fetches with encoded arn", async () => {
+    mockApi.mockResolvedValueOnce({ tags: [] });
+    const { result } = renderHook(() => useOpenSearchDomainTags("arn:d 1", "d1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/opensearch/domains/d1/tags?arn=arn%3Ad%201");
+  });
+
+  it("useOpenSearchDomainTags disabled without arn", () => {
+    const { result } = renderHook(() => useOpenSearchDomainTags(null, "d1"), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+
+  it("useAddOpenSearchDomainTags posts tags", async () => {
+    mockApi.mockResolvedValueOnce({ tagged: true });
+    const { result } = renderHook(() => useAddOpenSearchDomainTags(), { wrapper: createWrapper() });
+    result.current.mutate({ domainName: "d1", arn: "arn:x", tags: { env: "prod" } });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/opensearch/domains/d1/tags?arn=arn%3Ax", {
+      method: "POST",
+      body: JSON.stringify({ tags: { env: "prod" } }),
+    });
   });
 });

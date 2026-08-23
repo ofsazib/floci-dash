@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -15,6 +15,10 @@ const deleteDomainState = vi.hoisted(() => ({
 // ─── Mock hooks ─────────────────────────────────────────
 
 const mockDomains = vi.fn();
+const mockUpdateConfig = vi.fn();
+const mockUpgrade = vi.fn();
+const updateConfigState = vi.hoisted(() => ({ isError: false, error: null as Error | null }));
+const upgradeState = vi.hoisted(() => ({ isError: false, error: null as Error | null }));
 const mockDeleteDomain = vi.fn();
 
 vi.mock("../../hooks/useOpenSearch", () => ({
@@ -24,6 +28,20 @@ vi.mock("../../hooks/useOpenSearch", () => ({
     get isPending() { return deleteDomainState.isPending; },
     get variables() { return deleteDomainState.variables; },
   }),
+  useUpdateOpenSearchDomainConfig: () => ({
+    mutate: mockUpdateConfig,
+    isPending: false,
+    get isError() { return updateConfigState.isError; },
+    get error() { return updateConfigState.error; },
+  }),
+  useUpgradeOpenSearchDomain: () => ({
+    mutate: mockUpgrade,
+    isPending: false,
+    get isError() { return upgradeState.isError; },
+    get error() { return upgradeState.error; },
+  }),
+  useOpenSearchDomainTags: () => ({ data: undefined, isLoading: false }),
+  useAddOpenSearchDomainTags: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 import { OpenSearchDashboard } from "./OpenSearchDashboard";
@@ -31,6 +49,10 @@ import { OpenSearchDashboard } from "./OpenSearchDashboard";
 // ─── Setup ──────────────────────────────────────────────
 
 beforeEach(() => {
+  updateConfigState.isError = false;
+  updateConfigState.error = null;
+  upgradeState.isError = false;
+  upgradeState.error = null;
   vi.clearAllMocks();
   deleteDomainState.isPending = false;
   deleteDomainState.variables = null;
@@ -170,5 +192,152 @@ describe("OpenSearchDashboard — delete", () => {
     mockDomains.mockReturnValue({ data: { total: 0 }, isLoading: false });
     render(<OpenSearchDashboard />, { wrapper: createWrapper() });
     expect(screen.getByText("No OpenSearch domains")).toBeTruthy();
+  });
+});
+
+describe("OpenSearchDashboard — manage modal", () => {
+  function setupDomain() {
+    mockDomains.mockReturnValue({
+      data: { domains: [{ DomainName: "d1", EngineType: "OpenSearch" }], total: 1 },
+      isLoading: false,
+    });
+  }
+
+  it("updates the domain config", async () => {
+    mockUpdateConfig.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
+    setupDomain();
+    const user = userEvent.setup();
+    render(<OpenSearchDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "Manage" }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const inputs = dialog.querySelectorAll("input");
+    await user.type(inputs[0], "r6g.large.search");
+    await user.type(inputs[1], "100");
+    await user.click(within(dialog).getByRole("button", { name: /Update config/i }));
+    await waitFor(() =>
+      expect(mockUpdateConfig).toHaveBeenCalledWith(
+        {
+          domainName: "d1",
+          clusterConfig: { InstanceType: "r6g.large.search" },
+          ebsOptions: { VolumeSize: 100 },
+        },
+        expect.objectContaining({ onSuccess: expect.any(Function) })
+      )
+    );
+  });
+
+  it("runs an upgrade check", async () => {
+    mockUpgrade.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
+    setupDomain();
+    const user = userEvent.setup();
+    render(<OpenSearchDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "Manage" }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const inputs = dialog.querySelectorAll("input");
+    await user.type(inputs[2], "OpenSearch_2.11");
+    await user.click(within(dialog).getByRole("button", { name: /Run upgrade check/i }));
+    await waitFor(() =>
+      expect(mockUpgrade).toHaveBeenCalledWith(
+        { domainName: "d1", targetVersion: "OpenSearch_2.11", performCheckOnly: true },
+        expect.anything()
+      )
+    );
+  });
+
+  it("keeps update disabled until a field is set and closes via Close", async () => {
+    setupDomain();
+    const user = userEvent.setup();
+    render(<OpenSearchDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "Manage" }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    expect(within(dialog).getByRole("button", { name: /Update config/i }).hasAttribute("disabled")).toBe(true);
+    await user.click(within(dialog).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(dialog.className).toContain("hidden"));
+  });
+
+  it("shows config + upgrade error alerts with fallbacks", async () => {
+    updateConfigState.isError = true;
+    updateConfigState.error = new Error("cfg failed");
+    upgradeState.isError = true;
+    upgradeState.error = null;
+    setupDomain();
+    const user = userEvent.setup();
+    render(<OpenSearchDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "Manage" }));
+    expect(await screen.findByText("cfg failed")).toBeTruthy();
+    expect(screen.getByText("Upgrade failed")).toBeTruthy();
+  });
+});
+
+describe("OpenSearchDashboard — config-only + upgrade-only payloads", () => {
+  it("updates with only instance type", async () => {
+    mockUpdateConfig.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
+    mockDomains.mockReturnValue({
+      data: { domains: [{ DomainName: "d1", EngineType: "OpenSearch" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<OpenSearchDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "Manage" }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const inputs = dialog.querySelectorAll("input");
+    await user.type(inputs[0], "t3.small.search");
+    await user.click(within(dialog).getByRole("button", { name: /Update config/i }));
+    await waitFor(() =>
+      expect(mockUpdateConfig).toHaveBeenCalledWith(
+        { domainName: "d1", clusterConfig: { InstanceType: "t3.small.search" }, ebsOptions: undefined },
+        expect.anything()
+      )
+    );
+  });
+
+  it("shows the generic config error fallback", async () => {
+    updateConfigState.isError = true;
+    updateConfigState.error = null;
+    mockDomains.mockReturnValue({
+      data: { domains: [{ DomainName: "d1", EngineType: "OpenSearch" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<OpenSearchDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "Manage" }));
+    expect(await screen.findByText("Failed to update config")).toBeTruthy();
+  });
+
+  it("updates with only volume size", async () => {
+    mockUpdateConfig.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
+    mockDomains.mockReturnValue({
+      data: { domains: [{ DomainName: "d1", EngineType: "OpenSearch" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<OpenSearchDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "Manage" }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const inputs = dialog.querySelectorAll("input");
+    await user.type(inputs[1], "50");
+    await user.click(within(dialog).getByRole("button", { name: /Update config/i }));
+    await waitFor(() =>
+      expect(mockUpdateConfig).toHaveBeenCalledWith(
+        { domainName: "d1", clusterConfig: undefined, ebsOptions: { VolumeSize: 50 } },
+        expect.anything()
+      )
+    );
+  });
+});
+
+describe("OpenSearchDashboard — manage modal dismiss", () => {
+  it("dismisses the manage modal with Escape", async () => {
+    mockDomains.mockReturnValue({
+      data: { domains: [{ DomainName: "d1", EngineType: "OpenSearch" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<OpenSearchDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "Manage" }));
+    document.querySelectorAll('[class*="awsui_dialog"]').forEach((d) =>
+      fireEvent.keyDown(d as HTMLElement, { keyCode: 27 })
+    );
+    expect(mockUpdateConfig).not.toHaveBeenCalled();
   });
 });

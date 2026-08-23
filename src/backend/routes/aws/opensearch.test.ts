@@ -14,6 +14,10 @@ vi.mock("@aws-sdk/client-opensearch", () => ({
   CreateDomainCommand: createCmd("CreateDomainCommand"),
   DeleteDomainCommand: createCmd("DeleteDomainCommand"),
   ListVersionsCommand: createCmd("ListVersionsCommand"),
+  UpdateDomainConfigCommand: createCmd("UpdateDomainConfigCommand"),
+  UpgradeDomainCommand: createCmd("UpgradeDomainCommand"),
+  AddTagsCommand: createCmd("AddTagsCommand"),
+  ListTagsCommand: createCmd("ListTagsCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({ create: (Ctor: any, extra?: any) => new Ctor(extra) }));
@@ -21,6 +25,13 @@ vi.mock("../../clients/aws", () => ({ create: (Ctor: any, extra?: any) => new Ct
 import router from "./opensearch";
 
 async function get(p: string) { return router.request(p, { method: "GET" }); }
+async function put(p: string, b?: any) {
+  return router.request(p, {
+    method: "PUT",
+    body: b != null ? JSON.stringify(b) : undefined,
+    headers: b != null ? { "content-type": "application/json" } : undefined,
+  });
+}
 async function post(p: string, b?: any) {
   return router.request(p, { method: "POST", body: b != null ? JSON.stringify(b) : undefined, headers: b != null ? { "content-type": "application/json" } : undefined });
 }
@@ -82,5 +93,70 @@ describe("OpenSearch Routes", () => {
     const body = await res.json();
     expect(body.versions).toEqual([]);
     expect(body.total).toBe(0);
+  });
+
+  describe("Config update + upgrade + tags", () => {
+    it("PUT /domains/:name/config — updates domain config", async () => {
+      mockSend.mockResolvedValueOnce({ ChangeId: "ch-1" });
+      const res = await put("/domains/d1/config", {
+        clusterConfig: { InstanceType: "r6g.large.search" },
+        ebsOptions: { VolumeSize: 100 },
+      });
+      const body = await res.json();
+      expect(body.changeId).toBe("ch-1");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("UpdateDomainConfigCommand");
+      expect(cmd.ClusterConfig.InstanceType).toBe("r6g.large.search");
+    });
+
+    it("PUT /domains/:name/config — null changeId on sparse", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/domains/d1/config", {});
+      expect((await res.json()).changeId).toBeNull();
+    });
+
+    it("POST /domains/:name/upgrade — starts upgrade", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/domains/d1/upgrade", { targetVersion: "OpenSearch_2.11", performCheckOnly: true });
+      const body = await res.json();
+      expect(body.upgradeStarted).toBe(true);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("UpgradeDomainCommand");
+      expect(cmd.PerformCheckOnly).toBe(true);
+    });
+
+    it("POST /domains/:name/upgrade — 400 without targetVersion", async () => {
+      const res = await post("/domains/d1/upgrade", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("GET /domains/:name/tags — maps tags", async () => {
+      mockSend.mockResolvedValueOnce({ TagList: [{ Key: "env", Value: "prod" }] });
+      const res = await get("/domains/d1/tags?arn=arn:d1");
+      const body = await res.json();
+      expect(body.tags).toEqual([{ key: "env", value: "prod" }]);
+      expect(mockSend.mock.calls[0][0].ARN).toBe("arn:d1");
+    });
+
+    it("GET /domains/:name/tags — sparse fallback + 400 without arn", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/domains/d1/tags?arn=arn:x");
+      expect((await res.json()).tags).toEqual([]);
+      const res400 = await get("/domains/d1/tags");
+      expect(res400.status).toBe(400);
+    });
+
+    it("POST /domains/:name/tags — adds tags", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/domains/d1/tags?arn=arn:d1", { tags: { env: "prod" } });
+      expect((await res.json()).tagged).toBe(true);
+      expect(mockSend.mock.calls[0][0].TagList).toEqual([{ Key: "env", Value: "prod" }]);
+    });
+
+    it("POST /domains/:name/tags — 400s for missing arn/tags", async () => {
+      expect((await post("/domains/d1/tags", { tags: { a: "b" } })).status).toBe(400);
+      expect((await post("/domains/d1/tags?arn=x", {})).status).toBe(400);
+      expect((await post("/domains/d1/tags?arn=x", { tags: {} })).status).toBe(400);
+    });
   });
 });

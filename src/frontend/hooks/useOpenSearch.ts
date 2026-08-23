@@ -72,3 +72,52 @@ export function useOpenSearchVersions() {
     queryFn: () => api("/aws/opensearch/versions"),
   });
 }
+
+export function useUpdateOpenSearchDomainConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { domainName: string; clusterConfig?: any; ebsOptions?: any; accessPolicies?: string }) =>
+      api(`/aws/opensearch/domains/${encodeURIComponent(params.domainName)}/config`, {
+        method: "PUT",
+        body: JSON.stringify({
+          clusterConfig: params.clusterConfig,
+          ebsOptions: params.ebsOptions,
+          accessPolicies: params.accessPolicies,
+        }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "opensearch"] }),
+  });
+}
+
+export function useUpgradeOpenSearchDomain() {
+  return useMutation({
+    mutationFn: (params: { domainName: string; targetVersion: string; performCheckOnly?: boolean }) =>
+      api(`/aws/opensearch/domains/${encodeURIComponent(params.domainName)}/upgrade`, {
+        method: "POST",
+        body: JSON.stringify({
+          targetVersion: params.targetVersion,
+          performCheckOnly: params.performCheckOnly,
+        }),
+      }),
+  });
+}
+
+export function useOpenSearchDomainTags(arn: string | null, domainName: string) {
+  return useQuery<any>({
+    queryKey: ["aws", "opensearch", "domains", domainName, "tags"],
+    queryFn: () => api(`/aws/opensearch/domains/${encodeURIComponent(domainName)}/tags?arn=${encodeURIComponent(arn!)}`),
+    enabled: !!arn,
+  });
+}
+
+export function useAddOpenSearchDomainTags() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { domainName: string; arn: string; tags: Record<string, string> }) =>
+      api(`/aws/opensearch/domains/${encodeURIComponent(params.domainName)}/tags?arn=${encodeURIComponent(params.arn)}`, {
+        method: "POST",
+        body: JSON.stringify({ tags: params.tags }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "opensearch"] }),
+  });
+}

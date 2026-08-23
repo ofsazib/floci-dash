@@ -306,6 +306,8 @@ import {
 import {
   useOpenSearchDomains,
   useDeleteOpenSearchDomain,
+  useUpdateOpenSearchDomainConfig,
+  useUpgradeOpenSearchDomain,
 } from "../../hooks/useOpenSearch";
 import {
   useMskClusters,
@@ -508,10 +510,17 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
 export function OpenSearchDashboard() {
   const { data, isLoading } = useOpenSearchDomains();
   const deleteDomain = useDeleteOpenSearchDomain();
+  const updateConfig = useUpdateOpenSearchDomainConfig();
+  const upgradeDomain = useUpgradeOpenSearchDomain();
+  const [editDomain, setEditDomain] = useState<string | null>(null);
+  const [instanceType, setInstanceType] = useState("");
+  const [volumeSize, setVolumeSize] = useState("");
+  const [upgradeTarget, setUpgradeTarget] = useState("");
 
   if (isLoading) return <TableSkeleton />;
 
   return (
+    <>
     <ResourceTable
       resourceName="Domain"
       headerTitle="OpenSearch Domains"
@@ -529,12 +538,17 @@ export function OpenSearchDashboard() {
           id: "actions",
           header: "",
           cell: (i: any) => (
-            <DeleteButton
-              itemName={i.name}
-              resourceType="domain"
-              loading={deleteDomain.isPending && deleteDomain.variables === i.name}
-              onDelete={() => deleteDomain.mutateAsync(i.name)}
-            />
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button onClick={() => { setEditDomain(i.name); setInstanceType(""); setVolumeSize(""); setUpgradeTarget(""); }}>
+                Manage
+              </Button>
+              <DeleteButton
+                itemName={i.name}
+                resourceType="domain"
+                loading={deleteDomain.isPending && deleteDomain.variables === i.name}
+                onDelete={() => deleteDomain.mutateAsync(i.name)}
+              />
+            </SpaceBetween>
           ),
         },
       ]}
@@ -542,6 +556,77 @@ export function OpenSearchDashboard() {
       filterPlaceholder="Find domains"
       filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
     />
+
+    <Modal
+      visible={!!editDomain}
+      onDismiss={() => setEditDomain(null)}
+      header={`Manage domain — ${editDomain!}`}
+      footer={
+        <Box float="right">
+          <Button variant="link" onClick={() => setEditDomain(null)}>Close</Button>
+        </Box>
+      }
+    >
+      <SpaceBetween size="l">
+        <Container header={<Header variant="h3">Update config</Header>}>
+          <SpaceBetween size="s">
+            {updateConfig.isError && (
+              <Alert type="error" dismissible>
+                {(updateConfig.error as Error)?.message || "Failed to update config"}
+              </Alert>
+            )}
+            <FormField label="Instance type (optional)">
+              <Input value={instanceType} onChange={({ detail }) => setInstanceType(detail.value)} placeholder="r6g.large.search" />
+            </FormField>
+            <FormField label="EBS volume size (optional)">
+              <Input value={volumeSize} onChange={({ detail }) => setVolumeSize(detail.value)} inputMode="numeric" />
+            </FormField>
+            <Button
+              variant="primary"
+              loading={updateConfig.isPending}
+              disabled={!instanceType.trim() && !volumeSize.trim()}
+              onClick={() =>
+                updateConfig.mutate(
+                  {
+                    domainName: editDomain!,
+                    clusterConfig: instanceType.trim() ? { InstanceType: instanceType.trim() } : undefined,
+                    ebsOptions: volumeSize.trim() ? { VolumeSize: Number(volumeSize) } : undefined,
+                  },
+                  { onSuccess: () => setEditDomain(null) }
+                )
+              }
+            >
+              Update config
+            </Button>
+          </SpaceBetween>
+        </Container>
+        <Container header={<Header variant="h3">Upgrade engine</Header>}>
+          <SpaceBetween size="s">
+            {upgradeDomain.isError && (
+              <Alert type="error" dismissible>
+                {(upgradeDomain.error as Error)?.message || "Upgrade failed"}
+              </Alert>
+            )}
+            <FormField label="Target version">
+              <Input value={upgradeTarget} onChange={({ detail }) => setUpgradeTarget(detail.value)} placeholder="OpenSearch_2.11" />
+            </FormField>
+            <Button
+              loading={upgradeDomain.isPending}
+              disabled={!upgradeTarget.trim()}
+              onClick={() =>
+                upgradeDomain.mutate(
+                  { domainName: editDomain!, targetVersion: upgradeTarget.trim(), performCheckOnly: true },
+                  { onSuccess: () => setUpgradeTarget("") }
+                )
+              }
+            >
+              Run upgrade check
+            </Button>
+          </SpaceBetween>
+        </Container>
+      </SpaceBetween>
+    </Modal>
+    </>
   );
 }
 
