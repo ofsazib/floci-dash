@@ -31,6 +31,13 @@ vi.mock("@aws-sdk/client-codebuild", () => ({
   ListSourceCredentialsCommand: createCmd("ListSourceCredentialsCommand"),
   ImportSourceCredentialsCommand: createCmd("ImportSourceCredentialsCommand"),
   DeleteSourceCredentialsCommand: createCmd("DeleteSourceCredentialsCommand"),
+  RetryBuildCommand: createCmd("RetryBuildCommand"),
+  UpdateProjectCommand: createCmd("UpdateProjectCommand"),
+  ListReportGroupsCommand: createCmd("ListReportGroupsCommand"),
+  CreateReportGroupCommand: createCmd("CreateReportGroupCommand"),
+  BatchGetReportGroupsCommand: createCmd("BatchGetReportGroupsCommand"),
+  UpdateReportGroupCommand: createCmd("UpdateReportGroupCommand"),
+  DeleteReportGroupCommand: createCmd("DeleteReportGroupCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -53,6 +60,14 @@ async function post(path: string, body?: any) {
 
 async function del(path: string) {
   return router.request(path, { method: "DELETE" });
+}
+
+async function put(path: string, body?: any) {
+  return router.request(path, {
+    method: "PUT",
+    body: body != null ? JSON.stringify(body) : undefined,
+    headers: body != null ? { "content-type": "application/json" } : undefined,
+  });
 }
 
 beforeEach(() => {
@@ -285,6 +300,166 @@ describe("CodeBuild Routes", () => {
       const res = await get("/curated-images");
       const json = await res.json();
       expect(json.curatedImages).toEqual([]);
+    });
+  });
+
+  describe("Retry Build", () => {
+    it("POST /builds/:id/retry — returns the retried build", async () => {
+      mockSend.mockResolvedValueOnce({ build: { id: "b2" } });
+      const res = await post("/builds/b1/retry");
+      expect(res.status).toBe(201);
+      const json = await res.json();
+      expect(json.build).toEqual({ id: "b2" });
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("RetryBuildCommand");
+      expect(cmd.id).toBe("b1");
+    });
+
+    it("POST /builds/:id/retry — null build when not found", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/builds/b1/retry");
+      const json = await res.json();
+      expect(json.build).toBeUndefined();
+    });
+  });
+
+  describe("Update Project", () => {
+    it("PUT /projects/:name — sends UpdateProjectCommand with body fields", async () => {
+      mockSend.mockResolvedValueOnce({ project: { name: "p1" } });
+      const res = await put("/projects/p1", {
+        description: "updated",
+        timeoutInMinutes: 30,
+        queuedTimeoutInMinutes: 10,
+        encryptionKey: "arn:kms",
+        tags: [{ key: "k", value: "v" }],
+      });
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.project).toEqual({ name: "p1" });
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("UpdateProjectCommand");
+      expect(cmd.name).toBe("p1");
+      expect(cmd.description).toBe("updated");
+      expect(cmd.timeoutInMinutes).toBe(30);
+      expect(cmd.queuedTimeoutInMinutes).toBe(10);
+      expect(cmd.encryptionKey).toBe("arn:kms");
+      expect(cmd.tags).toEqual([{ key: "k", value: "v" }]);
+    });
+  });
+
+  describe("Report Groups", () => {
+    it("GET /report-groups — maps fields with sparse fallbacks", async () => {
+      mockSend.mockResolvedValueOnce({
+        reportGroups: [{ arn: "arn:rg1", name: "rg1", type: "TEST", created: 1700000000 }],
+      });
+      const res = await get("/report-groups");
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.total).toBe(1);
+      expect(json.reportGroups[0]).toEqual({
+        arn: "arn:rg1",
+        name: "rg1",
+        type: "TEST",
+        exportConfig: undefined,
+        created: 1700000000,
+        lastModified: undefined,
+        tags: [],
+        status: undefined,
+      });
+    });
+
+    it("GET /report-groups — empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/report-groups");
+      const json = await res.json();
+      expect(json.reportGroups).toEqual([]);
+      expect(json.total).toBe(0);
+    });
+
+    it("POST /report-groups — sends CreateReportGroupCommand", async () => {
+      mockSend.mockResolvedValueOnce({
+        reportGroup: { arn: "arn:rg1", name: "rg1", type: "TEST", tags: [{ key: "k", value: "v" }] },
+      });
+      const res = await post("/report-groups", {
+        name: "rg1",
+        type: "TEST",
+        exportConfig: { exportConfigType: "S3", s3Destination: { bucket: "b", path: "p" } },
+      });
+      expect(res.status).toBe(201);
+      const json = await res.json();
+      expect(json.reportGroup.tags).toEqual([{ key: "k", value: "v" }]);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("CreateReportGroupCommand");
+      expect(cmd.name).toBe("rg1");
+      expect(cmd.type).toBe("TEST");
+      expect(cmd.exportConfig.exportConfigType).toBe("S3");
+    });
+
+    it("POST /report-groups — 400 when name missing", async () => {
+      const res = await post("/report-groups", { type: "TEST" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /report-groups — 400 when type missing", async () => {
+      const res = await post("/report-groups", { name: "rg1" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /report-groups — null reportGroup when response is sparse", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/report-groups", { name: "rg1", type: "TEST" });
+      expect(res.status).toBe(201);
+      const json = await res.json();
+      expect(json.reportGroup).toBeNull();
+    });
+
+    it("GET /report-groups/:arn — batch-gets a single group", async () => {
+      mockSend.mockResolvedValueOnce({ reportGroups: [{ arn: "arn:rg1", name: "rg1" }] });
+      const res = await get("/report-groups/" + encodeURIComponent("arn:rg1"));
+      const json = await res.json();
+      expect(json.reportGroup.arn).toBe("arn:rg1");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("BatchGetReportGroupsCommand");
+      expect(cmd.reportGroupArns).toEqual(["arn:rg1"]);
+    });
+
+    it("GET /report-groups/:arn — null when not found", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/report-groups/" + encodeURIComponent("arn:missing"));
+      const json = await res.json();
+      expect(json.reportGroup).toBeNull();
+    });
+
+    it("PUT /report-groups/:arn — sends UpdateReportGroupCommand", async () => {
+      mockSend.mockResolvedValueOnce({ reportGroup: { arn: "arn:rg1", name: "rg1" } });
+      const res = await put("/report-groups/" + encodeURIComponent("arn:rg1"), {
+        exportConfig: { exportConfigType: "NO_EXPORT" },
+      });
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.reportGroup.arn).toBe("arn:rg1");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("UpdateReportGroupCommand");
+      expect(cmd.arn).toBe("arn:rg1");
+      expect(cmd.exportConfig.exportConfigType).toBe("NO_EXPORT");
+    });
+
+    it("PUT /report-groups/:arn — null reportGroup when response is sparse", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/report-groups/" + encodeURIComponent("arn:rg1"), {});
+      const json = await res.json();
+      expect(json.reportGroup).toBeNull();
+    });
+
+    it("DELETE /report-groups/:arn — sends DeleteReportGroupCommand", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/report-groups/" + encodeURIComponent("arn:rg1"));
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.deleted).toBe(true);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("DeleteReportGroupCommand");
+      expect(cmd.arn).toBe("arn:rg1");
     });
   });
 });

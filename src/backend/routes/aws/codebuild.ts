@@ -16,6 +16,13 @@ import {
   ListSourceCredentialsCommand,
   ImportSourceCredentialsCommand,
   DeleteSourceCredentialsCommand,
+  RetryBuildCommand,
+  UpdateProjectCommand,
+  ListReportGroupsCommand,
+  CreateReportGroupCommand,
+  BatchGetReportGroupsCommand,
+  UpdateReportGroupCommand,
+  DeleteReportGroupCommand,
 } from "@aws-sdk/client-codebuild";
 
 const router = new Hono();
@@ -135,6 +142,101 @@ router.get("/curated-images", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new ListCuratedEnvironmentImagesCommand({}));
   return c.json({ curatedImages: result.platforms || [] });
+});
+
+router.put("/projects/:name", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<any>();
+  const client = getClient();
+  const result = await client.send(
+    new UpdateProjectCommand({
+      name,
+      description: body.description,
+      source: body.source,
+      artifacts: body.artifacts,
+      environment: body.environment,
+      serviceRole: body.serviceRole,
+      timeoutInMinutes: body.timeoutInMinutes,
+      queuedTimeoutInMinutes: body.queuedTimeoutInMinutes,
+      encryptionKey: body.encryptionKey,
+      tags: body.tags,
+    })
+  );
+  return c.json({ project: result.project });
+});
+
+router.post("/builds/:id/retry", async (c: Context) => {
+  const id = c.req.param("id");
+  const client = getClient();
+  const result = await client.send(new RetryBuildCommand({ id }));
+  return c.json({ build: result.build }, 201);
+});
+
+function mapReportGroup(rg: any) {
+  return {
+    arn: rg.arn,
+    name: rg.name,
+    type: rg.type,
+    exportConfig: rg.exportConfig,
+    created: rg.created,
+    lastModified: rg.lastModified,
+    tags: (rg.tags || []).map((t: any) => ({ key: t.key, value: t.value })),
+    status: rg.status,
+  };
+}
+
+router.get("/report-groups", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new ListReportGroupsCommand({}));
+  const reportGroups = (result.reportGroups || []).map(mapReportGroup);
+  return c.json({ reportGroups, total: reportGroups.length });
+});
+
+router.post("/report-groups", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.name) return c.json({ error: "name is required" }, 400);
+  if (!body.type) return c.json({ error: "type is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new CreateReportGroupCommand({
+      name: body.name,
+      type: body.type,
+      exportConfig: body.exportConfig,
+      tags: body.tags,
+    })
+  );
+  return c.json({ reportGroup: result.reportGroup ? mapReportGroup(result.reportGroup) : null }, 201);
+});
+
+router.get("/report-groups/:arn", async (c: Context) => {
+  const arn = decodeURIComponent(c.req.param("arn")!);
+  const client = getClient();
+  const result = await client.send(
+    new BatchGetReportGroupsCommand({ reportGroupArns: [arn] })
+  );
+  const rg = result.reportGroups?.[0];
+  return c.json({ reportGroup: rg ? mapReportGroup(rg) : null });
+});
+
+router.put("/report-groups/:arn", async (c: Context) => {
+  const arn = decodeURIComponent(c.req.param("arn")!);
+  const body = await c.req.json<any>();
+  const client = getClient();
+  const result = await client.send(
+    new UpdateReportGroupCommand({
+      arn,
+      exportConfig: body.exportConfig,
+      tags: body.tags,
+    })
+  );
+  return c.json({ reportGroup: result.reportGroup ? mapReportGroup(result.reportGroup) : null });
+});
+
+router.delete("/report-groups/:arn", async (c: Context) => {
+  const arn = decodeURIComponent(c.req.param("arn")!);
+  const client = getClient();
+  await client.send(new DeleteReportGroupCommand({ arn }));
+  return c.json({ deleted: true });
 });
 
 export default router;

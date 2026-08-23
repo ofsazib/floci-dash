@@ -114,3 +114,69 @@ export function useCodeBuildCuratedImages() {
     queryFn: () => api<{ images: any[] }>("/aws/codebuild/curated-images"),
   });
 }
+
+// ─── Retry Build ─────────────────────────────────────
+
+export function useRetryCodeBuildBuild() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api("/aws/codebuild/builds/" + encodeURIComponent(id) + "/retry", { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "codebuild", "builds"] }),
+  });
+}
+
+// ─── Update Project ──────────────────────────────────
+
+export function useUpdateCodeBuildProject() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, ...body }: { name: string } & Record<string, unknown>) =>
+      api("/aws/codebuild/projects/" + encodeURIComponent(name), {
+        method: "PUT",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: (_d, v) => {
+      qc.invalidateQueries({ queryKey: ["aws", "codebuild", "projects"] });
+    },
+  });
+}
+
+// ─── Report Groups ───────────────────────────────────
+
+export function useCodeBuildReportGroups() {
+  return useQuery({
+    queryKey: ["aws", "codebuild", "report-groups"],
+    queryFn: () => api<{ reportGroups: any[]; total: number }>("/aws/codebuild/report-groups"),
+  });
+}
+
+export function useCreateCodeBuildReportGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string; type: string; exportConfig?: any; tags?: any[] }) =>
+      api("/aws/codebuild/report-groups", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "codebuild", "report-groups"] }),
+  });
+}
+
+export function useDeleteCodeBuildReportGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (arn: string) =>
+      api("/aws/codebuild/report-groups/" + encodeURIComponent(arn), { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "codebuild", "report-groups"] }),
+  });
+}
+
+export function useUpdateCodeBuildReportGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ arn, ...body }: { arn: string; exportConfig?: any; tags?: any[] }) =>
+      api("/aws/codebuild/report-groups/" + encodeURIComponent(arn), {
+        method: "PUT",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "codebuild", "report-groups"] }),
+  });
+}

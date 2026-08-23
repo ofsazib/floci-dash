@@ -23,6 +23,12 @@ import {
   useImportCodeBuildSourceCredentials,
   useDeleteCodeBuildSourceCredentials,
   useCodeBuildCuratedImages,
+  useRetryCodeBuildBuild,
+  useUpdateCodeBuildProject,
+  useCodeBuildReportGroups,
+  useCreateCodeBuildReportGroup,
+  useDeleteCodeBuildReportGroup,
+  useUpdateCodeBuildReportGroup,
 } from "./useCodeBuild";
 
 function createWrapper() {
@@ -203,5 +209,76 @@ describe("useCodeBuildCuratedImages", () => {
     const { result } = renderHook(() => useCodeBuildCuratedImages(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith("/aws/codebuild/curated-images");
+  });
+});
+
+describe("useRetryCodeBuildBuild", () => {
+  it("posts to the retry endpoint", async () => {
+    mockApi.mockResolvedValueOnce({ build: {} });
+    const { result } = renderHook(() => useRetryCodeBuildBuild(), { wrapper: createWrapper() });
+    result.current.mutate("b1:x");
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/codebuild/builds/b1%3Ax/retry", { method: "POST" });
+  });
+});
+
+describe("useUpdateCodeBuildProject", () => {
+  it("puts the project body", async () => {
+    mockApi.mockResolvedValueOnce({ project: {} });
+    const { result } = renderHook(() => useUpdateCodeBuildProject(), { wrapper: createWrapper() });
+    result.current.mutate({ name: "p1", description: "updated" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/codebuild/projects/p1", {
+      method: "PUT",
+      body: JSON.stringify({ description: "updated" }),
+    });
+  });
+});
+
+describe("useCodeBuildReportGroups", () => {
+  it("calls api with correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ reportGroups: [], total: 0 });
+    const { result } = renderHook(() => useCodeBuildReportGroups(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/codebuild/report-groups");
+  });
+});
+
+describe("useCreateCodeBuildReportGroup", () => {
+  it("posts the report group body", async () => {
+    mockApi.mockResolvedValueOnce({ reportGroup: {} });
+    const { result } = renderHook(() => useCreateCodeBuildReportGroup(), { wrapper: createWrapper() });
+    result.current.mutate({ name: "rg1", type: "TEST" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/codebuild/report-groups", {
+      method: "POST",
+      body: JSON.stringify({ name: "rg1", type: "TEST" }),
+    });
+  });
+});
+
+describe("useDeleteCodeBuildReportGroup", () => {
+  it("deletes by encoded arn", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useDeleteCodeBuildReportGroup(), { wrapper: createWrapper() });
+    result.current.mutate("arn:aws:codebuild:rg1");
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/codebuild/report-groups/arn%3Aaws%3Acodebuild%3Arg1",
+      { method: "DELETE" },
+    );
+  });
+});
+
+describe("useUpdateCodeBuildReportGroup", () => {
+  it("puts the report group body", async () => {
+    mockApi.mockResolvedValueOnce({ reportGroup: {} });
+    const { result } = renderHook(() => useUpdateCodeBuildReportGroup(), { wrapper: createWrapper() });
+    result.current.mutate({ arn: "arn:x", exportConfig: { exportConfigType: "NO_EXPORT" } });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/codebuild/report-groups/arn%3Ax", {
+      method: "PUT",
+      body: JSON.stringify({ exportConfig: { exportConfigType: "NO_EXPORT" } }),
+    });
   });
 });

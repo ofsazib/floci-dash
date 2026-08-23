@@ -407,7 +407,7 @@ These services have full CRUD operations in both backend and frontend:
 | **Resource Groups Tagging** | List tagged resources (with tag/value filters), tag/untag resources by ARN, list tag keys and values |
 | **Cost & Usage Report (cur)** | Report definitions (list, create, modify, delete), tags (list, add, remove) |
 | **BCM Data Exports** | Exports (list, create, get, update, delete), executions (list per export), tables (list), tags (list, add, remove) |
-| **CodeBuild** | Projects (list, create, delete, get), builds (start, list per project, list all, get, stop), source credentials (list, import, delete), curated environment images (list) |
+| **CodeBuild** | Projects (list, create, edit, delete, get), builds (start, list per project, list all, get, stop, retry), report groups (list, create, delete, update), source credentials (list, import, delete), curated environment images (list) |
 | **CodeDeploy** | Applications (list, create, get, update, delete), deployment groups (list, create, get, delete per application), deployment configs (list, create, get, delete), deployments (create, list per application, get), tags (list, add, remove per resource) |
 | **CodePipeline** | Pipelines (list, create with stages/actions, get, get state, update, delete), executions (list, get, start, stop, retry stage), stage transitions (enable/disable), approvals (submit result), action executions (list), action types (list, create custom), webhooks (list, create, delete), tags (list, add, remove) |
 | **Elastic Beanstalk** | Applications (list, create, update, delete), application versions (list, create, delete), environments (list, create, delete with health/status), configuration settings (get), solution stacks (list), DNS availability (check) |

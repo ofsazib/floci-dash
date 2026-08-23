@@ -353,6 +353,11 @@ import {
   useImportCodeBuildSourceCredentials,
   useDeleteCodeBuildSourceCredentials,
   useCodeBuildCuratedImages,
+  useRetryCodeBuildBuild,
+  useUpdateCodeBuildProject,
+  useCodeBuildReportGroups,
+  useCreateCodeBuildReportGroup,
+  useDeleteCodeBuildReportGroup,
 } from "../../hooks/useCodeBuild";
 import {
   useCodeDeployApplications,
@@ -513,9 +518,22 @@ export function CodeBuildDashboard() {
   const createProject = useCreateCodeBuildProject();
   const deleteProject = useDeleteCodeBuildProject();
   const startBuild = useStartCodeBuildBuild();
+  const updateProject = useUpdateCodeBuildProject();
+  const retryBuild = useRetryCodeBuildBuild();
+  const { data: reportGroupsData } = useCodeBuildReportGroups();
+  const createReportGroup = useCreateCodeBuildReportGroup();
+  const deleteReportGroup = useDeleteCodeBuildReportGroup();
   const [showCreate, setShowCreate] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [showEdit, setShowEdit] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [showCreateRG, setShowCreateRG] = useState(false);
+  const [rgName, setRgName] = useState("");
+  const [rgType, setRgType] = useState("TEST");
+  const [rgBucket, setRgBucket] = useState("");
+  const [rgPath, setRgPath] = useState("");
 
   if (projectsLoading) return <TableSkeleton />;
 
@@ -547,6 +565,15 @@ export function CodeBuildDashboard() {
             header: "",
             cell: (i: any) => (
               <SpaceBetween direction="horizontal" size="xs">
+                <Button
+                  onClick={() => {
+                    setEditName(i.name);
+                    setEditDescription(i.description === "-" ? "" : i.description);
+                    setShowEdit(true);
+                  }}
+                >
+                  Edit
+                </Button>
                 <Button
                   loading={startBuild.isPending && startBuild.variables === i.name}
                   onClick={() => startBuild.mutate(i.name)}
@@ -585,8 +612,66 @@ export function CodeBuildDashboard() {
             { id: "project", header: "Project", cell: (i: any) => i.project },
             { id: "status", header: "Status", cell: (i: any) => i.status },
             { id: "started", header: "Started", cell: (i: any) => i.started },
+            {
+              id: "actions",
+              header: "",
+              cell: (i: any) => (
+                <Button
+                  loading={retryBuild.isPending && retryBuild.variables === i.id}
+                  onClick={() => retryBuild.mutate(i.id)}
+                >
+                  Retry
+                </Button>
+              ),
+            },
           ]}
           emptyMessage="No builds yet"
+        />
+      </Container>
+
+      <Container
+        header={
+          <Header
+            variant="h3"
+            counter={reportGroupsData?.reportGroups?.length}
+            actions={
+              <Button variant="primary" onClick={() => setShowCreateRG(true)}>
+                Create report group
+              </Button>
+            }
+          >
+            Report Groups
+          </Header>
+        }
+      >
+        <ResourceTable
+          resourceName="Report group"
+          items={(reportGroupsData?.reportGroups || []).map((rg: any) => ({
+            arn: rg.arn,
+            name: rg.name,
+            type: rg.type || "-",
+            exportType: rg.exportConfig?.exportConfigType || "-",
+            created: rg.created ? new Date(rg.created).toLocaleDateString() : "-",
+          }))}
+          columns={[
+            { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+            { id: "type", header: "Type", cell: (i: any) => i.type },
+            { id: "exportType", header: "Export", cell: (i: any) => i.exportType },
+            { id: "created", header: "Created", cell: (i: any) => i.created },
+            {
+              id: "actions",
+              header: "",
+              cell: (i: any) => (
+                <DeleteButton
+                  itemName={i.name}
+                  resourceType="report group"
+                  loading={deleteReportGroup.isPending && deleteReportGroup.variables === i.arn}
+                  onDelete={() => deleteReportGroup.mutateAsync(i.arn)}
+                />
+              ),
+            },
+          ]}
+          emptyMessage="No report groups"
         />
       </Container>
 
@@ -659,6 +744,114 @@ export function CodeBuildDashboard() {
             </FormField>
             <FormField label="Description (optional)">
               <Input value={description} onChange={({ detail }) => setDescription(detail.value)} />
+            </FormField>
+          </SpaceBetween>
+        </Form>
+      </Modal>
+
+      <Modal
+        visible={showEdit}
+        onDismiss={() => setShowEdit(false)}
+        header={`Edit project ${editName}`}
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowEdit(false)}>Cancel</Button>
+              <Button
+                variant="primary"
+                loading={updateProject.isPending}
+                onClick={() => {
+                  updateProject.mutate(
+                    { name: editName, description: editDescription },
+                    { onSuccess: () => setShowEdit(false) }
+                  );
+                }}
+              >
+                Save
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          {updateProject.isError && (
+            <Alert type="error" dismissible>
+              {(updateProject.error as Error)?.message || "Failed to update project"}
+            </Alert>
+          )}
+          <FormField label="Description">
+            <Input value={editDescription} onChange={({ detail }) => setEditDescription(detail.value)} />
+          </FormField>
+        </Form>
+      </Modal>
+
+      <Modal
+        visible={showCreateRG}
+        onDismiss={() => setShowCreateRG(false)}
+        header="Create report group"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreateRG(false)}>Cancel</Button>
+              <Button
+                variant="primary"
+                loading={createReportGroup.isPending}
+                disabled={!rgName.trim()}
+                onClick={() => {
+                  createReportGroup.mutate(
+                    {
+                      name: rgName.trim(),
+                      type: rgType,
+                      exportConfig: rgBucket.trim()
+                        ? {
+                            exportConfigType: "S3",
+                            s3Destination: { bucket: rgBucket.trim(), path: rgPath.trim() || undefined },
+                          }
+                        : undefined,
+                    },
+                    {
+                      onSuccess: () => {
+                        setShowCreateRG(false);
+                        setRgName("");
+                        setRgType("TEST");
+                        setRgBucket("");
+                        setRgPath("");
+                      },
+                    }
+                  );
+                }}
+              >
+                Create
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          {createReportGroup.isError && (
+            <Alert type="error" dismissible>
+              {(createReportGroup.error as Error)?.message || "Failed to create report group"}
+            </Alert>
+          )}
+          <SpaceBetween size="m">
+            <FormField label="Name">
+              <Input value={rgName} onChange={({ detail }) => setRgName(detail.value)} placeholder="my-report-group" />
+            </FormField>
+            <FormField label="Type">
+              <Select
+                selectedOption={{ label: rgType === "TEST" ? "Test" : "Series", value: rgType }}
+                onChange={({ detail }) => setRgType(detail.selectedOption.value as string)}
+                options={[
+                  { label: "Test", value: "TEST" },
+                  { label: "Series", value: "SERIES" },
+                ]}
+              />
+            </FormField>
+            <FormField label="S3 export bucket (optional)">
+              <Input value={rgBucket} onChange={({ detail }) => setRgBucket(detail.value)} placeholder="my-bucket" />
+            </FormField>
+            <FormField label="S3 export path (optional)">
+              <Input value={rgPath} onChange={({ detail }) => setRgPath(detail.value)} placeholder="reports" />
             </FormField>
           </SpaceBetween>
         </Form>

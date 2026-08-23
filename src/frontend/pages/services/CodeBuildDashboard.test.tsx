@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -32,6 +32,28 @@ const startBuildState = vi.hoisted(() => ({
   variables: null as string | null,
 }));
 
+const retryBuildState = vi.hoisted(() => ({
+  isPending: false,
+  variables: null as string | null,
+}));
+
+const updateProjectState = vi.hoisted(() => ({
+  isPending: false,
+  isError: false,
+  error: null as Error | null,
+}));
+
+const createRGState = vi.hoisted(() => ({
+  isPending: false,
+  isError: false,
+  error: null as Error | null,
+}));
+
+const deleteRGState = vi.hoisted(() => ({
+  isPending: false,
+  variables: null as any,
+}));
+
 // ─── Mock hooks ─────────────────────────────────────────
 
 const mockProjectsHook = vi.fn();
@@ -41,12 +63,40 @@ const mockImagesHook = vi.fn();
 const mockCreateProject = vi.fn();
 const mockDeleteProject = vi.fn();
 const mockStartBuild = vi.fn();
+const mockRetryBuild = vi.fn();
+const mockUpdateProject = vi.fn();
+const mockReportGroupsHook = vi.fn();
+const mockCreateReportGroup = vi.fn();
+const mockDeleteReportGroup = vi.fn();
 
 vi.mock("../../hooks/useCodeBuild", () => ({
   useCodeBuildProjects: (...args: any[]) => mockProjectsHook(...args),
   useCodeBuildBuilds: (...args: any[]) => mockBuildsHook(...args),
   useCodeBuildSourceCredentials: (...args: any[]) => mockCredentialsHook(...args),
   useCodeBuildCuratedImages: (...args: any[]) => mockImagesHook(...args),
+  useRetryCodeBuildBuild: () => ({
+    mutate: mockRetryBuild,
+    get isPending() { return retryBuildState.isPending; },
+    get variables() { return retryBuildState.variables; },
+  }),
+  useUpdateCodeBuildProject: () => ({
+    mutate: mockUpdateProject,
+    get isPending() { return updateProjectState.isPending; },
+    get isError() { return updateProjectState.isError; },
+    get error() { return updateProjectState.error; },
+  }),
+  useCodeBuildReportGroups: (...args: any[]) => mockReportGroupsHook(...args),
+  useCreateCodeBuildReportGroup: () => ({
+    mutate: mockCreateReportGroup,
+    get isPending() { return createRGState.isPending; },
+    get isError() { return createRGState.isError; },
+    get error() { return createRGState.error; },
+  }),
+  useDeleteCodeBuildReportGroup: () => ({
+    mutateAsync: mockDeleteReportGroup,
+    get isPending() { return deleteRGState.isPending; },
+    get variables() { return deleteRGState.variables; },
+  }),
   useCreateCodeBuildProject: () => ({
     mutate: mockCreateProject,
     get isPending() { return createProjectState.isPending; },
@@ -85,6 +135,16 @@ beforeEach(() => {
   deleteProjectState.variables = null;
   startBuildState.isPending = false;
   startBuildState.variables = null;
+  retryBuildState.isPending = false;
+  retryBuildState.variables = null;
+  updateProjectState.isPending = false;
+  updateProjectState.isError = false;
+  updateProjectState.error = null;
+  createRGState.isPending = false;
+  createRGState.isError = false;
+  createRGState.error = null;
+  deleteRGState.isPending = false;
+  deleteRGState.variables = null;
 
   mockProjectsHook.mockReturnValue({
     data: { projects: [] as any[] },
@@ -98,6 +158,9 @@ beforeEach(() => {
   });
   mockImagesHook.mockReturnValue({
     data: { images: [] as any[] },
+  });
+  mockReportGroupsHook.mockReturnValue({
+    data: { reportGroups: [] as any[] },
   });
 });
 
@@ -257,7 +320,7 @@ describe("CodeBuildDashboard — create project modal", () => {
     });
 
     expect(screen.getByLabelText(/Project name/)).toBeTruthy();
-    expect(screen.getByLabelText(/Description/)).toBeTruthy();
+    expect(screen.getByLabelText(/Description \(optional\)/)).toBeTruthy();
     const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
     expect(createBtns.length).toBeGreaterThanOrEqual(1);
   });
@@ -283,7 +346,7 @@ describe("CodeBuildDashboard — create project modal", () => {
 
     const nameInput = screen.getByLabelText(/Project name/);
     await user.type(nameInput, "new-proj");
-    const descInput = screen.getByLabelText(/Description/);
+    const descInput = screen.getByLabelText(/Description \(optional\)/);
     await user.type(descInput, "A new project");
 
     await clickButton(user, /^Create$/i);
@@ -647,5 +710,288 @@ describe("CodeBuildDashboard — loading states", () => {
     render(<CodeBuildDashboard />, { wrapper: createWrapper() });
     expect(screen.getByText("my-project")).toBeTruthy();
     expect(screen.getByRole("button", { name: /Delete my-project/i })).toBeTruthy();
+  });
+});
+
+describe("CodeBuildDashboard — retry build", () => {
+  it("retries a build from the builds table", async () => {
+    mockBuildsHook.mockReturnValue({
+      data: { builds: [{ id: "p1:abc-123", projectName: "p1", buildStatus: "FAILED", startTime: 1700000000000 }] },
+    });
+    const user = userEvent.setup();
+    render(<CodeBuildDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(mockRetryBuild).toHaveBeenCalledWith("p1:abc-123"));
+  });
+
+  it("shows retry loading for the in-flight build only", async () => {
+    mockBuildsHook.mockReturnValue({
+      data: { builds: [{ id: "b1", buildStatus: "FAILED" }, { id: "b2", buildStatus: "SUCCEEDED" }] },
+    });
+    retryBuildState.isPending = true;
+    retryBuildState.variables = "b1";
+    render(<CodeBuildDashboard />, { wrapper: createWrapper() });
+    const buttons = screen.getAllByRole("button", { name: "Retry" });
+    expect(buttons[0].className).toMatch(/disabled|loading/);
+    expect(buttons[1].className).not.toMatch(/disabled|loading/);
+  });
+});
+
+describe("CodeBuildDashboard — edit project", () => {
+  it("opens the edit modal prefilled and saves the description", async () => {
+    mockProjectsHook.mockReturnValue({
+      data: { projects: [{ name: "p1", description: "old" }] },
+      isLoading: false,
+    });
+    mockUpdateProject.mockImplementation((_body: any, opts?: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    render(<CodeBuildDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getAllByRole("button", { name: "Edit" })[0]);
+    const dialog = screen.getByRole("dialog", { name: /Edit project p1/i });
+    const input = dialog.querySelector("input") as HTMLInputElement;
+    expect(input.value).toBe("old");
+    await user.clear(input);
+    await user.type(input, "new description");
+    await user.click(within(dialog).getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(mockUpdateProject).toHaveBeenCalledWith(
+        { name: "p1", description: "new description" },
+        { onSuccess: expect.any(Function) },
+      )
+    );
+    await waitFor(() => {
+      expect(screen.getByRole("dialog", { name: /Edit project p1/i }).className).toContain("hidden");
+    });
+  });
+
+  it("prefills an empty description when the table showed a dash", async () => {
+    mockProjectsHook.mockReturnValue({
+      data: { projects: [{ name: "p1" }] },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CodeBuildDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getAllByRole("button", { name: "Edit" })[0]);
+    const dialog = screen.getByRole("dialog", { name: /Edit project p1/i });
+    const input = dialog.querySelector("input") as HTMLInputElement;
+    expect(input.value).toBe("");
+  });
+
+  it("shows the update error and fallback message", async () => {
+    mockProjectsHook.mockReturnValue({
+      data: { projects: [{ name: "p1", description: "old" }] },
+      isLoading: false,
+    });
+    updateProjectState.isError = true;
+    updateProjectState.error = new Error("update failed");
+    const user = userEvent.setup();
+    render(<CodeBuildDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getAllByRole("button", { name: "Edit" })[0]);
+    expect(await screen.findByText("update failed")).toBeTruthy();
+  });
+
+  it("falls back to a generic update error message", async () => {
+    mockProjectsHook.mockReturnValue({
+      data: { projects: [{ name: "p1" }] },
+      isLoading: false,
+    });
+    updateProjectState.isError = true;
+    updateProjectState.error = null;
+    const user = userEvent.setup();
+    render(<CodeBuildDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getAllByRole("button", { name: "Edit" })[0]);
+    expect(await screen.findByText("Failed to update project")).toBeTruthy();
+  });
+
+  it("cancels the edit modal without saving", async () => {
+    mockProjectsHook.mockReturnValue({
+      data: { projects: [{ name: "p1", description: "old" }] },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CodeBuildDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getAllByRole("button", { name: "Edit" })[0]);
+    const dialog = screen.getByRole("dialog", { name: /Edit project p1/i });
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => {
+      expect(screen.getByRole("dialog", { name: /Edit project p1/i }).className).toContain("hidden");
+    });
+    expect(mockUpdateProject).not.toHaveBeenCalled();
+  });
+});
+
+describe("CodeBuildDashboard — report groups", () => {
+  it("renders report groups with export type and dash fallbacks", async () => {
+    mockReportGroupsHook.mockReturnValue({
+      data: { reportGroups: [{ arn: "arn:rg1", name: "rg1", type: "TEST", exportConfig: { exportConfigType: "S3" }, created: 1700000000 }] },
+    });
+    render(<CodeBuildDashboard />, { wrapper: createWrapper() });
+    expect(await screen.findByText("rg1")).toBeTruthy();
+    expect(screen.getByText("S3")).toBeTruthy();
+    expect(screen.getByText("TEST")).toBeTruthy();
+  });
+
+  it("falls back to a dash when the report group has no type or export config", async () => {
+    mockReportGroupsHook.mockReturnValue({
+      data: { reportGroups: [{ arn: "arn:rg2", name: "rg2", exportConfig: {} }] },
+    });
+    render(<CodeBuildDashboard />, { wrapper: createWrapper() });
+    expect(await screen.findByText("rg2")).toBeTruthy();
+    const dashes = screen.getAllByText("-");
+    expect(dashes.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("shows no report groups while the query is still loading", () => {
+    mockReportGroupsHook.mockReturnValue({ data: undefined });
+    render(<CodeBuildDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("No report groups")).toBeTruthy();
+  });
+
+  it("shows empty message when there are no report groups", () => {
+    render(<CodeBuildDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("No report groups")).toBeTruthy();
+  });
+
+  it("creates a report group with S3 export config", async () => {
+    mockCreateReportGroup.mockImplementation((_body: any, opts?: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    render(<CodeBuildDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Create report group" }));
+    const dialog = screen.getByRole("dialog", { name: "Create report group" });
+    const inputs = dialog.querySelectorAll("input");
+    await user.type(inputs[0], "my-rg");
+    await user.type(inputs[1], "my-bucket");
+    await user.type(inputs[2], "reports");
+    const createBtn = screen.getAllByRole("button", { name: "Create" }).at(-1)!;
+    await user.click(createBtn);
+    await waitFor(() =>
+      expect(mockCreateReportGroup).toHaveBeenCalledWith(
+        {
+          name: "my-rg",
+          type: "TEST",
+          exportConfig: {
+            exportConfigType: "S3",
+            s3Destination: { bucket: "my-bucket", path: "reports" },
+          },
+        },
+        { onSuccess: expect.any(Function) },
+      )
+    );
+  });
+
+  it("creates a report group without export config when bucket is blank", async () => {
+    mockCreateReportGroup.mockImplementation((_body: any, opts?: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    render(<CodeBuildDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Create report group" }));
+    const dialog = screen.getByRole("dialog", { name: "Create report group" });
+    const inputs = dialog.querySelectorAll("input");
+    await user.type(inputs[0], "my-rg");
+    await user.click(screen.getAllByRole("button", { name: "Create" }).at(-1)!);
+    await waitFor(() =>
+      expect(mockCreateReportGroup).toHaveBeenCalledWith(
+        { name: "my-rg", type: "TEST", exportConfig: undefined },
+        { onSuccess: expect.any(Function) },
+      )
+    );
+  });
+
+  it("cancels the create report group modal", async () => {
+    const user = userEvent.setup();
+    render(<CodeBuildDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Create report group" }));
+    const dialog = screen.getByRole("dialog", { name: "Create report group" });
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => {
+      expect(screen.getByRole("dialog", { name: "Create report group" }).className).toContain("hidden");
+    });
+    expect(mockCreateReportGroup).not.toHaveBeenCalled();
+  });
+
+  it("omits the S3 path when blank", async () => {
+    mockCreateReportGroup.mockImplementation((_body: any, opts?: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    render(<CodeBuildDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Create report group" }));
+    const dialog = screen.getByRole("dialog", { name: "Create report group" });
+    const inputs = dialog.querySelectorAll("input");
+    await user.type(inputs[0], "my-rg");
+    await user.type(inputs[1], "my-bucket");
+    await user.click(screen.getAllByRole("button", { name: "Create" }).at(-1)!);
+    await waitFor(() =>
+      expect(mockCreateReportGroup).toHaveBeenCalledWith(
+        {
+          name: "my-rg",
+          type: "TEST",
+          exportConfig: { exportConfigType: "S3", s3Destination: { bucket: "my-bucket", path: undefined } },
+        },
+        { onSuccess: expect.any(Function) },
+      )
+    );
+  });
+
+  it("keeps Create disabled until a name is entered", async () => {
+    const user = userEvent.setup();
+    render(<CodeBuildDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Create report group" }));
+    const createBtn = screen.getAllByRole("button", { name: "Create" }).at(-1)!;
+    expect(createBtn.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("selects the Series report type", async () => {
+    mockCreateReportGroup.mockImplementation((_body: any, opts?: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    render(<CodeBuildDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Create report group" }));
+    await user.click(screen.getByRole("button", { name: /Test/i }));
+    await user.click(await screen.findByRole("option", { name: "Series" }));
+    const dialog = screen.getByRole("dialog", { name: "Create report group" });
+    const inputs = dialog.querySelectorAll("input");
+    await user.type(inputs[0], "my-rg");
+    await user.click(screen.getAllByRole("button", { name: "Create" }).at(-1)!);
+    await waitFor(() => expect(mockCreateReportGroup.mock.calls[0][0].type).toBe("SERIES"));
+  });
+
+  it("shows the create error and fallback message", async () => {
+    mockReportGroupsHook.mockReturnValue({
+      data: { reportGroups: [{ arn: "arn:rg1", name: "rg1" }] },
+    });
+    createRGState.isError = true;
+    createRGState.error = new Error("rg failed");
+    const user = userEvent.setup();
+    render(<CodeBuildDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Create report group" }));
+    expect(await screen.findByText("rg failed")).toBeTruthy();
+  });
+
+  it("falls back to a generic create error message", async () => {
+    createRGState.isError = true;
+    createRGState.error = null;
+    const user = userEvent.setup();
+    render(<CodeBuildDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Create report group" }));
+    expect(await screen.findByText("Failed to create report group")).toBeTruthy();
+  });
+
+  it("deletes a report group after confirmation", async () => {
+    mockDeleteReportGroup.mockResolvedValue({});
+    mockReportGroupsHook.mockReturnValue({
+      data: { reportGroups: [{ arn: "arn:rg1", name: "rg1" }] },
+    });
+    const user = userEvent.setup();
+    render(<CodeBuildDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /Delete rg1/i }));
+    await waitFor(() => expect(mockDeleteReportGroup).toHaveBeenCalledWith("arn:rg1"));
+  });
+
+  it("disables the delete button while that group deletion is pending", async () => {
+    mockReportGroupsHook.mockReturnValue({
+      data: { reportGroups: [{ arn: "arn:rg1", name: "rg1" }] },
+    });
+    deleteRGState.isPending = true;
+    deleteRGState.variables = "arn:rg1";
+    render(<CodeBuildDashboard />, { wrapper: createWrapper() });
+    const btn = await screen.findByRole("button", { name: /Delete rg1/i });
+    expect(btn.hasAttribute("disabled")).toBe(true);
   });
 });
