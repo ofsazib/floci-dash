@@ -86,3 +86,23 @@ export function useACMCertificateTags(arn: string | null) {
     enabled: !!arn,
   });
 }
+
+export function useImportACMCertificate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      certificate: string;
+      privateKey: string;
+      certificateChain?: string;
+      tags?: any[];
+    }) => api("/aws/acm/certificates/import", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "acm"] }),
+  });
+}
+
+export function useExportACMCertificate() {
+  return useMutation({
+    mutationFn: (arn: string) =>
+      api(`/aws/acm/certificates/${encodeURIComponent(arn)}/export`, { method: "POST" }),
+  });
+}

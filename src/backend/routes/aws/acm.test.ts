@@ -15,6 +15,10 @@ vi.mock("@aws-sdk/client-acm", () => ({
   DeleteCertificateCommand: createCmd("DeleteCertificateCommand"),
   GetCertificateCommand: createCmd("GetCertificateCommand"),
   ListTagsForCertificateCommand: createCmd("ListTagsForCertificateCommand"),
+  ImportCertificateCommand: createCmd("ImportCertificateCommand"),
+  ExportCertificateCommand: createCmd("ExportCertificateCommand"),
+  AddTagsToCertificateCommand: createCmd("AddTagsToCertificateCommand"),
+  RemoveTagsFromCertificateCommand: createCmd("RemoveTagsFromCertificateCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({ create: (Ctor: any, extra?: any) => new Ctor(extra) }));
@@ -97,5 +101,86 @@ describe("ACM Routes", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.tags).toEqual([]);
+  });
+
+  describe("Import + export + tag writes", () => {
+    it("POST /certificates/import — imports a certificate", async () => {
+      mockSend.mockResolvedValueOnce({ CertificateArn: "arn:imported" });
+      const res = await post("/certificates/import", {
+        certificate: "-----BEGIN CERT-----",
+        privateKey: "-----BEGIN KEY-----",
+        certificateChain: "chain",
+      });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.certificateArn).toBe("arn:imported");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("ImportCertificateCommand");
+      expect(cmd.CertificateChain).toBe("chain");
+    });
+
+    it("POST /certificates/import — 400 without certificate", async () => {
+      const res = await post("/certificates/import", { privateKey: "k" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /certificates/import — 400 without privateKey", async () => {
+      const res = await post("/certificates/import", { certificate: "c" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /certificates/:arn/export — returns PEM parts", async () => {
+      mockSend.mockResolvedValueOnce({
+        Certificate: "CERT",
+        CertificateChain: "CHAIN",
+        PrivateKey: "KEY",
+      });
+      const res = await post("/certificates/" + encodeURIComponent("arn:c1") + "/export");
+      const body = await res.json();
+      expect(body).toEqual({ certificate: "CERT", certificateChain: "CHAIN", privateKey: "KEY" });
+    });
+
+    it("POST /certificates/:arn/export — sparse fallbacks to empty strings", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/certificates/" + encodeURIComponent("arn:c1") + "/export");
+      const body = await res.json();
+      expect(body).toEqual({ certificate: "", certificateChain: "", privateKey: "" });
+    });
+
+    it("POST /certificates/:arn/tags — adds tags", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/certificates/" + encodeURIComponent("arn:c1") + "/tags", {
+        tags: { env: "prod" },
+      });
+      const body = await res.json();
+      expect(body.tagged).toBe(true);
+      expect(mockSend.mock.calls[0][0].Tags).toEqual([{ Key: "env", Value: "prod" }]);
+    });
+
+    it("POST /certificates/:arn/tags — 400 without tags", async () => {
+      const res = await post("/certificates/" + encodeURIComponent("arn:c1") + "/tags", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE /certificates/:arn/tags — removes tags by key", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await router.request("/certificates/" + encodeURIComponent("arn:c1") + "/tags", {
+        method: "DELETE",
+        body: JSON.stringify({ tagKeys: ["env"] }),
+        headers: { "content-type": "application/json" },
+      });
+      const body = await res.json();
+      expect(body.untagged).toBe(true);
+      expect(mockSend.mock.calls[0][0].Tags).toEqual([{ Key: "env", Value: "" }]);
+    });
+
+    it("DELETE /certificates/:arn/tags — 400 without tagKeys", async () => {
+      const res = await router.request("/certificates/" + encodeURIComponent("arn:c1") + "/tags", {
+        method: "DELETE",
+        body: JSON.stringify({}),
+        headers: { "content-type": "application/json" },
+      });
+      expect(res.status).toBe(400);
+    });
   });
 });

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -16,6 +16,10 @@ vi.mock("../../components/ConfirmDialog", () => ({
 
 const mockCertificates = vi.fn();
 const mockDeleteCert = vi.fn();
+const mockImportCert = vi.fn();
+const mockExportCert = vi.fn();
+const importCertState = vi.hoisted(() => ({ isError: false, error: null as Error | null }));
+const exportPendingState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
 
 const deleteCertState = vi.hoisted(() => ({
   isPending: false,
@@ -30,6 +34,17 @@ vi.mock("../../hooks/useACM", () => ({
     isPending: deleteCertState.isPending,
     variables: deleteCertState.variables,
   }),
+  useImportACMCertificate: () => ({
+    mutate: mockImportCert,
+    isPending: false,
+    get isError() { return importCertState.isError; },
+    get error() { return importCertState.error; },
+  }),
+  useExportACMCertificate: () => ({
+    mutate: mockExportCert,
+    get isPending() { return exportPendingState.isPending; },
+    get variables() { return exportPendingState.variables; },
+  }),
 }));
 
 import { ACMDashboard } from "./ACMDashboard";
@@ -37,6 +52,10 @@ import { ACMDashboard } from "./ACMDashboard";
 // ─── Setup ──────────────────────────────────────────────
 
 beforeEach(() => {
+  exportPendingState.isPending = false;
+  exportPendingState.variables = null;
+  importCertState.isError = false;
+  importCertState.error = null;
   vi.clearAllMocks();
   deleteCertState.isPending = false;
   deleteCertState.variables = null;
@@ -197,5 +216,179 @@ describe("ACMDashboard — data", () => {
     await waitFor(() => expect(screen.getByText("example.com")).toBeTruthy());
     const deleteBtn = screen.getByRole("button", { name: /Delete example.com/i });
     expect(deleteBtn).toBeDisabled();
+  });
+});
+
+describe("ACMDashboard — import + export", () => {
+  function setupCert() {
+    mockCertificates.mockReturnValue({
+      data: {
+        certificates: [
+          { CertificateArn: "arn:c1", DomainName: "example.com", Status: "ISSUED", InUse: false },
+        ],
+        total: 1,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+  }
+
+  it("exports a certificate and shows the PEM modal", async () => {
+    mockExportCert.mockImplementation((_b: any, opts: any) =>
+      opts?.onSuccess?.({ certificate: "CERTPEM", certificateChain: "CHAINPEM", privateKey: "KEYPEM" })
+    );
+    setupCert();
+    const user = userEvent.setup();
+    render(<ACMDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "Export" }));
+    expect(await screen.findByText("CERTPEM")).toBeTruthy();
+    expect(screen.getByText("CHAINPEM")).toBeTruthy();
+    expect(screen.getByText("KEYPEM")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Close" }));
+  });
+
+  it("imports a certificate from the modal", async () => {
+    mockImportCert.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
+    setupCert();
+    const user = userEvent.setup();
+    render(<ACMDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: /Create certificate/i }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const areas = within(dialog).getAllByRole("textbox").filter((el) => el.tagName === "TEXTAREA");
+    fireEvent.change(areas[0], { target: { value: "-----BEGIN CERT-----" } });
+    fireEvent.change(areas[1], { target: { value: "-----BEGIN KEY-----" } });
+    fireEvent.change(areas[2], { target: { value: "chain" } });
+    await user.click(within(dialog).getByRole("button", { name: "Import" }));
+    await waitFor(() =>
+      expect(mockImportCert).toHaveBeenCalledWith(
+        { certificate: "-----BEGIN CERT-----", privateKey: "-----BEGIN KEY-----", certificateChain: "chain" },
+        expect.objectContaining({ onSuccess: expect.any(Function) })
+      )
+    );
+  });
+
+  it("keeps Import disabled until cert + key present", async () => {
+    setupCert();
+    const user = userEvent.setup();
+    render(<ACMDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: /Create certificate/i }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    expect(within(dialog).getByRole("button", { name: "Import" }).hasAttribute("disabled")).toBe(true);
+  });
+
+  it("shows the import error and fallback", async () => {
+    importCertState.isError = true;
+    importCertState.error = new Error("import failed");
+    setupCert();
+    const user = userEvent.setup();
+    render(<ACMDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: /Create certificate/i }));
+    expect(await screen.findByText("import failed")).toBeTruthy();
+  });
+});
+
+describe("ACMDashboard — import modal dismiss + fallback arms", () => {
+  function setupCert() {
+    mockCertificates.mockReturnValue({
+      data: {
+        certificates: [
+          { CertificateArn: "arn:c1", DomainName: "example.com", Status: "ISSUED", InUse: false },
+        ],
+        total: 1,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+  }
+
+  it("cancels and Escape-dismisses the import modal", async () => {
+    setupCert();
+    const user = userEvent.setup();
+    render(<ACMDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: /Create certificate/i }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(mockImportCert).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: /Create certificate/i }));
+    document.querySelectorAll('[class*="awsui_dialog"]').forEach((d) =>
+      fireEvent.keyDown(d as HTMLElement, { keyCode: 27 })
+    );
+    expect(mockImportCert).not.toHaveBeenCalled();
+  });
+
+  it("imports without a chain when blank", async () => {
+    mockImportCert.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
+    setupCert();
+    const user = userEvent.setup();
+    render(<ACMDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: /Create certificate/i }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const areas = within(dialog).getAllByRole("textbox").filter((el) => el.tagName === "TEXTAREA");
+    fireEvent.change(areas[0], { target: { value: "CERT" } });
+    fireEvent.change(areas[1], { target: { value: "KEY" } });
+    await user.click(within(dialog).getByRole("button", { name: "Import" }));
+    await waitFor(() =>
+      expect(mockImportCert).toHaveBeenCalledWith(
+        { certificate: "CERT", privateKey: "KEY", certificateChain: undefined },
+        expect.anything()
+      )
+    );
+  });
+
+  it("shows the generic import error fallback", async () => {
+    importCertState.isError = true;
+    importCertState.error = null;
+    setupCert();
+    const user = userEvent.setup();
+    render(<ACMDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: /Create certificate/i }));
+    expect(await screen.findByText("Failed to import certificate")).toBeTruthy();
+  });
+
+  it("closes the export modal via dismiss", async () => {
+    mockExportCert.mockImplementation((_b: any, opts: any) =>
+      opts?.onSuccess?.({ certificate: "C", certificateChain: "", privateKey: "" })
+    );
+    setupCert();
+    const user = userEvent.setup();
+    render(<ACMDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "Export" }));
+    await screen.findByText("C");
+    document.querySelectorAll('[class*="awsui_dialog"]').forEach((d) =>
+      fireEvent.keyDown(d as HTMLElement, { keyCode: 27 })
+    );
+    expect(screen.queryByText("C")).toBeNull();
+  });
+});
+
+describe("ACMDashboard — export loading + error arms", () => {
+  function setupCert() {
+    mockCertificates.mockReturnValue({
+      data: {
+        certificates: [
+          { CertificateArn: "arn:c1", DomainName: "example.com", Status: "ISSUED", InUse: false },
+          { CertificateArn: "arn:c2", DomainName: "two.com", Status: "ISSUED", InUse: false },
+        ],
+        total: 2,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+  }
+
+  it("shows export loading for the in-flight certificate only", async () => {
+    setupCert();
+    exportPendingState.isPending = true;
+    exportPendingState.variables = "arn:c1";
+    render(<ACMDashboard />, { wrapper: createWrapper() });
+    const buttons = await screen.findAllByRole("button", { name: "Export" });
+    expect(buttons[0].className).toMatch(/disabled|loading/);
+    expect(buttons[1].className).not.toMatch(/disabled|loading/);
+  });
+
+  it("covers the export onError callback", async () => {
+    mockExportCert.mockImplementation((_b: any, opts: any) => opts?.onError?.());
+    setupCert();
+    const user = userEvent.setup();
+    render(<ACMDashboard />, { wrapper: createWrapper() });
+    await user.click((await screen.findAllByRole("button", { name: "Export" }))[0]);
+    await waitFor(() => expect(mockExportCert).toHaveBeenCalled());
   });
 });

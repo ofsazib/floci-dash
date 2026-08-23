@@ -249,6 +249,8 @@ import {
   useACMCertificates,
   useRequestACMCertificate,
   useDeleteACMCertificate,
+  useImportACMCertificate,
+  useExportACMCertificate,
 } from "../../hooks/useACM";
 import {
   useCloudTrailTrails,
@@ -508,10 +510,18 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
 export function ACMDashboard() {
   const { data, isLoading } = useACMCertificates();
   const deleteCert = useDeleteACMCertificate();
+  const importCert = useImportACMCertificate();
+  const exportCert = useExportACMCertificate();
+  const [showImport, setShowImport] = useState(false);
+  const [importCertPem, setImportCertPem] = useState("");
+  const [importKey, setImportKey] = useState("");
+  const [importChain, setImportChain] = useState("");
+  const [exported, setExported] = useState<any>(null);
 
   if (isLoading) return <TableSkeleton />;
 
   return (
+    <>
     <ResourceTable
       resourceName="Certificate"
       headerTitle="ACM Certificates"
@@ -538,19 +548,110 @@ export function ACMDashboard() {
           id: "actions",
           header: "",
           cell: (i: any) => (
-            <DeleteButton
-              itemName={i.domain}
-              resourceType="certificate"
-              loading={deleteCert.isPending && deleteCert.variables === i.arn}
-              onDelete={() => deleteCert.mutateAsync(i.arn)}
-            />
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button
+                loading={exportCert.isPending && exportCert.variables === i.arn}
+                onClick={() =>
+                  exportCert.mutate(i.arn, {
+                    onSuccess: (result: any) => setExported(result),
+                    onError: () => setExported(null),
+                  })
+                }
+              >
+                Export
+              </Button>
+              <DeleteButton
+                itemName={i.domain}
+                resourceType="certificate"
+                loading={deleteCert.isPending && deleteCert.variables === i.arn}
+                onDelete={() => deleteCert.mutateAsync(i.arn)}
+              />
+            </SpaceBetween>
           ),
         },
       ]}
       filterEnabled
       filterPlaceholder="Find certificates by domain"
       filterFunction={(i: any, s: string) => i.domain.toLowerCase().includes(s.toLowerCase())}
+      onCreate={() => setShowImport(true)}
     />
+
+    {exported && (
+      <Modal
+        visible
+        onDismiss={() => setExported(null)}
+        header="Exported certificate"
+        footer={
+          <Box float="right">
+            <Button onClick={() => setExported(null)}>Close</Button>
+          </Box>
+        }
+      >
+        <SpaceBetween size="s">
+          <Box variant="h4">Certificate</Box>
+          <pre className="fd-code-bg" style={{ fontSize: 11, padding: 8, borderRadius: 4, overflow: "auto", maxHeight: 120 }}>{exported.certificate}</pre>
+          <Box variant="h4">Chain</Box>
+          <pre className="fd-code-bg" style={{ fontSize: 11, padding: 8, borderRadius: 4, overflow: "auto", maxHeight: 120 }}>{exported.certificateChain}</pre>
+          <Box variant="h4">Private key</Box>
+          <pre className="fd-code-bg" style={{ fontSize: 11, padding: 8, borderRadius: 4, overflow: "auto", maxHeight: 120 }}>{exported.privateKey}</pre>
+        </SpaceBetween>
+      </Modal>
+    )}
+
+    <Modal
+      visible={showImport}
+      onDismiss={() => setShowImport(false)}
+      header="Import certificate"
+      footer={
+        <Box float="right">
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button variant="link" onClick={() => setShowImport(false)}>Cancel</Button>
+            <Button
+              variant="primary"
+              loading={importCert.isPending}
+              disabled={!importCertPem.trim() || !importKey.trim()}
+              onClick={() => {
+                importCert.mutate(
+                  {
+                    certificate: importCertPem.trim(),
+                    privateKey: importKey.trim(),
+                    certificateChain: importChain.trim() || undefined,
+                  },
+                  {
+                    onSuccess: () => {
+                      setShowImport(false);
+                      setImportCertPem(""); setImportKey(""); setImportChain("");
+                    },
+                  }
+                );
+              }}
+            >
+              Import
+            </Button>
+          </SpaceBetween>
+        </Box>
+      }
+    >
+      <Form>
+        {importCert.isError && (
+          <Alert type="error" dismissible>
+            {(importCert.error as Error)?.message || "Failed to import certificate"}
+          </Alert>
+        )}
+        <SpaceBetween size="m">
+          <FormField label="Certificate (PEM)">
+            <Textarea value={importCertPem} onChange={({ detail }) => setImportCertPem(detail.value)} rows={4} placeholder="-----BEGIN CERTIFICATE-----" />
+          </FormField>
+          <FormField label="Private key (PEM)">
+            <Textarea value={importKey} onChange={({ detail }) => setImportKey(detail.value)} rows={4} placeholder="-----BEGIN PRIVATE KEY-----" />
+          </FormField>
+          <FormField label="Certificate chain (optional)">
+            <Textarea value={importChain} onChange={({ detail }) => setImportChain(detail.value)} rows={3} />
+          </FormField>
+        </SpaceBetween>
+      </Form>
+    </Modal>
+    </>
   );
 }
 

@@ -16,6 +16,8 @@ import {
   useRequestACMCertificate,
   useDeleteACMCertificate,
   useACMCertificateTags,
+  useImportACMCertificate,
+  useExportACMCertificate,
 } from "./useACM";
 
 beforeEach(() => mockApi.mockReset());
@@ -71,5 +73,30 @@ describe("useACM hooks", () => {
   it("useACMCertificateTags disabled when null", () => {
     const { result } = renderHook(() => useACMCertificateTags(null), { wrapper: createWrapper() });
     expect(result.current.fetchStatus).toBe("idle");
+  });
+});
+
+describe("useImportACMCertificate", () => {
+  it("posts the import body", async () => {
+    mockApi.mockResolvedValueOnce({ certificateArn: "arn:new" });
+    const { result } = renderHook(() => useImportACMCertificate(), { wrapper: createWrapper() });
+    result.current.mutate({ certificate: "CERT", privateKey: "KEY" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/acm/certificates/import", {
+      method: "POST",
+      body: JSON.stringify({ certificate: "CERT", privateKey: "KEY" }),
+    });
+  });
+});
+
+describe("useExportACMCertificate", () => {
+  it("posts export by encoded arn", async () => {
+    mockApi.mockResolvedValueOnce({ certificate: "C" });
+    const { result } = renderHook(() => useExportACMCertificate(), { wrapper: createWrapper() });
+    result.current.mutate("arn:c 1");
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/acm/certificates/arn%3Ac%201/export", {
+      method: "POST",
+    });
   });
 });
