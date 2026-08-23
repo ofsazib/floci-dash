@@ -33,6 +33,10 @@ import {
   useDeleteUser,
   useIAMRoles,
   useIAMRole,
+  usePutRoleInlinePolicy,
+  useDeleteRoleInlinePolicy,
+  useUpdateRoleTrustPolicy,
+  useSimulatePolicy,
   useCreateRole,
   useDeleteRole,
   useIAMGroups,
@@ -401,9 +405,15 @@ function RoleDetailModal({ roleName, onClose }: { roleName: string; onClose: () 
   const roleQuery = useIAMRole(roleName);
   const tagRole = useTagRole();
   const untagRole = useUntagRole();
+  const putInlinePolicy = usePutRoleInlinePolicy();
+  const deleteInlinePolicy = useDeleteRoleInlinePolicy();
+  const updateTrustPolicy = useUpdateRoleTrustPolicy();
   const r = roleQuery.data?.role;
   const attachedPolicies = roleQuery.data?.attachedPolicies || [];
   const tags = roleQuery.data?.tags || {};
+  const [trustText, setTrustText] = useState("");
+  const [inlineName, setInlineName] = useState("");
+  const [inlineDoc, setInlineDoc] = useState("");
 
   return (
     <Modal visible={true} onDismiss={onClose} header={`Role: ${roleName}`} size="large" footer={
@@ -430,6 +440,79 @@ function RoleDetailModal({ roleName, onClose }: { roleName: string; onClose: () 
               </pre>
             </Container>
           )}
+
+          <Container header={<Header variant="h3">Update trust policy</Header>}>
+            <SpaceBetween size="s">
+              <Textarea
+                value={trustText}
+                onChange={({ detail }) => setTrustText(detail.value)}
+                rows={5}
+                placeholder='{"Version": "2012-10-17", "Statement": []}'
+              />
+              <Button
+                variant="primary"
+                disabled={!trustText.trim()}
+                loading={updateTrustPolicy.isPending}
+                onClick={() =>
+                  updateTrustPolicy.mutate(
+                    { roleName, document: trustText.trim() },
+                    {
+                      onSuccess: () => showToast("success", "Trust policy updated"),
+                      onError: (e) => showToast("error", (e as Error).message || "Failed to update trust policy"),
+                    }
+                  )
+                }
+              >
+                Save trust policy
+              </Button>
+            </SpaceBetween>
+          </Container>
+
+          <Container header={<Header variant="h3">Inline policies</Header>}>
+            <SpaceBetween size="s">
+              <FormField label="Policy name">
+                <Input value={inlineName} onChange={({ detail }) => setInlineName(detail.value)} placeholder="inline-1" />
+              </FormField>
+              <Textarea
+                value={inlineDoc}
+                onChange={({ detail }) => setInlineDoc(detail.value)}
+                rows={4}
+                placeholder='Inline policy document (JSON)'
+              />
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button
+                  variant="primary"
+                  disabled={!inlineName.trim() || !inlineDoc.trim()}
+                  loading={putInlinePolicy.isPending}
+                  onClick={() =>
+                    putInlinePolicy.mutate(
+                      { roleName, policyName: inlineName.trim(), document: inlineDoc.trim() },
+                      {
+                        onSuccess: () => showToast("success", "Inline policy saved"),
+                        onError: (e) => showToast("error", (e as Error).message || "Failed to save inline policy"),
+                      }
+                    )
+                  }
+                >
+                  Save inline policy
+                </Button>
+                <Button
+                  disabled={!inlineName.trim()}
+                  onClick={() =>
+                    deleteInlinePolicy.mutate(
+                      { roleName, policyName: inlineName.trim() },
+                      {
+                        onSuccess: () => showToast("success", "Inline policy deleted"),
+                        onError: (e) => showToast("error", (e as Error).message || "Failed to delete inline policy"),
+                      }
+                    )
+                  }
+                >
+                  Delete inline policy
+                </Button>
+              </SpaceBetween>
+            </SpaceBetween>
+          </Container>
 
           <Container header={<Header variant="h3">Attached policies ({attachedPolicies.length})</Header>}>
             {attachedPolicies.length === 0 ? <Box color="text-body-secondary">No attached policies</Box> : (

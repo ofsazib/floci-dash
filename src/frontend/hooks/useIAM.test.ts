@@ -51,6 +51,10 @@ import {
   useDeleteUserPermissionsBoundary,
   useSetRolePermissionsBoundary,
   useDeleteRolePermissionsBoundary,
+  usePutRoleInlinePolicy,
+  useDeleteRoleInlinePolicy,
+  useUpdateRoleTrustPolicy,
+  useSimulatePolicy,
 } from "./useIAM";
 
 function createWrapper() {
@@ -601,5 +605,50 @@ describe("useDeleteRolePermissionsBoundary", () => {
       "/aws/iam/roles/my-role/permissions-boundary",
       expect.objectContaining({ method: "DELETE" })
     );
+  });
+});
+
+describe("IAM role policy hooks", () => {
+  it("usePutRoleInlinePolicy puts by role name", async () => {
+    mockApi.mockResolvedValueOnce({ updated: true });
+    const { result } = renderHook(() => usePutRoleInlinePolicy(), { wrapper: createWrapper() });
+    result.current.mutate({ roleName: "r 1", policyName: "p", document: "{}" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/roles/r%201/inline-policies", {
+      method: "PUT",
+      body: JSON.stringify({ policyName: "p", document: "{}" }),
+    });
+  });
+
+  it("useDeleteRoleInlinePolicy deletes both encoded", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useDeleteRoleInlinePolicy(), { wrapper: createWrapper() });
+    result.current.mutate({ roleName: "r/1", policyName: "p 1" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/roles/r%2F1/inline-policies/p%201", {
+      method: "DELETE",
+    });
+  });
+
+  it("useUpdateRoleTrustPolicy puts the trust doc", async () => {
+    mockApi.mockResolvedValueOnce({ updated: true });
+    const { result } = renderHook(() => useUpdateRoleTrustPolicy(), { wrapper: createWrapper() });
+    result.current.mutate({ roleName: "r1", document: "{}" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/roles/r1/trust-policy", {
+      method: "PUT",
+      body: JSON.stringify({ document: "{}" }),
+    });
+  });
+
+  it("useSimulatePolicy posts the simulation", async () => {
+    mockApi.mockResolvedValueOnce({ evaluations: [], total: 0 });
+    const { result } = renderHook(() => useSimulatePolicy(), { wrapper: createWrapper() });
+    result.current.mutate({ policySourceArn: "arn:x", actionNames: ["s3:Get"] });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/simulate", {
+      method: "POST",
+      body: JSON.stringify({ policySourceArn: "arn:x", actionNames: ["s3:Get"] }),
+    });
   });
 });

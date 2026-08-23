@@ -381,3 +381,46 @@ export function useDeleteRolePermissionsBoundary() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam"] }),
   });
 }
+
+export function usePutRoleInlinePolicy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { roleName: string; policyName: string; document: string }) =>
+      api(`/aws/iam/roles/${encodeURIComponent(params.roleName)}/inline-policies`, {
+        method: "PUT",
+        body: JSON.stringify({ policyName: params.policyName, document: params.document }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam"] }),
+  });
+}
+
+export function useDeleteRoleInlinePolicy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { roleName: string; policyName: string }) =>
+      api(
+        `/aws/iam/roles/${encodeURIComponent(params.roleName)}/inline-policies/${encodeURIComponent(params.policyName)}`,
+        { method: "DELETE" }
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam"] }),
+  });
+}
+
+export function useUpdateRoleTrustPolicy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { roleName: string; document: string }) =>
+      api(`/aws/iam/roles/${encodeURIComponent(params.roleName)}/trust-policy`, {
+        method: "PUT",
+        body: JSON.stringify({ document: params.document }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam"] }),
+  });
+}
+
+export function useSimulatePolicy() {
+  return useMutation({
+    mutationFn: (body: { policySourceArn: string; actionNames: string[]; resourceArns?: string[] }) =>
+      api("/aws/iam/simulate", { method: "POST", body: JSON.stringify(body) }),
+  });
+}

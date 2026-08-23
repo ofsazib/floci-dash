@@ -11,7 +11,12 @@ const mockIAMUser = vi.fn();
 const mockCreateUserMutate = vi.fn();
 const mockDeleteUserMutate = vi.fn();
 const mockIAMRoles = vi.fn();
+const mockShowToast = vi.hoisted(() => vi.fn());
 const mockIAMRole = vi.fn();
+const mockPutRoleInlinePolicy = vi.fn();
+const mockDeleteRoleInlinePolicy = vi.fn();
+const mockUpdateTrustPolicy = vi.fn();
+const mockSimulatePolicy = vi.fn();
 const mockCreateRoleMutate = vi.fn();
 const mockDeleteRoleMutate = vi.fn();
 const mockIAMGroups = vi.fn();
@@ -50,6 +55,10 @@ vi.mock("../hooks/useIAM", () => ({
   useDeleteUser: () => ({ mutateAsync: mockDeleteUserMutate, isPending: false }),
   useIAMRoles: (...args: any[]) => mockIAMRoles(...args),
   useIAMRole: (...args: any[]) => mockIAMRole(...args),
+  usePutRoleInlinePolicy: () => ({ mutate: mockPutRoleInlinePolicy, isPending: false }),
+  useDeleteRoleInlinePolicy: () => ({ mutate: mockDeleteRoleInlinePolicy, isPending: false }),
+  useUpdateRoleTrustPolicy: () => ({ mutate: mockUpdateTrustPolicy, isPending: false }),
+  useSimulatePolicy: () => ({ mutate: mockSimulatePolicy, isPending: false }),
   useCreateRole: () => ({ mutateAsync: mockCreateRoleMutate, isPending: false }),
   useDeleteRole: () => ({ mutateAsync: mockDeleteRoleMutate, isPending: false }),
   useIAMGroups: (...args: any[]) => mockIAMGroups(...args),
@@ -83,7 +92,7 @@ vi.mock("../hooks/useIAM", () => ({
 }));
 
 vi.mock("../components/Toast", () => ({
-  useToast: () => ({ showToast: vi.fn() }),
+  useToast: () => ({ showToast: mockShowToast }),
   ToastProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
@@ -1945,5 +1954,144 @@ describe("IAMPage — G.85 group detail, policies, tags, instance profiles", () 
     await waitFor(() => expect(screen.getByRole("textbox", { name: /Profile name/i })).toBeTruthy());
     await clickButton(user, /Cancel/i, { last: true });
     await waitFor(expectModalHidden);
+  });
+});
+
+describe("IAMPage — role policy management", () => {
+  function openRoleDetail() {
+    const trustPolicy = JSON.stringify({ Version: "2012-10-17", Statement: [] });
+    mockIAMRole.mockReturnValue({
+      data: {
+        role: { name: "ec2-role", arn: "arn:role", roleId: "R1", path: "/", createDate: "2024-01-01T00:00:00Z", maxSessionDuration: 3600, assumeRolePolicyDocument: trustPolicy },
+        attachedPolicies: [],
+        tags: {},
+      },
+      isLoading: false,
+    });
+    mockIAMRoles.mockReturnValue({
+      data: { roles: [{ name: "ec2-role", arn: "arn:role" }] },
+      isLoading: false, isError: false, error: null,
+    });
+    return (async () => {
+      const user = userEvent.setup();
+      render(<IAMPage />, { wrapper: pageWrapper() });
+      await user.click(screen.getByRole("tab", { name: /Roles/i }));
+      await clickButton(user, /View/i, { last: true });
+      await waitFor(() => expect(screen.getAllByText(/Role: ec2-role/i).length).toBeGreaterThan(0));
+      return user;
+    })();
+  }
+
+  it("updates the trust policy from the detail modal", async () => {
+    mockUpdateTrustPolicy.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
+    const user = await openRoleDetail();
+    const areas = await screen.findAllByRole("textbox");
+    fireEvent.change(areas[0], { target: { value: '{"Version":"2012-10-17"}' } });
+    await user.click(screen.getByRole("button", { name: /Save trust policy/i }));
+    await waitFor(() =>
+      expect(mockUpdateTrustPolicy).toHaveBeenCalledWith(
+        { roleName: "ec2-role", document: '{"Version":"2012-10-17"}' },
+        expect.objectContaining({ onSuccess: expect.any(Function) })
+      )
+    );
+  });
+
+  it("shows an error toast when the trust policy update fails", async () => {
+    mockUpdateTrustPolicy.mockImplementation((_b: any, opts: any) => opts?.onError?.(new Error("trust failed")));
+    const user = await openRoleDetail();
+    const areas = await screen.findAllByRole("textbox");
+    fireEvent.change(areas[0], { target: { value: "x" } });
+    await user.click(screen.getByRole("button", { name: /Save trust policy/i }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "trust failed"));
+  });
+
+  it("shows a fallback error for trust policy updates", async () => {
+    mockUpdateTrustPolicy.mockImplementation((_b: any, opts: any) => opts?.onError?.(new Error("")));
+    const user = await openRoleDetail();
+    const areas = await screen.findAllByRole("textbox");
+    fireEvent.change(areas[0], { target: { value: "x" } });
+    await user.click(screen.getByRole("button", { name: /Save trust policy/i }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "Failed to update trust policy"));
+  });
+
+  it("saves an inline policy from the detail modal", async () => {
+    mockPutRoleInlinePolicy.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
+    await openRoleDetail();
+    const user = userEvent.setup();
+    fireEvent.change(screen.getAllByPlaceholderText("inline-1").at(-1)!, { target: { value: "inline-1" } });
+    fireEvent.change(screen.getAllByPlaceholderText("Inline policy document (JSON)").at(-1)!, {
+      target: { value: '{"Version":"2012-10-17"}' },
+    });
+    await user.click(screen.getAllByRole("button", { name: /Save inline policy/i }).at(-1)!);
+    await waitFor(() =>
+      expect(mockPutRoleInlinePolicy).toHaveBeenCalledWith(
+        { roleName: "ec2-role", policyName: "inline-1", document: '{"Version":"2012-10-17"}' },
+        expect.objectContaining({ onSuccess: expect.any(Function) })
+      )
+    );
+  });
+
+  it("keeps Save inline policy disabled until both fields are set", async () => {
+    await openRoleDetail();
+    expect((await screen.findByRole("button", { name: /Save inline policy/i })).hasAttribute("disabled")).toBe(true);
+  });
+
+  it("deletes an inline policy by name", async () => {
+    mockDeleteRoleInlinePolicy.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
+    const user = await openRoleDetail();
+    const nameField = screen.getAllByPlaceholderText("inline-1").at(-1)!;
+    await user.type(nameField, "inline-1");
+    await user.click(screen.getByRole("button", { name: /Delete inline policy/i }));
+    await waitFor(() =>
+      expect(mockDeleteRoleInlinePolicy).toHaveBeenCalledWith(
+        { roleName: "ec2-role", policyName: "inline-1" },
+        expect.objectContaining({ onSuccess: expect.any(Function) })
+      )
+    );
+  });
+});
+
+describe("IAMPage — role inline policy error arms", () => {
+  it("shows error and fallback toasts for inline policy ops", async () => {
+    const trustPolicy = JSON.stringify({ Version: "2012-10-17", Statement: [] });
+    mockIAMRole.mockReturnValue({
+      data: {
+        role: { name: "ec2-role", arn: "arn:role", roleId: "R1", path: "/", createDate: "2024-01-01T00:00:00Z", maxSessionDuration: 3600, assumeRolePolicyDocument: trustPolicy },
+        attachedPolicies: [],
+        tags: {},
+      },
+      isLoading: false,
+    });
+    mockIAMRoles.mockReturnValue({
+      data: { roles: [{ name: "ec2-role", arn: "arn:role" }] },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<IAMPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Roles/i }));
+    await clickButton(user, /View/i, { last: true });
+    await waitFor(() => expect(screen.getAllByText(/Role: ec2-role/i).length).toBeGreaterThan(0));
+
+    // save fails with message
+    mockPutRoleInlinePolicy.mockImplementation((_b: any, opts: any) => opts?.onError?.(new Error("save failed")));
+    fireEvent.change(screen.getAllByPlaceholderText("inline-1").at(-1)!, { target: { value: "p1" } });
+    fireEvent.change(screen.getAllByPlaceholderText("Inline policy document (JSON)").at(-1)!, { target: { value: "{}" } });
+    await user.click(screen.getAllByRole("button", { name: /Save inline policy/i }).at(-1)!);
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "save failed"));
+
+    // save fails without message
+    mockPutRoleInlinePolicy.mockImplementation((_b: any, opts: any) => opts?.onError?.(new Error("")));
+    await user.click(screen.getAllByRole("button", { name: /Save inline policy/i }).at(-1)!);
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "Failed to save inline policy"));
+
+    // delete succeeds
+    mockDeleteRoleInlinePolicy.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
+    await user.click(screen.getAllByRole("button", { name: /Delete inline policy/i }).at(-1)!);
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("success", "Inline policy deleted"));
+
+    // delete fails with fallback
+    mockDeleteRoleInlinePolicy.mockImplementation((_b: any, opts: any) => opts?.onError?.(new Error("")));
+    await user.click(screen.getAllByRole("button", { name: /Delete inline policy/i }).at(-1)!);
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "Failed to delete inline policy"));
   });
 });

@@ -79,6 +79,10 @@ vi.mock("@aws-sdk/client-iam", () => ({
   DeleteUserPermissionsBoundaryCommand: createCmd("DeleteUserPermissionsBoundaryCommand"),
   PutRolePermissionsBoundaryCommand: createCmd("PutRolePermissionsBoundaryCommand"),
   DeleteRolePermissionsBoundaryCommand: createCmd("DeleteRolePermissionsBoundaryCommand"),
+  PutRolePolicyCommand: createCmd("PutRolePolicyCommand"),
+  DeleteRolePolicyCommand: createCmd("DeleteRolePolicyCommand"),
+  UpdateAssumeRolePolicyCommand: createCmd("UpdateAssumeRolePolicyCommand"),
+  SimulatePrincipalPolicyCommand: createCmd("SimulatePrincipalPolicyCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -1106,6 +1110,96 @@ describe("IAM Routes", () => {
         headers: { "content-type": "application/json" },
       });
       expect(res400.status).toBe(400);
+    });
+  });
+
+  describe("Role policies, trust policy, simulator", () => {
+    it("PUT /roles/:name/inline-policies — puts an inline policy", async () => {
+      mockSend.mockResolvedValue({});
+      const res = await put("/roles/r1/inline-policies", {
+        policyName: "inline-1",
+        document: '{"Version":"2012-10-17"}',
+      });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("PutRolePolicyCommand");
+      expect(cmd.RoleName).toBe("r1");
+      expect(cmd.PolicyName).toBe("inline-1");
+    });
+
+    it("PUT /roles/:name/inline-policies — 400 without policyName", async () => {
+      const res = await put("/roles/r1/inline-policies", { document: "{}" });
+      expect(res.status).toBe(400);
+    });
+
+    it("PUT /roles/:name/inline-policies — 400 without document", async () => {
+      const res = await put("/roles/r1/inline-policies", { policyName: "p" });
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE /roles/:name/inline-policies/:policyName — deletes", async () => {
+      mockSend.mockResolvedValue({});
+      const res = await del("/roles/r1/inline-policies/p1");
+      expect((await res.json()).deleted).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteRolePolicyCommand");
+    });
+
+    it("PUT /roles/:name/trust-policy — updates the trust policy", async () => {
+      mockSend.mockResolvedValue({});
+      const res = await put("/roles/r1/trust-policy", { document: '{"Version":"2012-10-17"}' });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("UpdateAssumeRolePolicyCommand");
+      expect(cmd.PolicyDocument).toBe('{"Version":"2012-10-17"}');
+    });
+
+    it("PUT /roles/:name/trust-policy — 400 without document", async () => {
+      const res = await put("/roles/r1/trust-policy", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /simulate — maps evaluation results", async () => {
+      mockSend.mockResolvedValueOnce({
+        EvaluationResults: [{
+          EvalActionName: "s3:GetObject",
+          EvalDecision: "allowed",
+          MatchedStatements: [{ SourcePolicyId: "pol1", StatementId: "st1" }],
+        }],
+      });
+      const res = await post("/simulate", {
+        policySourceArn: "arn:aws:iam::123:role/r1",
+        actionNames: ["s3:GetObject"],
+        resourceArns: ["arn:aws:s3:::b/*"],
+      });
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(body.evaluations[0].matchedStatements[0].statementId).toBe("st1");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("SimulatePrincipalPolicyCommand");
+      expect(cmd.ResourceArns).toEqual(["arn:aws:s3:::b/*"]);
+    });
+
+    it("POST /simulate — sparse fallbacks", async () => {
+      mockSend.mockResolvedValueOnce({ EvaluationResults: [{}] });
+      const res = await post("/simulate", { policySourceArn: "arn:x", actionNames: ["a"] });
+      const body = await res.json();
+      expect(body.evaluations[0].matchedStatements).toEqual([]);
+    });
+
+    it("POST /simulate — empty results", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/simulate", { policySourceArn: "arn:x", actionNames: ["a"] });
+      expect((await res.json()).evaluations).toEqual([]);
+    });
+
+    it("POST /simulate — 400 without policySourceArn", async () => {
+      const res = await post("/simulate", { actionNames: ["a"] });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /simulate — 400 without actionNames", async () => {
+      const res = await post("/simulate", { policySourceArn: "arn:x" });
+      expect(res.status).toBe(400);
     });
   });
 });

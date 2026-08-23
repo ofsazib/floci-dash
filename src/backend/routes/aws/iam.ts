@@ -73,6 +73,10 @@ import {
   DeleteUserPermissionsBoundaryCommand,
   PutRolePermissionsBoundaryCommand,
   DeleteRolePermissionsBoundaryCommand,
+  PutRolePolicyCommand,
+  DeleteRolePolicyCommand,
+  UpdateAssumeRolePolicyCommand,
+  SimulatePrincipalPolicyCommand,
 } from "@aws-sdk/client-iam";
 import { getAwsConfig } from "../../clients/aws";
 import { sanitizeName, validateJson } from "../../clients/sanitize";
@@ -648,6 +652,66 @@ router.delete("/roles/:name/permissions-boundary", async (c: Context) => {
   const name = c.req.param("name");
   await iam().send(new DeleteRolePermissionsBoundaryCommand({ RoleName: name }));
   return c.json({ deleted: true });
+});
+
+
+// ── Role inline policies + trust policy + simulator ─────
+
+router.put("/roles/:name/inline-policies", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const body = await c.req.json<any>();
+  if (!body.policyName) return c.json({ error: "policyName is required" }, 400);
+  if (!body.document) return c.json({ error: "document is required" }, 400);
+  await iam().send(
+    new PutRolePolicyCommand({
+      RoleName: name,
+      PolicyName: body.policyName,
+      PolicyDocument: body.document,
+    })
+  );
+  return c.json({ updated: true });
+});
+
+router.delete("/roles/:name/inline-policies/:policyName", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const policyName = c.req.param("policyName")!;
+  await iam().send(new DeleteRolePolicyCommand({ RoleName: name, PolicyName: policyName }));
+  return c.json({ deleted: true });
+});
+
+router.put("/roles/:name/trust-policy", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const body = await c.req.json<{ document?: string }>();
+  if (!body.document) return c.json({ error: "document is required" }, 400);
+  await iam().send(
+    new UpdateAssumeRolePolicyCommand({
+      RoleName: name,
+      PolicyDocument: body.document,
+    })
+  );
+  return c.json({ updated: true });
+});
+
+router.post("/simulate", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.policySourceArn) return c.json({ error: "policySourceArn is required" }, 400);
+  if (!body.actionNames?.length) return c.json({ error: "actionNames is required" }, 400);
+  const result = await iam().send(
+    new SimulatePrincipalPolicyCommand({
+      PolicySourceArn: body.policySourceArn,
+      ActionNames: body.actionNames,
+      ResourceArns: body.resourceArns,
+    })
+  );
+  const evaluations = (result.EvaluationResults || []).map((e: any) => ({
+    evalActionName: e.EvalActionName,
+    evalDecision: e.EvalDecision,
+    matchedStatements: (e.MatchedStatements || []).map((ms: any) => ({
+      sourcePolicyId: ms.SourcePolicyId,
+      statementId: ms.StatementId,
+    })),
+  }));
+  return c.json({ evaluations, total: evaluations.length });
 });
 
 export default router;
