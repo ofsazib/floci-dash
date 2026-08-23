@@ -130,6 +130,8 @@ import {
   useCreateAppSyncDataSource,
   useDeleteAppSyncDataSource,
   useAppSyncResolvers,
+  useCreateAppSyncResolver,
+  useDeleteAppSyncResolver,
   useAppSyncFunctions,
   useCreateAppSyncFunction,
   useDeleteAppSyncFunction,
@@ -633,6 +635,12 @@ function AppSyncApiDetail({ apiId, onBack }: { apiId: string; onBack: () => void
   const deleteDs = useDeleteAppSyncDataSource();
   const createFunc = useCreateAppSyncFunction();
   const deleteFunc = useDeleteAppSyncFunction();
+  const createResolver = useCreateAppSyncResolver();
+  const deleteResolver = useDeleteAppSyncResolver();
+  const [showCreateResolver, setShowCreateResolver] = useState(false);
+  const [resolverTypeName, setResolverTypeName] = useState("Query");
+  const [resolverFieldName, setResolverFieldName] = useState("");
+  const [resolverDs, setResolverDs] = useState("");
   const createKey = useCreateAppSyncApiKey();
   const deleteKey = useDeleteAppSyncApiKey();
   const { showToast } = useToast();
@@ -686,6 +694,7 @@ function AppSyncApiDetail({ apiId, onBack }: { apiId: string; onBack: () => void
       label: `Resolvers (${resolvers.length})`,
       id: "resolvers",
       content: (
+        <>
         <ResourceTable
           resourceName="Resolver"
           headerTitle="Resolvers"
@@ -697,10 +706,84 @@ function AppSyncApiDetail({ apiId, onBack }: { apiId: string; onBack: () => void
             { id: "ds", header: "Data Source", cell: (item: any) => item.dataSourceName || "—" },
             { id: "kind", header: "Kind", cell: (item: any) => item.kind || "UNIT" },
             { id: "runtime", header: "Runtime", cell: (item: any) => item.runtime?.name || "—" },
+            {
+              id: "actions",
+              header: "",
+              cell: (item: any) => (
+                <DeleteButton
+                  itemName={item.fieldName}
+                  resourceType="resolver"
+                  loading={deleteResolver.isPending}
+                  onDelete={() =>
+                    deleteResolver.mutateAsync({
+                      apiId,
+                      typeName: item.typeName,
+                      fieldName: item.fieldName,
+                    })
+                  }
+                />
+              ),
+            },
           ]}
           loading={resolverLoading}
           emptyMessage="No resolvers."
+          onCreate={() => setShowCreateResolver(true)}
         />
+        <Modal
+          visible={showCreateResolver}
+          onDismiss={() => setShowCreateResolver(false)}
+          header="Create resolver"
+          footer={
+            <Box float="right">
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button variant="link" onClick={() => setShowCreateResolver(false)}>Cancel</Button>
+                <Button
+                  variant="primary"
+                  loading={createResolver.isPending}
+                  disabled={!resolverFieldName.trim() || !resolverDs.trim()}
+                  onClick={() => {
+                    createResolver.mutate(
+                      {
+                        apiId,
+                        typeName: resolverTypeName.trim() || "Query",
+                        fieldName: resolverFieldName.trim(),
+                        dataSourceName: resolverDs.trim(),
+                      },
+                      {
+                        onSuccess: () => {
+                          setShowCreateResolver(false);
+                          setResolverFieldName(""); setResolverDs("");
+                        },
+                      }
+                    );
+                  }}
+                >
+                  Create
+                </Button>
+              </SpaceBetween>
+            </Box>
+          }
+        >
+          <Form>
+            {createResolver.isError && (
+              <Alert type="error" dismissible>
+                {(createResolver.error as Error)?.message || "Failed to create resolver"}
+              </Alert>
+            )}
+            <SpaceBetween size="m">
+              <FormField label="Type name">
+                <Input value={resolverTypeName} onChange={({ detail }) => setResolverTypeName(detail.value)} placeholder="Query" />
+              </FormField>
+              <FormField label="Field name">
+                <Input value={resolverFieldName} onChange={({ detail }) => setResolverFieldName(detail.value)} placeholder="getPost" />
+              </FormField>
+              <FormField label="Data source name">
+                <Input value={resolverDs} onChange={({ detail }) => setResolverDs(detail.value)} placeholder="ds-1" />
+              </FormField>
+            </SpaceBetween>
+          </Form>
+        </Modal>
+        </>
       ),
     },
     {

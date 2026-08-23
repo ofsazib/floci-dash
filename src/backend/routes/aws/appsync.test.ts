@@ -36,6 +36,10 @@ vi.mock("@aws-sdk/client-appsync", () => ({
   CreateApiKeyCommand: createCmd("CreateApiKeyCommand"),
   DeleteApiKeyCommand: createCmd("DeleteApiKeyCommand"),
   ListTypesCommand: createCmd("ListTypesCommand"),
+  CreateResolverCommand: createCmd("CreateResolverCommand"),
+  UpdateResolverCommand: createCmd("UpdateResolverCommand"),
+  DeleteResolverCommand: createCmd("DeleteResolverCommand"),
+  UpdateDataSourceCommand: createCmd("UpdateDataSourceCommand"),
 }));
 
 import app from "../../index";
@@ -494,5 +498,95 @@ describe("GET /api/aws/appsync/apis/:apiId/types", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.types).toHaveLength(0);
+  });
+
+
+async function post(path: string, body?: any) {
+  return app.request("/api/aws/appsync" + path, {
+    method: "POST",
+    body: body != null ? JSON.stringify(body) : undefined,
+    headers: body != null ? { "content-type": "application/json" } : undefined,
+  });
+}
+async function put(path: string, body?: any) {
+  return app.request("/api/aws/appsync" + path, {
+    method: "PUT",
+    body: body != null ? JSON.stringify(body) : undefined,
+    headers: body != null ? { "content-type": "application/json" } : undefined,
+  });
+}
+async function del(path: string) {
+  return app.request("/api/aws/appsync" + path, { method: "DELETE" });
+}
+  describe("Resolver + datasource mutations", () => {
+    it("POST /apis/:apiId/types/:typeName/resolvers — creates a resolver", async () => {
+      mockSend.mockResolvedValueOnce({ resolver: { fieldName: "getPost", typeName: "Query" } });
+      const res = await post("/apis/api-1/types/Query/resolvers", {
+        fieldName: "getPost",
+        dataSourceName: "ds-1",
+        requestMappingTemplate: "{version: '2018-05-29'}",
+      });
+      expect(res.status).toBe(201);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("CreateResolverCommand");
+      expect(cmd.typeName).toBe("Query");
+      expect(cmd.dataSourceName).toBe("ds-1");
+    });
+
+    it("POST resolvers — 400 without fieldName", async () => {
+      const res = await post("/apis/api-1/types/Query/resolvers", { dataSourceName: "ds" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST resolvers — 400 without dataSourceName", async () => {
+      const res = await post("/apis/api-1/types/Query/resolvers", { fieldName: "f" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST resolvers — null resolver on sparse", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/apis/api-1/types/Query/resolvers", { fieldName: "f", dataSourceName: "d" });
+      expect((await res.json()).resolver).toBeNull();
+    });
+
+    it("PUT .../resolvers/:fieldName — updates templates", async () => {
+      mockSend.mockResolvedValueOnce({ resolver: { fieldName: "getPost" } });
+      const res = await put("/apis/api-1/types/Query/resolvers/getPost", {
+        requestMappingTemplate: "{new}",
+      });
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("UpdateResolverCommand");
+      expect(cmd.fieldName).toBe("getPost");
+    });
+
+    it("PUT .../resolvers/:fieldName — null on sparse", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/apis/api-1/types/Query/resolvers/getPost", {});
+      expect((await res.json()).resolver).toBeNull();
+    });
+
+    it("DELETE .../resolvers/:fieldName — deletes", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/apis/api-1/types/Query/resolvers/getPost");
+      expect((await res.json()).deleted).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteResolverCommand");
+    });
+
+    it("PUT /apis/:apiId/datasources/:name — updates a data source", async () => {
+      mockSend.mockResolvedValueOnce({ dataSource: { name: "ds-1" } });
+      const res = await put("/apis/api-1/datasources/ds-1", {
+        type: "AWS_LAMBDA",
+        lambdaConfig: { lambdaFunctionArn: "arn:fn" },
+      });
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("UpdateDataSourceCommand");
+      expect(cmd.lambdaConfig.lambdaFunctionArn).toBe("arn:fn");
+    });
+
+    it("PUT /apis/:apiId/datasources/:name — null on sparse", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/apis/api-1/datasources/ds-1", {});
+      expect((await res.json()).dataSource).toBeNull();
+    });
   });
 });

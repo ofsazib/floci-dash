@@ -15,6 +15,9 @@ const mockDataSources = vi.fn();
 const mockCreateDS = vi.fn();
 const mockDeleteDS = vi.fn();
 const mockResolvers = vi.fn();
+const mockCreateResolver = vi.fn();
+const mockDeleteResolver = vi.fn();
+const createResolverState = vi.hoisted(() => ({ isError: false, error: null as Error | null }));
 const mockFunctions = vi.fn();
 const mockCreateFunc = vi.fn();
 const mockDeleteFunc = vi.fn();
@@ -57,6 +60,16 @@ vi.mock("../../hooks/useAppSync", () => ({
     variables: null,
   }),
   useAppSyncResolvers: (...args: any[]) => mockResolvers(...args),
+  useCreateAppSyncResolver: () => ({
+    mutate: mockCreateResolver,
+    isPending: false,
+    get isError() { return createResolverState.isError; },
+    get error() { return createResolverState.error; },
+  }),
+  useDeleteAppSyncResolver: () => ({
+    mutateAsync: mockDeleteResolver,
+    isPending: false,
+  }),
   useAppSyncFunctions: (...args: any[]) => mockFunctions(...args),
   useCreateAppSyncFunction: () => ({
     mutate: mockCreateFunc,
@@ -116,6 +129,8 @@ vi.mock("../../components/Toast", () => ({
 // ─── Setup ──────────────────────────────────────────────
 
 beforeEach(() => {
+  createResolverState.isError = false;
+  createResolverState.error = null;
   vi.resetAllMocks();
   createApiState.isError = false;
   createApiState.error = null;
@@ -1007,5 +1022,157 @@ describe("AppSyncDashboard — create flows", () => {
         expect.any(Object)
       )
     );
+  });
+});
+
+describe("AppSyncDashboard — resolver mutations", () => {
+  function setupApi() {
+    mockApis.mockReturnValue({
+      data: { apis: [{ apiId: "api-1", name: "blog" }] },
+      isLoading: false, isError: false, error: null,
+    });
+    mockResolvers.mockReturnValue({
+      data: { resolvers: [
+        { typeName: "Query", fieldName: "getPost", dataSourceName: "ds-1", kind: "UNIT" },
+      ] },
+      isLoading: false,
+    });
+  }
+
+  it("creates a resolver from the modal", async () => {
+    mockCreateResolver.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
+    setupApi();
+    const user = userEvent.setup();
+    render(<AppSyncDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "View" }));
+    await user.click(await screen.findByRole("tab", { name: /Resolvers/ }));
+    const createBtn = await screen.findByRole("button", { name: /Create resolver/i });
+    await user.click(createBtn);
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const inputs = dialog.querySelectorAll("input");
+    await user.type(inputs[1], "listPosts");
+    await user.type(inputs[2], "ds-2");
+    await user.click(within(dialog).getByRole("button", { name: "Create" }));
+    await waitFor(() =>
+      expect(mockCreateResolver).toHaveBeenCalledWith(
+        { apiId: "api-1", typeName: "Query", fieldName: "listPosts", dataSourceName: "ds-2" },
+        expect.objectContaining({ onSuccess: expect.any(Function) })
+      )
+    );
+  });
+
+  it("deletes a resolver after confirmation", async () => {
+    mockDeleteResolver.mockResolvedValue({});
+    setupApi();
+    const user = userEvent.setup();
+    render(<AppSyncDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "View" }));
+    await user.click(await screen.findByRole("tab", { name: /Resolvers/ }));
+    await user.click(await screen.findByRole("button", { name: /Delete getPost/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() =>
+      expect(mockDeleteResolver).toHaveBeenCalledWith({
+        apiId: "api-1",
+        typeName: "Query",
+        fieldName: "getPost",
+      })
+    );
+  });
+
+  it("shows the create resolver error with fallback", async () => {
+    createResolverState.isError = true;
+    createResolverState.error = new Error("resolver failed");
+    setupApi();
+    const user = userEvent.setup();
+    render(<AppSyncDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "View" }));
+    await user.click(await screen.findByRole("tab", { name: /Resolvers/ }));
+    await user.click(await screen.findByRole("button", { name: /Create resolver/i }));
+    expect(await screen.findByText("resolver failed")).toBeTruthy();
+  });
+});
+
+describe("AppSyncDashboard — resolver modal dismiss + fallbacks", () => {
+  function setupApi() {
+    mockApis.mockReturnValue({
+      data: { apis: [{ apiId: "api-1", name: "blog" }] },
+      isLoading: false, isError: false, error: null,
+    });
+    mockResolvers.mockReturnValue({ data: { resolvers: [] }, isLoading: false });
+  }
+
+  it("cancels and Escape-dismisses the resolver modal", async () => {
+    setupApi();
+    const user = userEvent.setup();
+    render(<AppSyncDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "View" }));
+    await user.click(await screen.findByRole("tab", { name: /Resolvers/ }));
+    await user.click(await screen.findByRole("button", { name: /Create resolver/i }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(mockCreateResolver).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: /Create resolver/i }));
+    document.querySelectorAll('[class*="awsui_dialog"]').forEach((d) =>
+      fireEvent.keyDown(d as HTMLElement, { keyCode: 27 })
+    );
+    expect(mockCreateResolver).not.toHaveBeenCalled();
+  });
+
+  it("sends a custom type name when edited", async () => {
+    mockCreateResolver.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
+    setupApi();
+    const user = userEvent.setup();
+    render(<AppSyncDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "View" }));
+    await user.click(await screen.findByRole("tab", { name: /Resolvers/ }));
+    await user.click(await screen.findByRole("button", { name: /Create resolver/i }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const inputs = dialog.querySelectorAll("input");
+    await user.clear(inputs[0]);
+    await user.type(inputs[0], "Mutation");
+    await user.type(inputs[1], "addPost");
+    await user.type(inputs[2], "ds-9");
+    await user.click(within(dialog).getByRole("button", { name: "Create" }));
+    await waitFor(() =>
+      expect(mockCreateResolver).toHaveBeenCalledWith(
+        expect.objectContaining({ typeName: "Mutation", fieldName: "addPost" }),
+        expect.anything()
+      )
+    );
+  });
+
+  it("defaults the type name to Query when cleared blank", async () => {
+    mockCreateResolver.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
+    setupApi();
+    const user = userEvent.setup();
+    render(<AppSyncDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "View" }));
+    await user.click(await screen.findByRole("tab", { name: /Resolvers/ }));
+    await user.click(await screen.findByRole("button", { name: /Create resolver/i }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const inputs = dialog.querySelectorAll("input");
+    await user.clear(inputs[0]);
+    await user.type(inputs[1], "f1");
+    await user.type(inputs[2], "d1");
+    await user.click(within(dialog).getByRole("button", { name: "Create" }));
+    await waitFor(() =>
+      expect(mockCreateResolver).toHaveBeenCalledWith(
+        expect.objectContaining({ typeName: "Query" }),
+        expect.anything()
+      )
+    );
+  });
+
+  it("shows the generic create error fallback", async () => {
+    createResolverState.isError = true;
+    createResolverState.error = null;
+    setupApi();
+    const user = userEvent.setup();
+    render(<AppSyncDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "View" }));
+    await user.click(await screen.findByRole("tab", { name: /Resolvers/ }));
+    await user.click(await screen.findByRole("button", { name: /Create resolver/i }));
+    expect(await screen.findByText("Failed to create resolver")).toBeTruthy();
   });
 });

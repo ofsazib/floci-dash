@@ -22,6 +22,8 @@ import {
   useCreateAppSyncApiKey,
   useDeleteAppSyncApiKey,
   useStartSchemaCreation,
+  useCreateAppSyncResolver,
+  useDeleteAppSyncResolver,
 } from "./useAppSync";
 import { api } from "../lib/client";
 
@@ -284,5 +286,33 @@ describe("useAppSyncTypes", () => {
   it("is disabled when apiId is null", () => {
     const { result } = renderHook(() => useAppSyncTypes(null), { wrapper: createWrapper() });
     expect(result.current.fetchStatus).toBe("idle");
+  });
+});
+
+describe("AppSync resolver hooks", () => {
+  it("useCreateAppSyncResolver posts encoded path", async () => {
+    mockedApi.mockResolvedValueOnce({ resolver: {} });
+    const { result } = renderHook(() => useCreateAppSyncResolver(), { wrapper: createWrapper() });
+    result.current.mutate({
+      apiId: "a 1",
+      typeName: "Query",
+      fieldName: "getPost",
+      dataSourceName: "ds",
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockedApi).toHaveBeenCalledWith("/aws/appsync/apis/a%201/types/Query/resolvers", {
+      method: "POST",
+      body: JSON.stringify({ apiId: "a 1", typeName: "Query", fieldName: "getPost", dataSourceName: "ds" }),
+    });
+  });
+
+  it("useDeleteAppSyncResolver deletes all encoded", async () => {
+    mockedApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useDeleteAppSyncResolver(), { wrapper: createWrapper() });
+    result.current.mutate({ apiId: "a/1", typeName: "T 1", fieldName: "f 1" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockedApi).toHaveBeenCalledWith("/aws/appsync/apis/a%2F1/types/T%201/resolvers/f%201", {
+      method: "DELETE",
+    });
   });
 });

@@ -208,3 +208,34 @@ export function useAppSyncTypes(apiId: string | null) {
     enabled: !!apiId,
   });
 }
+
+export function useCreateAppSyncResolver() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: {
+      apiId: string;
+      typeName: string;
+      fieldName: string;
+      dataSourceName: string;
+      requestMappingTemplate?: string;
+      responseMappingTemplate?: string;
+    }) =>
+      api(`/aws/appsync/apis/${encodeURIComponent(params.apiId)}/types/${encodeURIComponent(params.typeName)}/resolvers`, {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "appsync"] }),
+  });
+}
+
+export function useDeleteAppSyncResolver() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { apiId: string; typeName: string; fieldName: string }) =>
+      api(
+        `/aws/appsync/apis/${encodeURIComponent(params.apiId)}/types/${encodeURIComponent(params.typeName)}/resolvers/${encodeURIComponent(params.fieldName)}`,
+        { method: "DELETE" }
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "appsync"] }),
+  });
+}

@@ -3,6 +3,12 @@ import type { Context } from "hono";
 import { getAwsConfig } from "../../clients/aws";
 import { AppSyncClient } from "@aws-sdk/client-appsync";
 import {
+  CreateResolverCommand,
+  UpdateResolverCommand,
+  DeleteResolverCommand,
+  UpdateDataSourceCommand,
+} from "@aws-sdk/client-appsync";
+import {
   ListGraphqlApisCommand,
   CreateGraphqlApiCommand,
   GetGraphqlApiCommand,
@@ -234,6 +240,75 @@ router.get("/apis/:apiId/types", async (c: Context) => {
   );
   const types = result.types || [];
   return c.json({ types, total: types.length });
+});
+
+
+router.post("/apis/:apiId/types/:typeName/resolvers", async (c: Context) => {
+  const apiId = c.req.param("apiId")!;
+  const typeName = c.req.param("typeName")!;
+  const body = await c.req.json<any>();
+  if (!body.fieldName) return c.json({ error: "fieldName is required" }, 400);
+  if (!body.dataSourceName) return c.json({ error: "dataSourceName is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new CreateResolverCommand({
+      apiId,
+      typeName,
+      fieldName: body.fieldName,
+      dataSourceName: body.dataSourceName,
+      requestMappingTemplate: body.requestMappingTemplate,
+      responseMappingTemplate: body.responseMappingTemplate,
+    })
+  );
+  return c.json({ resolver: result.resolver || null }, 201);
+});
+
+router.put("/apis/:apiId/types/:typeName/resolvers/:fieldName", async (c: Context) => {
+  const apiId = c.req.param("apiId")!;
+  const typeName = c.req.param("typeName")!;
+  const fieldName = c.req.param("fieldName")!;
+  const body = await c.req.json<any>();
+  const client = getClient();
+  const result = await client.send(
+    new UpdateResolverCommand({
+      apiId,
+      typeName,
+      fieldName,
+      dataSourceName: body.dataSourceName,
+      requestMappingTemplate: body.requestMappingTemplate,
+      responseMappingTemplate: body.responseMappingTemplate,
+    })
+  );
+  return c.json({ resolver: result.resolver || null });
+});
+
+router.delete("/apis/:apiId/types/:typeName/resolvers/:fieldName", async (c: Context) => {
+  const apiId = c.req.param("apiId")!;
+  const typeName = c.req.param("typeName")!;
+  const fieldName = c.req.param("fieldName")!;
+  const client = getClient();
+  await client.send(new DeleteResolverCommand({ apiId, typeName, fieldName }));
+  return c.json({ deleted: true });
+});
+
+router.put("/apis/:apiId/datasources/:name", async (c: Context) => {
+  const apiId = c.req.param("apiId")!;
+  const name = c.req.param("name")!;
+  const body = await c.req.json<any>();
+  const client = getClient();
+  const result = await client.send(
+    new UpdateDataSourceCommand({
+      apiId,
+      name,
+      type: body.type,
+      serviceRoleArn: body.serviceRoleArn,
+      dynamodbConfig: body.dynamodbConfig,
+      lambdaConfig: body.lambdaConfig,
+      httpConfig: body.httpConfig,
+      description: body.description,
+    })
+  );
+  return c.json({ dataSource: result.dataSource || null });
 });
 
 export default router;
