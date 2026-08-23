@@ -102,6 +102,8 @@ vi.mock("../hooks/useCodeDeploy", () => ({
   useContinueCodeDeployDeployment: () => ({ mutate: vi.fn(), isPending: false, variables: null }),
   usePutCodeDeployLifecycleHookStatus: () => ({ mutate: vi.fn(), isPending: false }),
   useCodeDeployDeploymentTargets: vi.fn(() => ({ data: { targets: [] } })),
+  useStopCodeDeployDeployment: () => ({ mutate: vi.fn(), isPending: false, variables: null }),
+  useUpdateCodeDeployDeploymentGroup: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 vi.mock("../hooks/useCUR", () => ({
@@ -1088,6 +1090,9 @@ vi.mock("../hooks/useMsk", () => ({
 vi.mock("../hooks/useFirehose", () => ({
   useFirehoseStreams: (...args: any[]) => mockFirehoseStreams(...args),
   useDeleteFirehoseStream: () => ({ mutateAsync: vi.fn(), isPending: false, variables: null }),
+  useFirehoseStreamTags: vi.fn(() => ({ data: { tags: [] } })),
+  useTagFirehoseStream: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useUntagFirehoseStream: () => ({ mutateAsync: vi.fn(), isPending: false, variables: null }),
 }));
 
 vi.mock("../hooks/useACM", () => ({
@@ -1098,6 +1103,10 @@ vi.mock("../hooks/useACM", () => ({
 vi.mock("../hooks/useTranscribe", () => ({
   useTranscriptionJobs: (...args: any[]) => mockTranscriptionJobs(...args),
   useDeleteTranscriptionJob: () => ({ mutateAsync: vi.fn(), isPending: false, variables: null }),
+  useTranscribeVocabularies: vi.fn(() => ({ data: { vocabularies: [] } })),
+  useTranscribeVocabulary: vi.fn(() => ({ data: undefined })),
+  useCreateTranscribeVocabulary: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
+  useDeleteTranscribeVocabulary: () => ({ mutateAsync: vi.fn(), isPending: false, variables: null }),
 }));
 
 vi.mock("../hooks/useCloudTrail", () => ({
