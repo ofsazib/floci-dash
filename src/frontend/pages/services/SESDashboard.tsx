@@ -199,6 +199,11 @@ import {
   useDeleteTrackingOptions,
   useSetReputationMetrics,
   useSetDeliveryOptions,
+  useSESTemplates,
+  useCreateSESTemplate,
+  useDeleteSESTemplate,
+  useRenderSESTemplate,
+  useSESSendTemplated,
 } from "../../hooks/useSES";
 import {
   useSTSCallerIdentity,
@@ -552,6 +557,23 @@ export function SESDashboard() {
   const [rawAddress, setRawAddress] = useState("");
   const [rawMessage, setRawMessage] = useState("");
   const [accountError, setAccountError] = useState<string | null>(null);
+  const { data: templatesData } = useSESTemplates();
+  const createTemplate = useCreateSESTemplate();
+  const deleteTemplate = useDeleteSESTemplate();
+  const renderTemplate = useRenderSESTemplate();
+  const sendTemplated = useSESSendTemplated();
+  const [showCreateTemplate, setShowCreateTemplate] = useState(false);
+  const [tplName, setTplName] = useState("");
+  const [tplSubject, setTplSubject] = useState("");
+  const [tplText, setTplText] = useState("");
+  const [tplHtml, setTplHtml] = useState("");
+  const [rendered, setRendered] = useState<string | null>(null);
+  const [renderError, setRenderError] = useState<string | null>(null);
+  const [showSendTemplated, setShowSendTemplated] = useState(false);
+  const [stFrom, setStFrom] = useState("");
+  const [stTo, setStTo] = useState("");
+  const [stTemplate, setStTemplate] = useState("");
+  const [stData, setStData] = useState("{}");
   const [rawError, setRawError] = useState<string | null>(null);
   const [emailAddress, setEmailAddress] = useState("");
   const [sendFrom, setSendFrom] = useState("");
@@ -681,6 +703,70 @@ export function SESDashboard() {
           </SpaceBetween>
         </Container>
       )}
+
+      <Container
+        header={
+          <Header
+            variant="h2"
+            counter={templatesData?.total}
+            actions={
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button onClick={() => setShowSendTemplated(true)}>Send templated</Button>
+                <Button variant="primary" onClick={() => setShowCreateTemplate(true)}>Create template</Button>
+              </SpaceBetween>
+            }
+          >
+            Email Templates
+          </Header>
+        }
+      >
+        {renderError && (
+          <Alert type="error" dismissible onDismiss={() => setRenderError(null)}>{renderError}</Alert>
+        )}
+        <ResourceTable
+          resourceName="Template"
+          items={(templatesData?.templates || []).map((t) => ({
+            name: t.name,
+            created: t.createdTimestamp ? new Date(t.createdTimestamp).toLocaleDateString() : "-",
+          }))}
+          columns={[
+            { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+            { id: "created", header: "Created", cell: (i: any) => i.created },
+            {
+              id: "actions",
+              header: "",
+              cell: (i: any) => (
+                <SpaceBetween direction="horizontal" size="xs">
+                  <Button
+                    loading={renderTemplate.isPending && renderTemplate.variables?.name === i.name}
+                    onClick={() =>
+                      renderTemplate.mutate(
+                        { name: i.name },
+                        {
+                          onSuccess: (data: any) => setRendered(data.rendered),
+                          onError: (e) => setRenderError((e as Error).message || "Render failed"),
+                        }
+                      )
+                    }
+                  >
+                    Preview
+                  </Button>
+                  <DeleteButton
+                    itemName={i.name}
+                    resourceType="template"
+                    loading={deleteTemplate.isPending && deleteTemplate.variables === i.name}
+                    onDelete={() => deleteTemplate.mutateAsync(i.name)}
+                  />
+                </SpaceBetween>
+              ),
+            },
+          ]}
+          emptyMessage="No email templates"
+        />
+        {rendered && (
+          <pre className="fd-code-bg" style={{ fontSize: 12, padding: 12, borderRadius: 4, overflow: "auto", maxHeight: 220 }}>{rendered}</pre>
+        )}
+      </Container>
 
       <Container
         header={
@@ -1534,6 +1620,112 @@ export function SESDashboard() {
               placeholder="Select TLS policy"
             />
           </FormField>
+        </Form>
+      </Modal>
+
+      <Modal
+        visible={showCreateTemplate}
+        onDismiss={() => setShowCreateTemplate(false)}
+        header="Create email template"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreateTemplate(false)}>Cancel</Button>
+              <Button
+                variant="primary"
+                loading={createTemplate.isPending}
+                disabled={!tplName.trim()}
+                onClick={() => {
+                  createTemplate.mutate(
+                    { name: tplName.trim(), subject: tplSubject, text: tplText, html: tplHtml },
+                    {
+                      onSuccess: () => {
+                        setShowCreateTemplate(false);
+                        setTplName(""); setTplSubject(""); setTplText(""); setTplHtml("");
+                      },
+                    }
+                  );
+                }}
+              >
+                Create
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          {createTemplate.isError && (
+            <Alert type="error" dismissible>
+              {(createTemplate.error as Error)?.message || "Failed to create template"}
+            </Alert>
+          )}
+          <SpaceBetween size="m">
+            <FormField label="Template name">
+              <Input value={tplName} onChange={({ detail }) => setTplName(detail.value)} placeholder="welcome" />
+            </FormField>
+            <FormField label="Subject">
+              <Input value={tplSubject} onChange={({ detail }) => setTplSubject(detail.value)} placeholder="Hi {{name}}" />
+            </FormField>
+            <FormField label="Text part">
+              <Textarea value={tplText} onChange={({ detail }) => setTplText(detail.value)} rows={3} />
+            </FormField>
+            <FormField label="HTML part">
+              <Textarea value={tplHtml} onChange={({ detail }) => setTplHtml(detail.value)} rows={4} />
+            </FormField>
+          </SpaceBetween>
+        </Form>
+      </Modal>
+
+      <Modal
+        visible={showSendTemplated}
+        onDismiss={() => setShowSendTemplated(false)}
+        header="Send templated email"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowSendTemplated(false)}>Cancel</Button>
+              <Button
+                variant="primary"
+                loading={sendTemplated.isPending}
+                disabled={!stFrom.trim() || !stTo.trim() || !stTemplate.trim()}
+                onClick={() => {
+                  sendTemplated.mutate(
+                    {
+                      source: stFrom.trim(),
+                      template: stTemplate.trim(),
+                      destination: { to: [stTo.trim()] },
+                      templateData: stData,
+                    },
+                    { onSuccess: () => setShowSendTemplated(false) }
+                  );
+                }}
+              >
+                Send
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          {sendTemplated.isError && (
+            <Alert type="error" dismissible>
+              {(sendTemplated.error as Error)?.message || "Failed to send templated email"}
+            </Alert>
+          )}
+          <SpaceBetween size="m">
+            <FormField label="From">
+              <Input value={stFrom} onChange={({ detail }) => setStFrom(detail.value)} placeholder="sender@example.com" />
+            </FormField>
+            <FormField label="To">
+              <Input value={stTo} onChange={({ detail }) => setStTo(detail.value)} placeholder="recipient@example.com" />
+            </FormField>
+            <FormField label="Template name">
+              <Input value={stTemplate} onChange={({ detail }) => setStTemplate(detail.value)} placeholder="welcome" />
+            </FormField>
+            <FormField label="Template data (JSON)">
+              <Textarea value={stData} onChange={({ detail }) => setStData(detail.value)} rows={3} />
+            </FormField>
+          </SpaceBetween>
         </Form>
       </Modal>
     </>

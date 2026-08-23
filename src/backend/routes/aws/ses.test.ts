@@ -53,6 +53,13 @@ vi.mock("@aws-sdk/client-ses", () => ({
   DeleteConfigurationSetTrackingOptionsCommand: createCmd("DeleteConfigurationSetTrackingOptionsCommand"),
   UpdateConfigurationSetReputationMetricsEnabledCommand: createCmd("UpdateConfigurationSetReputationMetricsEnabledCommand"),
   PutConfigurationSetDeliveryOptionsCommand: createCmd("PutConfigurationSetDeliveryOptionsCommand"),
+  ListTemplatesCommand: createCmd("ListTemplatesCommand"),
+  CreateTemplateCommand: createCmd("CreateTemplateCommand"),
+  UpdateTemplateCommand: createCmd("UpdateTemplateCommand"),
+  DeleteTemplateCommand: createCmd("DeleteTemplateCommand"),
+  GetTemplateCommand: createCmd("GetTemplateCommand"),
+  SendTemplatedEmailCommand: createCmd("SendTemplatedEmailCommand"),
+  TestRenderTemplateCommand: createCmd("TestRenderTemplateCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -803,6 +810,134 @@ describe("SES Routes", () => {
       expect(body.updated).toBe(true);
       expect(mockSend.mock.calls[0][0].__cmdName).toBe("PutConfigurationSetDeliveryOptionsCommand");
       expect(mockSend.mock.calls[0][0].DeliveryOptions.TlsPolicy).toBe("Require");
+    });
+  });
+
+  describe("Templates", () => {
+    it("GET /templates — lists template metadata", async () => {
+      mockSend.mockResolvedValueOnce({ TemplatesMetadata: [{ Name: "welcome", CreatedTimestamp: new Date(0) }] });
+      const res = await get("/templates");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.templates[0].name).toBe("welcome");
+      expect(body.total).toBe(1);
+    });
+
+    it("GET /templates — empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/templates");
+      const body = await res.json();
+      expect(body.templates).toEqual([]);
+    });
+
+    it("POST /templates — creates with parts", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/templates", {
+        name: "welcome",
+        subject: "Hi {{name}}",
+        text: "Hello",
+        html: "<p>Hello</p>",
+      });
+      expect(res.status).toBe(201);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("CreateTemplateCommand");
+      expect(cmd.Template.TemplateName).toBe("welcome");
+      expect(cmd.Template.SubjectPart).toBe("Hi {{name}}");
+    });
+
+    it("POST /templates — 400 without name", async () => {
+      const res = await post("/templates", { subject: "x" });
+      expect(res.status).toBe(400);
+    });
+
+    it("PUT /templates/:name — updates parts", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/templates/welcome", { subject: "New" });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("UpdateTemplateCommand");
+      expect(cmd.Template.TemplateName).toBe("welcome");
+      expect(cmd.Template.SubjectPart).toBe("New");
+    });
+
+    it("GET /templates/:name — maps the template", async () => {
+      mockSend.mockResolvedValueOnce({
+        Template: { TemplateName: "welcome", SubjectPart: "s", TextPart: "t", HtmlPart: "<b>h</b>" },
+      });
+      const res = await get("/templates/welcome");
+      const body = await res.json();
+      expect(body.template).toEqual({ name: "welcome", subject: "s", text: "t", html: "<b>h</b>" });
+    });
+
+    it("GET /templates/:name — null when missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/templates/none");
+      expect((await res.json()).template).toBeNull();
+    });
+
+    it("DELETE /templates/:name — deletes", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/templates/welcome");
+      expect((await res.json()).deleted).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteTemplateCommand");
+    });
+
+    it("POST /templates/:name/render — returns rendered body", async () => {
+      mockSend.mockResolvedValueOnce({ RenderedTemplate: "<p>Hello World</p>" });
+      const res = await post("/templates/welcome/render", { templateData: '{"name":"World"}' });
+      const body = await res.json();
+      expect(body.rendered).toBe("<p>Hello World</p>");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("TestRenderTemplateCommand");
+      expect(cmd.TemplateData).toBe('{"name":"World"}');
+    });
+
+    it("POST /templates/:name/render — defaults template data", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/templates/welcome/render", {});
+      expect(mockSend.mock.calls[0][0].TemplateData).toBe("{}");
+    });
+
+    it("POST /send-templated — sends with template", async () => {
+      mockSend.mockResolvedValueOnce({ MessageId: "m-1" });
+      const res = await post("/send-templated", {
+        source: "sender@example.com",
+        template: "welcome",
+        destination: { to: ["to@example.com"] },
+        templateData: '{"name":"World"}',
+      });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.messageId).toBe("m-1");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("SendTemplatedEmailCommand");
+      expect(cmd.Source).toBe("sender@example.com");
+      expect(cmd.Template).toBe("welcome");
+    });
+
+    it("POST /send-templated — defaults template data", async () => {
+      mockSend.mockResolvedValueOnce({ MessageId: "m" });
+      const res = await post("/send-templated", {
+        source: "s@e.com",
+        template: "t",
+        destination: { to: ["x@y.z"] },
+      });
+      expect(mockSend.mock.calls[0][0].TemplateData).toBe("{}");
+    });
+
+    it("POST /send-templated — 400 without source", async () => {
+      const res = await post("/send-templated", { template: "t", destination: { to: ["x"] } });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /send-templated — 400 without template", async () => {
+      const res = await post("/send-templated", { source: "s", destination: { to: ["x"] } });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /send-templated — 400 without destination", async () => {
+      const res = await post("/send-templated", { source: "s", template: "t" });
+      expect(res.status).toBe(400);
     });
   });
 });

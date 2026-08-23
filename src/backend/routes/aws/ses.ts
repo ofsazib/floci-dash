@@ -3,6 +3,15 @@ import type { Context } from "hono";
 import { create } from "../../clients/aws";
 import { SESClient } from "@aws-sdk/client-ses";
 import {
+  ListTemplatesCommand,
+  CreateTemplateCommand,
+  UpdateTemplateCommand,
+  DeleteTemplateCommand,
+  GetTemplateCommand,
+  SendTemplatedEmailCommand,
+  TestRenderTemplateCommand,
+} from "@aws-sdk/client-ses";
+import {
   ListIdentitiesCommand,
   VerifyEmailIdentityCommand,
   VerifyDomainIdentityCommand,
@@ -533,6 +542,103 @@ router.post("/send-raw", async (c: Context) => {
       Source: body.source || undefined,
       Destinations: body.destinations && body.destinations.length > 0 ? body.destinations : undefined,
       RawMessage: { Data: new TextEncoder().encode(body.rawMessage) },
+    })
+  );
+  return c.json({ messageId: result.MessageId }, 201);
+});
+
+
+// ── Templates ─────────────────────────────────────────────
+
+router.get("/templates", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new ListTemplatesCommand({}));
+  const templates = (result.TemplatesMetadata || []).map((t: any) => ({
+    name: t.Name,
+    createdTimestamp: t.CreatedTimestamp,
+  }));
+  return c.json({ templates, total: templates.length });
+});
+
+router.post("/templates", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.name) return c.json({ error: "name is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new CreateTemplateCommand({
+      Template: {
+        TemplateName: body.name,
+        SubjectPart: body.subject,
+        TextPart: body.text,
+        HtmlPart: body.html,
+      },
+    })
+  );
+  return c.json({ created: true }, 201);
+});
+
+router.put("/templates/:name", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const body = await c.req.json<any>();
+  const client = getClient();
+  await client.send(
+    new UpdateTemplateCommand({
+      Template: {
+        TemplateName: name,
+        SubjectPart: body.subject,
+        TextPart: body.text,
+        HtmlPart: body.html,
+      },
+    })
+  );
+  return c.json({ updated: true });
+});
+
+router.get("/templates/:name", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const client = getClient();
+  const result = await client.send(new GetTemplateCommand({ TemplateName: name }));
+  const t = result.Template;
+  return c.json({
+    template: t
+      ? { name: t.TemplateName, subject: t.SubjectPart, text: t.TextPart, html: t.HtmlPart }
+      : null,
+  });
+});
+
+router.delete("/templates/:name", async (c: Context) => {
+  const name = c.req.param("name");
+  const client = getClient();
+  await client.send(new DeleteTemplateCommand({ TemplateName: name }));
+  return c.json({ deleted: true });
+});
+
+router.post("/templates/:name/render", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const body = await c.req.json<{ templateData?: string }>();
+  const client = getClient();
+  const result = await client.send(
+    new TestRenderTemplateCommand({
+      TemplateName: name,
+      TemplateData: body.templateData || "{}",
+    })
+  );
+  return c.json({ rendered: result.RenderedTemplate || "" });
+});
+
+router.post("/send-templated", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.source) return c.json({ error: "source is required" }, 400);
+  if (!body.template) return c.json({ error: "template is required" }, 400);
+  if (!body.destination?.to?.length)
+    return c.json({ error: "destination.to is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new SendTemplatedEmailCommand({
+      Source: body.source,
+      Destination: { ToAddresses: body.destination.to, CcAddresses: body.destination.cc },
+      Template: body.template,
+      TemplateData: body.templateData || "{}",
     })
   );
   return c.json({ messageId: result.MessageId }, 201);

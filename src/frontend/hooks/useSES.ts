@@ -430,3 +430,63 @@ export function useSetDeliveryOptions() {
       qc.invalidateQueries({ queryKey: ["aws", "ses", "configuration-sets", variables.configSetName] }),
   });
 }
+
+// ── Templates ──────────────────────────────────────────────
+
+export function useSESTemplates() {
+  return useQuery({
+    queryKey: ["aws", "ses", "templates"],
+    queryFn: () => api<{ templates: { name: string; createdTimestamp?: string }[]; total: number }>("/aws/ses/templates"),
+  });
+}
+
+export function useCreateSESTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string; subject?: string; text?: string; html?: string }) =>
+      api("/aws/ses/templates", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ses", "templates"] }),
+  });
+}
+
+export function useUpdateSESTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { name: string; subject?: string; text?: string; html?: string }) =>
+      api(`/aws/ses/templates/${encodeURIComponent(params.name)}`, {
+        method: "PUT",
+        body: JSON.stringify({ subject: params.subject, text: params.text, html: params.html }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ses", "templates"] }),
+  });
+}
+
+export function useDeleteSESTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api(`/aws/ses/templates/${encodeURIComponent(name)}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ses", "templates"] }),
+  });
+}
+
+export function useRenderSESTemplate() {
+  return useMutation({
+    mutationFn: (params: { name: string; templateData?: string }) =>
+      api(`/aws/ses/templates/${encodeURIComponent(params.name)}/render`, {
+        method: "POST",
+        body: JSON.stringify({ templateData: params.templateData }),
+      }),
+  });
+}
+
+export function useSESSendTemplated() {
+  return useMutation({
+    mutationFn: (body: {
+      source: string;
+      template: string;
+      destination: { to: string[]; cc?: string[] };
+      templateData?: string;
+    }) => api("/aws/ses/send-templated", { method: "POST", body: JSON.stringify(body) }),
+  });
+}

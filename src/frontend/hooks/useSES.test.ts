@@ -42,6 +42,12 @@ import {
   useDeleteTrackingOptions,
   useSetReputationMetrics,
   useSetDeliveryOptions,
+  useSESTemplates,
+  useCreateSESTemplate,
+  useUpdateSESTemplate,
+  useDeleteSESTemplate,
+  useRenderSESTemplate,
+  useSESSendTemplated,
 } from "./useSES";
 
 function createWrapper() {
@@ -555,5 +561,66 @@ describe("useSetDeliveryOptions", () => {
       "/aws/email/configuration-sets/cs1/delivery-options",
       expect.objectContaining({ method: "PUT" })
     );
+  });
+});
+
+describe("SES template hooks", () => {
+  it("useSESTemplates fetches the list", async () => {
+    mockApi.mockResolvedValueOnce({ templates: [], total: 0 });
+    const { result } = renderHook(() => useSESTemplates(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ses/templates");
+  });
+
+  it("useCreateSESTemplate posts the body", async () => {
+    mockApi.mockResolvedValueOnce({ created: true });
+    const { result } = renderHook(() => useCreateSESTemplate(), { wrapper: createWrapper() });
+    result.current.mutate({ name: "welcome", subject: "s" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ses/templates", {
+      method: "POST",
+      body: JSON.stringify({ name: "welcome", subject: "s" }),
+    });
+  });
+
+  it("useUpdateSESTemplate puts by name", async () => {
+    mockApi.mockResolvedValueOnce({ updated: true });
+    const { result } = renderHook(() => useUpdateSESTemplate(), { wrapper: createWrapper() });
+    result.current.mutate({ name: "welcome", subject: "new" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ses/templates/welcome", {
+      method: "PUT",
+      body: JSON.stringify({ subject: "new", text: undefined, html: undefined }),
+    });
+  });
+
+  it("useDeleteSESTemplate deletes by encoded name", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useDeleteSESTemplate(), { wrapper: createWrapper() });
+    result.current.mutate("my template");
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ses/templates/my%20template", { method: "DELETE" });
+  });
+
+  it("useRenderSESTemplate posts render", async () => {
+    mockApi.mockResolvedValueOnce({ rendered: "x" });
+    const { result } = renderHook(() => useRenderSESTemplate(), { wrapper: createWrapper() });
+    result.current.mutate({ name: "welcome", templateData: "{}" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ses/templates/welcome/render", {
+      method: "POST",
+      body: JSON.stringify({ templateData: "{}" }),
+    });
+  });
+
+  it("useSESSendTemplated posts the send", async () => {
+    mockApi.mockResolvedValueOnce({ messageId: "m1" });
+    const { result } = renderHook(() => useSESSendTemplated(), { wrapper: createWrapper() });
+    result.current.mutate({ source: "a@b.c", template: "t", destination: { to: ["x@y.z"] } });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ses/send-templated", {
+      method: "POST",
+      body: JSON.stringify({ source: "a@b.c", template: "t", destination: { to: ["x@y.z"] }, templateData: undefined }),
+    });
   });
 });
