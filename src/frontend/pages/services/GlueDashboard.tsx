@@ -290,6 +290,8 @@ import {
   useCreateGlueDatabase,
   useDeleteGlueDatabase,
   useGlueTables,
+  useUpdateGlueTable,
+  useGlueTableVersions,
   useDeleteGlueTable,
   useGlueRegistries,
   useCreateGlueRegistry,
@@ -532,6 +534,11 @@ export function GlueDashboard() {
   const [selectedDb, setSelectedDb] = useState<string | null>(null);
   const { data: tblData } = useGlueTables(selectedDb);
   const deleteTbl = useDeleteGlueTable(selectedDb || "");
+  const updateTbl = useUpdateGlueTable();
+  const [versionsTbl, setVersionsTbl] = useState<string | null>(null);
+  const { data: versionsData } = useGlueTableVersions(selectedDb, versionsTbl);
+  const [editTbl, setEditTbl] = useState<string | null>(null);
+  const [editDesc, setEditDesc] = useState("");
   const [activeTab, setActiveTab] = useState("databases");
 
   if (isLoading) return <TableSkeleton />;
@@ -570,12 +577,25 @@ export function GlueDashboard() {
                 id: "actions",
                 header: "",
                 cell: (i: any) => (
-                  <DeleteButton
-                    itemName={i.name}
-                    resourceType="table"
-                    loading={deleteTbl.isPending && deleteTbl.variables === i.name}
-                    onDelete={() => deleteTbl.mutateAsync(i.name)}
-                  />
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <Button
+                      onClick={() => {
+                        setEditTbl(i.name);
+                        setEditDesc("");
+                      }}
+                    >
+                      Edit
+                    </Button>
+                    <Button onClick={() => setVersionsTbl(i.name === versionsTbl ? null : i.name)}>
+                      Versions
+                    </Button>
+                    <DeleteButton
+                      itemName={i.name}
+                      resourceType="table"
+                      loading={deleteTbl.isPending && deleteTbl.variables === i.name}
+                      onDelete={() => deleteTbl.mutateAsync(i.name)}
+                    />
+                  </SpaceBetween>
                 ),
               },
             ]}
@@ -583,6 +603,66 @@ export function GlueDashboard() {
             filterPlaceholder="Find tables"
             filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
           />
+
+          {versionsTbl && (
+            <ResourceTable
+              resourceName="Version"
+              headerTitle={`Versions — ${versionsTbl}`}
+              headerCounter={versionsData?.total}
+              items={(versionsData?.versions || []).map((v: any) => ({
+                versionId: v.versionId,
+                created: v.createdTime || "-",
+                table: v.table ? v.table.name : "-",
+              }))}
+              columns={[
+                { id: "version", header: "Version", cell: (i: any) => i.versionId, isRowHeader: true },
+                { id: "created", header: "Created", cell: (i: any) => i.created },
+                { id: "table", header: "Table", cell: (i: any) => i.table },
+              ]}
+              emptyMessage="No versions"
+              loading={false}
+            />
+          )}
+
+          <Modal
+            visible={!!editTbl}
+            onDismiss={() => setEditTbl(null)}
+            header={`Edit table — ${editTbl!}`}
+            footer={
+              <Box float="right">
+                <SpaceBetween direction="horizontal" size="xs">
+                  <Button variant="link" onClick={() => setEditTbl(null)}>Cancel</Button>
+                  <Button
+                    variant="primary"
+                    loading={updateTbl.isPending}
+                    onClick={() => {
+                      updateTbl.mutate(
+                        {
+                          databaseName: selectedDb!,
+                          tableName: editTbl!,
+                          tableInput: { description: editDesc },
+                        },
+                        { onSuccess: () => setEditTbl(null) }
+                      );
+                    }}
+                  >
+                    Save
+                  </Button>
+                </SpaceBetween>
+              </Box>
+            }
+          >
+            <Form>
+              {updateTbl.isError && (
+                <Alert type="error" dismissible>
+                  {(updateTbl.error as Error)?.message || "Failed to update table"}
+                </Alert>
+              )}
+              <FormField label="Description">
+                <Input value={editDesc} onChange={({ detail }) => setEditDesc(detail.value)} />
+              </FormField>
+            </Form>
+          </Modal>
         </>
       ) : (
         <ResourceTable

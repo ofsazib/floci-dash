@@ -36,6 +36,10 @@ import {
   useCreateGluePartitions,
   useUpdateGluePartition,
   useDeleteGluePartition,
+  useUpdateGlueTable,
+  useUpdateGlueDatabase,
+  useGlueTableVersions,
+  useBatchDeleteGlueTables,
 } from "./useGlue";
 
 beforeEach(() => mockApi.mockReset());
@@ -289,5 +293,52 @@ describe("useGlue hooks", () => {
     const { result } = renderHook(() => useDeleteGluePartition("mydb", "tbl1"), { wrapper: createWrapper() });
     await result.current.mutateAsync(["2024", "01"]);
     expect(mockApi).toHaveBeenCalledWith("/aws/glue/databases/mydb/tables/tbl1/partitions?values=2024&values=01", { method: "DELETE" });
+  });
+});
+
+describe("Glue update/version hooks", () => {
+  it("useUpdateGlueTable puts by db+table", async () => {
+    mockApi.mockResolvedValueOnce({ updated: true });
+    const { result } = renderHook(() => useUpdateGlueTable(), { wrapper: createWrapper() });
+    result.current.mutate({ databaseName: "d 1", tableName: "t 1", tableInput: { description: "x" } });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/databases/d%201/tables/t%201", {
+      method: "PUT",
+      body: JSON.stringify({ tableInput: { description: "x" } }),
+    });
+  });
+
+  it("useUpdateGlueDatabase puts by db", async () => {
+    mockApi.mockResolvedValueOnce({ updated: true });
+    const { result } = renderHook(() => useUpdateGlueDatabase(), { wrapper: createWrapper() });
+    result.current.mutate({ databaseName: "d 1", databaseInput: { description: "x" } });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/databases/d%201", {
+      method: "PUT",
+      body: JSON.stringify({ databaseInput: { description: "x" } }),
+    });
+  });
+
+  it("useGlueTableVersions fetches encoded", async () => {
+    mockApi.mockResolvedValueOnce({ versions: [], total: 0 });
+    const { result } = renderHook(() => useGlueTableVersions("d 1", "t 1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/databases/d%201/tables/t%201/versions");
+  });
+
+  it("useGlueTableVersions disabled without params", () => {
+    const { result } = renderHook(() => useGlueTableVersions(null, null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+
+  it("useBatchDeleteGlueTables posts names", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: 2 });
+    const { result } = renderHook(() => useBatchDeleteGlueTables(), { wrapper: createWrapper() });
+    result.current.mutate({ databaseName: "d1", tableNames: ["t1", "t2"] });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/databases/d1/tables/batch-delete", {
+      method: "POST",
+      body: JSON.stringify({ tableNames: ["t1", "t2"] }),
+    });
   });
 });

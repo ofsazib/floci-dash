@@ -52,6 +52,10 @@ vi.mock("@aws-sdk/client-glue", () => ({
   UpdatePartitionCommand: createCmd("UpdatePartitionCommand"),
   DeletePartitionCommand: createCmd("DeletePartitionCommand"),
   BatchUpdatePartitionCommand: createCmd("BatchUpdatePartitionCommand"),
+  UpdateTableCommand: createCmd("UpdateTableCommand"),
+  UpdateDatabaseCommand: createCmd("UpdateDatabaseCommand"),
+  GetTableVersionsCommand: createCmd("GetTableVersionsCommand"),
+  BatchDeleteTableCommand: createCmd("BatchDeleteTableCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({ create: (Ctor: any, extra?: any) => new Ctor(extra) }));
@@ -814,5 +818,82 @@ describe("Glue Routes", () => {
   it("DELETE partitions — 400 without values", async () => {
     const res = await router.request("/databases/mydb/tables/tbl1/partitions", { method: "DELETE" });
     expect(res.status).toBe(400);
+  });
+
+  describe("Table/Database updates + versions", () => {
+    it("PUT /databases/:db/tables/:table — sends UpdateTableCommand", async () => {
+      mockSend.mockResolvedValue({});
+      const res = await put("/databases/db1/tables/t1", { tableInput: { description: "new" } });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("UpdateTableCommand");
+      expect(cmd.DatabaseName).toBe("db1");
+      expect(cmd.TableInput.Name).toBe("t1");
+      expect(cmd.TableInput.description).toBe("new");
+    });
+
+    it("PUT /databases/:db/tables/:table — 400 without tableInput", async () => {
+      const res = await put("/databases/db1/tables/t1", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("PUT /databases/:db — sends UpdateDatabaseCommand", async () => {
+      mockSend.mockResolvedValue({});
+      const res = await put("/databases/db1", { databaseInput: { description: "new" } });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("UpdateDatabaseCommand");
+      expect(cmd.Name).toBe("db1");
+      expect(cmd.DatabaseInput.Name).toBe("db1");
+    });
+
+    it("PUT /databases/:db — 400 without databaseInput", async () => {
+      const res = await put("/databases/db1", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("GET /databases/:db/tables/:table/versions — maps versions", async () => {
+      mockSend.mockResolvedValueOnce({
+        TableVersions: [{ VersionId: "2", CreatedTime: "2026", Table: { Name: "t1", Description: "d" } }],
+      });
+      const res = await get("/databases/db1/tables/t1/versions");
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(body.versions[0].table.name).toBe("t1");
+    });
+
+    it("GET /databases/:db/tables/:table/versions — sparse fallback", async () => {
+      mockSend.mockResolvedValueOnce({ TableVersions: [{}] });
+      const res = await get("/databases/db1/tables/t1/versions");
+      const body = await res.json();
+      expect(body.versions[0].table).toBeNull();
+    });
+
+    it("GET /databases/:db/tables/:table/versions — empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/databases/db1/tables/t1/versions");
+      expect((await res.json()).versions).toEqual([]);
+    });
+
+    it("POST /databases/:db/tables/batch-delete — deletes tables", async () => {
+      mockSend.mockResolvedValueOnce({ TablesDeleted: ["t1", "t2"], Errors: [] });
+      const res = await post("/databases/db1/tables/batch-delete", { tableNames: ["t1", "t2"] });
+      const body = await res.json();
+      expect(body.deleted).toBe(2);
+      expect(mockSend.mock.calls[0][0].TablesToDelete).toEqual(["t1", "t2"]);
+    });
+
+    it("POST /databases/:db/tables/batch-delete — sparse response", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/databases/db1/tables/batch-delete", { tableNames: ["t1"] });
+      const body = await res.json();
+      expect(body.deleted).toBe(0);
+      expect(body.errors).toEqual([]);
+    });
+
+    it("POST /databases/:db/tables/batch-delete — 400 without tableNames", async () => {
+      const res = await post("/databases/db1/tables/batch-delete", {});
+      expect(res.status).toBe(400);
+    });
   });
 });

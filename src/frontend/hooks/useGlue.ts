@@ -407,3 +407,48 @@ export function useDeleteGluePartition(databaseName: string, tableName: string) 
       qc.invalidateQueries({ queryKey: ["aws", "glue", "databases", databaseName, "tables", tableName, "partitions"] }),
   });
 }
+
+export function useUpdateGlueTable() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { databaseName: string; tableName: string; tableInput: any }) =>
+      api(
+        `/aws/glue/databases/${encodeURIComponent(params.databaseName)}/tables/${encodeURIComponent(params.tableName)}`,
+        { method: "PUT", body: JSON.stringify({ tableInput: params.tableInput }) }
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "glue"] }),
+  });
+}
+
+export function useUpdateGlueDatabase() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { databaseName: string; databaseInput: any }) =>
+      api(`/aws/glue/databases/${encodeURIComponent(params.databaseName)}`, {
+        method: "PUT",
+        body: JSON.stringify({ databaseInput: params.databaseInput }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "glue"] }),
+  });
+}
+
+export function useGlueTableVersions(databaseName: string | null, tableName: string | null) {
+  return useQuery<any>({
+    queryKey: ["aws", "glue", "databases", databaseName, "tables", tableName, "versions"],
+    queryFn: () =>
+      api(`/aws/glue/databases/${encodeURIComponent(databaseName!)}/tables/${encodeURIComponent(tableName!)}/versions`),
+    enabled: !!databaseName && !!tableName,
+  });
+}
+
+export function useBatchDeleteGlueTables() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { databaseName: string; tableNames: string[] }) =>
+      api(`/aws/glue/databases/${encodeURIComponent(params.databaseName)}/tables/batch-delete`, {
+        method: "POST",
+        body: JSON.stringify({ tableNames: params.tableNames }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "glue"] }),
+  });
+}

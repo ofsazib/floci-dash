@@ -3,11 +3,15 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
+import { within } from "@testing-library/react";
 import React from "react";
 
 const mockDatabases = vi.fn();
 const mockDeleteDb = vi.fn();
 const mockTables = vi.fn();
+const mockUpdateTable = vi.fn();
+const mockTableVersions = vi.fn();
+const updateTableState = vi.hoisted(() => ({ isError: false, error: null as Error | null }));
 const mockDeleteTable = vi.fn();
 const mockPartitions = vi.fn();
 const mockCreatePartitions = vi.fn();
@@ -45,6 +49,13 @@ vi.mock("../../hooks/useGlue", () => ({
   useGlueDatabases: (...args: any[]) => mockDatabases(...args),
   useDeleteGlueDatabase: () => ({ mutateAsync: mockDeleteDb, isPending: deleteDbState.isPending, variables: deleteDbState.variables }),
   useGlueTables: (...args: any[]) => mockTables(...args),
+  useUpdateGlueTable: () => ({
+    mutate: mockUpdateTable,
+    isPending: false,
+    get isError() { return updateTableState.isError; },
+    get error() { return updateTableState.error; },
+  }),
+  useGlueTableVersions: (...args: any[]) => mockTableVersions(...args),
   useDeleteGlueTable: (_dbName: string) => ({ mutateAsync: mockDeleteTable, isPending: deleteTblState.isPending, variables: deleteTblState.variables }),
   useGluePartitions: (...args: any[]) => mockPartitions(...args),
   useCreateGluePartitions: () => ({ mutate: mockCreatePartitions, isPending: false }),
@@ -89,6 +100,9 @@ function dismissModalWithEscape() {
 }
 
 beforeEach(() => {
+  updateTableState.isError = false;
+  updateTableState.error = null;
+  mockTableVersions.mockReturnValue({ data: undefined });
   vi.clearAllMocks();
   deleteDbState.isPending = false;
   deleteDbState.variables = null;
@@ -1879,5 +1893,117 @@ describe("GlueDashboard — Partitions error path", () => {
       expect(mockDeletePartition).toHaveBeenCalledWith(["2024"], expect.anything());
     });
     process.removeListener("unhandledRejection", rejectHandler);
+  });
+});
+
+describe("GlueDashboard — table edit + versions", () => {
+  function openTables(tables: any[]) {
+    return (async () => {
+      mockDatabases.mockReturnValue({
+        data: { databases: [{ Name: "db1", Description: "" }], total: 1 },
+        isLoading: false, isError: false, error: null,
+      });
+      mockTables.mockReturnValue({ data: { tables, total: tables.length } });
+      const user = userEvent.setup();
+      render(<GlueDashboard />, { wrapper: createWrapper() });
+      await user.click(screen.getByText("db1"));
+      await screen.findByText(/Tables in db1/);
+      return user;
+    })();
+  }
+
+  it("edits a table description", async () => {
+    mockUpdateTable.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
+    const user = await openTables([{ Name: "t1", TableType: "EXTERNAL_TABLE" }]);
+    await user.click((await screen.findAllByRole("button", { name: "Edit" }))[0]);
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const input = dialog.querySelector("input") as HTMLInputElement;
+    await user.type(input, "new desc");
+    await user.click(within(dialog).getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(mockUpdateTable).toHaveBeenCalledWith(
+        { databaseName: "db1", tableName: "t1", tableInput: { description: "new desc" } },
+        expect.objectContaining({ onSuccess: expect.any(Function) })
+      )
+    );
+  });
+
+  it("shows table versions", async () => {
+    mockTableVersions.mockReturnValue({
+      data: { versions: [{ versionId: "1", createdTime: "2026", table: { name: "t1" } }], total: 1 },
+    });
+    const user = await openTables([{ Name: "t1", TableType: "EXTERNAL_TABLE" }]);
+    await user.click((await screen.findAllByRole("button", { name: "Versions" }))[0]);
+    expect(await screen.findByText(/Versions — t1/)).toBeTruthy();
+    expect(mockTableVersions).toHaveBeenCalledWith("db1", "t1");
+  });
+
+  it("shows empty versions and toggles off", async () => {
+    mockTableVersions.mockReturnValue({ data: { versions: [], total: 0 } });
+    const user = await openTables([{ Name: "t1" }]);
+    await user.click((await screen.findAllByRole("button", { name: "Versions" }))[0]);
+    expect(await screen.findByText("No versions")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Versions" }));
+    await waitFor(() => expect(screen.queryByText("No versions")).toBeNull());
+  });
+
+  it("cancels the edit modal and Escape-dismisses", async () => {
+    const user = await openTables([{ Name: "t1" }]);
+    await user.click((await screen.findAllByRole("button", { name: "Edit" }))[0]);
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(mockUpdateTable).not.toHaveBeenCalled();
+    await user.click((await screen.findAllByRole("button", { name: "Edit" }))[0]);
+    document.querySelectorAll('[class*="awsui_dialog"]').forEach((d) =>
+      fireEvent.keyDown(d as HTMLElement, { keyCode: 27 })
+    );
+    expect(mockUpdateTable).not.toHaveBeenCalled();
+  });
+});
+
+describe("GlueDashboard — edit modal error + sparse version arms", () => {
+  function openTables(tables: any[]) {
+    return (async () => {
+      mockDatabases.mockReturnValue({
+        data: { databases: [{ Name: "db1", Description: "" }], total: 1 },
+        isLoading: false, isError: false, error: null,
+      });
+      mockTables.mockReturnValue({ data: { tables, total: tables.length } });
+      const user = userEvent.setup();
+      render(<GlueDashboard />, { wrapper: createWrapper() });
+      await user.click(screen.getByText("db1"));
+      await screen.findByText(/Tables in db1/);
+      return user;
+    })();
+  }
+
+  it("shows the update-table error alert", async () => {
+    updateTableState.isError = true;
+    updateTableState.error = new Error("update failed");
+    const user = await openTables([{ Name: "t1" }]);
+    await user.click((await screen.findAllByRole("button", { name: "Edit" }))[0]);
+    expect(await screen.findByText("update failed")).toBeTruthy();
+  });
+
+  it("falls back to a generic update error", async () => {
+    updateTableState.isError = true;
+    updateTableState.error = null;
+    const user = await openTables([{ Name: "t1" }]);
+    await user.click((await screen.findAllByRole("button", { name: "Edit" }))[0]);
+    expect(await screen.findByText("Failed to update table")).toBeTruthy();
+  });
+
+  it("shows an empty versions table while data is undefined", async () => {
+    const user = await openTables([{ Name: "t1" }]);
+    await user.click((await screen.findAllByRole("button", { name: "Versions" }))[0]);
+    expect(await screen.findByText("No versions")).toBeTruthy();
+  });
+
+  it("renders dashes for sparse versions", async () => {
+    mockTableVersions.mockReturnValue({ data: { versions: [{} as any], total: 1 } });
+    const user = await openTables([{ Name: "t1" }]);
+    await user.click((await screen.findAllByRole("button", { name: "Versions" }))[0]);
+    await screen.findByText(/Versions — t1/);
+    expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(2);
   });
 });

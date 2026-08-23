@@ -3,6 +3,12 @@ import type { Context } from "hono";
 import { create } from "../../clients/aws";
 import { GlueClient } from "@aws-sdk/client-glue";
 import {
+  UpdateTableCommand,
+  UpdateDatabaseCommand,
+  GetTableVersionsCommand,
+  BatchDeleteTableCommand,
+} from "@aws-sdk/client-glue";
+import {
   GetDatabasesCommand,
   GetDatabaseCommand,
   CreateDatabaseCommand,
@@ -721,6 +727,67 @@ router.delete("/databases/:dbName/tables/:tableName/partitions", async (c: Conte
     })
   );
   return c.json({ deleted: true });
+});
+
+
+// ── Table/Database updates + versions ──────────────────
+
+router.put("/databases/:dbName/tables/:tableName", async (c: Context) => {
+  const dbName = c.req.param("dbName")!;
+  const tableName = c.req.param("tableName")!;
+  const body = await c.req.json<any>();
+  if (!body.tableInput) return c.json({ error: "tableInput is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new UpdateTableCommand({
+      DatabaseName: dbName,
+      TableInput: { ...body.tableInput, Name: body.tableInput.name || tableName },
+    })
+  );
+  return c.json({ updated: true });
+});
+
+router.put("/databases/:dbName", async (c: Context) => {
+  const dbName = c.req.param("dbName")!;
+  const body = await c.req.json<any>();
+  if (!body.databaseInput) return c.json({ error: "databaseInput is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new UpdateDatabaseCommand({
+      Name: dbName,
+      DatabaseInput: { ...body.databaseInput, Name: body.databaseInput.name || dbName },
+    })
+  );
+  return c.json({ updated: true });
+});
+
+router.get("/databases/:dbName/tables/:tableName/versions", async (c: Context) => {
+  const dbName = c.req.param("dbName")!;
+  const tableName = c.req.param("tableName")!;
+  const client = getClient();
+  const result = await client.send(
+    new GetTableVersionsCommand({ DatabaseName: dbName, TableName: tableName })
+  );
+  const versions = (result.TableVersions || []).map((v: any) => ({
+    versionId: v.VersionId,
+    createdTime: v.CreatedTime,
+    table: v.Table ? { name: v.Table.Name, description: v.Table.Description } : null,
+  }));
+  return c.json({ versions, total: versions.length });
+});
+
+router.post("/databases/:dbName/tables/batch-delete", async (c: Context) => {
+  const dbName = c.req.param("dbName")!;
+  const body = await c.req.json<any>();
+  if (!body.tableNames?.length) return c.json({ error: "tableNames is required" }, 400);
+  const client = getClient();
+  const result: any = await client.send(
+    new BatchDeleteTableCommand({ DatabaseName: dbName, TablesToDelete: body.tableNames })
+  );
+  return c.json({
+    deleted: (result.TablesDeleted || []).length,
+    errors: result.Errors || [],
+  });
 });
 
 export default router;
