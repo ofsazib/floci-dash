@@ -15,6 +15,11 @@ import {
   UntagResourceCommand,
   ListSecretVersionIdsCommand,
   GetRandomPasswordCommand,
+  GetResourcePolicyCommand,
+  PutResourcePolicyCommand,
+  DeleteResourcePolicyCommand,
+  BatchGetSecretValueCommand,
+  UpdateSecretVersionStageCommand,
 } from "@aws-sdk/client-secrets-manager";
 import { getAwsConfig } from "../../clients/aws";
 import { sanitizeName, sanitizeText } from "../../clients/sanitize";
@@ -220,6 +225,70 @@ router.post("/random-password", async (c: Context) => {
     })
   );
   return c.json({ randomPassword: result.RandomPassword });
+});
+
+
+router.get("/secrets/:id/resource-policy", async (c: Context) => {
+  const id = c.req.param("id")!;
+  const client = sm();
+  const result = await client.send(new GetResourcePolicyCommand({ SecretId: id }));
+  return c.json({
+    arn: result.ARN,
+    name: result.Name,
+    resourcePolicy: result.ResourcePolicy || null,
+  });
+});
+
+router.put("/secrets/:id/resource-policy", async (c: Context) => {
+  const id = c.req.param("id")!;
+  const body = await c.req.json<{ resourcePolicy?: string }>();
+  if (!body.resourcePolicy) return c.json({ error: "resourcePolicy is required" }, 400);
+  const client = sm();
+  const result = await client.send(
+    new PutResourcePolicyCommand({ SecretId: id, ResourcePolicy: body.resourcePolicy })
+  );
+  return c.json({ arn: result.ARN, name: result.Name });
+});
+
+router.delete("/secrets/:id/resource-policy", async (c: Context) => {
+  const id = c.req.param("id")!;
+  const client = sm();
+  const result = await client.send(new DeleteResourcePolicyCommand({ SecretId: id }));
+  return c.json({ arn: result.ARN, name: result.Name });
+});
+
+router.post("/secrets/batch-value", async (c: Context) => {
+  const body = await c.req.json<{ secretIdList?: string[]; filters?: any[] }>();
+  if (!body.secretIdList?.length && !body.filters?.length)
+    return c.json({ error: "secretIdList or filters is required" }, 400);
+  const client = sm();
+  const result = await client.send(
+    new BatchGetSecretValueCommand({
+      SecretIdList: body.secretIdList,
+      Filters: body.filters,
+    })
+  );
+  return c.json({ secretValues: result.SecretValues || [], errors: result.Errors || [] });
+});
+
+router.post("/secrets/:id/version-stage", async (c: Context) => {
+  const id = c.req.param("id")!;
+  const body = await c.req.json<{
+    versionStage?: string;
+    moveToVersionId?: string;
+    removeFromVersionId?: string;
+  }>();
+  if (!body.versionStage) return c.json({ error: "versionStage is required" }, 400);
+  const client = sm();
+  const result = await client.send(
+    new UpdateSecretVersionStageCommand({
+      SecretId: id,
+      VersionStage: body.versionStage,
+      MoveToVersionId: body.moveToVersionId,
+      RemoveFromVersionId: body.removeFromVersionId,
+    })
+  );
+  return c.json({ arn: result.ARN, name: result.Name });
 });
 
 export default router;

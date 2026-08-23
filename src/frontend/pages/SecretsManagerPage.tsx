@@ -26,6 +26,9 @@ import { useToast } from "../components/Toast";
 import { useHealth } from "../hooks/useSystem";
 import {
   useSecrets,
+  useSecretResourcePolicy,
+  usePutSecretResourcePolicy,
+  useUpdateSecretVersionStage,
   useSecret,
   useSecretValue,
   useCreateSecret,
@@ -198,6 +201,10 @@ function SecretDetailModal({ secretId, onClose }: { secretId: string; onClose: (
   const secretQuery = useSecret(secretId);
   const valueQuery = useSecretValue(secretId);
   const putValue = usePutSecretValue();
+  const policyQuery = useSecretResourcePolicy(secretId);
+  const putPolicy = usePutSecretResourcePolicy();
+  const updateStage = useUpdateSecretVersionStage();
+  const [policyText, setPolicyText] = useState("");
 
   const s = secretQuery.data?.secret;
   const versions = secretQuery.data?.versions || [];
@@ -293,6 +300,43 @@ function SecretDetailModal({ secretId, onClose }: { secretId: string; onClose: (
           trackBy={(v: any) => v.versionId}
           empty={<Box>No versions</Box>}
         />
+      ),
+    },
+    {
+      id: "policy",
+      label: "Resource policy",
+      content: (
+        <SpaceBetween size="m">
+          {policyQuery.data?.resourcePolicy ? (
+            <pre className="fd-code-bg" style={{ fontSize: 13, padding: 12, borderRadius: 4, overflow: "auto", maxHeight: 240 }}>
+              {policyQuery.data.resourcePolicy}
+            </pre>
+          ) : (
+            <Box color="text-body-secondary">No resource policy attached.</Box>
+          )}
+          <Textarea
+            value={policyText}
+            onChange={({ detail }) => setPolicyText(detail.value)}
+            rows={5}
+            placeholder='{"Version": "2012-10-17", "Statement": []}'
+          />
+          <Button
+            variant="primary"
+            disabled={!policyText.trim()}
+            loading={putPolicy.isPending}
+            onClick={() =>
+              putPolicy.mutate(
+                { secretId, resourcePolicy: policyText.trim() },
+                {
+                  onSuccess: () => showToast("success", "Resource policy saved"),
+                  onError: (e) => showToast("error", e.message || "Failed to save policy"),
+                }
+              )
+            }
+          >
+            Save resource policy
+          </Button>
+        </SpaceBetween>
       ),
     },
     {

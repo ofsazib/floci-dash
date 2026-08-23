@@ -20,6 +20,11 @@ import {
   useRotateSecret,
   usePutSecretValue,
   useRandomPassword,
+  useSecretResourcePolicy,
+  usePutSecretResourcePolicy,
+  useDeleteSecretResourcePolicy,
+  useBatchGetSecretValue,
+  useUpdateSecretVersionStage,
 } from "./useSecrets";
 
 function createWrapper() {
@@ -205,5 +210,70 @@ describe("useRandomPassword", () => {
       "/aws/secretsmanager/random-password",
       expect.objectContaining({ method: "POST", body: JSON.stringify(body) })
     );
+  });
+});
+
+describe("useSecretResourcePolicy", () => {
+  it("fetches the policy with encoded id", async () => {
+    mockApi.mockResolvedValueOnce({ resourcePolicy: "{}" });
+    const { result } = renderHook(() => useSecretResourcePolicy("my secret"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/secretsmanager/secrets/my%20secret/resource-policy");
+  });
+
+  it("is disabled without an id", () => {
+    const { result } = renderHook(() => useSecretResourcePolicy(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+});
+
+describe("usePutSecretResourcePolicy", () => {
+  it("puts the policy", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => usePutSecretResourcePolicy(), { wrapper: createWrapper() });
+    result.current.mutate({ secretId: "s1", resourcePolicy: "{}" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/secretsmanager/secrets/s1/resource-policy", {
+      method: "PUT",
+      body: JSON.stringify({ resourcePolicy: "{}" }),
+    });
+  });
+});
+
+describe("useDeleteSecretResourcePolicy", () => {
+  it("deletes the policy", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useDeleteSecretResourcePolicy(), { wrapper: createWrapper() });
+    result.current.mutate("s1");
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/secretsmanager/secrets/s1/resource-policy", {
+      method: "DELETE",
+    });
+  });
+});
+
+describe("useBatchGetSecretValue", () => {
+  it("posts the batch request", async () => {
+    mockApi.mockResolvedValueOnce({ secretValues: [] });
+    const { result } = renderHook(() => useBatchGetSecretValue(), { wrapper: createWrapper() });
+    result.current.mutate({ secretIdList: ["s1"] });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/secretsmanager/secrets/batch-value", {
+      method: "POST",
+      body: JSON.stringify({ secretIdList: ["s1"] }),
+    });
+  });
+});
+
+describe("useUpdateSecretVersionStage", () => {
+  it("posts the stage update", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useUpdateSecretVersionStage(), { wrapper: createWrapper() });
+    result.current.mutate({ secretId: "s1", versionStage: "AWSCURRENT", moveToVersionId: "v2" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/secretsmanager/secrets/s1/version-stage", {
+      method: "POST",
+      body: JSON.stringify({ versionStage: "AWSCURRENT", moveToVersionId: "v2", removeFromVersionId: undefined }),
+    });
   });
 });

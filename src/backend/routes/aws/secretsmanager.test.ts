@@ -31,6 +31,11 @@ vi.mock("@aws-sdk/client-secrets-manager", () => ({
   UntagResourceCommand: createCmd("UntagResourceCommand"),
   ListSecretVersionIdsCommand: createCmd("ListSecretVersionIdsCommand"),
   GetRandomPasswordCommand: createCmd("GetRandomPasswordCommand"),
+  GetResourcePolicyCommand: createCmd("GetResourcePolicyCommand"),
+  PutResourcePolicyCommand: createCmd("PutResourcePolicyCommand"),
+  DeleteResourcePolicyCommand: createCmd("DeleteResourcePolicyCommand"),
+  BatchGetSecretValueCommand: createCmd("BatchGetSecretValueCommand"),
+  UpdateSecretVersionStageCommand: createCmd("UpdateSecretVersionStageCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -537,6 +542,86 @@ describe("Secrets Manager Routes", () => {
       expect(cmd.ExcludePunctuation).toBe(true);
       expect(cmd.IncludeSpace).toBe(false);
       expect(cmd.RequireEachIncludedType).toBe(false);
+    });
+  });
+
+  describe("Resource policy + version stage + batch value", () => {
+    it("GET /secrets/:id/resource-policy — returns the policy", async () => {
+      mockSend.mockResolvedValueOnce({ ARN: "arn:s1", Name: "s1", ResourcePolicy: "{}" });
+      const res = await get("/secrets/s1/resource-policy");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.resourcePolicy).toBe("{}");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("GetResourcePolicyCommand");
+    });
+
+    it("GET /secrets/:id/resource-policy — null policy when absent", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/secrets/s1/resource-policy");
+      const body = await res.json();
+      expect(body.resourcePolicy).toBeNull();
+    });
+
+    it("PUT /secrets/:id/resource-policy — puts the policy", async () => {
+      mockSend.mockResolvedValueOnce({ ARN: "arn:s1", Name: "s1" });
+      const res = await put("/secrets/s1/resource-policy", { resourcePolicy: '{"Version":"2012-10-17"}' });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("PutResourcePolicyCommand");
+      expect(cmd.ResourcePolicy).toBe('{"Version":"2012-10-17"}');
+    });
+
+    it("PUT /secrets/:id/resource-policy — 400 without policy", async () => {
+      const res = await put("/secrets/s1/resource-policy", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE /secrets/:id/resource-policy — deletes the policy", async () => {
+      mockSend.mockResolvedValueOnce({ ARN: "arn:s1", Name: "s1" });
+      const res = await del("/secrets/s1/resource-policy");
+      const body = await res.json();
+      expect(body.arn).toBe("arn:s1");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteResourcePolicyCommand");
+    });
+
+    it("POST /secrets/batch-value — with SecretIdList", async () => {
+      mockSend.mockResolvedValueOnce({ SecretValues: [{ Name: "s1", SecretString: "v" }] });
+      const res = await post("/secrets/batch-value", { secretIdList: ["s1"] });
+      const body = await res.json();
+      expect(body.secretValues).toHaveLength(1);
+      expect(body.errors).toEqual([]);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("BatchGetSecretValueCommand");
+    });
+
+    it("POST /secrets/batch-value — with Filters only", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/secrets/batch-value", { filters: [{ Key: "all", Values: ["true"] }] });
+      expect(res.status).toBe(200);
+    });
+
+    it("POST /secrets/batch-value — 400 without list or filters", async () => {
+      const res = await post("/secrets/batch-value", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /secrets/:id/version-stage — moves a stage", async () => {
+      mockSend.mockResolvedValueOnce({ ARN: "arn:s1", Name: "s1" });
+      const res = await post("/secrets/s1/version-stage", {
+        versionStage: "AWSCURRENT",
+        moveToVersionId: "v2",
+      });
+      const body = await res.json();
+      expect(body.arn).toBe("arn:s1");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("UpdateSecretVersionStageCommand");
+      expect(cmd.MoveToVersionId).toBe("v2");
+    });
+
+    it("POST /secrets/:id/version-stage — 400 without versionStage", async () => {
+      const res = await post("/secrets/s1/version-stage", {});
+      expect(res.status).toBe(400);
     });
   });
 });

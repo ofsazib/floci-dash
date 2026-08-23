@@ -93,3 +93,62 @@ export function useRandomPassword() {
       }),
   });
 }
+
+export function useSecretResourcePolicy(secretId: string | null) {
+  return useQuery({
+    queryKey: ["aws", "secrets", secretId, "resource-policy"],
+    queryFn: () => api<any>(`/aws/secretsmanager/secrets/${encodeURIComponent(secretId!)}/resource-policy`),
+    enabled: !!secretId,
+  });
+}
+
+export function usePutSecretResourcePolicy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { secretId: string; resourcePolicy: string }) =>
+      api(`/aws/secretsmanager/secrets/${encodeURIComponent(params.secretId)}/resource-policy`, {
+        method: "PUT",
+        body: JSON.stringify({ resourcePolicy: params.resourcePolicy }),
+      }),
+    onSuccess: (_d, v) =>
+      qc.invalidateQueries({ queryKey: ["aws", "secrets", v.secretId, "resource-policy"] }),
+  });
+}
+
+export function useDeleteSecretResourcePolicy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (secretId: string) =>
+      api(`/aws/secretsmanager/secrets/${encodeURIComponent(secretId)}/resource-policy`, {
+        method: "DELETE",
+      }),
+    onSuccess: (_d, secretId) =>
+      qc.invalidateQueries({ queryKey: ["aws", "secrets", secretId, "resource-policy"] }),
+  });
+}
+
+export function useBatchGetSecretValue() {
+  return useMutation({
+    mutationFn: (body: { secretIdList?: string[]; filters?: any[] }) =>
+      api("/aws/secretsmanager/secrets/batch-value", { method: "POST", body: JSON.stringify(body) }),
+  });
+}
+
+export function useUpdateSecretVersionStage() {
+  return useMutation({
+    mutationFn: (params: {
+      secretId: string;
+      versionStage: string;
+      moveToVersionId?: string;
+      removeFromVersionId?: string;
+    }) =>
+      api(`/aws/secretsmanager/secrets/${encodeURIComponent(params.secretId)}/version-stage`, {
+        method: "POST",
+        body: JSON.stringify({
+          versionStage: params.versionStage,
+          moveToVersionId: params.moveToVersionId,
+          removeFromVersionId: params.removeFromVersionId,
+        }),
+      }),
+  });
+}

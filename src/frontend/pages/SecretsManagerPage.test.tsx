@@ -14,6 +14,9 @@ const mockDeleteSecret = vi.fn();
 const mockRestoreSecret = vi.fn();
 const mockPutSecretValue = vi.fn();
 const mockRandomPassword = vi.fn();
+const mockPolicy = vi.fn();
+const mockShowToast = vi.hoisted(() => vi.fn());
+const mockPutPolicy = vi.fn();
 
 const mockUseHealth = vi.fn();
 vi.mock("../hooks/useSystem", () => ({
@@ -29,10 +32,15 @@ vi.mock("../hooks/useSecrets", () => ({
   useRestoreSecret: () => ({ mutateAsync: mockRestoreSecret, isPending: false }),
   usePutSecretValue: () => ({ mutateAsync: mockPutSecretValue, isPending: false }),
   useRandomPassword: () => ({ mutateAsync: mockRandomPassword, isPending: false, data: null }),
+  useSecretResourcePolicy: (...args: any[]) => mockPolicy(...args),
+  usePutSecretResourcePolicy: () => ({ mutate: mockPutPolicy, isPending: false }),
+  useDeleteSecretResourcePolicy: () => ({ mutate: vi.fn(), isPending: false }),
+  useBatchGetSecretValue: () => ({ mutate: vi.fn(), isPending: false }),
+  useUpdateSecretVersionStage: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 vi.mock("../components/Toast", () => ({
-  useToast: () => ({ showToast: vi.fn() }),
+  useToast: () => ({ showToast: mockShowToast }),
   ToastProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
@@ -70,6 +78,7 @@ const defaultSecret = {
 describe("SecretsManagerPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockPolicy.mockReturnValue({ data: undefined });
     mockSecrets.mockReturnValue({
       data: { secrets: [defaultSecret], total: 1 },
       isLoading: false, isError: false, error: null,
@@ -592,4 +601,78 @@ describe("SecretsManagerPage", () => {
     expect(screen.getAllByText("Connected").length).toBeGreaterThan(0);
   });
 
+});
+
+describe("SecretsManagerPage — resource policy tab", () => {
+  function setupDetail(policy: string | null) {
+    mockUseHealth.mockReturnValue({ data: { services: { secretsmanager: "running" } }, isLoading: false });
+    mockPolicy.mockReturnValue({ data: { resourcePolicy: policy } });
+    mockSecretValue.mockReturnValue({ data: undefined, isLoading: false });
+  }
+
+  async function openPolicyTab(user: ReturnType<typeof userEvent.setup>) {
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    const tab = await screen.findByText("Resource policy");
+    await user.click(tab);
+  }
+
+  it("shows the attached resource policy", async () => {
+    setupDetail('{"Version":"2012-10-17"}');
+    const user = userEvent.setup();
+    await openPolicyTab(user);
+    expect(await screen.findByText(/"Version":"2012-10-17"/)).toBeTruthy();
+  });
+
+  it("shows the no-policy message", async () => {
+    setupDetail(null);
+    const user = userEvent.setup();
+    await openPolicyTab(user);
+    expect(await screen.findByText("No resource policy attached.")).toBeTruthy();
+  });
+
+  it("saves an edited resource policy", async () => {
+    setupDetail(null);
+    mockPutPolicy.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    await openPolicyTab(user);
+    const area = await screen.findByRole("textbox");
+    fireEvent.change(area, { target: { value: '{"Version":"2012-10-17"}' } });
+    await user.click(screen.getByRole("button", { name: /Save resource policy/i }));
+    await waitFor(() =>
+      expect(mockPutPolicy).toHaveBeenCalledWith(
+        { secretId: "my-secret", resourcePolicy: '{"Version":"2012-10-17"}' },
+        expect.objectContaining({ onSuccess: expect.any(Function) })
+      )
+    );
+  });
+
+  it("shows an error toast when saving the policy fails", async () => {
+    setupDetail(null);
+    mockPutPolicy.mockImplementation((_b: any, opts: any) => opts?.onError?.(new Error("save failed")));
+    const user = userEvent.setup();
+    await openPolicyTab(user);
+    const area = await screen.findByRole("textbox");
+    fireEvent.change(area, { target: { value: "x" } });
+    await user.click(screen.getByRole("button", { name: /Save resource policy/i }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "save failed"));
+  });
+
+  it("shows a fallback error toast when saving fails without a message", async () => {
+    setupDetail(null);
+    mockPutPolicy.mockImplementation((_b: any, opts: any) => opts?.onError?.(new Error("")));
+    const user = userEvent.setup();
+    await openPolicyTab(user);
+    const area = await screen.findByRole("textbox");
+    fireEvent.change(area, { target: { value: "x" } });
+    await user.click(screen.getByRole("button", { name: /Save resource policy/i }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "Failed to save policy"));
+  });
+
+  it("keeps Save disabled until policy text is entered", async () => {
+    setupDetail(null);
+    const user = userEvent.setup();
+    await openPolicyTab(user);
+    expect((await screen.findByRole("button", { name: /Save resource policy/i })).hasAttribute("disabled")).toBe(true);
+  });
 });
