@@ -148,6 +148,7 @@ import {
 } from "../../hooks/useScheduler";
 import {
   useECRRepositories,
+  usePutECRImageTagMutability,
   useECRCreateRepository,
   useECRDeleteRepository,
   useECRImages,
@@ -518,6 +519,8 @@ export function ECRDashboard() {
   const [scanConfigRepo, setScanConfigRepo] = useState<string | null>(null);
   const [manifestRepo, setManifestRepo] = useState<string | null>(null);
   const [showAuthToken, setShowAuthToken] = useState(false);
+  const [mutabilityRepo, setMutabilityRepo] = useState<string | null>(null);
+  const putMutability = usePutECRImageTagMutability();
   const manifestMutation = useECRImageManifest();
   const authTokenQuery = useECRAuthToken();
 
@@ -556,6 +559,9 @@ export function ECRDashboard() {
                 </Button>
                 <Button variant="link" onClick={() => setScanConfigRepo(item.name)}>
                   Scan config
+                </Button>
+                <Button variant="link" onClick={() => setMutabilityRepo(item.name)}>
+                  Mutability
                 </Button>
                 <Button variant="link" onClick={() => setShowAuthToken(true)}>
                   Auth token
@@ -615,7 +621,70 @@ export function ECRDashboard() {
       <ECRManifestModal repoName={manifestRepo} onDismiss={() => setManifestRepo(null)} manifestMutation={manifestMutation} />
       <ECRAuthTokenModal visible={showAuthToken} onDismiss={() => setShowAuthToken(false)} authTokenQuery={authTokenQuery} />
       <ECRScanConfigModal repoName={scanConfigRepo} onDismiss={() => setScanConfigRepo(null)} />
+      {mutabilityRepo && (
+        <ECRMutabilityModal
+          repoName={mutabilityRepo}
+          onDismiss={() => setMutabilityRepo(null)}
+          mutation={putMutability}
+        />
+      )}
     </>
+  );
+}
+
+function ECRMutabilityModal({
+  repoName,
+  onDismiss,
+  mutation,
+}: {
+  repoName: string;
+  onDismiss: () => void;
+  mutation: { isPending: boolean; isError: boolean; error: unknown; mutate: (v: { repositoryName: string; tagMutability: string }, o?: any) => void };
+}) {
+  const [mutability, setMutability] = useState("MUTABLE");
+  return (
+    <Modal
+      visible
+      onDismiss={onDismiss}
+      header={`Tag mutability — ${repoName}`}
+      footer={
+        <Box float="right">
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button variant="link" onClick={onDismiss}>Cancel</Button>
+            <Button
+              variant="primary"
+              loading={mutation.isPending}
+              onClick={() => {
+                mutation.mutate(
+                  { repositoryName: repoName!, tagMutability: mutability },
+                  { onSuccess: onDismiss }
+                );
+              }}
+            >
+              Save
+            </Button>
+          </SpaceBetween>
+        </Box>
+      }
+    >
+      <Form>
+        {mutation.isError && (
+          <Alert type="error" dismissible>
+            {(mutation.error as Error)?.message || "Failed to update tag mutability"}
+          </Alert>
+        )}
+        <FormField label="Image tag mutability">
+          <Select
+            selectedOption={{ label: mutability === "IMMUTABLE" ? "IMMUTABLE" : "MUTABLE", value: mutability }}
+            onChange={({ detail }) => setMutability(detail.selectedOption.value as string)}
+            options={[
+              { label: "MUTABLE", value: "MUTABLE" },
+              { label: "IMMUTABLE", value: "IMMUTABLE" },
+            ]}
+          />
+        </FormField>
+      </Form>
+    </Modal>
   );
 }
 
@@ -772,7 +841,7 @@ function ECRScanConfigModal({
 
   return (
     <Modal
-      visible={!!repoName}
+      visible
       onDismiss={onDismiss}
       header={`Scanning configuration — ${repoName || ""}`}
       footer={

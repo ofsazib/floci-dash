@@ -370,6 +370,7 @@ import {
   useAddCodeDeployOnPremTags,
   useRemoveCodeDeployOnPremTags,
   useContinueCodeDeployDeployment,
+  useStopCodeDeployDeployment,
   usePutCodeDeployLifecycleHookStatus,
   useCodeDeployDeploymentTargets,
 } from "../../hooks/useCodeDeploy";
@@ -537,6 +538,7 @@ export function CodeDeployDashboard() {
   const addOnPremTags = useAddCodeDeployOnPremTags();
   const removeOnPremTags = useRemoveCodeDeployOnPremTags();
   const continueDeployment = useContinueCodeDeployDeployment();
+  const stopDeployment = useStopCodeDeployDeployment();
   const putHookStatus = usePutCodeDeployLifecycleHookStatus();
   const [showRegister, setShowRegister] = useState(false);
   const [regName, setRegName] = useState("");
@@ -694,6 +696,12 @@ export function CodeDeployDashboard() {
                                 Continue
                               </Button>
                               <Button onClick={() => setTargetsDeployment(i.id)}>Targets</Button>
+                              <Button
+                                loading={stopDeployment.isPending && stopDeployment.variables === i.id}
+                                onClick={() => stopDeployment.mutate(i.id)}
+                              >
+                                Stop
+                              </Button>
                             </SpaceBetween>
                           ),
                         },

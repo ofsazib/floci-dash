@@ -188,3 +188,35 @@ export function useCodeDeployDeploymentTargets(id: string | null) {
     enabled: !!id,
   });
 }
+
+export function useStopCodeDeployDeployment() {
+  return useMutation({
+    mutationFn: (id: string) =>
+      api(`/aws/codedeploy/deployments/${encodeURIComponent(id)}/stop`, { method: "POST" }),
+  });
+}
+
+export function useUpdateCodeDeployDeploymentGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: {
+      appName: string;
+      groupName: string;
+      newDeploymentGroupName?: string;
+      deploymentConfigName?: string;
+      serviceRoleArn?: string;
+    }) =>
+      api(
+        `/aws/codedeploy/deployment-groups/${encodeURIComponent(params.appName)}/${encodeURIComponent(params.groupName)}`,
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            newDeploymentGroupName: params.newDeploymentGroupName,
+            deploymentConfigName: params.deploymentConfigName,
+            serviceRoleArn: params.serviceRoleArn,
+          }),
+        }
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "codedeploy", "applications"] }),
+  });
+}

@@ -16,6 +16,7 @@ import {
   PutLifecyclePolicyCommand,
   DeleteLifecyclePolicyCommand,
   TagResourceCommand,
+  PutImageTagMutabilityCommand,
   UntagResourceCommand,
   ListTagsForResourceCommand,
   BatchGetRepositoryScanningConfigurationCommand,
@@ -292,6 +293,25 @@ router.delete("/repositories/:name/tags", async (c: Context) => {
     })
   );
   return c.json({ updated: true });
+});
+
+
+router.put("/repositories/:name/tag-mutability", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const body = await c.req.json<{ tagMutability?: string }>();
+  if (!body.tagMutability) return c.json({ error: "tagMutability is required" }, 400);
+  const client = getClient();
+  const result: any = await client.send(
+    new PutImageTagMutabilityCommand({
+      repositoryName: name,
+      imageTagMutability: body.tagMutability as any,
+    })
+  );
+  return c.json({
+    registryId: result.registryId,
+    repositoryName: result.repositoryName,
+    imageTagMutability: result.imageTagMutability,
+  });
 });
 
 export default router;

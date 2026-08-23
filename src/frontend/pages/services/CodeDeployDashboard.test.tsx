@@ -62,6 +62,11 @@ const continueState = vi.hoisted(() => ({
   variables: null as string | null,
 }));
 
+const stopState = vi.hoisted(() => ({
+  isPending: false,
+  variables: null as string | null,
+}));
+
 const putHookState = vi.hoisted(() => ({
   isPending: false,
 }));
@@ -83,6 +88,7 @@ const mockDeregisterInstance = vi.fn();
 const mockAddOnPremTags = vi.fn();
 const mockRemoveOnPremTags = vi.fn();
 const mockContinueDeployment = vi.fn();
+const mockStopDeployment = vi.fn();
 const mockPutHookStatus = vi.fn();
 const mockTargets = vi.fn();
 
@@ -141,6 +147,11 @@ vi.mock("../../hooks/useCodeDeploy", () => ({
     get isPending() { return continueState.isPending; },
     get variables() { return continueState.variables; },
   }),
+  useStopCodeDeployDeployment: () => ({
+    mutate: mockStopDeployment,
+    get isPending() { return stopState.isPending; },
+    get variables() { return stopState.variables; },
+  }),
   usePutCodeDeployLifecycleHookStatus: () => ({
     mutate: mockPutHookStatus,
     get isPending() { return putHookState.isPending; },
@@ -195,6 +206,8 @@ beforeEach(() => {
   removeTagsState.isPending = false;
   continueState.isPending = false;
   continueState.variables = null;
+  stopState.isPending = false;
+  stopState.variables = null;
   putHookState.isPending = false;
 
   mockApps.mockReturnValue({ data: { applications: [], total: 0 }, isLoading: false });
@@ -1306,5 +1319,42 @@ describe("CodeDeployDashboard — deployment actions", () => {
     const dialog = await screen.findByRole("dialog", { name: /Deployment targets — d-1/i });
     await user.click(within(dialog).getByRole("button", { name: "Close" }));
     await waitFor(() => expect(screen.queryByRole("button", { name: "Put hook status" })).toBeNull());
+  });
+});
+
+describe("CodeDeployDashboard — stop deployment", () => {
+  it("stops a deployment from the deployments table", async () => {
+    mockApps.mockReturnValue({
+      data: { applications: [{ applicationName: "my-app" }], total: 1 },
+      isLoading: false,
+    });
+    mockDeployments.mockReturnValue({
+      data: { deployments: [{ deploymentId: "d-1", status: "InProgress" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "my-app" }));
+    await user.click((await screen.findAllByRole("button", { name: "Stop" }))[0]);
+    await waitFor(() => expect(mockStopDeployment).toHaveBeenCalledWith("d-1"));
+  });
+
+  it("shows stop loading for the in-flight deployment only", async () => {
+    mockApps.mockReturnValue({
+      data: { applications: [{ applicationName: "my-app" }], total: 1 },
+      isLoading: false,
+    });
+    mockDeployments.mockReturnValue({
+      data: { deployments: [{ deploymentId: "d-1" }, { deploymentId: "d-2" }], total: 2 },
+      isLoading: false,
+    });
+    stopState.isPending = true;
+    stopState.variables = "d-1";
+    const user = userEvent.setup();
+    render(<CodeDeployDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "my-app" }));
+    const buttons = await screen.findAllByRole("button", { name: "Stop" });
+    expect(buttons[0].className).toMatch(/disabled|loading/);
+    expect(buttons[1].className).not.toMatch(/disabled|loading/);
   });
 });

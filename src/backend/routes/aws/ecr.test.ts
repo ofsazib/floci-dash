@@ -32,6 +32,7 @@ vi.mock("@aws-sdk/client-ecr", () => ({
   BatchGetRepositoryScanningConfigurationCommand: createCmd("BatchGetRepositoryScanningConfigurationCommand"),
   BatchGetImageCommand: createCmd("BatchGetImageCommand"),
   GetAuthorizationTokenCommand: createCmd("GetAuthorizationTokenCommand"),
+  PutImageTagMutabilityCommand: createCmd("PutImageTagMutabilityCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -675,6 +676,29 @@ describe("ECR Routes", () => {
       expect(body.authorizationToken).toBeNull();
       expect(body.expiresAt).toBeNull();
       expect(body.proxyEndpoint).toBeNull();
+    });
+  });
+
+  describe("Tag mutability", () => {
+    it("PUT /repositories/:name/tag-mutability — sends the command", async () => {
+      mockSend.mockResolvedValueOnce({
+        registryId: "000",
+        repositoryName: "repo-1",
+        imageTagMutability: "IMMUTABLE",
+      });
+      const res = await put("/repositories/repo-1/tag-mutability", { tagMutability: "IMMUTABLE" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.imageTagMutability).toBe("IMMUTABLE");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("PutImageTagMutabilityCommand");
+      expect(cmd.repositoryName).toBe("repo-1");
+      expect(cmd.imageTagMutability).toBe("IMMUTABLE");
+    });
+
+    it("PUT /repositories/:name/tag-mutability — 400 without tagMutability", async () => {
+      const res = await put("/repositories/repo-1/tag-mutability", {});
+      expect(res.status).toBe(400);
     });
   });
 });

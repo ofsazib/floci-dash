@@ -53,6 +53,7 @@ vi.mock("@aws-sdk/client-codedeploy", () => ({
   PutLifecycleEventHookExecutionStatusCommand: createCmd("PutLifecycleEventHookExecutionStatusCommand"),
   ListDeploymentTargetsCommand: createCmd("ListDeploymentTargetsCommand"),
   BatchGetDeploymentTargetsCommand: createCmd("BatchGetDeploymentTargetsCommand"),
+  StopDeploymentCommand: createCmd("StopDeploymentCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -484,6 +485,26 @@ describe("CodeDeploy Routes", () => {
     });
   });
 
+  describe("Update Deployment Group", () => {
+    it("PUT /deployment-groups/:app/:group — sends UpdateDeploymentGroupCommand", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/deployment-groups/my-app/my-group", {
+        newDeploymentGroupName: "renamed",
+        deploymentConfigName: "CodeDeployDefault.AllAtOnce",
+        serviceRoleArn: "arn:role",
+      });
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.updated).toBe(true);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("UpdateDeploymentGroupCommand");
+      expect(cmd.applicationName).toBe("my-app");
+      expect(cmd.currentDeploymentGroupName).toBe("my-group");
+      expect(cmd.newDeploymentGroupName).toBe("renamed");
+      expect(cmd.serviceRoleArn).toBe("arn:role");
+    });
+  });
+
   describe("On-Premises Instances", () => {
     it("GET /on-prem-instances — lists and batch-gets details", async () => {
       mockSend.mockResolvedValueOnce({ instanceNames: ["srv-1"] });
@@ -603,6 +624,19 @@ describe("CodeDeploy Routes", () => {
     it("POST /on-prem-instances/untag — 400 without tags", async () => {
       const res = await post("/on-prem-instances/untag", { instanceNames: ["srv-1"] });
       expect(res.status).toBe(400);
+    });
+  });
+
+  describe("Stop Deployment", () => {
+    it("POST /deployments/:id/stop — stops the deployment", async () => {
+      mockSend.mockResolvedValueOnce({ status: "Stopped" });
+      const res = await post("/deployments/d-1/stop");
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.status).toBe("Stopped");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("StopDeploymentCommand");
+      expect(cmd.deploymentId).toBe("d-1");
     });
   });
 

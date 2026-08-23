@@ -23,6 +23,7 @@ import {
   useECRScanningConfiguration,
   useECRImageManifest,
   useECRAuthToken,
+  usePutECRImageTagMutability,
 } from "./useECR";
 
 function createWrapper() {
@@ -259,5 +260,18 @@ describe("useECRAuthToken", () => {
     result.current.refetch();
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith("/aws/ecr/auth-token");
+  });
+});
+
+describe("usePutECRImageTagMutability", () => {
+  it("puts the mutability update", async () => {
+    mockApi.mockResolvedValueOnce({ imageTagMutability: "IMMUTABLE" });
+    const { result } = renderHook(() => usePutECRImageTagMutability(), { wrapper: createWrapper() });
+    result.current.mutate({ repositoryName: "repo-1", tagMutability: "IMMUTABLE" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ecr/repositories/repo-1/tag-mutability", {
+      method: "PUT",
+      body: JSON.stringify({ tagMutability: "IMMUTABLE" }),
+    });
   });
 });

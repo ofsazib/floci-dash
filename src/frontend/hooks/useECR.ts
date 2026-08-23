@@ -184,3 +184,15 @@ export function useECRAuthToken() {
   });
 }
 
+
+export function usePutECRImageTagMutability() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { repositoryName: string; tagMutability: string }) =>
+      api(`/aws/ecr/repositories/${encodeURIComponent(params.repositoryName)}/tag-mutability`, {
+        method: "PUT",
+        body: JSON.stringify({ tagMutability: params.tagMutability }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ecr", "repositories"] }),
+  });
+}

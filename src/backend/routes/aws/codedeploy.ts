@@ -13,6 +13,7 @@ import {
   CreateDeploymentGroupCommand,
   GetDeploymentGroupCommand,
   UpdateDeploymentGroupCommand,
+  StopDeploymentCommand,
   DeleteDeploymentGroupCommand,
   BatchGetDeploymentGroupsCommand,
   ListDeploymentConfigsCommand,
@@ -218,6 +219,30 @@ router.get("/applications/:name/deployments", async (c: Context) => {
     deployments: detailed.deploymentsInfo || [],
     total: detailed.deploymentsInfo?.length || 0,
   });
+});
+
+router.post("/deployments/:id/stop", async (c: Context) => {
+  const id = c.req.param("id");
+  const client = getClient();
+  const result = await client.send(new StopDeploymentCommand({ deploymentId: id }));
+  return c.json({ status: result.status });
+});
+
+router.put("/deployment-groups/:app/:group", async (c: Context) => {
+  const appName = c.req.param("app")!;
+  const groupName = c.req.param("group")!;
+  const body = await c.req.json<any>();
+  const client = getClient();
+  await client.send(
+    new UpdateDeploymentGroupCommand({
+      applicationName: appName,
+      currentDeploymentGroupName: groupName,
+      newDeploymentGroupName: body.newDeploymentGroupName,
+      deploymentConfigName: body.deploymentConfigName,
+      serviceRoleArn: body.serviceRoleArn,
+    })
+  );
+  return c.json({ updated: true });
 });
 
 router.get("/deployments/:deployId", async (c: Context) => {

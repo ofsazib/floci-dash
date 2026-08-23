@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -14,6 +15,12 @@ const mockScanConfig = vi.fn();
 const mockManifestMutate = vi.fn();
 const mockAuthTokenRefetch = vi.fn();
 const mockAuthToken = vi.fn();
+const mockPutMutability = vi.fn();
+
+const mockPutMutabilityState = vi.hoisted(() => ({
+  isError: false,
+  error: null as Error | null,
+}));
 const deleteRepoState: { isPending: boolean; variables: string | null } = {
   isPending: false,
   variables: null,
@@ -47,6 +54,12 @@ vi.mock("../../hooks/useECR", () => ({
     isPending: false,
   }),
   useECRAuthToken: (...args: any[]) => mockAuthToken(...args),
+  usePutECRImageTagMutability: () => ({
+    mutate: mockPutMutability,
+    isPending: false,
+    get isError() { return mockPutMutabilityState.isError; },
+    get error() { return mockPutMutabilityState.error; },
+  }),
 }));
 
 import { ECRDashboard } from "./ECRDashboard";
@@ -57,6 +70,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   deleteRepoState.isPending = false;
   deleteRepoState.variables = null;
+  mockPutMutabilityState.isError = false;
+  mockPutMutabilityState.error = null;
   mockRepositories.mockReturnValue({
     data: { repositories: [], total: 0 },
     isLoading: false,
@@ -813,5 +828,69 @@ describe("ECRDashboard — auth token modal", () => {
     await clickButton(user, /Auth token/i);
     await waitFor(() => expect(screen.getByText("Registry auth token")).toBeTruthy());
     await clickButton(user, /Close/i);
+  });
+});
+
+describe("ECRDashboard — tag mutability", () => {
+  it("opens the mutability modal, selects IMMUTABLE, and saves", async () => {
+    mockPutMutability.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
+    mockRepositories.mockReturnValue({
+      data: { repositories: [{ repositoryName: "repo-1", repositoryUri: "x", createdAt: 1700000000000 }] },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "Mutability" }));
+    await screen.findByRole("button", { name: /MUTABLE/i });
+    await user.click(screen.getByRole("button", { name: /MUTABLE/i }));
+    await user.click(await screen.findByRole("option", { name: "IMMUTABLE" }));
+    const saveBtn = screen.getAllByRole("button", { name: "Save" }).at(-1)!;
+    await user.click(saveBtn);
+    await waitFor(() =>
+      expect(mockPutMutability).toHaveBeenCalledWith(
+        { repositoryName: "repo-1", tagMutability: "IMMUTABLE" },
+        { onSuccess: expect.any(Function) },
+      )
+    );
+  });
+
+  it("shows the mutability error and fallback message", async () => {
+    mockPutMutabilityState.isError = true;
+    mockPutMutabilityState.error = new Error("mutability failed");
+    mockRepositories.mockReturnValue({
+      data: { repositories: [{ repositoryName: "repo-1", repositoryUri: "x", createdAt: 1700000000000 }] },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "Mutability" }));
+    expect(await screen.findByText("mutability failed")).toBeTruthy();
+  });
+
+  it("falls back to a generic mutability error message", async () => {
+    mockPutMutabilityState.isError = true;
+    mockPutMutabilityState.error = null;
+    mockRepositories.mockReturnValue({
+      data: { repositories: [{ repositoryName: "repo-1", repositoryUri: "x", createdAt: 1700000000000 }] },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "Mutability" }));
+    expect(await screen.findByText("Failed to update tag mutability")).toBeTruthy();
+  });
+
+  it("cancels the mutability modal without saving", async () => {
+    mockRepositories.mockReturnValue({
+      data: { repositories: [{ repositoryName: "repo-1", repositoryUri: "x", createdAt: 1700000000000 }] },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "Mutability" }));
+    await screen.findByRole("button", { name: /MUTABLE/i });
+    const cancelBtn = screen.getAllByRole("button", { name: "Cancel" }).at(-1)!;
+    await user.click(cancelBtn);
+    expect(mockPutMutability).not.toHaveBeenCalled();
   });
 });

@@ -2007,7 +2007,7 @@ describe("EventsPage — bus tags", () => {
     const user = userEvent.setup();
     render(<EventsPage />, { wrapper: createWrapper() });
     await user.click(screen.getByText("Event Buses"));
-    const tagsBtn = await screen.findByRole("button", { name: "Tags", exact: false });
+    const tagsBtn = await screen.findByRole("button", { name: /^Tags$/ });
     await user.click(tagsBtn);
     expect(await screen.findByText("Tags — custom")).toBeTruthy();
     expect(screen.getByText("env")).toBeTruthy();
@@ -2023,7 +2023,7 @@ describe("EventsPage — bus tags", () => {
     const user = userEvent.setup();
     render(<EventsPage />, { wrapper: createWrapper() });
     await user.click(screen.getByText("Event Buses"));
-    const tagsBtn = await screen.findByRole("button", { name: "Tags", exact: false });
+    const tagsBtn = await screen.findByRole("button", { name: /^Tags$/ });
     await user.click(tagsBtn);
     expect(await screen.findByText("No tags")).toBeTruthy();
   });
@@ -2038,7 +2038,7 @@ describe("EventsPage — bus tags", () => {
     const user = userEvent.setup();
     render(<EventsPage />, { wrapper: createWrapper() });
     await user.click(screen.getByText("Event Buses"));
-    const tagsBtn = await screen.findByRole("button", { name: "Tags", exact: false });
+    const tagsBtn = await screen.findByRole("button", { name: /^Tags$/ });
     await user.click(tagsBtn);
     await screen.findByText("No tags");
     const inputs = screen.getAllByRole("textbox");
@@ -2064,7 +2064,7 @@ describe("EventsPage — bus tags", () => {
     const user = userEvent.setup();
     render(<EventsPage />, { wrapper: createWrapper() });
     await user.click(screen.getByText("Event Buses"));
-    const tagsBtn = await screen.findByRole("button", { name: "Tags", exact: false });
+    const tagsBtn = await screen.findByRole("button", { name: /^Tags$/ });
     await user.click(tagsBtn);
     expect((await screen.findAllByRole("button", { name: /Add tag/i }))[0].hasAttribute("disabled")).toBe(true);
   });
@@ -2080,7 +2080,7 @@ describe("EventsPage — bus tags", () => {
     const user = userEvent.setup();
     render(<EventsPage />, { wrapper: createWrapper() });
     await user.click(screen.getByText("Event Buses"));
-    const tagsBtn = await screen.findByRole("button", { name: "Tags", exact: false });
+    const tagsBtn = await screen.findByRole("button", { name: /^Tags$/ });
     await user.click(tagsBtn);
     await screen.findByText("No tags");
     const inputs = screen.getAllByRole("textbox");
@@ -2099,7 +2099,7 @@ describe("EventsPage — bus tags", () => {
     const user = userEvent.setup();
     render(<EventsPage />, { wrapper: createWrapper() });
     await user.click(screen.getByText("Event Buses"));
-    const tagsBtn = await screen.findByRole("button", { name: "Tags", exact: false });
+    const tagsBtn = await screen.findByRole("button", { name: /^Tags$/ });
     await user.click(tagsBtn);
     await screen.findByText("env");
     await user.click(screen.getByRole("button", { name: /Delete tag env/i }));
@@ -2119,7 +2119,7 @@ describe("EventsPage — bus tags", () => {
     const user = userEvent.setup();
     render(<EventsPage />, { wrapper: createWrapper() });
     await user.click(screen.getByText("Event Buses"));
-    const tagsBtn = await screen.findByRole("button", { name: "Tags", exact: false });
+    const tagsBtn = await screen.findByRole("button", { name: /^Tags$/ });
     expect(tagsBtn.hasAttribute("disabled")).toBe(true);
   });
 
@@ -2135,7 +2135,7 @@ describe("EventsPage — bus tags", () => {
     const user = userEvent.setup();
     render(<EventsPage />, { wrapper: createWrapper() });
     await user.click(screen.getByText("Event Buses"));
-    const tagsBtn = await screen.findByRole("button", { name: "Tags", exact: false });
+    const tagsBtn = await screen.findByRole("button", { name: /^Tags$/ });
     await user.click(tagsBtn);
     await screen.findByText("env");
     await user.click(screen.getByRole("button", { name: /Delete tag env/i }));
@@ -2165,7 +2165,7 @@ describe("EventsPage — bus tags", () => {
     const user = userEvent.setup();
     render(<EventsPage />, { wrapper: createWrapper() });
     await user.click(screen.getByText("Event Buses"));
-    const tagsBtn = await screen.findByRole("button", { name: "Tags", exact: false });
+    const tagsBtn = await screen.findByRole("button", { name: /^Tags$/ });
     await user.click(tagsBtn);
     expect(await screen.findByText("No tags")).toBeTruthy();
   });
@@ -2181,7 +2181,7 @@ describe("EventsPage — bus tags", () => {
     const user = userEvent.setup();
     render(<EventsPage />, { wrapper: createWrapper() });
     await user.click(screen.getByText("Event Buses"));
-    const tagsBtn = await screen.findByRole("button", { name: "Tags", exact: false });
+    const tagsBtn = await screen.findByRole("button", { name: /^Tags$/ });
     await user.click(tagsBtn);
     await screen.findByText("No tags");
     const inputs = screen.getAllByRole("textbox");
@@ -2198,7 +2198,7 @@ describe("EventsPage — bus tags", () => {
     const user = userEvent.setup();
     render(<EventsPage />, { wrapper: createWrapper() });
     await user.click(screen.getByText("Event Buses"));
-    const tagsBtn = await screen.findByRole("button", { name: "Tags", exact: false });
+    const tagsBtn = await screen.findByRole("button", { name: /^Tags$/ });
     await user.click(tagsBtn);
     await screen.findByText("Tags — custom");
     await user.click(screen.getByRole("button", { name: "Close" }));

@@ -28,6 +28,8 @@ import {
   useContinueCodeDeployDeployment,
   usePutCodeDeployLifecycleHookStatus,
   useCodeDeployDeploymentTargets,
+  useStopCodeDeployDeployment,
+  useUpdateCodeDeployDeploymentGroup,
 } from "./useCodeDeploy";
 
 function createWrapper() {
@@ -350,5 +352,28 @@ describe("useCodeDeployDeploymentTargets", () => {
   it("is disabled without an id", () => {
     const { result } = renderHook(() => useCodeDeployDeploymentTargets(null), { wrapper: createWrapper() });
     expect(result.current.fetchStatus).toBe("idle");
+  });
+});
+
+describe("useStopCodeDeployDeployment", () => {
+  it("posts stop for the deployment", async () => {
+    mockApi.mockResolvedValueOnce({ status: "Stopped" });
+    const { result } = renderHook(() => useStopCodeDeployDeployment(), { wrapper: createWrapper() });
+    result.current.mutate("d-1");
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/codedeploy/deployments/d-1/stop", { method: "POST" });
+  });
+});
+
+describe("useUpdateCodeDeployDeploymentGroup", () => {
+  it("puts the group update", async () => {
+    mockApi.mockResolvedValueOnce({ updated: true });
+    const { result } = renderHook(() => useUpdateCodeDeployDeploymentGroup(), { wrapper: createWrapper() });
+    result.current.mutate({ appName: "a", groupName: "g", serviceRoleArn: "arn:role" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/codedeploy/deployment-groups/a/g", {
+      method: "PUT",
+      body: JSON.stringify({ newDeploymentGroupName: undefined, deploymentConfigName: undefined, serviceRoleArn: "arn:role" }),
+    });
   });
 });
