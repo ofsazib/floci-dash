@@ -296,6 +296,9 @@ import {
   useFirehoseStreams,
   useCreateFirehoseStream,
   useDeleteFirehoseStream,
+  useFirehoseStreamTags,
+  useTagFirehoseStream,
+  useUntagFirehoseStream,
 } from "../../hooks/useFirehose";
 import {
   useStateMachines,
@@ -505,13 +508,86 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
   { label: "aurora-mysql8", value: "aurora-mysql8" },
 ];
 
+function FirehoseTagsModal({ name, onClose }: { name: string; onClose: () => void }) {
+  const { data } = useFirehoseStreamTags(name);
+  const addTags = useTagFirehoseStream();
+  const removeTags = useUntagFirehoseStream();
+  const [newKey, setNewKey] = useState("");
+  const [newValue, setNewValue] = useState("");
+  const tags = data?.tags || [];
+
+  return (
+    <Modal
+      visible
+      onDismiss={onClose}
+      header={`Tags — ${name}`}
+      footer={
+        <Box float="right">
+          <Button variant="link" onClick={onClose}>Close</Button>
+        </Box>
+      }
+    >
+      <SpaceBetween size="m">
+        <ResourceTable
+          resourceName="Tag"
+          headerTitle={`Tags (${tags.length})`}
+          items={tags}
+          columns={[
+            { id: "key", header: "Key", cell: (t: any) => t.Key, isRowHeader: true },
+            { id: "value", header: "Value", cell: (t: any) => t.Value },
+            {
+              id: "actions",
+              header: "",
+              cell: (t: any) => (
+                <DeleteButton
+                  itemName={t.Key}
+                  resourceType="tag"
+                  loading={removeTags.isPending && removeTags.variables?.tagKeys?.[0] === t.Key}
+                  onDelete={() => removeTags.mutateAsync({ name, tagKeys: [t.Key] })}
+                />
+              ),
+            },
+          ]}
+          emptyMessage="No tags"
+          loading={false}
+        />
+        <SpaceBetween direction="horizontal" size="xs">
+          <FormField label="Key">
+            <Input value={newKey} onChange={({ detail }) => setNewKey(detail.value)} placeholder="env" />
+          </FormField>
+          <FormField label="Value">
+            <Input value={newValue} onChange={({ detail }) => setNewValue(detail.value)} placeholder="prod" />
+          </FormField>
+          <Button
+            variant="primary"
+            loading={addTags.isPending}
+            disabled={!newKey.trim()}
+            onClick={() =>
+              addTags
+                .mutateAsync({ name, tags: { [newKey.trim()]: newValue.trim() } })
+                .then(() => {
+                  setNewKey("");
+                  setNewValue("");
+                })
+            }
+          >
+            Add tag
+          </Button>
+        </SpaceBetween>
+      </SpaceBetween>
+    </Modal>
+  );
+}
+
 export function FirehoseDashboard() {
   const { data, isLoading } = useFirehoseStreams();
   const deleteStream = useDeleteFirehoseStream();
+  const [tagsStream, setTagsStream] = useState<string | null>(null);
 
   if (isLoading) return <TableSkeleton />;
 
   return (
+    <>
     <ResourceTable
       resourceName="Stream"
       headerTitle="Kinesis Firehose Delivery Streams"
@@ -536,12 +612,15 @@ export function FirehoseDashboard() {
           id: "actions",
           header: "",
           cell: (i: any) => (
-            <DeleteButton
-              itemName={i.name}
-              resourceType="delivery stream"
-              loading={deleteStream.isPending && deleteStream.variables === i.name}
-              onDelete={() => deleteStream.mutateAsync(i.name)}
-            />
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button onClick={() => setTagsStream(i.name)}>Tags</Button>
+              <DeleteButton
+                itemName={i.name}
+                resourceType="delivery stream"
+                loading={deleteStream.isPending && deleteStream.variables === i.name}
+                onDelete={() => deleteStream.mutateAsync(i.name)}
+              />
+            </SpaceBetween>
           ),
         },
       ]}
@@ -549,6 +628,8 @@ export function FirehoseDashboard() {
       filterPlaceholder="Find streams by name"
       filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
     />
+    {tagsStream && <FirehoseTagsModal name={tagsStream} onClose={() => setTagsStream(null)} />}
+    </>
   );
 }
 

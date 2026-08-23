@@ -317,6 +317,7 @@ import {
 } from "../../hooks/useTranscribe";
 import {
   useCostAndUsage,
+  useCostAndUsageWithResources,
   useDimensionValues,
   useCETags,
   useReservationCoverage,
@@ -507,6 +508,7 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
 
 export function CEDashboard() {
   const costAndUsage = useCostAndUsage();
+  const costAndUsageWithResources = useCostAndUsageWithResources();
   const dimensionValues = useDimensionValues();
   const ceTags = useCETags();
   const reservationCoverage = useReservationCoverage();
@@ -536,6 +538,26 @@ export function CEDashboard() {
       {(costAndUsage.data as any) && (
         <Box>
           Results by time: {((costAndUsage.data as any).resultsByTime || []).length}
+        </Box>
+      )}
+
+      <Header variant="h2">Cost & Usage by Resource</Header>
+      <Button
+        loading={costAndUsageWithResources.isPending}
+        onClick={() =>
+          costAndUsageWithResources.mutate({
+            timePeriod: { start: "2026-01-01", end: "2026-06-30" },
+            granularity: "MONTHLY",
+            metrics: ["UnblendedCost"],
+            filter: { Dimensions: { Key: "SERVICE", Values: ["Amazon S3"] } },
+          })
+        }
+      >
+        Get Cost & Usage by Resource
+      </Button>
+      {(costAndUsageWithResources.data as any) && (
+        <Box>
+          Results by time: {((costAndUsageWithResources.data as any).resultsByTime || []).length}
         </Box>
       )}
 

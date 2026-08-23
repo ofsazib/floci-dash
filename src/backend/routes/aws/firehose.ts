@@ -10,6 +10,8 @@ import {
   PutRecordCommand,
   PutRecordBatchCommand,
   ListTagsForDeliveryStreamCommand,
+  TagDeliveryStreamCommand,
+  UntagDeliveryStreamCommand,
 } from "@aws-sdk/client-firehose";
 
 const router = new Hono();
@@ -108,6 +110,33 @@ router.get("/streams/:name/tags", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new ListTagsForDeliveryStreamCommand({ DeliveryStreamName: name }));
   return c.json({ tags: result.Tags || [], hasMoreTags: result.HasMoreTags });
+});
+
+
+router.post("/streams/:name/tags", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const body = await c.req.json<{ tags?: Record<string, string> }>();
+  if (!body.tags || !Object.keys(body.tags).length)
+    return c.json({ error: "tags is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new TagDeliveryStreamCommand({
+      DeliveryStreamName: name,
+      Tags: Object.entries(body.tags).map(([Key, Value]) => ({ Key, Value })),
+    })
+  );
+  return c.json({ tagged: true });
+});
+
+router.delete("/streams/:name/tags", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const body = await c.req.json<{ tagKeys?: string[] }>();
+  if (!body.tagKeys?.length) return c.json({ error: "tagKeys is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new UntagDeliveryStreamCommand({ DeliveryStreamName: name, TagKeys: body.tagKeys })
+  );
+  return c.json({ untagged: true });
 });
 
 export default router;

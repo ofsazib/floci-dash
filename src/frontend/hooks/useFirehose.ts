@@ -56,3 +56,42 @@ export function usePutFirehoseRecord(streamName: string) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "firehose", "streams"] }),
   });
 }
+
+export interface FirehoseTag {
+  Key: string;
+  Value: string;
+}
+
+export function useFirehoseStreamTags(name: string | null) {
+  return useQuery<{ tags: FirehoseTag[]; hasMoreTags: boolean }>({
+    queryKey: ["aws", "firehose", "streams", name, "tags"],
+    queryFn: () => api(`/aws/firehose/streams/${encodeURIComponent(name!)}/tags`),
+    enabled: !!name,
+  });
+}
+
+export function useTagFirehoseStream() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { name: string; tags: Record<string, string> }) =>
+      api(`/aws/firehose/streams/${encodeURIComponent(params.name)}/tags`, {
+        method: "POST",
+        body: JSON.stringify({ tags: params.tags }),
+      }),
+    onSuccess: (_d, v) =>
+      qc.invalidateQueries({ queryKey: ["aws", "firehose", "streams", v.name, "tags"] }),
+  });
+}
+
+export function useUntagFirehoseStream() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { name: string; tagKeys: string[] }) =>
+      api(`/aws/firehose/streams/${encodeURIComponent(params.name)}/tags`, {
+        method: "DELETE",
+        body: JSON.stringify({ tagKeys: params.tagKeys }),
+      }),
+    onSuccess: (_d, v) =>
+      qc.invalidateQueries({ queryKey: ["aws", "firehose", "streams", v.name, "tags"] }),
+  });
+}

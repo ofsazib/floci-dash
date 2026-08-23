@@ -4,6 +4,7 @@ import { create } from "../../clients/aws";
 import { CostExplorerClient } from "@aws-sdk/client-cost-explorer";
 import {
   GetCostAndUsageCommand,
+  GetCostAndUsageWithResourcesCommand,
   GetDimensionValuesCommand,
   GetTagsCommand,
   GetReservationCoverageCommand,
@@ -25,6 +26,29 @@ router.post("/cost-and-usage", async (c: Context) => {
   const client = getClient();
   const result = await client.send(
     new GetCostAndUsageCommand({
+      TimePeriod: body.timePeriod,
+      Granularity: body.granularity,
+      Metrics: body.metrics,
+      Filter: body.filter,
+      GroupBy: body.groupBy,
+    })
+  );
+  return c.json({
+    resultsByTime: result.ResultsByTime || [],
+    groupDefinitions: result.GroupDefinitions || [],
+    total: (result.ResultsByTime || []).length,
+  });
+});
+
+router.post("/cost-and-usage-with-resources", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.timePeriod?.start || !body.timePeriod?.end) return c.json({ error: "timePeriod.start and timePeriod.end are required" }, 400);
+  if (!body.granularity) return c.json({ error: "granularity is required" }, 400);
+  if (!body.metrics?.length) return c.json({ error: "metrics is required" }, 400);
+
+  const client = getClient();
+  const result = await client.send(
+    new GetCostAndUsageWithResourcesCommand({
       TimePeriod: body.timePeriod,
       Granularity: body.granularity,
       Metrics: body.metrics,

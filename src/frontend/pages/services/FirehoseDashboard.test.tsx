@@ -7,6 +7,12 @@ import React from "react";
 
 const mockFirehoseStreams = vi.fn();
 const mockDeleteStream = vi.fn();
+const mockTags = vi.fn();
+const mockAddTagsMutate = vi.fn();
+const mockRemoveTagsMutate = vi.fn();
+
+const addTagsState = vi.hoisted(() => ({ isPending: false }));
+const removeTagsState = vi.hoisted(() => ({ isPending: false, variables: null as any }));
 
 const deleteStreamState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
 
@@ -17,6 +23,16 @@ vi.mock("../../hooks/useFirehose", () => ({
     isPending: deleteStreamState.isPending,
     variables: deleteStreamState.variables,
   }),
+  useFirehoseStreamTags: (...args: any[]) => mockTags(...args),
+  useTagFirehoseStream: () => ({
+    mutateAsync: mockAddTagsMutate,
+    get isPending() { return addTagsState.isPending; },
+  }),
+  useUntagFirehoseStream: () => ({
+    mutateAsync: mockRemoveTagsMutate,
+    get isPending() { return removeTagsState.isPending; },
+    get variables() { return removeTagsState.variables; },
+  }),
 }));
 
 import { FirehoseDashboard } from "./FirehoseDashboard";
@@ -25,6 +41,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   deleteStreamState.isPending = false;
   deleteStreamState.variables = null;
+  addTagsState.isPending = false;
+  removeTagsState.isPending = false;
+  removeTagsState.variables = null;
+  mockTags.mockReturnValue({ data: undefined });
   mockFirehoseStreams.mockReturnValue({
     data: { streams: [], total: 0 },
     isLoading: false,
@@ -189,5 +209,85 @@ describe("FirehoseDashboard — filtering", () => {
     mockFirehoseStreams.mockReturnValue({ data: { total: 0 }, isLoading: false });
     render(<FirehoseDashboard />, { wrapper: createWrapper() });
     expect(screen.getByText("No delivery streams")).toBeTruthy();
+  });
+});
+
+describe("FirehoseDashboard — stream tags", () => {
+  function setupStream() {
+    mockFirehoseStreams.mockReturnValue({
+      data: { streams: [{ DeliveryStreamName: "s1", DeliveryStreamStatus: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+  }
+
+  it("opens the tags modal and renders tags", async () => {
+    setupStream();
+    mockTags.mockReturnValue({ data: { tags: [{ Key: "env", Value: "prod" }] } });
+    const user = userEvent.setup();
+    render(<FirehoseDashboard />, { wrapper: createWrapper() });
+    await user.click((await screen.findAllByRole("button", { name: "Tags" }))[0]);
+    expect(await screen.findByText("env")).toBeTruthy();
+    expect(mockTags).toHaveBeenCalledWith("s1");
+  });
+
+  it("shows No tags for an empty list", async () => {
+    setupStream();
+    mockTags.mockReturnValue({ data: { tags: [] } });
+    const user = userEvent.setup();
+    render(<FirehoseDashboard />, { wrapper: createWrapper() });
+    await user.click((await screen.findAllByRole("button", { name: "Tags" }))[0]);
+    expect(await screen.findByText("No tags")).toBeTruthy();
+  });
+
+  it("adds a tag and clears inputs", async () => {
+    setupStream();
+    mockTags.mockReturnValue({ data: { tags: [] } });
+    mockAddTagsMutate.mockResolvedValue({});
+    const user = userEvent.setup();
+    render(<FirehoseDashboard />, { wrapper: createWrapper() });
+    await user.click((await screen.findAllByRole("button", { name: "Tags" }))[0]);
+    await screen.findByText("No tags");
+    const inputs = screen.getAllByRole("textbox");
+    await user.type(inputs[0], "team");
+    await user.type(inputs[1], "data");
+    await user.click(screen.getByRole("button", { name: /Add tag/i }));
+    await waitFor(() => expect(mockAddTagsMutate).toHaveBeenCalledWith({ name: "s1", tags: { team: "data" } }));
+    await waitFor(() => expect((screen.getAllByRole("textbox")[0] as HTMLInputElement).value).toBe(""));
+  });
+
+  it("removes a tag after confirmation", async () => {
+    setupStream();
+    mockTags.mockReturnValue({ data: { tags: [{ Key: "env", Value: "prod" }] } });
+    mockRemoveTagsMutate.mockResolvedValue({});
+    const user = userEvent.setup();
+    render(<FirehoseDashboard />, { wrapper: createWrapper() });
+    await user.click((await screen.findAllByRole("button", { name: "Tags" }))[0]);
+    await screen.findByText("env");
+    await user.click(screen.getByRole("button", { name: /Delete env/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() => expect(mockRemoveTagsMutate).toHaveBeenCalledWith({ name: "s1", tagKeys: ["env"] }));
+  });
+
+  it("disables the tag delete while pending", async () => {
+    setupStream();
+    mockTags.mockReturnValue({ data: { tags: [{ Key: "env", Value: "prod" }] } });
+    removeTagsState.isPending = true;
+    removeTagsState.variables = { tagKeys: ["env"] };
+    const user = userEvent.setup();
+    render(<FirehoseDashboard />, { wrapper: createWrapper() });
+    await user.click((await screen.findAllByRole("button", { name: "Tags" }))[0]);
+    const btn = await screen.findByRole("button", { name: /Delete env/i });
+    expect(btn.className).toMatch(/disabled/);
+  });
+
+  it("closes the tags modal", async () => {
+    setupStream();
+    const user = userEvent.setup();
+    render(<FirehoseDashboard />, { wrapper: createWrapper() });
+    await user.click((await screen.findAllByRole("button", { name: "Tags" }))[0]);
+    await screen.findByText(/Tags \(/);
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: /Add tag/i })).toBeNull());
   });
 });

@@ -16,6 +16,8 @@ vi.mock("@aws-sdk/client-firehose", () => ({
   PutRecordCommand: createCmd("PutRecordCommand"),
   PutRecordBatchCommand: createCmd("PutRecordBatchCommand"),
   ListTagsForDeliveryStreamCommand: createCmd("ListTagsForDeliveryStreamCommand"),
+  TagDeliveryStreamCommand: createCmd("TagDeliveryStreamCommand"),
+  UntagDeliveryStreamCommand: createCmd("UntagDeliveryStreamCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({ create: (Ctor: any, extra?: any) => new Ctor(extra) }));
@@ -132,5 +134,54 @@ describe("Firehose Routes", () => {
     const body = await res.json();
     expect(body.tags).toEqual([]);
     expect(body.hasMoreTags).toBeUndefined();
+  });
+
+  it("POST /streams/:name/tags — tags the stream", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await router.request("/streams/s1/tags", {
+      method: "POST",
+      body: JSON.stringify({ tags: { env: "prod" } }),
+      headers: { "content-type": "application/json" },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.tagged).toBe(true);
+    const cmd = mockSend.mock.calls[0][0];
+    expect(cmd.__cmdName).toBe("TagDeliveryStreamCommand");
+    expect(cmd.DeliveryStreamName).toBe("s1");
+    expect(cmd.Tags).toEqual([{ Key: "env", Value: "prod" }]);
+  });
+
+  it("POST /streams/:name/tags — 400 without tags", async () => {
+    const res = await router.request("/streams/s1/tags", {
+      method: "POST",
+      body: JSON.stringify({}),
+      headers: { "content-type": "application/json" },
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("DELETE /streams/:name/tags — untags the stream", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await router.request("/streams/s1/tags", {
+      method: "DELETE",
+      body: JSON.stringify({ tagKeys: ["env"] }),
+      headers: { "content-type": "application/json" },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.untagged).toBe(true);
+    const cmd = mockSend.mock.calls[0][0];
+    expect(cmd.__cmdName).toBe("UntagDeliveryStreamCommand");
+    expect(cmd.TagKeys).toEqual(["env"]);
+  });
+
+  it("DELETE /streams/:name/tags — 400 without tagKeys", async () => {
+    const res = await router.request("/streams/s1/tags", {
+      method: "DELETE",
+      body: JSON.stringify({}),
+      headers: { "content-type": "application/json" },
+    });
+    expect(res.status).toBe(400);
   });
 });

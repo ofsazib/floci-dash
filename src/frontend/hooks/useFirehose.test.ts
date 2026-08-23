@@ -15,6 +15,9 @@ import {
   useCreateFirehoseStream,
   useDeleteFirehoseStream,
   usePutFirehoseRecord,
+  useFirehoseStreamTags,
+  useTagFirehoseStream,
+  useUntagFirehoseStream,
 } from "./useFirehose";
 
 beforeEach(() => mockApi.mockReset());
@@ -51,6 +54,46 @@ describe("useFirehose hooks", () => {
     expect(mockApi).toHaveBeenCalledWith("/aws/firehose/streams/stream-1/records", {
       method: "POST",
       body: JSON.stringify({ data: "hello" }),
+    });
+  });
+});
+
+describe("useFirehoseStreamTags", () => {
+  it("fetches tags with encoded name", async () => {
+    mockApi.mockResolvedValueOnce({ tags: [] });
+    const { result } = renderHook(() => useFirehoseStreamTags("s 1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/firehose/streams/s%201/tags");
+  });
+
+  it("is disabled without a name", () => {
+    const { result } = renderHook(() => useFirehoseStreamTags(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+});
+
+describe("useTagFirehoseStream", () => {
+  it("posts tags", async () => {
+    mockApi.mockResolvedValueOnce({ tagged: true });
+    const { result } = renderHook(() => useTagFirehoseStream(), { wrapper: createWrapper() });
+    result.current.mutate({ name: "s1", tags: { env: "prod" } });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/firehose/streams/s1/tags", {
+      method: "POST",
+      body: JSON.stringify({ tags: { env: "prod" } }),
+    });
+  });
+});
+
+describe("useUntagFirehoseStream", () => {
+  it("deletes tag keys", async () => {
+    mockApi.mockResolvedValueOnce({ untagged: true });
+    const { result } = renderHook(() => useUntagFirehoseStream(), { wrapper: createWrapper() });
+    result.current.mutate({ name: "s1", tagKeys: ["env"] });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/firehose/streams/s1/tags", {
+      method: "DELETE",
+      body: JSON.stringify({ tagKeys: ["env"] }),
     });
   });
 });

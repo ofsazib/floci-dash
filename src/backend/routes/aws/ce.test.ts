@@ -19,6 +19,7 @@ const createCmd = vi.hoisted(() => {
 vi.mock("@aws-sdk/client-cost-explorer", () => ({
   CostExplorerClient: mockCE,
   GetCostAndUsageCommand: createCmd("GetCostAndUsageCommand"),
+  GetCostAndUsageWithResourcesCommand: createCmd("GetCostAndUsageWithResourcesCommand"),
   GetDimensionValuesCommand: createCmd("GetDimensionValuesCommand"),
   GetTagsCommand: createCmd("GetTagsCommand"),
   GetReservationCoverageCommand: createCmd("GetReservationCoverageCommand"),
@@ -335,5 +336,52 @@ describe("CE Routes", () => {
       expect(body.costCategories).toEqual([]);
       expect(body.total).toBe(0);
     });
+  });
+
+  it("POST /cost-and-usage-with-resources — returns grouped results", async () => {
+    mockSend.mockResolvedValueOnce({
+      ResultsByTime: [{ TimePeriod: { Start: "2026-01-01" }, Total: {} }],
+      GroupDefinitions: [{ Type: "DIMENSION", Key: "RESOURCE_ID" }],
+    });
+    const res = await post("/cost-and-usage-with-resources", {
+      timePeriod: { start: "2026-01-01", end: "2026-01-31" },
+      granularity: "MONTHLY",
+      metrics: ["UnblendedCost"],
+      filter: { Dimensions: { Key: "SERVICE", Values: ["Amazon S3"] } },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.total).toBe(1);
+    expect(body.groupDefinitions[0].Key).toBe("RESOURCE_ID");
+    const cmd = mockSend.mock.calls[0][0];
+    expect(cmd.__cmdName).toBe("GetCostAndUsageWithResourcesCommand");
+    expect(cmd.Granularity).toBe("MONTHLY");
+    expect(cmd.Filter.Dimensions.Key).toBe("SERVICE");
+  });
+
+  it("POST /cost-and-usage-with-resources — sparse response", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/cost-and-usage-with-resources", {
+      timePeriod: { start: "a", end: "b" },
+      granularity: "MONTHLY",
+      metrics: ["UnblendedCost"],
+    });
+    const body = await res.json();
+    expect(body).toEqual({ resultsByTime: [], groupDefinitions: [], total: 0 });
+  });
+
+  it("POST /cost-and-usage-with-resources — 400 without timePeriod", async () => {
+    const res = await post("/cost-and-usage-with-resources", { granularity: "MONTHLY", metrics: ["x"] });
+    expect(res.status).toBe(400);
+  });
+
+  it("POST /cost-and-usage-with-resources — 400 without granularity", async () => {
+    const res = await post("/cost-and-usage-with-resources", { timePeriod: { start: "a", end: "b" }, metrics: ["x"] });
+    expect(res.status).toBe(400);
+  });
+
+  it("POST /cost-and-usage-with-resources — 400 without metrics", async () => {
+    const res = await post("/cost-and-usage-with-resources", { timePeriod: { start: "a", end: "b" }, granularity: "MONTHLY" });
+    expect(res.status).toBe(400);
   });
 });

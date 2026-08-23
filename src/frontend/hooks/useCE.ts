@@ -74,3 +74,10 @@ export function useCostCategories() {
     onSuccess: () => qc.invalidateQueries({ queryKey: CE_KEY }),
   });
 }
+
+export function useCostAndUsageWithResources() {
+  return useMutation({
+    mutationFn: (body: any) =>
+      api("/aws/ce/cost-and-usage-with-resources", { method: "POST", body: JSON.stringify(body) }),
+  });
+}

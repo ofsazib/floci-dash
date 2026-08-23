@@ -15,6 +15,12 @@ const mockReservationUtilizationMutate = vi.fn();
 const mockSavingsPlansCoverageMutate = vi.fn();
 const mockSavingsPlansUtilizationMutate = vi.fn();
 const mockCostCategoriesMutate = vi.fn();
+const mockCostWithResourcesMutate = vi.fn();
+const mockCostWithResourcesHook = vi.fn(() => ({
+  mutate: mockCostWithResourcesMutate,
+  isPending: false,
+  data: undefined as any,
+}));
 
 // Hook mock functions that can be overridden per test
 const mockCostAndUsageHook = vi.fn(() => ({
@@ -60,6 +66,7 @@ const mockCostCategoriesHook = vi.fn(() => ({
 
 vi.mock("../../hooks/useCE", () => ({
   useCostAndUsage: () => mockCostAndUsageHook(),
+  useCostAndUsageWithResources: () => mockCostWithResourcesHook(),
   useDimensionValues: () => mockDimensionValuesHook(),
   useCETags: () => mockCETagsHook(),
   useReservationCoverage: () => mockReservationCoverageHook(),
@@ -137,7 +144,7 @@ describe("CEDashboard — rendering", () => {
 
   it("renders all query buttons", () => {
     render(<CEDashboard />, { wrapper: createWrapper() });
-    expect(screen.getByRole("button", { name: /Get Cost & Usage/i })).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: /Get Cost & Usage/i })[0]).toBeTruthy();
     expect(screen.getByRole("button", { name: /Get Dimensions/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Get Tags/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Reservation Coverage/i })).toBeTruthy();
@@ -304,7 +311,34 @@ describe("CEDashboard — result display branches", () => {
 describe("CEDashboard — disabled state", () => {
   it("submit buttons are enabled", () => {
     render(<CEDashboard />, { wrapper: createWrapper() });
-    const costUsageBtn = screen.getByRole("button", { name: /Get Cost & Usage/i });
+    const costUsageBtn = screen.getAllByRole("button", { name: /Get Cost & Usage/i })[0];
     expect(costUsageBtn).not.toBeDisabled();
+  });
+});
+
+describe("CEDashboard — cost & usage with resources", () => {
+  it("shows 0 when the response has no results", () => {
+    mockCostWithResourcesHook.mockReturnValue({
+      mutate: mockCostWithResourcesMutate,
+      isPending: false,
+      data: {},
+    });
+    render(<CEDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/Results by time: 0/)).toBeTruthy();
+  });
+
+  it("runs the with-resources query and shows the result count", async () => {
+    mockCostWithResourcesHook.mockReturnValue({
+      mutate: mockCostWithResourcesMutate,
+      isPending: false,
+      data: { resultsByTime: [{}, {}], total: 2 },
+    });
+    const user = userEvent.setup();
+    render(<CEDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /Get Cost & Usage by Resource/i }));
+    await waitFor(() => expect(screen.getByText(/Results by time: 2/)).toBeTruthy());
+    expect(mockCostWithResourcesMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ granularity: "MONTHLY", metrics: ["UnblendedCost"] })
+    );
   });
 });

@@ -19,6 +19,7 @@ import {
   useSavingsPlansCoverage,
   useSavingsPlansUtilization,
   useCostCategories,
+  useCostAndUsageWithResources,
 } from "./useCE";
 
 beforeEach(() => mockApi.mockReset());
@@ -117,6 +118,19 @@ describe("useCostCategories", () => {
     expect(mockApi).toHaveBeenCalledWith("/aws/ce/cost-categories", {
       method: "POST",
       body: JSON.stringify({ timePeriod: BODY.timePeriod }),
+    });
+  });
+});
+
+describe("useCostAndUsageWithResources", () => {
+  it("posts to the with-resources endpoint", async () => {
+    mockApi.mockResolvedValueOnce({ resultsByTime: [], total: 0 });
+    const { result } = renderHook(() => useCostAndUsageWithResources(), { wrapper: createWrapper() });
+    result.current.mutate({ timePeriod: { start: "a", end: "b" }, granularity: "MONTHLY", metrics: ["UnblendedCost"] });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ce/cost-and-usage-with-resources", {
+      method: "POST",
+      body: JSON.stringify({ timePeriod: { start: "a", end: "b" }, granularity: "MONTHLY", metrics: ["UnblendedCost"] }),
     });
   });
 });
