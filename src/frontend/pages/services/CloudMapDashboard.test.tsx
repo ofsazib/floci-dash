@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -29,6 +29,9 @@ vi.mock("../../components/ConfirmDialog", () => ({
 const mockNamespaces = vi.fn();
 const mockServices = vi.fn();
 const mockInstances = vi.fn();
+const mockRegisterInstance = vi.fn();
+const registerState = vi.hoisted(() => ({ isError: false, error: null as Error | null }));
+const mockDeregisterInstance = vi.fn();
 const mockDeleteNs = vi.fn();
 const mockDeleteSvc = vi.fn();
 
@@ -46,11 +49,23 @@ vi.mock("../../hooks/useCloudMap", () => ({
     get variables() { return deleteSvcState.variables; },
   }),
   useCloudMapInstances: (...args: any[]) => mockInstances(...args),
+  useRegisterCloudMapInstance: () => ({
+    mutate: mockRegisterInstance,
+    isPending: false,
+    get isError() { return registerState.isError; },
+    get error() { return registerState.error; },
+  }),
+  useDeregisterCloudMapInstance: () => ({
+    mutateAsync: mockDeregisterInstance,
+    isPending: false,
+  }),
 }));
 
 import { CloudMapDashboard } from "./CloudMapDashboard";
 
 beforeEach(() => {
+  registerState.isError = false;
+  registerState.error = null;
   vi.clearAllMocks();
   deleteNsState.isPending = false;
   deleteNsState.variables = null;
@@ -467,5 +482,148 @@ describe("CloudMapDashboard — instance list drill-down", () => {
     await waitFor(() => expect(screen.getByText("my-service")).toBeTruthy());
     await clickButton(user, /my-service/i);
     await waitFor(() => expect(screen.getByText(/No instances/i)).toBeTruthy());
+  });
+});
+
+describe("CloudMapDashboard — instance registration", () => {
+  function openInstances(instances: any[]) {
+    return (async () => {
+      mockNamespaces.mockReturnValue({
+        data: { namespaces: [{ Id: "ns-1", Name: "ns-a", Type: "DNS_PRIVATE" }], total: 1 },
+        isLoading: false, isError: false, error: null,
+      });
+      mockServices.mockReturnValue({
+        data: { services: [{ Id: "svc-1", Name: "svc-a", Type: "HTTP" }], total: 1 },
+        isLoading: false,
+      });
+      mockInstances.mockReturnValue({ data: { instances, total: instances.length } });
+      const user = userEvent.setup();
+      render(<CloudMapDashboard />, { wrapper: createWrapper() });
+      await clickButton(user, /ns-a/i);
+      await clickButton(user, /svc-a/i);
+      await screen.findByText(/Instances in svc-1/);
+      return user;
+    })();
+  }
+
+  it("lists instances with attributes", async () => {
+    await openInstances([{ Id: "i-1", Attributes: { AWS_INSTANCE_IPV4: "10.0.0.1" } }]);
+    expect(screen.getByText("AWS_INSTANCE_IPV4=10.0.0.1")).toBeTruthy();
+  });
+
+  it("registers an instance with an IP", async () => {
+    mockRegisterInstance.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
+    const user = await openInstances([]);
+    await clickButton(user, /Create instance/i);
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const inputs = dialog.querySelectorAll("input");
+    await user.type(inputs[0], "i-9");
+    await user.type(inputs[1], "10.0.0.9");
+    await user.click(within(dialog).getByRole("button", { name: "Register" }));
+    await waitFor(() =>
+      expect(mockRegisterInstance).toHaveBeenCalledWith(
+        { serviceId: "svc-1", instanceId: "i-9", attributes: { AWS_INSTANCE_IPV4: "10.0.0.9" } },
+        expect.objectContaining({ onSuccess: expect.any(Function) })
+      )
+    );
+  });
+
+  it("registers without attributes when IP blank", async () => {
+    mockRegisterInstance.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
+    const user = await openInstances([]);
+    await clickButton(user, /Create instance/i);
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const inputs = dialog.querySelectorAll("input");
+    await user.type(inputs[0], "i-8");
+    await user.click(within(dialog).getByRole("button", { name: "Register" }));
+    await waitFor(() =>
+      expect(mockRegisterInstance).toHaveBeenCalledWith(
+        { serviceId: "svc-1", instanceId: "i-8", attributes: undefined },
+        expect.anything()
+      )
+    );
+  });
+
+  it("keeps Register disabled until an ID is typed", async () => {
+    const user = await openInstances([]);
+    await clickButton(user, /Create instance/i);
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    expect(within(dialog).getByRole("button", { name: "Register" }).hasAttribute("disabled")).toBe(true);
+  });
+
+  it("deregisters an instance", async () => {
+    mockDeregisterInstance.mockResolvedValue({});
+    const user = await openInstances([{ Id: "i-1", Attributes: {} }]);
+    await user.click(screen.getByRole("button", { name: /Delete i-1/i }));
+    await waitFor(() =>
+      expect(mockDeregisterInstance).toHaveBeenCalledWith({ serviceId: "svc-1", instanceId: "i-1" })
+    );
+  });
+});
+
+describe("CloudMapDashboard — register modal error arms", () => {
+  it("shows the register error and fallback message", async () => {
+    mockNamespaces.mockReturnValue({
+      data: { namespaces: [{ Id: "ns-1", Name: "ns-a", Type: "DNS_PRIVATE" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockServices.mockReturnValue({
+      data: { services: [{ Id: "svc-1", Name: "svc-a", Type: "HTTP" }], total: 1 },
+      isLoading: false,
+    });
+    mockInstances.mockReturnValue({ data: { instances: [], total: 0 } });
+    registerState.isError = true;
+    registerState.error = new Error("register failed");
+    const user = userEvent.setup();
+    render(<CloudMapDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /ns-a/i);
+    await clickButton(user, /svc-a/i);
+    await clickButton(user, /Create instance/i);
+    expect(await screen.findByText("register failed")).toBeTruthy();
+  });
+
+  it("dismisses the register modal via Escape and Cancel", async () => {
+    mockNamespaces.mockReturnValue({
+      data: { namespaces: [{ Id: "ns-1", Name: "ns-a", Type: "DNS_PRIVATE" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockServices.mockReturnValue({
+      data: { services: [{ Id: "svc-1", Name: "svc-a", Type: "HTTP" }], total: 1 },
+      isLoading: false,
+    });
+    mockInstances.mockReturnValue({ data: { instances: [], total: 0 } });
+    const user = userEvent.setup();
+    render(<CloudMapDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /ns-a/i);
+    await clickButton(user, /svc-a/i);
+    await clickButton(user, /Create instance/i);
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    // reopen + Escape
+    await clickButton(user, /Create instance/i);
+    document.querySelectorAll('[class*="awsui_dialog"]').forEach((d) =>
+      fireEvent.keyDown(d as HTMLElement, { keyCode: 27 })
+    );
+    expect(mockRegisterInstance).not.toHaveBeenCalled();
+  });
+
+  it("falls back to a generic register error message", async () => {
+    mockNamespaces.mockReturnValue({
+      data: { namespaces: [{ Id: "ns-1", Name: "ns-a", Type: "DNS_PRIVATE" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockServices.mockReturnValue({
+      data: { services: [{ Id: "svc-1", Name: "svc-a", Type: "HTTP" }], total: 1 },
+      isLoading: false,
+    });
+    mockInstances.mockReturnValue({ data: { instances: [], total: 0 } });
+    registerState.isError = true;
+    registerState.error = null;
+    const user = userEvent.setup();
+    render(<CloudMapDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /ns-a/i);
+    await clickButton(user, /svc-a/i);
+    await clickButton(user, /Create instance/i);
+    expect(await screen.findByText("Failed to register instance")).toBeTruthy();
   });
 });

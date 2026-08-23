@@ -17,6 +17,9 @@ import {
   useCloudMapServices,
   useDeleteCloudMapService,
   useCloudMapInstances,
+  useRegisterCloudMapInstance,
+  useDeregisterCloudMapInstance,
+  useDiscoverCloudMapInstances,
 } from "./useCloudMap";
 
 beforeEach(() => mockApi.mockReset());
@@ -77,5 +80,39 @@ describe("useCloudMap hooks", () => {
   it("useCloudMapInstances disabled when null", () => {
     const { result } = renderHook(() => useCloudMapInstances(null), { wrapper: createWrapper() });
     expect(result.current.fetchStatus).toBe("idle");
+  });
+});
+
+describe("CloudMap registration hooks", () => {
+  it("useRegisterCloudMapInstance posts the registration", async () => {
+    mockApi.mockResolvedValueOnce({ operationId: "op-1" });
+    const { result } = renderHook(() => useRegisterCloudMapInstance(), { wrapper: createWrapper() });
+    result.current.mutate({ serviceId: "s 1", instanceId: "i-1", attributes: { A: "B" } });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/servicediscovery/services/s%201/instances", {
+      method: "POST",
+      body: JSON.stringify({ instanceId: "i-1", attributes: { A: "B" } }),
+    });
+  });
+
+  it("useDeregisterCloudMapInstance deletes both ids encoded", async () => {
+    mockApi.mockResolvedValueOnce({ operationId: "op-2" });
+    const { result } = renderHook(() => useDeregisterCloudMapInstance(), { wrapper: createWrapper() });
+    result.current.mutate({ serviceId: "s/1", instanceId: "i 1" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/servicediscovery/services/s%2F1/instances/i%201", {
+      method: "DELETE",
+    });
+  });
+
+  it("useDiscoverCloudMapInstances posts the discover body", async () => {
+    mockApi.mockResolvedValueOnce({ instances: [], total: 0 });
+    const { result } = renderHook(() => useDiscoverCloudMapInstances(), { wrapper: createWrapper() });
+    result.current.mutate({ namespaceName: "ns", serviceName: "svc" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/servicediscovery/discover", {
+      method: "POST",
+      body: JSON.stringify({ namespaceName: "ns", serviceName: "svc" }),
+    });
   });
 });

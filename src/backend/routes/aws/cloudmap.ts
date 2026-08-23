@@ -3,6 +3,12 @@ import type { Context } from "hono";
 import { create } from "../../clients/aws";
 import { ServiceDiscoveryClient } from "@aws-sdk/client-servicediscovery";
 import {
+  RegisterInstanceCommand,
+  DeregisterInstanceCommand,
+  DiscoverInstancesCommand,
+  GetInstancesHealthStatusCommand,
+} from "@aws-sdk/client-servicediscovery";
+import {
   ListNamespacesCommand,
   GetNamespaceCommand,
   CreateHttpNamespaceCommand,
@@ -105,6 +111,62 @@ router.get("/services/:id/instances", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new ListInstancesCommand({ ServiceId: id }));
   const instances = result.Instances || [];
+  return c.json({ instances, total: instances.length });
+});
+
+
+router.post("/services/:id/instances", async (c: Context) => {
+  const serviceId = c.req.param("id")!;
+  const body = await c.req.json<any>();
+  if (!body.instanceId) return c.json({ error: "instanceId is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new RegisterInstanceCommand({
+      ServiceId: serviceId,
+      InstanceId: body.instanceId,
+      Attributes: body.attributes,
+    })
+  );
+  return c.json({ operationId: result.OperationId || null }, 201);
+});
+
+router.delete("/services/:id/instances/:instanceId", async (c: Context) => {
+  const serviceId = c.req.param("id")!;
+  const instanceId = c.req.param("instanceId")!;
+  const client = getClient();
+  const result = await client.send(
+    new DeregisterInstanceCommand({ ServiceId: serviceId, InstanceId: instanceId })
+  );
+  return c.json({ operationId: result.OperationId || null });
+});
+
+router.get("/services/:id/instances/health", async (c: Context) => {
+  const serviceId = c.req.param("id")!;
+  const client = getClient();
+  const result = await client.send(
+    new GetInstancesHealthStatusCommand({ ServiceId: serviceId })
+  );
+  return c.json({ status: result.Status || {} });
+});
+
+router.post("/discover", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.namespaceName) return c.json({ error: "namespaceName is required" }, 400);
+  if (!body.serviceName) return c.json({ error: "serviceName is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new DiscoverInstancesCommand({
+      NamespaceName: body.namespaceName,
+      ServiceName: body.serviceName,
+      MaxResults: body.maxResults,
+    })
+  );
+  const instances = (result.Instances || []).map((inst: any) => ({
+    instanceId: inst.InstanceId,
+    namespaceName: inst.NamespaceName,
+    serviceName: inst.ServiceName,
+    attributes: inst.Attributes || {},
+  }));
   return c.json({ instances, total: instances.length });
 });
 

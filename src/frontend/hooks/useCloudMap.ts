@@ -82,3 +82,36 @@ export function useCloudMapInstances(serviceId: string | null) {
     enabled: !!serviceId,
   });
 }
+
+export function useRegisterCloudMapInstance() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { serviceId: string; instanceId: string; attributes?: Record<string, string> }) =>
+      api(`/aws/servicediscovery/services/${encodeURIComponent(params.serviceId)}/instances`, {
+        method: "POST",
+        body: JSON.stringify({ instanceId: params.instanceId, attributes: params.attributes }),
+      }),
+    onSuccess: (_d, v) =>
+      qc.invalidateQueries({ queryKey: ["aws", "cloudmap", "instances", v.serviceId] }),
+  });
+}
+
+export function useDeregisterCloudMapInstance() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { serviceId: string; instanceId: string }) =>
+      api(
+        `/aws/servicediscovery/services/${encodeURIComponent(params.serviceId)}/instances/${encodeURIComponent(params.instanceId)}`,
+        { method: "DELETE" }
+      ),
+    onSuccess: (_d, v) =>
+      qc.invalidateQueries({ queryKey: ["aws", "cloudmap", "instances", v.serviceId] }),
+  });
+}
+
+export function useDiscoverCloudMapInstances() {
+  return useMutation({
+    mutationFn: (body: { namespaceName: string; serviceName: string; maxResults?: number }) =>
+      api("/aws/servicediscovery/discover", { method: "POST", body: JSON.stringify(body) }),
+  });
+}

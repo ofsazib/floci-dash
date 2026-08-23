@@ -278,6 +278,8 @@ import {
   useCloudMapServices,
   useDeleteCloudMapService,
   useCloudMapInstances,
+  useRegisterCloudMapInstance,
+  useDeregisterCloudMapInstance,
 } from "../../hooks/useCloudMap";
 import {
   useAthenaWorkGroups,
@@ -513,6 +515,11 @@ export function CloudMapDashboard() {
   const deleteSvc = useDeleteCloudMapService();
   const [selectedSvc, setSelectedSvc] = useState<string | null>(null);
   const { data: instData } = useCloudMapInstances(selectedSvc);
+  const registerInstance = useRegisterCloudMapInstance();
+  const deregisterInstance = useDeregisterCloudMapInstance();
+  const [showRegister, setShowRegister] = useState(false);
+  const [newInstanceId, setNewInstanceId] = useState("");
+  const [newInstanceIp, setNewInstanceIp] = useState("");
 
   if (isLoading) return <TableSkeleton />;
 
@@ -540,8 +547,77 @@ export function CloudMapDashboard() {
           columns={[
             { id: "id", header: "Instance ID", cell: (i: any) => i.id, isRowHeader: true },
             { id: "attributes", header: "Attributes", cell: (i: any) => i.attributes },
+            {
+              id: "actions",
+              header: "",
+              cell: (i: any) => (
+                <DeleteButton
+                  itemName={i.id}
+                  resourceType="instance registration"
+                  loading={deregisterInstance.isPending}
+                  onDelete={() =>
+                    deregisterInstance.mutateAsync({ serviceId: selectedSvc, instanceId: i.id })
+                  }
+                />
+              ),
+            },
           ]}
+          onCreate={() => setShowRegister(true)}
         />
+
+        <Modal
+          visible={showRegister}
+          onDismiss={() => setShowRegister(false)}
+          header="Register instance"
+          footer={
+            <Box float="right">
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button variant="link" onClick={() => setShowRegister(false)}>Cancel</Button>
+                <Button
+                  variant="primary"
+                  loading={registerInstance.isPending}
+                  disabled={!newInstanceId.trim()}
+                  onClick={() => {
+                    registerInstance.mutate(
+                      {
+                        serviceId: selectedSvc,
+                        instanceId: newInstanceId.trim(),
+                        attributes: newInstanceIp.trim()
+                          ? { AWS_INSTANCE_IPV4: newInstanceIp.trim() }
+                          : undefined,
+                      },
+                      {
+                        onSuccess: () => {
+                          setShowRegister(false);
+                          setNewInstanceId("");
+                          setNewInstanceIp("");
+                        },
+                      }
+                    );
+                  }}
+                >
+                  Register
+                </Button>
+              </SpaceBetween>
+            </Box>
+          }
+        >
+          <Form>
+            {registerInstance.isError && (
+              <Alert type="error" dismissible>
+                {(registerInstance.error as Error)?.message || "Failed to register instance"}
+              </Alert>
+            )}
+            <SpaceBetween size="m">
+              <FormField label="Instance ID">
+                <Input value={newInstanceId} onChange={({ detail }) => setNewInstanceId(detail.value)} placeholder="i-1" />
+              </FormField>
+              <FormField label="IPv4 address (optional)">
+                <Input value={newInstanceIp} onChange={({ detail }) => setNewInstanceIp(detail.value)} placeholder="10.0.0.1" />
+              </FormField>
+            </SpaceBetween>
+          </Form>
+        </Modal>
       </>
     );
   }

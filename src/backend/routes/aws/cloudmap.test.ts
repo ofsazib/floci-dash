@@ -18,6 +18,10 @@ vi.mock("@aws-sdk/client-servicediscovery", () => ({
   CreateServiceCommand: createCmd("CreateServiceCommand"),
   DeleteServiceCommand: createCmd("DeleteServiceCommand"),
   ListInstancesCommand: createCmd("ListInstancesCommand"),
+  RegisterInstanceCommand: createCmd("RegisterInstanceCommand"),
+  DeregisterInstanceCommand: createCmd("DeregisterInstanceCommand"),
+  DiscoverInstancesCommand: createCmd("DiscoverInstancesCommand"),
+  GetInstancesHealthStatusCommand: createCmd("GetInstancesHealthStatusCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({ create: (Ctor: any, extra?: any) => new Ctor(extra) }));
@@ -133,5 +137,95 @@ describe("Cloud Map Routes", () => {
     const res = await get("/services/svc-1/instances");
     const body = await res.json();
     expect(body).toEqual({ instances: [], total: 0 });
+  });
+
+  describe("Instance registration + discovery", () => {
+    it("POST /services/:id/instances — registers an instance", async () => {
+      mockSend.mockResolvedValueOnce({ OperationId: "op-1" });
+      const res = await post("/services/srv-1/instances", {
+        instanceId: "i-1",
+        attributes: { AWS_INSTANCE_IPV4: "10.0.0.1" },
+      });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.operationId).toBe("op-1");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("RegisterInstanceCommand");
+      expect(cmd.ServiceId).toBe("srv-1");
+      expect(cmd.Attributes.AWS_INSTANCE_IPV4).toBe("10.0.0.1");
+    });
+
+    it("POST /services/:id/instances — null operationId on sparse response", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/services/srv-1/instances", { instanceId: "i-1" });
+      expect((await res.json()).operationId).toBeNull();
+    });
+
+    it("DELETE /services/:id/instances/:instanceId — null operationId on sparse response", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/services/srv-1/instances/i-1");
+      expect((await res.json()).operationId).toBeNull();
+    });
+
+    it("POST /services/:id/instances — 400 without instanceId", async () => {
+      const res = await post("/services/srv-1/instances", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE /services/:id/instances/:instanceId — deregisters", async () => {
+      mockSend.mockResolvedValueOnce({ OperationId: "op-2" });
+      const res = await del("/services/srv-1/instances/i-1");
+      const body = await res.json();
+      expect(body.operationId).toBe("op-2");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeregisterInstanceCommand");
+    });
+
+    it("GET /services/:id/instances/health — returns status map", async () => {
+      mockSend.mockResolvedValueOnce({ Status: { "i-1": "HEALTHY" } });
+      const res = await get("/services/srv-1/instances/health");
+      const body = await res.json();
+      expect(body.status["i-1"]).toBe("HEALTHY");
+    });
+
+    it("GET /services/:id/instances/health — sparse fallback", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/services/srv-1/instances/health");
+      const body = await res.json();
+      expect(body.status).toEqual({});
+    });
+
+    it("POST /discover — discovers instances", async () => {
+      mockSend.mockResolvedValueOnce({
+        Instances: [{ InstanceId: "i-1", NamespaceName: "ns", ServiceName: "svc", Attributes: { A: "B" } }],
+      });
+      const res = await post("/discover", { namespaceName: "ns", serviceName: "svc" });
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(body.instances[0].attributes).toEqual({ A: "B" });
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DiscoverInstancesCommand");
+    });
+
+    it("POST /discover — sparse instance falls back to empty attributes", async () => {
+      mockSend.mockResolvedValueOnce({ Instances: [{ InstanceId: "i-1" }] });
+      const res = await post("/discover", { namespaceName: "ns", serviceName: "svc" });
+      const body = await res.json();
+      expect(body.instances[0].attributes).toEqual({});
+    });
+
+    it("POST /discover — undefined Instances falls back to []", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/discover", { namespaceName: "ns", serviceName: "svc" });
+      expect((await res.json()).instances).toEqual([]);
+    });
+
+    it("POST /discover — 400 without namespaceName", async () => {
+      const res = await post("/discover", { serviceName: "svc" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /discover — 400 without serviceName", async () => {
+      const res = await post("/discover", { namespaceName: "ns" });
+      expect(res.status).toBe(400);
+    });
   });
 });
