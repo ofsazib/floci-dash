@@ -254,6 +254,7 @@ import {
   useUserPoolClientSecrets,
   useCognitoUser,
   useAdminRemoveUserFromGroup,
+  useAdminAddUserToGroup,
   useAdminResetUserPassword,
   useUpdateCognitoGroup,
   useUpdateCognitoUserPoolClient,
@@ -609,6 +610,9 @@ export function CognitoDashboard() {
   // G.86 hooks
   const { data: detailUserData, isLoading: detailUserLoading } = useCognitoUser(selectedPool, detailUsername);
   const adminRemoveFromGroup = useAdminRemoveUserFromGroup(selectedPool!);
+  const adminAddToGroup = useAdminAddUserToGroup(selectedPool!);
+  const [addToGroupUser, setAddToGroupUser] = useState<string | null>(null);
+  const [addToGroupName, setAddToGroupName] = useState("");
   const adminResetPassword = useAdminResetUserPassword(selectedPool!);
   const updateCognitoGroup = useUpdateCognitoGroup(selectedPool!);
   const updateCognitoClient = useUpdateCognitoUserPoolClient(selectedPool!);
@@ -667,6 +671,7 @@ export function CognitoDashboard() {
               id: "users",
               label: "Users",
               content: (
+                <>
                 <ResourceTable
                   resourceName="User"
                   headerTitle={`Users in ${selectedPool}`}
@@ -690,9 +695,14 @@ export function CognitoDashboard() {
                       id: "actions",
                       header: "",
                       cell: (i: any) => (
-                        <Button variant="link" onClick={() => setDetailUsername(i.username)}>
-                          View
-                        </Button>
+                        <SpaceBetween direction="horizontal" size="xs">
+                          <Button variant="link" onClick={() => { setAddToGroupUser(i.username); setAddToGroupName(""); }}>
+                            Add to group
+                          </Button>
+                          <Button variant="link" onClick={() => setDetailUsername(i.username)}>
+                            View
+                          </Button>
+                        </SpaceBetween>
                       ),
                     },
                   ]}
@@ -700,6 +710,44 @@ export function CognitoDashboard() {
                   filterPlaceholder="Find users"
                   filterFunction={(i: any, s: string) => i.username.toLowerCase().includes(s.toLowerCase())}
                 />
+      <Modal
+        visible={!!addToGroupUser}
+        onDismiss={() => setAddToGroupUser(null)}
+        header={`Add ${addToGroupUser || ""} to group`}
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setAddToGroupUser(null)}>Cancel</Button>
+              <Button
+                variant="primary"
+                loading={adminAddToGroup.isPending}
+                disabled={!addToGroupName.trim()}
+                onClick={() => {
+                  adminAddToGroup.mutate(
+                    { username: addToGroupUser!, groupName: addToGroupName.trim() },
+                    { onSuccess: () => setAddToGroupUser(null) }
+                  );
+                }}
+              >
+                Add
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          {adminAddToGroup.isError && (
+            <Alert type="error" dismissible>
+              {(adminAddToGroup.error as Error)?.message || "Failed to add user to group"}
+            </Alert>
+          )}
+          <FormField label="Group name">
+            <Input value={addToGroupName} onChange={({ detail }) => setAddToGroupName(detail.value)} placeholder="admins" />
+          </FormField>
+        </Form>
+      </Modal>
+                </>
+      
               ),
             },
             {

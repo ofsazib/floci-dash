@@ -70,6 +70,7 @@ import {
   useChangePassword,
   useSignUp,
   useRespondToAuthChallenge,
+  useAdminAddUserToGroup,
 } from "./useCognito";
 
 beforeEach(() => mockApi.mockReset());
@@ -657,6 +658,19 @@ describe("useCognito hooks", () => {
     expect(mockApi).toHaveBeenCalledWith(
       "/aws/cognito/auth/respond-challenge",
       expect.objectContaining({ method: "POST", body: JSON.stringify({ clientId: "client-1", challengeName: "NEW_PASSWORD_REQUIRED" }) })
+    );
+  });
+});
+
+describe("useAdminAddUserToGroup", () => {
+  it("posts to the group-membership path", async () => {
+    mockApi.mockResolvedValueOnce({ added: true });
+    const { result } = renderHook(() => useAdminAddUserToGroup("p 1"), { wrapper: createWrapper() });
+    result.current.mutate({ username: "b 1", groupName: "admins" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/cognito/user-pools/p%201/users/b%201/groups/admins",
+      { method: "POST" }
     );
   });
 });

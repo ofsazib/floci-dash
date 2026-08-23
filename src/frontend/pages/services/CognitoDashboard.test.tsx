@@ -66,6 +66,8 @@ const mockClientSecrets = vi.fn();
 const mockCognitoUser = vi.fn();
 let cognitoUserLoading = false;
 const mockAdminRemoveUserFromGroup = vi.fn();
+const mockAddToGroup = vi.fn();
+const addToGroupState = vi.hoisted(() => ({ isError: false, error: null as Error | null }));
 const mockAdminResetUserPassword = vi.fn();
 const mockUpdateCognitoGroup = vi.fn();
 const mockUpdateCognitoClient = vi.fn();
@@ -194,6 +196,12 @@ vi.mock("../../hooks/useCognito", () => ({
     mutateAsync: mockAdminRemoveUserFromGroup,
     isPending: false,
   }),
+  useAdminAddUserToGroup: () => ({
+    mutate: mockAddToGroup,
+    isPending: false,
+    get isError() { return addToGroupState.isError; },
+    get error() { return addToGroupState.error; },
+  }),
   useAdminResetUserPassword: () => ({
     mutateAsync: mockAdminResetUserPassword,
     isPending: false,
@@ -279,6 +287,8 @@ async function clickDialogButton(user: UserEvent, headerText: string, name: RegE
 // ─── Setup ──────────────────────────────────────────────
 
 beforeEach(() => {
+  addToGroupState.isError = false;
+  addToGroupState.error = null;
   vi.clearAllMocks();
   deletePoolState.isPending = false;
   deletePoolState.variables = null;
@@ -2194,5 +2204,73 @@ describe("CognitoDashboard — G.86 admin user ops, updates, tags", () => {
     await user.click(screen.getByRole("button", { name: /Tags/i }));
     await waitFor(() => expect(screen.getByText("No tags")).toBeTruthy());
     expect(screen.getByRole("button", { name: /Add tag/i }).hasAttribute("disabled")).toBe(true);
+  });
+});
+
+describe("CognitoDashboard — add user to group", () => {
+  it("adds a user to a group from the modal", async () => {
+    mockAddToGroup.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
+    mockPools.mockReturnValue({ data: { userPools: [{ Id: "pool-1", Name: "app" }] }, isLoading: false, isError: false, error: null });
+    mockUsers.mockReturnValue({
+      data: { users: [{ Username: "bob", UserStatus: "CONFIRMED", Enabled: true, UserAttributes: [] }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CognitoDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByText("app"));
+    await user.click(await screen.findByRole("button", { name: /Add to group/i }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const input = dialog.querySelector("input") as HTMLInputElement;
+    await user.type(input, "admins");
+    await user.click(within(dialog).getByRole("button", { name: "Add" }));
+    await waitFor(() =>
+      expect(mockAddToGroup).toHaveBeenCalledWith(
+        { username: "bob", groupName: "admins" },
+        expect.objectContaining({ onSuccess: expect.any(Function) })
+      )
+    );
+  });
+});
+
+describe("CognitoDashboard — add-to-group modal edge arms", () => {
+  function openModal() {
+    return (async () => {
+      mockPools.mockReturnValue({ data: { userPools: [{ Id: "pool-1", Name: "app" }] }, isLoading: false, isError: false, error: null });
+      mockUsers.mockReturnValue({
+        data: { users: [{ Username: "bob", UserStatus: "CONFIRMED", Enabled: true, UserAttributes: [] }], total: 1 },
+        isLoading: false,
+      });
+      const user = userEvent.setup();
+      render(<CognitoDashboard />, { wrapper: createWrapper() });
+      await user.click(await screen.findByText("app"));
+      await user.click(await screen.findByRole("button", { name: /Add to group/i }));
+      return user;
+    })();
+  }
+
+  it("keeps Add disabled until group typed and cancels", async () => {
+    const user = await openModal();
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    expect(within(dialog).getByRole("button", { name: "Add" }).hasAttribute("disabled")).toBe(true);
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(mockAddToGroup).not.toHaveBeenCalled();
+  });
+
+  it("shows error and fallback alerts", async () => {
+    addToGroupState.isError = true;
+    addToGroupState.error = new Error("group failed");
+    const user = await openModal();
+    expect(await screen.findByText("group failed")).toBeTruthy();
+  });
+
+  it("shows generic fallback and Escape-dismisses", async () => {
+    addToGroupState.isError = true;
+    addToGroupState.error = null;
+    const user = await openModal();
+    expect(await screen.findByText("Failed to add user to group")).toBeTruthy();
+    document.querySelectorAll('[class*="awsui_dialog"]').forEach((d) =>
+      fireEvent.keyDown(d as HTMLElement, { keyCode: 27 })
+    );
+    expect(mockAddToGroup).not.toHaveBeenCalled();
   });
 });

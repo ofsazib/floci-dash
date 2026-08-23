@@ -70,6 +70,7 @@ vi.mock("@aws-sdk/client-cognito-identity-provider", () => ({
   ListTagsForResourceCommand: createCmd("ListTagsForResourceCommand"),
   TagResourceCommand: createCmd("TagResourceCommand"),
   UntagResourceCommand: createCmd("UntagResourceCommand"),
+  AdminAddUserToGroupCommand: createCmd("AdminAddUserToGroupCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -900,5 +901,17 @@ describe("Cognito Routes", () => {
       const res400 = await post("/auth/respond-challenge", { clientId: "c" });
       expect(res400.status).toBe(400);
     });
+  });
+
+  it("POST /user-pools/:id/users/:username/groups/:groupName — adds user to group", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/user-pools/pool-1/users/bob/groups/admins");
+    const body = await res.json();
+    expect(body.added).toBe(true);
+    const cmd = mockSend.mock.calls[0][0];
+    expect(cmd.__cmdName).toBe("AdminAddUserToGroupCommand");
+    expect(cmd.UserPoolId).toBe("pool-1");
+    expect(cmd.Username).toBe("bob");
+    expect(cmd.GroupName).toBe("admins");
   });
 });

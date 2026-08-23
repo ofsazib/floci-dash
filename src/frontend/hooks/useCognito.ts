@@ -645,3 +645,14 @@ export function useRespondToAuthChallenge() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cognito"] }),
   });
 }
+
+export function useAdminAddUserToGroup(userPoolId: string) {
+  const qc = useQueryClient();
+  return useMutation<{ added: boolean }, Error, { username: string; groupName: string }>({
+    mutationFn: (params) =>
+      api(`/aws/cognito/user-pools/${encodeURIComponent(userPoolId)}/users/${encodeURIComponent(params.username)}/groups/${encodeURIComponent(params.groupName)}`, {
+        method: "POST",
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cognito"] }),
+  });
+}

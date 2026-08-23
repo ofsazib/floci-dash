@@ -47,6 +47,7 @@ import {
   DeleteUserAttributesCommand,
   AdminGetUserCommand,
   AdminRemoveUserFromGroupCommand,
+  AdminAddUserToGroupCommand,
   AdminResetUserPasswordCommand,
   AdminUpdateUserAttributesCommand,
   ChangePasswordCommand,
@@ -610,6 +611,17 @@ router.delete("/user-pools/:id/users/:username/groups/:groupName", async (c: Con
     new AdminRemoveUserFromGroupCommand({ UserPoolId: id, Username: username, GroupName: groupName })
   );
   return c.json({ removed: true });
+});
+
+router.post("/user-pools/:id/users/:username/groups/:groupName", async (c: Context) => {
+  const id = c.req.param("id");
+  const username = c.req.param("username");
+  const groupName = c.req.param("groupName");
+  const client = getClient();
+  await client.send(
+    new AdminAddUserToGroupCommand({ UserPoolId: id, Username: username, GroupName: groupName })
+  );
+  return c.json({ added: true });
 });
 
 router.post("/user-pools/:id/users/:username/reset-password", async (c: Context) => {
