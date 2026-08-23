@@ -112,3 +112,47 @@ export function useDecrypt() {
     mutationFn: (body: any) => api("/aws/kms/decrypt", { method: "POST", body: JSON.stringify(body) }),
   });
 }
+
+export function useKeyPolicy(keyId: string | null) {
+  return useQuery({
+    queryKey: ["aws", "kms", "keys", keyId, "policy"],
+    queryFn: () => api<any>(`/aws/kms/keys/${encodeURIComponent(keyId!)}/policy`),
+    enabled: !!keyId,
+  });
+}
+
+export function usePutKeyPolicy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { keyId: string; policy: string }) =>
+      api(`/aws/kms/keys/${encodeURIComponent(params.keyId)}/policy`, {
+        method: "PUT",
+        body: JSON.stringify({ policy: params.policy }),
+      }),
+    onSuccess: (_d, v) =>
+      qc.invalidateQueries({ queryKey: ["aws", "kms", "keys", v.keyId, "policy"] }),
+  });
+}
+
+export function useSign() {
+  return useMutation({
+    mutationFn: (body: { keyId: string; message: string; signingAlgorithm?: string }) =>
+      api(`/aws/kms/keys/${encodeURIComponent(body.keyId)}/sign`, { method: "POST", body: JSON.stringify(body) }),
+  });
+}
+
+export function useVerify() {
+  return useMutation({
+    mutationFn: (body: { keyId: string; message: string; signature: string; signingAlgorithm?: string }) =>
+      api(`/aws/kms/keys/${encodeURIComponent(body.keyId)}/verify`, { method: "POST", body: JSON.stringify(body) }),
+  });
+}
+
+export function useRotateKeyOnDemand() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (keyId: string) =>
+      api(`/aws/kms/keys/${encodeURIComponent(keyId)}/rotate-on-demand`, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "kms", "keys"] }),
+  });
+}

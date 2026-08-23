@@ -23,6 +23,11 @@ import {
   useDeleteAlias,
   useEncrypt,
   useDecrypt,
+  useKeyPolicy,
+  usePutKeyPolicy,
+  useSign,
+  useVerify,
+  useRotateKeyOnDemand,
 } from "./useKMS";
 
 function createWrapper() {
@@ -205,5 +210,68 @@ describe("useDecrypt", () => {
       "/aws/kms/decrypt",
       expect.objectContaining({ method: "POST" }),
     );
+  });
+});
+
+describe("useKeyPolicy", () => {
+  it("fetches the key policy", async () => {
+    mockApi.mockResolvedValueOnce({ policy: "{}" });
+    const { result } = renderHook(() => useKeyPolicy("k1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/kms/keys/k1/policy");
+  });
+
+  it("is disabled without a key id", () => {
+    const { result } = renderHook(() => useKeyPolicy(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+});
+
+describe("usePutKeyPolicy", () => {
+  it("puts the policy", async () => {
+    mockApi.mockResolvedValueOnce({ updated: true });
+    const { result } = renderHook(() => usePutKeyPolicy(), { wrapper: createWrapper() });
+    result.current.mutate({ keyId: "k1", policy: "{}" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/kms/keys/k1/policy", {
+      method: "PUT",
+      body: JSON.stringify({ policy: "{}" }),
+    });
+  });
+});
+
+describe("useSign", () => {
+  it("posts to the sign endpoint", async () => {
+    mockApi.mockResolvedValueOnce({ signature: "abc" });
+    const { result } = renderHook(() => useSign(), { wrapper: createWrapper() });
+    result.current.mutate({ keyId: "k1", message: "bWVzc2FnZQ==" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/kms/keys/k1/sign", {
+      method: "POST",
+      body: JSON.stringify({ keyId: "k1", message: "bWVzc2FnZQ==" }),
+    });
+  });
+});
+
+describe("useVerify", () => {
+  it("posts to the verify endpoint", async () => {
+    mockApi.mockResolvedValueOnce({ signatureValid: true });
+    const { result } = renderHook(() => useVerify(), { wrapper: createWrapper() });
+    result.current.mutate({ keyId: "k1", message: "bQ==", signature: "c2ln" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/kms/keys/k1/verify", {
+      method: "POST",
+      body: JSON.stringify({ keyId: "k1", message: "bQ==", signature: "c2ln" }),
+    });
+  });
+});
+
+describe("useRotateKeyOnDemand", () => {
+  it("posts rotate-on-demand", async () => {
+    mockApi.mockResolvedValueOnce({ keyId: "k1" });
+    const { result } = renderHook(() => useRotateKeyOnDemand(), { wrapper: createWrapper() });
+    result.current.mutate("k1");
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/kms/keys/k1/rotate-on-demand", { method: "POST" });
   });
 });

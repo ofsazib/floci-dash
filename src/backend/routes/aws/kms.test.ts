@@ -46,6 +46,12 @@ vi.mock("@aws-sdk/client-kms", () => ({
   ListResourceTagsCommand: createCmd("ListResourceTagsCommand"),
   GetKeyPolicyCommand: createCmd("GetKeyPolicyCommand"),
   GetPublicKeyCommand: createCmd("GetPublicKeyCommand"),
+  PutKeyPolicyCommand: createCmd("PutKeyPolicyCommand"),
+  SignCommand: createCmd("SignCommand"),
+  VerifyCommand: createCmd("VerifyCommand"),
+  GenerateMacCommand: createCmd("GenerateMacCommand"),
+  VerifyMacCommand: createCmd("VerifyMacCommand"),
+  RotateKeyOnDemandCommand: createCmd("RotateKeyOnDemandCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -516,6 +522,131 @@ describe("KMS Routes", () => {
       const body = await res.json();
       expect(body.plaintext).toBeNull();
       expect(mockSend.mock.calls[0][0].NumberOfBytes).toBe(32);
+    });
+  });
+
+  describe("Policy + crypto + rotation", () => {
+    it("GET /keys/:id/policy — returns the default policy", async () => {
+      mockSend.mockResolvedValueOnce({ Policy: '{"Version":"2012-10-17"}' });
+      const res = await get("/keys/k1/policy");
+      const body = await res.json();
+      expect(body.policy).toBe('{"Version":"2012-10-17"}');
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("GetKeyPolicyCommand");
+      expect(cmd.PolicyName).toBe("default");
+    });
+
+    it("GET /keys/:id/policy — null when absent", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/keys/k1/policy");
+      expect((await res.json()).policy).toBeNull();
+    });
+
+    it("PUT /keys/:id/policy — puts the policy", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/keys/k1/policy", { policy: "{}" });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("PutKeyPolicyCommand");
+      expect(cmd.Policy).toBe("{}");
+    });
+
+    it("PUT /keys/:id/policy — 400 without policy", async () => {
+      const res = await put("/keys/k1/policy", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /keys/:id/sign — returns base64 signature", async () => {
+      mockSend.mockResolvedValueOnce({
+        KeyId: "k1",
+        Signature: new Uint8Array([1, 2, 3]),
+        SigningAlgorithm: "RSASSA_PSS_SHA_256",
+      });
+      const res = await post("/keys/k1/sign", { message: Buffer.from("hi").toString("base64") });
+      const body = await res.json();
+      expect(body.signature).toBe(Buffer.from([1, 2, 3]).toString("base64"));
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("SignCommand");
+      expect(cmd.Message.toString("base64")).toBe(Buffer.from("hi").toString("base64"));
+    });
+
+    it("POST /keys/:id/sign — null signature on sparse response", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/keys/k1/sign", { message: "bQ==" });
+      expect((await res.json()).signature).toBeNull();
+    });
+
+    it("POST /keys/:id/sign — 400 without message", async () => {
+      const res = await post("/keys/k1/sign", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /keys/:id/verify — returns validity", async () => {
+      mockSend.mockResolvedValueOnce({ KeyId: "k1", SignatureValid: true });
+      const res = await post("/keys/k1/verify", { message: "bWVzc2FnZQ==", signature: "c2ln" });
+      const body = await res.json();
+      expect(body.signatureValid).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("VerifyCommand");
+    });
+
+    it("POST /keys/:id/verify — false when invalid", async () => {
+      mockSend.mockResolvedValueOnce({ SignatureValid: false });
+      const res = await post("/keys/k1/verify", { message: "bQ==", signature: "cw==" });
+      expect((await res.json()).signatureValid).toBe(false);
+    });
+
+    it("POST /keys/:id/verify — 400 without message", async () => {
+      const res = await post("/keys/k1/verify", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /keys/:id/verify — 400 without signature", async () => {
+      const res = await post("/keys/k1/verify", { message: "bQ==" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /keys/:id/mac — returns base64 mac", async () => {
+      mockSend.mockResolvedValueOnce({ Mac: new Uint8Array([9, 9]) });
+      const res = await post("/keys/k1/mac", { message: "bQ==" });
+      const body = await res.json();
+      expect(body.mac).toBe(Buffer.from([9, 9]).toString("base64"));
+      expect(mockSend.mock.calls[0][0].MacAlgorithm).toBe("HMAC_SHA_256");
+    });
+
+    it("POST /keys/:id/mac — null mac on sparse response", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/keys/k1/mac", { message: "bQ==" });
+      expect((await res.json()).mac).toBeNull();
+    });
+
+    it("POST /keys/:id/mac — 400 without message", async () => {
+      const res = await post("/keys/k1/mac", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /keys/:id/mac/verify — returns validity", async () => {
+      mockSend.mockResolvedValueOnce({ MacValid: true });
+      const res = await post("/keys/k1/mac/verify", { message: "bQ==", mac: "bWFj" });
+      expect((await res.json()).macValid).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("VerifyMacCommand");
+    });
+
+    it("POST /keys/:id/mac/verify — 400 without message", async () => {
+      const res = await post("/keys/k1/mac/verify", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /keys/:id/mac/verify — 400 without mac", async () => {
+      const res = await post("/keys/k1/mac/verify", { message: "bQ==" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /keys/:id/rotate-on-demand — rotates", async () => {
+      mockSend.mockResolvedValueOnce({ KeyId: "k1" });
+      const res = await post("/keys/k1/rotate-on-demand");
+      const body = await res.json();
+      expect(body.keyId).toBe("k1");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("RotateKeyOnDemandCommand");
     });
   });
 });

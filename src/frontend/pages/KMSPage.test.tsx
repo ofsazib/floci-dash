@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor, within, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../test/helpers";
 import React from "react";
@@ -19,6 +19,11 @@ const mockCreateAlias = vi.fn();
 const mockDeleteAlias = vi.fn();
 const mockEncrypt = vi.fn();
 const mockDecrypt = vi.fn();
+const mockKeyPolicy = vi.fn();
+const mockPutKeyPolicy = vi.fn();
+const mockSign = vi.fn();
+const mockVerify = vi.fn();
+const mockRotateOnDemand = vi.fn();
 let mockEncryptMutateAsync = vi.fn().mockResolvedValue({ ciphertextBlob: "ZW5jcnlwdGVk" });
 let mockDecryptMutateAsync = vi.fn().mockResolvedValue({ plaintext: "cGxhaW50ZXh0" });
 
@@ -47,6 +52,11 @@ vi.mock("../hooks/useKMS", () => ({
   useDeleteAlias: () => ({ mutateAsync: mockDeleteAlias, isPending: false }),
   useEncrypt: () => ({ mutate: mockEncrypt, mutateAsync: mockEncryptMutateAsync, isPending: false, data: null }),
   useDecrypt: () => ({ mutate: mockDecrypt, mutateAsync: mockDecryptMutateAsync, isPending: false, data: null }),
+  useKeyPolicy: (...args: any[]) => mockKeyPolicy(...args),
+  usePutKeyPolicy: () => ({ mutate: mockPutKeyPolicy, isPending: false }),
+  useSign: () => ({ mutate: mockSign, isPending: false }),
+  useVerify: () => ({ mutate: mockVerify, isPending: false }),
+  useRotateKeyOnDemand: () => ({ mutate: mockRotateOnDemand, isPending: false }),
 }));
 
 let mockShowToast = vi.fn();
@@ -79,6 +89,7 @@ function pageWrapper() {
 describe("KMSPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockKeyPolicy.mockReturnValue({ data: undefined });
     mockEncryptMutateAsync = vi.fn().mockResolvedValue({ ciphertextBlob: "ZW5jcnlwdGVk" });
     mockDecryptMutateAsync = vi.fn().mockResolvedValue({ plaintext: "cGxhaW50ZXh0" });
     mockShowToast = vi.fn();
@@ -1090,5 +1101,158 @@ describe("KMSPage", () => {
     healthState.data = { services: { kms: "available" } };
     render(<KMSPage />, { wrapper: pageWrapper() });
     expect(screen.getByText("Available")).toBeTruthy();
+  });
+});
+
+describe("KMSPage — sign/verify and policy tabs", () => {
+  async function openTab(tabName: string) {
+    mockKeyDetail.mockReturnValue({
+      data: { key: { keyId: "1234-abcd", keyState: "Enabled", description: "My key" }, tags: {}, aliases: [], grants: [], rotationEnabled: false },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<KMSPage />, { wrapper: pageWrapper() });
+    await clickButton(user, /View/i);
+    await user.click(await screen.findByText(tabName));
+    return user;
+  }
+
+  it("signs a message and shows the signature", async () => {
+    mockSign.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.({ signature: "c2ln" }));
+    const user = await openTab("Sign / Verify");
+    const areas = await screen.findAllByRole("textbox");
+    fireEvent.change(areas[0], { target: { value: "hello" } });
+    await user.click(screen.getByRole("button", { name: /^Sign$/ }));
+    expect(await screen.findByText("c2ln")).toBeTruthy();
+  });
+
+  it("shows an error toast when signing fails", async () => {
+    mockSign.mockImplementation((_b: any, opts: any) => opts?.onError?.(new Error("sign failed")));
+    const user = await openTab("Sign / Verify");
+    const areas = await screen.findAllByRole("textbox");
+    fireEvent.change(areas[0], { target: { value: "hello" } });
+    await user.click(screen.getByRole("button", { name: /^Sign$/ }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "sign failed"));
+  });
+
+  it("verifies a signature and shows valid", async () => {
+    mockSign.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.({ signature: "c2ln" }));
+    mockVerify.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.({ signatureValid: true }));
+    const user = await openTab("Sign / Verify");
+    const areas = await screen.findAllByRole("textbox");
+    fireEvent.change(areas[0], { target: { value: "hello" } });
+    fireEvent.change(areas[1], { target: { value: "c2ln" } });
+    await user.click(screen.getByRole("button", { name: "Verify" }));
+    expect(await screen.findByText("Signature is valid.")).toBeTruthy();
+  });
+
+  it("shows invalid verification result", async () => {
+    mockVerify.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.({ signatureValid: false }));
+    const user = await openTab("Sign / Verify");
+    const areas = await screen.findAllByRole("textbox");
+    fireEvent.change(areas[0], { target: { value: "hello" } });
+    fireEvent.change(areas[1], { target: { value: "c2ln" } });
+    await user.click(screen.getByRole("button", { name: "Verify" }));
+    expect(await screen.findByText("Signature is NOT valid.")).toBeTruthy();
+  });
+
+  it("shows the key policy", async () => {
+    mockKeyPolicy.mockReturnValue({ data: { policy: '{"Version":"2012-10-17"}' } });
+    await openTab("Key policy");
+    expect(await screen.findByText(/"Version":"2012-10-17"/)).toBeTruthy();
+  });
+
+  it("shows the no-policy message", async () => {
+    mockKeyPolicy.mockReturnValue({ data: { policy: null } });
+    await openTab("Key policy");
+    expect(await screen.findByText("No policy returned.")).toBeTruthy();
+  });
+
+  it("saves an edited key policy", async () => {
+    mockPutKeyPolicy.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
+    const user = await openTab("Key policy");
+    const areas = await screen.findAllByRole("textbox");
+    fireEvent.change(areas[0], { target: { value: "{}" } });
+    await user.click(screen.getByRole("button", { name: /Save policy/i }));
+    await waitFor(() =>
+      expect(mockPutKeyPolicy).toHaveBeenCalledWith(
+        { keyId: "1234-abcd", policy: "{}" },
+        expect.objectContaining({ onSuccess: expect.any(Function) })
+      )
+    );
+  });
+
+  it("keeps Save policy disabled without text", async () => {
+    await openTab("Key policy");
+    expect((await screen.findByRole("button", { name: /Save policy/i })).hasAttribute("disabled")).toBe(true);
+  });
+
+  it("shows an error toast when verify fails", async () => {
+    mockVerify.mockImplementation((_b: any, opts: any) => opts?.onError?.(new Error("verify failed")));
+    const user = await openTab("Sign / Verify");
+    const areas = await screen.findAllByRole("textbox");
+    fireEvent.change(areas[0], { target: { value: "hello" } });
+    fireEvent.change(areas[1], { target: { value: "c2ln" } });
+    await user.click(screen.getByRole("button", { name: "Verify" }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "verify failed"));
+  });
+
+  it("shows an error toast when saving the policy fails", async () => {
+    mockPutKeyPolicy.mockImplementation((_b: any, opts: any) => opts?.onError?.(new Error("policy failed")));
+    const user = await openTab("Key policy");
+    const areas = await screen.findAllByRole("textbox");
+    fireEvent.change(areas[0], { target: { value: "{}" } });
+    await user.click(screen.getByRole("button", { name: /Save policy/i }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "policy failed"));
+  });
+
+  it("shows an error toast when on-demand rotation fails", async () => {
+    mockRotateOnDemand.mockImplementation((_b: any, opts: any) => opts?.onError?.(new Error("rotation failed")));
+    const user = await openTab("Key policy");
+    await user.click(screen.getByRole("button", { name: /Rotate on demand/i }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "rotation failed"));
+  });
+
+  it("keeps an empty signature displayable when sign returns none", async () => {
+    mockSign.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.({}));
+    const user = await openTab("Sign / Verify");
+    const areas = await screen.findAllByRole("textbox");
+    fireEvent.change(areas[0], { target: { value: "hello" } });
+    await user.click(screen.getByRole("button", { name: /^Sign$/ }));
+    await waitFor(() => expect(mockSign).toHaveBeenCalled());
+  });
+
+  it("shows fallback error messages when failures carry no message", async () => {
+    mockSign.mockImplementation((_b: any, opts: any) => opts?.onError?.(new Error("")));
+    const user = await openTab("Sign / Verify");
+    const areas = await screen.findAllByRole("textbox");
+    fireEvent.change(areas[0], { target: { value: "hello" } });
+    await user.click(screen.getByRole("button", { name: /^Sign$/ }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "Sign failed"));
+
+    mockVerify.mockImplementation((_b: any, opts: any) => opts?.onError?.(new Error("")));
+    fireEvent.change(areas[1], { target: { value: "c2ln" } });
+    await user.click(screen.getByRole("button", { name: "Verify" }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "Verify failed"));
+  });
+
+  it("shows fallback policy and rotation error messages", async () => {
+    mockPutKeyPolicy.mockImplementation((_b: any, opts: any) => opts?.onError?.(new Error("")));
+    const user = await openTab("Key policy");
+    const areas = await screen.findAllByRole("textbox");
+    fireEvent.change(areas[0], { target: { value: "{}" } });
+    await user.click(screen.getByRole("button", { name: /Save policy/i }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "Failed to save policy"));
+
+    mockRotateOnDemand.mockImplementation((_b: any, opts: any) => opts?.onError?.(new Error("")));
+    await user.click(screen.getByRole("button", { name: /Rotate on demand/i }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "Rotation failed"));
+  });
+
+  it("rotates the key on demand", async () => {
+    mockRotateOnDemand.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
+    const user = await openTab("Key policy");
+    await user.click(screen.getByRole("button", { name: /Rotate on demand/i }));
+    await waitFor(() => expect(mockRotateOnDemand).toHaveBeenCalledWith("1234-abcd", expect.anything()));
   });
 });

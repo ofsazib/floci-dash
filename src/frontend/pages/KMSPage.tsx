@@ -39,6 +39,11 @@ import {
   useCreateAlias,
   useDeleteAlias,
   useEncrypt,
+  useKeyPolicy,
+  usePutKeyPolicy,
+  useSign,
+  useVerify,
+  useRotateKeyOnDemand,
   useDecrypt,
 } from "../hooks/useKMS";
 
@@ -170,6 +175,16 @@ function KeyDetailModal({ keyId, onClose }: { keyId: string; onClose: () => void
   const updateDesc = useUpdateKeyDescription();
   const encryptMut = useEncrypt();
   const decryptMut = useDecrypt();
+  const policyQuery = useKeyPolicy(keyId);
+  const putPolicy = usePutKeyPolicy();
+  const signMut = useSign();
+  const verifyMut = useVerify();
+  const rotateOnDemand = useRotateKeyOnDemand();
+  const [policyText, setPolicyText] = useState("");
+  const [signMessage, setSignMessage] = useState("");
+  const [signResult, setSignResult] = useState<string | null>(null);
+  const [verifySignature, setVerifySignature] = useState("");
+  const [verifyResult, setVerifyResult] = useState<boolean | null>(null);
 
   const k = keyQuery.data?.key;
   const tags = keyQuery.data?.tags || {};
@@ -382,6 +397,118 @@ function KeyDetailModal({ keyId, onClose }: { keyId: string; onClose: () => void
               )}
             </SpaceBetween>
           </Container>
+        </SpaceBetween>
+      ),
+    },
+    {
+      id: "sign-verify",
+      label: "Sign / Verify",
+      content: (
+        <SpaceBetween size="m">
+          <Container header={<Header variant="h3">Sign</Header>}>
+            <SpaceBetween size="s">
+              <Textarea
+                value={signMessage}
+                onChange={({ detail }) => setSignMessage(detail.value)}
+                rows={3}
+                placeholder="Message to sign (sent as base64)"
+              />
+              <Button
+                variant="primary"
+                disabled={!signMessage.trim()}
+                loading={signMut.isPending}
+                onClick={() =>
+                  signMut.mutate(
+                    { keyId, message: btoa(signMessage) },
+                    {
+                      onSuccess: (data: any) => setSignResult(data.signature || null),
+                      onError: (e) => showToast("error", (e as Error).message || "Sign failed"),
+                    }
+                  )
+                }
+              >
+                Sign
+              </Button>
+              {signResult && (
+                <pre className="fd-code-bg" style={{ fontSize: 11, padding: 8, borderRadius: 4, overflow: "auto" }}>{signResult}</pre>
+              )}
+            </SpaceBetween>
+          </Container>
+          <Container header={<Header variant="h3">Verify</Header>}>
+            <SpaceBetween size="s">
+              <Textarea
+                value={verifySignature}
+                onChange={({ detail }) => setVerifySignature(detail.value)}
+                rows={3}
+                placeholder="Base64 signature from above"
+              />
+              <Button
+                disabled={!signMessage.trim() || !verifySignature.trim()}
+                loading={verifyMut.isPending}
+                onClick={() =>
+                  verifyMut.mutate(
+                    { keyId, message: btoa(signMessage), signature: verifySignature.trim() },
+                    {
+                      onSuccess: (data: any) => setVerifyResult(data.signatureValid),
+                      onError: (e) => showToast("error", (e as Error).message || "Verify failed"),
+                    }
+                  )
+                }
+              >
+                Verify
+              </Button>
+              {verifyResult === true && <Alert type="success">Signature is valid.</Alert>}
+              {verifyResult === false && <Alert type="warning">Signature is NOT valid.</Alert>}
+            </SpaceBetween>
+          </Container>
+        </SpaceBetween>
+      ),
+    },
+    {
+      id: "policy",
+      label: "Key policy",
+      content: (
+        <SpaceBetween size="m">
+          {policyQuery.data?.policy ? (
+            <pre className="fd-code-bg" style={{ fontSize: 12, padding: 12, borderRadius: 4, overflow: "auto", maxHeight: 260 }}>{policyQuery.data.policy}</pre>
+          ) : (
+            <Box color="text-body-secondary">No policy returned.</Box>
+          )}
+          <Textarea
+            value={policyText}
+            onChange={({ detail }) => setPolicyText(detail.value)}
+            rows={5}
+            placeholder='{"Version": "2012-10-17", "Statement": []}'
+          />
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button
+              variant="primary"
+              disabled={!policyText.trim()}
+              loading={putPolicy.isPending}
+              onClick={() =>
+                putPolicy.mutate(
+                  { keyId, policy: policyText.trim() },
+                  {
+                    onSuccess: () => showToast("success", "Key policy saved"),
+                    onError: (e) => showToast("error", (e as Error).message || "Failed to save policy"),
+                  }
+                )
+              }
+            >
+              Save policy
+            </Button>
+            <Button
+              loading={rotateOnDemand.isPending}
+              onClick={() =>
+                rotateOnDemand.mutate(keyId, {
+                  onSuccess: () => showToast("success", "On-demand rotation started"),
+                  onError: (e) => showToast("error", (e as Error).message || "Rotation failed"),
+                })
+              }
+            >
+              Rotate on demand
+            </Button>
+          </SpaceBetween>
         </SpaceBetween>
       ),
     },

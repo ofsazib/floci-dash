@@ -30,6 +30,12 @@ import {
   ListResourceTagsCommand,
   GetKeyPolicyCommand,
   GetPublicKeyCommand,
+  PutKeyPolicyCommand,
+  SignCommand,
+  VerifyCommand,
+  GenerateMacCommand,
+  VerifyMacCommand,
+  RotateKeyOnDemandCommand,
 } from "@aws-sdk/client-kms";
 import { getAwsConfig } from "../../clients/aws";
 
@@ -334,6 +340,103 @@ router.delete("/keys/:id/tags", async (c: Context) => {
   const keys = c.req.query("keys")?.split(",") || [];
   await kms().send(new UntagResourceCommand({ KeyId: id, TagKeys: keys }));
   return c.json({ untagged: true });
+});
+
+
+router.get("/keys/:id/policy", async (c: Context) => {
+  const id = c.req.param("id")!;
+  const client = kms();
+  const result = await client.send(
+    new GetKeyPolicyCommand({ KeyId: id, PolicyName: "default" })
+  );
+  return c.json({ policy: result.Policy || null });
+});
+
+router.put("/keys/:id/policy", async (c: Context) => {
+  const id = c.req.param("id")!;
+  const body = await c.req.json<{ policy?: string }>();
+  if (!body.policy) return c.json({ error: "policy is required" }, 400);
+  const client = kms();
+  await client.send(
+    new PutKeyPolicyCommand({ KeyId: id, PolicyName: "default", Policy: body.policy })
+  );
+  return c.json({ updated: true });
+});
+
+router.post("/keys/:id/sign", async (c: Context) => {
+  const id = c.req.param("id")!;
+  const body = await c.req.json<{ message?: string; signingAlgorithm?: string; messageType?: string }>();
+  if (!body.message) return c.json({ error: "message is required" }, 400);
+  const client = kms();
+  const result: any = await client.send(
+    new SignCommand({
+      KeyId: id,
+      Message: Buffer.from(body.message, "base64"),
+      SigningAlgorithm: (body.signingAlgorithm || "RSASSA_PSS_SHA_256") as any,
+      MessageType: (body.messageType || "RAW") as any,
+    })
+  );
+  return c.json({
+    keyId: result.KeyId,
+    signature: result.Signature ? Buffer.from(result.Signature).toString("base64") : null,
+    signingAlgorithm: result.SigningAlgorithm,
+  });
+});
+
+router.post("/keys/:id/verify", async (c: Context) => {
+  const id = c.req.param("id")!;
+  const body = await c.req.json<{ message?: string; signature?: string; signingAlgorithm?: string }>();
+  if (!body.message) return c.json({ error: "message is required" }, 400);
+  if (!body.signature) return c.json({ error: "signature is required" }, 400);
+  const client = kms();
+  const result: any = await client.send(
+    new VerifyCommand({
+      KeyId: id,
+      Message: Buffer.from(body.message, "base64"),
+      Signature: Buffer.from(body.signature, "base64"),
+      SigningAlgorithm: (body.signingAlgorithm || "RSASSA_PSS_SHA_256") as any,
+    })
+  );
+  return c.json({ keyId: result.KeyId, signatureValid: result.SignatureValid === true });
+});
+
+router.post("/keys/:id/mac", async (c: Context) => {
+  const id = c.req.param("id")!;
+  const body = await c.req.json<{ message?: string }>();
+  if (!body.message) return c.json({ error: "message is required" }, 400);
+  const client = kms();
+  const result = await client.send(
+    new GenerateMacCommand({
+      KeyId: id,
+      Message: Buffer.from(body.message, "base64"),
+      MacAlgorithm: "HMAC_SHA_256",
+    })
+  );
+  return c.json({ mac: result.Mac ? Buffer.from(result.Mac).toString("base64") : null });
+});
+
+router.post("/keys/:id/mac/verify", async (c: Context) => {
+  const id = c.req.param("id")!;
+  const body = await c.req.json<{ message?: string; mac?: string }>();
+  if (!body.message) return c.json({ error: "message is required" }, 400);
+  if (!body.mac) return c.json({ error: "mac is required" }, 400);
+  const client = kms();
+  const result = await client.send(
+    new VerifyMacCommand({
+      KeyId: id,
+      Message: Buffer.from(body.message, "base64"),
+      Mac: Buffer.from(body.mac, "base64"),
+      MacAlgorithm: "HMAC_SHA_256",
+    })
+  );
+  return c.json({ macValid: result.MacValid === true });
+});
+
+router.post("/keys/:id/rotate-on-demand", async (c: Context) => {
+  const id = c.req.param("id")!;
+  const client = kms();
+  const result = await client.send(new RotateKeyOnDemandCommand({ KeyId: id }));
+  return c.json({ keyId: result.KeyId });
 });
 
 export default router;
