@@ -803,7 +803,7 @@ router.get("/tags", async (c: Context) => {
   if (!resourceArn) return c.json({ error: "resourceArn query parameter is required" }, 400);
   const client = getClient();
   const result = await client.send(new GetTagsCommand({ ResourceArn: resourceArn }));
-  return c.json({ tags: result.Tags || {} });
+  return c.json({ tags: result.Tags! });
 });
 
 router.post("/tags", async (c: Context) => {
@@ -813,7 +813,7 @@ router.post("/tags", async (c: Context) => {
   await client.send(
     new TagResourceCommand({
       ResourceArn: body.resourceArn,
-      TagsToAdd: body.tags || {},
+      TagsToAdd: body.tags!,
     })
   );
   return c.json({ tagged: true });
