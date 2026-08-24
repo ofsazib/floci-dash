@@ -3,6 +3,13 @@ import type { Context } from "hono";
 import { getAwsConfig } from "../../clients/aws";
 import { Route53Client } from "@aws-sdk/client-route-53";
 import {
+  ListTagsForResourceCommand,
+  ChangeTagsForResourceCommand,
+  GetChangeCommand,
+  GetDNSSECCommand,
+  GetAccountLimitCommand,
+} from "@aws-sdk/client-route-53";
+import {
   ListHostedZonesCommand,
   GetHostedZoneCommand,
   CreateHostedZoneCommand,
@@ -174,6 +181,82 @@ router.delete("/health-checks/:id", async (c: Context) => {
   const id = c.req.param("id");
   await client.send(new DeleteHealthCheckCommand({ HealthCheckId: id }));
   return c.json({});
+});
+
+
+// ── Tags ───────────────────────────────────────────────
+
+router.get("/tags/:resourceType/:resourceId", async (c: Context) => {
+  const resourceType = c.req.param("resourceType")!;
+  const resourceId = c.req.param("resourceId")!;
+  const client = getClient();
+  const result = await client.send(
+    new ListTagsForResourceCommand({
+      ResourceType: resourceType as any,
+      ResourceId: resourceId,
+    })
+  );
+  const tags = (result.ResourceTagSet?.Tags || []).map((t: any) => ({
+    key: t.Key,
+    value: t.Value,
+  }));
+  return c.json({ tags });
+});
+
+router.post("/tags/:resourceType/:resourceId", async (c: Context) => {
+  const resourceType = c.req.param("resourceType")!;
+  const resourceId = c.req.param("resourceId")!;
+  const body = await c.req.json<{ tags?: Record<string, string> }>();
+  if (!body.tags || !Object.keys(body.tags).length)
+    return c.json({ error: "tags is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new ChangeTagsForResourceCommand({
+      ResourceType: resourceType as any,
+      ResourceId: resourceId,
+      AddTags: Object.entries(body.tags).map(([Key, Value]) => ({ Key, Value })),
+    })
+  );
+  return c.json({ tagged: true });
+});
+
+router.delete("/tags/:resourceType/:resourceId", async (c: Context) => {
+  const resourceType = c.req.param("resourceType")!;
+  const resourceId = c.req.param("resourceId")!;
+  const body = await c.req.json<{ tagKeys?: string[] }>();
+  if (!body.tagKeys?.length) return c.json({ error: "tagKeys is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new ChangeTagsForResourceCommand({
+      ResourceType: resourceType as any,
+      ResourceId: resourceId,
+      RemoveTagKeys: body.tagKeys,
+    })
+  );
+  return c.json({ untagged: true });
+});
+
+// ── Change status + DNSSEC + limits ────────────────────
+
+router.get("/changes/:id", async (c: Context) => {
+  const id = c.req.param("id")!;
+  const client = getClient();
+  const result = await client.send(new GetChangeCommand({ Id: id }));
+  return c.json({ changeInfo: result.ChangeInfo || null });
+});
+
+router.get("/hostedzones/:id/dnssec", async (c: Context) => {
+  const id = c.req.param("id")!;
+  const client = getClient();
+  const result = await client.send(new GetDNSSECCommand({ HostedZoneId: id }));
+  return c.json({ status: result.Status || null, keySigningKeys: result.KeySigningKeys || [] });
+});
+
+router.get("/account-limit/:type", async (c: Context) => {
+  const type = c.req.param("type")!;
+  const client = getClient();
+  const result: any = await client.send(new GetAccountLimitCommand({ Type: type as any }));
+  return c.json({ limit: result.AccountLimit || null, count: result.Count ?? 0 });
 });
 
 export default router;

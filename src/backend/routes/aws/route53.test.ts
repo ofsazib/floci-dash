@@ -27,6 +27,11 @@ vi.mock("@aws-sdk/client-route-53", () => ({
   ListHealthChecksCommand: createCmd("ListHealthChecksCommand"),
   CreateHealthCheckCommand: createCmd("CreateHealthCheckCommand"),
   DeleteHealthCheckCommand: createCmd("DeleteHealthCheckCommand"),
+  ListTagsForResourceCommand: createCmd("ListTagsForResourceCommand"),
+  ChangeTagsForResourceCommand: createCmd("ChangeTagsForResourceCommand"),
+  GetChangeCommand: createCmd("GetChangeCommand"),
+  GetDNSSECCommand: createCmd("GetDNSSECCommand"),
+  GetAccountLimitCommand: createCmd("GetAccountLimitCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -245,5 +250,111 @@ describe("Route53 routes — Health Checks", () => {
     const cmd = mockSend.mock.calls[0][0];
     expect(cmd.__cmdName).toBe("DeleteHealthCheckCommand");
     expect(cmd.HealthCheckId).toBe("hc2");
+  });
+
+  describe("Tags + change status + DNSSEC + limits", () => {
+    it("GET /tags/:type/:id — maps ResourceTagSet", async () => {
+      mockSend.mockResolvedValueOnce({ ResourceTagSet: { Tags: [{ Key: "env", Value: "prod" }] } });
+      const res = await get("/tags/hostedzone/z-1");
+      const body = await res.json();
+      expect(body.tags).toEqual([{ key: "env", value: "prod" }]);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("ListTagsForResourceCommand");
+      expect(cmd.ResourceId).toBe("z-1");
+    });
+
+    it("GET /tags — sparse fallback", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/tags/hostedzone/z-1");
+      expect((await res.json()).tags).toEqual([]);
+    });
+
+    it("POST /tags — adds via ChangeTagsForResource", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/tags/healthcheck/hc-1", { tags: { team: "dns" } });
+      const body = await res.json();
+      expect(body.tagged).toBe(true);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("ChangeTagsForResourceCommand");
+      expect(cmd.AddTags).toEqual([{ Key: "team", Value: "dns" }]);
+    });
+
+    it("POST /tags — 400 without tags", async () => {
+      expect((await post("/tags/hostedzone/z-1", {})).status).toBe(400);
+      expect((await post("/tags/hostedzone/z-1", { tags: {} })).status).toBe(400);
+    });
+
+    it("DELETE /tags — removes via RemoveTagKeys", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await router.request("/tags/hostedzone/z-1", {
+        method: "DELETE",
+        body: JSON.stringify({ tagKeys: ["env"] }),
+        headers: { "content-type": "application/json" },
+      });
+      const body = await res.json();
+      expect(body.untagged).toBe(true);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.RemoveTagKeys).toEqual(["env"]);
+    });
+
+    it("DELETE /tags — 400 without tagKeys", async () => {
+      const res = await router.request("/tags/hostedzone/z-1", {
+        method: "DELETE",
+        body: JSON.stringify({}),
+        headers: { "content-type": "application/json" },
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it("GET /changes/:id — returns change info", async () => {
+      mockSend.mockResolvedValueOnce({ ChangeInfo: { Id: "C-1", Status: "INSYNC" } });
+      const res = await get("/changes/C-1");
+      const body = await res.json();
+      expect(body.changeInfo.Status).toBe("INSYNC");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetChangeCommand");
+    });
+
+    it("GET /changes/:id — null on sparse", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/changes/C-1");
+      expect((await res.json()).changeInfo).toBeNull();
+    });
+
+    it("GET /hostedzones/:id/dnssec — maps status and KSKs", async () => {
+      mockSend.mockResolvedValueOnce({
+        Status: { ServeSignature: "NOT_SIGNING", StatusMessage: "Zone is not signing" },
+        KeySigningKeys: [{ Name: "ksk-1" }],
+      });
+      const res = await get("/hostedzones/z-1/dnssec");
+      const body = await res.json();
+      expect(body.status.ServeSignature).toBe("NOT_SIGNING");
+      expect(body.keySigningKeys).toHaveLength(1);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetDNSSECCommand");
+    });
+
+    it("GET /hostedzones/:id/dnssec — sparse fallbacks", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/hostedzones/z-1/dnssec");
+      const body = await res.json();
+      expect(body.status).toBeNull();
+      expect(body.keySigningKeys).toEqual([]);
+    });
+
+    it("GET /account-limit/:type — returns limit and count", async () => {
+      mockSend.mockResolvedValueOnce({ AccountLimit: { Type: "MAX_HOSTED_ZONES_BY_OWNER", Value: 500 }, Count: 12 });
+      const res = await get("/account-limit/MAX_HOSTED_ZONES_BY_OWNER");
+      const body = await res.json();
+      expect(body.limit.Value).toBe(500);
+      expect(body.count).toBe(12);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetAccountLimitCommand");
+    });
+
+    it("GET /account-limit/:type — sparse count fallback", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/account-limit/MAX_HEALTH_CHECKS_BY_OWNER");
+      const body = await res.json();
+      expect(body.limit).toBeNull();
+      expect(body.count).toBe(0);
+    });
   });
 });

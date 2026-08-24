@@ -20,6 +20,12 @@ import {
   useRoute53HealthChecks,
   useCreateRoute53HealthCheck,
   useDeleteRoute53HealthCheck,
+  useRoute53Tags,
+  useAddRoute53Tags,
+  useRemoveRoute53Tags,
+  useRoute53Change,
+  useRoute53Dnssec,
+  useRoute53AccountLimit,
 } from "./useRoute53";
 
 function createWrapper() {
@@ -154,5 +160,62 @@ describe("useDeleteRoute53HealthCheck", () => {
       "/aws/route53/health-checks/hc-123",
       expect.objectContaining({ method: "DELETE" })
     );
+  });
+});
+
+describe("Route53 tags/change/dnssec/limit hooks", () => {
+  it("useRoute53Tags fetches encoded", async () => {
+    mockApi.mockResolvedValueOnce({ tags: [] });
+    const { result } = renderHook(() => useRoute53Tags("hostedzone", "z 1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/route53/tags/hostedzone/z%201");
+  });
+
+  it("useRoute53Tags disabled without id", () => {
+    const { result } = renderHook(() => useRoute53Tags("hostedzone", null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+
+  it("useAddRoute53Tags posts", async () => {
+    mockApi.mockResolvedValueOnce({ tagged: true });
+    const { result } = renderHook(() => useAddRoute53Tags(), { wrapper: createWrapper() });
+    result.current.mutate({ resourceType: "hostedzone", resourceId: "z-1", tags: { env: "prod" } });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/route53/tags/hostedzone/z-1", {
+      method: "POST",
+      body: JSON.stringify({ tags: { env: "prod" } }),
+    });
+  });
+
+  it("useRemoveRoute53Tags deletes", async () => {
+    mockApi.mockResolvedValueOnce({ untagged: true });
+    const { result } = renderHook(() => useRemoveRoute53Tags(), { wrapper: createWrapper() });
+    result.current.mutate({ resourceType: "hostedzone", resourceId: "z-1", tagKeys: ["env"] });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/route53/tags/hostedzone/z-1", {
+      method: "DELETE",
+      body: JSON.stringify({ tagKeys: ["env"] }),
+    });
+  });
+
+  it("useRoute53Change fetches encoded", async () => {
+    mockApi.mockResolvedValueOnce({ changeInfo: null });
+    const { result } = renderHook(() => useRoute53Change("C 1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/route53/changes/C%201");
+  });
+
+  it("useRoute53Dnssec fetches", async () => {
+    mockApi.mockResolvedValueOnce({ status: null, keySigningKeys: [] });
+    const { result } = renderHook(() => useRoute53Dnssec("z-1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/route53/hostedzones/z-1/dnssec");
+  });
+
+  it("useRoute53AccountLimit fetches", async () => {
+    mockApi.mockResolvedValueOnce({ limit: null, count: 0 });
+    const { result } = renderHook(() => useRoute53AccountLimit("MAX_HOSTED_ZONES_BY_OWNER"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/route53/account-limit/MAX_HOSTED_ZONES_BY_OWNER");
   });
 });

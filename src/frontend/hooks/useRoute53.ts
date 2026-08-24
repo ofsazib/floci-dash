@@ -105,3 +105,63 @@ export function useDeleteRoute53HealthCheck() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "route53", "health-checks"] }),
   });
 }
+
+// ── Tags ───────────────────────────────────────────────
+
+export function useRoute53Tags(resourceType: string, resourceId: string | null) {
+  return useQuery<{ tags: { key: string; value: string }[] }>({
+    queryKey: ["aws", "route53", "tags", resourceType, resourceId],
+    queryFn: () =>
+      api(`/aws/route53/tags/${encodeURIComponent(resourceType)}/${encodeURIComponent(resourceId!)}`),
+    enabled: !!resourceId,
+  });
+}
+
+export function useAddRoute53Tags() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { resourceType: string; resourceId: string; tags: Record<string, string> }) =>
+      api(`/aws/route53/tags/${encodeURIComponent(params.resourceType)}/${encodeURIComponent(params.resourceId)}`, {
+        method: "POST",
+        body: JSON.stringify({ tags: params.tags }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "route53", "tags"] }),
+  });
+}
+
+export function useRemoveRoute53Tags() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { resourceType: string; resourceId: string; tagKeys: string[] }) =>
+      api(`/aws/route53/tags/${encodeURIComponent(params.resourceType)}/${encodeURIComponent(params.resourceId)}`, {
+        method: "DELETE",
+        body: JSON.stringify({ tagKeys: params.tagKeys }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "route53", "tags"] }),
+  });
+}
+
+// ── Change status + DNSSEC + limits ────────────────────
+
+export function useRoute53Change(changeId: string | null) {
+  return useQuery<any>({
+    queryKey: ["aws", "route53", "changes", changeId],
+    queryFn: () => api(`/aws/route53/changes/${encodeURIComponent(changeId!)}`),
+    enabled: !!changeId,
+  });
+}
+
+export function useRoute53Dnssec(hostedZoneId: string | null) {
+  return useQuery<any>({
+    queryKey: ["aws", "route53", "dnssec", hostedZoneId],
+    queryFn: () => api(`/aws/route53/hostedzones/${encodeURIComponent(hostedZoneId!)}/dnssec`),
+    enabled: !!hostedZoneId,
+  });
+}
+
+export function useRoute53AccountLimit(type: string) {
+  return useQuery<any>({
+    queryKey: ["aws", "route53", "account-limit", type],
+    queryFn: () => api(`/aws/route53/account-limit/${encodeURIComponent(type)}`),
+  });
+}
