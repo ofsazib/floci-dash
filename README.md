@@ -47,7 +47,8 @@
 - **Deep resource management** — Browse, create, and delete resources for implemented services (S3, DynamoDB, EC2, RDS, SQS, SNS, EventBridge, CloudWatch Logs, CloudWatch Metrics, Lambda, IAM, Secrets Manager, CloudFormation, KMS, ECS, SSM, Route 53, API Gateway)
 - **EC2 web terminal** — Interactive bash shell inside running EC2 instances directly from the browser (xterm.js + Docker Engine API with PTY)
 - **Dark mode** — Toggle between light and dark themes (persisted to localStorage)
-- **Configurable Floci endpoint** — Change the Floci URL at runtime from Settings (no restart needed)
+- **Auto-detect Floci endpoint** — Automatically discovers Floci across Docker environments (Windows, macOS, Linux) by probing `host.docker.internal`, `172.17.0.1`, `127.0.0.1`, and `localhost`
+- **Configurable Floci endpoint** — Change the Floci URL at runtime from Settings (no restart needed), or use auto-detect to find it automatically
 - **Floci maintenance** — Reset or nuke the emulator state from Settings with a confirmation modal, plus a diagnostics viewer that dumps `/_floci/diagnose` into a modal
 - **AWS-aligned sidebar** — Service categories reorganized to match AWS Console navigation (Application Integration, Containers, Management & Governance, etc.)
 - **Favorites** — Star any service for quick access; favorites persist in localStorage and appear at the top of the sidebar
@@ -101,6 +102,24 @@ docker run -p 3000:3000 -p 4566:4566 -v /var/run/docker.sock:/var/run/docker.soc
 Open [http://localhost:9877](http://localhost:9877) — the dashboard connects to Floci automatically. For the combined image, use [http://localhost:3000](http://localhost:3000).
 
 Floci runs on [http://localhost:9878](http://localhost:9878) (standard LocalStack-compatible endpoint) with docker-compose, or on [http://localhost:4566](http://localhost:4566) when using the combined image.
+
+#### Cross-platform Docker networking
+
+On **Linux**, Docker containers can reach `localhost` directly. On **Windows** and **macOS**, containers run inside a Linux VM, so `localhost` inside the container does not refer to your host machine. The dashboard handles this automatically:
+
+1. When you first open the dashboard and Floci is unreachable, the error page shows an **"Auto-detect Floci"** button
+2. Clicking it probes common Docker hostnames (`host.docker.internal`, `172.17.0.1`, `127.0.0.1`, `localhost`) and connects to the first one that responds
+3. You can also use the **Settings** page (always visible in the sidebar) to auto-detect or manually set the Floci URL
+
+If auto-detect doesn't find Floci, set `FLOCI_URL` explicitly:
+
+```bash
+# Windows / macOS
+FLOCI_URL=http://host.docker.internal:4566 docker run -p 9877:3000 --rm ghcr.io/ofsazib/floci-dash:latest
+
+# Linux (host networking)
+docker run --network host --rm ghcr.io/ofsazib/floci-dash:latest
+```
 
 That's it. No `pnpm install`, no `.env` files, no AWS credentials.
 
@@ -188,7 +207,7 @@ docker run -p 3000:3000 -p 4566:4566 \
 │              Dashboard Backend                    │
 │           Node.js 22 + Hono (port 3000)          │
 │                                                  │
-│  /api/system/*   → Floci health/info (HTTP)      │
+│  /api/system/*   → Floci health/info, auto-detect endpoint (HTTP)      │
 │  /api/inspect/*  → SQS/SES/SNS inspection        │
 │  /api/active     → Resource detection             │
 │  /api/aws/*      → AWS SDK calls → Floci         │
@@ -227,6 +246,8 @@ make test-all-cov   # Full suite + coverage (unit + integration) — gates the 1
 Run the full suite with Floci up (`make up-bg`) to include the 295 integration tests: `npx vitest run` → **273/273 files, 9,250/9,250 tests, exit 0**. CI runs `make test-cov` (fast unit gate) followed by `make test-all-cov` (full combined coverage gate, worker pool capped at 4 to stay within runner RAM).
 
 ### Key design decisions
+
+- **Auto-detect Floci endpoint** — The `/system/discover-floci` endpoint probes candidate Docker hostnames with a configurable timeout, returning the first that responds to `/_floci/health`. This eliminates the need for manual `FLOCI_URL` configuration on Windows/macOS.
 
 - **Backend proxies all AWS calls** — The browser never imports `@aws-sdk/client-*`. All AWS SDK calls go through the Hono backend, which forwards them to Floci.
 - **Service-based vertical slices** — Each AWS service has its own backend route file (`src/backend/routes/aws/{service}.ts`) and frontend hooks (`src/frontend/hooks/use{Service}.ts`).
@@ -309,7 +330,7 @@ src/
       aws.ts               AWS SDK client factory
       sanitize.ts          Input sanitization utilities
     routes/
-      system.ts            /api/system/health, /init
+      system.ts            /api/system/health, /init, /discover-floci
       inspection.ts        /api/inspect/sqs, /ses, /sns
       active.ts            /api/active
       aws/
@@ -545,7 +566,7 @@ You'll need Floci running separately (e.g., `docker run -p 4566:4566 ghcr.io/hec
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `FLOCI_URL` | `http://localhost:4566` | Floci endpoint URL (auto-set in Docker; can also be changed at runtime via Settings) |
+| `FLOCI_URL` | `http://localhost:4566` | Floci endpoint URL (auto-detected at runtime; can also be changed via Settings or `FLOCI_URL` env var) |
 | `AWS_REGION` | `us-east-1` | Default AWS region |
 | `PORT` | `3000` | Dashboard backend port (inside container) |
 | `NODE_ENV` | `production` | Node environment |
