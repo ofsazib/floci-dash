@@ -395,11 +395,11 @@ describe("Glue update/version hooks", () => {
   it("useDeleteGlueSchemaVersions posts versions", async () => {
     mockApi.mockResolvedValueOnce({ deleted: true });
     const { result } = renderHook(() => useDeleteGlueSchemaVersions("reg1", "s1"), { wrapper: createWrapper() });
-    result.current.mutate([1, 2]);
+    result.current.mutate("1-2");
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith("/aws/glue/registries/reg1/schemas/s1/versions", {
       method: "DELETE",
-      body: JSON.stringify({ versions: [1, 2] }),
+      body: JSON.stringify({ versions: "1-2" }),
     });
   });
 

@@ -927,7 +927,7 @@ describe("Glue Routes", () => {
       expect(mockSend).toHaveBeenCalledWith(expect.objectContaining({
         __cmdName: "TagResourceCommand",
         ResourceArn: "arn:aws:glue:us-east-1:123:table/db/tbl",
-        Tags: { env: "prod" },
+        TagsToAdd: { env: "prod" },
       }));
     });
 
@@ -945,7 +945,7 @@ describe("Glue Routes", () => {
       expect(body.untagged).toBe(true);
       expect(mockSend).toHaveBeenCalledWith(expect.objectContaining({
         __cmdName: "UntagResourceCommand",
-        TagKeys: ["env", "team"],
+        TagsToRemove: ["env", "team"],
       }));
     });
 
@@ -980,7 +980,7 @@ describe("Glue Routes", () => {
       mockSend.mockResolvedValueOnce({});
       const res = await router.request("/registries/reg-1/schemas/s-1/versions", {
         method: "DELETE",
-        body: JSON.stringify({ versions: [1, 2] }),
+        body: JSON.stringify({ versions: "1-2" }),
         headers: { "content-type": "application/json" },
       });
       expect(res.status).toBe(200);
@@ -989,7 +989,7 @@ describe("Glue Routes", () => {
       expect(mockSend).toHaveBeenCalledWith(expect.objectContaining({
         __cmdName: "DeleteSchemaVersionsCommand",
         SchemaId: { RegistryName: "reg-1", SchemaName: "s-1" },
-        Versions: [1, 2],
+        Versions: "1-2",
       }));
     });
 

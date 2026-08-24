@@ -500,7 +500,7 @@ export function useUpdateGlueSchema(registryName: string) {
 export function useDeleteGlueSchemaVersions(registryName: string, schemaName: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (versions: number[]) =>
+    mutationFn: (versions: string) =>
       api(`/aws/glue/registries/${encodeURIComponent(registryName)}/schemas/${encodeURIComponent(schemaName)}/versions`, {
         method: "DELETE",
         body: JSON.stringify({ versions }),

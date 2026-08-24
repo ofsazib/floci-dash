@@ -813,21 +813,21 @@ router.post("/tags", async (c: Context) => {
   await client.send(
     new TagResourceCommand({
       ResourceArn: body.resourceArn,
-      Tags: body.tags || {},
+      TagsToAdd: body.tags || {},
     })
   );
   return c.json({ tagged: true });
 });
 
 router.delete("/tags/:resourceArn", async (c: Context) => {
-  const resourceArn = decodeURIComponent(c.req.param("resourceArn"));
-  const tagKeys = c.req.queries("tagKey") || [];
+  const resourceArn = decodeURIComponent(c.req.param("resourceArn")!);
+  const tagKeys = (c.req.queries("tagKey") || []) as string[];
   if (!tagKeys.length) return c.json({ error: "tagKey query parameter is required" }, 400);
   const client = getClient();
   await client.send(
     new UntagResourceCommand({
       ResourceArn: resourceArn,
-      TagKeys: tagKeys,
+      TagsToRemove: tagKeys,
     })
   );
   return c.json({ untagged: true });
@@ -854,8 +854,8 @@ router.put("/registries/:regName/schemas/:schemaName", async (c: Context) => {
 router.delete("/registries/:regName/schemas/:schemaName/versions", async (c: Context) => {
   const regName = c.req.param("regName");
   const schemaName = c.req.param("schemaName");
-  const body = await c.req.json<{ versions: number[] }>();
-  if (!body.versions?.length) return c.json({ error: "versions array is required" }, 400);
+  const body = await c.req.json<{ versions: string }>();
+  if (!body.versions) return c.json({ error: "versions string is required" }, 400);
   const client = getClient();
   await client.send(
     new DeleteSchemaVersionsCommand({
