@@ -255,6 +255,8 @@ export default function AppLayoutShell({ children }: Props) {
 
     // ── All services by category (no query) ──
     if (!health?.services) {
+      items.push({ type: "divider" as const });
+      items.push({ type: "link" as const, text: "Settings", href: "/#/settings" });
       return items;
     }
 

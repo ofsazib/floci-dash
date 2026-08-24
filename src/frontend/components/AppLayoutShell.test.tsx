@@ -193,6 +193,17 @@ describe("AppLayoutShell — health status", () => {
     expect(screen.getByText(/0 \/ 0 services running/)).toBeTruthy();
   });
 
+  it("renders Settings link even when health data is unavailable", () => {
+    (useHealth as any).mockReturnValue({ data: undefined });
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    expect(screen.getByText("Settings")).toBeTruthy();
+  });
+
   it("shows partial count when not all healthy", () => {
     (useHealth as any).mockReturnValue({
       data: {
