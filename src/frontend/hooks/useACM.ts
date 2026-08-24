@@ -106,3 +106,22 @@ export function useExportACMCertificate() {
       api(`/aws/acm/certificates/${encodeURIComponent(arn)}/export`, { method: "POST" }),
   });
 }
+
+export function useACMAccountConfiguration() {
+  return useQuery<any>({
+    queryKey: ["aws", "acm", "account-configuration"],
+    queryFn: () => api("/aws/acm/account-configuration"),
+  });
+}
+
+export function usePutACMAccountConfiguration() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (daysBeforeExpiry: number) =>
+      api("/aws/acm/account-configuration", {
+        method: "PUT",
+        body: JSON.stringify({ daysBeforeExpiry }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "acm", "account-configuration"] }),
+  });
+}

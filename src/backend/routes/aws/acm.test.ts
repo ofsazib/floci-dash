@@ -19,6 +19,8 @@ vi.mock("@aws-sdk/client-acm", () => ({
   ExportCertificateCommand: createCmd("ExportCertificateCommand"),
   AddTagsToCertificateCommand: createCmd("AddTagsToCertificateCommand"),
   RemoveTagsFromCertificateCommand: createCmd("RemoveTagsFromCertificateCommand"),
+  GetAccountConfigurationCommand: createCmd("GetAccountConfigurationCommand"),
+  PutAccountConfigurationCommand: createCmd("PutAccountConfigurationCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({ create: (Ctor: any, extra?: any) => new Ctor(extra) }));
@@ -30,6 +32,13 @@ async function post(p: string, b?: any) {
   return router.request(p, { method: "POST", body: b != null ? JSON.stringify(b) : undefined, headers: b != null ? { "content-type": "application/json" } : undefined });
 }
 async function del(p: string) { return router.request(p, { method: "DELETE" }); }
+async function putReq(p: string, b?: any) {
+  return router.request(p, {
+    method: "PUT",
+    body: b != null ? JSON.stringify(b) : undefined,
+    headers: b != null ? { "content-type": "application/json" } : undefined,
+  });
+}
 
 beforeEach(() => mockSend.mockReset());
 
@@ -181,6 +190,38 @@ describe("ACM Routes", () => {
         headers: { "content-type": "application/json" },
       });
       expect(res.status).toBe(400);
+    });
+  });
+
+  describe("Account configuration", () => {
+    it("GET /account-configuration — returns expiry events", async () => {
+      mockSend.mockResolvedValueOnce({ ExpiryEvents: { DaysBeforeExpiry: 45 } });
+      const res = await get("/account-configuration");
+      const body = await res.json();
+      expect(body.expiryEvents.DaysBeforeExpiry).toBe(45);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetAccountConfigurationCommand");
+    });
+
+    it("GET /account-configuration — null on sparse", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/account-configuration");
+      expect((await res.json()).expiryEvents).toBeNull();
+    });
+
+    it("PUT /account-configuration — updates days before expiry", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await putReq("/account-configuration", { daysBeforeExpiry: 30 });
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("PutAccountConfigurationCommand");
+      expect(cmd.ExpiryEvents.DaysBeforeExpiry).toBe(30);
+      expect(cmd.IdempotencyToken).toContain("floci-dash-");
+    });
+
+    it("PUT /account-configuration — 400 without numeric days", async () => {
+      expect((await putReq("/account-configuration", {})).status).toBe(400);
+      expect((await putReq("/account-configuration", { daysBeforeExpiry: "30" })).status).toBe(400);
     });
   });
 });

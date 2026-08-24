@@ -3,6 +3,10 @@ import type { Context } from "hono";
 import { create } from "../../clients/aws";
 import { ACMClient } from "@aws-sdk/client-acm";
 import {
+  GetAccountConfigurationCommand,
+  PutAccountConfigurationCommand,
+} from "@aws-sdk/client-acm";
+import {
   ImportCertificateCommand,
   ExportCertificateCommand,
   AddTagsToCertificateCommand,
@@ -138,6 +142,27 @@ router.delete("/certificates/:arn/tags", async (c: Context) => {
     new RemoveTagsFromCertificateCommand({ CertificateArn: arn, Tags: body.tagKeys.map((k) => ({ Key: k, Value: "" })) })
   );
   return c.json({ untagged: true });
+});
+
+
+router.get("/account-configuration", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new GetAccountConfigurationCommand({}));
+  return c.json({ expiryEvents: result.ExpiryEvents || null });
+});
+
+router.put("/account-configuration", async (c: Context) => {
+  const body = await c.req.json<{ daysBeforeExpiry?: number }>();
+  if (typeof body.daysBeforeExpiry !== "number")
+    return c.json({ error: "daysBeforeExpiry must be a number" }, 400);
+  const client = getClient();
+  await client.send(
+    new PutAccountConfigurationCommand({
+      ExpiryEvents: { DaysBeforeExpiry: body.daysBeforeExpiry },
+      IdempotencyToken: `floci-dash-${Date.now()}`,
+    })
+  );
+  return c.json({ updated: true });
 });
 
 export default router;

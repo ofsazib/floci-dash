@@ -18,6 +18,8 @@ import {
   useACMCertificateTags,
   useImportACMCertificate,
   useExportACMCertificate,
+  useACMAccountConfiguration,
+  usePutACMAccountConfiguration,
 } from "./useACM";
 
 beforeEach(() => mockApi.mockReset());
@@ -97,6 +99,26 @@ describe("useExportACMCertificate", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith("/aws/acm/certificates/arn%3Ac%201/export", {
       method: "POST",
+    });
+  });
+});
+
+describe("ACM account configuration hooks", () => {
+  it("useACMAccountConfiguration fetches", async () => {
+    mockApi.mockResolvedValueOnce({ expiryEvents: { DaysBeforeExpiry: 45 } });
+    const { result } = renderHook(() => useACMAccountConfiguration(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/acm/account-configuration");
+  });
+
+  it("usePutACMAccountConfiguration puts days", async () => {
+    mockApi.mockResolvedValueOnce({ updated: true });
+    const { result } = renderHook(() => usePutACMAccountConfiguration(), { wrapper: createWrapper() });
+    result.current.mutate(30);
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/acm/account-configuration", {
+      method: "PUT",
+      body: JSON.stringify({ daysBeforeExpiry: 30 }),
     });
   });
 });
