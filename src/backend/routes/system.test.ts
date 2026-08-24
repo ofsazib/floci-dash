@@ -244,3 +244,33 @@ describe("System Routes", () => {
     });
   });
 });
+
+describe("GET /discover-floci", () => {
+  it("returns the working endpoint when one is found", async () => {
+    const mockDiscover = vi.fn().mockResolvedValue({
+      working: "http://host.docker.internal:4566",
+      candidates: ["http://localhost:4566", "http://host.docker.internal:4566"],
+    });
+    const config = await import("../clients/config");
+    vi.spyOn(config, "discoverFlociEndpoint").mockImplementation(mockDiscover);
+    const res = await router.request("/discover-floci");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.working).toBe("http://host.docker.internal:4566");
+    expect(body.candidates).toContain("http://localhost:4566");
+  });
+
+  it("returns empty working when no endpoint responds", async () => {
+    const mockDiscover = vi.fn().mockResolvedValue({
+      working: "",
+      candidates: ["http://localhost:4566"],
+    });
+    const config = await import("../clients/config");
+    vi.spyOn(config, "discoverFlociEndpoint").mockImplementation(mockDiscover);
+    const res = await router.request("/discover-floci");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.working).toBe("");
+    expect(body.candidates.length).toBeGreaterThan(0);
+  });
+});

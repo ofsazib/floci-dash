@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ContentLayout, Header, Container, Toggle, Select, SpaceBetween, Box, Input, Button, FormField, Alert, Modal } from "@cloudscape-design/components";
 import { useSettings } from "../stores/settings";
 import { api } from "../lib/client";
+import { useDiscoverFloci } from "../hooks/useSystem";
 
 export default function Settings() {
   const { darkMode, refreshInterval, toggleDarkMode, setRefreshInterval, flociEndpoint, setFlociEndpoint } = useSettings();
@@ -15,6 +16,25 @@ export default function Settings() {
   const [diagnosticsError, setDiagnosticsError] = useState<string | null>(null);
   const [diagnosticsLoading, setDiagnosticsLoading] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const discover = useDiscoverFloci();
+  const [discoverResult, setDiscoverResult] = useState<string | null>(null);
+  const [discoverError, setDiscoverError] = useState<string | null>(null);
+
+  async function handleAutoDetect() {
+    setDiscoverResult(null);
+    setDiscoverError(null);
+    try {
+      const data = await discover.mutateAsync();
+      if (data.working) {
+        setEndpointInput(data.working);
+        setDiscoverResult(data.working);
+      } else {
+        setDiscoverError(`Tried ${data.candidates.length} addresses — none responded.`);
+      }
+    } catch (err) {
+      setDiscoverError((err as Error)?.message || "Auto-detect failed");
+    }
+  }
 
   async function handleMaintenance(target: "reset" | "nuke") {
     setMaintenanceBusy(true);
@@ -108,10 +128,25 @@ export default function Settings() {
               />
             </FormField>
             <Box float="right">
-              <Button variant="primary" loading={saving} onClick={handleSaveEndpoint}>
-                Save endpoint
-              </Button>
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button loading={discover.isPending} onClick={handleAutoDetect}>
+                  Auto-detect
+                </Button>
+                <Button variant="primary" loading={saving} onClick={handleSaveEndpoint}>
+                  Save endpoint
+                </Button>
+              </SpaceBetween>
             </Box>
+            {discoverResult && (
+              <Alert type="success" dismissible onDismiss={() => setDiscoverResult(null)}>
+                Found Floci at {discoverResult}. Click Save to apply.
+              </Alert>
+            )}
+            {discoverError && (
+              <Alert type="error" dismissible onDismiss={() => setDiscoverError(null)}>
+                {discoverError}
+              </Alert>
+            )}
           </SpaceBetween>
         </Container>
 

@@ -1,6 +1,8 @@
 import { useNavigate } from "react-router-dom";
-import { Box, BreadcrumbGroup, Button, ColumnLayout, Container, Header, SpaceBetween, StatusIndicator, Link } from "@cloudscape-design/components";
-import { useHealth, useActiveServices } from "../hooks/useSystem";
+import { Alert, Box, BreadcrumbGroup, Button, ColumnLayout, Container, Header, SpaceBetween, StatusIndicator, Link } from "@cloudscape-design/components";
+import { useState } from "react";
+import { useHealth, useActiveServices, useDiscoverFloci } from "../hooks/useSystem";
+import { useSettings } from "../stores/settings";
 import { useResourceCounts } from "../hooks/useResourceCounts";
 import { useActivityFeed } from "../hooks/useActivityFeed";
 import ServiceGrid from "../components/ServiceGrid";
@@ -37,6 +39,26 @@ export default function DashboardHome() {
     navigate(path);
   };
 
+  const discover = useDiscoverFloci();
+  const { flociEndpoint } = useSettings();
+  const [discoverResult, setDiscoverResult] = useState<string | null>(null);
+  const [discoverError, setDiscoverError] = useState<string | null>(null);
+
+  async function handleAutoDetect() {
+    setDiscoverResult(null);
+    setDiscoverError(null);
+    try {
+      const data = await discover.mutateAsync();
+      if (data.working) {
+        setDiscoverResult(data.working);
+      } else {
+        setDiscoverError(`Tried ${data.candidates.length} addresses — none responded. Check that Floci is running.`);
+      }
+    } catch (err) {
+      setDiscoverError((err as Error)?.message || "Auto-detect failed");
+    }
+  }
+
   return (
     <div className="fd-p-responsive fd-container-responsive">
       {isLoading ? (
@@ -44,11 +66,38 @@ export default function DashboardHome() {
           <DashboardSkeleton />
         </Box>
       ) : isError ? (
-        <EmptyState
-          title={(error as Error)?.message || "Failed to connect to Floci"}
-          icon="⚠️"
-          description="Make sure Floci is running and accessible."
-        />
+        <SpaceBetween size="m">
+          <EmptyState
+            title={(error as Error)?.message || "Failed to connect to Floci"}
+            icon="⚠️"
+            description="Make sure Floci is running and accessible."
+          />
+          <Container>
+            <SpaceBetween size="m" alignItems="center">
+              <Box variant="small" color="text-body-secondary">
+                Current endpoint: {flociEndpoint || "http://localhost:4566"}
+              </Box>
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button loading={discover.isPending} onClick={handleAutoDetect}>
+                  Auto-detect Floci
+                </Button>
+                <Button onClick={() => navigate("/#/settings")}>
+                  Open Settings
+                </Button>
+              </SpaceBetween>
+              {discoverResult && (
+                <Alert type="success" dismissible onDismiss={() => setDiscoverResult(null)}>
+                  Found Floci at {discoverResult} — the dashboard will use this endpoint.
+                </Alert>
+              )}
+              {discoverError && (
+                <Alert type="error" dismissible onDismiss={() => setDiscoverError(null)}>
+                  {discoverError}
+                </Alert>
+              )}
+            </SpaceBetween>
+          </Container>
+        </SpaceBetween>
       ) : health ? (
         <SpaceBetween size="xl">
           <BreadcrumbGroup

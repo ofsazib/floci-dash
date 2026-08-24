@@ -19,6 +19,11 @@ vi.mock("../lib/client", () => ({
   api: (...args: any[]) => mockApi(...args),
 }));
 
+const mockDiscoverMutateAsync = vi.fn();
+vi.mock("../hooks/useSystem", () => ({
+  useDiscoverFloci: () => ({ mutateAsync: mockDiscoverMutateAsync, isPending: false }),
+}));
+
 import Settings from "./Settings";
 
 function dismissModalWithEscape() {
@@ -363,6 +368,71 @@ describe("Settings", () => {
     await waitFor(() => {
       expect(screen.getByText("Failed to load diagnostics")).toBeTruthy();
     });
+  });
+
+  // ─── Auto-detect Floci ────────────────────────────────
+
+  it("auto-detect updates input and shows success alert", async () => {
+    mockDiscoverMutateAsync.mockResolvedValueOnce({ working: "http://host.docker.internal:4566", candidates: ["http://localhost:4566"] });
+    const user = userEvent.setup();
+    render(<Settings />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Auto-detect"));
+    await waitFor(() => {
+      expect(screen.getByText(/Found Floci at http:\/\/host.docker.internal:4566/)).toBeTruthy();
+    });
+    expect(screen.getByDisplayValue("http://host.docker.internal:4566")).toBeTruthy();
+  });
+
+  it("auto-detect shows error when no endpoint responds", async () => {
+    mockDiscoverMutateAsync.mockResolvedValueOnce({ working: "", candidates: ["http://localhost:4566"] });
+    const user = userEvent.setup();
+    render(<Settings />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Auto-detect"));
+    await waitFor(() => {
+      expect(screen.getByText(/none responded/)).toBeTruthy();
+    });
+  });
+
+  it("auto-detect shows error when mutateAsync throws", async () => {
+    mockDiscoverMutateAsync.mockRejectedValueOnce(new Error("timeout"));
+    const user = userEvent.setup();
+    render(<Settings />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Auto-detect"));
+    await waitFor(() => {
+      expect(screen.getByText(/timeout/)).toBeTruthy();
+    });
+  });
+
+  it("auto-detect shows fallback error for non-Error rejection", async () => {
+    mockDiscoverMutateAsync.mockRejectedValueOnce("boom");
+    const user = userEvent.setup();
+    render(<Settings />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Auto-detect"));
+    await waitFor(() => {
+      expect(screen.getByText("Auto-detect failed")).toBeTruthy();
+    });
+  });
+
+  it("dismisses the auto-detect success alert", async () => {
+    mockDiscoverMutateAsync.mockResolvedValueOnce({ working: "http://host.docker.internal:4566", candidates: [] });
+    const user = userEvent.setup();
+    render(<Settings />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Auto-detect"));
+    await waitFor(() => expect(screen.getByText(/Found Floci/)).toBeTruthy());
+    const dismiss = document.querySelector('[class*="awsui_dismiss-button"]') as HTMLElement;
+    fireEvent.click(dismiss);
+    await waitFor(() => expect(screen.queryByText(/Found Floci/)).toBeNull());
+  });
+
+  it("dismisses the auto-detect error alert", async () => {
+    mockDiscoverMutateAsync.mockResolvedValueOnce({ working: "", candidates: [] });
+    const user = userEvent.setup();
+    render(<Settings />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Auto-detect"));
+    await waitFor(() => expect(screen.getByText(/none responded/)).toBeTruthy());
+    const dismiss = document.querySelector('[class*="awsui_dismiss-button"]') as HTMLElement;
+    fireEvent.click(dismiss);
+    await waitFor(() => expect(screen.queryByText(/none responded/)).toBeNull());
   });
 
   it("dismisses the diagnostics error alert", async () => {

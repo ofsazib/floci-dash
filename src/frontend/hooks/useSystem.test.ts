@@ -9,7 +9,7 @@ vi.mock("../lib/client", () => ({
   api: (...args: any[]) => mockApi(...args),
 }));
 
-import { useHealth, useInit, useActiveServices } from "./useSystem";
+import { useHealth, useInit, useActiveServices, useDiscoverFloci } from "./useSystem";
 
 function createWrapper() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -63,5 +63,33 @@ describe("useActiveServices", () => {
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith("/active");
+  });
+});
+
+// ─── Discover Floci ──────────────────────────────────────
+
+describe("useDiscoverFloci", () => {
+  it("calls api with correct URL and returns result", async () => {
+    mockApi.mockResolvedValueOnce({ working: "http://host.docker.internal:4566", candidates: ["http://localhost:4566"] });
+    const { result } = renderHook(() => useDiscoverFloci(), { wrapper: createWrapper() });
+    result.current.mutate();
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/system/discover-floci");
+  });
+
+  it("handles discovery failure", async () => {
+    mockApi.mockRejectedValueOnce(new Error("network error"));
+    const { result } = renderHook(() => useDiscoverFloci(), { wrapper: createWrapper() });
+    result.current.mutate();
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error?.message).toBe("network error");
+  });
+
+  it("does not invalidate health queries when no endpoint found", async () => {
+    mockApi.mockResolvedValueOnce({ working: "", candidates: ["http://localhost:4566"] });
+    const { result } = renderHook(() => useDiscoverFloci(), { wrapper: createWrapper() });
+    result.current.mutate();
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.working).toBe("");
   });
 });

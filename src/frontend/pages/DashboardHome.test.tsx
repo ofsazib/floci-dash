@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createWrapper } from "../../test/helpers";
 import React from "react";
@@ -10,9 +10,16 @@ const mockActive = vi.fn();
 const mockResourceCounts = vi.fn();
 const mockNavigate = vi.fn();
 
+const mockDiscover = vi.fn();
 vi.mock("../hooks/useSystem", () => ({
   useHealth: (...args: any[]) => mockHealth(...args),
   useActiveServices: (...args: any[]) => mockActive(...args),
+  useDiscoverFloci: () => mockDiscover(),
+}));
+
+const mockFlociEndpoint = vi.fn();
+vi.mock("../stores/settings", () => ({
+  useSettings: () => ({ flociEndpoint: mockFlociEndpoint() }),
 }));
 
 vi.mock("../hooks/useResourceCounts", () => ({
@@ -43,6 +50,10 @@ beforeEach(() => {
   });
   mockResourceCounts.mockReturnValue({
     data: { s3: 2, dynamodb: 3, ec2: 1, lambda: 0, sqs: 5 },
+  });
+  mockDiscover.mockReturnValue({
+    mutateAsync: vi.fn().mockResolvedValue({ working: "", candidates: [] }),
+    isPending: false,
   });
 });
 
@@ -248,6 +259,111 @@ describe("DashboardHome", () => {
     const { container } = render(<DashboardHome />, { wrapper: createWrapper() });
     expect(screen.queryByText("Floci Dash")).toBeNull();
     expect(container.querySelectorAll(".fd-container-responsive").length).toBe(1);
+  });
+
+  it("shows default endpoint when flociEndpoint is empty", () => {
+    mockFlociEndpoint.mockReturnValue("");
+    mockHealth.mockReturnValue({ isLoading: false, isError: true, data: undefined, error: new Error("fail") });
+    mockActive.mockReturnValue({ data: { activeCount: 0, activeServices: [] } });
+    mockResourceCounts.mockReturnValue({ data: undefined });
+    render(<DashboardHome />, { wrapper: createWrapper() });
+    expect(screen.getByText(/http:\/\/localhost:4566/)).toBeTruthy();
+  });
+
+  it("auto-detect finds Floci and shows success alert", async () => {
+    mockHealth.mockReturnValue({ isLoading: false, isError: true, data: undefined, error: new Error("Connection refused") });
+    mockActive.mockReturnValue({ data: { activeCount: 0, activeServices: [] } });
+    mockResourceCounts.mockReturnValue({ data: undefined });
+    const mockMutateAsync = vi.fn().mockResolvedValue({ working: "http://host.docker.internal:4566", candidates: ["http://localhost:4566", "http://host.docker.internal:4566"] });
+    mockDiscover.mockReturnValue({ mutateAsync: mockMutateAsync, isPending: false });
+    const user = userEvent.setup();
+    render(<DashboardHome />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Auto-detect Floci"));
+    await waitFor(() => {
+      expect(screen.getByText(/Found Floci at http:\/\/host.docker.internal:4566/)).toBeTruthy();
+    });
+  });
+
+  it("auto-detect shows error when no endpoint responds", async () => {
+    mockHealth.mockReturnValue({ isLoading: false, isError: true, data: undefined, error: new Error("fail") });
+    mockActive.mockReturnValue({ data: { activeCount: 0, activeServices: [] } });
+    mockResourceCounts.mockReturnValue({ data: undefined });
+    const mockMutateAsync = vi.fn().mockResolvedValue({ working: "", candidates: ["http://localhost:4566"] });
+    mockDiscover.mockReturnValue({ mutateAsync: mockMutateAsync, isPending: false });
+    const user = userEvent.setup();
+    render(<DashboardHome />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Auto-detect Floci"));
+    await waitFor(() => {
+      expect(screen.getByText(/none responded/)).toBeTruthy();
+    });
+  });
+
+  it("auto-detect shows error when mutateAsync throws", async () => {
+    mockHealth.mockReturnValue({ isLoading: false, isError: true, data: undefined, error: new Error("fail") });
+    mockActive.mockReturnValue({ data: { activeCount: 0, activeServices: [] } });
+    mockResourceCounts.mockReturnValue({ data: undefined });
+    const mockMutateAsync = vi.fn().mockRejectedValue(new Error("timeout"));
+    mockDiscover.mockReturnValue({ mutateAsync: mockMutateAsync, isPending: false });
+    const user = userEvent.setup();
+    render(<DashboardHome />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Auto-detect Floci"));
+    await waitFor(() => {
+      expect(screen.getByText(/timeout/)).toBeTruthy();
+    });
+  });
+
+  it("auto-detect shows fallback error for non-Error rejection", async () => {
+    mockHealth.mockReturnValue({ isLoading: false, isError: true, data: undefined, error: new Error("fail") });
+    mockActive.mockReturnValue({ data: { activeCount: 0, activeServices: [] } });
+    mockResourceCounts.mockReturnValue({ data: undefined });
+    const mockMutateAsync = vi.fn().mockRejectedValue("boom");
+    mockDiscover.mockReturnValue({ mutateAsync: mockMutateAsync, isPending: false });
+    const user = userEvent.setup();
+    render(<DashboardHome />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Auto-detect Floci"));
+    await waitFor(() => {
+      expect(screen.getByText("Auto-detect failed")).toBeTruthy();
+    });
+  });
+
+  it("dismisses auto-detect success alert", async () => {
+    mockHealth.mockReturnValue({ isLoading: false, isError: true, data: undefined, error: new Error("fail") });
+    mockActive.mockReturnValue({ data: { activeCount: 0, activeServices: [] } });
+    mockResourceCounts.mockReturnValue({ data: undefined });
+    const mockMutateAsync = vi.fn().mockResolvedValue({ working: "http://host.docker.internal:4566", candidates: [] });
+    mockDiscover.mockReturnValue({ mutateAsync: mockMutateAsync, isPending: false });
+    const user = userEvent.setup();
+    render(<DashboardHome />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Auto-detect Floci"));
+    await waitFor(() => expect(screen.getByText(/Found Floci/)).toBeTruthy());
+    const dismiss = document.querySelector('[class*="awsui_dismiss-button"]') as HTMLElement;
+    fireEvent.click(dismiss);
+    await waitFor(() => expect(screen.queryByText(/Found Floci/)).toBeNull());
+  });
+
+  it("dismisses auto-detect error alert", async () => {
+    mockHealth.mockReturnValue({ isLoading: false, isError: true, data: undefined, error: new Error("fail") });
+    mockActive.mockReturnValue({ data: { activeCount: 0, activeServices: [] } });
+    mockResourceCounts.mockReturnValue({ data: undefined });
+    const mockMutateAsync = vi.fn().mockResolvedValue({ working: "", candidates: [] });
+    mockDiscover.mockReturnValue({ mutateAsync: mockMutateAsync, isPending: false });
+    const user = userEvent.setup();
+    render(<DashboardHome />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Auto-detect Floci"));
+    await waitFor(() => expect(screen.getByText(/none responded/)).toBeTruthy());
+    const dismiss = document.querySelector('[class*="awsui_dismiss-button"]') as HTMLElement;
+    fireEvent.click(dismiss);
+    await waitFor(() => expect(screen.queryByText(/none responded/)).toBeNull());
+  });
+
+  it("navigates to settings via Open Settings button", async () => {
+    mockHealth.mockReturnValue({ isLoading: false, isError: true, data: undefined, error: new Error("fail") });
+    mockActive.mockReturnValue({ data: { activeCount: 0, activeServices: [] } });
+    mockResourceCounts.mockReturnValue({ data: undefined });
+    const user = userEvent.setup();
+    render(<DashboardHome />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("Open Settings"));
+    expect(mockNavigate).toHaveBeenCalledWith("/#/settings");
   });
 
   it("formats older activity timestamps and renders entry resources", async () => {

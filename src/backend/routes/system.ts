@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { flociFetch } from "../clients/floci";
 import { getAwsConfig } from "../clients/aws";
-import { getFlociEndpoint, setFlociEndpoint, getDefaultFlociEndpoint } from "../clients/config";
+import { getFlociEndpoint, setFlociEndpoint, getDefaultFlociEndpoint, discoverFlociEndpoint } from "../clients/config";
 import { S3Client, ListBucketsCommand } from "@aws-sdk/client-s3";
 import { DynamoDBClient, ListTablesCommand } from "@aws-sdk/client-dynamodb";
 import { EC2Client, DescribeInstancesCommand } from "@aws-sdk/client-ec2";
@@ -89,6 +89,11 @@ router.get("/resource-counts", async (c: Context) => {
 
 router.get("/floci-endpoint", (c: Context) => {
   return c.json({ endpoint: getFlociEndpoint(), default: getDefaultFlociEndpoint() });
+});
+
+router.get("/discover-floci", async (c: Context) => {
+  const result = await discoverFlociEndpoint();
+  return c.json(result);
 });
 
 router.put("/floci-endpoint", async (c: Context) => {

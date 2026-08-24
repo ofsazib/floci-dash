@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/client";
 import type { HealthResponse, InitResponse } from "../types/api";
 
@@ -28,5 +28,22 @@ export function useActiveServices() {
     queryKey: ["system", "active"],
     queryFn: () => api("/active"),
     refetchInterval: 15000,
+  });
+}
+
+export interface DiscoverResponse {
+  working: string;
+  candidates: string[];
+}
+
+export function useDiscoverFloci() {
+  const qc = useQueryClient();
+  return useMutation<DiscoverResponse>({
+    mutationFn: () => api("/system/discover-floci"),
+    onSuccess: (data) => {
+      if (data.working) {
+        qc.invalidateQueries({ queryKey: ["system", "health"] });
+      }
+    },
   });
 }
