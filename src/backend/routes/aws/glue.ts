@@ -52,6 +52,12 @@ import {
   UpdatePartitionCommand,
   DeletePartitionCommand,
   BatchUpdatePartitionCommand,
+  GetTagsCommand,
+  TagResourceCommand,
+  UntagResourceCommand,
+  UpdateSchemaCommand,
+  DeleteSchemaVersionsCommand,
+  GetSchemaByDefinitionCommand,
 } from "@aws-sdk/client-glue";
 
 const router = new Hono();
@@ -787,6 +793,98 @@ router.post("/databases/:dbName/tables/batch-delete", async (c: Context) => {
   return c.json({
     deleted: (result.TablesDeleted || []).length,
     errors: result.Errors || [],
+  });
+});
+
+// ── Tags ────────────────────────────────────────────────
+
+router.get("/tags", async (c: Context) => {
+  const resourceArn = c.req.query("resourceArn");
+  if (!resourceArn) return c.json({ error: "resourceArn query parameter is required" }, 400);
+  const client = getClient();
+  const result = await client.send(new GetTagsCommand({ ResourceArn: resourceArn }));
+  return c.json({ tags: result.Tags || {} });
+});
+
+router.post("/tags", async (c: Context) => {
+  const body = await c.req.json<{ resourceArn: string; tags: Record<string, string> }>();
+  if (!body.resourceArn) return c.json({ error: "resourceArn is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new TagResourceCommand({
+      ResourceArn: body.resourceArn,
+      Tags: body.tags || {},
+    })
+  );
+  return c.json({ tagged: true });
+});
+
+router.delete("/tags/:resourceArn", async (c: Context) => {
+  const resourceArn = decodeURIComponent(c.req.param("resourceArn"));
+  const tagKeys = c.req.queries("tagKey") || [];
+  if (!tagKeys.length) return c.json({ error: "tagKey query parameter is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new UntagResourceCommand({
+      ResourceArn: resourceArn,
+      TagKeys: tagKeys,
+    })
+  );
+  return c.json({ untagged: true });
+});
+
+// ── Schema Registry extra operations ────────────────────
+
+router.put("/registries/:regName/schemas/:schemaName", async (c: Context) => {
+  const regName = c.req.param("regName");
+  const schemaName = c.req.param("schemaName");
+  const body = await c.req.json<{ compatibility?: string; description?: string }>();
+  if (!body.compatibility && !body.description) return c.json({ error: "compatibility or description is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new UpdateSchemaCommand({
+      SchemaId: { RegistryName: regName, SchemaName: schemaName },
+      Compatibility: body.compatibility as any,
+      Description: body.description,
+    })
+  );
+  return c.json({ schemaName, updated: true });
+});
+
+router.delete("/registries/:regName/schemas/:schemaName/versions", async (c: Context) => {
+  const regName = c.req.param("regName");
+  const schemaName = c.req.param("schemaName");
+  const body = await c.req.json<{ versions: number[] }>();
+  if (!body.versions?.length) return c.json({ error: "versions array is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new DeleteSchemaVersionsCommand({
+      SchemaId: { RegistryName: regName, SchemaName: schemaName },
+      Versions: body.versions,
+    })
+  );
+  return c.json({ deleted: true });
+});
+
+router.post("/schemas/by-definition", async (c: Context) => {
+  const body = await c.req.json<{ registryName?: string; schemaName?: string; definition: string }>();
+  if (!body.definition) return c.json({ error: "definition is required" }, 400);
+  const client = getClient();
+  const result = await client.send(
+    new GetSchemaByDefinitionCommand({
+      SchemaId: {
+        RegistryName: body.registryName,
+        SchemaName: body.schemaName,
+      },
+      SchemaDefinition: body.definition,
+    })
+  );
+  return c.json({
+    schemaVersionId: result.SchemaVersionId,
+    schemaArn: result.SchemaArn,
+    dataFormat: result.DataFormat,
+    status: result.Status,
+    createdTime: result.CreatedTime,
   });
 });
 

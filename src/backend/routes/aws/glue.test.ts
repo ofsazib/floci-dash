@@ -52,6 +52,12 @@ vi.mock("@aws-sdk/client-glue", () => ({
   UpdatePartitionCommand: createCmd("UpdatePartitionCommand"),
   DeletePartitionCommand: createCmd("DeletePartitionCommand"),
   BatchUpdatePartitionCommand: createCmd("BatchUpdatePartitionCommand"),
+  GetTagsCommand: createCmd("GetTagsCommand"),
+  TagResourceCommand: createCmd("TagResourceCommand"),
+  UntagResourceCommand: createCmd("UntagResourceCommand"),
+  UpdateSchemaCommand: createCmd("UpdateSchemaCommand"),
+  DeleteSchemaVersionsCommand: createCmd("DeleteSchemaVersionsCommand"),
+  GetSchemaByDefinitionCommand: createCmd("GetSchemaByDefinitionCommand"),
   UpdateTableCommand: createCmd("UpdateTableCommand"),
   UpdateDatabaseCommand: createCmd("UpdateDatabaseCommand"),
   GetTableVersionsCommand: createCmd("GetTableVersionsCommand"),
@@ -893,6 +899,131 @@ describe("Glue Routes", () => {
 
     it("POST /databases/:db/tables/batch-delete — 400 without tableNames", async () => {
       const res = await post("/databases/db1/tables/batch-delete", {});
+      expect(res.status).toBe(400);
+    });
+  });
+
+  // Tags
+  describe("Tags", () => {
+    it("GET /tags — returns tags for a resource ARN", async () => {
+      mockSend.mockResolvedValueOnce({ Tags: { env: "prod", team: "data" } });
+      const res = await get("/tags?resourceArn=arn:aws:glue:us-east-1:123:table/db/tbl");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.tags.env).toBe("prod");
+    });
+
+    it("GET /tags — 400 without resourceArn", async () => {
+      const res = await get("/tags");
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /tags — tags a resource", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/tags", { resourceArn: "arn:aws:glue:us-east-1:123:table/db/tbl", tags: { env: "prod" } });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.tagged).toBe(true);
+      expect(mockSend).toHaveBeenCalledWith(expect.objectContaining({
+        __cmdName: "TagResourceCommand",
+        ResourceArn: "arn:aws:glue:us-east-1:123:table/db/tbl",
+        Tags: { env: "prod" },
+      }));
+    });
+
+    it("POST /tags — 400 without resourceArn", async () => {
+      const res = await post("/tags", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE /tags/:resourceArn — untags a resource", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const arn = encodeURIComponent("arn:aws:glue:us-east-1:123:table/db/tbl");
+      const res = await del(`/tags/${arn}?tagKey=env&tagKey=team`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.untagged).toBe(true);
+      expect(mockSend).toHaveBeenCalledWith(expect.objectContaining({
+        __cmdName: "UntagResourceCommand",
+        TagKeys: ["env", "team"],
+      }));
+    });
+
+    it("DELETE /tags/:resourceArn — 400 without tagKey", async () => {
+      const arn = encodeURIComponent("arn:aws:glue:us-east-1:123:table/db/tbl");
+      const res = await del(`/tags/${arn}`);
+      expect(res.status).toBe(400);
+    });
+  });
+
+  // Schema Registry extra operations
+  describe("Schema Registry extras", () => {
+    it("PUT /registries/:reg/schemas/:schema — updates schema", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/registries/reg-1/schemas/s-1", { compatibility: "BACKWARD" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+      expect(mockSend).toHaveBeenCalledWith(expect.objectContaining({
+        __cmdName: "UpdateSchemaCommand",
+        SchemaId: { RegistryName: "reg-1", SchemaName: "s-1" },
+        Compatibility: "BACKWARD",
+      }));
+    });
+
+    it("PUT /registries/:reg/schemas/:schema — 400 without compatibility or description", async () => {
+      const res = await put("/registries/reg-1/schemas/s-1", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE /registries/:reg/schemas/:schema/versions — deletes schema versions", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await router.request("/registries/reg-1/schemas/s-1/versions", {
+        method: "DELETE",
+        body: JSON.stringify({ versions: [1, 2] }),
+        headers: { "content-type": "application/json" },
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deleted).toBe(true);
+      expect(mockSend).toHaveBeenCalledWith(expect.objectContaining({
+        __cmdName: "DeleteSchemaVersionsCommand",
+        SchemaId: { RegistryName: "reg-1", SchemaName: "s-1" },
+        Versions: [1, 2],
+      }));
+    });
+
+    it("DELETE /registries/:reg/schemas/:schema/versions — 400 without versions array", async () => {
+      const res = await router.request("/registries/reg-1/schemas/s-1/versions", {
+        method: "DELETE",
+        body: JSON.stringify({}),
+        headers: { "content-type": "application/json" },
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /schemas/by-definition — looks up schema by definition", async () => {
+      mockSend.mockResolvedValueOnce({
+        SchemaVersionId: "v-1",
+        SchemaArn: "arn:aws:glue:schema/reg-1/s-1",
+        DataFormat: "AVRO",
+        Status: "AVAILABLE",
+        CreatedTime: "2025-01-01",
+      });
+      const res = await post("/schemas/by-definition", { registryName: "reg-1", schemaName: "s-1", definition: '{"type":"record"}' });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.schemaVersionId).toBe("v-1");
+      expect(body.schemaArn).toBe("arn:aws:glue:schema/reg-1/s-1");
+      expect(mockSend).toHaveBeenCalledWith(expect.objectContaining({
+        __cmdName: "GetSchemaByDefinitionCommand",
+        SchemaDefinition: '{"type":"record"}',
+        SchemaId: { RegistryName: "reg-1", SchemaName: "s-1" },
+      }));
+    });
+
+    it("POST /schemas/by-definition — 400 without definition", async () => {
+      const res = await post("/schemas/by-definition", {});
       expect(res.status).toBe(400);
     });
   });

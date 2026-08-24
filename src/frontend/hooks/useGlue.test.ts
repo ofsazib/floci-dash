@@ -40,6 +40,12 @@ import {
   useUpdateGlueDatabase,
   useGlueTableVersions,
   useBatchDeleteGlueTables,
+  useGlueTags,
+  useTagGlueResource,
+  useUntagGlueResource,
+  useUpdateGlueSchema,
+  useDeleteGlueSchemaVersions,
+  useGetGlueSchemaByDefinition,
 } from "./useGlue";
 
 beforeEach(() => mockApi.mockReset());
@@ -339,6 +345,72 @@ describe("Glue update/version hooks", () => {
     expect(mockApi).toHaveBeenCalledWith("/aws/glue/databases/d1/tables/batch-delete", {
       method: "POST",
       body: JSON.stringify({ tableNames: ["t1", "t2"] }),
+    });
+  });
+
+  // Tags
+  it("useGlueTags calls correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ tags: { env: "prod" } });
+    const { result } = renderHook(() => useGlueTags("arn:aws:glue:us-east-1:123:table/db/tbl"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/tags?resourceArn=arn%3Aaws%3Aglue%3Aus-east-1%3A123%3Atable%2Fdb%2Ftbl");
+  });
+
+  it("useGlueTags disabled without arn", () => {
+    const { result } = renderHook(() => useGlueTags(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+
+  it("useTagGlueResource posts tags", async () => {
+    mockApi.mockResolvedValueOnce({ tagged: true });
+    const { result } = renderHook(() => useTagGlueResource(), { wrapper: createWrapper() });
+    result.current.mutate({ resourceArn: "arn:test", tags: { k: "v" } });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/tags", {
+      method: "POST",
+      body: JSON.stringify({ resourceArn: "arn:test", tags: { k: "v" } }),
+    });
+  });
+
+  it("useUntagGlueResource deletes tags", async () => {
+    mockApi.mockResolvedValueOnce({ untagged: true });
+    const { result } = renderHook(() => useUntagGlueResource(), { wrapper: createWrapper() });
+    result.current.mutate({ resourceArn: "arn:test", tagKeys: ["k1"] });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/tags/arn%3Atest?tagKey=k1", { method: "DELETE" });
+  });
+
+  // Schema extras
+  it("useUpdateGlueSchema puts update", async () => {
+    mockApi.mockResolvedValueOnce({ updated: true });
+    const { result } = renderHook(() => useUpdateGlueSchema("reg1"), { wrapper: createWrapper() });
+    result.current.mutate({ schemaName: "s1", compatibility: "BACKWARD" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/registries/reg1/schemas/s1", {
+      method: "PUT",
+      body: JSON.stringify({ compatibility: "BACKWARD", description: undefined }),
+    });
+  });
+
+  it("useDeleteGlueSchemaVersions posts versions", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useDeleteGlueSchemaVersions("reg1", "s1"), { wrapper: createWrapper() });
+    result.current.mutate([1, 2]);
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/registries/reg1/schemas/s1/versions", {
+      method: "DELETE",
+      body: JSON.stringify({ versions: [1, 2] }),
+    });
+  });
+
+  it("useGetGlueSchemaByDefinition posts definition", async () => {
+    mockApi.mockResolvedValueOnce({ schemaVersionId: "v1" });
+    const { result } = renderHook(() => useGetGlueSchemaByDefinition(), { wrapper: createWrapper() });
+    result.current.mutate({ definition: "{}" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/schemas/by-definition", {
+      method: "POST",
+      body: JSON.stringify({ definition: "{}" }),
     });
   });
 });

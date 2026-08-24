@@ -117,6 +117,7 @@ export const SERVICE_DASHBOARDS: Record<string, ComponentType> = {
   "codepipeline": CodePipelineDashboard,
   "elasticbeanstalk": ElasticBeanstalkDashboard,
   "iot": IoTDashboard,
+  "s3vectors": S3VectorsDashboard,
   "s3": S3Dashboard,
   "lambda": LambdaDashboard,
 };
