@@ -1808,285 +1808,86 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 | 25.133 | **G.91 — ELBv2 DescribeTags / ModifyListener / ModifyTargetGroup** — backend `elb.ts` +3 routes: `GET /tags?arns=` (DescribeTags — 400 without arns, sparse `|| []`), `PUT /listeners` (ModifyListener — 400 without listenerArn, sslPolicy/certificates omitted when absent, certificates split/trim/filtered), `PUT /target-groups/health-check` (ModifyTargetGroup — 400 without targetGroupArn, numeric fields NaN-guarded to undefined); `useELB` +3 hooks (tags query gated on arns, modify-listener + modify-target-group mutations); ELBDashboard: per-load-balancer "Tags" modal (Badges, "No tags found." empty state, Close button + Escape dismiss), per-listener "Edit" modal (prefilled port `String(l.port ?? "")` + protocol `l.protocol \|\| "HTTP"` fallbacks, protocol Select, optional SSL policy + comma-separated certificate ARNs, error alert with dismiss), per-target-group "Health check" modal (path + 4 optional numeric fields with NaN guards, error alert with dismiss). Tests: +3 backend (tags happy/400/sparse, listener modify full/400/optionals-omitted, TG health-check full/400), +4 hook (tags URL+enabled gate, both mutations URL/method/body), +12 component (tags modal open/empty/close/escape, listener modal open+save-with-all-fields/portless-protocol-less fallbacks/error+clear-port/fallback-message/error-dismiss/cancel/escape, health-check save-with-all-fields/non-numeric-undefined/error-fallback+dismiss/cancel/escape). Verification: scoped runs 100/100/100/100 on all 3 files, typecheck clean, `make test-cov` exit 0 (273/273 files, 9,067 tests, 100% all metrics) | Done | 2026-08-17 |
 | 25.132 | **G.87 — SES account stats + raw send** — backend `ses.ts` +6 routes: `GET /account-sending` (GetAccountSendingEnabled), `PUT /account-sending` (UpdateAccountSendingEnabled — 400 without enabled), `GET /send-quota` (GetSendQuota), `GET /send-stats` (GetSendStatistics — sparse `|| []`), `POST /send-raw` (SendRawEmail — 400 without rawMessage; source optional), `POST /verify-email-address` (VerifyEmailAddress — 400 without emailAddress); `useSES` +6 hooks (account-sending query + update mutation, quota/stats queries, send-raw + verify-address mutations); SESDashboard new "Account" container: sending-enabled Toggle (`sendingEnabled?.enabled ?? false` unchecked arm), quota StatCards with dash fallbacks, send-statistics ResourceTable gated on `(sendStats?.sendDataPoints || []).length > 0`, "Send raw email" (MIME) modal (raw-message textarea + optional source, Send disabled until message typed, error alert dismissible), "Verify address" modal (disabled until email typed, generic error fallbacks for message-less failures). Tests: +6 backend (each route happy/400/sparse), +8 hook (all six hooks' URL/method/body + invalidation), +14 component (toggle on/off/error/dismiss/absent-null, quota dashes, stats table present/absent/absent-data, verify happy/error/generic-error, send-raw happy with source/error/generic-error/cancel/escape/alert-dismiss). Verification: scoped runs 100/100/100/100 on all 3 files, typecheck clean, `make test-cov` exit 0 (273/273 files, 9,054 tests, 100% all metrics) | Done | 2026-08-17 |
 
----
-
 ## ═══════════════════════════════════════════════════════════
-## GAP ANALYSIS — Floci Operations Not Yet Exposed in Dashboard
+## GAP ANALYSIS — Floci vs Dashboard Parity
 ## ═══════════════════════════════════════════════════════════
 
-> **Audit date:** 2026-07-13 (1st/2nd pass, verified against dashboard codebase), **2026-08-17 (3rd pass — service-level + control-plane + operation-level parity audit)**
-> **Method:** Compared every `case` statement in Floci's Java handlers against the dashboard's backend route files. Each item was verified by searching for the corresponding AWS command in both Floci handlers and dashboard routes. The 2026-08-17 pass also diffed the Floci service directory list against dashboard routes (65/65 services matched — **zero missing services**) and enumerated Floci's lifecycle control endpoints (`/_floci/*`) against `system.ts`.
-> **Result:** All 65 Floci services have basic CRUD in the dashboard. However, many services have significant Floci-supported operations NOT yet exposed. Several items from the initial audit (G.5 old, G.10 old, G.12 old partial, G.18 old, G.27 old) were found to be already implemented and have been removed. The 3rd pass added the **control-plane gap category (G.81–G.82)** and operation gaps G.83–G.97 that the July audit did not list.
-
-### Latest Gap Analysis — Service Depth & Priority Order
-
-*Service coverage is now complete — all 66 Floci services have basic dashboard support (backend route, frontend hook, dashboard component, serviceRegistry entry). The focus is now entirely on depth.*
-
-#### Service Depth Tiers
-
-| Tier | Count | Description |
-|------|-------|-------------|
-| **Rich** | ~12 | Full CRUD + service-specific features + detail views (e.g., S3, DynamoDB, IAM, Lambda, EC2, API Gateway) |
-| **Good** | ~15 | CRUD + some extras (invoke, config, versions) (e.g., KMS, Secrets Manager, Step Functions, CloudFormation) |
-| **Basic** | ~38 | List + Create + Delete + minimal detail; missing deeper operations |
-
-#### Notable Feature Gaps by Service
-
-| Service | Missing Features | Floci Ops Missed |
-|---------|-----------------|------------------|
-| **EventBridge (Events)** | Archives (create/describe/delete/update) ✅ Done 2026-07-20, Replays (start/describe/cancel) ✅ Done 2026-07-20, Permissions management (PutPermission/RemovePermission) ✅ Done 2026-07-20, TestEventPattern | 8+ operations |
-| **Cognito** | AdminRespondToAuthChallenge, AdminUserGlobalSignOut, AddCustomAttributes, GetUserPoolMfaConfig, DescribeResourceServer, ListUserPoolClientSecrets, admin auth flow testers, Resource Server CRUD | 10+ operations |
-| **Kinesis** | SubscribeToShard, DisableEnhancedMonitoring, Start/StopStreamEncryption, DecreaseStreamRetentionPeriod, stream mode/consumers | 8+ operations |
-| **Lambda** | UpdateAlias, UpdateEventSourceMapping, GetPolicy, AddPermission, RemovePermission, GetLayerVersion, resource-based policy management | 5+ operations |
-| **SQS** | CancelMessageMoveTask, ListMessageMoveTasks (DLQ move task management), ChangeMessageVisibility batch | 3+ operations |
-| **RDS** | DBParameterGroup edit, ModifyDBCluster, DBClusterParameterGroups, DBSubnetGroups | 5+ operations |
-| **EC2** | IamInstanceProfileAssociations, ModifySecurityGroupRules, DescribeAddressesAttribute, DescribeVpcEndpointServices | 5+ operations |
-| **CloudFront** | Distribution tags, Origin Request Policies, Response Headers Policies, monitoring/subscriptions | 4+ operations |
-| **SNS** | ConfirmSubscription, SetEndpointAttributes, SetPlatformApplicationAttributes, SetSubscriptionAttributes | 5+ operations |
-| **CloudWatch Metrics** | GetMetricWidgetImage, ListDashboards, PutDashboard, DeleteDashboards | 4+ operations |
-| **CloudWatch Logs** | PutRetentionPolicy, DeleteRetentionPolicy, TagLogGroup | 3+ operations |
-| **SES** | SendBulkTemplatedEmail (v1), SendBulkEmail (v2) | 2+ operations |
-| **MSK** | Configuration management, broker operations | 2+ operations |
-| **EMR** | Cluster detail with tags + step management | 2+ operations |
-
-#### Recommended Priority Order for Deepening
-
-1. **EventBridge** — Archives + Replays are major missing features
-2. **Cognito** — ~~Auth flow testers, Resource Servers, MFA config~~ Done (auth flows, resource servers, MFA config, group membership all implemented)
-3. **Kinesis** — Encryption toggle, enhanced monitoring, stream mode editor
-4. **Lambda** — Resource-based policy management (AddPermission)
-5. **SQS** — Message move task management (list/cancel)
-6. **RDS** — Parameter groups edit UI, cluster parameter groups
-7. **EC2** — Instance profiles, security group rules description
-8. **CloudFront** — Origin/response header policies, monitoring
-9. **MSK** — Configuration management, broker operations
-10. **EMR** — Cluster detail with tags + step management
-
-### Priority Tiers
-
-| Tier | Meaning |
-|------|---------|
-| **P1** | High-value — significant Floci operations with clear UI benefit |
-| **P2** | Moderate-value — useful operations for completeness |
-| **P3** | Low-value — niche operations, stubs, or rarely used |
+> **Audit date:** 2026-08-25 (comprehensive parity audit after v0.1.0 release)
+> **Method:** Full diff of every `floci/services/` directory against `src/backend/routes/aws/`, `src/frontend/hooks/`, and `src/frontend/pages/serviceRegistry.tsx`. Checked every `case`/action in Floci Java handlers against dashboard SDK commands. Verified controller-based services (REST endpoints) and JSON-handler services (JSON 1.1 dispatch).
+> **Result:** All previously tracked gaps (G.1–G.97) are resolved (Done or N/A). **14 Floci services** have NO dashboard implementation. **3 existing services** have new operations added since last audit.
 
 ---
 
-### P1 — High-Value Missing Features (15 items)
+### Previously Resolved (G.1–G.97)
 
-| # | Service | Missing Operations | Floci Handler | Dashboard Impact |
-|---|---------|-------------------|---------------|-----------------|
-| G.1 | **DynamoDB Streams** | ListStreams, DescribeStream, GetShardIterator, GetRecords | `DynamoDbStreamsJsonHandler` | Done 2026-07-13 — users can't see item-level changes |
-| G.2 | **EC2 Flow Logs** | CreateFlowLogs, DescribeFlowLogs, DeleteFlowLogs | `Ec2QueryHandler` | Done 2026-07-18 — Flow Logs tab in EC2 page |
-| G.3 | **EC2 Network ACLs** | CreateNetworkAcl, DescribeNetworkAcls, DeleteNetworkAcl, CreateNetworkAclEntry, ReplaceNetworkAclEntry, DeleteNetworkAclEntry, ReplaceNetworkAclAssociation | `Ec2QueryHandler` | Done 2026-07-13 — network ACL resource type |
-| G.4 | **S3 Select** | SelectObjectContent (SQL queries on CSV/JSON objects) | `S3SelectService` + `S3Controller` | Done 2026-07-13 | — users can't query object contents with SQL |
-| G.5 | **CloudFormation** (Stack Sets) | CreateStackSet, DescribeStackSet, ListStackSets, UpdateStackSet, DeleteStackSet, CreateStackInstances, ListStackInstances, DescribeStackInstance, DeleteStackInstances, ListStackSetOperations, DescribeStackSetOperation | `CloudFormationQueryHandler` + `StackSetService` | Done (Stack Sets list/create/detail/delete + stack instance management) |
-| G.6 | **CloudFormation** (Events + Stack Resources) | DescribeStackEvents, DescribeStackResource, SetStackPolicy, GetStackPolicy | `CloudFormationQueryHandler` | Done 2026-07-16 (Events tab, resource detail, and Policy tab with get/set — Floci accepts policy but does not persist it) |
-| G.7 | **Glue** (Schema Registry) | CreateRegistry, GetRegistry, ListRegistries, UpdateRegistry, DeleteRegistry, CreateSchema, RegisterSchemaVersion, GetSchemaVersion, GetSchema, ListSchemas, ListSchemaVersions, DeleteSchema, GetSchemaVersionsDiff, CheckSchemaVersionValidity, PutSchemaVersionMetadata, RemoveSchemaVersionMetadata, QuerySchemaVersionMetadata | `GlueJsonHandler` | Done 2026-07-14 (UpdateRegistry, GetSchemaVersion, GetSchemaVersionsDiff, CheckSchemaVersionValidity, Query/Put/RemoveSchemaVersionMetadata + version detail modal) |
-| G.8 | **Glue** (UDFs + Column Stats + Partitions) | CreateUserDefinedFunction, GetUserDefinedFunction, GetUserDefinedFunctions, UpdateUserDefinedFunction, DeleteUserDefinedFunction, UpdateColumnStatisticsForTable, GetColumnStatisticsForTable, DeleteColumnStatisticsForTable (same for Partition), BatchCreatePartition, BatchUpdatePartition, BatchGetPartition, UpdatePartition, DeletePartition, GetPartition | `GlueJsonHandler` | Done 2026-07-14 (BatchUpdatePartition added; other UDF/partition/column-stats ops already present) |
-| G.9 | **WAFv2** (Regex Pattern Sets) | CreateRegexPatternSet, GetRegexPatternSet, UpdateRegexPatternSet, DeleteRegexPatternSet, ListRegexPatternSets | `WafV2Handler` | Done 2026-07-14 (UpdateRegexPatternSet hook + regex edit modal with LockToken fetch) |
-| G.10 | **WAFv2** (Logging + Associations) | PutLoggingConfiguration, GetLoggingConfiguration, DeleteLoggingConfiguration, ListLoggingConfigurations, AssociateWebACL, DisassociateWebACL, GetWebACLForResource, ListResourcesForWebACL, PutPermissionPolicy, GetPermissionPolicy, DeletePermissionPolicy | `WafV2Handler` | Done 2026-07-14 (backend/hooks/dashboard already complete; added test coverage) |
-| G.11 | **SES** (Identity Notifications + Feedback) | SetIdentityNotificationTopic, GetIdentityNotificationAttributes, SetIdentityFeedbackForwardingEnabled, SetIdentityHeadersInNotificationsEnabled | `SesQueryHandler` | Done 2026-07-21 — notification topics, feedback forwarding, and headers in notifications UI implemented with backend/hook tests |
-| G.12 | **SES** (Config Set Event Destinations) | CreateConfigurationSetEventDestination, UpdateConfigurationSetEventDestination, DeleteConfigurationSetEventDestination, UpdateConfigurationSetSendingEnabled, CreateConfigurationSetTrackingOptions, UpdateConfigurationSetTrackingOptions, DeleteConfigurationSetTrackingOptions, UpdateConfigurationSetReputationMetricsEnabled, PutConfigurationSetDeliveryOptions | `SesQueryHandler` | Done 2026-07-21 — event destinations (create/update/delete), sending enabled, tracking options (create/update/delete), reputation metrics, and delivery options UI implemented with backend/hook tests |
-| G.13 | **ELBv2** (SSL, Certificates, Settings) | SetSecurityGroups, SetSubnets, SetIpAddressType, ModifyTargetGroupAttributes, DescribeTargetGroupAttributes, ModifyListenerAttributes, DescribeListenerAttributes, SetRulePriorities, DescribeAccountLimits, DescribeSSLPolicies, AddListenerCertificates, RemoveListenerCertificates, DescribeListenerCertificates, DescribeRules, CreateRule, ModifyRule, DeleteRule | `ElbV2QueryHandler` | Done 2026-07-21 — SSL policies, account limits, security groups, subnets, IP address type, listener/target group attributes, listener certificates, and listener rules (create/update/delete/set priorities) UI implemented with backend/hook tests |
-| G.14 | **Auto Scaling** (Instance Refresh + Tags + LB) | StartInstanceRefresh, DescribeInstanceRefreshes, CreateOrUpdateTags, DeleteTags, AttachLoadBalancerTargetGroups, DetachLoadBalancerTargetGroups, DescribeLoadBalancerTargetGroups, AttachLoadBalancers, DetachLoadBalancers, DescribeLoadBalancers | `AutoScalingQueryHandler` | Done 2026-07-21 — instance refresh (start/list), ASG tags (create/delete), LB target groups (attach/detach/list), classic load balancers (attach/detach/list) UI implemented with backend/hook/tests |
-| G.15 | **Cognito** (Resource Servers + MFA + Custom Attrs + Auth Flow Testers) | CreateResourceServer, DescribeResourceServer, ListResourceServers, UpdateResourceServer, DeleteResourceServer, AddCustomAttributes, GetUserPoolMfaConfig, SetUserPoolMfaConfig, AdminDeleteUserAttributes, AdminUserGlobalSignOut, AdminRespondToAuthChallenge, AdminConfirmSignUp, ConfirmForgotPassword, GetUser, UpdateUserAttributes, DeleteUserAttributes, ListUsersInGroup, AdminListGroupsForUser, GetTokensFromRefreshToken, ListUserPoolClientSecrets, AddUserPoolClientSecret, DeleteUserPoolClientSecret | `CognitoJsonHandler` | Done — Resource servers, MFA config, custom attributes, client secrets, and auth flow testers (InitiateAuth, AdminInitiateAuth, ConfirmSignUp, AdminRespondToAuthChallenge, ForgotPassword, ConfirmForgotPassword, GetUser, UpdateUserAttributes, DeleteUserAttributes) implemented |
+All 97 gap items from the first, second, and third audit passes are **Done** or **N/A** (Floci doesn't support the operation). This includes:
+- Service scaffolding for all 66 existing dashboard services (G.1–G.15, G.39–G.80)
+- Control-plane endpoints: state reset/nuke, diagnostics (G.81–G.82)
+- Operation-level gaps: DynamoDB Query, Step Functions activities, IAM groups, Cognito admin, SES account ops, ECS container instances, ELBv2 tags/modify, Cloud Map discover, API Gateway V2 full CRUD, SSM parameter ops (G.83–G.97)
 
 ---
 
-### P2 — Moderate-Value Missing Features (14 items)
+### Missing Services (14 services in Floci, zero in dashboard)
 
-| # | Service | Missing Operations | Impact |
-|---|---------|-------------------|--------|
-| G.16 | **DynamoDB** (Kinesis Streaming) | EnableKinesisStreamingDestination, DisableKinesisStreamingDestination, DescribeKinesisStreamingDestination | Done 2026-07-14 (List/Enable/Disable Kinesis streaming destinations) |
-| G.17 | **DynamoDB** (Exports + UpdateTable) | ExportTableToPointInTime, DescribeExport, ListExports, UpdateTable | Done 2026-07-14 (Exports: S3 modal + detail viewer; UpdateTable: billing/throughput/SSE/streams/GSIs settings tab) |
-| G.18 | **DynamoDB** (PartiQL Transactions) | ExecuteTransaction, BatchExecuteStatement | Done 2026-07-14 (Transaction/Batch sub-tabs in PartiQL editor, atomic multi-statement execution, per-statement results) |
-| G.19 | **S3** (ACLs) | GetObjectAcl, PutObjectAcl, GetBucketAcl, PutBucketAcl | Done 2026-07-14 (Bucket ACL tab with canned ACL picker + grants view, Object ACL view with Set ACL modal) |
-| G.20 | **CloudTrail** (Lookup + Event Selectors) | LookupEvents, PutEventSelectors | Done 2026-07-18 (Lookup Events tab: attribute/time-range search + event detail modal; Event Selectors tab: basic + advanced selector config with current-config view; 6 new dashboard tests covering both tabs) |
-| G.21 | **Kinesis** (Enhanced Fan-out) | SubscribeToShard, RegisterStreamConsumer, DeregisterStreamConsumer, DescribeStreamConsumer | Done 2026-07-14 (Consumers tab with register/deregister/subscribe modals; SubscribeToShard with shard select + starting position + results display) |
-| G.22 | **CodePipeline** (Advanced) | RollbackStage, OverrideStageCondition, ListRuleExecutions, CreateCustomActionType, UpdateActionType, GetActionType, DeleteCustomActionType, ListActionTypes, PutActionRevision, RegisterWebhookWithThirdParty, DeregisterWebhookWithThirdParty, PollForJobs, AcknowledgeJob, GetJobDetails, PutJobSuccessResult, PutJobFailureResult | Done 2026-07-14 (Rollback/Override modals, Rules tab, Jobs tab with poll+detail, Webhook register/deregister, Action type delete, 12 new backend tests) |
-| G.23 | **ECS** (Account Settings + Task Sets) | PutAccountSetting, PutAccountSettingDefault, DeleteAccountSetting, ListAccountSettings, PutAttributes, DeleteAttributes, ListAttributes, CreateTaskSet, UpdateTaskSet, DeleteTaskSet, DescribeTaskSets, UpdateServicePrimaryTaskSet, DescribeServiceDeployments, ListServiceDeployments, DescribeServiceRevisions | Done 2026-07-14 (Account Settings, Attributes, Task Sets, Service Deployments) |
-| G.24 | **IoT** (MQTT Broker + Shadows) | MQTT broker status, client connections, list subscriptions, disconnect client, ListNamedShadowsForThing | Done 2026-07-18 (Data-plane: GetConnection/ListSubscriptions/DeleteConnection/SendDirectMessage/Publish, ListRetainedMessages/GetRetainedMessage, ListNamedShadowsForThing + named-shadow support on shadow CRUD; MQTT Broker tab with client inspect/disconnect + publish modal + retained messages table; 13 backend tests, 11 hook tests, 6 component tests) |
-| G.25 | **API Gateway V2** (WebSocket) | WebSocket connection management, route resolution display | Done 2026-07-14 (WebSocket API discovery + route→integration resolution tab; live @connections management not wired — documented limitation) |
-| G.26 | **MemoryDB** (Users + ACLs) | CreateUser, DescribeUsers, DeleteUser, CreateACL, DescribeACLs, DeleteACL | Users/ACLs not yet exposed in dashboard | **Done** — backend routes + tests added, useMemoryDB hooks extended, Users/ACLs tabs added to MemoryDBDashboard, 26 tests pass, 100% coverage |
-| G.27 | **CloudWatch Logs** (Data Protection) | GetDataProtectionPolicy | No data protection policy viewer | **Done** — backend route, useDataProtectionPolicy hook, Data Protection tab with JSON viewer, 83 tests, 100% coverage |
-| G.28 | **Config Service** (Compliance Status) | DescribeComplianceByConfigRule, DescribeConfigRuleEvaluationStatus, DescribeConformancePackStatus, DescribeConfigurationRecorderStatus | **Done** — audit 2026-08-22 found all four ops already implemented (routes/hooks/Advanced tab); gap entry was stale. Closed Config parity by adding resource tags CRUD (ListTagsForResource/TagResource/UntagResource) with a Tags modal on config rules + conformance packs |
-| G.29 | **RDS** (Subnet Groups + Cluster PGs) | CreateDBSubnetGroup, DescribeDBSubnetGroups, ModifyDBSubnetGroup, DeleteDBSubnetGroup, CreateDBClusterParameterGroup, DescribeDBClusterParameterGroups, DeleteDBClusterParameterGroup, ModifyDBClusterParameterGroup, DescribeDBClusterParameters, DescribeOrderableDBInstanceOptions | **Done** — audit 2026-08-22 found all listed ops already implemented (PATCH modify routes live); gap entry was stale. Completed RDS parity by adding tags CRUD (ListTagsForResource/AddTagsToResource/RemoveTagsFromResource) with a shared Tags editor on instance + cluster detail views |
+These are Floci services with handler directories that have **no** corresponding backend route, frontend hook, or dashboard component.
 
----
-
-### P3 — Low-Value / Niche Missing Features (9 items)
-
-| # | Service | Missing Operations | Impact |
-|---|---------|-------------------|--------|
-| G.30 | **S3 Control** | listTagsForResource, tagResource, untagResource (S3 Access Points) | **N/A** — no s3control/Access Points service in Floci |
-| G.31 | **EC2** (Prefix Lists + SG Rule Descriptions) | DescribePrefixLists, UpdateSecurityGroupRuleDescriptionsIngress, UpdateSecurityGroupRuleDescriptionsEgress | **Done** 2026-08-22 — Prefix Lists tab + rule-descriptions route (egress N/A, Floci handler only exposes ingress) |
-| G.32 | **ECR** (Scanning Config) | BatchGetRepositoryScanningConfiguration | Done 2026-07-14 (per-repository scan config modal: scan-on-push, frequency, applied filters) |
-| G.33 | **SES** (Verified Emails) | ListVerifiedEmailAddresses, DeleteVerifiedEmailAddress | **Done** — delete route added, useSESDeleteVerifiedEmail hook added, delete button added to verified emails section, 226 tests all pass, 100% coverage |
-| G.34 | **Auto Scaling** (Describe Types) | DescribeAutoScalingNotificationTypes, DescribeTerminationPolicyTypes, DescribeAdjustmentTypes, DescribeAccountLimits, DescribeLifecycleHookTypes, DescribeMetricCollectionTypes | Done 2026-07-22 — notification types, termination policy types, adjustment types, account limits, lifecycle hook types, and metric collection types displayed in Advanced tab Container |
-| G.35 | **ELBv2** (Capacity Reservation) | DescribeCapacityReservation | **Done** — backend route added, useELBCapacityReservation hook added, capacity reservation section in ELBDashboard advanced tab, 131 tests pass, 100% coverage |
-| G.36 | **CodeDeploy** (On-Premises + Advanced) | RegisterOnPremisesInstance, DeregisterOnPremisesInstance, GetOnPremisesInstance, BatchGetOnPremisesInstances, ListOnPremisesInstances, AddTagsToOnPremisesInstances, RemoveTagsFromOnPremisesInstances, ContinueDeployment, PutLifecycleEventHookExecutionStatus, ListDeploymentTargets, BatchGetDeploymentTargets | **Done** — On-Premises tab (register/deregister/tag modals), Continue + Targets row actions on deployments, lifecycle hook status form in the targets modal (2026-08-22) |
-| G.37 | **Step Functions** (Version Management) | PublishStateMachineVersion, ListStateMachineVersions, DeleteStateMachineVersion | No version management for state machines | **Done** — versions tab with publish/delete, 57 tests, 100% coverage |
-| G.38 | **CloudFormation** (Stack Policy) | SetStackPolicy, GetStackPolicy (stubbed as empty response in Floci) | Done 2026-07-16 (stack policy viewer/editor — Floci stubs persistence) |
+| # | Service | Floci Package | Operations | Complexity |
+|---|---------|--------------|------------|------------|
+| M.1 | **SWF** (Simple Workflow) | `swf/` | Domains CRUD, workflow types, activity types, executions (start/signal/terminate/cancel), tags — ~30+ ops | Medium |
+| M.2 | **Organizations** | `organizations/` | Orgs, OUs, accounts, handshakes, delegated admins, tags — ~30+ ops | Medium |
+| M.3 | **Lightsail** | `lightsail/` | Instances, disks, static IPs, key pairs, load balancers, domains, tags — ~40+ ops | Large |
+| M.4 | **AmazonMQ** | `amazonmq/` | Broker CRUD, config, queues, users | Medium |
+| M.5 | **Kinesis Analytics V2** | `kinesisanalyticsv2/` | App CRUD, snapshots, tags | Small |
+| M.6 | **EMR Serverless** | `emrserverless/` | App CRUD, jobs, runtime configs | Medium |
+| M.7 | **FIS** (Fault Injection Simulator) | `fis/` | Experiments, templates, actions, targets | Medium |
+| M.8 | **GuardDuty** | `guardduty/` | Detectors, findings, IP sets, threat intel, org config | Medium |
+| M.9 | **CloudHSM V2** | `cloudhsmv2/` | Clusters, HSMs, backups, resource policies | Medium |
+| M.10 | **MWAA** (Managed Airflow) | `mwaa/` | Airflow environments CRUD | Small |
+| M.11 | **RUM** (Real User Monitoring) | `rum/` | App monitors CRUD, data | Small |
+| M.12 | **S3 Tables** | `s3tables/` | Table buckets, namespaces, Iceberg tables | Medium |
+| M.13 | **Bedrock AgentCore** | `bedrockagentcore/` | Runtime invocations | Small |
+| M.14 | **CloudControl** | `cloudcontrol/` | Generic resource CRUD | Medium |
 
 ---
 
-### Second-Pass Audit — Additional Gaps (2026-07-14)
+### New Operations in Existing Services (3 services)
 
-Full 66-service diff of Floci-supported operations vs. dashboard UI-reachable operations (backend route + hook + rendered page). These are gaps beyond G.1–G.38.
-
-#### Tier 1 — Backend route already exists, only needs hook + UI (cheap wins)
-
-| # | Service | Missing UI (route exists) | Dashboard Impact |
-|---|---------|---------------------------|------------------|
-| G.39 | **Step Functions** (Execution control) | StartExecution (`POST /state-machines/:arn/executions`), StopExecution (`POST /executions/:arn/stop`) — routes exist, no hook | Done 2026-07-14 — Start execution modal (name + JSON input) + per-row Stop for RUNNING executions |
-| G.40 | **Scheduler** (Update) | UpdateSchedule (`PUT /schedules/:name`) — route exists, no hook | Done 2026-07-14 — useUpdateSchedule hook + per-row Edit modal (expression, state ENABLED/DISABLED, target ARN/role, description) |
-| G.41 | **AppConfig** (Environments + Profiles) | CreateEnvironment/DeleteEnvironment, CreateConfigurationProfile/DeleteConfigurationProfile, ListHostedConfigurationVersions — routes exist, no hooks | Done 2026-07-14 — create/delete hooks + Create modals & per-row Delete for environments and configuration profiles in the app detail view |
-| G.42 | **Config Service** (Delivery + Recorder + Conformance) | PutDeliveryChannel/DescribeDeliveryChannels, PutConfigurationRecorder/Start/Stop, PutConformancePack — routes exist, no hook/UI | **Done (stale)** — routes + hooks + UI verified 2026-08-22 |
-| G.43 | **EMR** (Instance fleets/groups + step control) | ListInstanceFleets/ListInstanceGroups/AddInstanceFleet/AddInstanceGroups, CancelSteps, ModifyCluster, DescribeStep — commands imported in `emr.ts`, not surfaced | **Done** 2026-08-22 — Detail panel surfaces steps + instance groups (backend pre-existing) |
-| G.44 | **Route 53** (Health Checks) | CreateHealthCheck, UpdateHealthCheck, DeleteHealthCheck, GetHealthCheck, GetHealthCheckStatus — `ListHealthChecks` route + `useRoute53HealthChecks` hook exist but page never renders them | **Done** — create/delete backend routes added, hooks + hook tests added, Health Checks tab added to Route53Dashboard, 46 tests all pass, 100% coverage on all metrics |
-| G.45 | **Cloud Map** (Service + instance registration) | CreateService (route exists, backend-only), RegisterInstance, DeregisterInstance, DNS namespace types | **Done** 2026-08-22 — register/deregister modal + health + discover routes (G.92 ops) |
-
-#### Tier 2 — High-value features (need backend + frontend)
-
-| # | Service | Missing Operations | Dashboard Impact |
-|---|---------|-------------------|------------------|
-| G.46 | **SSM** (Run Command) | SendCommand, ListCommands, ListCommandInvocations, GetCommandInvocation, CancelCommand | **Done** 2026-08-22 — Run Command tab (history/invocations/cancel/send modal) |
-| G.47 | **Athena** (Run query) | StartQueryExecution | Can view/stop queries but cannot actually run one | **Done** |
-| G.48 | **IoT** (Thing Groups) | CreateThingGroup, DescribeThingGroup, ListThingGroups, UpdateThingGroup, DeleteThingGroup, AddThingToThingGroup, RemoveThingFromThingGroup | **N/A** — Floci IoT has no ThingGroup operations |
-| G.49 | **ECS** (Capacity Providers) | CreateCapacityProvider, DeleteCapacityProvider, UpdateCapacityProvider, DescribeCapacityProviders, PutClusterCapacityProviders | **Done** 2026-08-22 — 5 routes + Capacity Providers tab |
-| G.50 | **EC2** (Spot Instances) | RequestSpotInstances, DescribeSpotInstanceRequests, CancelSpotInstanceRequests | **Done** 2026-08-22 — Spot Requests tab with request modal + cancel |
-| G.51 | **ELBv2** (Listener Rules) | CreateRule, ModifyRule, DeleteRule, DescribeRules, SetRulePriorities | Done 2026-08-20 — routes, hooks, dashboard tab with create/edit/delete modal, all tests + 100% coverage |
-| G.52 | **Auto Scaling** (Policies + Lifecycle Hooks) | PutScalingPolicy, DeletePolicy, PutLifecycleHook, DeleteLifecycleHook, DescribeLifecycleHooks, CompleteLifecycleAction | Done 2026-07-22 — scaling policies create/delete, lifecycle hooks CRUD with create/list/delete/complete action modals in Advanced tab |
-| G.53 | **SES** (Email Templates) | CreateTemplate, UpdateTemplate, DeleteTemplate, GetTemplate, ListTemplates, SendTemplatedEmail, SendBulkTemplatedEmail, TestRenderTemplate | **Done** 2026-08-22 — template CRUD + preview + templated send (SendBulk marked low-value, skipped) |
-| G.54 | **CloudFront** (Functions + Policies) | CreateFunction/UpdateFunction/PublishFunction/DeleteFunction, cache/OAC/response-headers/origin-request policy CRUD | **N/A (Floci limits)** — Floci CloudFront supports distributions/invalidations/OAC-list only; policy/function CRUD not in handler |
-| G.55 | **Backup** (Recovery Points) | ListRecoveryPointsByBackupVault, DescribeRecoveryPoint, DeleteRecoveryPoint | **Done** 2026-08-22 — expandable recovery points per vault |
-| G.56 | **OpenSearch** (Domain management) | UpdateDomainConfig, AddTags/ListTags/RemoveTags, UpgradeDomain, Start/CancelServiceSoftwareUpdate | **Done** 2026-08-22 — Manage modal (config update + upgrade check) + tag routes (software-update ops N/A in Floci) |
-| G.57 | **IAM** (Policy management) | PutRolePolicy, PutUserPolicy, DeleteRolePolicy, DeleteUserPolicy, AddUserToGroup, RemoveUserFromGroup, AttachGroupPolicy, PutGroupPolicy, SimulatePrincipalPolicy, UpdateAssumeRolePolicy | **Done** 2026-08-22 — role inline policies + trust-policy edit + simulator route (user/group ops pre-existing); AttachGroupPolicy N/A (no Floci op) |
-| G.58 | **KMS** (Key policy + signing) | GetKeyPolicy, PutKeyPolicy, Sign, Verify, GenerateMac, VerifyMac, RotateKeyOnDemand | **Done** 2026-08-22 — policy tab + Sign/Verify tab + rotate-on-demand on key detail modal |
-| G.59 | **Secrets Manager** (Resource policy) | GetResourcePolicy, PutResourcePolicy, DeleteResourcePolicy, BatchGetSecretValue, UpdateSecretVersionStage | **Done** 2026-08-22 — resource policy tab, batch-value + version-stage routes/hooks |
-
-#### Tier 3 — Smaller / rounding-out gaps
-
-| # | Service | Missing Operations | Dashboard Impact |
-|---|---------|-------------------|------------------|
-| G.60 | **CodeBuild** | ReportGroups CRUD + BatchGetReportGroups, RetryBuild, UpdateProject | **Done** — report groups section (list/create/delete + S3 export config modal), Retry action on builds table, Edit-description modal on projects (2026-08-22) |
-| G.61 | **CodeDeploy** (Stop + Targets) | StopDeployment, ListDeploymentTargets, BatchGetDeploymentTargets | **Done** 2026-08-22 — Stop action + UpdateDeploymentGroup route + targets modal (with G.36) |
-| G.62 | **Kinesis** (Stream management) | Increase/DecreaseStreamRetentionPeriod, Start/StopStreamEncryption, Enable/DisableEnhancedMonitoring, Merge/SplitShard, UpdateStreamMode, AddTags/RemoveTagsToStream | Done 2026-08-22 — `kinesis.ts` +11 routes (retention inc/dec, encryption start/stop with AWS-required NONE type passthrough, monitoring enable/disable mapping CurrentShardLevelMetrics, stream mode via StreamARN-only UpdateStreamMode, shard split/merge, tags PUT/DELETE), `useKinesis` +12 hooks (incl. sparse-response normalization), KinesisDashboard new "Settings" tab (retention, encryption, enhanced monitoring with result alert, stream-mode Select gated on ARN, resharding split/merge selects, tag table + add/remove); tests: kinesis.test.ts 39→65, useKinesis.test.ts 22→34, KinesisDashboard.test.tsx 58→94 — all three files 100% on all metrics; full suite 272 files green, coverage 100% repo-wide |
-| G.63 | **Lambda** (Policy + ESM write) | AddPermission, RemovePermission, GetPolicy, CreateEventSourceMapping, UpdateEventSourceMapping | Done 2026-08-22 — `lambda.ts` +6 routes: `GET /functions/:name/policy` (GetPolicy with JSON.parse of the Policy string; ResourceNotFoundException → `{ policy: null }` instead of error), `POST /functions/:name/policy` (AddPermission — 400s for statementId/principal/action; Statement JSON-parsed), `DELETE /functions/:name/policy/:statementId` (RemovePermission), `POST /event-source-mappings` (CreateEventSourceMapping — 400s for eventSourceArn/functionName; StartingPosition defaults TRIM_HORIZON; ScalingConfig only when maximumConcurrency set), `PUT /event-source-mappings/:uuid` (UpdateEventSourceMapping — batchSize/enabled/maxConcurrency optional), `PUT /functions/:name/aliases/:aliasName` (UpdateAlias — functionVersion/description optional; RoutingConfig built from routingAdditionalVersion + routingWeight ?? 0); `useLambda` +6 hooks (policy query gated on name, add/remove permission, create/update ESM, update alias — all invalidating their caches); LambdaDashboard: new "Permissions" tab (statements table with Service/AWS/stringified-object/bare principal mapping, Add-permission modal with disabled-until-valid gate + sourceArn/sourceAccount optionals, per-statement DeleteButton, empty state, both error alerts with fallbacks); Triggers tab gained "Create trigger" modal (source ARN gate, TRIM_HORIZON/LATEST select, batch size NaN-guard) and per-row Edit modal (batch size prefill, enabled checkbox, max concurrency NaN-guard) + Escape/Cancel dismisses; Aliases tab gained per-row Edit modal (prefilled version/description, empty-save → undefined arms, Escape). Tests: lambda.test.ts 67→90 (+23: every route happy/400/sparse incl. ResourceNotFound arm, rethrow 500, parsed/null Policy, routing weight default 0, raw-result fallbacks), useLambda.test.ts 47→54 (+7), LambdaDashboard.test.tsx 66→93 (+27: every modal flow with payload asserts, disabled gates, error alerts + fallback arms + dismiss clicks firing onDismiss resets, principal-mapping variants incl. stringify/dash arms, dialog-scoped Cancel/Escape via within(dialogOf())). Verification: scoped runs 100% stmts/branch/funcs/lines on all 3 files, typecheck clean, make test-cov exit 0 (272 files, coverage 100% repo-wide) |
-| G.64 | **AppSync** (Resolver + Type mutations) | CreateResolver/UpdateResolver/DeleteResolver, CreateType/UpdateType/DeleteType, UpdateDataSource/UpdateFunction/UpdateGraphqlApi | **Done** 2026-08-22 — resolver CRUD + UpdateDataSource (type mutations + api/function updates low-value, skipped) |
-| G.65 | **EventBridge** (Replay + testing) | StartReplay, CancelReplay, DescribeReplay, UpdateArchive, TestEventPattern, PutPermission/RemovePermission | **Done** — replay/archive/permission ops already live (stale entry); closed with Pattern Tester tab + bus tags CRUD (2026-08-22) |
-| G.66 | **API Gateway v1** (Stages + Deployments) | CreateDeployment, DeleteDeployment, Stages CRUD, ApiKeys, UsagePlans, Authorizers, Methods/Integrations | **N/A (Floci limits)** — Floci v1 handler is REST/resources/deployments only; no stages/keys/plans/authorizers ops |
-| G.67 | **Transfer** (Server/User + SSH keys) | UpdateServer, UpdateUser, ImportSshPublicKey, DeleteSshPublicKey | **Done** 2026-08-22 — edit-server modal + SSH key import form |
-| G.68 | **Transcribe** (Vocabularies) | CreateVocabulary, GetVocabulary, DeleteVocabulary | **Done** 2026-08-22 — vocabulary table + create modal + delete |
-| G.69 | **Glue** (Table/DB updates) | UpdateTable, UpdateDatabase, GetTableVersions, BatchDeleteTable | **Done** 2026-08-22 — update routes + versions table + edit modal |
-| G.70 | **Neptune / ElastiCache** (Modify) | ModifyDBCluster, ModifyDBInstance (Neptune); ModifyReplicationGroup, ModifyUser (ElastiCache) | **Done** 2026-08-22 — PATCH/POST modify routes + Neptune Modify modal |
-| G.71 | **RDS** (Tagging) | AddTagsToResource, RemoveTagsFromResource, ListTagsForResource | **Done** 2026-08-22 — closed via G.29 tags CRUD (instance/cluster detail editors) |
-| G.72 | **ECR** (Tag mutability) | PutImageTagMutability | **Done** 2026-08-22 — Mutability modal on repository rows |
-| G.73 | **SQS** (Message move tasks) | StartMessageMoveTask, ListMessageMoveTasks, CancelMessageMoveTask | Done 2026-08-22 — native redrive alongside the manual loop: `sqs.ts` +3 routes (`POST /queues/move-tasks` StartMessageMoveTask — 400 without sourceArn, optional DestinationArn/MaxNumberOfMessagesPerSecond; `GET /queues/move-tasks?sourceArn=` ListMessageMoveTasks with MaxResults passthrough + full field mapping incl. sparse `|| []`; `POST /queues/move-tasks/cancel` CancelMessageMoveTask — 400 without taskHandle, moved ?? 0), `useSQS` +3 hooks (useSQSStartMoveTask, useSQSMoveTasks gated on sourceArn, useSQSCancelMoveTask); SQSPage DLQ tab rebuilt as two containers (DLQ sources + "Message move tasks" with Start-redrive modal — destination URL converted via exported queueUrlToArn helper with region-from-hostname parsing and invalid-URL fallback, max-rate NaN-guard — tasks table with truncated handles, status indicators, moved/to-move counts, failure reasons, per-row Cancel hidden for terminal statuses) |
-| G.74 | **Firehose** (Tag write) | TagDeliveryStream, UntagDeliveryStream | **Done** 2026-08-22 — stream Tags modal with add/remove |
-| G.75 | **RDS Data** (Batch) | BatchExecuteStatement | **N/A** — Floci explicitly rejects BatchExecuteStatement |
-| G.76 | **ACM** (Import + tags) | ImportCertificate, ExportCertificate, AddTagsToCertificate, RemoveTagsFromCertificate | **Done** 2026-08-22 — import modal + export PEM modal + tag routes |
-| G.77 | **Cognito** (Update + client secret) | UpdateUserPool, UpdateUserPoolClient, UpdateGroup, AdminAddUserToGroup, AddUserPoolClientSecret | **Done** 2026-08-22 — updates pre-existing; added AdminAddUserToGroup + modal |
-| G.78 | **STS** (Federation) | AssumeRoleWithSAML, AssumeRoleWithWebIdentity, GetFederationToken, DecodeAuthorizationMessage | **Done** 2026-08-22 — 4 routes + Federation tab (SAML/web-identity/federation-token/decode) |
-| G.79 | **EC2** (SG rules + Spot detail) | DescribeSecurityGroupRules, ModifySecurityGroupRules, DescribeInstanceAttribute | **Done** 2026-08-22 — SG Rules tab + modify route (DescribeInstanceAttribute low-value, skipped) |
-| G.80 | **CE** (Resource-level cost) | GetCostAndUsageWithResources | **Done** 2026-08-22 — route + hook + by-resource query button |
+| Service | New Operations | Dashboard Status |
+|---------|---------------|-----------------|
+| **SES** | PutAccountDetails, GetAccountDetails (v2 account provisioning) | Not yet implemented |
+| **Cognito** | GlobalSignOut, RevokeToken, UsernameAttributes pools | Not yet implemented |
+| **SFN** (Step Functions) | Engine enhancements (mocked integrations, Retry, distributed Map, JSONata) | Floci engine features, not new API endpoints — no dashboard change needed |
 
 ---
 
-### Third-Pass Audit — 2026-08-17 (Control Plane + New Operation Gaps)
-
-> **Method:** Full parity audit — (1) service-level: diffed every directory under `floci/services/` against `src/backend/routes/aws/` → **65/65 services matched, zero missing services** (the only unmatched dir, `floci/`, is the emulator's internal web UI — `duck`/`ui` — not an AWS service); (2) control-plane: enumerated Floci's `/_floci/*` lifecycle endpoints vs `system.ts`; (3) operation-level: diffed Floci `case "Op"` handler dispatch + `*_ACTIONS` sets against dashboard SDK commands per route. Items below were **not** in the G.1–G.80 list; ops already covered by G.1–G.80 (e.g. Athena StartQueryExecution → G.47, SSM Run Command → G.46, KMS Sign/Verify → G.58, IAM policy mgmt → G.57) are not duplicated here.
-
-#### Control Plane (new gap category)
-
-| # | Endpoint | Purpose | Dashboard Impact |
-|---|----------|---------|------------------|
-| G.81 | `POST /_floci/state/reset`, `POST /_floci/state/nuke` | Emulator state reset / full nuke | Done 2026-08-17 — Settings "Floci Maintenance" section: Reset state / Nuke state buttons with confirm modal, success/error alerts, `POST /system/state/reset` + `/system/state/nuke` proxy routes in `system.ts` (100% coverage) |
-| G.82 | `GET /_floci/diagnose`, `GET /_floci/config` | Diagnostics dump / runtime config | Done 2026-08-17 — "Load diagnostics" button in the same section opens a modal with the JSON dump; `GET /system/diagnose` proxy route (diagnose + config both proxied in `system.ts`, 100% coverage) |
-
-#### Operation Gaps (not previously tracked)
-
-| # | Service | Missing Operations | Dashboard Impact |
-|---|---------|-------------------|------------------|
-| G.83 | **DynamoDB** | Query | Done 2026-08-17 — native key-condition Query: backend `POST /tables/:name/items/query-native` (QueryCommand with KeyConditionExpression + optional values/names/index/scanIndexForward/limit/startKey/filter, 400 when expression missing), `useDynamoDBQuery` hook, and a "Query" tab in DynamoDBTableDetail with expression/values/names/index/limit inputs, forward toggle, JSON validation errors, results viewer (100% coverage) |
-| G.84 | **Step Functions** | CreateActivity, DeleteActivity, DescribeActivity, GetActivityTask, SendTaskSuccess, SendTaskFailure, SendTaskHeartbeat, StartSyncExecution, ValidateStateMachineDefinition, tags | Activities + task-token callbacks entirely absent (G.37/G.39 cover versions + start/stop only) | Done | 2026-08-18 |
-| G.85 | **IAM** | GetGroup, AddUserToGroup, RemoveUserFromGroup, group policies (Put/Get/Delete/List), Create/Delete/Get/ListLoginProfile, Generate/GetCredentialReport, GetAccountSummary, instance profiles (Create/Get/Delete/List/AddRole/RemoveRole), SetDefaultPolicyVersion, Tag/Untag policy-role-user | Done 2026-08-17 — group membership (GetGroup detail modal with members + add/remove user), group inline policies (list/view/put/delete with document alert), instance profiles tab (create/delete/add-role/remove-role with sparse fallbacks), SetDefaultPolicyVersion button in policy detail, Tag/Untag editors for user/role/policy. Login profiles, credential reports, and account summary skipped — Floci IAM supports neither (no case handlers). Backend `iam.ts` +10 routes (GetGroup, AddUserToGroup, RemoveUserFromGroup, List/Get/Put/DeleteGroupPolicy, SetDefaultPolicyVersion, Tag/Untag policy-role-user), user + policy detail routes now return tags; `useIAM` +19 hooks; tests 88 backend / 50 hook / 94 component — all 3 files 100/100/100/100 |
-| G.86 | **Cognito** | AdminGetUser, AdminRemoveUserFromGroup, AdminResetUserPassword, AdminUpdateUserAttributes, ChangePassword, SignUp, RespondToAuthChallenge, GetGroup, UpdateGroup, UpdateUserPool, UpdateUserPoolClient, tags | Admin user ops + update flows absent beyond G.15/G.77 | Done | 2026-08-18 |
-| G.87 | **SES** | GetAccountSendingEnabled, UpdateAccountSendingEnabled, GetSendQuota, GetSendStatistics, SendRawEmail, VerifyEmailAddress | Done 2026-08-17 — account-level sending stats + raw email send: backend `ses.ts` +6 routes (GET /account-sending, PUT /account-sending, GET /send-quota, GET /send-stats, POST /send-raw, POST /verify-email-address), `useSES` +6 hooks, SESDashboard "Account" section with sending Toggle, quota StatCards, send-statistics table, "Send raw email" (MIME) modal, "Verify address" modal (100% coverage) |
-| G.88 | **SNS** | **N/A** — (detail below) AddPermission, RemovePermission, CheckIfPhoneNumberIsOptedOut, ListPhoneNumbersOptedOut, OptInPhoneNumber, Set/GetSMSAttributes, SMS sandbox (Create/Delete/List/GetStatus/Verify) | Skipped 2026-08-17 — verified Floci has none of these ops: `SnsJsonHandler`/`SnsQueryHandler` only dispatch Create/DeleteTopic, ListTopics, (Set/Get)TopicAttributes, Subscribe/Unsubscribe, (List)Subscriptions(ByTopic), (Publish|Batch), (Set/Get)SubscriptionAttributes, ConfirmSubscription, Tag/Untag/ListTags, platform-app + endpoint CRUD/attrs; AddPermission/RemovePermission/SMS sandbox/opt-out all fall to the `default -> 400 UnsupportedOperation` arm. Topic permissions are visible read-only via the Policy attribute in GetTopicAttributes. No dashboard change is possible without violating "Zero Floci changes" |
-| G.89 | **ECS** | DeregisterContainerInstance, DescribeContainerInstances, StartTask, GetTaskProtection, UpdateTaskProtection, UpdateContainerInstancesState, UpdateContainerAgent, DiscoverPollEndpoint | Done 2026-08-18 — `GET /container-instances/:instanceId` (DescribeContainerInstances — 400 without cluster), `POST /container-instances/deregister` (force flag), `POST /container-instances/state` (400 without cluster/instances/status), `POST /container-instances/agent`, `POST /tasks/start` (StartTask — 400 without cluster/taskDefinition; optional instances/group/startedBy, 201), `GET /tasks/:taskId/protection` (GetTaskProtection), `PUT /tasks/protection` (UpdateTaskProtection — 400 without cluster/tasks/protectionEnabled; optional expiresInMinutes), `GET /poll-endpoint` (DiscoverPollEndpoint); `useECS` +8 hooks; ECSDashboard: new "Container Instances" cluster tab (per-row Update state modal with ACTIVE/DRAINING/STOPPED Select, Update agent, Poll endpoint toast, Deregister confirm, "Start task on instances" modal with task def + comma-separated instances + group + startedBy, dismissible error alerts) and per-task "Protection" modal on the Tasks tab (current protection StatusIndicator + loading/error states, enable checkbox, expires-in-minutes input, save toast) |
-| G.90 | **ECR** | BatchGetImage, GetAuthorizationToken | Done 2026-08-17 — `GET /repositories/:name/images/manifest?tag=|digest=` (BatchGetImage, 400 without tag/digest) + `GET /auth-token` (GetAuthorizationToken) routes; `useECRImageManifest` mutation + `useECRAuthToken` lazy query hooks; Manifest (tag/digest inputs + JSON result) and Auth token modals on the ECR dashboard (100% coverage) |
-| G.91 | **ELBv2** | DescribeTags, ModifyListener, ModifyTargetGroup | Done 2026-08-17 — `GET /tags?arns=` (DescribeTags — 400 without arns, sparse `|| []`), `PUT /listeners` (ModifyListener — 400 without listenerArn; port/protocol required, sslPolicy/certificates optional, certificates split/trimmed/filtered), `PUT /target-groups/health-check` (ModifyTargetGroup — 400 without targetGroupArn; path + optional interval/timeout/healthy/unhealthy with NaN guards); `useELB` +3 hooks (tags query, modify-listener + modify-target-group mutations); ELBDashboard: per-LB "Tags" modal (Badges, empty state, Close + Escape), per-listener "Edit" modal (prefilled port/protocol with `?? ""`/`|| "HTTP"` fallbacks, protocol Select, optional SSL policy + comma-separated certificates, error alert dismissible), per-target-group "Health check" modal (path + 4 optional numeric fields with NaN guards, error alert dismissible) |
-| G.92 | **Cloud Map** | DiscoverInstances, DiscoverInstancesRevision, GetInstance, GetInstancesHealthStatus, GetOperation, ListOperations, RegisterInstance, DeregisterInstance, DNS namespaces (Public/Private), tags | **Done 2026-08-22** — register/deregister (G.45), health/discover, GetOperation + ListOperations table with detail panel, GetInstance detail, Private/Public DNS + HTTP namespace create modal (DiscoverInstancesRevision marked low-value, skipped; tags N/A — no Floci TagResource for cloudmap) | (no `services/servicediscovery/` directory, no handler/registry files anywhere in the repo). The G.45 partial in the dashboard cannot be extended without violating "Zero Floci changes" |
-| G.93 | **EventBridge** | UpdateEventBus | Done 2026-08-17 — `PUT /buses` route (UpdateEventBusCommand: description, kmsKeyIdentifier, deadLetterArn with 400 when name missing), `useUpdateEventBus` hook, and an Edit bus modal on the buses tab (prefilled description, save/cancel, success/error toasts) (100% coverage) |
-| G.94 | **WAFv2** | UpdateWebACL, CheckCapacity | Done 2026-08-17 — `PUT /web-acls/:id` (UpdateWebACL — 400 without Name/Scope/LockToken; description/defaultAction/rules/visibilityConfig/customResponseBodies/captcha/challenge/tokenDomains/associationConfig; returns NextLockToken), `POST /capacity` (CheckCapacity — 400 without Rules, scope defaults to REGIONAL); `useUpdateWebACL` + `useCheckCapacity` hooks; WafV2Dashboard per-web-ACL "Edit" modal (description input with em-dash→empty prefills, default-action Allow/Block Select, rules JSON textarea, Save with invalid-JSON validation + error alert dismissible + success toast) and "Check capacity" button showing a success-alert capacity result or error alert |
-| G.95 | **Auto Scaling** | CreateLaunchConfiguration, DeleteLaunchConfiguration, DescribeAutoScalingInstances, AttachInstances, DetachInstances, TerminateInstanceInAutoScalingGroup | Done 2026-08-17 — `POST /launch-configurations` (CreateLaunchConfiguration — 400 without name; optional image/type/key/SGs/userData/iamProfile/associatePublicIp), `DELETE /launch-configurations/:name`, `GET /groups/:name/instances` (DescribeAutoScalingInstances filtered client-side by group), `POST /groups/:name/instances/attach`, `POST /groups/:name/instances/detach` (decrement flag), `POST /instances/terminate`; `useAutoScaling` +6 hooks; AutoScalingDashboard: Launch Configurations tab Create modal (all optional fields, validation, success toast, error alert dismissible, Cancel/Escape) + per-row Delete, Advanced tab "Instances" container (table with lifecycle/health/AZ/protected, Terminate per row, comma-separated Attach/Detach with inputs + success toasts + dismissible error alert) |
-| G.96 | **API Gateway V2** | CreateAuthorizer, GetAuthorizer(s), Update/DeleteAuthorizer, CreateModel, GetModel(s), Update/DeleteModel, GetIntegration(Response)(s), Create/Update/DeleteIntegrationResponse, GetRoute(Response)(s), Create/Update/DeleteRouteResponse, GetDeployment, Update/DeleteDeployment, GetStage, Update/DeleteStage, TagResource, UntagResource, GetTags | Done 2026-08-20 — 3794 insertions across 6 files: backend routes (Create/Update/DeleteAuthorizer, Create/Update/DeleteModel, UpdateRoute, UpdateIntegration, Create/Update/DeleteRouteResponse, Create/Update/DeleteIntegrationResponse, UpdateStage, UpdateDeployment, TagResource, UntagResource, GetTags) + 15 new hooks + dashboard CRUD flows (authorizer create/edit/delete, model create/edit/delete, route-response create/delete, integration-response create/delete, stage update, deployment update, tag/untag, route edit, integration edit) with 100% coverage; mock Select for Cloudscape onChange coverage in happy-dom (118 tests, 100% stmts/branches/functions/lines) |
-| G.97 | **SSM** | GetParameters, GetParametersByPath, DeleteParameters, LabelParameterVersion, DescribeInstanceInformation | Done 2026-08-17 — `POST /parameters/batch` (GetParameters — 400 without non-empty Names), `GET /parameters-by-path` (GetParametersByPath — 400 without path; recursive/withDecryption flags), `POST /parameters/delete-batch` (DeleteParameters — 400 without non-empty Names), `POST /parameters/label` (LabelParameterVersion — 400 without Name/ParameterVersion, labels default []), `GET /instance-information` (DescribeInstanceInformation); `useSSM` +5 hooks; SSMDashboard "Parameter Lookup" container (load-by-path results + batch-get modal with per-result Label/Delete, label modal) + "Managed Instances" tab (DescribePatchBaselines/GetDefaultPatchBaseline not present in Floci's handler) |
-
----
-
-### Already Implemented (Removed from Gap List)
-
-These items were in the initial audit but found to be already implemented upon code verification:
-
-| Original # | Service | Feature | Verified In |
-|------------|---------|---------|-------------|
-| G.5 | **CloudFormation** (Change Sets) | CreateChangeSet, DescribeChangeSet, ExecuteChangeSet, DeleteChangeSet, ListChangeSets | `CloudFormationQueryHandler` | Done 2026-07-13 |
-| G.7 (old) partial | CloudFormation Templates/Exports | GetTemplate, ValidateTemplate, ListExports | `cloudformation.ts` — routes exist — **Done (verified 2026-08-22)** |
-| G.10 (old) partial | WAFv2 IP Sets | CreateIPSet, GetIPSet, UpdateIPSet, DeleteIPSet, ListIPSets | `wafv2.ts` — full CRUD routes — **Done (verified 2026-08-22)** |
-| G.10 (old) partial | WAFv2 Rule Groups | CreateRuleGroup, GetRuleGroup, UpdateRuleGroup, DeleteRuleGroup, ListRuleGroups | `wafv2.ts` — full CRUD routes — **Done (verified 2026-08-22)** |
-| G.12 (old) partial | SES DKIM + MailFrom | GetIdentityDkimAttributes, SetIdentityDkimEnabled, SetIdentityMailFromDomain, GetIdentityMailFromDomainAttributes | `ses.ts` — routes exist + included in identity list/detail — **Done (verified 2026-08-22)** |
-| G.18 (old) full | Config Service Conformance Packs + Recorder | PutConformancePack, DeleteConformancePack, DescribeConformancePacks, PutConfigurationRecorder, DescribeConfigurationRecorders, StartConfigurationRecorder, StopConfigurationRecorder, PutDeliveryChannel, DescribeDeliveryChannels, StartConfigRulesEvaluation | `configservice.ts` — all routes exist — **Done (verified 2026-08-22)** |
-| G.27 (old) full | Athena Work Groups + Query Results + Data Catalogs | GetWorkGroup, CreateWorkGroup, DeleteWorkGroup, GetQueryResults, StopQueryExecution, ListDataCatalogs, GetDataCatalog, ListDatabases, ListTableMetadata | Done 2026-07-14 (Query Results viewer, Stop query, Work Group detail, Catalog/Database/Table browser + metadata) |
-
----
-
-### Summary Statistics
+### Summary
 
 | Metric | Count |
 |--------|-------|
-| Total gap items identified (1st pass) | 38 |
-| P1 (high-value) | 15 |
-| P2 (moderate-value) | 14 |
-| P3 (low-value) | 9 |
-| Already implemented (removed) | 6 feature groups |
-| Services with P1 gaps | 11 unique services |
-| Services with any gaps | 20+ unique services |
-| Second-pass gaps (G.39–G.80) | 42 |
-| — Tier 1 (backend route exists, needs UI) | 7 (G.39–G.45) |
-| — Tier 2 (high-value, backend+frontend) | 14 (G.46–G.59) |
-| — Tier 3 (rounding-out) | 21 (G.60–G.80) |
-| Third-pass gaps (G.81–G.97, 2026-08-17) | 17 |
-| — Control plane (/_floci/* lifecycle endpoints) | 2 (G.81–G.82) |
-| — New operation gaps (not in G.1–G.80) | 15 (G.83–G.97) |
-| Missing services (service-level parity) | 0 of 65 |
+| Previously resolved gaps (G.1–G.97) | 97 (all Done/N/A) |
+| Missing services (M.1–M.14) | 14 |
+| New ops in existing services | 2 actionable (SES + Cognito) |
+| **Total remaining gaps** | **16** |
 
-### Recommended Implementation Order
+---
 
-> **Updated priority order based on the latest service-depth gap analysis.** The focus has shifted from "missing service scaffolding" (now complete) to "deepening" the services that currently only have basic CRUD.
+### Recommended Implementation Priority
 
-1. **EventBridge** — Archives + Replays are major missing features (8+ operations).
-2. **Cognito** — ~~Auth flow testers, Resource Servers, MFA config~~ Done (auth flows, resource servers, MFA config, group membership all implemented) (~10+ operations).
-3. **Kinesis** — Encryption toggle, enhanced monitoring, stream mode editor (8+ operations).
-4. **Lambda** — Resource-based policy management: AddPermission, RemovePermission, GetPolicy, UpdateAlias, UpdateEventSourceMapping, GetLayerVersion (5+ operations).
-5. **SQS** — Message move task management: ListMessageMoveTasks, CancelMessageMoveTask, ChangeMessageVisibility batch (3+ operations).
-6. **RDS** — Parameter groups edit UI, ModifyDBCluster, DBClusterParameterGroups, DBSubnetGroups (5+ operations).
-7. **EC2** — IamInstanceProfileAssociations, ModifySecurityGroupRules, DescribeAddressesAttribute, DescribeVpcEndpointServices (5+ operations).
-8. **CloudFront** — Distribution tags, Origin Request Policies, Response Headers Policies, monitoring/subscriptions (4+ operations).
-9. **MSK** — Configuration management, broker operations (2+ operations).
-10. **EMR** — Cluster detail with tags + step management (2+ operations).
-
-#### Historical G.1–G.15 Order (retained for reference)
-
-1. **G.1 — DynamoDB Streams** — Done 2026-07-13, Floci has 4 dedicated Streams operations
-2. **G.2 — EC2 Flow Logs** — Done 2026-07-13 (3 operations)
-3. **G.3 — EC2 Network ACLs** — Done 2026-07-13 (7 operations)
-4. **G.5 — CloudFormation Stack Sets** — Major feature gap, Floci has full StackSetService (11 operations)
-5. **G.9-G.10 — WAFv2 Regex Pattern Sets + Logging** — Complete WAFv2 coverage (14 operations)
-6. **G.8 — Glue Partitions** — Done 2026-07-13, added GetPartitions/GetPartition/BatchGetPartition/BatchCreatePartition/UpdatePartition/DeletePartition + Partitions tab (Schema Registry, UDFs, Column Stats already implemented)
-7. **G.15 — Cognito Resource Servers + MFA + Custom Attrs** — Completes Cognito management (~22 operations)
-8. **G.4 — S3 Select** — Unique feature, high demo value, Floci has S3SelectService + S3SelectEvaluator
-9. **G.11-G.12 — SES Notifications + Config Set Event Destinations** — Completes SES management (13 operations)
-10. **G.13 — ELBv2 SSL/Certificates/Security Groups** — Completes ELBv2 management (13 operations)
+| Priority | Service | Rationale |
+|----------|---------|-----------|
+| 1 | **Organizations** (M.2) | Commonly used in AWS accounts, medium complexity |
+| 2 | **GuardDuty** (M.8) | Security monitoring, high value |
+| 3 | **Lightsail** (M.3) | Simple servers, large but high value |
+| 4 | **SWF** (M.1) | Legacy but still used, medium complexity |
+| 5 | **AmazonMQ** (M.4) | Message broker, medium complexity |
+| 6 | **EMR Serverless** (M.6) | Modern EMR, medium complexity |
+| 7 | **CloudHSM V2** (M.9) | Security/compliance, medium complexity |
+| 8 | **FIS** (M.7) | Chaos engineering, medium complexity |
+| 9 | **Kinesis Analytics V2** (M.5) | Analytics, small complexity |
+| 10 | **MWAA** (M.10) | Airflow, small complexity |
+| 11 | **RUM** (M.11) | Monitoring, small complexity |
+| 12 | **S3 Tables** (M.12) | Iceberg tables, medium complexity |
+| 13 | **Bedrock AgentCore** (M.13) | AI/ML, small complexity |
+| 14 | **CloudControl** (M.14) | Generic CRUD, medium complexity |
+| — | **SES v2 account ops** | New in existing service, small |
+| — | **Cognito GlobalSignOut/RevokeToken** | New in existing service, small |
