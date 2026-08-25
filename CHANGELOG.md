@@ -5,13 +5,160 @@ All notable changes to Floci Dash will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.0] — 2026-08-25
 
 ### Added
-- **CloudFormation:** Stack policy tab — view (`GetStackPolicy`) and set (`SetStackPolicy`) a stack policy document with JSON validation (G.6). Note: Floci accepts the policy but does not persist or enforce it, so the fetched policy is always empty.
+
+#### Cross-Platform & UX
+- **Auto-detect Floci endpoint** — dashboard probes candidate URLs (`localhost`, `host.docker.internal`, `172.17.0.1`, `127.0.0.1`) and auto-configures the connection. Works out of the box on Windows, macOS, and Linux Docker.
+- **Settings link always visible** — sidebar Settings link now renders even when the API returns 500, so users can always reach the endpoint configuration page.
+- **`/system/discover-floci` endpoint** — backend probe route that tests candidate Floci URLs and returns the first working one.
+
+#### ACM (Certificate Manager)
+- Account configuration GET/PUT routes
+- Import certificate (`ImportCertificate`) and export certificate (`ExportCertificate`) routes
+- Hooks, UI flows, and tests
+
+#### Route 53
+- Tag CRUD operations (list, create, delete)
+- DNSSEC status (`GetDNSSEC`)
+- Account limits (`ListLimits`)
+- Change info (`GetChange`)
+- Health Checks create/delete with full UI tab
+- Hooks, dashboard tests, and 100% coverage
+
+#### Glue
+- Tag operations (GET/POST/DELETE for resource tags)
+- Update schema compatibility mode
+- Delete schema versions
+- Get schema by definition
+- Fixed SDK types: `TagsToAdd` (Record), `TagsToRemove` (string[]), `Versions` (string range)
+- Removed dead `|| {}` fallbacks for 100% branch coverage
+
+#### SES (Simple Email Service)
+- Email template CRUD (create, get, delete, preview, templated send)
+- Verified email delete route
+- Account statistics (sending quotas, reputation, delivery metrics)
+- Raw email send
+- Configuration sets and event destinations
+- Identity notifications, DKIM, and MAIL FROM configuration
+
+#### ECS (Elastic Container Service)
+- Capacity provider management
+- Container instances list and detail
+- Task protection (update protection on running tasks)
+- StartTask for ad-hoc container execution
+
+#### Step Functions
+- Activity management (create, list, describe, delete)
+- Task callbacks (send task success/failure/heartbeat)
+- Sync execution runs
+- State machine validation
+- Tags CRUD
+
+#### Cognito
+- Admin user operations (create, delete, disable/enable, confirm sign-up, forgot password, respond to auth challenge)
+- Update user flows
+- Pool tags CRUD
+- Resource Servers, MFA config, and Custom Attributes (from earlier)
+- Auth flow tester (InitiateAuth, AdminInitiateAuth, ConfirmSignUp)
+
+#### IAM
+- Group membership (add/remove users from groups)
+- Group policies (list/attach/detach inline policies)
+- Instance profiles CRUD
+- SetDefaultPolicyVersion
+- Tags for roles, users, groups
+- Role inline policies CRUD
+- Trust policy editing
+- Policy simulator
+
+#### Auto Scaling
+- Launch configurations CRUD
+- Instance operations (terminate, detach, connect)
+- Scaling policies create/delete
+- Lifecycle hooks CRUD
+- Describe types (notification, termination, adjustment, metric collection)
+- Instance refresh, tags, and LB attachments
+
+#### SSM (Systems Manager)
+- Batch parameter operations
+- By-path parameter lookup
+- Parameter labels
+- Instance information
+- Run Command (send commands, view history and invocations, cancel)
+
+#### ELBv2 (Elastic Load Balancing)
+- DescribeTags and ModifyListener
+- ModifyTargetGroup
+- Listener rules (create/update/delete/set priorities)
+- Capacity Reservation display
+
+#### API Gateway V2
+- Full CRUD flows for routes, integrations, stages, deployments, authorizers, models, and route responses
+- WebSocket API discovery and route resolution
+
+#### DynamoDB
+- Native Query support (key-condition expression queries)
+- Streams, Exports, Kinesis Streaming, UpdateTable, and PartiQL
+
+#### Kinesis
+- Day-2 stream management
+- Enhanced Fan-out (consumer management + SubscribeToShard)
+
+#### CloudWatch Logs
+- Data Protection policy viewer tab
+
+#### MemoryDB
+- Users + ACLs tabs with full CRUD
+
+#### Athena
+- RunQueryExecution backend route, hook, and Run Query UI
+
+#### Floci Control-Plane
+- Reset/nuke state endpoints
+- Diagnostics in Settings page
+
+#### Additional Services
+- **EventBridge:** UpdateEventBus, permissions management, pattern tester, event bus tags
+- **ECR:** Image manifests, registry auth token, scanning configuration, image tag mutability
+- **OpenSearch:** Domain config update, upgrade check, and tags
+- **EC2:** Spot requests, prefix lists, security group rules, flow logs, network ACLs
+- **EMR:** Cluster detail with steps and instance groups
+- **Transfer:** Server/user updates, SSH public key management
+- **KMS:** Key policy, sign/verify, MAC, on-demand rotation
+- **Secrets Manager:** Resource policy, batch get, version stage ops
+- **Transcribe:** Custom vocabulary create, get, and delete
+- **Cost Explorer/Firehose:** Resource-level costs, delivery stream tags
+- **CodeDeploy:** Stop deployments, update deployment groups, on-premises instances, deployment lifecycle
+- **Events:** Pattern tester and event bus tags
+- **Config:** Resource tags on config rules and conformance packs
+- **CodeBuild:** Report groups, build retry, project editing
+- **RDS:** Resource tags on instance and cluster details
+- **SQS:** Native DLQ redrive with message move tasks
+- **Lambda:** Resource-based policy, ESM writes, alias editing
+- **CloudMap:** Operations, instance detail, DNS namespace creation
+- **AppSync:** Resolver mutations, resolver create/delete, datasource update
 
 ### Fixed
-- **AWS SDK bump:** Resolved TypeScript errors across `kinesis`, `s3-select`, `ses`, `wafv2`, `glue`, `cognito`, `cloudtrail`, and `codepipeline` routes caused by updated SDK type shapes. Corrected the Kinesis `SubscribeToShard` event-stream handling (and its test mock) to match the real `SubscribeToShardEvent` shape.
+- **Settings link visibility** — sidebar Settings link now renders when the API returns 500 (issue #2), so users can always reach endpoint configuration
+- **S3VectorsDashboard registration** — dashboard was imported but not registered in `serviceRegistry.tsx`, making it unreachable
+- **Glue SDK type errors** — corrected `TagsToAdd`/`TagsToRemove` (Glue-specific Record types) and `Versions` (string range, not array)
+- **Cross-platform Docker networking** — auto-detection eliminates the need for manual `FLOCI_URL` configuration on Windows/macOS
+- **Dead code removal** — removed 100+ unreachable `|| []`, `|| {}`, `|| "-"` fallbacks across backend routes and frontend components
+
+### Improved
+- **100% test coverage** — all four metrics (statements, branches, functions, lines) at 100% across every file
+- **10,514 tests** across 272 test files
+- **CI coverage gates** — `vitest.config.ts` thresholds at 100%, `codecov.yml` patch target at 100%, worker cap for memory pressure
+- **Deterministic env-stub tests** — all `process.env` captures tested with `vi.stubEnv` + `vi.resetModules()` to prevent ambient-env flakes
+- **README** — comprehensive cross-platform Docker networking docs, updated feature table, auto-detect documentation
+- **AGENTS.md** — mandate 100% coverage on all four metrics for every change
+- **PLAN.md** — fully reconciled progress tracker with 567 tasks resolved
+
+## [Unreleased]
+
+_No changes yet._
 
 ## [0.0.99] — 2026-07-07
 
