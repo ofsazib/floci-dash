@@ -503,15 +503,28 @@ router.delete("/tags/:arn", async (c: Context) => {
 
 router.get("/functions/:name/url", async (c: Context) => {
   const name = c.req.param("name");
-  const result = await lambda().send(
-    new GetFunctionUrlConfigCommand({ FunctionName: name })
-  );
-  return c.json({
-    url: result.FunctionUrl,
-    authType: result.AuthType,
-    cors: result.Cors,
-    invokeMode: result.InvokeMode,
-  });
+  try {
+    const result = await lambda().send(
+      new GetFunctionUrlConfigCommand({ FunctionName: name })
+    );
+    return c.json({
+      url: result.FunctionUrl,
+      authType: result.AuthType,
+      cors: result.Cors,
+      invokeMode: result.InvokeMode,
+    });
+  } catch (e: any) {
+    // Most functions have no URL — surface as empty, not an error
+    if (e?.name === "ResourceNotFoundException") {
+      return c.json({
+        url: null,
+        authType: null,
+        cors: null,
+        invokeMode: null,
+      });
+    }
+    throw e;
+  }
 });
 
 router.delete("/functions/:name/url", async (c: Context) => {
