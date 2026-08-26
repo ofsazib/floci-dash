@@ -443,6 +443,7 @@ These services have full CRUD operations in both backend and frontend:
 | **ElastiCache** | Replication groups (list, create, describe, delete), cache clusters (list, create, describe, delete), users (list, create, describe, delete) |
 | **MemoryDB** | Clusters (list, create, describe, delete), tags (list per resource) |
 | **S3 Vector Search** | Vector buckets (list, create, get, delete), indexes (list, create, get, delete with dimension/data type/distance metric), vectors (put with metadata, get by keys, delete, query with top-K/filter) |
+| **SWF** (Simple Workflow) | Domains (list, describe, register, deprecate, undeprecate), workflow types (list, describe, register, deprecate, undeprecate, delete), activity types (list, describe, register, deprecate, undeprecate, delete), executions (open/closed list, start, describe, terminate, signal, request cancel), execution history, tags (list, add, remove) |
 
 ### Navigation + status (65 services)
 
@@ -464,6 +465,7 @@ All services reported by Floci appear in the sidebar with status indicators.
 **Developer Tools:** CodeBuild, CodeDeploy, CodePipeline, Elastic Beanstalk
 **Internet of Things:** IoT Core
 **Migration:** Backup, Transfer Family
+**Workflow:** SWF (Simple Workflow)
 
 </details>
 

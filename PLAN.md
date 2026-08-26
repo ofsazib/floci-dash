@@ -1833,7 +1833,7 @@ These are Floci services with handler directories that have **no** corresponding
 
 | # | Service | Floci Package | Operations | Complexity |
 |---|---------|--------------|------------|------------|
-| M.1 | **SWF** (Simple Workflow) | `swf/` | Domains CRUD, workflow types, activity types, executions (start/signal/terminate/cancel), tags — ~30+ ops | Medium |
+| M.1 | **SWF** (Simple Workflow) | `swf/` | Domains CRUD, workflow types, activity types, executions (start/signal/terminate/cancel), tags — ~30+ ops | Medium | ✅ Done |
 | M.2 | **Organizations** | `organizations/` | Orgs, OUs, accounts, handshakes, delegated admins, tags — ~30+ ops | Medium |
 | M.3 | **Lightsail** | `lightsail/` | Instances, disks, static IPs, key pairs, load balancers, domains, tags — ~40+ ops | Large |
 | M.4 | **AmazonMQ** | `amazonmq/` | Broker CRUD, config, queues, users | Medium |

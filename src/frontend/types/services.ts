@@ -4,7 +4,7 @@ export const SERVICE_CATEGORIES: Record<string, string[]> = {
   "Storage":        ["s3"],
   "Database":       ["dynamodb", "rds", "neptune", "elasticache", "docdb", "memorydb"],
   "Networking & Content Delivery": ["elasticloadbalancing", "route53", "cloudfront", "apigateway", "apigatewayv2", "appsync"],
-  "Application Integration": ["sqs", "sns", "events", "kinesis", "pipes", "scheduler", "email", "states", "appsync"],
+  "Application Integration": ["sqs", "sns", "events", "kinesis", "pipes", "scheduler", "email", "states", "appsync", "swf"],
   "Security, Identity & Compliance": ["iam", "sts", "cognito-idp", "kms", "secretsmanager", "acm", "wafv2"],
   "Management & Governance": ["cloudformation", "monitoring", "logs", "ssm", "config", "appconfig", "appconfigdata", "cloudtrail", "servicediscovery"],
   "Analytics":      ["athena", "glue", "firehose", "kafka", "es", "emr"],
@@ -41,6 +41,7 @@ export const SERVICE_CATEGORY_MAP: Record<string, string> = {
   apigateway: "Networking & Content Delivery", apigatewayv2: "Networking & Content Delivery", appsync: "Application Integration",
   sqs: "Application Integration", sns: "Application Integration", events: "Application Integration", kinesis: "Application Integration",
   pipes: "Application Integration", scheduler: "Application Integration", email: "Application Integration", states: "Application Integration",
+  swf: "Application Integration",
   iam: "Security, Identity & Compliance", sts: "Security, Identity & Compliance", "cognito-idp": "Security, Identity & Compliance",
   kms: "Security, Identity & Compliance", secretsmanager: "Security, Identity & Compliance", acm: "Security, Identity & Compliance",
   wafv2: "Security, Identity & Compliance",
@@ -125,6 +126,7 @@ export const SERVICE_LABELS: Record<string, string> = {
   "codepipeline": "CodePipeline",
   "elasticbeanstalk": "Elastic Beanstalk",
   "iot": "IoT Core",
+  "swf": "SWF",
 };
 
 export function getServiceLabel(externalKey: string): string {

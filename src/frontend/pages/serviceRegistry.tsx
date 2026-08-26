@@ -55,6 +55,7 @@ import { S3VectorsDashboard } from "./services/S3VectorsDashboard";
 import { CodePipelineDashboard } from "./services/CodePipelineDashboard";
 import { ElasticBeanstalkDashboard } from "./services/ElasticBeanstalkDashboard";
 import { IoTDashboard } from "./services/IoTDashboard";
+import { SWFDashboard } from "./services/SWFDashboard";
 import { S3Dashboard } from "./services/S3Dashboard";
 import { LambdaDashboard } from "./services/LambdaDashboard";
 
@@ -117,6 +118,7 @@ export const SERVICE_DASHBOARDS: Record<string, ComponentType> = {
   "codepipeline": CodePipelineDashboard,
   "elasticbeanstalk": ElasticBeanstalkDashboard,
   "iot": IoTDashboard,
+  "swf": SWFDashboard,
   "s3vectors": S3VectorsDashboard,
   "s3": S3Dashboard,
   "lambda": LambdaDashboard,
