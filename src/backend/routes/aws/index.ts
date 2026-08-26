@@ -78,6 +78,7 @@ import iotRoutes from "./iot";
 import organizationsRoutes from "./organizations";
 import swfRoutes from "./swf";
 import lightsailRoutes from "./lightsail";
+import amazonmqRoutes from "./amazonmq";
 
 const router = new Hono();
 
@@ -159,6 +160,7 @@ router.route("/iot", iotRoutes);
 router.route("/organizations", organizationsRoutes);
 router.route("/swf", swfRoutes);
 router.route("/lightsail", lightsailRoutes);
+router.route("/mq", amazonmqRoutes);
 
   router.get("/", (c: Context) => {
     return c.json({ message: "AWS routes available. Services registered: s3, dynamodb, rds, ec2, sqs, sns, events, logs, lambda, cloudwatch, iam, secretsmanager, cloudformation, kms, ecs, ssm, route53, apigateway, sts, appsync, scheduler, ecr, elasticloadbalancing, email, eks, autoscaling, cloudfront, kinesis, neptune, pipes, cognito, apigatewayv2, acm, cloudtrail, config, appconfig, servicediscovery, athena, glue, firehose, stepfunctions, opensearch, msk, bedrockruntime, textract, transcribe, ce, pricing, tagging, codebuild, codedeploy, backup, transfer, cur, bcmdataexports, wafv2, elasticache, ec2messages, batch, docdb, emr, rdsdata, memorydb, s3vectors, codepipeline, elasticbeanstalk, iot" });
