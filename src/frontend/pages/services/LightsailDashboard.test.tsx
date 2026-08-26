@@ -10,7 +10,7 @@ const mockDisks = vi.fn();
 const mockStaticIps = vi.fn();
 const mockKeyPairs = vi.fn();
 
-vi.mock("../../../hooks/useLightsail", () => ({
+vi.mock("../../hooks/useLightsail", () => ({
   useLightsailInstances: (...args: any[]) => mockInstances(...args),
   useCreateLightsailInstance: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useDeleteLightsailInstance: () => ({ mutateAsync: vi.fn(), isPending: false, mutate: vi.fn() }),

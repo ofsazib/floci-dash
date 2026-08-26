@@ -9,7 +9,7 @@ const mockApps = vi.fn();
 const mockDetail = vi.fn();
 const mockSnaps = vi.fn();
 
-vi.mock("../../../hooks/useKinesisAnalytics", () => ({
+vi.mock("../../hooks/useKinesisAnalytics", () => ({
   useKinesisAnalyticsApplications: (...args: any[]) => mockApps(...args),
   useKinesisAnalyticsApplication: (...args: any[]) => mockDetail(...args),
   useCreateKinesisAnalyticsApplication: () => ({ mutateAsync: vi.fn(), isPending: false }),

@@ -8,7 +8,7 @@ import React from "react";
 const mockBrokers = vi.fn();
 const mockUsers = vi.fn();
 
-vi.mock("../../../hooks/useAmazonMQ", () => ({
+vi.mock("../../hooks/useAmazonMQ", () => ({
   useMQBrokers: (...args: any[]) => mockBrokers(...args),
   useMQBroker: () => ({ data: undefined, isLoading: false }),
   useCreateMQBroker: () => ({ mutateAsync: vi.fn(), isPending: false }),

@@ -7,7 +7,7 @@ export const SERVICE_CATEGORIES: Record<string, string[]> = {
   "Application Integration": ["sqs", "sns", "events", "kinesis", "pipes", "scheduler", "email", "states", "appsync", "swf", "mq"],
   "Security, Identity & Compliance": ["iam", "sts", "cognito-idp", "kms", "secretsmanager", "acm", "wafv2"],
   "Management & Governance": ["organizations", "cloudformation", "monitoring", "logs", "ssm", "config", "appconfig", "appconfigdata", "cloudtrail", "servicediscovery"],
-  "Analytics":      ["athena", "glue", "firehose", "kafka", "es", "emr", "kinesisanalytics"],
+  "Analytics":      ["athena", "glue", "firehose", "kafka", "es", "emr", "kinesisanalytics", "emrserverless"],
   "Machine Learning": ["bedrock-runtime", "textract", "transcribe"],
   "Cost Management": ["ce", "cur", "bcm-data-exports", "pricing", "tagging"],
   "Developer Tools":["codedeploy", "codebuild", "codepipeline", "elasticbeanstalk"],
@@ -49,7 +49,7 @@ export const SERVICE_CATEGORY_MAP: Record<string, string> = {
   cloudformation: "Management & Governance", monitoring: "Management & Governance", logs: "Management & Governance",
   ssm: "Management & Governance", config: "Management & Governance", appconfig: "Management & Governance",
   appconfigdata: "Management & Governance", cloudtrail: "Management & Governance", servicediscovery: "Management & Governance",
-  athena: "Analytics", glue: "Analytics", firehose: "Analytics", kafka: "Analytics", es: "Analytics", emr: "Analytics", kinesisanalytics: "Analytics",
+  athena: "Analytics", glue: "Analytics", firehose: "Analytics", kafka: "Analytics", es: "Analytics", emr: "Analytics", kinesisanalytics: "Analytics", emrserverless: "Analytics",
   "bedrock-runtime": "Machine Learning", textract: "Machine Learning", transcribe: "Machine Learning",
   ce: "Cost Management", cur: "Cost Management", "bcm-data-exports": "Cost Management", pricing: "Cost Management", tagging: "Cost Management",
   codedeploy: "Developer Tools", codebuild: "Developer Tools", codepipeline: "Developer Tools", elasticbeanstalk: "Developer Tools",
@@ -132,6 +132,7 @@ export const SERVICE_LABELS: Record<string, string> = {
   "lightsail": "Lightsail",
   "mq": "AmazonMQ",
   "kinesisanalytics": "Kinesis Analytics V2",
+  "emrserverless": "EMR Serverless",
 };
 
 export function getServiceLabel(externalKey: string): string {
