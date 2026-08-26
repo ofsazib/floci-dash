@@ -75,6 +75,7 @@ import s3vectorsRoutes from "./s3vectors";
 import codepipelineRoutes from "./codepipeline";
 import elasticbeanstalkRoutes from "./elasticbeanstalk";
 import iotRoutes from "./iot";
+import organizationsRoutes from "./organizations";
 import swfRoutes from "./swf";
 
 const router = new Hono();
@@ -154,6 +155,7 @@ router.route("/s3vectors", s3vectorsRoutes);
 router.route("/codepipeline", codepipelineRoutes);
 router.route("/elasticbeanstalk", elasticbeanstalkRoutes);
 router.route("/iot", iotRoutes);
+router.route("/organizations", organizationsRoutes);
 router.route("/swf", swfRoutes);
 
   router.get("/", (c: Context) => {

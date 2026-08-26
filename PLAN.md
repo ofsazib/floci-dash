@@ -1834,7 +1834,7 @@ These are Floci services with handler directories that have **no** corresponding
 | # | Service | Floci Package | Operations | Complexity |
 |---|---------|--------------|------------|------------|
 | M.1 | **SWF** (Simple Workflow) | `swf/` | Domains CRUD, workflow types, activity types, executions (start/signal/terminate/cancel), tags — ~30+ ops | Medium | ✅ Done |
-| M.2 | **Organizations** | `organizations/` | Orgs, OUs, accounts, handshakes, delegated admins, tags — ~30+ ops | Medium |
+| M.2 | **Organizations** | `organizations/` | Orgs, OUs, accounts, handshakes, delegated admins, tags — ~30+ ops | Medium | ✅ Done |
 | M.3 | **Lightsail** | `lightsail/` | Instances, disks, static IPs, key pairs, load balancers, domains, tags — ~40+ ops | Large |
 | M.4 | **AmazonMQ** | `amazonmq/` | Broker CRUD, config, queues, users | Medium |
 | M.5 | **Kinesis Analytics V2** | `kinesisanalyticsv2/` | App CRUD, snapshots, tags | Small |
@@ -1865,7 +1865,7 @@ These are Floci services with handler directories that have **no** corresponding
 | Metric | Count |
 |--------|-------|
 | Previously resolved gaps (G.1–G.97) | 97 (all Done/N/A) |
-| Missing services (M.1–M.14) | 14 |
+| Missing services (M.1–M.14) | 12 (M.1 + M.2 done) |
 | New ops in existing services | 2 actionable (SES + Cognito) |
 | **Total remaining gaps** | **16** |
 
