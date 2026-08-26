@@ -225,4 +225,46 @@ describe("backend/index.ts — onError branches", () => {
     const body = await res.json();
     expect(body.error).toBe("Internal server error");
   });
+
+  it("returns 404 for NoSuchKey errors", async () => {
+    vi.resetModules();
+    const { default: freshApp } = await import("./index");
+    freshApp.get("/api/throw-nosuchkey", () => {
+      const err: any = new Error("The specified key does not exist.");
+      err.name = "NoSuchKey";
+      throw err;
+    });
+    const res = await freshApp.request("/api/throw-nosuchkey");
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body.error).toBe("The specified key does not exist.");
+  });
+
+  it("returns 404 for NoSuchTagSet errors", async () => {
+    vi.resetModules();
+    const { default: freshApp } = await import("./index");
+    freshApp.get("/api/throw-nosuchtagset", () => {
+      const err: any = new Error("The TagSet does not exist.");
+      err.name = "NoSuchTagSet";
+      throw err;
+    });
+    const res = await freshApp.request("/api/throw-nosuchtagset");
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body.error).toBe("The TagSet does not exist.");
+  });
+
+  it("returns 404 for NoSuchKey errors with no message", async () => {
+    vi.resetModules();
+    const { default: freshApp } = await import("./index");
+    freshApp.get("/api/throw-nosuchkey-empty", () => {
+      const err: any = new Error("");
+      err.name = "NoSuchKey";
+      throw err;
+    });
+    const res = await freshApp.request("/api/throw-nosuchkey-empty");
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body.error).toBe("Resource not found");
+  });
 });

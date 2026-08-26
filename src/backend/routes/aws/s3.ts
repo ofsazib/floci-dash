@@ -168,7 +168,10 @@ router.put("/buckets/:name/objects/*", async (c: Context, next) => {
 });
 
 // Get object metadata + content (supports keys with slashes)
-router.get("/buckets/:name/objects/*", async (c: Context) => {
+router.get("/buckets/:name/objects/*", async (c: Context, next) => {
+  // Skip paths that are handled by s3-objects.ts (tags, acl, attributes, head, raw)
+  const urlPath = new URL(c.req.url).pathname;
+  if (/\/(tags|acl|attributes|head|raw)$/.test(urlPath)) return next();
   const bucket = sanitizeBucketName(c.req.param("name")!);
   const path = new URL(c.req.url).pathname;
   const key = sanitizeS3Key(decodeURIComponent(path.split("/objects/")[1] || ""));
@@ -282,7 +285,9 @@ router.put("/buckets/:name/folders", async (c: Context) => {
 });
 
 // Delete object (supports keys with slashes)
-router.delete("/buckets/:name/objects/*", async (c: Context) => {
+router.delete("/buckets/:name/objects/*", async (c: Context, next) => {
+  const urlPath = new URL(c.req.url).pathname;
+  if (/\/(tags|acl|attributes|head|raw)$/.test(urlPath)) return next();
   const bucket = c.req.param("name");
   const path = new URL(c.req.url).pathname;
   const key = sanitizeS3Key(decodeURIComponent(path.split("/objects/")[1] || ""));

@@ -49,8 +49,12 @@ if (isProd) {
   });
 }
 
-app.onError((err: Error, c: any) => {
+app.onError((err: any, c: any) => {
   console.error("Unhandled error:", err);
+  // Map upstream AWS NoSuchKey/NoSuchTagSet errors to 404
+  if (err?.name === "NoSuchKey" || err?.name === "NoSuchTagSet") {
+    return c.json({ error: err.message || "Resource not found" }, 404);
+  }
   return c.json({ error: err.message || "Internal server error" }, 500);
 });
 

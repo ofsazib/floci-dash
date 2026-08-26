@@ -800,4 +800,34 @@ describe("S3_MAX_UPLOAD_BYTES env capture", () => {
     expect(res.status).toBe(200);
     expect(mockSend).toHaveBeenCalled();
   });
+
+  describe("suffix guard — skips /tags, /acl, /attributes, /head, /raw", () => {
+    it("calls next() for paths ending in /tags", async () => {
+      // The guard should skip so the request falls through to the next router.
+      // Without the guard, this would try to GetObject with key "my-key/tags"
+      mockSend.mockResolvedValueOnce({});
+      const res = await router.request("/buckets/my-bucket/objects/my-key/tags");
+      // The guard skips to next — since no /tags handler exists in s3.ts,
+      // it would 404 at the Hono level, not 500 from GetObject
+      expect(res.status).not.toBe(500);
+    });
+
+    it("calls next() for paths ending in /attributes", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await router.request("/buckets/my-bucket/objects/my-key/attributes");
+      expect(res.status).not.toBe(500);
+    });
+
+    it("calls next() for paths ending in /head", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await router.request("/buckets/my-bucket/objects/my-key/head");
+      expect(res.status).not.toBe(500);
+    });
+
+    it("DELETE calls next() for paths ending in /tags", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await router.request("/buckets/my-bucket/objects/my-key/tags", { method: "DELETE" });
+      expect(res.status).not.toBe(500);
+    });
+  });
 });
