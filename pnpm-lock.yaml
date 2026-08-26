@@ -137,6 +137,9 @@ importers:
       '@aws-sdk/client-kinesis':
         specifier: ^3.1071.0
         version: 3.1071.0
+      '@aws-sdk/client-kinesis-analytics-v2':
+        specifier: ^3.1118.0
+        version: 3.1118.0
       '@aws-sdk/client-kms':
         specifier: ^3.1068.0
         version: 3.1070.0
@@ -514,6 +517,10 @@ packages:
 
   '@aws-sdk/client-kafka@3.1072.0':
     resolution: {integrity: sha512-wvYTaGj+WpGeSlaFN/0zU4AFz6PZTLUCF4qmhxiieY3wjKbvGpO+RIiUWMBkqOao1NpK9qEZVtH7eu3rqbQAEA==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/client-kinesis-analytics-v2@3.1118.0':
+    resolution: {integrity: sha512-LtApfa97i1QmgstFbAeR5hGccRLVHVIRl/kj9WOmpu5B4SMkQdhRjcsr9IoRsn0p6uU9z/c6VNkGoIICO6D7XA==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-kinesis@3.1071.0':
@@ -3126,6 +3133,17 @@ snapshots:
       '@smithy/fetch-http-handler': 5.5.0
       '@smithy/node-http-handler': 4.8.0
       '@smithy/types': 4.15.0
+      tslib: 2.8.1
+
+  '@aws-sdk/client-kinesis-analytics-v2@3.1118.0':
+    dependencies:
+      '@aws-sdk/core': 3.977.9
+      '@aws-sdk/credential-provider-node': 3.972.81
+      '@aws-sdk/types': 3.974.5
+      '@smithy/core': 3.33.3
+      '@smithy/fetch-http-handler': 5.7.2
+      '@smithy/node-http-handler': 4.11.3
+      '@smithy/types': 4.17.2
       tslib: 2.8.1
 
   '@aws-sdk/client-kinesis@3.1071.0':

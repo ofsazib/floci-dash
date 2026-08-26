@@ -73,6 +73,7 @@
     "@aws-sdk/client-iot-data-plane": "^3.1078.0",
     "@aws-sdk/client-kafka": "^3.1072.0",
     "@aws-sdk/client-kinesis": "^3.1071.0",
+    "@aws-sdk/client-kinesis-analytics-v2": "^3.1118.0",
     "@aws-sdk/client-kms": "^3.1068.0",
     "@aws-sdk/client-lambda": "^3.1068.0",
     "@aws-sdk/client-lightsail": "^3.1118.0",

@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
 import s3Routes from "./s3";
+import kinesisAnalyticsRoutes from "./kinesisanalytics";
 import s3ConfigRoutes from "./s3-config";
 import s3ObjectRoutes from "./s3-objects";
 import dynamodbRoutes from "./dynamodb";
@@ -86,6 +87,7 @@ router.route("/s3", s3Routes);
 router.route("/s3", s3ConfigRoutes);
 router.route("/s3", s3ObjectRoutes);
 router.route("/s3", s3SelectRoutes);
+router.route("/kinesisanalytics", kinesisAnalyticsRoutes);
 router.route("/dynamodb", dynamodbRoutes);
 router.route("/dynamodb", dynamodbAdvancedRoutes);
 router.route("/dynamodb", dynamodbStreamsRoutes);

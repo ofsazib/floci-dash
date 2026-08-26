@@ -447,8 +447,9 @@ These services have full CRUD operations in both backend and frontend:
 | **Organizations** | Describe org, roots, OUs (list/create/update/delete), accounts (list/create/close), policies (list/create/delete), policy attachments (attach/detach), effective policies, tags |
 | **Lightsail** | Instances (list/describe/create/delete/start/stop/reboot, state, ports), disks (list/describe/create/attach/detach/delete), static IPs (allocate/attach/detach/release), key pairs (list/create/delete), tags |
 | **AmazonMQ** | Brokers (list/describe/create/delete/reboot), users (list/describe/create/delete) |
+| **Kinesis Analytics V2** | Applications (list/describe/create/update/delete, start/stop), snapshots (list/create/describe/delete), tags |
 
-### Navigation + status (65 services)
+### Navigation + status (66 services)
 
 All services reported by Floci appear in the sidebar with status indicators.
 
