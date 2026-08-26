@@ -1,5 +1,5 @@
 export const SERVICE_CATEGORIES: Record<string, string[]> = {
-  "Compute":        ["ec2", "lambda", "autoscaling"],
+  "Compute":        ["ec2", "lambda", "autoscaling", "lightsail"],
   "Containers":     ["ecs", "ecr", "eks"],
   "Storage":        ["s3"],
   "Database":       ["dynamodb", "rds", "neptune", "elasticache", "docdb", "memorydb"],
@@ -33,7 +33,7 @@ export const CATEGORY_ORDER = [
 ] as const;
 
 export const SERVICE_CATEGORY_MAP: Record<string, string> = {
-  ec2: "Compute", lambda: "Compute", autoscaling: "Compute",
+  ec2: "Compute", lambda: "Compute", autoscaling: "Compute", lightsail: "Compute",
   ecs: "Containers", ecr: "Containers", eks: "Containers",
   s3: "Storage", s3vectors: "Storage",
   dynamodb: "Database", rds: "Database", neptune: "Database", elasticache: "Database", docdb: "Database", memorydb: "Database",
@@ -129,6 +129,7 @@ export const SERVICE_LABELS: Record<string, string> = {
   "iot": "IoT Core",
   "organizations": "Organizations",
   "swf": "SWF",
+  "lightsail": "Lightsail",
 };
 
 export function getServiceLabel(externalKey: string): string {

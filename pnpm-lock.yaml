@@ -143,6 +143,9 @@ importers:
       '@aws-sdk/client-lambda':
         specifier: ^3.1068.0
         version: 3.1070.0
+      '@aws-sdk/client-lightsail':
+        specifier: ^3.1118.0
+        version: 3.1118.0
       '@aws-sdk/client-memorydb':
         specifier: ^3.1073.0
         version: 3.1073.0
@@ -523,6 +526,10 @@ packages:
 
   '@aws-sdk/client-lambda@3.1070.0':
     resolution: {integrity: sha512-v9xBUFCtLnhrdf/sWZETvGggTDDMF0dLTQ/D9AmHBXSOjJ9BZ8O3V2Mr0htfu5A58dK8Rkxcw5f7YMuFui35mw==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/client-lightsail@3.1118.0':
+    resolution: {integrity: sha512-eHXMioEFS8ClMBzb7iAHeGySJY8r6APbu7Wv2rb/69e/0vh0jKtcmP4c587Gf3mdUj3eO8yKsLNNEO86rMkTqw==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-memorydb@3.1073.0':
@@ -3158,6 +3165,17 @@ snapshots:
       '@smithy/fetch-http-handler': 5.5.0
       '@smithy/node-http-handler': 4.8.0
       '@smithy/types': 4.15.0
+      tslib: 2.8.1
+
+  '@aws-sdk/client-lightsail@3.1118.0':
+    dependencies:
+      '@aws-sdk/core': 3.977.9
+      '@aws-sdk/credential-provider-node': 3.972.81
+      '@aws-sdk/types': 3.974.5
+      '@smithy/core': 3.33.3
+      '@smithy/fetch-http-handler': 5.7.2
+      '@smithy/node-http-handler': 4.11.3
+      '@smithy/types': 4.17.2
       tslib: 2.8.1
 
   '@aws-sdk/client-memorydb@3.1073.0':

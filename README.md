@@ -65,7 +65,7 @@
 - **Toast notifications** — Global API error interceptor that surfaces network and server errors via non-intrusive toast notifications
 - **Content Security Policy** — Strict CSP headers applied in production (self-only scripts, inline styles allowed for Cloudscape, no inline event handlers)
 - **Input sanitization** — All user inputs sanitized on the backend (control character stripping, path traversal prevention, JSON validation, length limits)
-- **100% test coverage** — **10,861 tests across 275 files** with **100% statement/branch/function/line coverage** across every file with executable code (backend routes, frontend pages/components/hooks, and 295 integration tests against a live Floci instance)
+- **100% test coverage** — **10,973 tests across 278 files** with **100% statement/branch/function/line coverage** across every file with executable code (backend routes, frontend pages/components/hooks, and 295 integration tests against a live Floci instance)
 - **Docker health checks** — Container health monitoring via `/api/healthz` endpoint, used by Docker Compose for dependency ordering
 - **Optimized Docker image** — Multi-stage build with pnpm cache mounts and `pnpm prune --prod` for minimal production image size
 
@@ -224,7 +224,7 @@ docker run -p 3000:3000 -p 4566:4566 \
 
 ### Testing
 
-The project includes **10,861 tests across 275 test files** with **100% statement / branch / function / line coverage** on every file with executable code, organized as:
+The project includes **10,973 tests across 278 test files** with **100% statement / branch / function / line coverage** on every file with executable code, organized as:
 
 | Tests | Files | Location |
 |-------|-------|----------|
@@ -445,6 +445,7 @@ These services have full CRUD operations in both backend and frontend:
 | **S3 Vector Search** | Vector buckets (list, create, get, delete), indexes (list, create, get, delete with dimension/data type/distance metric), vectors (put with metadata, get by keys, delete, query with top-K/filter) |
 | **SWF** (Simple Workflow) | Domains (list, describe, register, deprecate, undeprecate), workflow types (list, describe, register, deprecate, undeprecate, delete), activity types (list, describe, register, deprecate, undeprecate, delete), executions (open/closed list, start, describe, terminate, signal, request cancel), execution history, tags (list, add, remove) |
 | **Organizations** | Describe org, roots, OUs (list/create/update/delete), accounts (list/create/close), policies (list/create/delete), policy attachments (attach/detach), effective policies, tags |
+| **Lightsail** | Instances (list/describe/create/delete/start/stop/reboot, state, ports), disks (list/describe/create/attach/detach/delete), static IPs (allocate/attach/detach/release), key pairs (list/create/delete), tags |
 
 ### Navigation + status (65 services)
 
