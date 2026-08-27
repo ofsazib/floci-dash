@@ -46,6 +46,7 @@
     "@aws-sdk/client-bedrock-runtime": "^3.1072.0",
     "@aws-sdk/client-cloudformation": "^3.1068.0",
     "@aws-sdk/client-cloudfront": "^3.1071.0",
+    "@aws-sdk/client-cloudhsm-v2": "^3.1119.0",
     "@aws-sdk/client-cloudtrail": "^3.1071.0",
     "@aws-sdk/client-cloudwatch": "^3.1068.0",
     "@aws-sdk/client-cloudwatch-logs": "^3.1068.0",

@@ -454,8 +454,9 @@ These services have full CRUD operations in both backend and frontend:
 | **Bedrock AgentCore** | Runtimes (list/describe/create/update/delete), runtime invocations |
 | **FIS** | Experiment templates (list/describe/create/update/delete), experiments (list/describe/start/stop) |
 | **GuardDuty** | Detectors (list/describe/create/update/delete) |
+| **CloudHSM** | Clusters (list/create/delete), backups (list/delete) |
 
-### Navigation + status (72 services)
+### Navigation + status (73 services)
 
 All services reported by Floci appear in the sidebar with status indicators.
 
