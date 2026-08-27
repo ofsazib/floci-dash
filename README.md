@@ -455,8 +455,9 @@ These services have full CRUD operations in both backend and frontend:
 | **FIS** | Experiment templates (list/describe/create/update/delete), experiments (list/describe/start/stop) |
 | **GuardDuty** | Detectors (list/describe/create/update/delete) |
 | **CloudHSM** | Clusters (list/create/delete), backups (list/delete) |
+| **S3 Tables** | Table buckets, namespaces, tables (list/create/delete each) |
 
-### Navigation + status (73 services)
+### Navigation + status (74 services)
 
 All services reported by Floci appear in the sidebar with status indicators.
 
