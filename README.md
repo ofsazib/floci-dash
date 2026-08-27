@@ -450,8 +450,9 @@ These services have full CRUD operations in both backend and frontend:
 | **Kinesis Analytics V2** | Applications (list/describe/create/update/delete, start/stop), snapshots (list/create/describe/delete), tags |
 | **EMR Serverless** | Applications (list/describe/create/update/delete, start/stop, auto-start/auto-stop toggles) |
 | **MWAA** | Environments (list/describe/create/update/delete, web login + CLI tokens) |
+| **CloudWatch RUM** | App monitors (list/describe/create/update/delete) |
 
-### Navigation + status (68 services)
+### Navigation + status (69 services)
 
 All services reported by Floci appear in the sidebar with status indicators.
 

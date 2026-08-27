@@ -89,6 +89,7 @@
     "@aws-sdk/client-rds-data": "^3.1073.0",
     "@aws-sdk/client-resource-groups-tagging-api": "^3.1072.0",
     "@aws-sdk/client-route-53": "^3.1070.0",
+    "@aws-sdk/client-rum": "^3.1119.0",
     "@aws-sdk/client-s3": "^3.0.0",
     "@aws-sdk/client-scheduler": "^3.1070.0",
     "@aws-sdk/client-secrets-manager": "^3.1068.0",
