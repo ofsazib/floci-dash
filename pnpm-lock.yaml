@@ -50,6 +50,9 @@ importers:
       '@aws-sdk/client-bedrock-runtime':
         specifier: ^3.1072.0
         version: 3.1072.0
+      '@aws-sdk/client-cloudcontrol':
+        specifier: ^3.1119.0
+        version: 3.1119.0
       '@aws-sdk/client-cloudformation':
         specifier: ^3.1068.0
         version: 3.1070.0
@@ -432,6 +435,10 @@ packages:
 
   '@aws-sdk/client-bedrock-runtime@3.1072.0':
     resolution: {integrity: sha512-I+7zSjT/39K28DTQR/uXBtO/cL4M44w1xSSGZGo/0K7AlpVOJ1zODg6BkvY9OWNcKJUnkpgv8eWMx2JzBtZqSA==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/client-cloudcontrol@3.1119.0':
+    resolution: {integrity: sha512-yRceNKseBFf+NCFf6FJ8xiPf28/Nmw1bMxnU8FkuQXyLnCfxJN8vwRN0jh61WNSqmlLbOFkcdcIPbkclGhwziQ==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-cloudformation@3.1070.0':
@@ -2830,6 +2837,17 @@ snapshots:
       '@smithy/fetch-http-handler': 5.5.0
       '@smithy/node-http-handler': 4.8.0
       '@smithy/types': 4.15.0
+      tslib: 2.8.1
+
+  '@aws-sdk/client-cloudcontrol@3.1119.0':
+    dependencies:
+      '@aws-sdk/core': 3.977.9
+      '@aws-sdk/credential-provider-node': 3.972.81
+      '@aws-sdk/types': 3.974.5
+      '@smithy/core': 3.33.3
+      '@smithy/fetch-http-handler': 5.7.2
+      '@smithy/node-http-handler': 4.11.3
+      '@smithy/types': 4.17.2
       tslib: 2.8.1
 
   '@aws-sdk/client-cloudformation@3.1070.0':
