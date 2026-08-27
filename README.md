@@ -453,8 +453,9 @@ These services have full CRUD operations in both backend and frontend:
 | **CloudWatch RUM** | App monitors (list/describe/create/update/delete) |
 | **Bedrock AgentCore** | Runtimes (list/describe/create/update/delete), runtime invocations |
 | **FIS** | Experiment templates (list/describe/create/update/delete), experiments (list/describe/start/stop) |
+| **GuardDuty** | Detectors (list/describe/create/update/delete) |
 
-### Navigation + status (71 services)
+### Navigation + status (72 services)
 
 All services reported by Floci appear in the sidebar with status indicators.
 
