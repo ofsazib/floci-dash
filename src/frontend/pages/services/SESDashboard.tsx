@@ -179,6 +179,8 @@ import {
   useSESSetSendingEnabled,
   useSESSendQuota,
   useSESSendStatistics,
+  useSESAccountDetails,
+  usePutSESAccountDetails,
   useSESSendRawEmail,
   useSESNotificationAttributes,
   useSESSetNotificationTopic,
@@ -549,6 +551,17 @@ export function SESDashboard() {
   const accountSetSendingEnabled = useSESSetSendingEnabled();
   const { data: sendQuota } = useSESSendQuota();
   const { data: sendStats } = useSESSendStatistics();
+  const { data: accountDetails } = useSESAccountDetails();
+  const putAccountDetails = usePutSESAccountDetails();
+  const [showAccountDetails, setShowAccountDetails] = useState(false);
+  const [detailsForm, setDetailsForm] = useState({
+    mailType: "MARKETING",
+    websiteUrl: "",
+    contactLanguage: "en",
+    useCaseDescription: "",
+    additionalContacts: "",
+    productionAccessEnabled: false,
+  });
   const sendRawEmail = useSESSendRawEmail();
   const [showVerifyEmail, setShowVerifyEmail] = useState(false);
   const [showVerifyEmailAddress, setShowVerifyEmailAddress] = useState(false);
@@ -806,6 +819,37 @@ export function SESDashboard() {
             <StatCard label="Max send rate" value={sendQuota?.maxSendRate != null ? String(sendQuota.maxSendRate) : "—"} />
             <StatCard label="Sent last 24h" value={sendQuota?.sentLast24Hours != null ? String(sendQuota.sentLast24Hours) : "—"} />
           </ColumnLayout>
+          <Container
+            header={
+              <Header
+                variant="h3"
+                actions={
+                  <Button onClick={() => setShowAccountDetails(true)}>Edit account details</Button>
+                }
+              >
+                Account details (v2)
+              </Header>
+            }
+          >
+            {(accountDetails as any)?.details ? (
+              <ColumnLayout columns={3}>
+                <StatCard label="Mail type" value={(accountDetails as any).details.mailType ?? "—"} />
+                <StatCard
+                  label="Production access"
+                  value={String((accountDetails as any).details.productionAccessEnabled ?? false)}
+                />
+                <StatCard label="Website" value={(accountDetails as any).details.websiteUrl ?? "—"} />
+                <StatCard label="Contact language" value={(accountDetails as any).details.contactLanguage ?? "—"} />
+                <StatCard label="Use case" value={(accountDetails as any).details.useCaseDescription ?? "—"} />
+                <StatCard
+                  label="Additional contacts"
+                  value={(accountDetails as any).details.additionalContacts?.join(", ") || "—"}
+                />
+              </ColumnLayout>
+            ) : (
+              <Box variant="p">No account details submitted yet.</Box>
+            )}
+          </Container>
           {(sendStats?.sendDataPoints || []).length > 0 && (
             <ResourceTable
               resourceName="Data point"
@@ -828,6 +872,82 @@ export function SESDashboard() {
           )}
         </SpaceBetween>
       </Container>
+
+      <Modal
+        visible={showAccountDetails}
+        onDismiss={() => setShowAccountDetails(false)}
+        header="Edit Account Details"
+      >
+        <Form
+          actions={
+            <Button
+              variant="primary"
+              disabled={!detailsForm.mailType || putAccountDetails.isPending}
+              onClick={async () => {
+                try {
+                  await putAccountDetails.mutateAsync({
+                    mailType: detailsForm.mailType,
+                    websiteUrl: detailsForm.websiteUrl || undefined,
+                    contactLanguage: detailsForm.contactLanguage || undefined,
+                    useCaseDescription: detailsForm.useCaseDescription || undefined,
+                    additionalContacts: detailsForm.additionalContacts
+                      .split(",")
+                      .map((x) => x.trim())
+                      .filter(Boolean),
+                    productionAccessEnabled: detailsForm.productionAccessEnabled,
+                  });
+                  setShowAccountDetails(false);
+                } catch {}
+              }}
+            >
+              Submit account details
+            </Button>
+          }
+        >
+          <SpaceBetween size="m">
+            <FormField label="Mail type">
+              <Input
+                value={detailsForm.mailType}
+                onChange={(e) => setDetailsForm({ ...detailsForm, mailType: e.detail.value.toUpperCase() })}
+                placeholder="MARKETING | TRANSACTIONAL"
+              />
+            </FormField>
+            <FormField label="Website URL">
+              <Input
+                value={detailsForm.websiteUrl}
+                onChange={(e) => setDetailsForm({ ...detailsForm, websiteUrl: e.detail.value })}
+              />
+            </FormField>
+            <FormField label="Contact language">
+              <Input
+                value={detailsForm.contactLanguage}
+                onChange={(e) => setDetailsForm({ ...detailsForm, contactLanguage: e.detail.value })}
+                placeholder="en | ja"
+              />
+            </FormField>
+            <FormField label="Use case description">
+              <Input
+                value={detailsForm.useCaseDescription}
+                onChange={(e) => setDetailsForm({ ...detailsForm, useCaseDescription: e.detail.value })}
+              />
+            </FormField>
+            <FormField label="Additional contacts (comma-separated)">
+              <Input
+                value={detailsForm.additionalContacts}
+                onChange={(e) => setDetailsForm({ ...detailsForm, additionalContacts: e.detail.value })}
+              />
+            </FormField>
+            <Toggle
+              checked={detailsForm.productionAccessEnabled}
+              onChange={({ detail }) =>
+                setDetailsForm({ ...detailsForm, productionAccessEnabled: detail.checked })
+              }
+            >
+              Request production access
+            </Toggle>
+          </SpaceBetween>
+        </Form>
+      </Modal>
 
       {/* ── Identity Notification Detail ── */}
       {selectedIdentity && (

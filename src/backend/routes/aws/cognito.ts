@@ -30,6 +30,8 @@ import {
   AddCustomAttributesCommand,
   AdminDeleteUserAttributesCommand,
   AdminUserGlobalSignOutCommand,
+  GlobalSignOutCommand,
+  RevokeTokenCommand,
   AdminConfirmSignUpCommand,
   AdminListGroupsForUserCommand,
   ListUsersInGroupCommand,
@@ -82,12 +84,15 @@ router.get("/user-pools/:id", async (c: Context) => {
 });
 
 router.post("/user-pools", async (c: Context) => {
-  const body = await c.req.json<{ poolName: string }>();
+  const body = await c.req.json<{ poolName: string; usernameAttributes?: ("email" | "phone_number")[] }>();
   if (!body.poolName) return c.json({ error: "poolName is required" }, 400);
 
   const client = getClient();
   const result = await client.send(
-    new CreateUserPoolCommand({ PoolName: body.poolName })
+    new CreateUserPoolCommand({
+      PoolName: body.poolName,
+      UsernameAttributes: body.usernameAttributes,
+    })
   );
   return c.json({ userPool: result.UserPool }, 201);
 });
@@ -738,6 +743,26 @@ router.delete("/user-pools/:id/tags", async (c: Context) => {
   const client = getClient();
   await client.send(new UntagResourceCommand({ ResourceArn: id, TagKeys: body.tagKeys }));
   return c.json({ untagged: true });
+});
+
+router.post("/auth/global-sign-out", async (c: Context) => {
+  const body = await c.req.json<{ accessToken: string }>();
+  if (!body.accessToken) {
+    return c.json({ error: "accessToken is required" }, 400);
+  }
+  const client = getClient();
+  await client.send(new GlobalSignOutCommand({ AccessToken: body.accessToken }));
+  return c.json({ signedOut: true });
+});
+
+router.post("/auth/revoke-token", async (c: Context) => {
+  const body = await c.req.json<{ clientId: string; token: string }>();
+  if (!body.clientId || !body.token) {
+    return c.json({ error: "clientId and token are required" }, 400);
+  }
+  const client = getClient();
+  await client.send(new RevokeTokenCommand({ ClientId: body.clientId, Token: body.token }));
+  return c.json({ revoked: true });
 });
 
 router.post("/auth/change-password", async (c: Context) => {

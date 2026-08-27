@@ -611,6 +611,30 @@ export function useChangePassword() {
   });
 }
 
+export function useGlobalSignOut() {
+  const qc = useQueryClient();
+  return useMutation<{ signedOut: boolean }, Error, { accessToken: string }>({
+    mutationFn: (params) =>
+      api("/aws/cognito/auth/global-sign-out", {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cognito"] }),
+  });
+}
+
+export function useRevokeToken() {
+  const qc = useQueryClient();
+  return useMutation<{ revoked: boolean }, Error, { clientId: string; token: string }>({
+    mutationFn: (params) =>
+      api("/aws/cognito/auth/revoke-token", {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cognito"] }),
+  });
+}
+
 export function useSignUp() {
   const qc = useQueryClient();
   return useMutation<{ result: any }, Error, {

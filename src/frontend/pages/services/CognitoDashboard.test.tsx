@@ -76,6 +76,8 @@ const mockCognitoTags = vi.fn();
 const mockTagPool = vi.fn();
 const mockUntagPool = vi.fn();
 const mockChangePassword = vi.fn();
+const mockGlobalSignOut = vi.fn();
+const mockRevokeToken = vi.fn();
 const mockSignUp = vi.fn();
 const mockRespondChallenge = vi.fn();
 
@@ -241,6 +243,14 @@ vi.mock("../../hooks/useCognito", () => ({
   useRespondToAuthChallenge: () => ({
     mutateAsync: mockRespondChallenge,
     get isPending() { return advancedStates.respondChallenge.isPending; },
+  }),
+  useGlobalSignOut: () => ({
+    mutateAsync: mockGlobalSignOut,
+    isPending: false,
+  }),
+  useRevokeToken: () => ({
+    mutateAsync: mockRevokeToken,
+    isPending: false,
   }),
 }));
 
@@ -2067,6 +2077,40 @@ describe("CognitoDashboard — G.86 admin user ops, updates, tags", () => {
       )
     );
     await waitFor(() => expect(screen.getByText(/CodeDeliveryDetails/)).toBeTruthy());
+  });
+
+  it("runs the global-sign-out auth flow", async () => {
+    const user = userEvent.setup();
+    setupPool();
+    mockUsers.mockReturnValue({ data: { users: [], total: 0 } });
+    mockGlobalSignOut.mockResolvedValue({ signedOut: true });
+    await openPool(user);
+    await user.click(screen.getByRole("tab", { name: /Auth Flows/i }));
+    await waitFor(() => expect(screen.getByText("Authentication Flow Tester")).toBeTruthy());
+    await user.click(screen.getAllByText("initiate")[0]);
+    await user.click(await screen.findByText("Global Sign Out"));
+    await user.type(screen.getByPlaceholderText("Access token from successful authentication"), "tok");
+    await clickButton(user, /Run Flow/i);
+    await waitFor(() => expect(mockGlobalSignOut).toHaveBeenCalledWith({ accessToken: "tok" }));
+  });
+
+  it("runs the revoke-token auth flow", async () => {
+    const user = userEvent.setup();
+    setupPool();
+    mockUsers.mockReturnValue({ data: { users: [], total: 0 } });
+    mockRevokeToken.mockResolvedValue({ revoked: true });
+    await openPool(user);
+    await user.click(screen.getByRole("tab", { name: /Auth Flows/i }));
+    await waitFor(() => expect(screen.getByText("Authentication Flow Tester")).toBeTruthy());
+    await user.click(screen.getAllByText("initiate")[0]);
+    await user.click(await screen.findByText("Revoke Token"));
+    await waitFor(() => expect(screen.getByText("Refresh Token")).toBeTruthy());
+    await clickButton(user, /Run Flow/i);
+    await waitFor(() => expect(screen.getByRole("button", { name: /Run Flow/i })).toHaveProperty("disabled", true));
+    await user.type(screen.getByPlaceholderText("App client ID"), "cid");
+    await user.type(screen.getByPlaceholderText("Refresh token to revoke"), "rtok");
+    await clickButton(user, /Run Flow/i);
+    await waitFor(() => expect(mockRevokeToken).toHaveBeenCalledWith({ clientId: "cid", token: "rtok" }));
   });
 
   it("runs the sign-up auth flow", async () => {

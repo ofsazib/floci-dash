@@ -76,6 +76,8 @@ const mockSendingEnabled = vi.fn();
 const mockAccountSetSendingEnabled = vi.fn();
 const mockSendQuota = vi.fn();
 const mockSendStats = vi.fn();
+const mockAccountDetails = vi.fn();
+const mockPutAccountDetails = vi.fn();
 const mockSendRawEmail = vi.fn();
 const mockDeleteIdentity = vi.fn();
 const mockDeleteVerifiedEmail = vi.fn();
@@ -128,6 +130,11 @@ vi.mock("../../hooks/useSES", () => ({
   }),
   useSESSendQuota: (...args: any[]) => mockSendQuota(...args),
   useSESSendStatistics: (...args: any[]) => mockSendStats(...args),
+  useSESAccountDetails: (...args: any[]) => mockAccountDetails(...args),
+  usePutSESAccountDetails: () => ({
+    mutateAsync: mockPutAccountDetails,
+    isPending: false,
+  }),
   useSESSendRawEmail: () => ({
     mutate: mockSendRawEmail,
     get isPending() { return sendRawState.isPending; },
@@ -358,6 +365,12 @@ beforeEach(() => {
   });
   mockSendStats.mockReturnValue({
     data: { sendDataPoints: [] },
+    isLoading: false,
+    isError: false,
+    error: null,
+  });
+  mockAccountDetails.mockReturnValue({
+    data: undefined,
     isLoading: false,
     isError: false,
     error: null,
@@ -2617,6 +2630,103 @@ describe("SESDashboard — Account section", () => {
     });
     render(<SESDashboard />, { wrapper: createWrapper() });
     expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("renders account details when configured", async () => {
+    mockAccountDetails.mockReturnValue({
+      data: {
+        details: {
+          mailType: "MARKETING",
+          websiteUrl: "https://x.test",
+          contactLanguage: "en",
+          useCaseDescription: "d",
+          additionalContacts: ["a@x", "b@x"],
+          productionAccessEnabled: true,
+        },
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("Account details (v2)")).toBeTruthy();
+    expect(screen.getAllByText("MARKETING").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("https://x.test").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("a@x, b@x")).toBeTruthy();
+    expect(screen.getByText("true")).toBeTruthy();
+  });
+
+  it("shows empty account details message when unconfigured", async () => {
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("No account details submitted yet.")).toBeTruthy();
+  });
+
+  it("opens the account details modal and submits parsed values", async () => {
+    mockPutAccountDetails.mockResolvedValue({});
+    const user = userEvent.setup();
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /Edit account details/i }));
+    const dialog = screen.getByRole("dialog", { name: /Edit Account Details/i });
+    expect(within(dialog).getByText("Mail type")).toBeTruthy();
+    await user.clear(within(dialog).getByPlaceholderText("MARKETING | TRANSACTIONAL"));
+    await user.type(within(dialog).getByPlaceholderText("MARKETING | TRANSACTIONAL"), "transactional");
+    await user.type(within(dialog).getAllByRole("textbox")[1], "https://shop.test");
+    await user.type(within(dialog).getAllByRole("textbox")[3], "newsletters");
+    await user.type(within(dialog).getAllByRole("textbox")[4], "ops@x.test, ceo@x.test ,");
+    await user.click(within(dialog).getByRole("checkbox", { name: /Request production access/i }));
+    await user.click(within(dialog).getByRole("button", { name: /Submit account details/i }));
+    await waitFor(() =>
+      expect(mockPutAccountDetails).toHaveBeenCalledWith({
+        mailType: "TRANSACTIONAL",
+        websiteUrl: "https://shop.test",
+        contactLanguage: "en",
+        useCaseDescription: "newsletters",
+        additionalContacts: ["ops@x.test", "ceo@x.test"],
+        productionAccessEnabled: true,
+      })
+    );
+  });
+
+  it("renders dashes for sparse account details", async () => {
+    mockAccountDetails.mockReturnValue({
+      data: {
+        details: {
+          mailType: null,
+          websiteUrl: null,
+          contactLanguage: null,
+          useCaseDescription: null,
+          additionalContacts: [],
+          productionAccessEnabled: null,
+        },
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("Account details (v2)")).toBeTruthy();
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(4);
+    expect(screen.getByText("false")).toBeTruthy();
+  });
+
+  it("submits account details with empty optional fields sent as undefined", async () => {
+    mockPutAccountDetails.mockResolvedValue({});
+    const user = userEvent.setup();
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /Edit account details/i }));
+    const dialog = screen.getByRole("dialog", { name: /Edit Account Details/i });
+    await user.clear(within(dialog).getByPlaceholderText("en | ja"));
+    await user.click(within(dialog).getByRole("button", { name: /Submit account details/i }));
+    await waitFor(() =>
+      expect(mockPutAccountDetails).toHaveBeenCalledWith({
+        mailType: "MARKETING",
+        websiteUrl: undefined,
+        contactLanguage: undefined,
+        useCaseDescription: undefined,
+        additionalContacts: [],
+        productionAccessEnabled: false,
+      })
+    );
   });
 
   it("toggles account sending enabled and shows error on failure", async () => {

@@ -1864,8 +1864,8 @@ These are Floci services with handler directories that have **no** corresponding
 
 | Service | New Operations | Dashboard Status |
 |---------|---------------|-----------------|
-| **SES** | PutAccountDetails, GetAccountDetails (v2 account provisioning) | Not yet implemented |
-| **Cognito** | GlobalSignOut, RevokeToken, UsernameAttributes pools | Not yet implemented |
+| **SES** | PutAccountDetails, GetAccountDetails (v2 account provisioning) | Done 2026-08-27 — GET/PUT `/aws/email/account/details`, account details panel + edit modal |
+| **Cognito** | GlobalSignOut, RevokeToken, UsernameAttributes pools | Done 2026-08-27 — auth flow tester flows + `usernameAttributes` on pool create |
 | **SFN** (Step Functions) | Engine enhancements (mocked integrations, Retry, distributed Map, JSONata) | Floci engine features, not new API endpoints — no dashboard change needed |
 
 ---

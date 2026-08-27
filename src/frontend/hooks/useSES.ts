@@ -134,6 +134,38 @@ export function useSESSetSendingEnabled() {
   });
 }
 
+export interface SESAccountDetails {
+  mailType?: string;
+  websiteUrl?: string;
+  contactLanguage?: string;
+  useCaseDescription?: string;
+  additionalContacts?: string[];
+  productionAccessEnabled?: boolean;
+}
+
+export function useSESAccountDetails() {
+  return useQuery<{ details: SESAccountDetails | null }>({
+    queryKey: ["aws", "ses", "account", "details"],
+    queryFn: () => api("/aws/email/account/details"),
+  });
+}
+
+export function usePutSESAccountDetails() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      mailType: string;
+      websiteUrl?: string;
+      contactLanguage?: string;
+      useCaseDescription?: string;
+      additionalContacts?: string[];
+      productionAccessEnabled?: boolean;
+    }) =>
+      api("/aws/email/account/details", { method: "PUT", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ses", "account", "details"] }),
+  });
+}
+
 export function useSESSendQuota() {
   return useQuery<SESSendQuota>({
     queryKey: ["aws", "ses", "account", "send-quota"],

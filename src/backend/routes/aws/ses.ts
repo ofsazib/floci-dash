@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { create } from "../../clients/aws";
 import { SESClient } from "@aws-sdk/client-ses";
+import { SESv2Client, PutAccountDetailsCommand, GetAccountCommand } from "@aws-sdk/client-sesv2";
 import {
   ListTemplatesCommand,
   CreateTemplateCommand,
@@ -51,6 +52,7 @@ import {
 
 const router = new Hono();
 const getClient = () => create(SESClient);
+const getV2Client = () => create(SESv2Client);
 
 // ── Identities ────────────────────────────────────────────
 
@@ -527,6 +529,41 @@ router.get("/account/send-statistics", async (c: Context) => {
       bounces: p.Bounces,
     })),
   });
+});
+
+router.get("/account/details", async (c: Context) => {
+  const client = getV2Client();
+  const result = await client.send(new GetAccountCommand({}));
+  const d = result.Details;
+  return c.json({
+    details: d
+      ? {
+          mailType: d.MailType ?? null,
+          websiteUrl: d.WebsiteURL ?? null,
+          contactLanguage: d.ContactLanguage ?? null,
+          useCaseDescription: d.UseCaseDescription ?? null,
+          additionalContacts: d.AdditionalContactEmailAddresses ?? [],
+          productionAccessEnabled: (d as any).ProductionAccessEnabled ?? false,
+        }
+      : null,
+  });
+});
+
+router.put("/account/details", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.mailType) return c.json({ error: "mailType is required" }, 400);
+  const client = getV2Client();
+  await client.send(
+    new PutAccountDetailsCommand({
+      MailType: body.mailType,
+      WebsiteURL: body.websiteUrl,
+      ContactLanguage: body.contactLanguage,
+      UseCaseDescription: body.useCaseDescription,
+      AdditionalContactEmailAddresses: body.additionalContacts,
+      ProductionAccessEnabled: body.productionAccessEnabled,
+    })
+  );
+  return c.json({ updated: true });
 });
 
 // ── Raw email ─────────────────────────────────────────────

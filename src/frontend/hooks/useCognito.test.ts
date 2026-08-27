@@ -68,6 +68,8 @@ import {
   useTagCognitoUserPool,
   useUntagCognitoUserPool,
   useChangePassword,
+  useGlobalSignOut,
+  useRevokeToken,
   useSignUp,
   useRespondToAuthChallenge,
   useAdminAddUserToGroup,
@@ -638,6 +640,26 @@ describe("useCognito hooks", () => {
     expect(mockApi).toHaveBeenCalledWith(
       "/aws/cognito/auth/change-password",
       expect.objectContaining({ method: "POST", body: JSON.stringify({ accessToken: "tok", previousPassword: "old", proposedPassword: "new" }) })
+    );
+  });
+
+  it("useGlobalSignOut calls POST with accessToken", async () => {
+    mockApi.mockResolvedValueOnce({ signedOut: true });
+    const { result } = renderHook(() => useGlobalSignOut(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ accessToken: "tok" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/cognito/auth/global-sign-out",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ accessToken: "tok" }) })
+    );
+  });
+
+  it("useRevokeToken calls POST with clientId + token", async () => {
+    mockApi.mockResolvedValueOnce({ revoked: true });
+    const { result } = renderHook(() => useRevokeToken(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ clientId: "cid", token: "tok" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/cognito/auth/revoke-token",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ clientId: "cid", token: "tok" }) })
     );
   });
 

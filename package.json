@@ -102,6 +102,7 @@
     "@aws-sdk/client-secrets-manager": "^3.1068.0",
     "@aws-sdk/client-servicediscovery": "^3.1072.0",
     "@aws-sdk/client-ses": "^3.1070.0",
+    "@aws-sdk/client-sesv2": "^3.1119.0",
     "@aws-sdk/client-sfn": "^3.1072.0",
     "@aws-sdk/client-sns": "^3.1068.0",
     "@aws-sdk/client-sqs": "^3.1068.0",

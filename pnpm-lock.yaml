@@ -224,6 +224,9 @@ importers:
       '@aws-sdk/client-ses':
         specifier: ^3.1070.0
         version: 3.1070.0
+      '@aws-sdk/client-sesv2':
+        specifier: ^3.1119.0
+        version: 3.1119.0
       '@aws-sdk/client-sfn':
         specifier: ^3.1072.0
         version: 3.1072.0
@@ -669,6 +672,10 @@ packages:
     resolution: {integrity: sha512-bPfie6sd2pcs4inpRTBnZzNN8ud5aup9ljI72DjOnI1xUzJKbWjS+i1RVcRjgB5zWdWawOhMYauGlrmKNGCUSg==}
     engines: {node: '>=20.0.0'}
 
+  '@aws-sdk/client-sesv2@3.1119.0':
+    resolution: {integrity: sha512-QmBd9MZVFqW569AA80GzOMU6fcaF3C0c/Djdetd/I8P1q6/cPeeJ18Li3cKbkW6kGrjvlb0d87I7GIFY+Wv3JA==}
+    engines: {node: '>=20.0.0'}
+
   '@aws-sdk/client-sfn@3.1072.0':
     resolution: {integrity: sha512-4KlbGS6U5vLvNqgp752M4Wci+x27dWB+As5RHHVOm4e2EmrAhYX3kOlelnpwVSIDQSip5216NefDXom131ciuw==}
     engines: {node: '>=20.0.0'}
@@ -967,14 +974,6 @@ packages:
 
   '@aws-sdk/signature-v4-multi-region@3.996.35':
     resolution: {integrity: sha512-6L/VWs+Wch2stHemCGTmUNqKLMzURxQDK5boNG3Jn3kAOp71meDUuS5sbObpEvFxHDq0uWeSLFDNSYsjNt+Dlg==}
-    engines: {node: '>=20.0.0'}
-
-  '@aws-sdk/signature-v4-multi-region@3.996.38':
-    resolution: {integrity: sha512-C379Sk+MiFZCfWZphKlMyLHKxV22OjoGM5KJjj5IJNJcOCWL4IGIpnEGzv1FQiRwhYXfq55SJMfxlqPE08JJ9g==}
-    engines: {node: '>=20.0.0'}
-
-  '@aws-sdk/signature-v4-multi-region@3.996.39':
-    resolution: {integrity: sha512-8+srXqYIF8KYMLC4FxMLEM5Ek7kUNibJu1R4m8/fUhhNYIZZz26oGtKkCr8I/HiG2fFQxBvaGgQZT4/mqRCSnA==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/signature-v4-multi-region@3.996.46':
@@ -3576,6 +3575,18 @@ snapshots:
       '@smithy/types': 4.15.0
       tslib: 2.8.1
 
+  '@aws-sdk/client-sesv2@3.1119.0':
+    dependencies:
+      '@aws-sdk/core': 3.977.9
+      '@aws-sdk/credential-provider-node': 3.972.81
+      '@aws-sdk/signature-v4-multi-region': 3.996.46
+      '@aws-sdk/types': 3.974.5
+      '@smithy/core': 3.33.3
+      '@smithy/fetch-http-handler': 5.7.2
+      '@smithy/node-http-handler': 4.11.3
+      '@smithy/types': 4.17.2
+      tslib: 2.8.1
+
   '@aws-sdk/client-sfn@3.1072.0':
     dependencies:
       '@aws-crypto/sha256-browser': 5.2.0
@@ -4291,7 +4302,7 @@ snapshots:
       '@aws-crypto/sha256-browser': 5.2.0
       '@aws-crypto/sha256-js': 5.2.0
       '@aws-sdk/core': 3.977.9
-      '@aws-sdk/signature-v4-multi-region': 3.996.35
+      '@aws-sdk/signature-v4-multi-region': 3.996.46
       '@aws-sdk/types': 3.974.5
       '@smithy/core': 3.33.3
       '@smithy/fetch-http-handler': 5.7.2
@@ -4304,7 +4315,7 @@ snapshots:
       '@aws-crypto/sha256-browser': 5.2.0
       '@aws-crypto/sha256-js': 5.2.0
       '@aws-sdk/core': 3.977.9
-      '@aws-sdk/signature-v4-multi-region': 3.996.35
+      '@aws-sdk/signature-v4-multi-region': 3.996.46
       '@aws-sdk/types': 3.974.5
       '@smithy/core': 3.33.3
       '@smithy/fetch-http-handler': 5.7.2
@@ -4315,7 +4326,7 @@ snapshots:
   '@aws-sdk/nested-clients@3.997.26':
     dependencies:
       '@aws-sdk/core': 3.977.9
-      '@aws-sdk/signature-v4-multi-region': 3.996.38
+      '@aws-sdk/signature-v4-multi-region': 3.996.46
       '@aws-sdk/types': 3.974.5
       '@smithy/core': 3.33.3
       '@smithy/fetch-http-handler': 5.7.2
@@ -4326,7 +4337,7 @@ snapshots:
   '@aws-sdk/nested-clients@3.997.31':
     dependencies:
       '@aws-sdk/core': 3.977.9
-      '@aws-sdk/signature-v4-multi-region': 3.996.39
+      '@aws-sdk/signature-v4-multi-region': 3.996.46
       '@aws-sdk/types': 3.974.5
       '@smithy/core': 3.33.3
       '@smithy/fetch-http-handler': 5.7.2
@@ -4350,20 +4361,6 @@ snapshots:
       '@aws-sdk/types': 3.973.13
       '@smithy/signature-v4': 5.5.0
       '@smithy/types': 4.15.0
-      tslib: 2.8.1
-
-  '@aws-sdk/signature-v4-multi-region@3.996.38':
-    dependencies:
-      '@aws-sdk/types': 3.974.5
-      '@smithy/signature-v4': 5.7.3
-      '@smithy/types': 4.17.2
-      tslib: 2.8.1
-
-  '@aws-sdk/signature-v4-multi-region@3.996.39':
-    dependencies:
-      '@aws-sdk/types': 3.974.5
-      '@smithy/signature-v4': 5.7.3
-      '@smithy/types': 4.17.2
       tslib: 2.8.1
 
   '@aws-sdk/signature-v4-multi-region@3.996.46':

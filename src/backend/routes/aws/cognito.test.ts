@@ -41,6 +41,8 @@ vi.mock("@aws-sdk/client-cognito-identity-provider", () => ({
   AddCustomAttributesCommand: createCmd("AddCustomAttributesCommand"),
   AdminDeleteUserAttributesCommand: createCmd("AdminDeleteUserAttributesCommand"),
   AdminUserGlobalSignOutCommand: createCmd("AdminUserGlobalSignOutCommand"),
+  GlobalSignOutCommand: createCmd("GlobalSignOutCommand"),
+  RevokeTokenCommand: createCmd("RevokeTokenCommand"),
   AdminConfirmSignUpCommand: createCmd("AdminConfirmSignUpCommand"),
   AdminListGroupsForUserCommand: createCmd("AdminListGroupsForUserCommand"),
   ListUsersInGroupCommand: createCmd("ListUsersInGroupCommand"),
@@ -144,6 +146,20 @@ describe("Cognito Routes", () => {
       mockSend.mockResolvedValueOnce({ UserPool: { Id: "us-east-1_new", Name: "newpool" } });
       const res = await post("/user-pools", { poolName: "newpool" });
       expect(res.status).toBe(201);
+    });
+
+    it("POST /user-pools — passes usernameAttributes through (201)", async () => {
+      mockSend.mockResolvedValueOnce({ UserPool: { Id: "us-east-1_attr", Name: "attrpool" } });
+      const res = await post("/user-pools", {
+        poolName: "attrpool",
+        usernameAttributes: ["email"],
+      });
+      expect(res.status).toBe(201);
+      expect(mockSend.mock.calls[0][0]).toMatchObject({
+        __cmdName: "CreateUserPoolCommand",
+        PoolName: "attrpool",
+        UsernameAttributes: ["email"],
+      });
     });
 
     it("POST /user-pools — 400 if poolName missing", async () => {
@@ -914,4 +930,35 @@ describe("Cognito Routes", () => {
     expect(cmd.Username).toBe("bob");
     expect(cmd.GroupName).toBe("admins");
   });
+  it("POST /auth/global-sign-out — signs out access token", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/auth/global-sign-out", { accessToken: "tok" });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ signedOut: true });
+    expect(mockSend.mock.calls[0][0]).toMatchObject({
+      __cmdName: "GlobalSignOutCommand",
+      AccessToken: "tok",
+    });
+
+    const res400 = await post("/auth/global-sign-out", {});
+    expect(res400.status).toBe(400);
+    expect(await res400.json()).toEqual({ error: "accessToken is required" });
+  });
+
+  it("POST /auth/revoke-token — revokes refresh token", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/auth/revoke-token", { clientId: "cid", token: "tok" });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ revoked: true });
+    expect(mockSend.mock.calls[0][0]).toMatchObject({
+      __cmdName: "RevokeTokenCommand",
+      ClientId: "cid",
+      Token: "tok",
+    });
+
+    const res400 = await post("/auth/revoke-token", { clientId: "cid" });
+    expect(res400.status).toBe(400);
+    expect(await res400.json()).toEqual({ error: "clientId and token are required" });
+  });
+
 });

@@ -20,6 +20,8 @@ import {
   useSESDeleteVerifiedEmail,
   useSESSendingEnabled,
   useSESSetSendingEnabled,
+  useSESAccountDetails,
+  usePutSESAccountDetails,
   useSESSendQuota,
   useSESSendStatistics,
   useSESSendRawEmail,
@@ -624,3 +626,24 @@ describe("SES template hooks", () => {
     });
   });
 });
+
+describe("useSESAccountDetails + usePutSESAccountDetails", () => {
+  it("queries account details", async () => {
+    mockApi.mockResolvedValueOnce({ details: null });
+    const { result } = renderHook(() => useSESAccountDetails(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/email/account/details");
+  });
+
+  it("puts account details", async () => {
+    mockApi.mockResolvedValueOnce({ updated: true });
+    const body = { mailType: "MARKETING" };
+    const { result } = renderHook(() => usePutSESAccountDetails(), { wrapper: createWrapper() });
+    await result.current.mutateAsync(body);
+    expect(mockApi).toHaveBeenCalledWith("/aws/email/account/details", {
+      method: "PUT",
+      body: JSON.stringify(body),
+    });
+  });
+});
+

@@ -62,6 +62,14 @@ vi.mock("@aws-sdk/client-ses", () => ({
   TestRenderTemplateCommand: createCmd("TestRenderTemplateCommand"),
 }));
 
+vi.mock("@aws-sdk/client-sesv2", () => ({
+  SESv2Client: vi.fn(function () {
+    return { send: mockSend };
+  }),
+  PutAccountDetailsCommand: createCmd("PutAccountDetailsCommand"),
+  GetAccountCommand: createCmd("GetAccountCommand"),
+}));
+
 vi.mock("../../clients/aws", () => ({
   create: () => ({ send: mockSend }),
 }));
@@ -940,4 +948,85 @@ describe("SES Routes", () => {
       expect(res.status).toBe(400);
     });
   });
+  it("PUT /account/details — puts v2 account details", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await router.request("/account/details", {
+      method: "PUT",
+      body: JSON.stringify({
+        mailType: "MARKETING",
+        websiteUrl: "https://x",
+        contactLanguage: "en",
+        useCaseDescription: "d",
+        additionalContacts: ["a@x"],
+        productionAccessEnabled: true,
+      }),
+      headers: { "content-type": "application/json" },
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ updated: true });
+    expect(mockSend.mock.calls[0][0]).toMatchObject({
+      __cmdName: "PutAccountDetailsCommand",
+      MailType: "MARKETING",
+      ProductionAccessEnabled: true,
+    });
+  });
+
+  it("PUT /account/details — 400 without mailType", async () => {
+    const res = await router.request("/account/details", {
+      method: "PUT",
+      body: JSON.stringify({}),
+      headers: { "content-type": "application/json" },
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "mailType is required" });
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  it("GET /account/details — returns configured details", async () => {
+    mockSend.mockResolvedValueOnce({
+      Details: {
+        MailType: "MARKETING",
+        WebsiteURL: "https://x",
+        ContactLanguage: "en",
+        UseCaseDescription: "d",
+        AdditionalContactEmailAddresses: ["a@x"],
+        ProductionAccessEnabled: true,
+      },
+    });
+    const res = await router.request("/account/details", { method: "GET" });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      details: {
+        mailType: "MARKETING",
+        websiteUrl: "https://x",
+        contactLanguage: "en",
+        useCaseDescription: "d",
+        additionalContacts: ["a@x"],
+        productionAccessEnabled: true,
+      },
+    });
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetAccountCommand");
+  });
+
+  it("GET /account/details — sparse details default fields", async () => {
+    mockSend.mockResolvedValueOnce({ Details: {} });
+    const res = await router.request("/account/details", { method: "GET" });
+    expect(await res.json()).toEqual({
+      details: {
+        mailType: null,
+        websiteUrl: null,
+        contactLanguage: null,
+        useCaseDescription: null,
+        additionalContacts: [],
+        productionAccessEnabled: false,
+      },
+    });
+  });
+
+  it("GET /account/details — null details when unconfigured", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await router.request("/account/details", { method: "GET" });
+    expect(await res.json()).toEqual({ details: null });
+  });
+
 });

@@ -263,6 +263,8 @@ import {
   useTagCognitoUserPool,
   useUntagCognitoUserPool,
   useChangePassword,
+  useGlobalSignOut,
+  useRevokeToken,
   useSignUp,
   useRespondToAuthChallenge,
 } from "../../hooks/useCognito";
@@ -579,6 +581,8 @@ export function CognitoDashboard() {
     | "update-user-attributes"
     | "delete-user-attributes"
     | "change-password"
+    | "global-sign-out"
+    | "revoke-token"
     | "sign-up"
     | "respond-challenge"
   >("initiate");
@@ -621,6 +625,8 @@ export function CognitoDashboard() {
   const tagPool = useTagCognitoUserPool(selectedPool!);
   const untagPool = useUntagCognitoUserPool(selectedPool!);
   const changePassword = useChangePassword();
+  const globalSignOut = useGlobalSignOut();
+  const revokeToken = useRevokeToken();
   const signUp = useSignUp();
   const respondChallenge = useRespondToAuthChallenge();
   const [flowPreviousPassword, setFlowPreviousPassword] = useState("");
@@ -874,6 +880,8 @@ export function CognitoDashboard() {
                             { label: "Update User Attributes", value: "update-user-attributes" },
                             { label: "Delete User Attributes", value: "delete-user-attributes" },
                             { label: "Change Password", value: "change-password" },
+                            { label: "Global Sign Out", value: "global-sign-out" },
+                            { label: "Revoke Token", value: "revoke-token" },
                             { label: "Sign Up", value: "sign-up" },
                             { label: "Respond to Challenge", value: "respond-challenge" },
                           ]}
@@ -978,7 +986,8 @@ export function CognitoDashboard() {
                       {(activeAuthFlowType === "get-user" ||
                         activeAuthFlowType === "update-user-attributes" ||
                         activeAuthFlowType === "delete-user-attributes" ||
-                        activeAuthFlowType === "change-password") && (
+                        activeAuthFlowType === "change-password" ||
+                        activeAuthFlowType === "global-sign-out") && (
                         <FormField label="Access Token">
                           <Input
                             value={authFlowAccessToken}
@@ -986,6 +995,24 @@ export function CognitoDashboard() {
                             placeholder="Access token from successful authentication"
                           />
                         </FormField>
+                      )}
+                      {activeAuthFlowType === "revoke-token" && (
+                        <>
+                          <FormField label="Client ID">
+                            <Input
+                              value={authFlowClientId}
+                              onChange={({ detail }) => setAuthFlowClientId(detail.value)}
+                              placeholder="App client ID"
+                            />
+                          </FormField>
+                          <FormField label="Refresh Token">
+                            <Input
+                              value={authFlowSession}
+                              onChange={({ detail }) => setAuthFlowSession(detail.value)}
+                              placeholder="Refresh token to revoke"
+                            />
+                          </FormField>
+                        </>
                       )}
                       {activeAuthFlowType === "change-password" && (
                         <>
@@ -1067,6 +1094,8 @@ export function CognitoDashboard() {
                             "delete-user-attributes": !authFlowAccessToken,
                             "update-user-attributes": !authFlowAccessToken || !authFlowUserAttributes,
                             "change-password": !authFlowAccessToken || !flowPreviousPassword || !flowProposedPassword,
+                            "global-sign-out": !authFlowAccessToken,
+                            "revoke-token": !authFlowClientId || !authFlowSession,
                             "sign-up": !authFlowClientId || !authFlowUsername || !authFlowPassword,
                             "respond-challenge": !authFlowClientId || !authFlowChallengeName,
                           } as Record<string, boolean>)[activeAuthFlowType]
@@ -1131,6 +1160,15 @@ export function CognitoDashboard() {
                                 accessToken: authFlowAccessToken,
                                 previousPassword: flowPreviousPassword,
                                 proposedPassword: flowProposedPassword,
+                              });
+                            } else if (activeAuthFlowType === "global-sign-out") {
+                              result = await globalSignOut.mutateAsync({
+                                accessToken: authFlowAccessToken,
+                              });
+                            } else if (activeAuthFlowType === "revoke-token") {
+                              result = await revokeToken.mutateAsync({
+                                clientId: authFlowClientId,
+                                token: authFlowSession,
                               });
                             } else if (activeAuthFlowType === "sign-up") {
                               result = await signUp.mutateAsync({
