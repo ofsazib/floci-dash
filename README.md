@@ -452,8 +452,9 @@ These services have full CRUD operations in both backend and frontend:
 | **MWAA** | Environments (list/describe/create/update/delete, web login + CLI tokens) |
 | **CloudWatch RUM** | App monitors (list/describe/create/update/delete) |
 | **Bedrock AgentCore** | Runtimes (list/describe/create/update/delete), runtime invocations |
+| **FIS** | Experiment templates (list/describe/create/update/delete), experiments (list/describe/start/stop) |
 
-### Navigation + status (70 services)
+### Navigation + status (71 services)
 
 All services reported by Floci appear in the sidebar with status indicators.
 
