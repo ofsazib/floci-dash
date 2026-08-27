@@ -660,6 +660,29 @@ describe("Function URLs", () => {
     expect(body.authType).toBe("NONE");
   });
 
+  it("GET /functions/:name/url — empty when no URL config", async () => {
+    mockSend.mockRejectedValueOnce(
+      Object.assign(new Error("Function URL config not found"), {
+        name: "ResourceNotFoundException",
+      })
+    );
+    const res = await get("/functions/my-func/url");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({
+      url: null,
+      authType: null,
+      cors: null,
+      invokeMode: null,
+    });
+  });
+
+  it("GET /functions/:name/url — rethrows unexpected errors as 500", async () => {
+    mockSend.mockRejectedValueOnce(new Error("boom"));
+    const res = await get("/functions/my-func/url");
+    expect(res.status).toBe(500);
+  });
+
   it("POST /functions/:name/url — creates URL config", async () => {
     mockSend.mockResolvedValueOnce({
       FunctionUrl: "https://example.com/fn",
