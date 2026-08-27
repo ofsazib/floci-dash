@@ -5,6 +5,27 @@ All notable changes to Floci Dash will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] — 2026-08-27
+
+### Fixed
+
+- **S3 object tags 500** — the `/buckets/:name/objects/*` catch-all no longer swallows `tags|acl|attributes|head|raw` requests; object keys containing slashes (URL-encoded `%2F`) round-trip correctly, and `NoSuchKey`/`NoSuchTagSet` map to 404 instead of 500
+- **Lambda function list empty** — all Lambda GET hooks now call `/aws/lambda/*` (previously `/lambda/*` returned the SPA HTML and broke JSON parsing) (#5, #4)
+- **Lambda detail 500 without Function URL** — `GET /functions/:name/url` returns an empty config when Floci/AWS raise `ResourceNotFoundException` instead of a 500 (#6, #4)
+
+### Added
+
+#### SES
+- Account details (v2): `GET/PUT /aws/email/account/details`, account panel with quota/statistics, edit modal for mail type, website, contacts, and production access request
+
+#### Cognito
+- Auth flow tester: GlobalSignOut and RevokeToken flows
+- User pool create passes `usernameAttributes` (email / phone_number) through to Floci
+
+#### New service dashboards
+- AmazonMQ (M.5: brokers + users), Kinesis Analytics V2 (M.5), EMR Serverless (M.6), Fault Injection Simulator (M.7), GuardDuty (M.8), CloudHSM (M.9), MWAA (M.10), CloudWatch RUM (M.11), S3 Tables (M.12), Bedrock AgentCore (M.13), CloudControl (M.14)
+- Organizations, SWF, Lightsail dashboards
+
 ## [0.1.0] — 2026-08-25
 
 ### Added
