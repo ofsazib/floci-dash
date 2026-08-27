@@ -451,8 +451,9 @@ These services have full CRUD operations in both backend and frontend:
 | **EMR Serverless** | Applications (list/describe/create/update/delete, start/stop, auto-start/auto-stop toggles) |
 | **MWAA** | Environments (list/describe/create/update/delete, web login + CLI tokens) |
 | **CloudWatch RUM** | App monitors (list/describe/create/update/delete) |
+| **Bedrock AgentCore** | Runtimes (list/describe/create/update/delete), runtime invocations |
 
-### Navigation + status (69 services)
+### Navigation + status (70 services)
 
 All services reported by Floci appear in the sidebar with status indicators.
 
