@@ -61,6 +61,7 @@ import { LightsailDashboard } from "./services/LightsailDashboard";
 import { AmazonMQDashboard } from "./services/AmazonMQDashboard";
 import { KinesisAnalyticsDashboard } from "./services/KinesisAnalyticsDashboard";
 import { EmrServerlessDashboard } from "./services/EmrServerlessDashboard";
+import { MWAADashboard } from "./services/MWAADashboard";
 import { S3Dashboard } from "./services/S3Dashboard";
 import { LambdaDashboard } from "./services/LambdaDashboard";
 
@@ -129,6 +130,7 @@ export const SERVICE_DASHBOARDS: Record<string, ComponentType> = {
   "mq": AmazonMQDashboard,
   "kinesisanalytics": KinesisAnalyticsDashboard,
   "emrserverless": EmrServerlessDashboard,
+  "mwaa": MWAADashboard,
   "s3vectors": S3VectorsDashboard,
   "s3": S3Dashboard,
   "lambda": LambdaDashboard,

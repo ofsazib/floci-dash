@@ -449,8 +449,9 @@ These services have full CRUD operations in both backend and frontend:
 | **AmazonMQ** | Brokers (list/describe/create/delete/reboot), users (list/describe/create/delete) |
 | **Kinesis Analytics V2** | Applications (list/describe/create/update/delete, start/stop), snapshots (list/create/describe/delete), tags |
 | **EMR Serverless** | Applications (list/describe/create/update/delete, start/stop, auto-start/auto-stop toggles) |
+| **MWAA** | Environments (list/describe/create/update/delete, web login + CLI tokens) |
 
-### Navigation + status (67 services)
+### Navigation + status (68 services)
 
 All services reported by Floci appear in the sidebar with status indicators.
 
