@@ -158,3 +158,59 @@ export function useS3DeleteFolder(bucket: string) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "s3", "objects", bucket] }),
   });
 }
+
+// ─── Copy Object ────────────────────────────────────────────────
+
+export function useS3CopyObject(bucket: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { sourceKey: string; destKey: string; destBucket?: string }) =>
+      api(`/aws/s3/buckets/${bucket}/objects/copy`, {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["aws", "s3", "objects", bucket] });
+    },
+  });
+}
+
+// ─── List Object Versions ────────────────────────────────────────
+
+export interface S3ObjectVersion {
+  key: string;
+  versionId: string;
+  isLatest: boolean;
+  lastModified: string | null;
+  size: number;
+  etag: string;
+  storageClass: string;
+  isDeleteMarker: boolean;
+}
+
+export function useS3ObjectVersions(bucket: string | null, prefix?: string) {
+  return useQuery<{
+    versions: S3ObjectVersion[];
+    deleteMarkers: S3ObjectVersion[];
+    total: number;
+    isTruncated: boolean;
+  }>({
+    queryKey: ["aws", "s3", "versions", bucket, prefix],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (prefix) params.set("prefix", prefix);
+      return api(`/aws/s3/buckets/${bucket}/versions?${params.toString()}`);
+    },
+    enabled: !!bucket,
+  });
+}
+
+// ─── Get Bucket Location ─────────────────────────────────────────
+
+export function useS3BucketLocation(bucket: string | null) {
+  return useQuery<{ locationConstraint: string | null }>({
+    queryKey: ["aws", "s3", "location", bucket],
+    queryFn: () => api(`/aws/s3/buckets/${bucket}/location`),
+    enabled: !!bucket,
+  });
+}

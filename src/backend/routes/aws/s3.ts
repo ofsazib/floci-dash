@@ -12,6 +12,9 @@ import {
   DeleteObjectsCommand,
   GetObjectAclCommand,
   PutObjectAclCommand,
+  CopyObjectCommand,
+  ListObjectVersionsCommand,
+  GetBucketLocationCommand,
 } from "@aws-sdk/client-s3";
 import { getAwsConfig } from "../../clients/aws";
 import { sanitizeName, sanitizeS3Key, sanitizeBucketName, sanitizeFileName, validateJson } from "../../clients/sanitize";
@@ -422,6 +425,92 @@ router.post("/buckets/:name/folders/delete", async (c: Context) => {
     totalDeleted,
     errors: allErrors,
   });
+});
+
+// ─── Copy Object ───────────────────────────────────────────────
+
+router.post("/buckets/:name/objects/copy", async (c: Context) => {
+  const bucket = c.req.param("name")!;
+  const body = await c.req.json<{ sourceKey: string; destKey: string; destBucket?: string }>();
+  if (!body.sourceKey || !body.destKey) return c.json({ error: "sourceKey and destKey are required" }, 400);
+  const sourceKey = sanitizeS3Key(body.sourceKey);
+  const destKey = sanitizeS3Key(body.destKey);
+  const destBucket = body.destBucket || bucket;
+  if (!sourceKey || !destKey) return c.json({ error: "Invalid source or destination key" }, 400);
+  const client = s3();
+  const result = await client.send(
+    new CopyObjectCommand({
+      Bucket: destBucket,
+      Key: destKey,
+      CopySource: `/${bucket}/${encodeURIComponent(sourceKey)}`,
+    })
+  );
+  return c.json({
+    bucket: destBucket,
+    key: destKey,
+    etag: result.CopyObjectResult?.ETag?.replace(/"/g, ""),
+    lastModified: result.CopyObjectResult?.LastModified?.toISOString(),
+  }, 201);
+});
+
+// ─── List Object Versions ────────────────────────────────────────
+
+router.get("/buckets/:name/versions", async (c: Context) => {
+  const bucket = c.req.param("name")!;
+  const prefix = sanitizeS3Key(c.req.query("prefix") || "");
+  const delimiter = c.req.query("delimiter") || "";
+  const keyMarker = c.req.query("keyMarker") ?? undefined;
+  const versionIdMarker = c.req.query("versionIdMarker") ?? undefined;
+  const maxKeys = c.req.query("maxKeys") ? parseInt(c.req.query("maxKeys")!) : undefined;
+  const client = s3();
+  const result = await client.send(
+    new ListObjectVersionsCommand({
+      Bucket: bucket,
+      Prefix: prefix || undefined,
+      Delimiter: delimiter || undefined,
+      KeyMarker: keyMarker,
+      VersionIdMarker: versionIdMarker,
+      MaxKeys: maxKeys,
+    })
+  );
+  const versions = (result.Versions || []).map((v: any) => ({
+    key: v.Key,
+    versionId: v.VersionId,
+    isLatest: v.IsLatest,
+    lastModified: v.LastModified?.toISOString() || null,
+    size: v.Size,
+    etag: v.ETag?.replace(/"/g, ""),
+    storageClass: v.StorageClass,
+    isDeleteMarker: false,
+  }));
+  const deleteMarkers = (result.DeleteMarkers || []).map((dm: any) => ({
+    key: dm.Key,
+    versionId: dm.VersionId,
+    isLatest: dm.IsLatest,
+    lastModified: dm.LastModified?.toISOString() || null,
+    isDeleteMarker: true,
+  }));
+  return c.json({
+    versions,
+    deleteMarkers,
+    name: result.Name,
+    prefix: result.Prefix,
+    keyMarker: result.KeyMarker,
+    versionIdMarker: result.VersionIdMarker,
+    nextKeyMarker: result.NextKeyMarker,
+    nextVersionIdMarker: result.NextVersionIdMarker,
+    isTruncated: result.IsTruncated,
+    total: versions.length + deleteMarkers.length,
+  });
+});
+
+// ─── Get Bucket Location ─────────────────────────────────────────
+
+router.get("/buckets/:name/location", async (c: Context) => {
+  const bucket = c.req.param("name")!;
+  const client = s3();
+  const result = await client.send(new GetBucketLocationCommand({ Bucket: bucket }));
+  return c.json({ locationConstraint: result.LocationConstraint || null });
 });
 
 export default router;

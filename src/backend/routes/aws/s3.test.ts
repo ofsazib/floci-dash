@@ -28,6 +28,9 @@ vi.mock("@aws-sdk/client-s3", () => ({
   DeleteObjectsCommand: createCmd("DeleteObjectsCommand"),
   GetObjectAclCommand: createCmd("GetObjectAclCommand"),
   PutObjectAclCommand: createCmd("PutObjectAclCommand"),
+  CopyObjectCommand: createCmd("CopyObjectCommand"),
+  ListObjectVersionsCommand: createCmd("ListObjectVersionsCommand"),
+  GetBucketLocationCommand: createCmd("GetBucketLocationCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -829,5 +832,102 @@ describe("S3_MAX_UPLOAD_BYTES env capture", () => {
       const res = await router.request("/buckets/my-bucket/objects/my-key/tags", { method: "DELETE" });
       expect(res.status).not.toBe(500);
     });
+  });
+});
+
+describe("Copy Object", () => {
+  it("copies an object within the same bucket", async () => {
+    mockSend.mockResolvedValueOnce({
+      CopyObjectResult: { ETag: "\"abc123\"", LastModified: new Date("2024-01-15") },
+    });
+    const res = await post("/buckets/my-bucket/objects/copy", {
+      sourceKey: "file.txt",
+      destKey: "copy-of-file.txt",
+    });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.etag).toBe("abc123");
+    expect(body.key).toBe("copy-of-file.txt");
+  });
+
+  it("copies an object to a different bucket", async () => {
+    mockSend.mockResolvedValueOnce({
+      CopyObjectResult: { ETag: "\"def456\"" },
+    });
+    const res = await post("/buckets/source-bucket/objects/copy", {
+      sourceKey: "data.json",
+      destKey: "data.json",
+      destBucket: "dest-bucket",
+    });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.bucket).toBe("dest-bucket");
+  });
+
+  it("returns 400 if sourceKey missing", async () => {
+    const res = await post("/buckets/b/objects/copy", { destKey: "k" });
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 400 if destKey missing", async () => {
+    const res = await post("/buckets/b/objects/copy", { sourceKey: "k" });
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("List Object Versions", () => {
+  it("lists versions for a bucket", async () => {
+    mockSend.mockResolvedValueOnce({
+      Name: "my-bucket",
+      Prefix: "",
+      Versions: [
+        { Key: "file.txt", VersionId: "v1", IsLatest: false, LastModified: new Date(), Size: 100, ETag: "\"abc\"", StorageClass: "STANDARD" },
+        { Key: "file.txt", VersionId: "v2", IsLatest: true, LastModified: new Date(), Size: 200, ETag: "\"def\"", StorageClass: "STANDARD" },
+      ],
+      DeleteMarkers: [
+        { Key: "file.txt", VersionId: "dm1", IsLatest: false, LastModified: new Date() },
+      ],
+      IsTruncated: false,
+    });
+    const res = await get("/buckets/my-bucket/versions");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.versions).toHaveLength(2);
+    expect(body.deleteMarkers).toHaveLength(1);
+    expect(body.total).toBe(3);
+    expect(body.isTruncated).toBe(false);
+  });
+
+  it("returns empty arrays when no versions exist", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/buckets/my-bucket/versions");
+    const body = await res.json();
+    expect(body.versions).toEqual([]);
+    expect(body.deleteMarkers).toEqual([]);
+    expect(body.total).toBe(0);
+  });
+
+  it("passes prefix query parameter", async () => {
+    mockSend.mockResolvedValueOnce({ Versions: [], IsTruncated: false });
+    await get("/buckets/my-bucket/versions?prefix=logs/");
+    const cmd = mockSend.mock.calls[0][0];
+    expect(cmd.Prefix).toBe("logs/");
+  });
+});
+
+describe("Get Bucket Location", () => {
+  it("returns location constraint", async () => {
+    mockSend.mockResolvedValueOnce({ LocationConstraint: "us-west-2" });
+    const res = await get("/buckets/my-bucket/location");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.locationConstraint).toBe("us-west-2");
+  });
+
+  it("returns null when no location constraint (us-east-1)", async () => {
+    mockSend.mockResolvedValueOnce({ LocationConstraint: null });
+    const res = await get("/buckets/my-bucket/location");
+    const body = await res.json();
+    expect(body.locationConstraint).toBeNull();
   });
 });
