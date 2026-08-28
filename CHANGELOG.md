@@ -5,6 +5,26 @@ All notable changes to Floci Dash will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] — 2026-08-28
+
+### Added
+
+#### OpenSearch
+- **Create Domain modal** — full domain creation UI with domain name input, engine version dropdown (fetches available versions from Floci), and error handling
+- **Engine version dropdown** — dynamically loads supported OpenSearch versions from the backend and presents them as selectable options
+
+#### Docker-in-Docker Combined Image
+- **Self-contained OpenSearch** — new combined Docker image variant (`Dockerfile.combined`) that runs an internal Docker daemon, enabling real OpenSearch domains without mounting the host Docker socket
+- **Process supervision** — custom entrypoint supervises dockerd, Floci, and Dashboard with proper signal handling and readiness checks
+- **Health checks** — combined container health check verifies Docker daemon, Floci, and Dashboard are all responsive
+- **Documentation** — complete setup guide in `docs/combined-docker-in-docker.md` with architecture diagram, compose example, and troubleshooting
+
+### Fixed
+- **ServicePage OpenSearch tests** — added missing `useOpenSearchVersions` mock that caused 3 test failures
+
+### Improved
+- **Floci parity audit** — comprehensive gap analysis of all 89 Floci services vs dashboard implementation (`docs/floci-gap-audit-2026-08-28.md`)
+
 ## [0.1.1] — 2026-08-27
 
 ### Fixed
