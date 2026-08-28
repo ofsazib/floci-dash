@@ -15,6 +15,7 @@ const deleteDomainState = vi.hoisted(() => ({
 // ─── Mock hooks ─────────────────────────────────────────
 
 const mockDomains = vi.fn();
+const mockVersions = vi.fn();
 const mockUpdateConfig = vi.fn();
 const mockUpgrade = vi.fn();
 const updateConfigState = vi.hoisted(() => ({ isError: false, error: null as Error | null }));
@@ -52,6 +53,7 @@ vi.mock("../../hooks/useOpenSearch", () => ({
     get isError() { return upgradeState.isError; },
     get error() { return upgradeState.error; },
   }),
+  useOpenSearchVersions: (...args: any[]) => mockVersions(...args),
   useOpenSearchDomainTags: () => ({ data: undefined, isLoading: false }),
   useAddOpenSearchDomainTags: () => ({ mutate: vi.fn(), isPending: false }),
 }));
@@ -61,6 +63,10 @@ import { OpenSearchDashboard } from "./OpenSearchDashboard";
 // ─── Setup ──────────────────────────────────────────────
 
 beforeEach(() => {
+  mockVersions.mockReturnValue({
+    data: { versions: ["OpenSearch_3.6", "OpenSearch_2.19", "OpenSearch_2.11", "Elasticsearch_7.10"], total: 4 },
+    isLoading: false,
+  });
   updateConfigState.isError = false;
   updateConfigState.error = null;
   upgradeState.isError = false;
@@ -365,6 +371,10 @@ describe("OpenSearchDashboard — create", () => {
 
   it("creates a domain with an engine version and closes on success", async () => {
     mockCreateDomain.mockImplementation((_p: any, opts: any) => opts?.onSuccess?.());
+    mockVersions.mockReturnValue({
+      data: { versions: ["OpenSearch_3.6", "OpenSearch_2.19", "OpenSearch_2.11", "Elasticsearch_7.10"], total: 4 },
+      isLoading: false,
+    });
     mockDomains.mockReturnValue({
       data: { domains: [{ DomainName: "d1", EngineType: "OpenSearch" }], total: 1 },
       isLoading: false,
@@ -372,9 +382,9 @@ describe("OpenSearchDashboard — create", () => {
     const user = userEvent.setup();
     render(<OpenSearchDashboard />, { wrapper: createWrapper() });
     const dialog = await openCreateModal(user);
-    const inputs = dialog.querySelectorAll("input");
-    await user.type(inputs[0], "new-domain");
-    await user.type(inputs[1], "OpenSearch_2.11");
+    await user.type(dialog.querySelectorAll("input")[0], "new-domain");
+    await user.click(within(dialog).getByRole("button", { name: /Choose engine version/i }));
+    await user.click(await screen.findByText("OpenSearch_2.11"));
     await user.click(within(dialog).getByRole("button", { name: "Create domain" }));
     await waitFor(() =>
       expect(mockCreateDomain).toHaveBeenCalledWith(
@@ -387,6 +397,7 @@ describe("OpenSearchDashboard — create", () => {
 
   it("omits engineVersion when left empty", async () => {
     mockCreateDomain.mockImplementation((_p: any, opts: any) => opts?.onSuccess?.());
+    mockVersions.mockReturnValue({ data: undefined, isLoading: false });
     mockDomains.mockReturnValue({ data: { domains: [], total: 0 }, isLoading: false });
     const user = userEvent.setup();
     render(<OpenSearchDashboard />, { wrapper: createWrapper() });

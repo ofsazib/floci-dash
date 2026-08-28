@@ -309,6 +309,7 @@ import {
   useDeleteOpenSearchDomain,
   useUpdateOpenSearchDomainConfig,
   useUpgradeOpenSearchDomain,
+  useOpenSearchVersions,
 } from "../../hooks/useOpenSearch";
 import {
   useMskClusters,
@@ -514,6 +515,8 @@ export function OpenSearchDashboard() {
   const deleteDomain = useDeleteOpenSearchDomain();
   const updateConfig = useUpdateOpenSearchDomainConfig();
   const upgradeDomain = useUpgradeOpenSearchDomain();
+  const { data: versionsData } = useOpenSearchVersions();
+  const versionOptions = (versionsData?.versions || []).map((v: string) => ({ label: v, value: v }));
   const [showCreate, setShowCreate] = useState(false);
   const [newDomain, setNewDomain] = useState("");
   const [newVersion, setNewVersion] = useState("");
@@ -602,7 +605,14 @@ export function OpenSearchDashboard() {
           <Input value={newDomain} onChange={({ detail }) => setNewDomain(detail.value)} placeholder="my-domain" />
         </FormField>
         <FormField label="Engine version (optional)" description="Leave empty to use the Floci default version">
-          <Input value={newVersion} onChange={({ detail }) => setNewVersion(detail.value)} placeholder="OpenSearch_2.11" />
+          <Select
+            options={versionOptions}
+            selectedOption={versionOptions.find((o) => o.value === newVersion) ?? null}
+            onChange={({ detail }) => setNewVersion(detail.selectedOption.value!)}
+            placeholder="Choose engine version"
+            filteringType="auto"
+            empty="No versions available"
+          />
         </FormField>
       </SpaceBetween>
     </Modal>
