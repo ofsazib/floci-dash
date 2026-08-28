@@ -20,9 +20,21 @@ const mockUpgrade = vi.fn();
 const updateConfigState = vi.hoisted(() => ({ isError: false, error: null as Error | null }));
 const upgradeState = vi.hoisted(() => ({ isError: false, error: null as Error | null }));
 const mockDeleteDomain = vi.fn();
+const mockCreateDomain = vi.fn();
+const createDomainState = vi.hoisted(() => ({
+  isPending: false,
+  isError: false,
+  error: null as Error | null,
+}));
 
 vi.mock("../../hooks/useOpenSearch", () => ({
   useOpenSearchDomains: (...args: any[]) => mockDomains(...args),
+  useCreateOpenSearchDomain: () => ({
+    mutate: mockCreateDomain,
+    get isPending() { return createDomainState.isPending; },
+    get isError() { return createDomainState.isError; },
+    get error() { return createDomainState.error; },
+  }),
   useDeleteOpenSearchDomain: () => ({
     mutateAsync: mockDeleteDomain,
     get isPending() { return deleteDomainState.isPending; },
@@ -53,6 +65,9 @@ beforeEach(() => {
   updateConfigState.error = null;
   upgradeState.isError = false;
   upgradeState.error = null;
+  createDomainState.isPending = false;
+  createDomainState.isError = false;
+  createDomainState.error = null;
   vi.clearAllMocks();
   deleteDomainState.isPending = false;
   deleteDomainState.variables = null;
@@ -339,5 +354,102 @@ describe("OpenSearchDashboard — manage modal dismiss", () => {
       fireEvent.keyDown(d as HTMLElement, { keyCode: 27 })
     );
     expect(mockUpdateConfig).not.toHaveBeenCalled();
+  });
+});
+
+describe("OpenSearchDashboard — create", () => {
+  async function openCreateModal(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(await screen.findByRole("button", { name: "Create Domain" }));
+    return screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+  }
+
+  it("creates a domain with an engine version and closes on success", async () => {
+    mockCreateDomain.mockImplementation((_p: any, opts: any) => opts?.onSuccess?.());
+    mockDomains.mockReturnValue({
+      data: { domains: [{ DomainName: "d1", EngineType: "OpenSearch" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<OpenSearchDashboard />, { wrapper: createWrapper() });
+    const dialog = await openCreateModal(user);
+    const inputs = dialog.querySelectorAll("input");
+    await user.type(inputs[0], "new-domain");
+    await user.type(inputs[1], "OpenSearch_2.11");
+    await user.click(within(dialog).getByRole("button", { name: "Create domain" }));
+    await waitFor(() =>
+      expect(mockCreateDomain).toHaveBeenCalledWith(
+        { domainName: "new-domain", engineVersion: "OpenSearch_2.11" },
+        expect.objectContaining({ onSuccess: expect.any(Function) })
+      )
+    );
+    await waitFor(() => expect(dialog.className).toContain("hidden"));
+  });
+
+  it("omits engineVersion when left empty", async () => {
+    mockCreateDomain.mockImplementation((_p: any, opts: any) => opts?.onSuccess?.());
+    mockDomains.mockReturnValue({ data: { domains: [], total: 0 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<OpenSearchDashboard />, { wrapper: createWrapper() });
+    const dialog = await openCreateModal(user);
+    await user.type(dialog.querySelectorAll("input")[0], "plain-domain");
+    await user.click(within(dialog).getByRole("button", { name: "Create domain" }));
+    await waitFor(() =>
+      expect(mockCreateDomain).toHaveBeenCalledWith(
+        { domainName: "plain-domain", engineVersion: undefined },
+        expect.anything()
+      )
+    );
+  });
+
+  it("keeps the create button disabled until a domain name is entered", async () => {
+    mockDomains.mockReturnValue({ data: { domains: [], total: 0 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<OpenSearchDashboard />, { wrapper: createWrapper() });
+    const dialog = await openCreateModal(user);
+    const submit = within(dialog).getByRole("button", { name: "Create domain" });
+    expect(submit.hasAttribute("disabled")).toBe(true);
+    await user.type(dialog.querySelectorAll("input")[0], "x");
+    await waitFor(() => expect(submit.hasAttribute("disabled")).toBe(false));
+  });
+
+  it("closes the create modal via Cancel", async () => {
+    mockDomains.mockReturnValue({ data: { domains: [], total: 0 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<OpenSearchDashboard />, { wrapper: createWrapper() });
+    const dialog = await openCreateModal(user);
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(dialog.className).toContain("hidden"));
+    expect(mockCreateDomain).not.toHaveBeenCalled();
+  });
+
+  it("shows the create error alert with the error message", async () => {
+    createDomainState.isError = true;
+    createDomainState.error = new Error("creation failed");
+    mockDomains.mockReturnValue({ data: { domains: [], total: 0 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<OpenSearchDashboard />, { wrapper: createWrapper() });
+    const dialog = await openCreateModal(user);
+    expect(await within(dialog).findByText("creation failed")).toBeTruthy();
+  });
+
+  it("shows the generic create error fallback", async () => {
+    createDomainState.isError = true;
+    createDomainState.error = null;
+    mockDomains.mockReturnValue({ data: { domains: [], total: 0 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<OpenSearchDashboard />, { wrapper: createWrapper() });
+    const dialog = await openCreateModal(user);
+    expect(await within(dialog).findByText("Failed to create domain")).toBeTruthy();
+  });
+
+  it("renders the submit button while the mutation is pending", async () => {
+    createDomainState.isPending = true;
+    mockDomains.mockReturnValue({ data: { domains: [], total: 0 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<OpenSearchDashboard />, { wrapper: createWrapper() });
+    const dialog = await openCreateModal(user);
+    await user.type(dialog.querySelectorAll("input")[0], "pending-domain");
+    expect(within(dialog).getByRole("button", { name: "Create domain" })).toBeTruthy();
+    expect(mockCreateDomain).not.toHaveBeenCalled();
   });
 });

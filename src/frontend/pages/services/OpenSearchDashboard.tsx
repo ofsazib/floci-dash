@@ -305,6 +305,7 @@ import {
 } from "../../hooks/useStepFunctions";
 import {
   useOpenSearchDomains,
+  useCreateOpenSearchDomain,
   useDeleteOpenSearchDomain,
   useUpdateOpenSearchDomainConfig,
   useUpgradeOpenSearchDomain,
@@ -509,9 +510,13 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
 
 export function OpenSearchDashboard() {
   const { data, isLoading } = useOpenSearchDomains();
+  const createDomain = useCreateOpenSearchDomain();
   const deleteDomain = useDeleteOpenSearchDomain();
   const updateConfig = useUpdateOpenSearchDomainConfig();
   const upgradeDomain = useUpgradeOpenSearchDomain();
+  const [showCreate, setShowCreate] = useState(false);
+  const [newDomain, setNewDomain] = useState("");
+  const [newVersion, setNewVersion] = useState("");
   const [editDomain, setEditDomain] = useState<string | null>(null);
   const [instanceType, setInstanceType] = useState("");
   const [volumeSize, setVolumeSize] = useState("");
@@ -555,7 +560,52 @@ export function OpenSearchDashboard() {
       filterEnabled
       filterPlaceholder="Find domains"
       filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+      onCreate={() => {
+        setNewDomain("");
+        setNewVersion("");
+        setShowCreate(true);
+      }}
     />
+
+    <Modal
+      visible={showCreate}
+      onDismiss={() => setShowCreate(false)}
+      header="Create domain"
+      footer={
+        <Box float="right">
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button variant="link" onClick={() => setShowCreate(false)}>Cancel</Button>
+            <Button
+              variant="primary"
+              loading={createDomain.isPending}
+              disabled={!newDomain.trim()}
+              onClick={() =>
+                createDomain.mutate(
+                  { domainName: newDomain.trim(), engineVersion: newVersion.trim() || undefined },
+                  { onSuccess: () => setShowCreate(false) }
+                )
+              }
+            >
+              Create domain
+            </Button>
+          </SpaceBetween>
+        </Box>
+      }
+    >
+      <SpaceBetween size="s">
+        {createDomain.isError && (
+          <Alert type="error" dismissible>
+            {(createDomain.error as Error)?.message || "Failed to create domain"}
+          </Alert>
+        )}
+        <FormField label="Domain name">
+          <Input value={newDomain} onChange={({ detail }) => setNewDomain(detail.value)} placeholder="my-domain" />
+        </FormField>
+        <FormField label="Engine version (optional)" description="Leave empty to use the Floci default version">
+          <Input value={newVersion} onChange={({ detail }) => setNewVersion(detail.value)} placeholder="OpenSearch_2.11" />
+        </FormField>
+      </SpaceBetween>
+    </Modal>
 
     <Modal
       visible={!!editDomain}

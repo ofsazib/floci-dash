@@ -1079,6 +1079,7 @@ const mockRGTTagValues = vi.fn();
 
 vi.mock("../hooks/useOpenSearch", () => ({
   useOpenSearchDomains: (...args: any[]) => mockOpenSearchDomains(...args),
+  useCreateOpenSearchDomain: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
   useDeleteOpenSearchDomain: () => ({ mutateAsync: vi.fn(), isPending: false, variables: null }),
   useUpdateOpenSearchDomainConfig: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
   useUpgradeOpenSearchDomain: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
