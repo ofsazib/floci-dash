@@ -305,11 +305,16 @@ import {
 } from "../../hooks/useStepFunctions";
 import {
   useOpenSearchDomains,
+  useOpenSearchDomain,
   useCreateOpenSearchDomain,
   useDeleteOpenSearchDomain,
   useUpdateOpenSearchDomainConfig,
   useUpgradeOpenSearchDomain,
   useOpenSearchVersions,
+  useOpenSearchDomainTags,
+  useAddOpenSearchDomainTags,
+  useRemoveOpenSearchDomainTags,
+  useOpenSearchDomainConfig,
 } from "../../hooks/useOpenSearch";
 import {
   useMskClusters,
@@ -524,6 +529,18 @@ export function OpenSearchDashboard() {
   const [instanceType, setInstanceType] = useState("");
   const [volumeSize, setVolumeSize] = useState("");
   const [upgradeTarget, setUpgradeTarget] = useState("");
+  const [detailTab, setDetailTab] = useState<string>("overview");
+  const [tagKey, setTagKey] = useState("");
+  const [tagValue, setTagValue] = useState("");
+  const { data: domainDetail, isLoading: detailLoading } = useOpenSearchDomain(editDomain);
+  const domainArn = domainDetail?.domain?.ARN || "";
+  const { data: tagsData, isLoading: tagsLoading } = useOpenSearchDomainTags(
+    domainArn || null, editDomain || "",
+  );
+  const addTag = useAddOpenSearchDomainTags();
+  const removeTag = useRemoveOpenSearchDomainTags();
+  const { data: domainConfigData, isLoading: configLoading } = useOpenSearchDomainConfig(editDomain);
+  const existingTags: Record<string, string> = tagsData?.tags || {};
 
   if (isLoading) return <TableSkeleton />;
 
@@ -627,64 +644,228 @@ export function OpenSearchDashboard() {
         </Box>
       }
     >
-      <SpaceBetween size="l">
-        <Container header={<Header variant="h3">Update config</Header>}>
-          <SpaceBetween size="s">
-            {updateConfig.isError && (
-              <Alert type="error" dismissible>
-                {(updateConfig.error as Error)?.message || "Failed to update config"}
-              </Alert>
-            )}
-            <FormField label="Instance type (optional)">
-              <Input value={instanceType} onChange={({ detail }) => setInstanceType(detail.value)} placeholder="r6g.large.search" />
-            </FormField>
-            <FormField label="EBS volume size (optional)">
-              <Input value={volumeSize} onChange={({ detail }) => setVolumeSize(detail.value)} inputMode="numeric" />
-            </FormField>
-            <Button
-              variant="primary"
-              loading={updateConfig.isPending}
-              disabled={!instanceType.trim() && !volumeSize.trim()}
-              onClick={() =>
-                updateConfig.mutate(
-                  {
-                    domainName: editDomain!,
-                    clusterConfig: instanceType.trim() ? { InstanceType: instanceType.trim() } : undefined,
-                    ebsOptions: volumeSize.trim() ? { VolumeSize: Number(volumeSize) } : undefined,
-                  },
-                  { onSuccess: () => setEditDomain(null) }
-                )
-              }
-            >
-              Update config
-            </Button>
-          </SpaceBetween>
-        </Container>
-        <Container header={<Header variant="h3">Upgrade engine</Header>}>
-          <SpaceBetween size="s">
-            {upgradeDomain.isError && (
-              <Alert type="error" dismissible>
-                {(upgradeDomain.error as Error)?.message || "Upgrade failed"}
-              </Alert>
-            )}
-            <FormField label="Target version">
-              <Input value={upgradeTarget} onChange={({ detail }) => setUpgradeTarget(detail.value)} placeholder="OpenSearch_2.11" />
-            </FormField>
-            <Button
-              loading={upgradeDomain.isPending}
-              disabled={!upgradeTarget.trim()}
-              onClick={() =>
-                upgradeDomain.mutate(
-                  { domainName: editDomain!, targetVersion: upgradeTarget.trim(), performCheckOnly: true },
-                  { onSuccess: () => setUpgradeTarget("") }
-                )
-              }
-            >
-              Run upgrade check
-            </Button>
-          </SpaceBetween>
-        </Container>
-      </SpaceBetween>
+      <Tabs
+        activeTabId={detailTab}
+        onChange={({ detail }) => setDetailTab(detail.activeTabId)}
+        tabs={[
+          {
+            label: "Overview",
+            id: "overview",
+            content: (
+              <SpaceBetween size="l">
+                {detailLoading ? (
+                  <Spinner />
+                ) : domainDetail?.domain ? (
+                  <SpaceBetween size="s">
+                    <Container header={<Header variant="h3">Domain Details</Header>}>
+                      <ColumnLayout columns={2} variant="text-grid">
+                        <div>
+                          <Box variant="awsui-key-label">Endpoint</Box>
+                          <Box>{domainDetail.domain.Endpoint || "—"}</Box>
+                        </div>
+                        <div>
+                          <Box variant="awsui-key-label">ARN</Box>
+                          <Box>{domainDetail.domain.ARN || "—"}</Box>
+                        </div>
+                        <div>
+                          <Box variant="awsui-key-label">Engine Version</Box>
+                          <Box>{domainDetail.domain.EngineVersion || "—"}</Box>
+                        </div>
+                        <div>
+                          <Box variant="awsui-key-label">Created</Box>
+                          <Box>{domainDetail.domain.CreatedAt ? new Date(domainDetail.domain.CreatedAt).toLocaleDateString() : "—"}</Box>
+                        </div>
+                      </ColumnLayout>
+                    </Container>
+                    <Container header={<Header variant="h3">Cluster Config</Header>}>
+                      <ColumnLayout columns={2} variant="text-grid">
+                        <div>
+                          <Box variant="awsui-key-label">Instance Type</Box>
+                          <Box>{domainDetail.domain.ClusterConfig?.InstanceType || "—"}</Box>
+                        </div>
+                        <div>
+                          <Box variant="awsui-key-label">Instance Count</Box>
+                          <Box>{domainDetail.domain.ClusterConfig?.InstanceCount ?? "—"}</Box>
+                        </div>
+                      </ColumnLayout>
+                    </Container>
+                    <Container header={<Header variant="h3">EBS Options</Header>}>
+                      <ColumnLayout columns={2} variant="text-grid">
+                        <div>
+                          <Box variant="awsui-key-label">Enabled</Box>
+                          <Box>{domainDetail.domain.EBSOptions?.EBSEnabled ? "Yes" : "No"}</Box>
+                        </div>
+                        <div>
+                          <Box variant="awsui-key-label">Volume Type</Box>
+                          <Box>{domainDetail.domain.EBSOptions?.VolumeType || "—"}</Box>
+                        </div>
+                        <div>
+                          <Box variant="awsui-key-label">Volume Size (GB)</Box>
+                          <Box>{domainDetail.domain.EBSOptions?.VolumeSize ?? "—"}</Box>
+                        </div>
+                      </ColumnLayout>
+                    </Container>
+                  </SpaceBetween>
+                ) : (
+                  <Box>No domain details available</Box>
+                )}
+              </SpaceBetween>
+            ),
+          },
+          {
+            label: "Tags",
+            id: "tags",
+            content: (
+              <SpaceBetween size="s">
+                {tagsLoading ? (
+                  <Spinner />
+                ) : (
+                  <>
+                    {Object.keys(existingTags).length > 0 ? (
+                      <ColumnLayout columns={2} variant="text-grid">
+                        {Object.entries(existingTags).map(([k, v]) => (
+                          <div key={k} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <div>
+                              <Box variant="awsui-key-label">{k}</Box>
+                              <Box>{v}</Box>
+                            </div>
+                            <Button
+                              iconName="close"
+                              formAction="none"
+                              ariaLabel={`Remove ${k}`}
+                              onClick={() =>
+                                removeTag.mutate({
+                                  domainName: editDomain!,
+                                  arn: domainArn,
+                                  tagKeys: [k],
+                                })
+                              }
+                            />
+                          </div>
+                        ))}
+                      </ColumnLayout>
+                    ) : (
+                      <Box>No tags</Box>
+                    )}
+                    <SpaceBetween direction="horizontal" size="xs">
+                      <Input
+                        value={tagKey}
+                        onChange={({ detail }) => setTagKey(detail.value)}
+                        placeholder="Key"
+                        ariaLabel="Tag key"
+                      />
+                      <Input
+                        value={tagValue}
+                        onChange={({ detail }) => setTagValue(detail.value)}
+                        placeholder="Value"
+                        ariaLabel="Tag value"
+                      />
+                      <Button
+                        variant="primary"
+                        disabled={!tagKey.trim()}
+                        loading={addTag.isPending}
+                        onClick={() => {
+                          addTag.mutate(
+                            { domainName: editDomain!, arn: domainArn, tags: { [tagKey.trim()]: tagValue.trim() } },
+                            { onSuccess: () => { setTagKey(""); setTagValue(""); } },
+                          );
+                        }}
+                      >
+                        Add tag
+                      </Button>
+                    </SpaceBetween>
+                  </>
+                )}
+              </SpaceBetween>
+            ),
+          },
+          {
+            label: "Update config",
+            id: "config",
+            content: (
+              <SpaceBetween size="l">
+                <Container header={<Header variant="h3">Update config</Header>}>
+                  <SpaceBetween size="s">
+                    {updateConfig.isError && (
+                      <Alert type="error" dismissible>
+                        {(updateConfig.error as Error)?.message || "Failed to update config"}
+                      </Alert>
+                    )}
+                    <FormField label="Instance type (optional)">
+                      <Input value={instanceType} onChange={({ detail }) => setInstanceType(detail.value)} placeholder="r6g.large.search" />
+                    </FormField>
+                    <FormField label="EBS volume size (optional)">
+                      <Input value={volumeSize} onChange={({ detail }) => setVolumeSize(detail.value)} inputMode="numeric" />
+                    </FormField>
+                    <Button
+                      variant="primary"
+                      loading={updateConfig.isPending}
+                      disabled={!instanceType.trim() && !volumeSize.trim()}
+                      onClick={() =>
+                        updateConfig.mutate(
+                          {
+                            domainName: editDomain!,
+                            clusterConfig: instanceType.trim() ? { InstanceType: instanceType.trim() } : undefined,
+                            ebsOptions: volumeSize.trim() ? { VolumeSize: Number(volumeSize) } : undefined,
+                          },
+                          { onSuccess: () => setEditDomain(null) }
+                        )
+                      }
+                    >
+                      Update config
+                    </Button>
+                  </SpaceBetween>
+                </Container>
+                <Container header={<Header variant="h3">Upgrade engine</Header>}>
+                  <SpaceBetween size="s">
+                    {upgradeDomain.isError && (
+                      <Alert type="error" dismissible>
+                        {(upgradeDomain.error as Error)?.message || "Upgrade failed"}
+                      </Alert>
+                    )}
+                    <FormField label="Target version">
+                      <Input value={upgradeTarget} onChange={({ detail }) => setUpgradeTarget(detail.value)} placeholder="OpenSearch_2.11" />
+                    </FormField>
+                    <Button
+                      loading={upgradeDomain.isPending}
+                      disabled={!upgradeTarget.trim()}
+                      onClick={() =>
+                        upgradeDomain.mutate(
+                          { domainName: editDomain!, targetVersion: upgradeTarget.trim(), performCheckOnly: true },
+                          { onSuccess: () => setUpgradeTarget("") }
+                        )
+                      }
+                    >
+                      Run upgrade check
+                    </Button>
+                  </SpaceBetween>
+                </Container>
+              </SpaceBetween>
+            ),
+          },
+          {
+            label: "Domain config",
+            id: "domain-config",
+            content: (
+              <SpaceBetween size="s">
+                {configLoading ? (
+                  <Spinner />
+                ) : domainConfigData?.domainConfig ? (
+                  <Container header={<Header variant="h3">Access Policy</Header>}>
+                    <Textarea
+                      value={JSON.stringify(domainConfigData.domainConfig.AccessPolicies || {}, null, 2)}
+                      readOnly
+                      rows={8}
+                    />
+                  </Container>
+                ) : (
+                  <Box>No config available</Box>
+                )}
+              </SpaceBetween>
+            ),
+          },
+        ]}
+      />
     </Modal>
     </>
   );

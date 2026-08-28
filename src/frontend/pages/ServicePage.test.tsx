@@ -1079,16 +1079,17 @@ const mockRGTTagValues = vi.fn();
 
 vi.mock("../hooks/useOpenSearch", () => ({
   useOpenSearchDomains: (...args: any[]) => mockOpenSearchDomains(...args),
+  useOpenSearchDomain: () => ({ data: { domain: { DomainName: "d1", ARN: "arn:d1", Endpoint: "ep", EngineVersion: "v", ClusterConfig: {}, EBSOptions: {} } }, isLoading: false }),
   useCreateOpenSearchDomain: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
   useDeleteOpenSearchDomain: () => ({ mutateAsync: vi.fn(), isPending: false, variables: null }),
   useUpdateOpenSearchDomainConfig: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
   useUpgradeOpenSearchDomain: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
-  useOpenSearchDomainTags: () => ({ data: undefined, isLoading: false }),
+  useOpenSearchDomainTags: () => ({ data: { tags: {} }, isLoading: false }),
   useAddOpenSearchDomainTags: () => ({ mutate: vi.fn(), isPending: false }),
   useOpenSearchVersions: () => ({ data: { versions: [] }, isLoading: false }),
   useRemoveOpenSearchDomainTags: () => ({ mutate: vi.fn(), isPending: false }),
   useOpenSearchDomainsDescribe: () => ({ data: undefined, isLoading: false }),
-  useOpenSearchDomainConfig: () => ({ data: undefined, isLoading: false }),
+  useOpenSearchDomainConfig: () => ({ data: { domainConfig: { AccessPolicies: {} } }, isLoading: false }),
 }));
 
 vi.mock("../hooks/useMsk", () => ({

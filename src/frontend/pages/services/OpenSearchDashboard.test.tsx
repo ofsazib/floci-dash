@@ -28,8 +28,15 @@ const createDomainState = vi.hoisted(() => ({
   error: null as Error | null,
 }));
 
+const mockDomainDetail = vi.fn();
+const mockDomainTags = vi.fn();
+const mockAddTag = vi.fn();
+const mockRemoveTag = vi.fn();
+const mockDomainConfig = vi.fn();
+
 vi.mock("../../hooks/useOpenSearch", () => ({
   useOpenSearchDomains: (...args: any[]) => mockDomains(...args),
+  useOpenSearchDomain: (...args: any[]) => mockDomainDetail(...args),
   useCreateOpenSearchDomain: () => ({
     mutate: mockCreateDomain,
     get isPending() { return createDomainState.isPending; },
@@ -54,8 +61,16 @@ vi.mock("../../hooks/useOpenSearch", () => ({
     get error() { return upgradeState.error; },
   }),
   useOpenSearchVersions: (...args: any[]) => mockVersions(...args),
-  useOpenSearchDomainTags: () => ({ data: undefined, isLoading: false }),
-  useAddOpenSearchDomainTags: () => ({ mutate: vi.fn(), isPending: false }),
+  useOpenSearchDomainTags: (...args: any[]) => mockDomainTags(...args),
+  useAddOpenSearchDomainTags: () => ({
+    mutate: mockAddTag,
+    isPending: false,
+  }),
+  useRemoveOpenSearchDomainTags: () => ({
+    mutate: mockRemoveTag,
+    isPending: false,
+  }),
+  useOpenSearchDomainConfig: (...args: any[]) => mockDomainConfig(...args),
 }));
 
 import { OpenSearchDashboard } from "./OpenSearchDashboard";
@@ -78,6 +93,11 @@ beforeEach(() => {
   deleteDomainState.isPending = false;
   deleteDomainState.variables = null;
   mockDomains.mockReturnValue({ data: { domains: [], total: 0 }, isLoading: false });
+  mockDomainDetail.mockReturnValue({ data: { domain: { DomainName: "d1", ARN: "arn:os:d1", Endpoint: "search-d1.os.internal", EngineVersion: "OpenSearch_2.19", CreatedAt: 1700000000000, ClusterConfig: { InstanceType: "m5.large.search", InstanceCount: 1 }, EBSOptions: { EBSEnabled: true, VolumeType: "gp2", VolumeSize: 10 } } }, isLoading: false });
+  mockDomainTags.mockReturnValue({ data: { tags: {} }, isLoading: false });
+  mockDomainConfig.mockReturnValue({ data: { domainConfig: { AccessPolicies: {} } }, isLoading: false });
+  mockAddTag.mockReset();
+  mockRemoveTag.mockReset();
 });
 
 // ─── Tests ──────────────────────────────────────────────
@@ -231,6 +251,7 @@ describe("OpenSearchDashboard — manage modal", () => {
     render(<OpenSearchDashboard />, { wrapper: createWrapper() });
     await user.click(await screen.findByRole("button", { name: "Manage" }));
     const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    await user.click(within(dialog).getByRole("tab", { name: /Update config/i }));
     const inputs = dialog.querySelectorAll("input");
     await user.type(inputs[0], "r6g.large.search");
     await user.type(inputs[1], "100");
@@ -254,7 +275,9 @@ describe("OpenSearchDashboard — manage modal", () => {
     render(<OpenSearchDashboard />, { wrapper: createWrapper() });
     await user.click(await screen.findByRole("button", { name: "Manage" }));
     const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    await user.click(within(dialog).getByRole("tab", { name: /Update config/i }));
     const inputs = dialog.querySelectorAll("input");
+    // inputs are: instance type, volume size, upgrade target
     await user.type(inputs[2], "OpenSearch_2.11");
     await user.click(within(dialog).getByRole("button", { name: /Run upgrade check/i }));
     await waitFor(() =>
@@ -271,7 +294,8 @@ describe("OpenSearchDashboard — manage modal", () => {
     render(<OpenSearchDashboard />, { wrapper: createWrapper() });
     await user.click(await screen.findByRole("button", { name: "Manage" }));
     const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
-    expect(within(dialog).getByRole("button", { name: /Update config/i }).hasAttribute("disabled")).toBe(true);
+    await user.click(within(dialog).getByRole("tab", { name: /Update config/i }));
+    expect(within(dialog).getByRole("button", { name: /^Update config$/i }).hasAttribute("disabled")).toBe(true);
     await user.click(within(dialog).getByRole("button", { name: "Close" }));
     await waitFor(() => expect(dialog.className).toContain("hidden"));
   });
@@ -285,8 +309,10 @@ describe("OpenSearchDashboard — manage modal", () => {
     const user = userEvent.setup();
     render(<OpenSearchDashboard />, { wrapper: createWrapper() });
     await user.click(await screen.findByRole("button", { name: "Manage" }));
-    expect(await screen.findByText("cfg failed")).toBeTruthy();
-    expect(screen.getByText("Upgrade failed")).toBeTruthy();
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    await user.click(within(dialog).getByRole("tab", { name: /Update config/i }));
+    expect(await within(dialog).findByText("cfg failed")).toBeTruthy();
+    expect(within(dialog).getByText("Upgrade failed")).toBeTruthy();
   });
 });
 
@@ -301,9 +327,10 @@ describe("OpenSearchDashboard — config-only + upgrade-only payloads", () => {
     render(<OpenSearchDashboard />, { wrapper: createWrapper() });
     await user.click(await screen.findByRole("button", { name: "Manage" }));
     const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    await user.click(within(dialog).getByRole("tab", { name: /Update config/i }));
     const inputs = dialog.querySelectorAll("input");
     await user.type(inputs[0], "t3.small.search");
-    await user.click(within(dialog).getByRole("button", { name: /Update config/i }));
+    await user.click(within(dialog).getByRole("button", { name: /^Update config$/i }));
     await waitFor(() =>
       expect(mockUpdateConfig).toHaveBeenCalledWith(
         { domainName: "d1", clusterConfig: { InstanceType: "t3.small.search" }, ebsOptions: undefined },
@@ -322,7 +349,9 @@ describe("OpenSearchDashboard — config-only + upgrade-only payloads", () => {
     const user = userEvent.setup();
     render(<OpenSearchDashboard />, { wrapper: createWrapper() });
     await user.click(await screen.findByRole("button", { name: "Manage" }));
-    expect(await screen.findByText("Failed to update config")).toBeTruthy();
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    await user.click(within(dialog).getByRole("tab", { name: /Update config/i }));
+    expect(await within(dialog).findByText("Failed to update config")).toBeTruthy();
   });
 
   it("updates with only volume size", async () => {
@@ -335,9 +364,10 @@ describe("OpenSearchDashboard — config-only + upgrade-only payloads", () => {
     render(<OpenSearchDashboard />, { wrapper: createWrapper() });
     await user.click(await screen.findByRole("button", { name: "Manage" }));
     const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    await user.click(within(dialog).getByRole("tab", { name: /Update config/i }));
     const inputs = dialog.querySelectorAll("input");
     await user.type(inputs[1], "50");
-    await user.click(within(dialog).getByRole("button", { name: /Update config/i }));
+    await user.click(within(dialog).getByRole("button", { name: /^Update config$/i }));
     await waitFor(() =>
       expect(mockUpdateConfig).toHaveBeenCalledWith(
         { domainName: "d1", clusterConfig: undefined, ebsOptions: { VolumeSize: 50 } },
@@ -360,6 +390,115 @@ describe("OpenSearchDashboard — manage modal dismiss", () => {
       fireEvent.keyDown(d as HTMLElement, { keyCode: 27 })
     );
     expect(mockUpdateConfig).not.toHaveBeenCalled();
+  });
+});
+
+describe("OpenSearchDashboard — domain detail & tags", () => {
+  function setupDomain() {
+    mockDomains.mockReturnValue({
+      data: { domains: [{ DomainName: "d1", EngineType: "OpenSearch" }], total: 1 },
+      isLoading: false,
+    });
+  }
+
+  it("shows domain details in Overview tab", async () => {
+    setupDomain();
+    const user = userEvent.setup();
+    render(<OpenSearchDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "Manage" }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    expect(await within(dialog).findByText("search-d1.os.internal")).toBeTruthy();
+    expect(within(dialog).getByText("arn:os:d1")).toBeTruthy();
+    expect(within(dialog).getByText("OpenSearch_2.19")).toBeTruthy();
+    expect(within(dialog).getByText("m5.large.search")).toBeTruthy();
+    expect(within(dialog).getByText("gp2")).toBeTruthy();
+  });
+
+  it("adds a tag in the Tags tab", async () => {
+    mockAddTag.mockImplementation((_p: any, opts: any) => opts?.onSuccess?.());
+    setupDomain();
+    const user = userEvent.setup();
+    render(<OpenSearchDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "Manage" }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    await user.click(within(dialog).getByRole("tab", { name: /Tags/i }));
+    const keyInput = screen.getByPlaceholderText("Key");
+    const valInput = screen.getByPlaceholderText("Value");
+    await user.type(keyInput, "env");
+    await user.type(valInput, "prod");
+    await user.click(within(dialog).getByRole("button", { name: /Add tag/i }));
+    await waitFor(() =>
+      expect(mockAddTag).toHaveBeenCalledWith(
+        { domainName: "d1", arn: "arn:os:d1", tags: { env: "prod" } },
+        expect.anything()
+      )
+    );
+  });
+
+  it("removes a tag", async () => {
+    mockDomainTags.mockReturnValue({ data: { tags: { env: "prod" } }, isLoading: false });
+    setupDomain();
+    const user = userEvent.setup();
+    render(<OpenSearchDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "Manage" }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    await user.click(within(dialog).getByRole("tab", { name: /Tags/i }));
+    expect(await within(dialog).findByText("env")).toBeTruthy();
+    expect(within(dialog).getByText("prod")).toBeTruthy();
+    const removeBtn = within(dialog).getByRole("button", { name: /Remove env/i });
+    await user.click(removeBtn);
+    await waitFor(() =>
+      expect(mockRemoveTag).toHaveBeenCalledWith({
+        domainName: "d1",
+        arn: "arn:os:d1",
+        tagKeys: ["env"],
+      })
+    );
+  });
+
+  it("shows No tags when empty", async () => {
+    setupDomain();
+    const user = userEvent.setup();
+    render(<OpenSearchDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "Manage" }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    await user.click(within(dialog).getByRole("tab", { name: /Tags/i }));
+    expect(await within(dialog).findByText("No tags")).toBeTruthy();
+  });
+
+  it("shows domain config tab with access policy", async () => {
+    setupDomain();
+    const user = userEvent.setup();
+    render(<OpenSearchDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "Manage" }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    await user.click(within(dialog).getByRole("tab", { name: /Domain config/i }));
+    expect(await within(dialog).findByText("Access Policy")).toBeTruthy();
+  });
+
+  it("shows No config when config is undefined", async () => {
+    mockDomainConfig.mockReturnValue({ data: undefined, isLoading: false });
+    setupDomain();
+    const user = userEvent.setup();
+    render(<OpenSearchDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "Manage" }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    await user.click(within(dialog).getByRole("tab", { name: /Domain config/i }));
+    expect(await within(dialog).findByText("No config available")).toBeTruthy();
+  });
+
+  it("shows loading state for domain detail", async () => {
+    mockDomainDetail.mockReturnValue({ data: undefined, isLoading: true });
+    setupDomain();
+    const user = userEvent.setup();
+    render(<OpenSearchDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "Manage" }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    // Overview tab is default — when loading, shows tabs but no detail content
+    expect(dialog.textContent).toContain("Overview");
+    expect(dialog.textContent).toContain("Tags");
+    // No Domain Details text when loading
+    expect(dialog.textContent).not.toContain("Endpoint");
   });
 });
 
