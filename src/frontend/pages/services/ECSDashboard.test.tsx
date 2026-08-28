@@ -1003,6 +1003,36 @@ describe("ECSDashboard — Task Sets", () => {
     ));
   });
 
+  it("deletes a task set with success and error toasts", async () => {
+    mockServices.mockReturnValue({
+      data: { services: [{ serviceName: "svc1", status: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    mockTaskSets.mockReturnValue({
+      data: { taskSets: [{ id: "ts-9", status: "ACTIVE", taskDefinition: "arn:aws:ecs:::task-def/t:1" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    await openTaskSetsTab(user);
+    await user.click(screen.getByText("Choose a service"));
+    await user.click(await screen.findByText("svc1"));
+    await waitFor(() => expect(screen.getByText("ts-9")).toBeTruthy());
+    // success arm
+    mockDeleteTaskSet.mockResolvedValueOnce({});
+    await user.click(screen.getByRole("button", { name: /Delete ts-9/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() => expect(mockDeleteTaskSet).toHaveBeenCalledWith(
+      { cluster: "my-cluster", service: "svc1", taskSet: "ts-9", force: true },
+    ));
+    // error arm
+    mockDeleteTaskSet.mockRejectedValueOnce(new Error("task set locked"));
+    await user.click(screen.getByRole("button", { name: /Delete ts-9/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() => expect(mockDeleteTaskSet).toHaveBeenCalledTimes(2));
+  });
+
   it("cancels create task set modal", async () => {
     mockServices.mockReturnValue({
       data: { services: [{ serviceName: "svc1", status: "ACTIVE" }], total: 1 },

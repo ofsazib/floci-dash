@@ -947,4 +947,76 @@ describe("Bucket Metrics Configuration", () => {
     expect(res.status).toBe(200);
     expect((await res.json()).deleted).toBe(true);
   });
+
+  it("GET /buckets/:name/object-lock — returns null config when sparse", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/buckets/my-bucket/object-lock");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ objectLockConfiguration: null });
+  });
+
+  it("GET /buckets/:name/objects/:key/retention — returns null retention when sparse", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/buckets/my-bucket/objects/file.txt/retention");
+    expect(await res.json()).toEqual({ retention: null });
+  });
+
+  it("GET /buckets/:name/objects/:key/legal-hold — returns null hold when sparse", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/buckets/my-bucket/objects/file.txt/legal-hold");
+    expect(await res.json()).toEqual({ legalHold: null });
+  });
+
+  it("GET /buckets/:name/object-lock — rethrows non-404 errors", async () => {
+    mockSend.mockRejectedValueOnce(Object.assign(new Error("boom"), { $metadata: { httpStatusCode: 500 } }));
+    const res = await get("/buckets/my-bucket/object-lock");
+    expect(res.status).toBe(500);
+  });
+
+  it("GET /buckets/:name/objects/:key/retention — returns null on 404", async () => {
+    mockSend.mockRejectedValueOnce(Object.assign(new Error("nope"), { $metadata: { httpStatusCode: 404 } }));
+    const res = await get("/buckets/my-bucket/objects/file.txt/retention");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ retention: null });
+  });
+
+  it("GET /buckets/:name/objects/:key/retention — rethrows non-404 errors", async () => {
+    mockSend.mockRejectedValueOnce(Object.assign(new Error("boom"), { $metadata: { httpStatusCode: 500 } }));
+    const res = await get("/buckets/my-bucket/objects/file.txt/retention");
+    expect(res.status).toBe(500);
+  });
+
+  it("GET /buckets/:name/objects/:key/legal-hold — returns null on 404", async () => {
+    mockSend.mockRejectedValueOnce(Object.assign(new Error("nope"), { $metadata: { httpStatusCode: 404 } }));
+    const res = await get("/buckets/my-bucket/objects/file.txt/legal-hold");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ legalHold: null });
+  });
+
+  it("GET /buckets/:name/objects/:key/legal-hold — rethrows non-404 errors", async () => {
+    mockSend.mockRejectedValueOnce(Object.assign(new Error("boom"), { $metadata: { httpStatusCode: 500 } }));
+    const res = await get("/buckets/my-bucket/objects/file.txt/legal-hold");
+    expect(res.status).toBe(500);
+  });
+
+  it("GET /buckets/:name/metrics?id=x — returns null config when missing", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/buckets/my-bucket/metrics?id=missing");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ metricsConfiguration: null });
+  });
+
+  it("GET /buckets/:name/metrics — empty list defaults", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/buckets/my-bucket/metrics");
+    const body = await res.json();
+    expect(body).toEqual({ metricsConfigurations: [], continuationToken: undefined, isTruncated: undefined, total: 0 });
+  });
+
+  it("POST /buckets/:name/metrics — defaults metricsConfiguration", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/buckets/my-bucket/metrics", { id: "cfg" });
+    expect(res.status).toBe(201);
+    expect(mockSend.mock.calls[0][0].MetricsConfiguration).toEqual({});
+  });
 });

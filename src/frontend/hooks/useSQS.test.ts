@@ -28,6 +28,7 @@ import {
   useSQSStartMoveTask,
   useSQSMoveTasks,
   useSQSCancelMoveTask,
+  useSQSDeleteMessageBatch,
   extractQueueName,
 } from "./useSQS";
 
@@ -375,5 +376,18 @@ describe("useSQSCancelMoveTask", () => {
       method: "POST",
       body: JSON.stringify({ taskHandle: "h1" }),
     });
+  });
+});
+
+describe("useSQSDeleteMessageBatch", () => {
+  it("posts batch delete with entries and invalidates messages", async () => {
+    mockApi.mockResolvedValueOnce({ successful: 1 });
+    const { result } = renderHook(() => useSQSDeleteMessageBatch(), { wrapper: createWrapper() });
+    const entries = [{ id: "e1", receiptHandle: "rh1" }];
+    await result.current.mutateAsync({ queueUrl: "http://localhost:4566/000000000000/q", entries });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/sqs/queues/messages/delete-batch?queueUrl=http%3A%2F%2Flocalhost%3A4566%2F000000000000%2Fq",
+      { method: "POST", body: JSON.stringify({ entries }) }
+    );
   });
 });

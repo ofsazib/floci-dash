@@ -215,4 +215,11 @@ describe("Describe Domain Config", () => {
     expect(body.domainConfig.DomainName).toBe("d1");
     expect(mockSend.mock.calls[0][0].__cmdName).toBe("DescribeDomainConfigCommand");
   });
+
+  it("POST /domains/describe — defaults empty list when sparse", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/domains/describe", { domainNames: ["d1"] });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ domainStatusList: [] });
+  });
 });

@@ -794,6 +794,15 @@ describe("Delete Message Batch", () => {
     expect(res.status).toBe(400);
   });
 
+  it("delete-batch defaults successful/failed when sparse", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/queues/messages/delete-batch?queueUrl=http://localhost:4566/000000000000/test", {
+      entries: [{ id: "1", receiptHandle: "rh-1" }],
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ successful: [], failed: [] });
+  });
+
   it("returns 400 with empty entries", async () => {
     const res = await post("/queues/messages/delete-batch?queueUrl=http://localhost:4566/000000000000/test", {
       entries: [],

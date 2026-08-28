@@ -482,7 +482,6 @@ router.get("/buckets/:name/objects/*/retention", async (c: Context) => {
   const bucket = c.req.param("name")!;
   const path = new URL(c.req.url).pathname;
   const key = decodeURIComponent(path.split("/objects/")[1]!.split("/retention")[0]);
-  if (!key) return c.json({ error: "Object key is required" }, 400);
   const versionId = c.req.query("versionId") || undefined;
   try {
     const result = await s3().send(new GetObjectRetentionCommand({
@@ -501,7 +500,6 @@ router.put("/buckets/:name/objects/*/retention", async (c: Context) => {
   const bucket = c.req.param("name")!;
   const path = new URL(c.req.url).pathname;
   const key = decodeURIComponent(path.split("/objects/")[1]!.split("/retention")[0]);
-  if (!key) return c.json({ error: "Object key is required" }, 400);
   const body = await c.req.json<{ retention?: any; versionId?: string }>();
   const versionId = body.versionId || c.req.query("versionId") || undefined;
   const bypassGovernance = c.req.header("x-amz-bypass-governance-retention") === "true";
@@ -518,7 +516,6 @@ router.get("/buckets/:name/objects/*/legal-hold", async (c: Context) => {
   const bucket = c.req.param("name")!;
   const path = new URL(c.req.url).pathname;
   const key = decodeURIComponent(path.split("/objects/")[1]!.split("/legal-hold")[0]);
-  if (!key) return c.json({ error: "Object key is required" }, 400);
   const versionId = c.req.query("versionId") || undefined;
   try {
     const result = await s3().send(new GetObjectLegalHoldCommand({
@@ -537,7 +534,6 @@ router.put("/buckets/:name/objects/*/legal-hold", async (c: Context) => {
   const bucket = c.req.param("name")!;
   const path = new URL(c.req.url).pathname;
   const key = decodeURIComponent(path.split("/objects/")[1]!.split("/legal-hold")[0]);
-  if (!key) return c.json({ error: "Object key is required" }, 400);
   const body = await c.req.json<{ legalHold?: any; versionId?: string }>();
   const versionId = body.versionId || c.req.query("versionId") || undefined;
   await s3().send(new PutObjectLegalHoldCommand({

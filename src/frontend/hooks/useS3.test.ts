@@ -20,6 +20,9 @@ import {
   useS3CreateFolder,
   useS3BatchDeleteObjects,
   useS3DeleteFolder,
+  useS3CopyObject,
+  useS3ObjectVersions,
+  useS3BucketLocation,
 } from "./useS3";
 
 function createWrapper() {
@@ -358,5 +361,38 @@ describe("useS3DeleteFolder", () => {
     });
     await result.current.mutateAsync("myfolder/");
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["aws", "s3", "objects", "my-bucket"] });
+  });
+});
+
+describe("useS3CopyObject / useS3ObjectVersions / useS3BucketLocation", () => {
+  it("useS3CopyObject posts copy body and invalidates objects", async () => {
+    mockApi.mockResolvedValueOnce({ copied: true });
+    const { result } = renderHook(() => useS3CopyObject("my-bucket"), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ sourceKey: "a", destKey: "b" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/s3/buckets/my-bucket/objects/copy", {
+      method: "POST",
+      body: JSON.stringify({ sourceKey: "a", destKey: "b" }),
+    });
+  });
+
+  it("useS3ObjectVersions queries with prefix", async () => {
+    mockApi.mockResolvedValueOnce({ versions: [], deleteMarkers: [], total: 0, isTruncated: false });
+    const { result } = renderHook(() => useS3ObjectVersions("my-bucket", "logs/"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/s3/buckets/my-bucket/versions?prefix=logs%2F");
+  });
+
+  it("useS3ObjectVersions queries without prefix", async () => {
+    mockApi.mockResolvedValueOnce({ versions: [], deleteMarkers: [], total: 0, isTruncated: false });
+    const { result } = renderHook(() => useS3ObjectVersions("my-bucket"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/s3/buckets/my-bucket/versions?");
+  });
+
+  it("useS3BucketLocation queries location", async () => {
+    mockApi.mockResolvedValueOnce({ locationConstraint: null });
+    const { result } = renderHook(() => useS3BucketLocation("my-bucket"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/s3/buckets/my-bucket/location");
   });
 });

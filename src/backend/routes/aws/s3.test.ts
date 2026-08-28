@@ -1006,4 +1006,72 @@ describe("Multipart Upload", () => {
     expect(body.uploads).toEqual([]);
     expect(body.total).toBe(0);
   });
+
+  it("PUT /buckets/:name/multipart/:uploadId/part/:partNumber — uploads a part", async () => {
+    mockSend.mockResolvedValueOnce({ ETag: '"part-etag"' });
+    const form = new FormData();
+    form.append("file", new File(["chunk"], "chunk.bin"));
+    form.append("key", "large-file.bin");
+    const res = await router.request("/buckets/my-bucket/multipart/upload-123/part/1", { method: "PUT", body: form });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.partNumber).toBe(1);
+    expect(body.ETag).toBe("part-etag");
+    expect(mockSend.mock.calls[0][0].Key).toBe("large-file.bin");
+    expect(mockSend.mock.calls[0][0].PartNumber).toBe(1);
+  });
+
+  it("PUT /buckets/:name/multipart/:uploadId/part/:partNumber — defaults key to empty string", async () => {
+    mockSend.mockResolvedValueOnce({ ETag: '"e"' });
+    const form = new FormData();
+    form.append("file", new File(["chunk"], "chunk.bin"));
+    const res = await router.request("/buckets/my-bucket/multipart/upload-1/part/2", { method: "PUT", body: form });
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].Key).toBe("");
+  });
+
+  it("PUT /buckets/:name/multipart/:uploadId/part/:partNumber — 400 without file", async () => {
+    const form = new FormData();
+    form.append("notfile", "text");
+    const res = await router.request("/buckets/my-bucket/multipart/upload-123/part/1", { method: "PUT", body: form });
+    expect(res.status).toBe(400);
+  });
+
+  it("POST /buckets/:name/objects/copy — 400 when key sanitizes to empty", async () => {
+    const res = await post("/buckets/b/objects/copy", { sourceKey: "../", destKey: "ok" });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("Invalid source or destination key");
+  });
+
+  it("GET /buckets/:name/versions — passes maxKeys and handles missing dates", async () => {
+    mockSend.mockResolvedValueOnce({
+      Versions: [{ Key: "v1", VersionId: "vid", IsLatest: true }],
+      DeleteMarkers: [{ Key: "d1", IsLatest: false }],
+    });
+    const res = await get("/buckets/my-bucket/versions?maxKeys=5");
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].MaxKeys).toBe(5);
+    const body = await res.json();
+    expect(body.versions[0].lastModified).toBeNull();
+    expect(body.deleteMarkers[0].lastModified).toBeNull();
+  });
+
+  it("DELETE /buckets/:name/multipart/:uploadId — defaults key to empty string", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await router.request("/buckets/my-bucket/multipart/upload-9", { method: "DELETE" });
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].Key).toBe("");
+  });
+
+  it("GET /buckets/:name/multipart — passes maxUploads and handles missing Initiated", async () => {
+    mockSend.mockResolvedValueOnce({
+      Uploads: [{ UploadId: "u2", Key: "f.bin", StorageClass: "STANDARD" }],
+      IsTruncated: true,
+    });
+    const res = await get("/buckets/my-bucket/multipart?maxUploads=3");
+    expect(mockSend.mock.calls[0][0].MaxUploads).toBe(3);
+    const body = await res.json();
+    expect(body.uploads[0].initiated).toBeNull();
+    expect(body.isTruncated).toBe(true);
+  });
 });

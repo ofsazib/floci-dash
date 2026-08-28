@@ -502,6 +502,47 @@ describe("OpenSearchDashboard — domain detail & tags", () => {
   });
 });
 
+it("shows dashes for sparse domain fields and defaults empty access policy", async () => {
+    mockDomainDetail.mockReturnValue({
+      data: { domain: { DomainName: "sparse" } },
+      isLoading: false,
+    });
+    mockDomainConfig.mockReturnValue({ data: { domainConfig: {} }, isLoading: false });
+    mockDomains.mockReturnValue({ data: { domains: [{ DomainName: "d1", EngineType: "OpenSearch" }], total: 1 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<OpenSearchDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "Manage" }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    expect(await within(dialog).findByText("Domain Details")).toBeTruthy();
+    expect(dialog.textContent).toContain("—");
+    await user.click(within(dialog).getByRole("tab", { name: /Domain config/i }));
+    expect(within(dialog).getByText("{}")).toBeTruthy();
+  });
+
+  it("shows spinners while tags and config are loading", async () => {
+    mockDomainTags.mockReturnValue({ data: undefined, isLoading: true });
+    mockDomainConfig.mockReturnValue({ data: undefined, isLoading: true });
+    mockDomains.mockReturnValue({ data: { domains: [{ DomainName: "d1", EngineType: "OpenSearch" }], total: 1 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<OpenSearchDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "Manage" }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    await user.click(within(dialog).getByRole("tab", { name: /Tags/i }));
+    expect(within(dialog).queryByText("Add tag")).toBeNull();
+    await user.click(within(dialog).getByRole("tab", { name: /Domain config/i }));
+    expect(within(dialog).queryByText("No config available")).toBeNull();
+  });
+
+  it("shows the no-domain-details fallback when domain is absent", async () => {
+    mockDomainDetail.mockReturnValue({ data: {}, isLoading: false });
+    mockDomains.mockReturnValue({ data: { domains: [{ DomainName: "d1", EngineType: "OpenSearch" }], total: 1 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<OpenSearchDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "Manage" }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    expect(await within(dialog).findByText("No domain details available")).toBeTruthy();
+  });
+
 describe("OpenSearchDashboard — create", () => {
   async function openCreateModal(user: ReturnType<typeof userEvent.setup>) {
     await user.click(await screen.findByRole("button", { name: "Create Domain" }));
