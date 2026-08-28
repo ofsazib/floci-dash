@@ -1,0 +1,48 @@
+# ─── Floci Dash — Docker-in-Docker Combined Stack ───
+#
+# This configuration runs the combined image with Docker-in-Docker (dind).
+# Floci manages real Docker containers (OpenSearch, Lambda, RDS, etc)
+# through the internal daemon - no host Docker socket mount required.
+#
+# Usage:
+#   docker compose -f docker-compose.dind.yml up -d
+#   docker compose -f docker-compose.dind.yml down
+#
+# Requirements:
+#   - privileged: true (required for Docker-in-Docker)
+#   - Named volumes for data persistence
+
+services:
+  floci:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.combined
+    container_name: floci-dash-combined
+    privileged: true
+    ports:
+      - "${DASHBOARD_PORT:-3000}:3000"
+      - "${FLOCI_PORT:-4566}:4566"
+      - "${OPENSEARCH_PROXY_PORT_START:-9400}-${OPENSEARCH_PROXY_PORT_END:-9499}:9400-9499"
+    environment:
+      - FLOCI_HOSTNAME=floci
+      - FLOCI_STORAGE_MODE=hybrid
+      - FLOCI_DOCKER_DOCKER_HOST=unix:///var/run/docker.sock
+      - FLOCI_SERVICES_OPENSEARCH_MOCK=false
+      - FLOCI_SERVICES_OPENSEARCH_PROXY_BASE_PORT=9400
+      - FLOCI_SERVICES_OPENSEARCH_PROXY_MAX_PORT=9499
+      - FLOCI_SERVICES_OPENSEARCH_DEFAULT_IMAGE=${OPENSEARCH_IMAGE:-opensearchproject/opensearch:2.19.5}
+    volumes:
+      - floci-data:/app/data
+      - floci-docker:/var/lib/docker
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:3000/api/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+volumes:
+  floci-data:
+    driver: local
+  floci-docker:
+    driver: local

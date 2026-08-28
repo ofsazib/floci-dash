@@ -1,13 +1,10 @@
-# ─── Combined Floci + Dashboard Image ───
-# Single container running both Floci (port 4566) and the Dashboard (port 3000).
-# Uses floci/floci:latest native binary on top of Node.js slim (Debian-based).
+# ─── Combined Floci + Dashboard with Docker-in-Docker ───
+# Single container with internal Docker daemon for OpenSearch support.
+# Does NOT require host Docker socket mount.
 #
-# Build:
-#   docker build -f docker/Dockerfile.combined -t floci-dash:combined .
-#
-# Run:
-#   docker run -p 3000:3000 -p 4566:4566 -v /var/run/docker.sock:/var/run/docker.sock \
-#     floci-dash:combined
+# Build: docker build -f docker/Dockerfile.combined -t floci-dash:combined .
+# Run:   docker run --privileged -p 3000:3000 -p 4566:4566 -p 9400-9499:9400-9499 \
+#          -v floci-data:/app/data -v floci-docker:/var/lib/docker floci-dash:combined
 
 # Stage 1 — Build dashboard
 FROM node:22-alpine AS dashboard-builder
@@ -18,29 +15,59 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm run build
 
-# Stage 2 — Combined runtime (Node.js slim = Debian-based, has Node.js + glibc)
-FROM node:22-slim
+# Stage 2 — Runtime with Docker-in-Docker
+FROM debian:bookworm-slim
+
 ENV NODE_ENV=production
+ENV DEBIAN_FRONTEND=noninteractive
+
 USER root
 
-# Install runtime tools (curl for health checks)
-RUN apt-get update && apt-get install -y --no-install-recommends curl && \
-    rm -rf /var/lib/apt/lists/*
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
+    gnupg \
+    lsb-release \
+    procps \
+    tini \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy Floci native binary + support files from the official image
+# Install Docker engine
+RUN install -m 0755 -d /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg \
+    && chmod a+r /etc/apt/keyrings/docker.gpg \
+    && echo \
+    "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian \
+    $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+    tee /etc/apt/sources.list.d/docker.list > /dev/null \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        docker-ce \
+        docker-ce-cli \
+        containerd.io \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Node.js 22
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy Floci binary and gosu
 COPY --from=floci/floci:latest /app/application /app/application
-COPY --from=floci/floci:latest /usr/local/bin/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-COPY --from=floci/floci:latest /usr/local/bin/localstack-parity.sh /usr/local/bin/localstack-parity.sh
 COPY --from=floci/floci:latest /usr/local/bin/gosu /usr/local/bin/gosu
 
-# Create floci user matching the original image
+# Create floci user
 RUN groupadd -g 1001 floci && \
-    useradd -r -u 1001 -g floci -d /app -s /sbin/nologin floci && \
-    mkdir -p /app/data && \
-    chown -R floci:floci /app && \
-    chmod -R g+rwX /app
+    useradd -r -u 1001 -g floci -d /app -s /sbin/nologin floci
 
-# Copy dashboard artifacts
+# Create required directories
+RUN mkdir -p /app/data \
+             /var/run/docker \
+             /var/lib/docker \
+             /var/log
+
+# Copy dashboard
 WORKDIR /app/dashboard
 RUN corepack enable && corepack prepare pnpm@latest --activate
 COPY --from=dashboard-builder /app/dist ./dist
@@ -49,18 +76,29 @@ RUN pnpm install --frozen-lockfile --prod && \
     chown -R floci:floci /app/dashboard && \
     chmod -R a+rX /app/dashboard
 
-# Combined startup script
-COPY docker/combined-start.sh /usr/local/bin/combined-start.sh
-RUN chmod +x /usr/local/bin/combined-start.sh
+# Copy entrypoint and healthcheck
+COPY docker/combined-dind-entrypoint.sh /usr/local/bin/combined-entrypoint.sh
+COPY docker/healthcheck.sh /usr/local/bin/healthcheck.sh
+RUN chmod +x /usr/local/bin/combined-entrypoint.sh /usr/local/bin/healthcheck.sh
 
-EXPOSE 3000 4566
+# Configure Floci for Docker-in-Docker
+# FLOCI_SERVICES_DOCKER_NETWORK is set dynamically in the entrypoint
+# after creating the internal Docker network
+ENV FLOCI_HOSTNAME=floci \
+    FLOCI_STORAGE_MODE=hybrid \
+    FLOCI_DOCKER_DOCKER_HOST=unix:///var/run/docker.sock \
+    FLOCI_SERVICES_OPENSEARCH_MOCK=false \
+    FLOCI_SERVICES_OPENSEARCH_PROXY_BASE_PORT=9400 \
+    FLOCI_SERVICES_OPENSEARCH_PROXY_MAX_PORT=9499
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD curl -sf http://localhost:3000/api/healthz || exit 1
+EXPOSE 3000 4566 9400-9499
+
+VOLUME ["/app/data", "/var/lib/docker"]
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
+    CMD /usr/local/bin/healthcheck.sh
 
 WORKDIR /app
 
-# Reuse Floci's entrypoint which handles docker socket permissions,
-# drops to the floci user via gosu, then exec's our CMD.
-ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
-CMD ["/usr/local/bin/combined-start.sh"]
+# tini as init for proper signal handling + process reaping
+ENTRYPOINT ["tini", "--", "/usr/local/bin/combined-entrypoint.sh"]
