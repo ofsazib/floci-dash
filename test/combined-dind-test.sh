@@ -2,6 +2,12 @@
 # ─── Combined Docker-in-Docker Integration Test ───
 # Tests that the combined image can run OpenSearch without host Docker socket.
 # Verifies data plane operations from a sibling container.
+#
+# NOTE: the inner Docker daemon starts cold, so Floci must pull the OpenSearch
+# image inside DinD (Floci times a pull out after 5 min per attempt). On slow
+# networks, pre-seed first to skip the network pull:
+#   docker save opensearchproject/opensearch:2.19.5 | \
+#     docker exec -i <combined-container> docker load
 
 set -euo pipefail
 

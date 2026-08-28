@@ -89,6 +89,34 @@ if ! docker network inspect "$FLOCI_NETWORK" > /dev/null 2>&1; then
 fi
 export FLOCI_SERVICES_DOCKER_NETWORK="$FLOCI_NETWORK"
 
+# ── DinD hostname shim ───────────────────────────────────────────────────
+# Floci's domain readiness check connects to http://{containerName}:9200 from
+# this container's network namespace. Nested containers live on the inner
+# floci-net bridge, which this container cannot join, so their names are not
+# resolvable and Created would never flip to true. Keep /etc/hosts in sync
+# with the inner daemon's containers (managed block, rewritten every 3s).
+(
+    while true; do
+        {
+            docker ps --format '{{.Names}}' 2>/dev/null | while read -r name; do
+                # Docker 29 renders empty IPAddress as the literal "invalid IP";
+                # containers may sit on several networks, so keep the first IPv4.
+                ip=$(docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$v.IPAddress}} {{end}}' "$name" 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+                [ -n "$ip" ] && echo "$ip $name"
+            done
+        } > /tmp/floci-nested-hosts 2>/dev/null || true
+        # /etc/hosts is a bind mount: sed -i cannot rename it, so rewrite in place
+        grep -v '# floci-dind-' /etc/hosts > /tmp/floci-hosts-base 2>/dev/null || true
+        {
+            cat /tmp/floci-hosts-base 2>/dev/null
+            echo "# floci-dind-begin"
+            cat /tmp/floci-nested-hosts 2>/dev/null
+            echo "# floci-dind-end"
+        } > /etc/hosts || true
+        sleep 3
+    done
+) &>/dev/null &
+
 # ── Fix permissions ──────────────────────────────────────────────────────
 chown -R floci:floci /app/data 2>/dev/null || true
 chmod 770 /app/data 2>/dev/null || true
