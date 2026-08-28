@@ -93,11 +93,19 @@ Or pull the public Docker image. Two variants are published:
 docker pull ghcr.io/ofsazib/floci-dash:latest
 docker run -p 9877:3000 --rm ghcr.io/ofsazib/floci-dash
 
-# Combined (Floci + Dashboard, single container)
+# Combined (Floci + Dashboard, single container, requires host Docker socket)
 docker pull ghcr.io/ofsazib/floci-dash:latest-combined
 docker run -p 3000:3000 -p 4566:4566 -v /var/run/docker.sock:/var/run/docker.sock \
   --rm ghcr.io/ofsazib/floci-dash:latest-combined
+
+# Combined with Docker-in-Docker (no host socket, runs OpenSearch natively)
+docker pull ghcr.io/ofsazib/floci-dash:latest-combined
+docker run -d --privileged -p 3000:3000 -p 4566:4566 -p 9400-9499:9400-9499 \
+  -v floci-data:/app/data -v floci-docker:/var/lib/docker \
+  ghcr.io/ofsazib/floci-dash:latest-combined
 ```
+
+> **For OpenSearch support without host Docker socket:** Use the Docker-in-Docker (DinD) mode with `--privileged`. See [docs/combined-docker-in-docker.md](docs/combined-docker-in-docker.md) for details.
 
 Open [http://localhost:9877](http://localhost:9877) — the dashboard connects to Floci automatically. For the combined image, use [http://localhost:3000](http://localhost:3000).
 
@@ -186,13 +194,22 @@ FLOCI_STORAGE_MODE=persistent make up-bg
 For the **combined image**, set the mode and mount a volume yourself:
 
 ```bash
+# With host Docker socket (for container-based services)
 docker run -p 3000:3000 -p 4566:4566 \
   -e FLOCI_STORAGE_MODE=hybrid -v floci-data:/app/data \
   -v /var/run/docker.sock:/var/run/docker.sock \
   --rm ghcr.io/ofsazib/floci-dash:latest-combined
+
+# With Docker-in-Docker (no host socket, runs OpenSearch natively)
+docker run -d --privileged -p 3000:3000 -p 4566:4566 -p 9400-9499:9400-9499 \
+  -e FLOCI_STORAGE_MODE=hybrid \
+  -v floci-data:/app/data -v floci-docker:/var/lib/docker \
+  ghcr.io/ofsazib/floci-dash:latest-combined
 ```
 
 (For LocalStack compatibility, Floci also accepts `PERSISTENCE=1`, which it auto-translates to `FLOCI_STORAGE_MODE=persistent`.)
+
+For Docker-in-Docker with OpenSearch, see [docs/combined-docker-in-docker.md](docs/combined-docker-in-docker.md).
 
 ## Architecture
 
@@ -418,7 +435,7 @@ These services have full CRUD operations in both backend and frontend:
 | **Glue** | Databases (list, get, create, delete), tables (list, get, create, delete per database) with drill-down navigation |
 | **Firehose** | Delivery streams (list with describe, get, create, delete), put record/batch, tags (list per stream) |
 | **Step Functions** | State machines (list, describe, create, delete), executions (list, describe, start, stop, history), activities (list) with drill-down per state machine |
-| **OpenSearch** | Domains (list, describe, create, delete), versions (list) |
+| **OpenSearch** | Domains (list, describe, create, delete, update config, upgrade check), versions (list), tags (list, add) |
 | **MSK** | Clusters (list, describe, create, delete V2 API), bootstrap brokers (get per cluster) |
 | **Bedrock Runtime** | Converse (messages → response), invoke model (prompt → response) with configurable model IDs |
 | **Textract** | Sync detect document text, sync analyze document (with feature types), async start/get document text detection, async start/get document analysis |
@@ -588,6 +605,11 @@ You'll need Floci running separately (e.g., `docker run -p 4566:4566 ghcr.io/hec
 | `FLOCI_PORT` | `9878` | Host port for Floci (docker-compose) |
 | `DASHBOARD_PORT` | `9877` | Host port for Dashboard (docker-compose) |
 | `FLOCI_STORAGE_MODE` | `hybrid` (this repo) / `memory` (Floci default) | Floci storage mode — see [Data persistence](#data-persistence) |
+| `FLOCI_HOSTNAME` | `floci` | Floci hostname for internal Docker network |
+| `FLOCI_SERVICES_DOCKER_NETWORK` | `floci-net` (DinD) | Docker network for spawned containers |
+| `FLOCI_SERVICES_OPENSEARCH_MOCK` | `false` (DinD) | `false` for real OpenSearch, `true` for metadata-only |
+| `FLOCI_SERVICES_OPENSEARCH_PROXY_BASE_PORT` | `9400` | Start of OpenSearch proxy port range |
+| `FLOCI_SERVICES_OPENSEARCH_PROXY_MAX_PORT` | `9499` | End of OpenSearch proxy port range |
 
 ## License
 
