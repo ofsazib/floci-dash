@@ -305,6 +305,7 @@ import {
   useActivities,
   useStateMachineVersions,
   usePublishStateMachineVersion,
+  useUpdateStateMachine,
   useDeleteStateMachineVersion,
   useStartExecution,
   useStopExecution,
@@ -531,6 +532,11 @@ export function StepFunctionsDashboard() {
   const { data: actData } = useActivities();
   const { data: versionsData } = useStateMachineVersions(versionSm);
   const publishVersion = usePublishStateMachineVersion();
+  const [editArn, setEditArn] = useState<string | null>(null);
+  const [editDefinition, setEditDefinition] = useState("");
+  const [editRoleArn, setEditRoleArn] = useState("");
+  const [editError, setEditError] = useState<string | null>(null);
+  const updateSm = useUpdateStateMachine(editArn ?? "");
   const deleteVersion = useDeleteStateMachineVersion();
   const startExecution = useStartExecution();
   const stopExecution = useStopExecution();
@@ -722,6 +728,9 @@ export function StepFunctionsDashboard() {
                   header: "",
                   cell: (i: any) => (
                     <SpaceBetween direction="horizontal" size="xs">
+                      <Button variant="link" onClick={() => { setEditArn(i.arn); setEditDefinition(""); setEditRoleArn(""); setEditError(null); }}>
+                        Edit
+                      </Button>
                       <Button variant="link" onClick={() => setTagsArn(i.arn)}>
                         Tags
                       </Button>
@@ -1141,6 +1150,58 @@ export function StepFunctionsDashboard() {
           </FormField>
         </SpaceBetween>
       </Form>
+    </Modal>
+
+    {/* Edit state machine modal */}
+    <Modal
+      visible={!!editArn}
+      onDismiss={() => setEditArn(null)}
+      header={`Edit state machine — ${editArn?.split(":").pop() ?? ""}`}
+      footer={
+        <Box float="right">
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button variant="link" onClick={() => setEditArn(null)}>Cancel</Button>
+            <Button
+              variant="primary"
+              loading={updateSm.isPending}
+              disabled={!editDefinition.trim() && !editRoleArn.trim()}
+              onClick={async () => {
+                setEditError(null);
+                try {
+                  await updateSm.mutateAsync({
+                    definition: editDefinition.trim() || undefined,
+                    roleArn: editRoleArn.trim() || undefined,
+                  });
+                  setEditArn(null);
+                } catch (e) {
+                  setEditError((e as Error)?.message || "Failed to update state machine");
+                }
+              }}
+            >
+              Save changes
+            </Button>
+          </SpaceBetween>
+        </Box>
+      }
+    >
+      <SpaceBetween size="m">
+        {editError && <Alert type="error">{editError}</Alert>}
+        <FormField label="New definition (JSON) — optional" description="Leave empty to keep the current definition">
+          <Textarea
+            value={editDefinition}
+            onChange={({ detail }) => setEditDefinition(detail.value)}
+            rows={8}
+            placeholder='{ "StartAt": "S", "States": {} }'
+          />
+        </FormField>
+        <FormField label="New role ARN — optional">
+          <Input
+            value={editRoleArn}
+            onChange={({ detail }) => setEditRoleArn(detail.value)}
+            placeholder="arn:aws:iam::123456789012:role/execution-role"
+          />
+        </FormField>
+      </SpaceBetween>
     </Modal>
 
     {/* G.84 — Validate definition modal */}

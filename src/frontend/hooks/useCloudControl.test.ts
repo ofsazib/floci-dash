@@ -12,6 +12,7 @@ import {
   useCloudControlResources,
   useCloudControlResource,
   useCreateCloudControlResource,
+  useResourceRequestStatus,
   useDeleteCloudControlResource,
 } from "./useCloudControl";
 
@@ -79,5 +80,19 @@ describe("CloudControl hooks", () => {
     expect(mockApi).toHaveBeenCalledWith("/aws/cloudcontrol/resources/T%201/i%202", {
       method: "DELETE",
     });
+  });
+});
+
+describe("useResourceRequestStatus", () => {
+  it("queries request status by token", async () => {
+    mockApi.mockResolvedValueOnce({ status: "SUCCESS", identifier: "i1" });
+    const { result } = renderHook(() => useResourceRequestStatus("tok-1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/cloudcontrol/requests/tok-1");
+  });
+
+  it("is disabled without token", () => {
+    const { result } = renderHook(() => useResourceRequestStatus(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
   });
 });

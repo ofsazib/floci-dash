@@ -12,6 +12,7 @@ vi.mock("@aws-sdk/client-sfn", () => ({
   ListStateMachinesCommand: createCmd("ListStateMachinesCommand"),
   DescribeStateMachineCommand: createCmd("DescribeStateMachineCommand"),
   CreateStateMachineCommand: createCmd("CreateStateMachineCommand"),
+  UpdateStateMachineCommand: createCmd("UpdateStateMachineCommand"),
   DeleteStateMachineCommand: createCmd("DeleteStateMachineCommand"),
   ListExecutionsCommand: createCmd("ListExecutionsCommand"),
   DescribeExecutionCommand: createCmd("DescribeExecutionCommand"),
@@ -56,6 +57,30 @@ async function delWithBody(p: string, b?: any) {
 }
 
 beforeEach(() => mockSend.mockReset());
+
+describe("PUT /state-machines/:arn — UpdateStateMachine", () => {
+  it("updates definition", async () => {
+    mockSend.mockResolvedValueOnce({ updateDate: new Date("2026-01-01"), stateMachineVersionArn: "arn:arn:ver:1" });
+    const res = await put(`/state-machines/${encodeURIComponent("arn:aws:states:us-east-1:1:stateMachine:sm")}`, { definition: "{}" });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.stateMachineVersionArn).toBe("arn:arn:ver:1");
+    expect(mockSend.mock.calls[0][0].definition).toBe("{}");
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("UpdateStateMachineCommand");
+  });
+
+  it("updates roleArn only", async () => {
+    mockSend.mockResolvedValueOnce({ updateDate: new Date("2026-01-01") });
+    const res = await put(`/state-machines/${encodeURIComponent("arn:aws:states:us-east-1:1:stateMachine:sm")}`, { roleArn: "arn:aws:iam::1:role/x" });
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].roleArn).toBe("arn:aws:iam::1:role/x");
+  });
+
+  it("400 when neither definition nor roleArn", async () => {
+    const res = await put(`/state-machines/${encodeURIComponent("arn:aws:states:us-east-1:1:stateMachine:sm")}`, {});
+    expect(res.status).toBe(400);
+  });
+});
 
 describe("Step Functions Routes", () => {
   it("GET /state-machines — lists SMs", async () => {

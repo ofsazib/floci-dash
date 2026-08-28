@@ -7,6 +7,7 @@ import {
   GetResourceCommand,
   CreateResourceCommand,
   DeleteResourceCommand,
+  GetResourceRequestStatusCommand,
 } from "@aws-sdk/client-cloudcontrol";
 
 const router = new Hono();
@@ -71,6 +72,24 @@ router.post("/resources/create", async (c: Context) => {
     },
     202
   );
+});
+
+router.get("/requests/:requestToken", async (c: Context) => {
+  const requestToken = decodeURIComponent(c.req.param("requestToken")!);
+  const client = getClient();
+  const result = await client.send(
+    new GetResourceRequestStatusCommand({ RequestToken: requestToken })
+  );
+  const pe = result.ProgressEvent;
+  return c.json({
+    typeName: pe?.TypeName ?? null,
+    identifier: pe?.Identifier ?? null,
+    requestToken: pe?.RequestToken ?? requestToken,
+    status: pe?.OperationStatus ?? null,
+    operation: pe?.Operation ?? null,
+    errorCode: pe?.ErrorCode ?? null,
+    message: pe?.StatusMessage ?? null,
+  });
 });
 
 router.delete("/resources/:typeName/:identifier", async (c: Context) => {

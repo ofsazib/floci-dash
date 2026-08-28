@@ -47,6 +47,27 @@ export function useCreateCloudControlResource() {
   });
 }
 
+export function useResourceRequestStatus(requestToken: string | null) {
+  return useQuery<{
+    typeName: string | null;
+    identifier: string | null;
+    requestToken: string;
+    status: string | null;
+    operation: string | null;
+    errorCode: string | null;
+    message: string | null;
+  }>({
+    queryKey: ["aws", "cloudcontrol", "request-status", requestToken],
+    queryFn: () =>
+      api(`/aws/cloudcontrol/requests/${encodeURIComponent(requestToken!)}`),
+    enabled: !!requestToken,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === "SUCCESS" || status === "FAILED" ? false : 2000;
+    },
+  });
+}
+
 export function useDeleteCloudControlResource(typeName: string | null) {
   const qc = useQueryClient();
   return useMutation({

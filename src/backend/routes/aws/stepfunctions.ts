@@ -6,6 +6,7 @@ import {
   ListStateMachinesCommand,
   DescribeStateMachineCommand,
   CreateStateMachineCommand,
+  UpdateStateMachineCommand,
   DeleteStateMachineCommand,
   ListExecutionsCommand,
   DescribeExecutionCommand,
@@ -70,6 +71,27 @@ router.post("/state-machines", async (c: Context) => {
     })
   );
   return c.json({ stateMachineArn: result.stateMachineArn, creationDate: result.creationDate }, 201);
+});
+
+router.put("/state-machines/:arn", async (c: Context) => {
+  const arn = decodeURIComponent(c.req.param("arn")!);
+  const body = await c.req.json<{ definition?: string; roleArn?: string }>();
+  if (!body.definition && !body.roleArn) {
+    return c.json({ error: "definition or roleArn is required" }, 400);
+  }
+  const client = getClient();
+  const result = await client.send(
+    new UpdateStateMachineCommand({
+      stateMachineArn: arn,
+      definition: body.definition,
+      roleArn: body.roleArn,
+    })
+  );
+  return c.json({
+    stateMachineArn: arn,
+    stateMachineVersionArn: result.stateMachineVersionArn,
+    updateDate: result.updateDate,
+  });
 });
 
 router.delete("/state-machines/:arn", async (c: Context) => {

@@ -16,6 +16,7 @@ import {
   useCloudControlResource,
   useCreateCloudControlResource,
   useDeleteCloudControlResource,
+  useResourceRequestStatus,
 } from "../../hooks/useCloudControl";
 import ResourceTable from "../../components/ResourceTable";
 import DeleteButton from "../../components/DeleteButton";
@@ -25,6 +26,8 @@ export function CloudControlDashboard() {
   const [typeName, setTypeName] = useState<string | null>(null);
   const { data, isLoading } = useCloudControlResources(typeName);
   const createResource = useCreateCloudControlResource();
+  const [lastRequestToken, setLastRequestToken] = useState<string | null>(null);
+  const requestStatus = useResourceRequestStatus(lastRequestToken);
   const deleteResource = useDeleteCloudControlResource(typeName);
   const [selected, setSelected] = useState<string | null>(null);
   const { data: detailData } = useCloudControlResource(typeName, selected);
@@ -40,7 +43,8 @@ export function CloudControlDashboard() {
       return;
     }
     try {
-      await createResource.mutateAsync({ typeName, desiredState: parsed });
+      const res: any = await createResource.mutateAsync({ typeName, desiredState: parsed });
+      setLastRequestToken(res?.requestToken ?? null);
       setShowCreate(false);
       setDesiredState("{}");
     } catch {}
@@ -77,6 +81,33 @@ export function CloudControlDashboard() {
           </Button>
         </SpaceBetween>
       </Box>
+
+      {lastRequestToken && (
+        <Box>
+          <Header variant="h3">Last request</Header>
+          <SpaceBetween direction="horizontal" size="xs">
+            <Box variant="small">token {lastRequestToken}</Box>
+            <Box
+              variant="awsui-key-label"
+              color={
+                requestStatus.data?.status === "SUCCESS"
+                  ? "text-status-success"
+                  : requestStatus.data?.status === "FAILED"
+                  ? "text-status-error"
+                  : "text-status-inactive"
+              }
+            >
+              {requestStatus.data?.status ?? "PENDING"}
+            </Box>
+            {requestStatus.data?.identifier && (
+              <Box variant="small">identifier {requestStatus.data.identifier}</Box>
+            )}
+            {requestStatus.data?.status === "FAILED" && requestStatus.data?.message && (
+              <Box variant="small" color="text-status-error">{requestStatus.data.message}</Box>
+            )}
+          </SpaceBetween>
+        </Box>
+      )}
 
       <ResourceTable
         resourceName="Resource"

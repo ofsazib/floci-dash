@@ -17,6 +17,7 @@ vi.mock("@aws-sdk/client-cloudcontrol", () => ({
   ListResourcesCommand: createCmd("ListResourcesCommand"),
   GetResourceCommand: createCmd("GetResourceCommand"),
   CreateResourceCommand: createCmd("CreateResourceCommand"),
+  GetResourceRequestStatusCommand: createCmd("GetResourceRequestStatusCommand"),
   DeleteResourceCommand: createCmd("DeleteResourceCommand"),
 }));
 
@@ -221,6 +222,56 @@ describe("CloudControl routes", () => {
       typeName: null,
       identifier: null,
       status: null,
+    });
+  });
+
+  describe("GET /requests/:requestToken — GetResourceRequestStatus", () => {
+    it("returns progress event fields", async () => {
+      mockSend.mockResolvedValueOnce({
+        ProgressEvent: {
+          TypeName: "AWS::S3::Bucket",
+          Identifier: "new-bucket",
+          RequestToken: "tok-1",
+          OperationStatus: "SUCCESS",
+          Operation: "CREATE",
+          StatusMessage: "ok",
+        },
+      });
+      const res = await get("/requests/tok-1");
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        typeName: "AWS::S3::Bucket",
+        identifier: "new-bucket",
+        requestToken: "tok-1",
+        status: "SUCCESS",
+        operation: "CREATE",
+        errorCode: null,
+        message: "ok",
+      });
+      expect(mockSend.mock.calls[0][0]).toMatchObject({
+        __cmdName: "GetResourceRequestStatusCommand",
+        RequestToken: "tok-1",
+      });
+    });
+
+    it("returns nulls when ProgressEvent is absent", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/requests/tok");
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        typeName: null, identifier: null, requestToken: "tok",
+        status: null, operation: null, errorCode: null, message: null,
+      });
+    });
+
+    it("encodes token and defaults sparse fields", async () => {
+      mockSend.mockResolvedValueOnce({ ProgressEvent: { OperationStatus: "PENDING" } });
+      const res = await get("/requests/tok%2Fwith%2Fslash");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.status).toBe("PENDING");
+      expect(body.requestToken).toBe("tok/with/slash");
+      expect(mockSend.mock.calls[0][0].RequestToken).toBe("tok/with/slash");
     });
   });
 });

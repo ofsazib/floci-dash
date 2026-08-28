@@ -14,6 +14,7 @@ import {
   useStateMachines,
   useStateMachine,
   useCreateStateMachine,
+  useUpdateStateMachine,
   useDeleteStateMachine,
   useStateMachineExecutions,
   useExecutionHistory,
@@ -68,6 +69,16 @@ describe("useStepFunctions hooks", () => {
     expect(mockApi).toHaveBeenCalledWith("/aws/stepfunctions/state-machines", {
       method: "POST",
       body: JSON.stringify({ name: "sm", definition: "{}", roleArn: "arn:r" }),
+    });
+  });
+
+  it("useUpdateStateMachine calls PUT and invalidates detail", async () => {
+    mockApi.mockResolvedValueOnce({ stateMachineArn: ARN, updateDate: 1 });
+    const { result } = renderHook(() => useUpdateStateMachine(ARN), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ definition: "{}" });
+    expect(mockApi).toHaveBeenCalledWith(`/aws/stepfunctions/state-machines/${encodeURIComponent(ARN)}`, {
+      method: "PUT",
+      body: JSON.stringify({ definition: "{}" }),
     });
   });
 

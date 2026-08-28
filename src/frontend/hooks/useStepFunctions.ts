@@ -44,6 +44,21 @@ export function useCreateStateMachine() {
   });
 }
 
+export function useUpdateStateMachine(arn: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { definition?: string; roleArn?: string }) =>
+      api(`/aws/stepfunctions/state-machines/${encodeURIComponent(arn)}`, {
+        method: "PUT",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["aws", "stepfunctions", "state-machines"] });
+      qc.invalidateQueries({ queryKey: ["aws", "stepfunctions", "state-machine", arn] });
+    },
+  });
+}
+
 export function useDeleteStateMachine() {
   const qc = useQueryClient();
   return useMutation({

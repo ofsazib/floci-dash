@@ -18,6 +18,7 @@ const mockStartExecution = vi.fn().mockResolvedValue({});
 const mockStopExecution = vi.fn().mockResolvedValue({});
 const mockVersions = vi.fn();
 const mockPublishVersion = vi.fn();
+const mockUpdateSm = vi.fn();
 const mockDeleteVersion = vi.fn();
 const mockCreateActivity = vi.fn().mockResolvedValue({});
 const mockDeleteActivity = vi.fn().mockResolvedValue({});
@@ -42,6 +43,7 @@ vi.mock("../../hooks/useStepFunctions", () => ({
   useActivities: (...args: any[]) => mockActivities(...args),
   useStateMachineVersions: (...args: any[]) => mockVersions(...args),
   usePublishStateMachineVersion: () => ({ mutate: mockPublishVersion, mutateAsync: mockPublishVersion, isPending: false, isError: false, error: null, reset: vi.fn() }),
+  useUpdateStateMachine: () => ({ mutateAsync: mockUpdateSm, isPending: false }),
   useDeleteStateMachineVersion: () => ({
     mutate: mockDeleteVersion,
     mutateAsync: mockDeleteVersion,
@@ -705,6 +707,60 @@ async function clickDialogButton(user: ReturnType<typeof userEvent.setup>, heade
   const dialog = header!.closest('[role="dialog"]') as HTMLElement;
   await user.click(within(dialog).getByRole("button", { name }));
 }
+
+describe("StepFunctionsDashboard — edit state machine", () => {
+  it("opens edit modal, saves updated definition, shows error on failure", async () => {
+    const user = userEvent.setup();
+    mockStateMachines.mockReturnValue({
+      data: { stateMachines: [{ stateMachineArn: "arn:aws:states:us-east-1:1:stateMachine:sm-edit", name: "sm-edit", type: "STANDARD", creationDate: "2026-01-01" }], total: 1 },
+      isLoading: false,
+    });
+    mockUpdateSm.mockResolvedValueOnce({ stateMachineArn: "arn:aws:states:us-east-1:1:stateMachine:sm-edit" });
+    render(<StepFunctionsDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("sm-edit")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    expect(within(dialog).getByText(/Edit state machine/)).toBeTruthy();
+    await user.type(within(dialog).getByPlaceholderText(/StartAt/), '{{"StartAt":"NEW"}');
+    await user.click(within(dialog).getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(mockUpdateSm).toHaveBeenCalledWith({ definition: '{"StartAt":"NEW"}', roleArn: undefined }));
+    // modal closed
+    expect(screen.getAllByRole("dialog").every((d) => d.className.includes("hidden"))).toBe(true);
+    // error arm
+    mockUpdateSm.mockRejectedValueOnce(new Error("update failed"));
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    const dialog2 = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    await user.type(within(dialog2).getByPlaceholderText(/StartAt/), '{{}');
+    await user.click(within(dialog2).getByRole("button", { name: "Save changes" }));
+    expect(await within(dialog2).findByText("update failed")).toBeTruthy();
+    // non-Error rejection falls back to the generic message
+    mockUpdateSm.mockRejectedValueOnce({});
+    await user.click(within(dialog2).getByRole("button", { name: "Save changes" }));
+    expect(await within(dialog2).findByText("Failed to update state machine")).toBeTruthy();
+    // cancel closes the modal
+    await user.click(within(dialog2).getByRole("button", { name: "Cancel" }));
+    expect(screen.getAllByRole("dialog").every((d) => d.className.includes("hidden"))).toBe(true);
+  });
+
+  it("keeps Save disabled until definition or roleArn entered", async () => {
+    const user = userEvent.setup();
+    mockStateMachines.mockReturnValue({
+      data: { stateMachines: [{ stateMachineArn: "arn:aws:states:us-east-1:1:stateMachine:sm-edit2", name: "sm-edit2", type: "STANDARD", creationDate: "2026-01-01" }], total: 1 },
+      isLoading: false,
+    });
+    render(<StepFunctionsDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("sm-edit2")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const save = within(dialog).getByRole("button", { name: "Save changes" }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    await user.type(within(dialog).getByPlaceholderText(/arn:aws:iam/), "arn:aws:iam::1:role/x");
+    expect(save.disabled).toBe(false);
+    mockUpdateSm.mockResolvedValueOnce({});
+    await user.click(save);
+    await waitFor(() => expect(mockUpdateSm).toHaveBeenCalledWith({ definition: undefined, roleArn: "arn:aws:iam::1:role/x" }));
+  });
+});
 
 describe("StepFunctionsDashboard — G.84 activities, task callbacks, sync runs, validation, tags", () => {
   const SM = { stateMachineArn: "arn:aws:states:us-east-1:123:stateMachine:my-sm", name: "my-sm", type: "STANDARD", creationDate: "2024-01-15T00:00:00Z" };
