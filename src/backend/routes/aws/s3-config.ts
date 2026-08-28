@@ -31,6 +31,16 @@ import {
   GetBucketAclCommand,
   PutBucketAclCommand,
   ServerSideEncryptionByDefault,
+  PutObjectLockConfigurationCommand,
+  GetObjectLockConfigurationCommand,
+  PutObjectRetentionCommand,
+  GetObjectRetentionCommand,
+  PutObjectLegalHoldCommand,
+  GetObjectLegalHoldCommand,
+  PutBucketMetricsConfigurationCommand,
+  GetBucketMetricsConfigurationCommand,
+  ListBucketMetricsConfigurationsCommand,
+  DeleteBucketMetricsConfigurationCommand,
 } from "@aws-sdk/client-s3";
 import { getAwsConfig } from "../../clients/aws";
 import { sanitizeBucketName, sanitizeName, validateJson } from "../../clients/sanitize";
@@ -439,6 +449,137 @@ router.put("/buckets/:name/acl", async (c: Context) => {
   if (body.owner) accessControlPolicy.Owner = body.owner;
   await s3().send(new PutBucketAclCommand({ Bucket: name, AccessControlPolicy: accessControlPolicy }));
   return c.json({ bucket: name, grants: body.grants.length, updated: true });
+});
+
+// ─── Object Lock Configuration ──────────────────────────────────
+
+router.get("/buckets/:name/object-lock", async (c: Context) => {
+  const name = c.req.param("name")!;
+  try {
+    const result = await s3().send(new GetObjectLockConfigurationCommand({ Bucket: name }));
+    return c.json({ objectLockConfiguration: result.ObjectLockConfiguration || null });
+  } catch (err: any) {
+    if (err.$metadata?.httpStatusCode === 404) {
+      return c.json({ objectLockConfiguration: null });
+    }
+    throw err;
+  }
+});
+
+router.put("/buckets/:name/object-lock", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const body = await c.req.json<{ objectLockConfiguration?: any }>();
+  await s3().send(new PutObjectLockConfigurationCommand({
+    Bucket: name,
+    ObjectLockConfiguration: body.objectLockConfiguration,
+  }));
+  return c.json({ bucket: name, updated: true });
+});
+
+// ─── Object Retention ────────────────────────────────────────────
+
+router.get("/buckets/:name/objects/*/retention", async (c: Context) => {
+  const bucket = c.req.param("name")!;
+  const path = new URL(c.req.url).pathname;
+  const key = decodeURIComponent(path.split("/objects/")[1]!.split("/retention")[0]);
+  if (!key) return c.json({ error: "Object key is required" }, 400);
+  const versionId = c.req.query("versionId") || undefined;
+  try {
+    const result = await s3().send(new GetObjectRetentionCommand({
+      Bucket: bucket, Key: key, VersionId: versionId,
+    }));
+    return c.json({ retention: result.Retention || null });
+  } catch (err: any) {
+    if (err.$metadata?.httpStatusCode === 404) {
+      return c.json({ retention: null });
+    }
+    throw err;
+  }
+});
+
+router.put("/buckets/:name/objects/*/retention", async (c: Context) => {
+  const bucket = c.req.param("name")!;
+  const path = new URL(c.req.url).pathname;
+  const key = decodeURIComponent(path.split("/objects/")[1]!.split("/retention")[0]);
+  if (!key) return c.json({ error: "Object key is required" }, 400);
+  const body = await c.req.json<{ retention?: any; versionId?: string }>();
+  const versionId = body.versionId || c.req.query("versionId") || undefined;
+  const bypassGovernance = c.req.header("x-amz-bypass-governance-retention") === "true";
+  await s3().send(new PutObjectRetentionCommand({
+    Bucket: bucket, Key: key, VersionId: versionId,
+    Retention: body.retention, BypassGovernanceRetention: bypassGovernance,
+  }));
+  return c.json({ bucket, key, updated: true });
+});
+
+// ─── Object Legal Hold ───────────────────────────────────────────
+
+router.get("/buckets/:name/objects/*/legal-hold", async (c: Context) => {
+  const bucket = c.req.param("name")!;
+  const path = new URL(c.req.url).pathname;
+  const key = decodeURIComponent(path.split("/objects/")[1]!.split("/legal-hold")[0]);
+  if (!key) return c.json({ error: "Object key is required" }, 400);
+  const versionId = c.req.query("versionId") || undefined;
+  try {
+    const result = await s3().send(new GetObjectLegalHoldCommand({
+      Bucket: bucket, Key: key, VersionId: versionId,
+    }));
+    return c.json({ legalHold: result.LegalHold || null });
+  } catch (err: any) {
+    if (err.$metadata?.httpStatusCode === 404) {
+      return c.json({ legalHold: null });
+    }
+    throw err;
+  }
+});
+
+router.put("/buckets/:name/objects/*/legal-hold", async (c: Context) => {
+  const bucket = c.req.param("name")!;
+  const path = new URL(c.req.url).pathname;
+  const key = decodeURIComponent(path.split("/objects/")[1]!.split("/legal-hold")[0]);
+  if (!key) return c.json({ error: "Object key is required" }, 400);
+  const body = await c.req.json<{ legalHold?: any; versionId?: string }>();
+  const versionId = body.versionId || c.req.query("versionId") || undefined;
+  await s3().send(new PutObjectLegalHoldCommand({
+    Bucket: bucket, Key: key, VersionId: versionId,
+    LegalHold: body.legalHold,
+  }));
+  return c.json({ bucket, key, updated: true });
+});
+
+// ─── Bucket Metrics Configuration ────────────────────────────────
+
+router.get("/buckets/:name/metrics", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const id = c.req.query("id");
+  if (id) {
+    const result = await s3().send(new GetBucketMetricsConfigurationCommand({ Bucket: name, Id: id }));
+    return c.json({ metricsConfiguration: result.MetricsConfiguration || null });
+  }
+  const result = await s3().send(new ListBucketMetricsConfigurationsCommand({ Bucket: name }));
+  return c.json({
+    metricsConfigurations: result.MetricsConfigurationList || [],
+    continuationToken: result.ContinuationToken,
+    isTruncated: result.IsTruncated,
+    total: (result.MetricsConfigurationList || []).length,
+  });
+});
+
+router.post("/buckets/:name/metrics", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const body = await c.req.json<{ id: string; metricsConfiguration?: any }>();
+  if (!body.id) return c.json({ error: "id is required" }, 400);
+  await s3().send(new PutBucketMetricsConfigurationCommand({
+    Bucket: name, Id: body.id, MetricsConfiguration: body.metricsConfiguration || {},
+  }));
+  return c.json({ bucket: name, id: body.id, created: true }, 201);
+});
+
+router.delete("/buckets/:name/metrics/:id", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const id = c.req.param("id")!;
+  await s3().send(new DeleteBucketMetricsConfigurationCommand({ Bucket: name, Id: id }));
+  return c.json({ bucket: name, id, deleted: true });
 });
 
 export default router;

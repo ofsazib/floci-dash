@@ -15,6 +15,11 @@ import {
   CopyObjectCommand,
   ListObjectVersionsCommand,
   GetBucketLocationCommand,
+  CreateMultipartUploadCommand,
+  UploadPartCommand,
+  CompleteMultipartUploadCommand,
+  AbortMultipartUploadCommand,
+  ListMultipartUploadsCommand,
 } from "@aws-sdk/client-s3";
 import { getAwsConfig } from "../../clients/aws";
 import { sanitizeName, sanitizeS3Key, sanitizeBucketName, sanitizeFileName, validateJson } from "../../clients/sanitize";
@@ -511,6 +516,104 @@ router.get("/buckets/:name/location", async (c: Context) => {
   const client = s3();
   const result = await client.send(new GetBucketLocationCommand({ Bucket: bucket }));
   return c.json({ locationConstraint: result.LocationConstraint || null });
+});
+
+// ─── Multipart Upload ───────────────────────────────────────────
+
+router.post("/buckets/:name/multipart", async (c: Context) => {
+  const bucket = c.req.param("name")!;
+  const body = await c.req.json<{ key: string; contentType?: string; metadata?: Record<string, string> }>();
+  if (!body.key) return c.json({ error: "key is required" }, 400);
+  const key = sanitizeS3Key(body.key);
+  const client = s3();
+  const result = await client.send(new CreateMultipartUploadCommand({
+    Bucket: bucket,
+    Key: key,
+    ContentType: body.contentType,
+    Metadata: body.metadata,
+  }));
+  return c.json({
+    uploadId: result.UploadId,
+    bucket: result.Bucket,
+    key: result.Key,
+    abortDate: result.AbortDate?.toISOString(),
+  }, 201);
+});
+
+router.put("/buckets/:name/multipart/:uploadId/part/:partNumber", async (c: Context) => {
+  const bucket = c.req.param("name")!;
+  const uploadId = c.req.param("uploadId")!;
+  const partNumber = parseInt(c.req.param("partNumber")!);
+  const body = await c.req.parseBody();
+  const file = body["file"];
+  if (!(file instanceof File)) return c.json({ error: "file field required" }, 400);
+  const client = s3();
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const result = await client.send(new UploadPartCommand({
+    Bucket: bucket,
+    Key: body["key"] as string || "",
+    UploadId: uploadId,
+    PartNumber: partNumber,
+    Body: buffer,
+  }));
+  return c.json({
+    partNumber,
+    ETag: result.ETag?.replace(/"/g, ""),
+  });
+});
+
+router.post("/buckets/:name/multipart/:uploadId/complete", async (c: Context) => {
+  const bucket = c.req.param("name")!;
+  const uploadId = c.req.param("uploadId")!;
+  const body = await c.req.json<{ key: string; parts: Array<{ partNumber: number; etag: string }> }>();
+  if (!body.key || !body.parts) return c.json({ error: "key and parts are required" }, 400);
+  const client = s3();
+  const result = await client.send(new CompleteMultipartUploadCommand({
+    Bucket: bucket,
+    Key: body.key,
+    UploadId: uploadId,
+    MultipartUpload: {
+      Parts: body.parts.map((p) => ({ PartNumber: p.partNumber, ETag: p.etag })),
+    },
+  }));
+  return c.json({
+    bucket: result.Bucket,
+    key: result.Key,
+    location: result.Location,
+    etag: result.ETag?.replace(/"/g, ""),
+  });
+});
+
+router.delete("/buckets/:name/multipart/:uploadId", async (c: Context) => {
+  const bucket = c.req.param("name")!;
+  const uploadId = c.req.param("uploadId")!;
+  const key = c.req.query("key") || "";
+  const client = s3();
+  await client.send(new AbortMultipartUploadCommand({
+    Bucket: bucket,
+    Key: key,
+    UploadId: uploadId,
+  }));
+  return c.json({ bucket, uploadId, aborted: true });
+});
+
+router.get("/buckets/:name/multipart", async (c: Context) => {
+  const bucket = c.req.param("name")!;
+  const prefix = c.req.query("prefix") || undefined;
+  const maxUploads = c.req.query("maxUploads") ? parseInt(c.req.query("maxUploads")!) : undefined;
+  const client = s3();
+  const result = await client.send(new ListMultipartUploadsCommand({
+    Bucket: bucket,
+    Prefix: prefix,
+    MaxUploads: maxUploads,
+  }));
+  const uploads = (result.Uploads || []).map((u: any) => ({
+    uploadId: u.UploadId,
+    key: u.Key,
+    initiated: u.Initiated?.toISOString() || null,
+    storageClass: u.StorageClass,
+  }));
+  return c.json({ uploads, total: uploads.length, isTruncated: result.IsTruncated });
 });
 
 export default router;

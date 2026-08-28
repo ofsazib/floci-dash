@@ -32,6 +32,16 @@ vi.mock("@aws-sdk/client-s3", () => ({
   PutBucketLoggingCommand: vi.fn(function(args) { return args; }),
   GetBucketAclCommand: vi.fn(function(args) { return args; }),
   PutBucketAclCommand: vi.fn(function(args) { return args; }),
+  PutObjectLockConfigurationCommand: vi.fn(function(args) { return args; }),
+  GetObjectLockConfigurationCommand: vi.fn(function(args) { return args; }),
+  PutObjectRetentionCommand: vi.fn(function(args) { return args; }),
+  GetObjectRetentionCommand: vi.fn(function(args) { return args; }),
+  PutObjectLegalHoldCommand: vi.fn(function(args) { return args; }),
+  GetObjectLegalHoldCommand: vi.fn(function(args) { return args; }),
+  PutBucketMetricsConfigurationCommand: vi.fn(function(args) { return args; }),
+  GetBucketMetricsConfigurationCommand: vi.fn(function(args) { return args; }),
+  ListBucketMetricsConfigurationsCommand: vi.fn(function(args) { return args; }),
+  DeleteBucketMetricsConfigurationCommand: vi.fn(function(args) { return args; }),
 }));
 
 import router from "./s3-config";
@@ -110,6 +120,14 @@ async function put(path: string, body?: any) {
 
 async function del(path: string) {
   return router.request(path, { method: "DELETE" });
+}
+
+async function post(path: string, body?: any) {
+  return router.request(path, {
+    method: "POST",
+    body: body != null ? JSON.stringify(body) : undefined,
+    headers: body != null ? { "content-type": "application/json" } : undefined,
+  });
 }
 
 describe("S3 Config", () => {
@@ -820,4 +838,113 @@ describe("S3 Config", () => {
     });
   });
 
+});
+
+describe("Object Lock Configuration", () => {
+  it("GET /buckets/:name/object-lock — returns config", async () => {
+    mockSend.mockResolvedValueOnce({
+      ObjectLockConfiguration: { ObjectLockEnabled: "Enabled", Rule: { DefaultRetention: { Mode: "COMPLIANCE", Days: 30 } } },
+    });
+    const res = await get("/buckets/my-bucket/object-lock");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.objectLockConfiguration.ObjectLockEnabled).toBe("Enabled");
+  });
+
+  it("GET /buckets/:name/object-lock — returns null on 404", async () => {
+    const err404 = new Error("Not found");
+    (err404 as any).$metadata = { httpStatusCode: 404 };
+    mockSend.mockRejectedValueOnce(err404);
+    const res = await get("/buckets/my-bucket/object-lock");
+    const body = await res.json();
+    expect(body.objectLockConfiguration).toBeNull();
+  });
+
+  it("PUT /buckets/:name/object-lock — sets config", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put("/buckets/my-bucket/object-lock", {
+      objectLockConfiguration: { ObjectLockEnabled: "Enabled", Rule: { DefaultRetention: { Mode: "COMPLIANCE", Days: 7 } } },
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).updated).toBe(true);
+  });
+});
+
+describe("Object Retention", () => {
+  it("GET /buckets/:name/objects/:key/retention — returns retention", async () => {
+    mockSend.mockResolvedValueOnce({
+      Retention: { Mode: "GOVERNANCE", RetainUntilDate: new Date("2025-12-31") },
+    });
+    const res = await get("/buckets/my-bucket/objects/file.txt/retention");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.retention.Mode).toBe("GOVERNANCE");
+  });
+
+  it("PUT /buckets/:name/objects/:key/retention — sets retention", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put("/buckets/my-bucket/objects/file.txt/retention", {
+      retention: { Mode: "COMPLIANCE", RetainUntilDate: "2025-12-31T00:00:00Z" },
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).updated).toBe(true);
+  });
+});
+
+describe("Object Legal Hold", () => {
+  it("GET /buckets/:name/objects/:key/legal-hold — returns hold", async () => {
+    mockSend.mockResolvedValueOnce({ LegalHold: { Status: "ON" } });
+    const res = await get("/buckets/my-bucket/objects/file.txt/legal-hold");
+    expect(res.status).toBe(200);
+    expect((await res.json()).legalHold.Status).toBe("ON");
+  });
+
+  it("PUT /buckets/:name/objects/:key/legal-hold — sets hold", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put("/buckets/my-bucket/objects/file.txt/legal-hold", {
+      legalHold: { Status: "OFF" },
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).updated).toBe(true);
+  });
+});
+
+describe("Bucket Metrics Configuration", () => {
+  it("GET /buckets/:name/metrics — lists configs", async () => {
+    mockSend.mockResolvedValueOnce({
+      MetricsConfigurationList: [{ Id: "config-1" }, { Id: "config-2" }],
+      IsTruncated: false,
+    });
+    const res = await get("/buckets/my-bucket/metrics");
+    const body = await res.json();
+    expect(body.total).toBe(2);
+  });
+
+  it("GET /buckets/:name/metrics?id=x — gets single config", async () => {
+    mockSend.mockResolvedValueOnce({
+      MetricsConfiguration: { Id: "config-1" },
+    });
+    const res = await get("/buckets/my-bucket/metrics?id=config-1");
+    const body = await res.json();
+    expect(body.metricsConfiguration.Id).toBe("config-1");
+  });
+
+  it("POST /buckets/:name/metrics — creates config", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/buckets/my-bucket/metrics", { id: "config-1", metricsConfiguration: { Prefix: "logs/" } });
+    expect(res.status).toBe(201);
+    expect((await res.json()).created).toBe(true);
+  });
+
+  it("POST /buckets/:name/metrics — 400 without id", async () => {
+    const res = await post("/buckets/my-bucket/metrics", {});
+    expect(res.status).toBe(400);
+  });
+
+  it("DELETE /buckets/:name/metrics/:id — deletes config", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await del("/buckets/my-bucket/metrics/config-1");
+    expect(res.status).toBe(200);
+    expect((await res.json()).deleted).toBe(true);
+  });
 });

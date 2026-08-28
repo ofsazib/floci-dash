@@ -31,6 +31,11 @@ vi.mock("@aws-sdk/client-s3", () => ({
   CopyObjectCommand: createCmd("CopyObjectCommand"),
   ListObjectVersionsCommand: createCmd("ListObjectVersionsCommand"),
   GetBucketLocationCommand: createCmd("GetBucketLocationCommand"),
+  CreateMultipartUploadCommand: createCmd("CreateMultipartUploadCommand"),
+  UploadPartCommand: createCmd("UploadPartCommand"),
+  CompleteMultipartUploadCommand: createCmd("CompleteMultipartUploadCommand"),
+  AbortMultipartUploadCommand: createCmd("AbortMultipartUploadCommand"),
+  ListMultipartUploadsCommand: createCmd("ListMultipartUploadsCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -929,5 +934,76 @@ describe("Get Bucket Location", () => {
     const res = await get("/buckets/my-bucket/location");
     const body = await res.json();
     expect(body.locationConstraint).toBeNull();
+  });
+});
+
+describe("Multipart Upload", () => {
+  it("POST /buckets/:name/multipart — creates upload", async () => {
+    mockSend.mockResolvedValueOnce({
+      UploadId: "upload-123",
+      Bucket: "my-bucket",
+      Key: "large-file.bin",
+    });
+    const res = await post("/buckets/my-bucket/multipart", { key: "large-file.bin" });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.uploadId).toBe("upload-123");
+    expect(body.key).toBe("large-file.bin");
+  });
+
+  it("POST /buckets/:name/multipart — 400 without key", async () => {
+    const res = await post("/buckets/my-bucket/multipart", {});
+    expect(res.status).toBe(400);
+  });
+
+  it("POST /buckets/:name/multipart/:uploadId/complete — completes upload", async () => {
+    mockSend.mockResolvedValueOnce({
+      Location: "http://my-bucket.s3.amazonaws.com/large-file.bin",
+      Bucket: "my-bucket",
+      Key: "large-file.bin",
+      ETag: "\"complete-etag\"",
+    });
+    const res = await post("/buckets/my-bucket/multipart/upload-123/complete", {
+      key: "large-file.bin",
+      parts: [{ partNumber: 1, etag: "part-etag-1" }],
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.etag).toBe("complete-etag");
+  });
+
+  it("POST /buckets/:name/multipart/:uploadId/complete — 400 without parts", async () => {
+    const res = await post("/buckets/my-bucket/multipart/upload-123/complete", { key: "k" });
+    expect(res.status).toBe(400);
+  });
+
+  it("DELETE /buckets/:name/multipart/:uploadId — aborts upload", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await router.request("/buckets/my-bucket/multipart/upload-123?key=large-file.bin", { method: "DELETE" });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.aborted).toBe(true);
+  });
+
+  it("GET /buckets/:name/multipart — lists uploads", async () => {
+    mockSend.mockResolvedValueOnce({
+      Uploads: [
+        { UploadId: "u1", Key: "file.bin", Initiated: new Date("2024-01-15"), StorageClass: "STANDARD" },
+      ],
+      IsTruncated: false,
+    });
+    const res = await get("/buckets/my-bucket/multipart");
+    const body = await res.json();
+    expect(body.uploads).toHaveLength(1);
+    expect(body.total).toBe(1);
+    expect(body.isTruncated).toBe(false);
+  });
+
+  it("GET /buckets/:name/multipart — empty when no uploads", async () => {
+    mockSend.mockResolvedValueOnce({ IsTruncated: false });
+    const res = await get("/buckets/my-bucket/multipart");
+    const body = await res.json();
+    expect(body.uploads).toEqual([]);
+    expect(body.total).toBe(0);
   });
 });
