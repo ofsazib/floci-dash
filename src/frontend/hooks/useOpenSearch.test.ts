@@ -20,6 +20,9 @@ import {
   useUpgradeOpenSearchDomain,
   useOpenSearchDomainTags,
   useAddOpenSearchDomainTags,
+  useRemoveOpenSearchDomainTags,
+  useOpenSearchDomainConfig,
+  useOpenSearchDomainsDescribe,
 } from "./useOpenSearch";
 
 beforeEach(() => mockApi.mockReset());
@@ -113,5 +116,49 @@ describe("OpenSearch manage hooks", () => {
       method: "POST",
       body: JSON.stringify({ tags: { env: "prod" } }),
     });
+  });
+});
+
+describe("useRemoveOpenSearchDomainTags", () => {
+  it("removes tag keys", async () => {
+    mockApi.mockResolvedValueOnce({ removed: true });
+    const { result } = renderHook(() => useRemoveOpenSearchDomainTags(), { wrapper: createWrapper() });
+    result.current.mutate({ domainName: "d1", arn: "arn:x", tagKeys: ["env"] });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/opensearch/domains/d1/tags/remove?arn=arn%3Ax", {
+      method: "POST",
+      body: JSON.stringify({ tagKeys: ["env"] }),
+    });
+  });
+});
+
+describe("useOpenSearchDomainConfig", () => {
+  it("fetches domain config when name provided", async () => {
+    mockApi.mockResolvedValueOnce({ domainConfig: { DomainName: "d1" } });
+    const { result } = renderHook(() => useOpenSearchDomainConfig("d1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(mockApi).toHaveBeenCalledWith("/aws/opensearch/domains/d1/config");
+  });
+
+  it("is idle when name is null", () => {
+    const { result } = renderHook(() => useOpenSearchDomainConfig(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+});
+
+describe("useOpenSearchDomainsDescribe", () => {
+  it("describes domains when names provided", async () => {
+    mockApi.mockResolvedValueOnce({ domainStatusList: [{ DomainName: "d1" }] });
+    const { result } = renderHook(() => useOpenSearchDomainsDescribe(["d1"]), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(mockApi).toHaveBeenCalledWith("/aws/opensearch/domains/describe", {
+      method: "POST",
+      body: JSON.stringify({ domainNames: ["d1"] }),
+    });
+  });
+
+  it("is idle when empty array", () => {
+    const { result } = renderHook(() => useOpenSearchDomainsDescribe([]), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
   });
 });

@@ -18,6 +18,9 @@ vi.mock("@aws-sdk/client-opensearch", () => ({
   UpgradeDomainCommand: createCmd("UpgradeDomainCommand"),
   AddTagsCommand: createCmd("AddTagsCommand"),
   ListTagsCommand: createCmd("ListTagsCommand"),
+  RemoveTagsCommand: createCmd("RemoveTagsCommand"),
+  DescribeDomainsCommand: createCmd("DescribeDomainsCommand"),
+  DescribeDomainConfigCommand: createCmd("DescribeDomainConfigCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({ create: (Ctor: any, extra?: any) => new Ctor(extra) }));
@@ -158,5 +161,58 @@ describe("OpenSearch Routes", () => {
       expect((await post("/domains/d1/tags?arn=x", {})).status).toBe(400);
       expect((await post("/domains/d1/tags?arn=x", { tags: {} })).status).toBe(400);
     });
+  });
+});
+
+describe("Remove Tags", () => {
+  it("removes tag keys from a domain", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/domains/d1/tags/remove?arn=arn:d1", { tagKeys: ["env", "team"] });
+    expect(res.status).toBe(200);
+    expect((await res.json()).removed).toBe(true);
+    const cmd = mockSend.mock.calls[0][0];
+    expect(cmd.__cmdName).toBe("RemoveTagsCommand");
+    expect(cmd.TagKeys).toEqual(["env", "team"]);
+  });
+
+  it("returns 400 without arn", async () => {
+    const res = await post("/domains/d1/tags/remove", { tagKeys: ["k"] });
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 400 without tagKeys", async () => {
+    const res = await post("/domains/d1/tags/remove?arn=arn:d1", {});
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("Describe Domains (batch)", () => {
+  it("describes multiple domains", async () => {
+    mockSend.mockResolvedValueOnce({
+      DomainStatusList: [{ DomainName: "d1" }, { DomainName: "d2" }],
+    });
+    const res = await post("/domains/describe", { domainNames: ["d1", "d2"] });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.domainStatusList).toHaveLength(2);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("DescribeDomainsCommand");
+  });
+
+  it("returns 400 without domainNames", async () => {
+    const res = await post("/domains/describe", {});
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("Describe Domain Config", () => {
+  it("returns domain config", async () => {
+    mockSend.mockResolvedValueOnce({
+      DomainConfig: { DomainName: "d1", ClusterConfig: { InstanceType: "m5.large.search" } },
+    });
+    const res = await get("/domains/d1/config");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.domainConfig.DomainName).toBe("d1");
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("DescribeDomainConfigCommand");
   });
 });

@@ -298,3 +298,18 @@ export function useChangeSQSVisibility() {
 }
 
 export { extractQueueName };
+
+// ─── Delete Message Batch ────────────────────────────────────────
+
+export function useSQSDeleteMessageBatch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { queueUrl: string; entries: Array<{ id: string; receiptHandle: string }> }) =>
+      api(`/aws/sqs/queues/messages/delete-batch?queueUrl=${encodeURIComponent(params.queueUrl)}`, {
+        method: "POST",
+        body: JSON.stringify({ entries: params.entries }),
+      }),
+    onSuccess: (_data, vars) =>
+      qc.invalidateQueries({ queryKey: ["aws", "sqs", "messages", vars.queueUrl] }),
+  });
+}

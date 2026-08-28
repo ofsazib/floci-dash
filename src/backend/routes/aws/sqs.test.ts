@@ -769,3 +769,35 @@ describe("Message Move Tasks (native redrive, G.73)", () => {
     expect(mockSend).not.toHaveBeenCalled();
   });
 });
+
+describe("Delete Message Batch", () => {
+  it("deletes multiple messages", async () => {
+    mockSend.mockResolvedValueOnce({
+      Successful: [{ Id: "1" }, { Id: "2" }],
+      Failed: [],
+    });
+    const res = await post("/queues/messages/delete-batch?queueUrl=http://localhost:4566/000000000000/test", {
+      entries: [
+        { id: "1", receiptHandle: "rh-1" },
+        { id: "2", receiptHandle: "rh-2" },
+      ],
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.successful).toHaveLength(2);
+    expect(body.failed).toHaveLength(0);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteMessageBatchCommand");
+  });
+
+  it("returns 400 without queueUrl", async () => {
+    const res = await post("/queues/messages/delete-batch", { entries: [] });
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 400 with empty entries", async () => {
+    const res = await post("/queues/messages/delete-batch?queueUrl=http://localhost:4566/000000000000/test", {
+      entries: [],
+    });
+    expect(res.status).toBe(400);
+  });
+});

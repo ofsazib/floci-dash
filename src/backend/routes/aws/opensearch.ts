@@ -7,6 +7,9 @@ import {
   UpgradeDomainCommand,
   AddTagsCommand,
   ListTagsCommand,
+  RemoveTagsCommand,
+  DescribeDomainsCommand,
+  DescribeDomainConfigCommand,
 } from "@aws-sdk/client-opensearch";
 import {
   ListDomainNamesCommand,
@@ -126,6 +129,44 @@ router.post("/domains/:name/tags", async (c: Context) => {
     })
   );
   return c.json({ tagged: true });
+});
+
+// ─── Remove Tags ──────────────────────────────────────────────
+
+router.post("/domains/:name/tags/remove", async (c: Context) => {
+  const arn = c.req.query("arn");
+  if (!arn) return c.json({ error: "arn query parameter required" }, 400);
+  const body = await c.req.json<{ tagKeys?: string[] }>();
+  if (!body.tagKeys || !Array.isArray(body.tagKeys) || !body.tagKeys.length)
+    return c.json({ error: "tagKeys array is required" }, 400);
+  const client = getClient();
+  await client.send(new RemoveTagsCommand({
+    ARN: arn,
+    TagKeys: body.tagKeys,
+  }));
+  return c.json({ removed: true });
+});
+
+// ─── Describe Domains (batch) ────────────────────────────────────
+
+router.post("/domains/describe", async (c: Context) => {
+  const body = await c.req.json<{ domainNames?: string[] }>();
+  if (!body.domainNames || !Array.isArray(body.domainNames) || !body.domainNames.length)
+    return c.json({ error: "domainNames array is required" }, 400);
+  const client = getClient();
+  const result = await client.send(new DescribeDomainsCommand({
+    DomainNames: body.domainNames,
+  }));
+  return c.json({ domainStatusList: result.DomainStatusList || [] });
+});
+
+// ─── Describe Domain Config ──────────────────────────────────────
+
+router.get("/domains/:name/config", async (c: Context) => {
+  const name = c.req.param("name");
+  const client = getClient();
+  const result = await client.send(new DescribeDomainConfigCommand({ DomainName: name }));
+  return c.json({ domainConfig: result.DomainConfig });
 });
 
 export default router;

@@ -1086,6 +1086,9 @@ vi.mock("../hooks/useOpenSearch", () => ({
   useOpenSearchDomainTags: () => ({ data: undefined, isLoading: false }),
   useAddOpenSearchDomainTags: () => ({ mutate: vi.fn(), isPending: false }),
   useOpenSearchVersions: () => ({ data: { versions: [] }, isLoading: false }),
+  useRemoveOpenSearchDomainTags: () => ({ mutate: vi.fn(), isPending: false }),
+  useOpenSearchDomainsDescribe: () => ({ data: undefined, isLoading: false }),
+  useOpenSearchDomainConfig: () => ({ data: undefined, isLoading: false }),
 }));
 
 vi.mock("../hooks/useMsk", () => ({

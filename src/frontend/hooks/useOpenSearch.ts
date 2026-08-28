@@ -121,3 +121,41 @@ export function useAddOpenSearchDomainTags() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "opensearch"] }),
   });
 }
+
+// ─── Remove Tags ─────────────────────────────────────────────────
+
+export function useRemoveOpenSearchDomainTags() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { domainName: string; arn: string; tagKeys: string[] }) =>
+      api(`/aws/opensearch/domains/${encodeURIComponent(params.domainName)}/tags/remove?arn=${encodeURIComponent(params.arn)}`, {
+        method: "POST",
+        body: JSON.stringify({ tagKeys: params.tagKeys }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "opensearch"] }),
+  });
+}
+
+// ─── Describe Domains (batch) ────────────────────────────────────
+
+export function useOpenSearchDomainsDescribe(domainNames: string[]) {
+  return useQuery<{ domainStatusList: any[] }>({
+    queryKey: ["aws", "opensearch", "domains-describe", domainNames],
+    queryFn: () =>
+      api("/aws/opensearch/domains/describe", {
+        method: "POST",
+        body: JSON.stringify({ domainNames }),
+      }),
+    enabled: domainNames.length > 0,
+  });
+}
+
+// ─── Describe Domain Config ──────────────────────────────────────
+
+export function useOpenSearchDomainConfig(name: string | null) {
+  return useQuery<{ domainConfig: any }>({
+    queryKey: ["aws", "opensearch", "domain-config", name],
+    queryFn: () => api(`/aws/opensearch/domains/${encodeURIComponent(name!)}/config`),
+    enabled: !!name,
+  });
+}

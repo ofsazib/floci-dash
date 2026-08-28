@@ -205,6 +205,26 @@ router.delete("/queues/messages/item", async (c: Context) => {
   return c.json({ deleted: true });
 });
 
+router.post("/queues/messages/delete-batch", async (c: Context) => {
+  const queueUrl = c.req.query("queueUrl");
+  if (!queueUrl) return c.json({ error: "queueUrl query parameter required" }, 400);
+  const body = await c.req.json<{ entries: Array<{ id: string; receiptHandle: string }> }>();
+  if (!body.entries || !Array.isArray(body.entries) || body.entries.length === 0) {
+    return c.json({ error: "entries array is required" }, 400);
+  }
+  const client = getClient();
+  const result = await client.send(
+    new DeleteMessageBatchCommand({
+      QueueUrl: queueUrl,
+      Entries: body.entries.map((e) => ({ Id: e.id, ReceiptHandle: e.receiptHandle })),
+    })
+  );
+  return c.json({
+    successful: result.Successful || [],
+    failed: result.Failed || [],
+  });
+});
+
 router.post("/queues/messages/visibility", async (c: Context) => {
   const queueUrl = c.req.query("queueUrl");
   if (!queueUrl) return c.json({ error: "queueUrl query parameter required" }, 400);
