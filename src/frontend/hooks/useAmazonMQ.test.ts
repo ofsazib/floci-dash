@@ -29,7 +29,7 @@ describe("useAmazonMQ hooks", () => {
       mockApi.mockResolvedValueOnce({ brokers: [] });
       const { result } = renderHook(() => useMQBrokers(), { wrapper: createWrapper() });
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
-      expect(mockApi).toHaveBeenCalledWith("/api/aws/mq/brokers");
+      expect(mockApi).toHaveBeenCalledWith("/aws/mq/brokers");
     });
   });
 
@@ -38,7 +38,7 @@ describe("useAmazonMQ hooks", () => {
       mockApi.mockResolvedValueOnce({ broker: { brokerId: "b-1" } });
       const { result } = renderHook(() => useMQBroker("b-1"), { wrapper: createWrapper() });
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
-      expect(mockApi).toHaveBeenCalledWith("/api/aws/mq/brokers/b-1");
+      expect(mockApi).toHaveBeenCalledWith("/aws/mq/brokers/b-1");
     });
 
     it("disabled when null", () => {
@@ -54,7 +54,7 @@ describe("useAmazonMQ hooks", () => {
       mockApi.mockResolvedValueOnce({ brokerId: "b-new" });
       const { result } = renderHook(() => useCreateMQBroker(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ brokerName: "test", engineType: "ActiveMQ", hostInstanceType: "mq.t2.micro" });
-      expect(mockApi).toHaveBeenCalledWith("/api/aws/mq/brokers", expect.objectContaining({ method: "POST" }));
+      expect(mockApi).toHaveBeenCalledWith("/aws/mq/brokers", expect.objectContaining({ method: "POST" }));
     });
   });
 
@@ -63,7 +63,7 @@ describe("useAmazonMQ hooks", () => {
       mockApi.mockResolvedValueOnce({ deleted: true });
       const { result } = renderHook(() => useDeleteMQBroker(), { wrapper: createWrapper() });
       await result.current.mutateAsync("b-1");
-      expect(mockApi).toHaveBeenCalledWith("/api/aws/mq/brokers/b-1", expect.objectContaining({ method: "DELETE" }));
+      expect(mockApi).toHaveBeenCalledWith("/aws/mq/brokers/b-1", expect.objectContaining({ method: "DELETE" }));
     });
   });
 
@@ -72,7 +72,7 @@ describe("useAmazonMQ hooks", () => {
       mockApi.mockResolvedValueOnce({ rebooted: true });
       const { result } = renderHook(() => useRebootMQBroker(), { wrapper: createWrapper() });
       await result.current.mutateAsync("b-1");
-      expect(mockApi).toHaveBeenCalledWith("/api/aws/mq/brokers/b-1/reboot", expect.objectContaining({ method: "POST" }));
+      expect(mockApi).toHaveBeenCalledWith("/aws/mq/brokers/b-1/reboot", expect.objectContaining({ method: "POST" }));
     });
   });
 
@@ -83,7 +83,7 @@ describe("useAmazonMQ hooks", () => {
       mockApi.mockResolvedValueOnce({ users: [{ username: "admin" }] });
       const { result } = renderHook(() => useMQUsers("b-1"), { wrapper: createWrapper() });
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
-      expect(mockApi).toHaveBeenCalledWith("/api/aws/mq/brokers/b-1/users");
+      expect(mockApi).toHaveBeenCalledWith("/aws/mq/brokers/b-1/users");
     });
 
     it("disabled when null", () => {
@@ -99,7 +99,7 @@ describe("useAmazonMQ hooks", () => {
       mockApi.mockResolvedValueOnce({ username: "new-user" });
       const { result } = renderHook(() => useCreateMQUser(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ brokerId: "b-1", username: "new-user", password: "pass123" });
-      expect(mockApi).toHaveBeenCalledWith("/api/aws/mq/brokers/b-1/users/new-user", expect.objectContaining({ method: "POST" }));
+      expect(mockApi).toHaveBeenCalledWith("/aws/mq/brokers/b-1/users/new-user", expect.objectContaining({ method: "POST" }));
     });
   });
 
@@ -108,7 +108,7 @@ describe("useAmazonMQ hooks", () => {
       mockApi.mockResolvedValueOnce({ deleted: true });
       const { result } = renderHook(() => useDeleteMQUser(), { wrapper: createWrapper() });
       await result.current.mutateAsync({ brokerId: "b-1", username: "admin" });
-      expect(mockApi).toHaveBeenCalledWith("/api/aws/mq/brokers/b-1/users/admin", expect.objectContaining({ method: "DELETE" }));
+      expect(mockApi).toHaveBeenCalledWith("/aws/mq/brokers/b-1/users/admin", expect.objectContaining({ method: "DELETE" }));
     });
   });
 });

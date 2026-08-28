@@ -30,6 +30,8 @@ describe("AmazonMQ routes", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.brokers).toHaveLength(1);
+      // Floci serves MQ at /v1/brokers — guard against the old /_aws/mq prefix
+      expect(mockFetch.mock.calls[0][0]).toBe("/v1/brokers");
     });
 
     it("returns empty list", async () => {

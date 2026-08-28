@@ -59,6 +59,12 @@ import { OrganizationsDashboard } from "./services/OrganizationsDashboard";
 import { SWFDashboard } from "./services/SWFDashboard";
 import { LightsailDashboard } from "./services/LightsailDashboard";
 import { AmazonMQDashboard } from "./services/AmazonMQDashboard";
+import { FisDashboard } from "./services/FisDashboard";
+import { GuardDutyDashboard } from "./services/GuardDutyDashboard";
+import { CloudControlDashboard } from "./services/CloudControlDashboard";
+import { S3TablesDashboard } from "./services/S3TablesDashboard";
+import { AgentCoreDashboard } from "./services/AgentCoreDashboard";
+import { CloudHSMDashboard } from "./services/CloudHSMDashboard";
 import { KinesisAnalyticsDashboard } from "./services/KinesisAnalyticsDashboard";
 import { EmrServerlessDashboard } from "./services/EmrServerlessDashboard";
 import { MWAADashboard } from "./services/MWAADashboard";
@@ -136,4 +142,10 @@ export const SERVICE_DASHBOARDS: Record<string, ComponentType> = {
   "s3vectors": S3VectorsDashboard,
   "s3": S3Dashboard,
   "lambda": LambdaDashboard,
+  "fis": FisDashboard,
+  "guardduty": GuardDutyDashboard,
+  "cloudcontrol": CloudControlDashboard,
+  "s3tables": S3TablesDashboard,
+  "bedrockagentcore": AgentCoreDashboard,
+  "cloudhsm": CloudHSMDashboard,
 };
