@@ -700,3 +700,223 @@ export function useEC2SecurityGroupRules(groupId: string | null) {
     enabled: groupId === null || !!groupId,
   });
 }
+
+// ─── P1 gap audit — Transit Gateway family ───────────────
+export function useEC2TransitGateways() {
+  return useQuery<{ transitGateways: any[]; total: number }>({
+    queryKey: ["aws", "ec2", "transit-gateways"],
+    queryFn: () => api("/aws/ec2/transit-gateways"),
+  });
+}
+
+export function useCreateEC2TransitGateway() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { description?: string; options?: unknown }) =>
+      api("/aws/ec2/transit-gateways", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ec2", "transit-gateways"] }),
+  });
+}
+
+export function useDeleteEC2TransitGateway() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api(`/aws/ec2/transit-gateways/${id}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ec2", "transit-gateways"] }),
+  });
+}
+
+export function useEC2TransitGatewayVpcAttachments() {
+  return useQuery<{ attachments: any[]; total: number }>({
+    queryKey: ["aws", "ec2", "tgw-vpc-attachments"],
+    queryFn: () => api("/aws/ec2/transit-gateways/vpc-attachments"),
+  });
+}
+
+export function useCreateEC2TgwVpcAttachment(tgwId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { vpcId: string; subnetIds: string[]; options?: unknown }) =>
+      api(`/aws/ec2/transit-gateways/${tgwId}/vpc-attachments`, { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ec2", "tgw-vpc-attachments"] }),
+  });
+}
+
+export function useDeleteEC2TgwVpcAttachment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api(`/aws/ec2/transit-gateways/vpc-attachments/${id}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ec2", "tgw-vpc-attachments"] }),
+  });
+}
+
+export function useEC2TgwRouteTables() {
+  return useQuery<{ routeTables: any[]; total: number }>({
+    queryKey: ["aws", "ec2", "tgw-route-tables"],
+    queryFn: () => api("/aws/ec2/transit-gateway-route-tables"),
+  });
+}
+
+export function useCreateEC2TgwRouteTable() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { transitGatewayId: string }) =>
+      api("/aws/ec2/transit-gateway-route-tables", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ec2", "tgw-route-tables"] }),
+  });
+}
+
+export function useDeleteEC2TgwRouteTable() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api(`/aws/ec2/transit-gateway-route-tables/${id}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ec2", "tgw-route-tables"] }),
+  });
+}
+
+export function useAssociateEC2TgwRouteTable(routeTableId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (attachmentId: string) =>
+      api(`/aws/ec2/transit-gateway-route-tables/${routeTableId}/associate`, {
+        method: "POST",
+        body: JSON.stringify({ attachmentId }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ec2", "tgw-route-tables"] }),
+  });
+}
+
+export function useDisassociateEC2TgwRouteTable(routeTableId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (attachmentId: string) =>
+      api(`/aws/ec2/transit-gateway-route-tables/${routeTableId}/disassociate`, {
+        method: "POST",
+        body: JSON.stringify({ attachmentId }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ec2", "tgw-route-tables"] }),
+  });
+}
+
+export function useEC2TgwRouteTableAssociations(routeTableId: string | null) {
+  return useQuery<{ associations: any[]; total: number }>({
+    queryKey: ["aws", "ec2", "tgw-route-table-associations", routeTableId],
+    queryFn: () => api(`/aws/ec2/transit-gateway-route-tables/${routeTableId}/associations`),
+    enabled: !!routeTableId,
+  });
+}
+
+export function useEC2TgwRouteTablePropagations(routeTableId: string | null) {
+  return useQuery<{ propagations: any[]; total: number }>({
+    queryKey: ["aws", "ec2", "tgw-route-table-propagations", routeTableId],
+    queryFn: () => api(`/aws/ec2/transit-gateway-route-tables/${routeTableId}/propagations`),
+    enabled: !!routeTableId,
+  });
+}
+
+export function useEnableEC2TgwPropagation(routeTableId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (attachmentId: string) =>
+      api(`/aws/ec2/transit-gateway-route-tables/${routeTableId}/enable-propagation`, {
+        method: "POST",
+        body: JSON.stringify({ attachmentId }),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "ec2", "tgw-route-table-propagations", routeTableId] }),
+  });
+}
+
+export function useDisableEC2TgwPropagation(routeTableId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (attachmentId: string) =>
+      api(`/aws/ec2/transit-gateway-route-tables/${routeTableId}/disable-propagation`, {
+        method: "POST",
+        body: JSON.stringify({ attachmentId }),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "ec2", "tgw-route-table-propagations", routeTableId] }),
+  });
+}
+
+export function useCreateEC2TgwRoute(routeTableId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { destinationCidrBlock: string; attachmentId?: string; blackhole?: boolean }) =>
+      api(`/aws/ec2/transit-gateway-route-tables/${routeTableId}/routes`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ec2", "tgw-routes", routeTableId] }),
+  });
+}
+
+export function useDeleteEC2TgwRoute(routeTableId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (cidr: string) =>
+      api(`/aws/ec2/transit-gateway-route-tables/${routeTableId}/routes/${encodeURIComponent(cidr)}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ec2", "tgw-routes", routeTableId] }),
+  });
+}
+
+export function useSearchEC2TgwRoutes(routeTableId: string | null) {
+  return useQuery<{ routes: any[]; total: number }>({
+    queryKey: ["aws", "ec2", "tgw-routes", routeTableId],
+    queryFn: () =>
+      api(`/aws/ec2/transit-gateway-route-tables/${routeTableId}/routes/search`, {
+        method: "POST",
+        body: JSON.stringify({ filters: [] }),
+      }),
+    enabled: !!routeTableId,
+  });
+}
+
+// ─── P1 gap audit — managed prefix lists ─────────────────
+export function useEC2ManagedPrefixLists() {
+  return useQuery<{ prefixLists: any[]; total: number }>({
+    queryKey: ["aws", "ec2", "managed-prefix-lists"],
+    queryFn: () => api("/aws/ec2/managed-prefix-lists"),
+  });
+}
+
+export function useCreateEC2ManagedPrefixList() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string; addressFamily: string; maxEntries?: number; entries: Array<{ Cidr: string; Description?: string }>; tagSpecifications?: unknown }) =>
+      api("/aws/ec2/managed-prefix-lists", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ec2", "managed-prefix-lists"] }),
+  });
+}
+
+export function useEC2ManagedPrefixListEntries(id: string | null) {
+  return useQuery<{ entries: Array<{ cidr: string; description: string | null }>; total: number }>({
+    queryKey: ["aws", "ec2", "managed-prefix-list-entries", id],
+    queryFn: () => api(`/aws/ec2/managed-prefix-lists/${id}/entries`),
+    enabled: !!id,
+  });
+}
+
+export function useModifyEC2ManagedPrefixList(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { currentVersion?: number; name?: string; addEntries?: any[]; removeEntries?: any[] }) =>
+      api(`/aws/ec2/managed-prefix-lists/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ec2", "managed-prefix-lists"] }),
+  });
+}
+
+export function useDeleteEC2ManagedPrefixList() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api(`/aws/ec2/managed-prefix-lists/${id}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ec2", "managed-prefix-lists"] }),
+  });
+}

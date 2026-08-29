@@ -100,6 +100,32 @@ vi.mock("@aws-sdk/client-ec2", () => ({
   DescribeSecurityGroupRulesCommand: createCmd("DescribeSecurityGroupRulesCommand"),
   ModifySecurityGroupRulesCommand: createCmd("ModifySecurityGroupRulesCommand"),
   UpdateSecurityGroupRuleDescriptionsIngressCommand: createCmd("UpdateSecurityGroupRuleDescriptionsIngressCommand"),
+  CreateTransitGatewayCommand: createCmd("CreateTransitGatewayCommand"),
+  DescribeTransitGatewaysCommand: createCmd("DescribeTransitGatewaysCommand"),
+  ModifyTransitGatewayCommand: createCmd("ModifyTransitGatewayCommand"),
+  DeleteTransitGatewayCommand: createCmd("DeleteTransitGatewayCommand"),
+  DescribeTransitGatewayAttachmentsCommand: createCmd("DescribeTransitGatewayAttachmentsCommand"),
+  CreateTransitGatewayVpcAttachmentCommand: createCmd("CreateTransitGatewayVpcAttachmentCommand"),
+  DescribeTransitGatewayVpcAttachmentsCommand: createCmd("DescribeTransitGatewayVpcAttachmentsCommand"),
+  ModifyTransitGatewayVpcAttachmentCommand: createCmd("ModifyTransitGatewayVpcAttachmentCommand"),
+  DeleteTransitGatewayVpcAttachmentCommand: createCmd("DeleteTransitGatewayVpcAttachmentCommand"),
+  CreateTransitGatewayRouteTableCommand: createCmd("CreateTransitGatewayRouteTableCommand"),
+  DescribeTransitGatewayRouteTablesCommand: createCmd("DescribeTransitGatewayRouteTablesCommand"),
+  DeleteTransitGatewayRouteTableCommand: createCmd("DeleteTransitGatewayRouteTableCommand"),
+  AssociateTransitGatewayRouteTableCommand: createCmd("AssociateTransitGatewayRouteTableCommand"),
+  DisassociateTransitGatewayRouteTableCommand: createCmd("DisassociateTransitGatewayRouteTableCommand"),
+  GetTransitGatewayRouteTableAssociationsCommand: createCmd("GetTransitGatewayRouteTableAssociationsCommand"),
+  GetTransitGatewayRouteTablePropagationsCommand: createCmd("GetTransitGatewayRouteTablePropagationsCommand"),
+  EnableTransitGatewayRouteTablePropagationCommand: createCmd("EnableTransitGatewayRouteTablePropagationCommand"),
+  DisableTransitGatewayRouteTablePropagationCommand: createCmd("DisableTransitGatewayRouteTablePropagationCommand"),
+  CreateTransitGatewayRouteCommand: createCmd("CreateTransitGatewayRouteCommand"),
+  DeleteTransitGatewayRouteCommand: createCmd("DeleteTransitGatewayRouteCommand"),
+  SearchTransitGatewayRoutesCommand: createCmd("SearchTransitGatewayRoutesCommand"),
+  CreateManagedPrefixListCommand: createCmd("CreateManagedPrefixListCommand"),
+  DescribeManagedPrefixListsCommand: createCmd("DescribeManagedPrefixListsCommand"),
+  GetManagedPrefixListEntriesCommand: createCmd("GetManagedPrefixListEntriesCommand"),
+  ModifyManagedPrefixListCommand: createCmd("ModifyManagedPrefixListCommand"),
+  DeleteManagedPrefixListCommand: createCmd("DeleteManagedPrefixListCommand"),
 }));
 
 // Now import the router after the mock is set up
@@ -2173,6 +2199,227 @@ describe("EC2 Routes", () => {
     it("POST /security-groups/:groupId/rule-descriptions — 400 without description", async () => {
       const res = await post("/security-groups/sg-1/rule-descriptions", {});
       expect(res.status).toBe(400);
+    });
+  });
+});
+
+// ─── P1 gap audit — Transit Gateway + managed prefix lists ──
+
+describe("Transit Gateways", () => {
+  it("POST /transit-gateways creates", async () => {
+    mockSend.mockResolvedValueOnce({ TransitGateway: { TransitGatewayId: "tgw-1", State: "pending" } });
+    const res = await post("/transit-gateways", { description: "core" });
+    expect(res.status).toBe(201);
+    expect((await res.json()).transitGateway.TransitGatewayId).toBe("tgw-1");
+  });
+
+  it("GET /transit-gateways lists", async () => {
+    mockSend.mockResolvedValueOnce({ TransitGateways: [{ TransitGatewayId: "tgw-1", State: "available", OwnerId: "1" }] });
+    const res = await get("/transit-gateways");
+    const body = await res.json();
+    expect(body.total).toBe(1);
+    expect(body.transitGateways[0].id).toBe("tgw-1");
+  });
+
+  it("PUT /transit-gateways/:id modifies", async () => {
+    mockSend.mockResolvedValueOnce({ TransitGateway: { TransitGatewayId: "tgw-1" } });
+    const res = await putReq("/transit-gateways/tgw-1", { description: "updated" });
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].Description).toBe("updated");
+  });
+
+  it("DELETE /transit-gateways/:id", async () => {
+    mockSend.mockResolvedValueOnce({ TransitGateway: { TransitGatewayId: "tgw-1" } });
+    const res = await del("/transit-gateways/tgw-1");
+    expect((await res.json()).deleted).toBe(true);
+  });
+
+  it("attachments describe (generic + vpc)", async () => {
+    mockSend
+      .mockResolvedValueOnce({ TransitGatewayAttachments: [{ TransitGatewayAttachmentId: "tgw-attach-1", TransitGatewayId: "tgw-1", ResourceType: "vpc", ResourceId: "vpc-1", State: "available" }] })
+      .mockResolvedValueOnce({ TransitGatewayVpcAttachments: [{ TransitGatewayAttachmentId: "tgw-attach-1", TransitGatewayId: "tgw-1", VpcId: "vpc-1", State: "available", SubnetIds: ["subnet-1"] }] });
+    const all = await get("/transit-gateway-attachments");
+    expect((await all.json()).total).toBe(1);
+    const vpc = await get("/transit-gateways/vpc-attachments");
+    const body = await vpc.json();
+    expect(body.attachments[0].vpcId).toBe("vpc-1");
+    expect(body.total).toBe(1);
+  });
+
+  it("POST vpc attachment — 400 without vpcId/subnets", async () => {
+    const res = await post("/transit-gateways/tgw-1/vpc-attachments", {});
+    expect(res.status).toBe(400);
+  });
+
+  it("POST vpc attachment creates + modify + delete", async () => {
+    mockSend
+      .mockResolvedValueOnce({ TransitGatewayVpcAttachment: { TransitGatewayAttachmentId: "tgw-attach-2", State: "pending" } })
+      .mockResolvedValueOnce({ TransitGatewayVpcAttachment: { State: "modifying" } })
+      .mockResolvedValueOnce({ TransitGatewayVpcAttachment: { State: "deleting" } });
+    const created = await post("/transit-gateways/tgw-1/vpc-attachments", { vpcId: "vpc-1", subnetIds: ["subnet-1"] });
+    expect(created.status).toBe(201);
+    const modified = await putReq("/transit-gateways/vpc-attachments/tgw-attach-2", { addSubnetIds: ["subnet-2"] });
+    expect(modified.status).toBe(200);
+    const deleted = await del("/transit-gateways/vpc-attachments/tgw-attach-2");
+    expect((await deleted.json()).deleted).toBe(true);
+  });
+});
+
+describe("TGW route tables + routes", () => {
+  it("POST /transit-gateway-route-tables creates + 400", async () => {
+    mockSend.mockResolvedValueOnce({ TransitGatewayRouteTable: { TransitGatewayRouteTableId: "tgw-rtb-1", State: "pending" } });
+    const res = await post("/transit-gateway-route-tables", { transitGatewayId: "tgw-1" });
+    expect(res.status).toBe(201);
+    expect((await res.json()).routeTable.TransitGatewayRouteTableId).toBe("tgw-rtb-1");
+    expect((await post("/transit-gateway-route-tables", {})).status).toBe(400);
+  });
+
+  it("GET + DELETE route tables", async () => {
+    mockSend
+      .mockResolvedValueOnce({ TransitGatewayRouteTables: [{ TransitGatewayRouteTableId: "tgw-rtb-1", TransitGatewayId: "tgw-1", State: "available", DefaultAssociationRouteTable: false, DefaultPropagationRouteTable: false }] });
+    const res = await get("/transit-gateway-route-tables");
+    const body = await res.json();
+    expect(body.total).toBe(1);
+    mockSend.mockResolvedValueOnce({});
+    const delRes = await del("/transit-gateway-route-tables/tgw-rtb-1");
+    expect((await delRes.json()).deleted).toBe(true);
+  });
+
+  it("associate + disassociate", async () => {
+    mockSend
+      .mockResolvedValueOnce({ Association: { State: "associating" } })
+      .mockResolvedValueOnce({ Association: { State: "disassociating" } });
+    const a = await post("/transit-gateway-route-tables/tgw-rtb-1/associate", { attachmentId: "tgw-attach-1" });
+    expect(a.status).toBe(200);
+    const d = await post("/transit-gateway-route-tables/tgw-rtb-1/disassociate", { attachmentId: "tgw-attach-1" });
+    expect(d.status).toBe(200);
+  });
+
+  it("associate 400 without attachmentId", async () => {
+    expect((await post("/transit-gateway-route-tables/tgw-rtb-1/associate", {})).status).toBe(400);
+  });
+
+  it("associations + propagations", async () => {
+    mockSend
+      .mockResolvedValueOnce({ Associations: [{ TransitGatewayAttachmentId: "tgw-attach-1", ResourceId: "vpc-1", ResourceType: "vpc", State: "associated" }] })
+      .mockResolvedValueOnce({ TransitGatewayRouteTablePropagations: [{ TransitGatewayAttachmentId: "tgw-attach-1", ResourceId: "vpc-1", State: "enabled" }] });
+    const assoc = await get("/transit-gateway-route-tables/tgw-rtb-1/associations");
+    expect((await assoc.json()).total).toBe(1);
+    const prop = await get("/transit-gateway-route-tables/tgw-rtb-1/propagations");
+    expect((await prop.json()).total).toBe(1);
+  });
+
+  it("enable + disable propagation", async () => {
+    mockSend.mockResolvedValue({});
+    expect((await post("/transit-gateway-route-tables/tgw-rtb-1/enable-propagation", { attachmentId: "a" })).status).toBe(200);
+    expect((await post("/transit-gateway-route-tables/tgw-rtb-1/disable-propagation", { attachmentId: "a" })).status).toBe(200);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("EnableTransitGatewayRouteTablePropagationCommand");
+    expect(mockSend.mock.calls[1][0].__cmdName).toBe("DisableTransitGatewayRouteTablePropagationCommand");
+  });
+
+  it("propagation 400 without attachmentId", async () => {
+    expect((await post("/transit-gateway-route-tables/tgw-rtb-1/enable-propagation", {})).status).toBe(400);
+  });
+
+  it("static routes create/delete/search", async () => {
+    mockSend
+      .mockResolvedValueOnce({ Route: { State: "pending", RouteType: "static" } })
+      .mockResolvedValueOnce({ Routes: [{ DestinationCidrBlock: "10.0.0.0/8", State: "active", Type: "static" }] })
+      .mockResolvedValueOnce({ Route: { State: "deleting" } });
+    const created = await post("/transit-gateway-route-tables/tgw-rtb-1/routes", { destinationCidrBlock: "10.0.0.0/8", attachmentId: "a", blackhole: false });
+    expect(created.status).toBe(201);
+    expect(mockSend.mock.calls[0][0].DestinationCidrBlock).toBe("10.0.0.0/8");
+    const search = await post("/transit-gateway-route-tables/tgw-rtb-1/routes/search", { filters: [] });
+    expect((await search.json()).total).toBe(1);
+    const deleted = await del("/transit-gateway-route-tables/tgw-rtb-1/routes/10.0.0.0%2F8");
+    expect((await deleted.json()).deleted).toBe(true);
+  });
+
+  it("static route 400 without cidr", async () => {
+    expect((await post("/transit-gateway-route-tables/tgw-rtb-1/routes", {})).status).toBe(400);
+  });
+});
+
+describe("Managed prefix lists", () => {
+  it("POST creates + 400s", async () => {
+    mockSend.mockResolvedValueOnce({ PrefixList: { PrefixListId: "pl-1", State: "create-in-progress" } });
+    const res = await post("/managed-prefix-lists", { name: "allowed-cidrs", addressFamily: "IPv4", entries: [{ Cidr: "10.0.0.0/8" }], maxEntries: 10 });
+    expect(res.status).toBe(201);
+    expect(mockSend.mock.calls[0][0].PrefixListName).toBe("allowed-cidrs");
+    expect((await post("/managed-prefix-lists", { addressFamily: "IPv4", entries: [{ Cidr: "10.0.0.0/8" }] })).status).toBe(400);
+    expect((await post("/managed-prefix-lists", { name: "x", entries: [{ Cidr: "10.0.0.0/8" }] })).status).toBe(400);
+    expect((await post("/managed-prefix-lists", { name: "x", addressFamily: "IPv4" })).status).toBe(400);
+  });
+
+  it("GET lists + entries", async () => {
+    mockSend
+      .mockResolvedValueOnce({ PrefixLists: [{ PrefixListId: "pl-1", PrefixListName: "allowed", AddressFamily: "IPv4", State: "create-complete", MaxEntries: 10, Version: 1, OwnerId: "1" }] })
+      .mockResolvedValueOnce({ Entries: [{ Cidr: "10.0.0.0/8", Description: "corp" }] });
+    const res = await get("/managed-prefix-lists");
+    const body = await res.json();
+    expect(body.total).toBe(1);
+    const entries = await get("/managed-prefix-lists/pl-1/entries");
+    expect((await entries.json()).entries[0].cidr).toBe("10.0.0.0/8");
+  });
+
+  it("PUT modify + DELETE", async () => {
+    mockSend
+      .mockResolvedValueOnce({ PrefixList: { PrefixListId: "pl-1", Version: 2 } })
+      .mockResolvedValueOnce({ PrefixList: { PrefixListId: "pl-1", State: "delete-in-progress" } });
+    const mod = await putReq("/managed-prefix-lists/pl-1", { currentVersion: 1, addEntries: [{ Cidr: "192.168.0.0/16" }] });
+    expect((await mod.json()).prefixList.Version).toBe(2);
+    const delRes = await del("/managed-prefix-lists/pl-1");
+    expect((await delRes.json()).deleted).toBe(true);
+  });
+
+  describe("sparse SDK responses — default arms", () => {
+    it("returns nulls when SDK omits fields", async () => {
+      mockSend.mockResolvedValue({});
+      expect((await post("/transit-gateways", {})).status).toBe(201);
+      expect((await putReq("/transit-gateways/tgw-1", {})).status).toBe(200);
+      expect((await del("/transit-gateways/tgw-1")).status).toBe(200);
+      expect((await get("/transit-gateways")).status).toBe(200);
+      expect((await get("/transit-gateways?ids=tgw-1,tgw-2")).status).toBe(200);
+      expect((await get("/transit-gateway-attachments")).status).toBe(200);
+      expect((await get("/transit-gateways/vpc-attachments")).status).toBe(200);
+      expect((await post("/transit-gateways/tgw-1/vpc-attachments", { vpcId: "vpc-1", subnetIds: ["s"] })).status).toBe(201);
+      expect((await putReq("/transit-gateways/vpc-attachments/a1", {})).status).toBe(200);
+      expect((await del("/transit-gateways/vpc-attachments/a1")).status).toBe(200);
+      expect((await post("/transit-gateway-route-tables", { transitGatewayId: "tgw-1" })).status).toBe(201);
+      expect((await get("/transit-gateway-route-tables?ids=rtb-1")).status).toBe(200);
+      expect((await del("/transit-gateway-route-tables/rtb-1")).status).toBe(200);
+      expect((await post("/transit-gateway-route-tables/rtb-1/associate", { attachmentId: "a" })).status).toBe(200);
+      expect((await post("/transit-gateway-route-tables/rtb-1/disassociate", { attachmentId: "a" })).status).toBe(200);
+      expect((await get("/transit-gateway-route-tables/rtb-1/associations")).status).toBe(200);
+      expect((await get("/transit-gateway-route-tables/rtb-1/propagations")).status).toBe(200);
+      expect((await post("/transit-gateway-route-tables/rtb-1/enable-propagation", { attachmentId: "a" })).status).toBe(200);
+      expect((await post("/transit-gateway-route-tables/rtb-1/disable-propagation", { attachmentId: "a" })).status).toBe(200);
+      expect((await post("/transit-gateway-route-tables/rtb-1/routes", { destinationCidrBlock: "10.0.0.0/8" })).status).toBe(201);
+      expect((await post("/transit-gateway-route-tables/rtb-1/routes/search", {})).status).toBe(200);
+      expect((await del("/transit-gateway-route-tables/rtb-1/routes/10.0.0.0%2F8")).status).toBe(200);
+      expect((await post("/managed-prefix-lists", { name: "n", addressFamily: "IPv4", entries: [{ Cidr: "10.0.0.0/8" }] })).status).toBe(201);
+      expect((await get("/managed-prefix-lists?ids=pl-1")).status).toBe(200);
+      expect((await get("/managed-prefix-lists/pl-1/entries")).status).toBe(200);
+      expect((await putReq("/managed-prefix-lists/pl-1", {})).status).toBe(200);
+      expect((await del("/managed-prefix-lists/pl-1")).status).toBe(200);
+    });
+
+    it("400s for disassociate + disable-propagation without attachmentId", async () => {
+      expect((await post("/transit-gateway-route-tables/rtb-1/disassociate", {})).status).toBe(400);
+      expect((await post("/transit-gateway-route-tables/rtb-1/disable-propagation", {})).status).toBe(400);
+    });
+
+    it("prefix list entry with missing description defaults to null", async () => {
+      mockSend.mockResolvedValueOnce({ Entries: [{ Cidr: "10.0.0.0/8" }] });
+      const res = await get("/managed-prefix-lists/pl-1/entries");
+      expect((await res.json()).entries[0].description).toBeNull();
+    });
+
+    it("modify transit gateway without description uses undefined", async () => {
+      mockSend.mockResolvedValue({ TransitGateway: { TransitGatewayId: "tgw-1" } });
+      const res = await putReq("/transit-gateways/tgw-1", { options: {} });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].Description).toBeUndefined();
     });
   });
 });

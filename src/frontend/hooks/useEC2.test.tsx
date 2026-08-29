@@ -65,6 +65,29 @@ import {
   useRequestEC2SpotInstances,
   useCancelEC2SpotRequests,
   useEC2SecurityGroupRules,
+  useEC2TransitGateways,
+  useCreateEC2TransitGateway,
+  useDeleteEC2TransitGateway,
+  useEC2TransitGatewayVpcAttachments,
+  useCreateEC2TgwVpcAttachment,
+  useDeleteEC2TgwVpcAttachment,
+  useEC2TgwRouteTables,
+  useCreateEC2TgwRouteTable,
+  useDeleteEC2TgwRouteTable,
+  useAssociateEC2TgwRouteTable,
+  useDisassociateEC2TgwRouteTable,
+  useEC2TgwRouteTableAssociations,
+  useEC2TgwRouteTablePropagations,
+  useEnableEC2TgwPropagation,
+  useDisableEC2TgwPropagation,
+  useCreateEC2TgwRoute,
+  useDeleteEC2TgwRoute,
+  useSearchEC2TgwRoutes,
+  useEC2ManagedPrefixLists,
+  useCreateEC2ManagedPrefixList,
+  useEC2ManagedPrefixListEntries,
+  useModifyEC2ManagedPrefixList,
+  useDeleteEC2ManagedPrefixList,
 } from "./useEC2";
 
 function createWrapper() {
@@ -658,5 +681,148 @@ describe("EC2 spot/prefix/rules hooks", () => {
     const { result } = renderHook(() => useEC2SecurityGroupRules(null), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith("/aws/ec2/security-group-rules");
+  });
+});
+
+describe("useEC2 — Transit Gateway + managed prefix lists (P1)", () => {
+  it("queries transit gateways, attachments, route tables", async () => {
+    mockApi.mockResolvedValueOnce({ transitGateways: [], total: 0 });
+    const tgw = renderHook(() => useEC2TransitGateways(), { wrapper: createWrapper() });
+    await waitFor(() => expect(tgw.result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/transit-gateways");
+    mockApi.mockResolvedValueOnce({ attachments: [], total: 0 });
+    const attach = renderHook(() => useEC2TransitGatewayVpcAttachments(), { wrapper: createWrapper() });
+    await waitFor(() => expect(attach.result.current.isSuccess).toBe(true));
+    mockApi.mockResolvedValueOnce({ routeTables: [], total: 0 });
+    const rtb = renderHook(() => useEC2TgwRouteTables(), { wrapper: createWrapper() });
+    await waitFor(() => expect(rtb.result.current.isSuccess).toBe(true));
+  });
+
+  it("tgw create/delete mutations", async () => {
+    mockApi.mockResolvedValueOnce({ transitGateway: {} });
+    const { result: createR } = renderHook(() => useCreateEC2TransitGateway(), { wrapper: createWrapper() });
+    await createR.current.mutateAsync({ description: "d" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/transit-gateways", {
+      method: "POST",
+      body: JSON.stringify({ description: "d" }),
+    });
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result: delR } = renderHook(() => useDeleteEC2TransitGateway(), { wrapper: createWrapper() });
+    await delR.current.mutateAsync("tgw-1");
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/transit-gateways/tgw-1", { method: "DELETE" });
+  });
+
+  it("vpc attachment create/delete", async () => {
+    mockApi.mockResolvedValueOnce({ attachment: {} });
+    const { result: createR } = renderHook(() => useCreateEC2TgwVpcAttachment("tgw-1"), { wrapper: createWrapper() });
+    await createR.current.mutateAsync({ vpcId: "vpc-1", subnetIds: ["s1"] });
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/transit-gateways/tgw-1/vpc-attachments", {
+      method: "POST",
+      body: JSON.stringify({ vpcId: "vpc-1", subnetIds: ["s1"] }),
+    });
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result: delR } = renderHook(() => useDeleteEC2TgwVpcAttachment(), { wrapper: createWrapper() });
+    await delR.current.mutateAsync("attach-1");
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/transit-gateways/vpc-attachments/attach-1", { method: "DELETE" });
+  });
+
+  it("route table create/delete + associate/disassociate", async () => {
+    mockApi.mockResolvedValueOnce({ routeTable: {} });
+    const { result: createR } = renderHook(() => useCreateEC2TgwRouteTable(), { wrapper: createWrapper() });
+    await createR.current.mutateAsync({ transitGatewayId: "tgw-1" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/transit-gateway-route-tables", {
+      method: "POST",
+      body: JSON.stringify({ transitGatewayId: "tgw-1" }),
+    });
+    mockApi.mockResolvedValueOnce({ association: {} });
+    const { result: assoc } = renderHook(() => useAssociateEC2TgwRouteTable("rtb-1"), { wrapper: createWrapper() });
+    await assoc.current.mutateAsync("attach-1");
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/transit-gateway-route-tables/rtb-1/associate", {
+      method: "POST",
+      body: JSON.stringify({ attachmentId: "attach-1" }),
+    });
+    mockApi.mockResolvedValueOnce({ association: {} });
+    const { result: dis } = renderHook(() => useDisassociateEC2TgwRouteTable("rtb-1"), { wrapper: createWrapper() });
+    await dis.current.mutateAsync("attach-1");
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result: delR } = renderHook(() => useDeleteEC2TgwRouteTable(), { wrapper: createWrapper() });
+    await delR.current.mutateAsync("rtb-1");
+  });
+
+  it("associations + propagations queries + enable/disable", async () => {
+    mockApi.mockResolvedValueOnce({ associations: [], total: 0 });
+    const assoc = renderHook(() => useEC2TgwRouteTableAssociations("rtb-1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(assoc.result.current.isSuccess).toBe(true));
+    mockApi.mockResolvedValueOnce({ propagations: [], total: 0 });
+    const prop = renderHook(() => useEC2TgwRouteTablePropagations("rtb-1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(prop.result.current.isSuccess).toBe(true));
+    mockApi.mockResolvedValueOnce({ enabled: true });
+    const { result: en } = renderHook(() => useEnableEC2TgwPropagation("rtb-1"), { wrapper: createWrapper() });
+    await en.current.mutateAsync("attach-1");
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/transit-gateway-route-tables/rtb-1/enable-propagation", {
+      method: "POST",
+      body: JSON.stringify({ attachmentId: "attach-1" }),
+    });
+    mockApi.mockResolvedValueOnce({ disabled: true });
+    const { result: dis } = renderHook(() => useDisableEC2TgwPropagation("rtb-1"), { wrapper: createWrapper() });
+    await dis.current.mutateAsync("attach-1");
+  });
+
+  it("tgw routes create/delete/search", async () => {
+    mockApi.mockResolvedValueOnce({ route: {} });
+    const { result: createR } = renderHook(() => useCreateEC2TgwRoute("rtb-1"), { wrapper: createWrapper() });
+    await createR.current.mutateAsync({ destinationCidrBlock: "10.0.0.0/8" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/transit-gateway-route-tables/rtb-1/routes", {
+      method: "POST",
+      body: JSON.stringify({ destinationCidrBlock: "10.0.0.0/8" }),
+    });
+    mockApi.mockResolvedValueOnce({ routes: [], total: 0 });
+    const search = renderHook(() => useSearchEC2TgwRoutes("rtb-1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(search.result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/transit-gateway-route-tables/rtb-1/routes/search", {
+      method: "POST",
+      body: JSON.stringify({ filters: [] }),
+    });
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result: delR } = renderHook(() => useDeleteEC2TgwRoute("rtb-1"), { wrapper: createWrapper() });
+    await delR.current.mutateAsync("10.0.0.0/8");
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/transit-gateway-route-tables/rtb-1/routes/10.0.0.0%2F8", { method: "DELETE" });
+  });
+
+  it("search disabled without route table", () => {
+    const { result } = renderHook(() => useSearchEC2TgwRoutes(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+
+  it("managed prefix list full lifecycle", async () => {
+    mockApi.mockResolvedValueOnce({ prefixLists: [], total: 0 });
+    const list = renderHook(() => useEC2ManagedPrefixLists(), { wrapper: createWrapper() });
+    await waitFor(() => expect(list.result.current.isSuccess).toBe(true));
+    mockApi.mockResolvedValueOnce({ prefixList: {} });
+    const { result: createR } = renderHook(() => useCreateEC2ManagedPrefixList(), { wrapper: createWrapper() });
+    await createR.current.mutateAsync({ name: "x", addressFamily: "IPv4", entries: [{ Cidr: "10.0.0.0/8" }] });
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/managed-prefix-lists", {
+      method: "POST",
+      body: JSON.stringify({ name: "x", addressFamily: "IPv4", entries: [{ Cidr: "10.0.0.0/8" }] }),
+    });
+    mockApi.mockResolvedValueOnce({ entries: [], total: 0 });
+    const entries = renderHook(() => useEC2ManagedPrefixListEntries("pl-1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(entries.result.current.isSuccess).toBe(true));
+    mockApi.mockResolvedValueOnce({ prefixList: {} });
+    const { result: modR } = renderHook(() => useModifyEC2ManagedPrefixList("pl-1"), { wrapper: createWrapper() });
+    await modR.current.mutateAsync({ currentVersion: 1 });
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/managed-prefix-lists/pl-1", {
+      method: "PUT",
+      body: JSON.stringify({ currentVersion: 1 }),
+    });
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result: delR } = renderHook(() => useDeleteEC2ManagedPrefixList(), { wrapper: createWrapper() });
+    await delR.current.mutateAsync("pl-1");
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/managed-prefix-lists/pl-1", { method: "DELETE" });
+  });
+
+  it("prefix list entries disabled without id", () => {
+    const { result } = renderHook(() => useEC2ManagedPrefixListEntries(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
   });
 });

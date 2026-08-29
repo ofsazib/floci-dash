@@ -79,6 +79,34 @@ import {
   DescribeSecurityGroupRulesCommand,
   ModifySecurityGroupRulesCommand,
   UpdateSecurityGroupRuleDescriptionsIngressCommand,
+  // P1 gap audit — Transit Gateway family
+  CreateTransitGatewayCommand,
+  DescribeTransitGatewaysCommand,
+  ModifyTransitGatewayCommand,
+  DeleteTransitGatewayCommand,
+  DescribeTransitGatewayAttachmentsCommand,
+  CreateTransitGatewayVpcAttachmentCommand,
+  DescribeTransitGatewayVpcAttachmentsCommand,
+  ModifyTransitGatewayVpcAttachmentCommand,
+  DeleteTransitGatewayVpcAttachmentCommand,
+  CreateTransitGatewayRouteTableCommand,
+  DescribeTransitGatewayRouteTablesCommand,
+  DeleteTransitGatewayRouteTableCommand,
+  AssociateTransitGatewayRouteTableCommand,
+  DisassociateTransitGatewayRouteTableCommand,
+  GetTransitGatewayRouteTableAssociationsCommand,
+  GetTransitGatewayRouteTablePropagationsCommand,
+  EnableTransitGatewayRouteTablePropagationCommand,
+  DisableTransitGatewayRouteTablePropagationCommand,
+  CreateTransitGatewayRouteCommand,
+  DeleteTransitGatewayRouteCommand,
+  SearchTransitGatewayRoutesCommand,
+  // P1 gap audit — managed prefix lists
+  CreateManagedPrefixListCommand,
+  DescribeManagedPrefixListsCommand,
+  GetManagedPrefixListEntriesCommand,
+  ModifyManagedPrefixListCommand,
+  DeleteManagedPrefixListCommand,
 } from "@aws-sdk/client-ec2";
 import { getAwsConfig } from "../../clients/aws";
 import { sanitizeName, sanitizeText } from "../../clients/sanitize";
@@ -1072,6 +1100,328 @@ router.post("/security-groups/:groupId/rule-descriptions", async (c: Context) =>
     })
   );
   return c.json({ updated: true });
+});
+
+
+// ── P1 gap audit — Transit Gateway family ─────────────────
+
+router.post("/transit-gateways", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.description && !body.options) {
+    // description optional per AWS; require at least a name-ish signal is not
+    // mandated by the API, so accept empty body
+  }
+  const client = ec2();
+  const result = await client.send(new CreateTransitGatewayCommand({
+    Description: body.description || undefined,
+    Options: body.options,
+    TagSpecifications: body.tagSpecifications,
+  }));
+  return c.json({ transitGateway: result.TransitGateway ?? null }, 201);
+});
+
+router.get("/transit-gateways", async (c: Context) => {
+  const client = ec2();
+  const result = await client.send(new DescribeTransitGatewaysCommand({
+    TransitGatewayIds: c.req.query("ids") ? c.req.query("ids")!.split(",") : undefined,
+  }));
+  const transitGateways = (result.TransitGateways || []).map((tg: any) => ({
+    id: tg.TransitGatewayId,
+    state: tg.State,
+    ownerId: tg.OwnerId,
+    description: tg.Description ?? null,
+    options: tg.Options ?? null,
+  }));
+  return c.json({ transitGateways, total: transitGateways.length });
+});
+
+router.put("/transit-gateways/:id", async (c: Context) => {
+  const body = await c.req.json<any>();
+  const client = ec2();
+  const result = await client.send(new ModifyTransitGatewayCommand({
+    TransitGatewayId: c.req.param("id")!,
+    Description: body.description,
+    Options: body.options,
+  }));
+  return c.json({ transitGateway: result.TransitGateway ?? null });
+});
+
+router.delete("/transit-gateways/:id", async (c: Context) => {
+  const client = ec2();
+  const result = await client.send(new DeleteTransitGatewayCommand({ TransitGatewayId: c.req.param("id")! }));
+  return c.json({ transitGateway: result.TransitGateway ?? null, deleted: true });
+});
+
+router.get("/transit-gateway-attachments", async (c: Context) => {
+  const client = ec2();
+  const result = await client.send(new DescribeTransitGatewayAttachmentsCommand({}));
+  const attachments = (result.TransitGatewayAttachments || []).map((a: any) => ({
+    id: a.TransitGatewayAttachmentId,
+    transitGatewayId: a.TransitGatewayId,
+    resourceType: a.ResourceType,
+    resourceId: a.ResourceId,
+    state: a.State,
+  }));
+  return c.json({ attachments, total: attachments.length });
+});
+
+router.post("/transit-gateways/:tgwId/vpc-attachments", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.vpcId || !body.subnetIds?.length) {
+    return c.json({ error: "vpcId and subnetIds are required" }, 400);
+  }
+  const client = ec2();
+  const result = await client.send(new CreateTransitGatewayVpcAttachmentCommand({
+    TransitGatewayId: c.req.param("tgwId")!,
+    VpcId: body.vpcId,
+    SubnetIds: body.subnetIds,
+    Options: body.options,
+  }));
+  return c.json({ attachment: result.TransitGatewayVpcAttachment ?? null }, 201);
+});
+
+router.get("/transit-gateways/vpc-attachments", async (c: Context) => {
+  const client = ec2();
+  const result = await client.send(new DescribeTransitGatewayVpcAttachmentsCommand({}));
+  const attachments = (result.TransitGatewayVpcAttachments || []).map((a: any) => ({
+    id: a.TransitGatewayAttachmentId,
+    transitGatewayId: a.TransitGatewayId,
+    vpcId: a.VpcId,
+    vpcOwnerId: a.VpcOwnerId,
+    state: a.State,
+    subnetIds: a.SubnetIds,
+  }));
+  return c.json({ attachments, total: attachments.length });
+});
+
+router.put("/transit-gateways/vpc-attachments/:id", async (c: Context) => {
+  const body = await c.req.json<any>();
+  const client = ec2();
+  const result = await client.send(new ModifyTransitGatewayVpcAttachmentCommand({
+    TransitGatewayAttachmentId: c.req.param("id")!,
+    AddSubnetIds: body.addSubnetIds,
+    RemoveSubnetIds: body.removeSubnetIds,
+    Options: body.options,
+  }));
+  return c.json({ attachment: result.TransitGatewayVpcAttachment ?? null });
+});
+
+router.delete("/transit-gateways/vpc-attachments/:id", async (c: Context) => {
+  const client = ec2();
+  const result = await client.send(new DeleteTransitGatewayVpcAttachmentCommand({
+    TransitGatewayAttachmentId: c.req.param("id")!,
+  }));
+  return c.json({ attachment: result.TransitGatewayVpcAttachment ?? null, deleted: true });
+});
+
+// ── TGW route tables ──────────────────────────────────────
+
+router.post("/transit-gateway-route-tables", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.transitGatewayId) return c.json({ error: "transitGatewayId is required" }, 400);
+  const client = ec2();
+  const result = await client.send(new CreateTransitGatewayRouteTableCommand({
+    TransitGatewayId: body.transitGatewayId,
+    TagSpecifications: body.tagSpecifications,
+  }));
+  return c.json({ routeTable: result.TransitGatewayRouteTable ?? null }, 201);
+});
+
+router.get("/transit-gateway-route-tables", async (c: Context) => {
+  const client = ec2();
+  const result = await client.send(new DescribeTransitGatewayRouteTablesCommand({
+    TransitGatewayRouteTableIds: c.req.query("ids") ? c.req.query("ids")!.split(",") : undefined,
+  }));
+  const routeTables = (result.TransitGatewayRouteTables || []).map((rt: any) => ({
+    id: rt.TransitGatewayRouteTableId,
+    transitGatewayId: rt.TransitGatewayId,
+    state: rt.State,
+    defaultAssociationRouteTable: rt.DefaultAssociationRouteTable,
+    defaultPropagationRouteTable: rt.DefaultPropagationRouteTable,
+  }));
+  return c.json({ routeTables, total: routeTables.length });
+});
+
+router.delete("/transit-gateway-route-tables/:id", async (c: Context) => {
+  const client = ec2();
+  await client.send(new DeleteTransitGatewayRouteTableCommand({ TransitGatewayRouteTableId: c.req.param("id")! }));
+  return c.json({ deleted: true });
+});
+
+router.post("/transit-gateway-route-tables/:id/associate", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.attachmentId) return c.json({ error: "attachmentId is required" }, 400);
+  const client = ec2();
+  const result = await client.send(new AssociateTransitGatewayRouteTableCommand({
+    TransitGatewayRouteTableId: c.req.param("id")!,
+    TransitGatewayAttachmentId: body.attachmentId,
+  }));
+  return c.json({ association: result.Association ?? null });
+});
+
+router.post("/transit-gateway-route-tables/:id/disassociate", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.attachmentId) return c.json({ error: "attachmentId is required" }, 400);
+  const client = ec2();
+  const result = await client.send(new DisassociateTransitGatewayRouteTableCommand({
+    TransitGatewayRouteTableId: c.req.param("id")!,
+    TransitGatewayAttachmentId: body.attachmentId,
+  }));
+  return c.json({ association: result.Association ?? null });
+});
+
+router.get("/transit-gateway-route-tables/:id/associations", async (c: Context) => {
+  const client = ec2();
+  const result = await client.send(new GetTransitGatewayRouteTableAssociationsCommand({
+    TransitGatewayRouteTableId: c.req.param("id")!,
+  }));
+  const associations = (result.Associations || []).map((a: any) => ({
+    attachmentId: a.TransitGatewayAttachmentId,
+    resourceId: a.ResourceId,
+    resourceType: a.ResourceType,
+    state: a.State,
+  }));
+  return c.json({ associations, total: associations.length });
+});
+
+router.get("/transit-gateway-route-tables/:id/propagations", async (c: Context) => {
+  const client = ec2();
+  const result = await client.send(new GetTransitGatewayRouteTablePropagationsCommand({
+    TransitGatewayRouteTableId: c.req.param("id")!,
+  }));
+  const propagations = (result.TransitGatewayRouteTablePropagations || []).map((p: any) => ({
+    attachmentId: p.TransitGatewayAttachmentId,
+    resourceId: p.ResourceId,
+    resourceType: p.ResourceType,
+    state: p.State,
+  }));
+  return c.json({ propagations, total: propagations.length });
+});
+
+router.post("/transit-gateway-route-tables/:id/enable-propagation", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.attachmentId) return c.json({ error: "attachmentId is required" }, 400);
+  const client = ec2();
+  await client.send(new EnableTransitGatewayRouteTablePropagationCommand({
+    TransitGatewayRouteTableId: c.req.param("id")!,
+    TransitGatewayAttachmentId: body.attachmentId,
+  }));
+  return c.json({ enabled: true });
+});
+
+router.post("/transit-gateway-route-tables/:id/disable-propagation", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.attachmentId) return c.json({ error: "attachmentId is required" }, 400);
+  const client = ec2();
+  await client.send(new DisableTransitGatewayRouteTablePropagationCommand({
+    TransitGatewayRouteTableId: c.req.param("id")!,
+    TransitGatewayAttachmentId: body.attachmentId,
+  }));
+  return c.json({ disabled: true });
+});
+
+// ── TGW static routes ─────────────────────────────────────
+
+router.post("/transit-gateway-route-tables/:id/routes", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.destinationCidrBlock) return c.json({ error: "destinationCidrBlock is required" }, 400);
+  const client = ec2();
+  const result = await client.send(new CreateTransitGatewayRouteCommand({
+    TransitGatewayRouteTableId: c.req.param("id")!,
+    DestinationCidrBlock: body.destinationCidrBlock,
+    TransitGatewayAttachmentId: body.attachmentId,
+    Blackhole: body.blackhole,
+  }));
+  return c.json({ route: result.Route ?? null }, 201);
+});
+
+router.delete("/transit-gateway-route-tables/:id/routes/:cidr", async (c: Context) => {
+  const client = ec2();
+  const result = await client.send(new DeleteTransitGatewayRouteCommand({
+    TransitGatewayRouteTableId: c.req.param("id")!,
+    DestinationCidrBlock: decodeURIComponent(c.req.param("cidr")!),
+  }));
+  return c.json({ route: result.Route ?? null, deleted: true });
+});
+
+router.post("/transit-gateway-route-tables/:id/routes/search", async (c: Context) => {
+  const body = await c.req.json<any>();
+  const client = ec2();
+  const result = await client.send(new SearchTransitGatewayRoutesCommand({
+    TransitGatewayRouteTableId: c.req.param("id")!,
+    Filters: body.filters,
+    MaxResults: body.maxResults,
+  }));
+  return c.json({
+    routes: result.Routes || [],
+    total: (result.Routes || []).length,
+  });
+});
+
+// ── Managed prefix lists ──────────────────────────────────
+
+router.post("/managed-prefix-lists", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.name) return c.json({ error: "name is required" }, 400);
+  if (!body.addressFamily) return c.json({ error: "addressFamily is required" }, 400);
+  if (!body.entries?.length) return c.json({ error: "at least one entry is required" }, 400);
+  const client = ec2();
+  const result = await client.send(new CreateManagedPrefixListCommand({
+    PrefixListName: body.name,
+    AddressFamily: body.addressFamily,
+    MaxEntries: body.maxEntries,
+    Entries: body.entries,
+    TagSpecifications: body.tagSpecifications,
+  }));
+  return c.json({ prefixList: result.PrefixList ?? null }, 201);
+});
+
+router.get("/managed-prefix-lists", async (c: Context) => {
+  const client = ec2();
+  const result = await client.send(new DescribeManagedPrefixListsCommand({
+    PrefixListIds: c.req.query("ids") ? c.req.query("ids")!.split(",") : undefined,
+  }));
+  const prefixLists = (result.PrefixLists || []).map((pl: any) => ({
+    id: pl.PrefixListId,
+    name: pl.PrefixListName,
+    addressFamily: pl.AddressFamily,
+    state: pl.State,
+    maxEntries: pl.MaxEntries,
+    version: pl.Version,
+    ownerId: pl.OwnerId,
+  }));
+  return c.json({ prefixLists, total: prefixLists.length });
+});
+
+router.get("/managed-prefix-lists/:id/entries", async (c: Context) => {
+  const client = ec2();
+  const result = await client.send(new GetManagedPrefixListEntriesCommand({
+    PrefixListId: c.req.param("id")!,
+  }));
+  const entries = (result.Entries || []).map((e: any) => ({
+    cidr: e.Cidr,
+    description: e.Description ?? null,
+  }));
+  return c.json({ entries, total: entries.length });
+});
+
+router.put("/managed-prefix-lists/:id", async (c: Context) => {
+  const body = await c.req.json<any>();
+  const client = ec2();
+  const result = await client.send(new ModifyManagedPrefixListCommand({
+    PrefixListId: c.req.param("id")!,
+    CurrentVersion: body.currentVersion,
+    PrefixListName: body.name,
+    AddEntries: body.addEntries,
+    RemoveEntries: body.removeEntries,
+  }));
+  return c.json({ prefixList: result.PrefixList ?? null });
+});
+
+router.delete("/managed-prefix-lists/:id", async (c: Context) => {
+  const client = ec2();
+  const result = await client.send(new DeleteManagedPrefixListCommand({ PrefixListId: c.req.param("id")! }));
+  return c.json({ prefixList: result.PrefixList ?? null, deleted: true });
 });
 
 export default router;
