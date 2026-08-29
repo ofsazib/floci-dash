@@ -15,6 +15,7 @@ vi.mock("../../hooks/useCloudControl", () => ({
   useCloudControlResources: (...args: any[]) => mockResources(...args),
   useCloudControlResource: (...args: any[]) => mockResourceDetail(...args),
   useCreateCloudControlResource: () => ({ mutateAsync: mockCreateMutate, isPending: false }),
+  useResourceRequestStatus: () => ({ data: undefined, isLoading: false }),
   useDeleteCloudControlResource: () => ({ mutateAsync: mockDeleteMutate, isPending: false }),
 }));
 

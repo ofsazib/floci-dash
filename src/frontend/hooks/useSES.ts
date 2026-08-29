@@ -522,3 +522,204 @@ export function useSESSendTemplated() {
     }) => api("/aws/ses/send-templated", { method: "POST", body: JSON.stringify(body) }),
   });
 }
+
+// ─── SES v2 (P1 gap audit) ───────────────────────────────
+export function useSESv2Identities() {
+  return useQuery<{ identities: any[]; total: number }>({
+    queryKey: ["aws", "ses", "v2", "identities"],
+    queryFn: () => api("/aws/email/v2/email-identities"),
+  });
+}
+
+export function useCreateSESv2Identity() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { emailIdentity: string; tags?: Record<string, string> }) =>
+      api("/aws/email/v2/email-identities", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ses", "v2", "identities"] }),
+  });
+}
+
+export function useDeleteSESv2Identity() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (identity: string) =>
+      api(`/aws/email/v2/email-identities/${encodeURIComponent(identity)}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ses", "v2", "identities"] }),
+  });
+}
+
+export function useSendSESv2Email() {
+  return useMutation({
+    mutationFn: (body: { from: string; destination: unknown; content: unknown; configurationSetName?: string }) =>
+      api("/aws/email/v2/send", { method: "POST", body: JSON.stringify(body) }),
+  });
+}
+
+export function useSESv2Templates() {
+  return useQuery<{ templates: any[]; total: number }>({
+    queryKey: ["aws", "ses", "v2", "templates"],
+    queryFn: () => api("/aws/email/v2/templates"),
+  });
+}
+
+export function useCreateSESv2Template() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { templateName: string; subject: string; html?: string; text?: string }) =>
+      api("/aws/email/v2/templates", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ses", "v2", "templates"] }),
+  });
+}
+
+export function useDeleteSESv2Template() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api(`/aws/email/v2/templates/${encodeURIComponent(name)}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ses", "v2", "templates"] }),
+  });
+}
+
+export function useSESv2ConfigurationSets() {
+  return useQuery<{ configurationSets: string[]; total: number }>({
+    queryKey: ["aws", "ses", "v2", "configuration-sets"],
+    queryFn: () => api("/aws/email/v2/configuration-sets"),
+  });
+}
+
+export function useCreateSESv2ConfigurationSet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string }) =>
+      api("/aws/email/v2/configuration-sets", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ses", "v2", "configuration-sets"] }),
+  });
+}
+
+export function useDeleteSESv2ConfigurationSet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api(`/aws/email/v2/configuration-sets/${encodeURIComponent(name)}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ses", "v2", "configuration-sets"] }),
+  });
+}
+
+export function usePutSESv2ConfigSetOptions(name: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ option, body }: { option: string; body: unknown }) =>
+      api(`/aws/email/v2/configuration-sets/${encodeURIComponent(name)}/${option}`, {
+        method: "PUT",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ses", "v2", "configuration-sets"] }),
+  });
+}
+
+export function useSESv2DedicatedIpPools() {
+  return useQuery<{ pools: string[]; total: number }>({
+    queryKey: ["aws", "ses", "v2", "dedicated-ip-pools"],
+    queryFn: () => api("/aws/email/v2/dedicated-ip-pools"),
+  });
+}
+
+export function useCreateSESv2DedicatedIpPool() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { poolName: string }) =>
+      api("/aws/email/v2/dedicated-ip-pools", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ses", "v2", "dedicated-ip-pools"] }),
+  });
+}
+
+export function useDeleteSESv2DedicatedIpPool() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api(`/aws/email/v2/dedicated-ip-pools/${encodeURIComponent(name)}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ses", "v2", "dedicated-ip-pools"] }),
+  });
+}
+
+export function useSESv2ContactLists() {
+  return useQuery<{ contactLists: string[]; total: number }>({
+    queryKey: ["aws", "ses", "v2", "contact-lists"],
+    queryFn: () => api("/aws/email/v2/contact-lists"),
+  });
+}
+
+export function useCreateSESv2ContactList() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { listName: string }) =>
+      api("/aws/email/v2/contact-lists", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ses", "v2", "contact-lists"] }),
+  });
+}
+
+export function useDeleteSESv2ContactList() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api(`/aws/email/v2/contact-lists/${encodeURIComponent(name)}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ses", "v2", "contact-lists"] }),
+  });
+}
+
+export function useSESv2Contacts(listName: string | null) {
+  return useQuery<{ contacts: any[]; total: number }>({
+    queryKey: ["aws", "ses", "v2", "contacts", listName],
+    queryFn: () => api(`/aws/email/v2/contact-lists/${encodeURIComponent(listName!)}/contacts`),
+    enabled: !!listName,
+  });
+}
+
+export function useCreateSESv2Contact(listName: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { email: string }) =>
+      api(`/aws/email/v2/contact-lists/${encodeURIComponent(listName)}/contacts`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ses", "v2", "contacts", listName] }),
+  });
+}
+
+export function useDeleteSESv2Contact(listName: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (email: string) =>
+      api(`/aws/email/v2/contact-lists/${encodeURIComponent(listName)}/contacts/${encodeURIComponent(email)}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ses", "v2", "contacts", listName] }),
+  });
+}
+
+export function useSESv2SuppressionList() {
+  return useQuery<{ suppressed: any[]; total: number }>({
+    queryKey: ["aws", "ses", "v2", "suppression"],
+    queryFn: () => api("/aws/email/v2/suppressed-destinations"),
+  });
+}
+
+export function useSuppressSESv2Destination() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { email: string; reason?: string }) =>
+      api("/aws/email/v2/suppressed-destinations", { method: "PUT", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ses", "v2", "suppression"] }),
+  });
+}
+
+export function useDeleteSESv2SuppressedDestination() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (email: string) =>
+      api(`/aws/email/v2/suppressed-destinations/${encodeURIComponent(email)}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ses", "v2", "suppression"] }),
+  });
+}

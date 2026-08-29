@@ -50,6 +50,29 @@ import {
   useDeleteSESTemplate,
   useRenderSESTemplate,
   useSESSendTemplated,
+  useSESv2Identities,
+  useCreateSESv2Identity,
+  useDeleteSESv2Identity,
+  useSendSESv2Email,
+  useSESv2Templates,
+  useCreateSESv2Template,
+  useDeleteSESv2Template,
+  useSESv2ConfigurationSets,
+  useCreateSESv2ConfigurationSet,
+  useDeleteSESv2ConfigurationSet,
+  usePutSESv2ConfigSetOptions,
+  useSESv2DedicatedIpPools,
+  useCreateSESv2DedicatedIpPool,
+  useDeleteSESv2DedicatedIpPool,
+  useSESv2ContactLists,
+  useCreateSESv2ContactList,
+  useDeleteSESv2ContactList,
+  useSESv2Contacts,
+  useCreateSESv2Contact,
+  useDeleteSESv2Contact,
+  useSESv2SuppressionList,
+  useSuppressSESv2Destination,
+  useDeleteSESv2SuppressedDestination,
 } from "./useSES";
 
 function createWrapper() {
@@ -647,3 +670,120 @@ describe("useSESAccountDetails + usePutSESAccountDetails", () => {
   });
 });
 
+
+// ─── SES v2 (P1 gap audit) ───────────────────────────────
+describe("useSES v2 hooks", () => {
+  it("identities query/create/delete", async () => {
+    mockApi.mockResolvedValueOnce({ identities: [], total: 0 });
+    const list = renderHook(() => useSESv2Identities(), { wrapper: createWrapper() });
+    await waitFor(() => expect(list.result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/email/v2/email-identities");
+    mockApi.mockResolvedValueOnce({ identityType: "EMAIL_ADDRESS" });
+    const { result: createR } = renderHook(() => useCreateSESv2Identity(), { wrapper: createWrapper() });
+    await createR.current.mutateAsync({ emailIdentity: "x@y.z" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/email/v2/email-identities", {
+      method: "POST",
+      body: JSON.stringify({ emailIdentity: "x@y.z" }),
+    });
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result: delR } = renderHook(() => useDeleteSESv2Identity(), { wrapper: createWrapper() });
+    await delR.current.mutateAsync("x@y.z");
+    expect(mockApi).toHaveBeenCalledWith("/aws/email/v2/email-identities/x%40y.z", { method: "DELETE" });
+  });
+
+  it("send email", async () => {
+    mockApi.mockResolvedValueOnce({ messageId: "m1" });
+    const { result } = renderHook(() => useSendSESv2Email(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ from: "a@b.c", destination: {}, content: {} });
+    expect(mockApi).toHaveBeenCalledWith("/aws/email/v2/send", {
+      method: "POST",
+      body: JSON.stringify({ from: "a@b.c", destination: {}, content: {} }),
+    });
+  });
+
+  it("templates query/create/delete", async () => {
+    mockApi.mockResolvedValueOnce({ templates: [], total: 0 });
+    const list = renderHook(() => useSESv2Templates(), { wrapper: createWrapper() });
+    await waitFor(() => expect(list.result.current.isSuccess).toBe(true));
+    mockApi.mockResolvedValueOnce({ created: true });
+    const { result: createR } = renderHook(() => useCreateSESv2Template(), { wrapper: createWrapper() });
+    await createR.current.mutateAsync({ templateName: "t1", subject: "s" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/email/v2/templates", {
+      method: "POST",
+      body: JSON.stringify({ templateName: "t1", subject: "s" }),
+    });
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result: delR } = renderHook(() => useDeleteSESv2Template(), { wrapper: createWrapper() });
+    await delR.current.mutateAsync("t1");
+  });
+
+  it("configuration sets query/create/delete + options PUT", async () => {
+    mockApi.mockResolvedValueOnce({ configurationSets: [], total: 0 });
+    const list = renderHook(() => useSESv2ConfigurationSets(), { wrapper: createWrapper() });
+    await waitFor(() => expect(list.result.current.isSuccess).toBe(true));
+    mockApi.mockResolvedValueOnce({ created: true });
+    const { result: createR } = renderHook(() => useCreateSESv2ConfigurationSet(), { wrapper: createWrapper() });
+    await createR.current.mutateAsync({ name: "cs1" });
+    mockApi.mockResolvedValueOnce({ updated: true });
+    const { result: opts } = renderHook(() => usePutSESv2ConfigSetOptions("cs1"), { wrapper: createWrapper() });
+    await opts.current.mutateAsync({ option: "sending", body: { SendingEnabled: true } });
+    expect(mockApi).toHaveBeenCalledWith("/aws/email/v2/configuration-sets/cs1/sending", {
+      method: "PUT",
+      body: JSON.stringify({ SendingEnabled: true }),
+    });
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result: delR } = renderHook(() => useDeleteSESv2ConfigurationSet(), { wrapper: createWrapper() });
+    await delR.current.mutateAsync("cs1");
+  });
+
+  it("dedicated ip pools query/create/delete", async () => {
+    mockApi.mockResolvedValueOnce({ pools: [], total: 0 });
+    const list = renderHook(() => useSESv2DedicatedIpPools(), { wrapper: createWrapper() });
+    await waitFor(() => expect(list.result.current.isSuccess).toBe(true));
+    mockApi.mockResolvedValueOnce({ created: true });
+    const { result: createR } = renderHook(() => useCreateSESv2DedicatedIpPool(), { wrapper: createWrapper() });
+    await createR.current.mutateAsync({ poolName: "p1" });
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result: delR } = renderHook(() => useDeleteSESv2DedicatedIpPool(), { wrapper: createWrapper() });
+    await delR.current.mutateAsync("p1");
+  });
+
+  it("contact lists + contacts", async () => {
+    mockApi.mockResolvedValueOnce({ contactLists: [], total: 0 });
+    const lists = renderHook(() => useSESv2ContactLists(), { wrapper: createWrapper() });
+    await waitFor(() => expect(lists.result.current.isSuccess).toBe(true));
+    mockApi.mockResolvedValueOnce({ created: true });
+    const { result: createR } = renderHook(() => useCreateSESv2ContactList(), { wrapper: createWrapper() });
+    await createR.current.mutateAsync({ listName: "cl1" });
+    mockApi.mockResolvedValueOnce({ contacts: [], total: 0 });
+    const contacts = renderHook(() => useSESv2Contacts("cl1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(contacts.result.current.isSuccess).toBe(true));
+    mockApi.mockResolvedValueOnce({ created: true });
+    const { result: addC } = renderHook(() => useCreateSESv2Contact("cl1"), { wrapper: createWrapper() });
+    await addC.current.mutateAsync({ email: "c@x.y" });
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result: delC } = renderHook(() => useDeleteSESv2Contact("cl1"), { wrapper: createWrapper() });
+    await delC.current.mutateAsync("c@x.y");
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result: delL } = renderHook(() => useDeleteSESv2ContactList(), { wrapper: createWrapper() });
+    await delL.current.mutateAsync("cl1");
+    const idle = renderHook(() => useSESv2Contacts(null), { wrapper: createWrapper() });
+    expect(idle.result.current.fetchStatus).toBe("idle");
+  });
+
+  it("suppression list query/suppress/delete", async () => {
+    mockApi.mockResolvedValueOnce({ suppressed: [], total: 0 });
+    const list = renderHook(() => useSESv2SuppressionList(), { wrapper: createWrapper() });
+    await waitFor(() => expect(list.result.current.isSuccess).toBe(true));
+    mockApi.mockResolvedValueOnce({ suppressed: true });
+    const { result: supR } = renderHook(() => useSuppressSESv2Destination(), { wrapper: createWrapper() });
+    await supR.current.mutateAsync({ email: "b@x.y" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/email/v2/suppressed-destinations", {
+      method: "PUT",
+      body: JSON.stringify({ email: "b@x.y" }),
+    });
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result: delR } = renderHook(() => useDeleteSESv2SuppressedDestination(), { wrapper: createWrapper() });
+    await delR.current.mutateAsync("b@x.y");
+  });
+});
