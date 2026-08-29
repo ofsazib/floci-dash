@@ -55,6 +55,38 @@ import {
   useDeleteRoleInlinePolicy,
   useUpdateRoleTrustPolicy,
   useSimulatePolicy,
+  useUpdateUser,
+  useUpdateRole,
+  useCreateServiceLinkedRole,
+  useDeleteServiceLinkedRole,
+  useServiceLinkedRoleDeletionStatus,
+  useListEntitiesForPolicy,
+  useCreatePolicyVersion,
+  useDeletePolicyVersion,
+  useAttachUserPolicy,
+  useDetachUserPolicy,
+  useAttachRolePolicy,
+  useDetachRolePolicy,
+  useAttachGroupPolicy,
+  useDetachGroupPolicy,
+  useListAttachedGroupPolicies,
+  useListRoleInlinePolicies,
+  useGetRoleInlinePolicy,
+  useInstanceProfile,
+  useListInstanceProfilesForRole,
+  useAccessKeyLastUsed,
+  useAccountAliases,
+  useCreateAccountAlias,
+  useDeleteAccountAlias,
+  useAccountSummary,
+  useOIDCProviders,
+  useOIDCProvider,
+  useCreateOIDCProvider,
+  useDeleteOIDCProvider,
+  useAddOIDCClientId,
+  useRemoveOIDCClientId,
+  useUpdateOIDCThumbprint,
+  useLoginProfile,
 } from "./useIAM";
 
 function createWrapper() {
@@ -652,3 +684,211 @@ describe("IAM role policy hooks", () => {
     });
   });
 });
+
+// ─── P1 gap audit hooks ─────────────────────────────────
+describe("useIAM — P1 gap hooks", () => {
+  it("useUpdateUser PUTs rename", async () => {
+    mockApi.mockResolvedValueOnce({ renamed: true });
+    const { result } = renderHook(() => useUpdateUser(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ name: "old", newName: "new" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/users/old", {
+      method: "PUT",
+      body: JSON.stringify({ newName: "new" }),
+    });
+  });
+
+  it("useUpdateRole PUTs description", async () => {
+    mockApi.mockResolvedValueOnce({ updated: true });
+    const { result } = renderHook(() => useUpdateRole(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ name: "r1", description: "d" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/roles/r1", {
+      method: "PUT",
+      body: JSON.stringify({ description: "d" }),
+    });
+  });
+
+  it("service-linked role create/delete/status", async () => {
+    mockApi.mockResolvedValueOnce({ role: {} });
+    const { result: createR } = renderHook(() => useCreateServiceLinkedRole(), { wrapper: createWrapper() });
+    await createR.current.mutateAsync({ roleName: "ecs.amazonaws.com" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/roles/service-linked", {
+      method: "POST",
+      body: JSON.stringify({ roleName: "ecs.amazonaws.com" }),
+    });
+
+    mockApi.mockResolvedValueOnce({ deleted: true, deletionTaskId: "t1" });
+    const { result: delR } = renderHook(() => useDeleteServiceLinkedRole(), { wrapper: createWrapper() });
+    await delR.current.mutateAsync("slr");
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/roles/service-linked/slr", { method: "DELETE" });
+
+    mockApi.mockResolvedValueOnce({ status: "SUCCEEDED", reason: null, roleName: "slr" });
+    const { result } = renderHook(() => useServiceLinkedRoleDeletionStatus("slr"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/roles/service-linked/slr/deletion-status");
+  });
+
+  it("policy versions create/delete + entities", async () => {
+    mockApi.mockResolvedValueOnce({ versionId: "v2" });
+    const { result: createR } = renderHook(() => useCreatePolicyVersion(), { wrapper: createWrapper() });
+    await createR.current.mutateAsync({ arn: "arn:p", document: "{}", setAsDefault: true });
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/policies/arn%3Ap/versions", {
+      method: "POST",
+      body: JSON.stringify({ document: "{}", setAsDefault: true }),
+    });
+
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result: delR } = renderHook(() => useDeletePolicyVersion(), { wrapper: createWrapper() });
+    await delR.current.mutateAsync({ arn: "arn:p", versionId: "v1" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/policies/arn%3Ap/versions/v1", { method: "DELETE" });
+
+    mockApi.mockResolvedValueOnce({ policyUsers: [], policyRoles: [], policyGroups: [], total: 0 });
+    const { result } = renderHook(() => useListEntitiesForPolicy("arn:p"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/policies/entities?policyArn=arn%3Ap");
+  });
+
+  it("entities query disabled without arn", () => {
+    const { result } = renderHook(() => useListEntitiesForPolicy(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+
+  it("attach/detach user+role+group policies", async () => {
+    mockApi.mockResolvedValue({ attached: true });
+    const { result: attachU } = renderHook(() => useAttachUserPolicy(), { wrapper: createWrapper() });
+    await attachU.current.mutateAsync({ userName: "u1", policyArn: "arn:p" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/users/u1/policies", {
+      method: "POST",
+      body: JSON.stringify({ policyArn: "arn:p" }),
+    });
+    const { result: detachU } = renderHook(() => useDetachUserPolicy(), { wrapper: createWrapper() });
+    await detachU.current.mutateAsync({ userName: "u1", policyArn: "arn:p" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/users/u1/policies/arn%3Ap", { method: "DELETE" });
+    const { result: attachR } = renderHook(() => useAttachRolePolicy(), { wrapper: createWrapper() });
+    await attachR.current.mutateAsync({ roleName: "r1", policyArn: "arn:p" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/roles/r1/policies", {
+      method: "POST",
+      body: JSON.stringify({ policyArn: "arn:p" }),
+    });
+    const { result: detachR } = renderHook(() => useDetachRolePolicy(), { wrapper: createWrapper() });
+    await detachR.current.mutateAsync({ roleName: "r1", policyArn: "arn:p" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/roles/r1/policies/arn%3Ap", { method: "DELETE" });
+    const { result: attachG } = renderHook(() => useAttachGroupPolicy(), { wrapper: createWrapper() });
+    await attachG.current.mutateAsync({ groupName: "g1", policyArn: "arn:p" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/groups/g1/policies", {
+      method: "POST",
+      body: JSON.stringify({ policyArn: "arn:p" }),
+    });
+    const { result: detachG } = renderHook(() => useDetachGroupPolicy(), { wrapper: createWrapper() });
+    await detachG.current.mutateAsync({ groupName: "g1", policyArn: "arn:p" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/groups/g1/policies/arn%3Ap", { method: "DELETE" });
+  });
+
+  it("400 when policyArn missing", async () => {
+    mockApi.mockRejectedValueOnce(new Error("policyArn is required"));
+    const { result } = renderHook(() => useAttachUserPolicy(), { wrapper: createWrapper() });
+    await expect(result.current.mutateAsync({ userName: "u1", policyArn: "" })).rejects.toThrow();
+  });
+
+  it("group attached policies query", async () => {
+    mockApi.mockResolvedValueOnce({ attachedPolicies: [{ name: "p", arn: "arn:p" }], total: 1 });
+    const { result } = renderHook(() => useListAttachedGroupPolicies("g1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+  });
+
+  it("group attached policies query disabled without group", () => {
+    const { result } = renderHook(() => useListAttachedGroupPolicies(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+
+  it("role inline policies list + get", async () => {
+    mockApi.mockResolvedValueOnce({ policyNames: ["p1"], total: 1 });
+    const { result: list } = renderHook(() => useListRoleInlinePolicies("r1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(list.current.isSuccess).toBe(true));
+    mockApi.mockResolvedValueOnce({ policyName: "p1", document: "{}" });
+    const { result: get } = renderHook(() => useGetRoleInlinePolicy("r1", "p1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(get.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/roles/r1/inline-policies/p1");
+  });
+
+  it("instance profiles + access key last used", async () => {
+    mockApi.mockResolvedValueOnce({ instanceProfile: {} });
+    const { result: ip } = renderHook(() => useInstanceProfile("ip1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(ip.current.isSuccess).toBe(true));
+    mockApi.mockResolvedValueOnce({ instanceProfiles: [], total: 0 });
+    const { result: ips } = renderHook(() => useListInstanceProfilesForRole("r1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(ips.current.isSuccess).toBe(true));
+    mockApi.mockResolvedValueOnce({ userName: "u1", lastUsedDate: null, service: "s3", region: null });
+    const { result: lu } = renderHook(() => useAccessKeyLastUsed("u1", "AKIA1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(lu.current.isSuccess).toBe(true));
+  });
+
+  it("account aliases + summary", async () => {
+    mockApi.mockResolvedValueOnce({ aliases: ["a"], total: 1 });
+    const { result: aliases } = renderHook(() => useAccountAliases(), { wrapper: createWrapper() });
+    await waitFor(() => expect(aliases.current.isSuccess).toBe(true));
+    mockApi.mockResolvedValueOnce({ created: true });
+    const { result: createR } = renderHook(() => useCreateAccountAlias(), { wrapper: createWrapper() });
+    await createR.current.mutateAsync("a2");
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/account/aliases", {
+      method: "POST",
+      body: JSON.stringify({ alias: "a2" }),
+    });
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result: delR } = renderHook(() => useDeleteAccountAlias(), { wrapper: createWrapper() });
+    await delR.current.mutateAsync("a2");
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/account/aliases/a2", { method: "DELETE" });
+    mockApi.mockResolvedValueOnce({ summary: { Users: 1 } });
+    const { result: summary } = renderHook(() => useAccountSummary(), { wrapper: createWrapper() });
+    await waitFor(() => expect(summary.current.isSuccess).toBe(true));
+  });
+
+  it("OIDC provider hooks", async () => {
+    mockApi.mockResolvedValueOnce({ providers: ["arn:o"], total: 1 });
+    const { result: list } = renderHook(() => useOIDCProviders(), { wrapper: createWrapper() });
+    await waitFor(() => expect(list.current.isSuccess).toBe(true));
+    mockApi.mockResolvedValueOnce({ url: "https://idp", clientIds: ["c"], thumbprints: ["t"], createDate: null });
+    const { result: getR } = renderHook(() => useOIDCProvider("arn:o"), { wrapper: createWrapper() });
+    await waitFor(() => expect(getR.current.isSuccess).toBe(true));
+    mockApi.mockResolvedValueOnce({ openIdConnectProviderArn: "arn:o" });
+    const { result: createR } = renderHook(() => useCreateOIDCProvider(), { wrapper: createWrapper() });
+    await createR.current.mutateAsync({ url: "https://idp" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/oidc-providers", {
+      method: "POST",
+      body: JSON.stringify({ url: "https://idp" }),
+    });
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result: delR } = renderHook(() => useDeleteOIDCProvider(), { wrapper: createWrapper() });
+    await delR.current.mutateAsync("arn:o");
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/oidc-providers/arn%3Ao", { method: "DELETE" });
+    mockApi.mockResolvedValueOnce({ added: true });
+    const { result: addId } = renderHook(() => useAddOIDCClientId("arn:o"), { wrapper: createWrapper() });
+    await addId.current.mutateAsync("c2");
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/oidc-providers/arn%3Ao/client-ids", {
+      method: "POST",
+      body: JSON.stringify({ clientId: "c2" }),
+    });
+    mockApi.mockResolvedValueOnce({ removed: true });
+    const { result: remId } = renderHook(() => useRemoveOIDCClientId("arn:o"), { wrapper: createWrapper() });
+    await remId.current.mutateAsync("c2");
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/oidc-providers/arn%3Ao/client-ids/c2", { method: "DELETE" });
+    mockApi.mockResolvedValueOnce({ updated: true });
+    const { result: thumb } = renderHook(() => useUpdateOIDCThumbprint("arn:o"), { wrapper: createWrapper() });
+    await thumb.current.mutateAsync(["tp"]);
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/oidc-providers/arn%3Ao/thumbprint", {
+      method: "PUT",
+      body: JSON.stringify({ thumbprints: ["tp"] }),
+    });
+  });
+
+  it("OIDC provider query disabled without arn", () => {
+    const { result } = renderHook(() => useOIDCProvider(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+
+  it("login profile query", async () => {
+    mockApi.mockResolvedValueOnce({ userName: "u1", createdAt: null });
+    const { result } = renderHook(() => useLoginProfile("u1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+  });
+});
+

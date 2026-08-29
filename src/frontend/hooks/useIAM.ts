@@ -424,3 +424,295 @@ export function useSimulatePolicy() {
       api("/aws/iam/simulate", { method: "POST", body: JSON.stringify(body) }),
   });
 }
+
+// ─── P1 gap audit — users/roles updates ─────────────────
+export function useUpdateUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, ...body }: { name: string; newName?: string; newPath?: string }) =>
+      api(`/aws/iam/users/${name}`, { method: "PUT", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam"] }),
+  });
+}
+
+export function useUpdateRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, ...body }: { name: string; description?: string; maxSessionDuration?: number }) =>
+      api(`/aws/iam/roles/${name}`, { method: "PUT", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam"] }),
+  });
+}
+
+// ─── Service-linked roles ────────────────────────────────
+export function useCreateServiceLinkedRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { roleName: string; awsServiceName?: string; description?: string }) =>
+      api("/aws/iam/roles/service-linked", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam", "roles"] }),
+  });
+}
+
+export function useDeleteServiceLinkedRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (roleName: string) =>
+      api(`/aws/iam/roles/service-linked/${roleName}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam", "roles"] }),
+  });
+}
+
+export function useServiceLinkedRoleDeletionStatus(roleName: string | null) {
+  return useQuery<{ status: string | null; reason: string | null; roleName: string }>({
+    queryKey: ["aws", "iam", "service-linked-deletion", roleName],
+    queryFn: () => api(`/aws/iam/roles/service-linked/${roleName}/deletion-status`),
+    enabled: !!roleName,
+  });
+}
+
+// ─── Policy entities + versions ──────────────────────────
+export function useListEntitiesForPolicy(policyArn: string | null) {
+  return useQuery<{ policyUsers: string[]; policyRoles: string[]; policyGroups: string[]; total: number }>({
+    queryKey: ["aws", "iam", "policy-entities", policyArn],
+    queryFn: () => api(`/aws/iam/policies/entities?policyArn=${encodeURIComponent(policyArn!)}`),
+    enabled: !!policyArn,
+  });
+}
+
+export function useCreatePolicyVersion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ arn, document, setAsDefault }: { arn: string; document: string; setAsDefault?: boolean }) =>
+      api(`/aws/iam/policies/${encodeURIComponent(arn)}/versions`, {
+        method: "POST",
+        body: JSON.stringify({ document, setAsDefault }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam"] }),
+  });
+}
+
+export function useDeletePolicyVersion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ arn, versionId }: { arn: string; versionId: string }) =>
+      api(`/aws/iam/policies/${encodeURIComponent(arn)}/versions/${versionId}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam"] }),
+  });
+}
+
+// ─── Managed policy attachments ──────────────────────────
+export function useAttachUserPolicy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userName, policyArn }: { userName: string; policyArn: string }) =>
+      api(`/aws/iam/users/${userName}/policies`, { method: "POST", body: JSON.stringify({ policyArn }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam"] }),
+  });
+}
+
+export function useDetachUserPolicy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userName, policyArn }: { userName: string; policyArn: string }) =>
+      api(`/aws/iam/users/${userName}/policies/${encodeURIComponent(policyArn)}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam"] }),
+  });
+}
+
+export function useAttachRolePolicy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ roleName, policyArn }: { roleName: string; policyArn: string }) =>
+      api(`/aws/iam/roles/${roleName}/policies`, { method: "POST", body: JSON.stringify({ policyArn }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam"] }),
+  });
+}
+
+export function useDetachRolePolicy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ roleName, policyArn }: { roleName: string; policyArn: string }) =>
+      api(`/aws/iam/roles/${roleName}/policies/${encodeURIComponent(policyArn)}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam"] }),
+  });
+}
+
+export function useAttachGroupPolicy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupName, policyArn }: { groupName: string; policyArn: string }) =>
+      api(`/aws/iam/groups/${groupName}/policies`, { method: "POST", body: JSON.stringify({ policyArn }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam"] }),
+  });
+}
+
+export function useDetachGroupPolicy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupName, policyArn }: { groupName: string; policyArn: string }) =>
+      api(`/aws/iam/groups/${groupName}/policies/${encodeURIComponent(policyArn)}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam"] }),
+  });
+}
+
+export function useListAttachedGroupPolicies(groupName: string | null) {
+  return useQuery<{ attachedPolicies: Array<{ name: string; arn: string }>; total: number }>({
+    queryKey: ["aws", "iam", "group-attached", groupName],
+    queryFn: () => api(`/aws/iam/groups/${groupName}/policies`),
+    enabled: !!groupName,
+  });
+}
+
+// ─── Role inline policies ────────────────────────────────
+export function useListRoleInlinePolicies(roleName: string | null) {
+  return useQuery<{ policyNames: string[]; total: number }>({
+    queryKey: ["aws", "iam", "role-inline", roleName],
+    queryFn: () => api(`/aws/iam/roles/${roleName}/inline-policies`),
+    enabled: !!roleName,
+  });
+}
+
+export function useGetRoleInlinePolicy(roleName: string | null, policyName: string | null) {
+  return useQuery<{ policyName: string; document: string | null }>({
+    queryKey: ["aws", "iam", "role-inline", roleName, policyName],
+    queryFn: () => api(`/aws/iam/roles/${roleName}/inline-policies/${encodeURIComponent(policyName!)}`),
+    enabled: !!roleName && !!policyName,
+  });
+}
+
+// ─── Instance profiles + access keys ─────────────────────
+export function useInstanceProfile(name: string | null) {
+  return useQuery<{ instanceProfile: unknown }>({
+    queryKey: ["aws", "iam", "instance-profile", name],
+    queryFn: () => api(`/aws/iam/instance-profiles/${name}`),
+    enabled: !!name,
+  });
+}
+
+export function useListInstanceProfilesForRole(roleName: string | null) {
+  return useQuery<{ instanceProfiles: Array<{ name: string; arn: string }>; total: number }>({
+    queryKey: ["aws", "iam", "role-instance-profiles", roleName],
+    queryFn: () => api(`/aws/iam/roles/${roleName}/instance-profiles`),
+    enabled: !!roleName,
+  });
+}
+
+export function useAccessKeyLastUsed(userName: string | null, keyId: string | null) {
+  return useQuery<{ userName: string | null; lastUsedDate: string | null; service: string | null; region: string | null }>({
+    queryKey: ["aws", "iam", "access-key-last-used", userName, keyId],
+    queryFn: () => api(`/aws/iam/users/${userName}/access-keys/${keyId}/last-used`),
+    enabled: !!userName && !!keyId,
+  });
+}
+
+// ─── Account aliases + summary ───────────────────────────
+export function useAccountAliases() {
+  return useQuery<{ aliases: string[]; total: number }>({
+    queryKey: ["aws", "iam", "account-aliases"],
+    queryFn: () => api("/aws/iam/account/aliases"),
+  });
+}
+
+export function useCreateAccountAlias() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (alias: string) =>
+      api("/aws/iam/account/aliases", { method: "POST", body: JSON.stringify({ alias }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam", "account-aliases"] }),
+  });
+}
+
+export function useDeleteAccountAlias() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (alias: string) =>
+      api(`/aws/iam/account/aliases/${alias}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam", "account-aliases"] }),
+  });
+}
+
+export function useAccountSummary() {
+  return useQuery<{ summary: Record<string, number> }>({
+    queryKey: ["aws", "iam", "account-summary"],
+    queryFn: () => api("/aws/iam/account/summary"),
+  });
+}
+
+// ─── OIDC providers ──────────────────────────────────────
+export function useOIDCProviders() {
+  return useQuery<{ providers: string[]; total: number }>({
+    queryKey: ["aws", "iam", "oidc-providers"],
+    queryFn: () => api("/aws/iam/oidc-providers"),
+  });
+}
+
+export function useOIDCProvider(arn: string | null) {
+  return useQuery<{ url: string | null; clientIds: string[]; thumbprints: string[]; createDate: string | null }>({
+    queryKey: ["aws", "iam", "oidc-provider", arn],
+    queryFn: () => api(`/aws/iam/oidc-providers/${encodeURIComponent(arn!)}`),
+    enabled: !!arn,
+  });
+}
+
+export function useCreateOIDCProvider() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { url: string; clientIds?: string[]; thumbprints?: string[] }) =>
+      api("/aws/iam/oidc-providers", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam", "oidc-providers"] }),
+  });
+}
+
+export function useDeleteOIDCProvider() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (arn: string) =>
+      api(`/aws/iam/oidc-providers/${encodeURIComponent(arn)}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam", "oidc-providers"] }),
+  });
+}
+
+export function useAddOIDCClientId(arn: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (clientId: string) =>
+      api(`/aws/iam/oidc-providers/${encodeURIComponent(arn)}/client-ids`, {
+        method: "POST",
+        body: JSON.stringify({ clientId }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam", "oidc-provider", arn] }),
+  });
+}
+
+export function useRemoveOIDCClientId(arn: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (clientId: string) =>
+      api(`/aws/iam/oidc-providers/${encodeURIComponent(arn)}/client-ids/${encodeURIComponent(clientId)}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam", "oidc-provider", arn] }),
+  });
+}
+
+export function useUpdateOIDCThumbprint(arn: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (thumbprints: string[]) =>
+      api(`/aws/iam/oidc-providers/${encodeURIComponent(arn)}/thumbprint`, {
+        method: "PUT",
+        body: JSON.stringify({ thumbprints }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam", "oidc-provider", arn] }),
+  });
+}
+
+// ─── Login profile ───────────────────────────────────────
+export function useLoginProfile(userName: string | null) {
+  return useQuery<{ userName: string | null; createdAt: string | null; loginProfile?: null }>({
+    queryKey: ["aws", "iam", "login-profile", userName],
+    queryFn: () => api(`/aws/iam/users/${userName}/login-profile`),
+    enabled: !!userName,
+  });
+}

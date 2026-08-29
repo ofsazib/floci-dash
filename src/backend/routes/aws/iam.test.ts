@@ -83,6 +83,31 @@ vi.mock("@aws-sdk/client-iam", () => ({
   DeleteRolePolicyCommand: createCmd("DeleteRolePolicyCommand"),
   UpdateAssumeRolePolicyCommand: createCmd("UpdateAssumeRolePolicyCommand"),
   SimulatePrincipalPolicyCommand: createCmd("SimulatePrincipalPolicyCommand"),
+  UpdateRoleCommand: createCmd("UpdateRoleCommand"),
+  ListAttachedGroupPoliciesCommand: createCmd("ListAttachedGroupPoliciesCommand"),
+  AttachGroupPolicyCommand: createCmd("AttachGroupPolicyCommand"),
+  DetachGroupPolicyCommand: createCmd("DetachGroupPolicyCommand"),
+  ListEntitiesForPolicyCommand: createCmd("ListEntitiesForPolicyCommand"),
+  CreateServiceLinkedRoleCommand: createCmd("CreateServiceLinkedRoleCommand"),
+  DeleteServiceLinkedRoleCommand: createCmd("DeleteServiceLinkedRoleCommand"),
+  GetServiceLinkedRoleDeletionStatusCommand: createCmd("GetServiceLinkedRoleDeletionStatusCommand"),
+  ListRolePoliciesCommand: createCmd("ListRolePoliciesCommand"),
+  GetRolePolicyCommand: createCmd("GetRolePolicyCommand"),
+  GetInstanceProfileCommand: createCmd("GetInstanceProfileCommand"),
+  ListInstanceProfilesForRoleCommand: createCmd("ListInstanceProfilesForRoleCommand"),
+  GetAccessKeyLastUsedCommand: createCmd("GetAccessKeyLastUsedCommand"),
+  CreateAccountAliasCommand: createCmd("CreateAccountAliasCommand"),
+  DeleteAccountAliasCommand: createCmd("DeleteAccountAliasCommand"),
+  ListAccountAliasesCommand: createCmd("ListAccountAliasesCommand"),
+  GetAccountSummaryCommand: createCmd("GetAccountSummaryCommand"),
+  CreateOpenIDConnectProviderCommand: createCmd("CreateOpenIDConnectProviderCommand"),
+  DeleteOpenIDConnectProviderCommand: createCmd("DeleteOpenIDConnectProviderCommand"),
+  UpdateOpenIDConnectProviderThumbprintCommand: createCmd("UpdateOpenIDConnectProviderThumbprintCommand"),
+  GetOpenIDConnectProviderCommand: createCmd("GetOpenIDConnectProviderCommand"),
+  ListOpenIDConnectProvidersCommand: createCmd("ListOpenIDConnectProvidersCommand"),
+  AddClientIDToOpenIDConnectProviderCommand: createCmd("AddClientIDToOpenIDConnectProviderCommand"),
+  RemoveClientIDFromOpenIDConnectProviderCommand: createCmd("RemoveClientIDFromOpenIDConnectProviderCommand"),
+  GetLoginProfileCommand: createCmd("GetLoginProfileCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -1200,6 +1225,302 @@ describe("IAM Routes", () => {
     it("POST /simulate — 400 without actionNames", async () => {
       const res = await post("/simulate", { policySourceArn: "arn:x" });
       expect(res.status).toBe(400);
+    });
+  });
+
+  // ─── P1 gap audit — new routes ─────────────────────────────
+
+  describe("PUT /users/:name — UpdateUser", () => {
+    it("renames a user", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/users/old-name", { newName: "new-name" });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0]).toMatchObject({ __cmdName: "UpdateUserCommand", UserName: "old-name", NewUserName: "new-name" });
+    });
+    it("400 without newName/newPath", async () => {
+      const res = await put("/users/old-name", {});
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe("PUT /roles/:name — UpdateRole", () => {
+    it("updates description", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/roles/my-role", { description: "new desc", maxSessionDuration: 3600 });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0]).toMatchObject({ __cmdName: "UpdateRoleCommand", RoleName: "my-role", Description: "new desc" });
+    });
+    it("skips SDK call when description missing", async () => {
+      const res = await put("/roles/my-role", { maxSessionDuration: 900 });
+      expect(res.status).toBe(200);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("Service-linked roles", () => {
+    it("POST /roles/service-linked creates", async () => {
+      mockSend.mockResolvedValueOnce({ Role: { RoleName: "slr", Arn: "arn:slr" } });
+      const res = await post("/roles/service-linked", { roleName: "ecs.amazonaws.com" });
+      expect(res.status).toBe(201);
+      expect(mockSend.mock.calls[0][0].AWSServiceName).toBe("ecs.amazonaws.com");
+      expect((await res.json()).role.name).toBe("slr");
+    });
+    it("400 without roleName", async () => {
+      expect((await post("/roles/service-linked", {})).status).toBe(400);
+    });
+    it("DELETE /roles/service-linked/:roleName returns deletion task", async () => {
+      mockSend.mockResolvedValueOnce({ DeletionTaskId: "task-1" });
+      const res = await del("/roles/service-linked/slr");
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ deleted: true, deletionTaskId: "task-1" });
+    });
+    it("GET deletion-status", async () => {
+      mockSend.mockResolvedValueOnce({ Status: "SUCCEEDED" });
+      const res = await get("/roles/service-linked/slr/deletion-status");
+      expect(res.status).toBe(200);
+      expect((await res.json()).status).toBe("SUCCEEDED");
+    });
+    it("GET deletion-status — sparse result defaults", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/roles/service-linked/slr/deletion-status");
+      expect(await res.json()).toEqual({ status: null, reason: null, roleName: "slr" });
+    });
+  });
+
+  describe("GET /policies/entities — ListEntitiesForPolicy", () => {
+    it("returns entity lists", async () => {
+      mockSend.mockResolvedValueOnce({
+        PolicyUsers: [{ UserName: "u1" }],
+        PolicyRoles: [{ RoleName: "r1" }],
+        PolicyGroups: [{ GroupName: "g1" }],
+      });
+      const res = await get("/policies/entities?policyArn=arn%3Ap");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body).toEqual({ policyUsers: ["u1"], policyRoles: ["r1"], policyGroups: ["g1"], total: 3 });
+      expect(mockSend.mock.calls[0][0].PolicyArn).toBe("arn:p");
+    });
+    it("400 without policyArn", async () => {
+      expect((await get("/policies/entities")).status).toBe(400);
+    });
+  });
+
+  describe("Policy versions", () => {
+    it("POST /policies/:arn/versions creates", async () => {
+      mockSend.mockResolvedValueOnce({ PolicyVersion: { VersionId: "v2", IsDefaultVersion: true } });
+      const res = await post(`/policies/${encodeURIComponent("arn:p")}/versions`, { document: '{"V":1}', setAsDefault: true });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.versionId).toBe("v2");
+      expect(body.isDefaultVersion).toBe(true);
+    });
+    it("400 without document", async () => {
+      const res = await post(`/policies/${encodeURIComponent("arn:p")}/versions`, {});
+      expect(res.status).toBe(400);
+    });
+    it("DELETE /policies/:arn/versions/:versionId", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del(`/policies/${encodeURIComponent("arn:p")}/versions/v1`);
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0]).toMatchObject({ __cmdName: "DeletePolicyVersionCommand", PolicyArn: "arn:p", VersionId: "v1" });
+    });
+  });
+
+  describe("Managed policy attachments", () => {
+    it("attach + detach user policy", async () => {
+      mockSend.mockResolvedValue({});
+      expect((await post("/users/u1/policies", { policyArn: "arn:p" })).status).toBe(200);
+      expect(mockSend.mock.calls[0][0]).toMatchObject({ __cmdName: "AttachUserPolicyCommand", UserName: "u1", PolicyArn: "arn:p" });
+      expect((await del("/users/u1/policies/arn%3Ap")).status).toBe(200);
+      expect(mockSend.mock.calls[1][0]).toMatchObject({ __cmdName: "DetachUserPolicyCommand", PolicyArn: "arn:p" });
+    });
+    it("attach + detach role policy", async () => {
+      mockSend.mockResolvedValue({});
+      expect((await post("/roles/r1/policies", { policyArn: "arn:p" })).status).toBe(200);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("AttachRolePolicyCommand");
+      expect((await del("/roles/r1/policies/arn%3Ap")).status).toBe(200);
+      expect(mockSend.mock.calls[1][0].__cmdName).toBe("DetachRolePolicyCommand");
+    });
+    it("attach + detach + list group policies", async () => {
+      mockSend
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({ AttachedPolicies: [{ PolicyName: "p", PolicyArn: "arn:p" }] });
+      expect((await post("/groups/g1/policies", { policyArn: "arn:p" })).status).toBe(200);
+      expect((await del("/groups/g1/policies/arn%3Ap")).status).toBe(200);
+      const res = await get("/groups/g1/policies");
+      const body = await res.json();
+      expect(body.attachedPolicies).toHaveLength(1);
+      expect(body.total).toBe(1);
+      expect(mockSend.mock.calls[2][0].__cmdName).toBe("ListAttachedGroupPoliciesCommand");
+    });
+    it("400 when policyArn missing", async () => {
+      expect((await post("/users/u1/policies", {})).status).toBe(400);
+    });
+  });
+
+  describe("Role inline policies", () => {
+    it("lists policy names", async () => {
+      mockSend.mockResolvedValueOnce({ PolicyNames: ["inline-1"] });
+      const res = await get("/roles/r1/inline-policies");
+      expect(await res.json()).toEqual({ policyNames: ["inline-1"], total: 1 });
+    });
+    it("gets one decoded document", async () => {
+      mockSend.mockResolvedValueOnce({ PolicyName: "inline-1", PolicyDocument: encodeURIComponent('{"V":1}') });
+      const res = await get("/roles/r1/inline-policies/inline-1");
+      const body = await res.json();
+      expect(body.document).toBe('{"V":1}');
+    });
+  });
+
+  describe("Instance profiles + access keys", () => {
+    it("GET /instance-profiles/:name", async () => {
+      mockSend.mockResolvedValueOnce({ InstanceProfile: { InstanceProfileName: "ip1" } });
+      const res = await get("/instance-profiles/ip1");
+      expect((await res.json()).instanceProfile.InstanceProfileName).toBe("ip1");
+    });
+    it("GET /roles/:name/instance-profiles", async () => {
+      mockSend.mockResolvedValueOnce({ InstanceProfiles: [{ InstanceProfileName: "ip1", InstanceProfileArn: "arn:ip" }] });
+      const res = await get("/roles/r1/instance-profiles");
+      expect(await res.json()).toEqual({ instanceProfiles: [{ name: "ip1", arn: "arn:ip" }], total: 1 });
+    });
+    it("GET last-used via nested AccessKeyLastUsed", async () => {
+      mockSend.mockResolvedValueOnce({ UserName: "u1", AccessKeyLastUsed: { LastUsedDate: new Date("2026-01-01"), ServiceName: "s3", Region: "us-east-1" } });
+      const res = await get("/users/u1/access-keys/AKIA1/last-used");
+      const body = await res.json();
+      expect(body.service).toBe("s3");
+      expect(body.userName).toBe("u1");
+    });
+  });
+
+  describe("Account aliases + summary", () => {
+    it("POST/GET/DELETE aliases", async () => {
+      mockSend.mockResolvedValue({});
+      expect((await post("/account/aliases", { alias: "my-alias" })).status).toBe(201);
+      expect(mockSend.mock.calls[0][0].AccountAlias).toBe("my-alias");
+      const res = await get("/account/aliases");
+      expect(await res.json()).toEqual({ aliases: [], total: 0 });
+      expect((await del("/account/aliases/my-alias")).status).toBe(200);
+    });
+    it("400 without alias", async () => {
+      expect((await post("/account/aliases", {})).status).toBe(400);
+    });
+    it("GET /account/summary", async () => {
+      mockSend.mockResolvedValueOnce({ SummaryMap: { Users: 3 } });
+      const res = await get("/account/summary");
+      expect(await res.json()).toEqual({ summary: { Users: 3 } });
+    });
+  });
+
+  describe("OIDC providers", () => {
+    it("POST creates", async () => {
+      mockSend.mockResolvedValueOnce({ OpenIDConnectProviderArn: "arn:oidc" });
+      const res = await post("/oidc-providers", { url: "https://idp.example.com", clientIds: ["c1"], thumbprints: ["tp"] });
+      expect(res.status).toBe(201);
+      expect((await res.json()).openIdConnectProviderArn).toBe("arn:oidc");
+    });
+    it("400 without url", async () => {
+      expect((await post("/oidc-providers", {})).status).toBe(400);
+    });
+    it("GET list + single + delete + client ids + thumbprint", async () => {
+      mockSend
+        .mockResolvedValueOnce({ OpenIDConnectProviderList: [{ Arn: "arn:oidc" }] })
+        .mockResolvedValueOnce({ Url: "https://idp", ClientIDList: ["c1"], ThumbprintList: ["tp"], CreateDate: new Date("2026-01-01") })
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({});
+      const list = await get("/oidc-providers");
+      expect(await list.json()).toEqual({ providers: ["arn:oidc"], total: 1 });
+      const one = await get(`/oidc-providers/${encodeURIComponent("arn:oidc")}`);
+      const body = await one.json();
+      expect(body.url).toBe("https://idp");
+      expect(body.clientIds).toEqual(["c1"]);
+      expect((await post(`/oidc-providers/${encodeURIComponent("arn:oidc")}/client-ids`, { clientId: "c2" })).status).toBe(200);
+      expect((await del(`/oidc-providers/${encodeURIComponent("arn:oidc")}/client-ids/c2`)).status).toBe(200);
+      expect((await put(`/oidc-providers/${encodeURIComponent("arn:oidc")}/thumbprint`, { thumbprints: ["tp2"] })).status).toBe(200);
+      expect(mockSend.mock.calls[2][0].__cmdName).toBe("AddClientIDToOpenIDConnectProviderCommand");
+      expect(mockSend.mock.calls[3][0].__cmdName).toBe("RemoveClientIDFromOpenIDConnectProviderCommand");
+      expect(mockSend.mock.calls[4][0].__cmdName).toBe("UpdateOpenIDConnectProviderThumbprintCommand");
+    });
+    it("DELETE provider", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del(`/oidc-providers/${encodeURIComponent("arn:oidc")}`);
+      expect(res.status).toBe(200);
+    });
+    it("thumbprint 400 without thumbprints", async () => {
+      expect((await put(`/oidc-providers/${encodeURIComponent("arn:o")}/thumbprint`, {})).status).toBe(400);
+    });
+    it("client-id 400 without clientId", async () => {
+      expect((await post(`/oidc-providers/${encodeURIComponent("arn:o")}/client-ids`, {})).status).toBe(400);
+    });
+  });
+
+  describe("sparse response defaults (P1 routes)", () => {
+    it("handles empty SDK responses across routes", async () => {
+      mockSend.mockResolvedValue({});
+      // slr create with no Role
+      expect((await post("/roles/service-linked", { roleName: "x" })).status).toBe(201);
+      // policy version sparse
+      expect((await post(`/policies/${encodeURIComponent("arn:p")}/versions`, { document: "{}" })).status).toBe(201);
+      // role attach / group attach missing policyArn -> 400
+      expect((await post("/roles/r1/policies", {})).status).toBe(400);
+      expect((await post("/groups/g1/policies", {})).status).toBe(400);
+      // group attached policies sparse
+      const grp = await get("/groups/g1/policies");
+      expect(await grp.json()).toEqual({ attachedPolicies: [], total: 0 });
+      // role inline list sparse
+      const inline = await get("/roles/r1/inline-policies");
+      expect(await inline.json()).toEqual({ policyNames: [], total: 0 });
+      // role inline get sparse -> null document
+      mockSend.mockResolvedValueOnce({});
+      const inlineDoc = await get("/roles/r1/inline-policies/p1");
+      expect((await inlineDoc.json()).document).toBeNull();
+      // instance profile sparse
+      const ip = await get("/instance-profiles/ip1");
+      expect((await ip.json()).instanceProfile).toBeNull();
+      // role instance profiles sparse
+      const rip = await get("/roles/r1/instance-profiles");
+      expect(await rip.json()).toEqual({ instanceProfiles: [], total: 0 });
+      // access key last used sparse
+      const lu = await get("/users/u1/access-keys/AKIA/last-used");
+      expect(await lu.json()).toEqual({ userName: null, lastUsedDate: null, service: null, region: null });
+      // account summary sparse
+      const summary = await get("/account/summary");
+      expect(await summary.json()).toEqual({ summary: {} });
+      // slr delete sparse — no DeletionTaskId
+      const slrDel = await del("/roles/service-linked/slr2");
+      expect((await slrDel.json()).deletionTaskId).toBeNull();
+      // entities sparse — empty lists default
+      const ent = await get("/policies/entities?policyArn=arn%3Ap");
+      expect(await ent.json()).toEqual({ policyUsers: [], policyRoles: [], policyGroups: [], total: 0 });
+      // oidc list sparse
+      const list = await get("/oidc-providers");
+      expect(await list.json()).toEqual({ providers: [], total: 0 });
+      // oidc get sparse
+      const one = await get(`/oidc-providers/${encodeURIComponent("arn:o")}`);
+      expect(await one.json()).toEqual({ url: null, clientIds: [], thumbprints: [], createDate: null });
+      // login profile sparse — falls back to path userName
+      const lp = await get("/users/u1/login-profile");
+      expect((await lp.json()).userName).toBe("u1");
+    });
+  });
+
+  describe("GET /users/:name/login-profile", () => {
+    it("returns profile", async () => {
+      mockSend.mockResolvedValueOnce({ LoginProfile: { UserName: "u1", CreateDate: new Date("2026-01-01") } });
+      const res = await get("/users/u1/login-profile");
+      expect((await res.json()).userName).toBe("u1");
+    });
+    it("returns null on NoSuchEntityException", async () => {
+      mockSend.mockRejectedValueOnce(Object.assign(new Error("nope"), { name: "NoSuchEntityException" }));
+      const res = await get("/users/u1/login-profile");
+      expect(await res.json()).toEqual({ loginProfile: null });
+    });
+    it("rethrows non-404 errors", async () => {
+      mockSend.mockRejectedValueOnce(Object.assign(new Error("boom"), { $metadata: { httpStatusCode: 500 } }));
+      const res = await get("/users/u1/login-profile");
+      expect(res.status).toBe(500);
     });
   });
 });
