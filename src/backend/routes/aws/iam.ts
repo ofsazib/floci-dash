@@ -98,6 +98,10 @@ import {
   DeleteAccountAliasCommand,
   ListAccountAliasesCommand,
   GetAccountSummaryCommand,
+  // P1 — MFA, SAML, server certs
+  ListMFADevicesCommand,
+  ListSAMLProvidersCommand,
+  ListServerCertificatesCommand,
   // P1 — OIDC providers
   CreateOpenIDConnectProviderCommand,
   DeleteOpenIDConnectProviderCommand,
@@ -1069,3 +1073,24 @@ router.get("/users/:name/login-profile", async (c: Context) => {
 });
 
 export default router;
+// ── MFA Devices ──────────────────────────────────────────
+
+router.get("/users/:name/mfa-devices", async (c: Context) => {
+  const userName = c.req.param("name")!;
+  const result = await iam().send(new ListMFADevicesCommand({ UserName: userName }));
+  return c.json({ mfaDevices: result.MFADevices || [] });
+});
+
+// ── SAML Providers ───────────────────────────────────────
+
+router.get("/saml-providers", async (c: Context) => {
+  const result = await iam().send(new ListSAMLProvidersCommand({}));
+  return c.json({ samlProviders: result.SAMLProviderList || [] });
+});
+
+// ── Server Certificates ──────────────────────────────────
+
+router.get("/server-certificates", async (c: Context) => {
+  const result = await iam().send(new ListServerCertificatesCommand({}));
+  return c.json({ serverCertificates: result.ServerCertificateMetadataList || [] });
+});
