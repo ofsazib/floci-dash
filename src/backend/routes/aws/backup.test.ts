@@ -41,6 +41,7 @@ vi.mock("@aws-sdk/client-backup", () => ({
   ListRecoveryPointsByBackupVaultCommand: createCmd("ListRecoveryPointsByBackupVaultCommand"),
   DescribeRecoveryPointCommand: createCmd("DescribeRecoveryPointCommand"),
   DeleteRecoveryPointCommand: createCmd("DeleteRecoveryPointCommand"),
+  GetSupportedResourceTypesCommand: createCmd("GetSupportedResourceTypesCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -430,5 +431,27 @@ describe("Backup routes — Tags", () => {
       expect((await res.json()).deleted).toBe(true);
       expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteRecoveryPointCommand");
     });
+  });
+});
+
+// ─── P1 gap audit ─────────────────────────────────────────
+
+describe("Backup P1 extras", () => {
+  it("updates plan", async () => {
+    mockSend.mockResolvedValueOnce({ BackupPlanId: "bp-1", CreationDate: new Date("2026-01-01") });
+    const res = await router.request("/plans/bp-1", { method: "PUT", body: JSON.stringify({ backupPlan: { BackupPlanName: "n", Rules: [] } }), headers: { "content-type": "application/json" } });
+    expect(res.status).toBe(200);
+  });
+  it("tags + untags + 400", async () => {
+    mockSend.mockResolvedValue({});
+    expect((await router.request("/tags", { method: "POST", body: JSON.stringify({ resourceArn: "arn:x", tags: { k: "v" } }), headers: { "content-type": "application/json" } })).status).toBe(200);
+    expect((await router.request("/tags?resourceArn=arn%3Ax&tagKeys=k", { method: "DELETE" })).status).toBe(200);
+    expect((await router.request("/tags", { method: "POST", body: "{}", headers: { "content-type": "application/json" } })).status).toBe(400);
+    expect((await router.request("/tags", { method: "DELETE" })).status).toBe(400);
+  });
+  it("supported resource types", async () => {
+    mockSend.mockResolvedValueOnce({ ResourceTypes: ["S3", "DynamoDB"] });
+    const res = await router.request("/supported-resource-types");
+    expect((await res.json()).resourceTypes).toEqual(["S3", "DynamoDB"]);
   });
 });

@@ -25,6 +25,10 @@ import {
   CreateServiceCommand,
   DeleteServiceCommand,
   ListInstancesCommand,
+  DiscoverInstancesRevisionCommand,
+  ListTagsForResourceCommand,
+  TagResourceCommand,
+  UntagResourceCommand,
 } from "@aws-sdk/client-servicediscovery";
 
 const router = new Hono();
@@ -254,5 +258,43 @@ router.get("/services/:id/instances/:instanceId", async (c: Context) => {
       : null,
   });
 });
+
+
+// ── P1 gap audit ─────────────────────────────────────────
+
+router.get("/discover-instances-revision", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new DiscoverInstancesRevisionCommand({
+    NamespaceName: c.req.query("namespaceName") || "",
+    ServiceName: c.req.query("serviceName") || "",
+  }));
+  return c.json({ instancesRevision: result.InstancesRevision ?? null });
+});
+
+router.get("/resources/tags", async (c: Context) => {
+  const arn = c.req.query("arn") || "";
+  if (!arn) return c.json({ error: "arn is required" }, 400);
+  const client = getClient();
+  const result = await client.send(new ListTagsForResourceCommand({ ResourceARN: arn }));
+  return c.json({ tags: result.Tags ?? [] });
+});
+
+router.post("/resources/tags", async (c: Context) => {
+  const body = await c.req.json<{ arn: string; tags: Array<{ Key: string; Value: string }> }>();
+  if (!body.arn || !body.tags) return c.json({ error: "arn and tags are required" }, 400);
+  const client = getClient();
+  await client.send(new TagResourceCommand({ ResourceARN: body.arn, Tags: body.tags }));
+  return c.json({ tagged: true });
+});
+
+router.delete("/resources/tags", async (c: Context) => {
+  const arn = c.req.query("arn") || "";
+  const tagKeys = (c.req.query("tagKeys") || "").split(",").filter(Boolean);
+  if (!arn || !tagKeys.length) return c.json({ error: "arn and tagKeys are required" }, 400);
+  const client = getClient();
+  await client.send(new UntagResourceCommand({ ResourceARN: arn, TagKeys: tagKeys }));
+  return c.json({ untagged: true });
+});
+
 
 export default router;

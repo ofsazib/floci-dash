@@ -32,6 +32,10 @@ vi.mock("@aws-sdk/client-route-53", () => ({
   GetChangeCommand: createCmd("GetChangeCommand"),
   GetDNSSECCommand: createCmd("GetDNSSECCommand"),
   GetAccountLimitCommand: createCmd("GetAccountLimitCommand"),
+  ListHostedZonesByNameCommand: createCmd("ListHostedZonesByNameCommand"),
+  GetHostedZoneCountCommand: createCmd("GetHostedZoneCountCommand"),
+  GetHealthCheckCommand: createCmd("GetHealthCheckCommand"),
+  UpdateHealthCheckCommand: createCmd("UpdateHealthCheckCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -356,5 +360,28 @@ describe("Route53 routes — Health Checks", () => {
       expect(body.limit).toBeNull();
       expect(body.count).toBe(0);
     });
+  });
+});
+
+// ─── P1 gap audit ─────────────────────────────────────────
+
+describe("Route53 P1 extras", () => {
+  it("list hosted zones by name", async () => {
+    mockSend.mockResolvedValueOnce({ HostedZones: [{ Id: "hz-1", Name: "x.", Config: { PrivateZone: false } }], IsTruncated: false });
+    const res = await router.request("/hosted-zones-by-name?dnsName=x.");
+    const body = await res.json();
+    expect(body.total).toBe(1);
+  });
+  it("hosted zone count", async () => {
+    mockSend.mockResolvedValueOnce({ HostedZoneCount: 5 });
+    expect((await (await router.request("/hosted-zone-count")).json()).count).toBe(5);
+  });
+  it("get + update health check", async () => {
+    mockSend
+      .mockResolvedValueOnce({ HealthCheck: { Id: "h-1" } })
+      .mockResolvedValueOnce({ HealthCheck: { Id: "h-1" } });
+    expect((await router.request("/health-checks/h-1")).status).toBe(200);
+    const res = await router.request("/health-checks/h-1", { method: "PUT", body: JSON.stringify({ healthThreshold: 3 }), headers: { "content-type": "application/json" } });
+    expect(res.status).toBe(200);
   });
 });
