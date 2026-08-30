@@ -19,6 +19,10 @@ import {
   ListHealthChecksCommand,
   CreateHealthCheckCommand,
   DeleteHealthCheckCommand,
+  ListHostedZonesByNameCommand,
+  GetHostedZoneCountCommand,
+  GetHealthCheckCommand,
+  UpdateHealthCheckCommand,
 } from "@aws-sdk/client-route-53";
 
 const router = new Hono();
@@ -258,5 +262,49 @@ router.get("/account-limit/:type", async (c: Context) => {
   const result: any = await client.send(new GetAccountLimitCommand({ Type: type as any }));
   return c.json({ limit: result.AccountLimit || null, count: result.Count ?? 0 });
 });
+
+
+// ── P1 gap audit ─────────────────────────────────────────
+
+router.get("/hosted-zones-by-name", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new ListHostedZonesByNameCommand({
+    DNSName: c.req.query("dnsName"),
+    HostedZoneId: c.req.query("hostedZoneId"),
+    MaxItems: c.req.query("maxItems") ? parseInt(c.req.query("maxItems")!) : undefined,
+  }));
+  return c.json({
+    zones: (result.HostedZones || []).map((z: any) => ({ id: z.Id, name: z.Name, private: z.Config?.PrivateZone ?? false })),
+    total: (result.HostedZones || []).length,
+    dnsName: result.NextDNSName ?? null,
+    truncated: result.IsTruncated ?? false,
+  });
+});
+
+router.get("/hosted-zone-count", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new GetHostedZoneCountCommand({}));
+  return c.json({ count: result.HostedZoneCount ?? 0 });
+});
+
+router.get("/health-checks/:id", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new GetHealthCheckCommand({ HealthCheckId: c.req.param("id")! }));
+  return c.json({ healthCheck: result.HealthCheck ?? null });
+});
+
+router.put("/health-checks/:id", async (c: Context) => {
+  const body = await c.req.json<any>();
+  const client = getClient();
+  const result = await client.send(new UpdateHealthCheckCommand({
+    HealthCheckId: c.req.param("id")!,
+    HealthThreshold: body.healthThreshold,
+    FailureThreshold: body.failureThreshold,
+    ResourcePath: body.resourcePath,
+    FullyQualifiedDomainName: body.fqdn,
+  }));
+  return c.json({ healthCheck: result.HealthCheck ?? null });
+});
+
 
 export default router;

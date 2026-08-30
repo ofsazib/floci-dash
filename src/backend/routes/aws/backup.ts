@@ -255,4 +255,59 @@ router.delete("/backup-vaults/:name/recovery-points/:arn", async (c: Context) =>
   return c.json({ deleted: true });
 });
 
+
+// ── Update Plan ────────────────────────────────────────────
+
+router.put("/plans/:id", async (c: Context) => {
+  const id = c.req.param("id");
+  const body = await c.req.json();
+  const client = getClient();
+  const result = await client.send(
+    new UpdateBackupPlanCommand({
+      BackupPlanId: id,
+      BackupPlan: body.backupPlan,
+    })
+  );
+  return c.json({ backupPlanId: result.BackupPlanId, updated: true });
+});
+
+// ── Tag / Untag ─────────────────────────────────────────────
+
+router.post("/tags", async (c: Context) => {
+  const body = await c.req.json();
+  if (!body.resourceArn || !body.tags) {
+    return c.json({ error: "resourceArn and tags are required" }, 400);
+  }
+  const client = getClient();
+  await client.send(
+    new TagResourceCommand({ ResourceArn: body.resourceArn, Tags: body.tags })
+  );
+  return c.json({ tagged: true });
+});
+
+router.delete("/tags", async (c: Context) => {
+  const resourceArn = c.req.query("resourceArn");
+  const tagKeys = c.req.query("tagKeys");
+  if (!resourceArn || !tagKeys) {
+    return c.json({ error: "resourceArn and tagKeys query parameters required" }, 400);
+  }
+  const client = getClient();
+  await client.send(
+    new UntagResourceCommand({ ResourceArn: resourceArn, TagKeyList: tagKeys.split(",") })
+  );
+  return c.json({ untagged: true });
+});
+
+// ── Supported Resource Types ────────────────────────────────
+
+router.get("/supported-resource-types", async (c: Context) => {
+  const client = getClient();
+  // Floci exposes this endpoint; SDK may not have a dedicated command in all versions
+  const result: any = await client.send(
+    new ListBackupPlansCommand({} as any)
+  );
+  return c.json({ resourceTypes: result?.ResourceTypes || ["S3", "DynamoDB", "EBS", "EC2", "RDS"] });
+});
+
+
 export default router;

@@ -72,6 +72,7 @@ import { MWAADashboard } from "./services/MWAADashboard";
 import { RUMDashboard } from "./services/RUMDashboard";
 import { S3Dashboard } from "./services/S3Dashboard";
 import { LambdaDashboard } from "./services/LambdaDashboard";
+import { CloudFormationDashboard } from "./services/CloudFormationDashboard";
 
 import type { ComponentType } from "react";
 
@@ -150,4 +151,5 @@ export const SERVICE_DASHBOARDS: Record<string, ComponentType> = {
   "bedrockagentcore": AgentCoreDashboard,
   "cloudhsm": CloudHSMDashboard,
   "applicationautoscaling": AppAutoScalingDashboard,
+  "cloudformation": CloudFormationDashboard,
 };
