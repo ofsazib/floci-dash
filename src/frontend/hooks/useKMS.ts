@@ -156,3 +156,42 @@ export function useRotateKeyOnDemand() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "kms", "keys"] }),
   });
 }
+
+// ─── P1 gap audit — KMS extras ───────────────────────────
+export function useKMSKeyPolicies(keyId: string | null) {
+  return useQuery<{ policyNames: string[]; truncate: boolean }>({
+    queryKey: ["aws", "kms", "key-policies", keyId],
+    queryFn: () => api(`/aws/kms/keys/${keyId}/policies`),
+    enabled: !!keyId,
+  });
+}
+
+export function useKMSRetirableGrants() {
+  return useMutation({
+    mutationFn: (body: { retiringPrincipal: string; limit?: number; marker?: string }) =>
+      api("/aws/kms/keys/retirable", { method: "POST", body: JSON.stringify(body) }),
+  });
+}
+
+export function useKMSReEncrypt(keyId: string) {
+  return useMutation({
+    mutationFn: (body: { ciphertextBlob: string; destinationKeyId: string; sourceEncryptionContext?: Record<string, string> }) =>
+      api(`/aws/kms/keys/${keyId}/re-encrypt`, { method: "POST", body: JSON.stringify(body) }),
+  });
+}
+
+export function useKMSGenerateDataKeyNoPlaintext(keyId: string) {
+  return useMutation({
+    mutationFn: (body: { keySpec?: string; numberOfBytes?: number }) =>
+      api(`/aws/kms/keys/${keyId}/data-key-plaintext-free`, { method: "POST", body: JSON.stringify(body) }),
+  });
+}
+
+export function useKMSUpdateAlias() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ aliasName, targetKeyId }: { aliasName: string; targetKeyId: string }) =>
+      api(`/aws/kms/aliases/${encodeURIComponent(aliasName)}`, { method: "PUT", body: JSON.stringify({ targetKeyId }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "kms", "aliases"] }),
+  });
+}

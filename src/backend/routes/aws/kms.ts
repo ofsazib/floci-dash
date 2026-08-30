@@ -25,6 +25,11 @@ import {
   ReEncryptCommand,
   GenerateDataKeyCommand,
   GenerateRandomCommand,
+  // P1 gap audit
+  ListRetirableGrantsCommand,
+  GenerateDataKeyWithoutPlaintextCommand,
+  UpdateAliasCommand,
+  ListKeyPoliciesCommand,
   TagResourceCommand,
   UntagResourceCommand,
   ListResourceTagsCommand,
@@ -437,6 +442,79 @@ router.post("/keys/:id/rotate-on-demand", async (c: Context) => {
   const client = kms();
   const result = await client.send(new RotateKeyOnDemandCommand({ KeyId: id }));
   return c.json({ keyId: result.KeyId });
+});
+
+
+// ────────────────────────────────────────────────────────────────
+//  P1 gap audit — KMS extras
+// ────────────────────────────────────────────────────────────────
+
+router.get("/keys/:keyId/policies", async (c: Context) => {
+  const keyId = c.req.param("keyId")!;
+  const result = await kms().send(new ListKeyPoliciesCommand({ KeyId: keyId }));
+  return c.json({ policyNames: result.PolicyNames ?? [], truncate: result.Truncated ?? false });
+});
+
+router.post("/keys/retirable", async (c: Context) => {
+  const body = await c.req.json<{ retiringPrincipal?: string; limit?: number; marker?: string }>();
+  const result = await kms().send(new ListRetirableGrantsCommand({
+    RetiringPrincipal: body.retiringPrincipal || "",
+    Limit: body.limit,
+    Marker: body.marker,
+  }));
+  return c.json({
+    grants: (result.Grants || []).map((g: any) => ({
+      grantId: g.GrantId,
+      keyId: g.KeyId,
+      name: g.Name ?? null,
+      creationDate: g.CreationDate,
+    })),
+    truncate: result.Truncated ?? false,
+    marker: result.NextMarker ?? null,
+  });
+});
+
+router.post("/keys/:keyId/re-encrypt", async (c: Context) => {
+  const keyId = c.req.param("keyId")!;
+  const body = await c.req.json<{ ciphertextBlob: string; destinationKeyId?: string; sourceEncryptionContext?: Record<string, string> }>();
+  if (!body.ciphertextBlob) return c.json({ error: "ciphertextBlob is required" }, 400);
+  if (!body.destinationKeyId) return c.json({ error: "destinationKeyId is required" }, 400);
+  const result = await kms().send(new ReEncryptCommand({
+    CiphertextBlob: Buffer.from(body.ciphertextBlob, "base64"),
+    DestinationKeyId: body.destinationKeyId,
+    SourceEncryptionContext: body.sourceEncryptionContext,
+  }));
+  return c.json({
+    ciphertextBlob: result.CiphertextBlob ? Buffer.from(result.CiphertextBlob).toString("base64") : null,
+    sourceKeyId: result.SourceKeyId ?? null,
+    keyId: result.KeyId ?? null,
+  });
+});
+
+router.post("/keys/:keyId/data-key-plaintext-free", async (c: Context) => {
+  const keyId = c.req.param("keyId")!;
+  const body = await c.req.json<{ keySpec?: string; numberOfBytes?: number; encryptionContext?: Record<string, string> }>().catch(() => ({}) as any);
+  const result = await kms().send(new GenerateDataKeyWithoutPlaintextCommand({
+    KeyId: keyId,
+    KeySpec: (body.keySpec as any) || "AES_256",
+    NumberOfBytes: body.numberOfBytes,
+    EncryptionContext: body.encryptionContext,
+  }));
+  return c.json({
+    ciphertextBlob: result.CiphertextBlob ? Buffer.from(result.CiphertextBlob).toString("base64") : null,
+    keyId: result.KeyId ?? null,
+  }, 201);
+});
+
+router.put("/aliases/:aliasName", async (c: Context) => {
+  const aliasName = decodeURIComponent(c.req.param("aliasName")!);
+  const body = await c.req.json<{ targetKeyId: string }>();
+  if (!body.targetKeyId) return c.json({ error: "targetKeyId is required" }, 400);
+  await kms().send(new UpdateAliasCommand({
+    AliasName: aliasName.startsWith("alias/") ? aliasName : `alias/${aliasName}`,
+    TargetKeyId: body.targetKeyId,
+  }));
+  return c.json({ updated: true });
 });
 
 export default router;

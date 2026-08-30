@@ -107,6 +107,20 @@ import {
   GetManagedPrefixListEntriesCommand,
   ModifyManagedPrefixListCommand,
   DeleteManagedPrefixListCommand,
+  // P1 gap audit — misc
+  DescribeInstanceAttributeCommand,
+  DescribeVpcAttributeCommand,
+  DescribeVpcEndpointServicesCommand,
+  ModifyVpcEndpointCommand,
+  CreateDefaultVpcCommand,
+  GetSecurityGroupsForVpcCommand,
+  UpdateSecurityGroupRuleDescriptionsEgressCommand,
+  CreateImageCommand,
+  RegisterImageCommand,
+  ReplaceRouteCommand,
+  DescribeAddressesAttributeCommand,
+  DescribeInstanceTypeOfferingsCommand,
+  DescribeIamInstanceProfileAssociationsCommand,
 } from "@aws-sdk/client-ec2";
 import { getAwsConfig } from "../../clients/aws";
 import { sanitizeName, sanitizeText } from "../../clients/sanitize";
@@ -1422,6 +1436,141 @@ router.delete("/managed-prefix-lists/:id", async (c: Context) => {
   const client = ec2();
   const result = await client.send(new DeleteManagedPrefixListCommand({ PrefixListId: c.req.param("id")! }));
   return c.json({ prefixList: result.PrefixList ?? null, deleted: true });
+});
+
+
+// ── P1 gap audit — misc ops ───────────────────────────────
+
+router.get("/instances/:id/attributes", async (c: Context) => {
+  const client = ec2();
+  const result = await client.send(new DescribeInstanceAttributeCommand({
+    InstanceId: c.req.param("id")!,
+    Attribute: (c.req.query("attribute") as any) || "instanceType",
+  }));
+  return c.json({ instanceId: result.InstanceId ?? null, attribute: result });
+});
+
+router.get("/vpcs/:id/attributes", async (c: Context) => {
+  const client = ec2();
+  const result = await client.send(new DescribeVpcAttributeCommand({
+    VpcId: c.req.param("id")!,
+    Attribute: (c.req.query("attribute") as any) || "enableDnsHostnames",
+  }));
+  return c.json({ vpcId: result.VpcId ?? null });
+});
+
+router.get("/vpc-endpoint-services", async (c: Context) => {
+  const client = ec2();
+  const result = await client.send(new DescribeVpcEndpointServicesCommand({}));
+  return c.json({
+    serviceNames: (result.ServiceNames || []),
+    serviceDetails: result.ServiceDetails || [],
+    total: (result.ServiceNames || []).length,
+  });
+});
+
+router.post("/default-vpc", async (c: Context) => {
+  const client = ec2();
+  const result = await client.send(new CreateDefaultVpcCommand({}));
+  return c.json({ vpc: result.Vpc ?? null }, 201);
+});
+
+router.get("/security-groups-for-vpc", async (c: Context) => {
+  const client = ec2();
+  const result: any = await client.send(new GetSecurityGroupsForVpcCommand({} as any));
+  return c.json({
+    securityGroups: (result.SecurityGroups || []).map((sg: any) => ({
+      id: sg.GroupId, name: sg.GroupName, description: sg.GroupDescription,
+    })),
+    total: (result.SecurityGroups || []).length,
+  });
+});
+
+router.put("/security-groups/:id/egress-descriptions", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.ipPermissions) return c.json({ error: "ipPermissions is required" }, 400);
+  const client = ec2();
+  const result = await client.send(new UpdateSecurityGroupRuleDescriptionsEgressCommand({
+    GroupId: c.req.param("id")!,
+    IpPermissions: body.ipPermissions,
+  }));
+  return c.json({ success: result.Return ?? false });
+});
+
+router.get("/instance-type-offerings", async (c: Context) => {
+  const client = ec2();
+  const result = await client.send(new DescribeInstanceTypeOfferingsCommand({
+    LocationType: (c.req.query("locationType") as any) || "region",
+    MaxResults: c.req.query("maxResults") ? parseInt(c.req.query("maxResults")!) : undefined,
+  }));
+  const offerings = (result.InstanceTypeOfferings || []).map((o: any) => ({
+    type: o.InstanceType, region: o.Region, zone: o.AvailabilityZone ?? null,
+  }));
+  return c.json({ offerings, total: offerings.length });
+});
+
+router.get("/iam-instance-profile-associations", async (c: Context) => {
+  const client = ec2();
+  const result = await client.send(new DescribeIamInstanceProfileAssociationsCommand({}));
+  const associations = (result.IamInstanceProfileAssociations || []).map((a: any) => ({
+    id: a.AssociationId,
+    instanceId: a.InstanceId,
+    state: a.State,
+    profile: a.IamInstanceProfile?.Arn ?? null,
+  }));
+  return c.json({ associations, total: associations.length });
+});
+
+router.get("/addresses-attributes", async (c: Context) => {
+  const client = ec2();
+  const result = await client.send(new DescribeAddressesAttributeCommand({
+    Attribute: c.req.query("attribute") as any,
+  }));
+  return c.json({ addresses: result.Addresses ?? [], total: (result.Addresses ?? []).length });
+});
+
+
+router.post("/instances/:id/create-image", async (c: Context) => {
+  const body = await c.req.json<{ name: string; description?: string; noReboot?: boolean }>();
+  if (!body.name) return c.json({ error: "name is required" }, 400);
+  const client = ec2();
+  const result = await client.send(new CreateImageCommand({
+    InstanceId: c.req.param("id")!,
+    Name: body.name,
+    Description: body.description,
+    NoReboot: body.noReboot,
+  }));
+  return c.json({ imageId: result.ImageId ?? null }, 201);
+});
+
+router.post("/images/register", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.name) return c.json({ error: "name is required" }, 400);
+  const client = ec2();
+  const result = await client.send(new RegisterImageCommand({
+    Name: body.name,
+    Architecture: body.architecture as any,
+    RootDeviceName: body.rootDeviceName || "/dev/sda1",
+    BlockDeviceMappings: body.blockDeviceMappings,
+  }));
+  return c.json({ imageId: result.ImageId ?? null }, 201);
+});
+
+router.put("/route-tables/:routeTableId/replace-route", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.destinationCidrBlock) return c.json({ error: "destinationCidrBlock is required" }, 400);
+  if (!body.gatewayId && !body.natGatewayId && !body.instanceId) {
+    return c.json({ error: "gatewayId, natGatewayId or instanceId is required" }, 400);
+  }
+  const client = ec2();
+  await client.send(new ReplaceRouteCommand({
+    RouteTableId: c.req.param("routeTableId")!,
+    DestinationCidrBlock: body.destinationCidrBlock,
+    GatewayId: body.gatewayId,
+    NatGatewayId: body.natGatewayId,
+    InstanceId: body.instanceId,
+  }));
+  return c.json({ replaced: true });
 });
 
 export default router;

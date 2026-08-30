@@ -55,6 +55,40 @@ describe("AppAutoScalingDashboard", () => {
     });
   });
 
+  it("shows register error when mutation fails", async () => {
+    mockApi.mockImplementation((path: string, init?: any) => {
+      if (path === "/aws/applicationautoscaling/scalable-targets" && init?.method === "POST")
+        return Promise.reject(new Error("busted"));
+      if (path.includes("/scalable-targets?"))
+        return Promise.resolve({ scalableTargets: [], total: 0 });
+      return Promise.resolve({});
+    });
+    const user = userEvent.setup();
+    render(<AppAutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: /Register scalable target/i }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    await user.type(within(dialog).getByPlaceholderText("cluster/service"), "c/s");
+    await user.click(within(dialog).getByRole("button", { name: /Register$/i }));
+    expect(await within(dialog).findByText("busted")).toBeTruthy();
+  });
+
+  it("creates a scaling policy via modal", async () => {
+    const user = userEvent.setup();
+    render(<AppAutoScalingDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Scaling Policies/i }));
+    await user.click(await screen.findByRole("button", { name: /Create scaling policy/i }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    await user.type(within(dialog).getByPlaceholderText("scale-on-cpu"), "cpu-50");
+    await user.type(within(dialog).getAllByPlaceholderText("cluster/service")[0], "c/s");
+    await user.click(within(dialog).getByRole("button", { name: /Create policy$/i }));
+    await waitFor(() => {
+      expect(mockApi).toHaveBeenCalledWith(
+        "/aws/applicationautoscaling/scalable-policies",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+  });
+
   it("shows namespace select", async () => {
     render(<AppAutoScalingDashboard />, { wrapper: createWrapper() });
     expect(await screen.findByText("Service namespace")).toBeTruthy();

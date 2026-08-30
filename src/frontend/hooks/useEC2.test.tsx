@@ -88,6 +88,14 @@ import {
   useEC2ManagedPrefixListEntries,
   useModifyEC2ManagedPrefixList,
   useDeleteEC2ManagedPrefixList,
+  useEC2InstanceAttribute,
+  useEC2VpcAttribute,
+  useEC2VpcEndpointServices,
+  useCreateEC2DefaultVpc,
+  useEC2InstanceTypeOfferings,
+  useEC2IAMInstanceProfileAssociations,
+  useCreateEC2Image,
+  useEC2ReplaceRoute,
 } from "./useEC2";
 
 function createWrapper() {
@@ -824,5 +832,63 @@ describe("useEC2 — Transit Gateway + managed prefix lists (P1)", () => {
   it("prefix list entries disabled without id", () => {
     const { result } = renderHook(() => useEC2ManagedPrefixListEntries(null), { wrapper: createWrapper() });
     expect(result.current.fetchStatus).toBe("idle");
+  });
+});
+
+describe("useEC2 — P1 misc hooks", () => {
+  it("instance/vpc attribute queries + disabled arms", async () => {
+    mockApi.mockResolvedValueOnce({ instanceId: "i-1" });
+    const ia = renderHook(() => useEC2InstanceAttribute("i-1", "instanceType"), { wrapper: createWrapper() });
+    await waitFor(() => expect(ia.result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/instances/i-1/attributes?attribute=instanceType");
+    const iaIdle = renderHook(() => useEC2InstanceAttribute(null), { wrapper: createWrapper() });
+    expect(iaIdle.result.current.fetchStatus).toBe("idle");
+    mockApi.mockResolvedValueOnce({ vpcId: "vpc-1" });
+    const va = renderHook(() => useEC2VpcAttribute("vpc-1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(va.result.current.isSuccess).toBe(true));
+    const vaIdle = renderHook(() => useEC2VpcAttribute(null), { wrapper: createWrapper() });
+    expect(vaIdle.result.current.fetchStatus).toBe("idle");
+    // no-attribute arms — bare URLs
+    mockApi.mockResolvedValueOnce({});
+    const iaBare = renderHook(() => useEC2InstanceAttribute("i-2"), { wrapper: createWrapper() });
+    await waitFor(() => expect(iaBare.result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenLastCalledWith("/aws/ec2/instances/i-2/attributes");
+    mockApi.mockResolvedValueOnce({});
+    const vaBare = renderHook(() => useEC2VpcAttribute("vpc-2"), { wrapper: createWrapper() });
+    await waitFor(() => expect(vaBare.result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenLastCalledWith("/aws/ec2/vpcs/vpc-2/attributes");
+  });
+
+  it("vpc endpoint services + type offerings + profile associations", async () => {
+    mockApi.mockResolvedValueOnce({ serviceNames: [], total: 0 });
+    const svcs = renderHook(() => useEC2VpcEndpointServices(), { wrapper: createWrapper() });
+    await waitFor(() => expect(svcs.result.current.isSuccess).toBe(true));
+    mockApi.mockResolvedValueOnce({ offerings: [], total: 0 });
+    const offerings = renderHook(() => useEC2InstanceTypeOfferings(), { wrapper: createWrapper() });
+    await waitFor(() => expect(offerings.result.current.isSuccess).toBe(true));
+    mockApi.mockResolvedValueOnce({ associations: [], total: 0 });
+    const assoc = renderHook(() => useEC2IAMInstanceProfileAssociations(), { wrapper: createWrapper() });
+    await waitFor(() => expect(assoc.result.current.isSuccess).toBe(true));
+  });
+
+  it("default vpc + create image + replace route", async () => {
+    mockApi.mockResolvedValueOnce({ vpc: { VpcId: "vpc-new" } });
+    const { result: dv } = renderHook(() => useCreateEC2DefaultVpc(), { wrapper: createWrapper() });
+    await dv.current.mutateAsync();
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/default-vpc", { method: "POST", body: "{}" });
+    mockApi.mockResolvedValueOnce({ imageId: "ami-1" });
+    const { result: ci } = renderHook(() => useCreateEC2Image(), { wrapper: createWrapper() });
+    await ci.current.mutateAsync({ instanceId: "i-1", name: "img" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/instances/i-1/create-image", {
+      method: "POST",
+      body: JSON.stringify({ name: "img" }),
+    });
+    mockApi.mockResolvedValueOnce({ replaced: true });
+    const { result: rr } = renderHook(() => useEC2ReplaceRoute(), { wrapper: createWrapper() });
+    await rr.current.mutateAsync({ routeTableId: "rtb-1", destinationCidrBlock: "0.0.0.0/0", gatewayId: "igw-1" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/route-tables/rtb-1/replace-route", {
+      method: "PUT",
+      body: JSON.stringify({ destinationCidrBlock: "0.0.0.0/0", gatewayId: "igw-1" }),
+    });
   });
 });

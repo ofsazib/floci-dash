@@ -920,3 +920,67 @@ export function useDeleteEC2ManagedPrefixList() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ec2", "managed-prefix-lists"] }),
   });
 }
+
+// ─── P1 gap audit — misc ops ─────────────────────────────
+export function useEC2InstanceAttribute(instanceId: string | null, attribute?: string) {
+  return useQuery<{ instanceId: string | null }>({
+    queryKey: ["aws", "ec2", "instance-attribute", instanceId, attribute],
+    queryFn: () => api(`/aws/ec2/instances/${instanceId}/attributes${attribute ? `?attribute=${attribute}` : ""}`),
+    enabled: !!instanceId,
+  });
+}
+
+export function useEC2VpcAttribute(vpcId: string | null, attribute?: string) {
+  return useQuery<{ vpcId: string | null }>({
+    queryKey: ["aws", "ec2", "vpc-attribute", vpcId, attribute],
+    queryFn: () => api(`/aws/ec2/vpcs/${vpcId}/attributes${attribute ? `?attribute=${attribute}` : ""}`),
+    enabled: !!vpcId,
+  });
+}
+
+export function useEC2VpcEndpointServices() {
+  return useQuery<{ serviceNames: string[]; total: number }>({
+    queryKey: ["aws", "ec2", "vpc-endpoint-services"],
+    queryFn: () => api("/aws/ec2/vpc-endpoint-services"),
+  });
+}
+
+export function useCreateEC2DefaultVpc() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api("/aws/ec2/default-vpc", { method: "POST", body: "{}" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ec2", "vpcs"] }),
+  });
+}
+
+export function useEC2InstanceTypeOfferings() {
+  return useQuery<{ offerings: any[]; total: number }>({
+    queryKey: ["aws", "ec2", "instance-type-offerings"],
+    queryFn: () => api("/aws/ec2/instance-type-offerings"),
+  });
+}
+
+export function useEC2IAMInstanceProfileAssociations() {
+  return useQuery<{ associations: any[]; total: number }>({
+    queryKey: ["aws", "ec2", "iam-instance-profile-associations"],
+    queryFn: () => api("/aws/ec2/iam-instance-profile-associations"),
+  });
+}
+
+export function useCreateEC2Image() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ instanceId, ...body }: { instanceId: string; name: string; description?: string; noReboot?: boolean }) =>
+      api(`/aws/ec2/instances/${instanceId}/create-image`, { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ec2", "images"] }),
+  });
+}
+
+export function useEC2ReplaceRoute() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ routeTableId, ...body }: { routeTableId: string; destinationCidrBlock: string; gatewayId?: string; natGatewayId?: string; instanceId?: string }) =>
+      api(`/aws/ec2/route-tables/${routeTableId}/replace-route`, { method: "PUT", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ec2", "route-tables"] }),
+  });
+}

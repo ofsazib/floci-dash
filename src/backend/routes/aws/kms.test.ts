@@ -52,6 +52,10 @@ vi.mock("@aws-sdk/client-kms", () => ({
   GenerateMacCommand: createCmd("GenerateMacCommand"),
   VerifyMacCommand: createCmd("VerifyMacCommand"),
   RotateKeyOnDemandCommand: createCmd("RotateKeyOnDemandCommand"),
+  ListRetirableGrantsCommand: createCmd("ListRetirableGrantsCommand"),
+  GenerateDataKeyWithoutPlaintextCommand: createCmd("GenerateDataKeyWithoutPlaintextCommand"),
+  UpdateAliasCommand: createCmd("UpdateAliasCommand"),
+  ListKeyPoliciesCommand: createCmd("ListKeyPoliciesCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -648,5 +652,56 @@ describe("KMS Routes", () => {
       expect(body.keyId).toBe("k1");
       expect(mockSend.mock.calls[0][0].__cmdName).toBe("RotateKeyOnDemandCommand");
     });
+  });
+});
+
+// ─── P1 gap audit — KMS extras ─────────────────────────────
+
+describe("KMS extras", () => {
+  it("list key policies", async () => {
+    mockSend.mockResolvedValueOnce({ PolicyNames: ["default"], Truncated: false });
+    const res = await get("/keys/k1/policies");
+    const body = await res.json();
+    expect(body.policyNames).toEqual(["default"]);
+    expect(body.truncate).toBe(false);
+  });
+
+  it("list retirable grants", async () => {
+    mockSend.mockResolvedValueOnce({
+      Grants: [{ GrantId: "g1", KeyId: "k1", Name: "grant", CreationDate: new Date("2026-01-01") }],
+      Truncated: false,
+      NextMarker: "m",
+    });
+    const res = await post("/keys/retirable", { retiringPrincipal: "arn:r" });
+    const body = await res.json();
+    expect(body.grants[0].grantId).toBe("g1");
+    expect(body.marker).toBe("m");
+    expect(mockSend.mock.calls[0][0].RetiringPrincipal).toBe("arn:r");
+  });
+
+  it("re-encrypt + 400s", async () => {
+    mockSend.mockResolvedValueOnce({ CiphertextBlob: new Uint8Array([1, 2, 3]), SourceKeyId: "k1", KeyId: "k2" });
+    const res = await post("/keys/k1/re-encrypt", { ciphertextBlob: "AQICAH", destinationKeyId: "k2" });
+    const body = await res.json();
+    expect(body.sourceKeyId).toBe("k1");
+    expect(body.ciphertextBlob).toBe(Buffer.from([1, 2, 3]).toString("base64"));
+    expect((await post("/keys/k1/re-encrypt", { destinationKeyId: "k2" })).status).toBe(400);
+    expect((await post("/keys/k1/re-encrypt", { ciphertextBlob: "AQICAH" })).status).toBe(400);
+  });
+
+  it("generate data key without plaintext", async () => {
+    mockSend.mockResolvedValueOnce({ CiphertextBlob: new Uint8Array([9, 9]), KeyId: "k1" });
+    const res = await post("/keys/k1/data-key-plaintext-free", { keySpec: "AES_256" });
+    const body = await res.json();
+    expect(res.status).toBe(201);
+    expect(body.keyId).toBe("k1");
+  });
+
+  it("update alias + 400 + prefix normalization", async () => {
+    mockSend.mockResolvedValue({});
+    const res = await put("/aliases/prod-key", { targetKeyId: "k2" });
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].AliasName).toBe("alias/prod-key");
+    expect((await put("/aliases/prod-key", {})).status).toBe(400);
   });
 });

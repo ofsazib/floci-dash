@@ -28,6 +28,11 @@ import {
   useSign,
   useVerify,
   useRotateKeyOnDemand,
+  useKMSKeyPolicies,
+  useKMSRetirableGrants,
+  useKMSReEncrypt,
+  useKMSGenerateDataKeyNoPlaintext,
+  useKMSUpdateAlias,
 } from "./useKMS";
 
 function createWrapper() {
@@ -273,5 +278,57 @@ describe("useRotateKeyOnDemand", () => {
     result.current.mutate("k1");
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith("/aws/kms/keys/k1/rotate-on-demand", { method: "POST" });
+  });
+});
+
+// ─── P1 gap audit — KMS extras ───────────────────────────
+describe("useKMS extras", () => {
+  it("key policies query + disabled arm", async () => {
+    mockApi.mockResolvedValueOnce({ policyNames: ["default"], truncate: false });
+    const { result } = renderHook(() => useKMSKeyPolicies("k1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/kms/keys/k1/policies");
+    const idle = renderHook(() => useKMSKeyPolicies(null), { wrapper: createWrapper() });
+    expect(idle.result.current.fetchStatus).toBe("idle");
+  });
+
+  it("retirable grants mutation", async () => {
+    mockApi.mockResolvedValueOnce({ grants: [], truncate: false, marker: null });
+    const { result } = renderHook(() => useKMSRetirableGrants(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ retiringPrincipal: "arn:r" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/kms/keys/retirable", {
+      method: "POST",
+      body: JSON.stringify({ retiringPrincipal: "arn:r" }),
+    });
+  });
+
+  it("re-encrypt mutation", async () => {
+    mockApi.mockResolvedValueOnce({ ciphertextBlob: "AQICAH", keyId: "k2" });
+    const { result } = renderHook(() => useKMSReEncrypt("k1"), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ ciphertextBlob: "AQICAH", destinationKeyId: "k2" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/kms/keys/k1/re-encrypt", {
+      method: "POST",
+      body: JSON.stringify({ ciphertextBlob: "AQICAH", destinationKeyId: "k2" }),
+    });
+  });
+
+  it("data key without plaintext", async () => {
+    mockApi.mockResolvedValueOnce({ ciphertextBlob: "AQICAH", keyId: "k1" });
+    const { result } = renderHook(() => useKMSGenerateDataKeyNoPlaintext("k1"), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ keySpec: "AES_256" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/kms/keys/k1/data-key-plaintext-free", {
+      method: "POST",
+      body: JSON.stringify({ keySpec: "AES_256" }),
+    });
+  });
+
+  it("update alias", async () => {
+    mockApi.mockResolvedValueOnce({ updated: true });
+    const { result } = renderHook(() => useKMSUpdateAlias(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ aliasName: "prod-key", targetKeyId: "k2" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/kms/aliases/prod-key", {
+      method: "PUT",
+      body: JSON.stringify({ targetKeyId: "k2" }),
+    });
   });
 });

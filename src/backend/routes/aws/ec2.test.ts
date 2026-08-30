@@ -126,6 +126,19 @@ vi.mock("@aws-sdk/client-ec2", () => ({
   GetManagedPrefixListEntriesCommand: createCmd("GetManagedPrefixListEntriesCommand"),
   ModifyManagedPrefixListCommand: createCmd("ModifyManagedPrefixListCommand"),
   DeleteManagedPrefixListCommand: createCmd("DeleteManagedPrefixListCommand"),
+  DescribeInstanceAttributeCommand: createCmd("DescribeInstanceAttributeCommand"),
+  DescribeVpcAttributeCommand: createCmd("DescribeVpcAttributeCommand"),
+  DescribeVpcEndpointServicesCommand: createCmd("DescribeVpcEndpointServicesCommand"),
+  ModifyVpcEndpointCommand: createCmd("ModifyVpcEndpointCommand"),
+  CreateDefaultVpcCommand: createCmd("CreateDefaultVpcCommand"),
+  GetSecurityGroupsForVpcCommand: createCmd("GetSecurityGroupsForVpcCommand"),
+  UpdateSecurityGroupRuleDescriptionsEgressCommand: createCmd("UpdateSecurityGroupRuleDescriptionsEgressCommand"),
+  CreateImageCommand: createCmd("CreateImageCommand"),
+  RegisterImageCommand: createCmd("RegisterImageCommand"),
+  ReplaceRouteCommand: createCmd("ReplaceRouteCommand"),
+  DescribeAddressesAttributeCommand: createCmd("DescribeAddressesAttributeCommand"),
+  DescribeInstanceTypeOfferingsCommand: createCmd("DescribeInstanceTypeOfferingsCommand"),
+  DescribeIamInstanceProfileAssociationsCommand: createCmd("DescribeIamInstanceProfileAssociationsCommand"),
 }));
 
 // Now import the router after the mock is set up
@@ -2421,5 +2434,90 @@ describe("Managed prefix lists", () => {
       expect(res.status).toBe(200);
       expect(mockSend.mock.calls[0][0].Description).toBeUndefined();
     });
+  });
+});
+
+// ─── P1 gap audit — misc ops ──────────────────────────────
+
+describe("EC2 misc ops", () => {
+  it("instance/vpc attribute describes", async () => {
+    mockSend
+      .mockResolvedValueOnce({ InstanceId: "i-1", InstanceType: { Value: "t3.micro" } })
+      .mockResolvedValueOnce({ VpcId: "vpc-1", EnableDnsHostnames: { Value: true } });
+    expect((await get("/instances/i-1/attributes?attribute=instanceType")).status).toBe(200);
+    expect(mockSend.mock.calls[0][0].Attribute).toBe("instanceType");
+    expect((await get("/vpcs/vpc-1/attributes?attribute=enableDnsHostnames")).status).toBe(200);
+  });
+
+  it("vpc endpoint services list", async () => {
+    mockSend.mockResolvedValueOnce({ ServiceNames: ["com.amazonaws.vpce.s3"], ServiceDetails: [] });
+    const res = await get("/vpc-endpoint-services");
+    expect((await res.json()).total).toBe(1);
+  });
+
+  it("creates default vpc", async () => {
+    mockSend.mockResolvedValueOnce({ Vpc: { VpcId: "vpc-new" } });
+    const res = await post("/default-vpc", {});
+    expect(res.status).toBe(201);
+    expect((await res.json()).vpc.VpcId).toBe("vpc-new");
+  });
+
+  it("security groups for vpc", async () => {
+    mockSend.mockResolvedValueOnce({ SecurityGroups: [{ GroupId: "sg-1", GroupName: "web", GroupDescription: "web sg" }] });
+    const res = await get("/security-groups-for-vpc");
+    const body = await res.json();
+    expect(body.total).toBe(1);
+    expect(body.securityGroups[0].name).toBe("web");
+  });
+
+  it("egress description update", async () => {
+    mockSend.mockResolvedValueOnce({ Return: true });
+    const res = await putReq("/security-groups/sg-1/egress-descriptions", { ipPermissions: [{ IpProtocol: "-1" }] });
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].IpPermissions).toEqual([{ IpProtocol: "-1" }]);
+  });
+
+  it("instance type offerings", async () => {
+    mockSend.mockResolvedValueOnce({ InstanceTypeOfferings: [{ InstanceType: "t3.micro", Region: "us-east-1", AvailabilityZone: null }] });
+    const res = await get("/instance-type-offerings?maxResults=10");
+    const body = await res.json();
+    expect(body.total).toBe(1);
+    expect(body.offerings[0].type).toBe("t3.micro");
+  });
+
+  it("iam instance profile associations", async () => {
+    mockSend.mockResolvedValueOnce({ IamInstanceProfileAssociations: [{ AssociationId: "iipa-1", InstanceId: "i-1", State: "associated", IamInstanceProfile: { Arn: "arn:ip" } }] });
+    const res = await get("/iam-instance-profile-associations");
+    const body = await res.json();
+    expect(body.associations[0].profile).toBe("arn:ip");
+  });
+
+  it("addresses attribute", async () => {
+    mockSend.mockResolvedValueOnce({ Addresses: [{ PublicIp: "1.2.3.4" }] });
+    const res = await get("/addresses-attributes?attribute=domain-name");
+    expect((await res.json()).total).toBe(1);
+  });
+
+  it("create image", async () => {
+    mockSend.mockResolvedValueOnce({ ImageId: "ami-1" });
+    const res = await post("/instances/i-1/create-image", { name: "ami-1", noReboot: true });
+    expect(res.status).toBe(201);
+    expect((await res.json()).imageId).toBe("ami-1");
+    expect((await post("/instances/i-1/create-image", {})).status).toBe(400);
+  });
+
+  it("register image + 400", async () => {
+    mockSend.mockResolvedValueOnce({ ImageId: "ami-2" });
+    const res = await post("/images/register", { name: "custom", architecture: "x86_64" });
+    expect(res.status).toBe(201);
+    expect((await post("/images/register", {})).status).toBe(400);
+  });
+
+  it("replace route + 400", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await putReq("/route-tables/rtb-1/replace-route", { destinationCidrBlock: "0.0.0.0/0", gatewayId: "igw-1" });
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].GatewayId).toBe("igw-1");
+    expect((await putReq("/route-tables/rtb-1/replace-route", { destinationCidrBlock: "0.0.0.0/0" })).status).toBe(400);
   });
 });
