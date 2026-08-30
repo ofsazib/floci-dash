@@ -8,6 +8,16 @@ const mockApi = vi.hoisted(() => vi.fn());
 vi.mock("../lib/client", () => ({ api: (...args: any[]) => mockApi(...args) }));
 
 import {
+  useCloudFrontDistributions,
+  useCloudFrontDistribution,
+  useCreateCloudFrontDistribution,
+  useDeleteCloudFrontDistribution,
+  useCloudFrontInvalidations,
+  useCreateCloudFrontInvalidation,
+  useCloudFrontCachePolicies,
+  useCloudFrontOriginAccessControls,
+  useCloudFrontFunctions,
+  useCloudFrontTags,
   useCreateCFPolicy,
   useDeleteCFPolicy,
   useUpdateCFPolicy,
@@ -90,6 +100,14 @@ describe("useCloudFront — P1 gap hooks", () => {
       headers: { "If-Match": "E" },
       body: "{}",
     });
+    // publish without ifMatch — headers omit If-Match
+    mockApi.mockResolvedValueOnce({ functionSummary: {} });
+    await pubR.current.mutateAsync({ name: "fn1" });
+    expect(mockApi).toHaveBeenLastCalledWith("/aws/cloudfront/functions/fn1/publish", {
+      method: "POST",
+      headers: {},
+      body: "{}",
+    });
     mockApi.mockResolvedValueOnce({ deleted: true });
     const { result: delR } = renderHook(() => useDeleteCFFunction(), { wrapper: createWrapper() });
     await delR.current.mutateAsync({ name: "fn1", ifMatch: "E" });
@@ -142,5 +160,90 @@ describe("useCloudFront — P1 gap hooks", () => {
     mockApi.mockResolvedValueOnce({ untagged: true });
     const { result: untag } = renderHook(() => useUntagCFResource(), { wrapper: createWrapper() });
     await untag.current.mutateAsync({ resourceArn: "arn:d", tagKeys: ["a"] });
+  });
+});
+
+describe("useCloudFront — remaining P1 hooks", () => {
+  it("policy update (origin-request family)", async () => {
+    mockApi.mockResolvedValueOnce({ policy: {} });
+    const { result } = renderHook(() => useUpdateCFPolicy("origin-request-policies"), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ id: "orp-1", ifMatch: "E", name: "n" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/cloudfront/origin-request-policies/orp-1", {
+      method: "PUT",
+      body: JSON.stringify({ ifMatch: "E", name: "n" }),
+    });
+  });
+});
+
+describe("useCloudFront — legacy hooks (P1)", () => {
+  it("distributions + distribution + invalidations + tags queries", async () => {
+    mockApi.mockResolvedValueOnce({ distributions: [], total: 0 });
+    const dists = renderHook(() => useCloudFrontDistributions(), { wrapper: createWrapper() });
+    await waitFor(() => expect(dists.result.current.isSuccess).toBe(true));
+    mockApi.mockResolvedValueOnce({ distribution: {} });
+    const dist = renderHook(() => useCloudFrontDistribution("d1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(dist.result.current.isSuccess).toBe(true));
+    const distIdle = renderHook(() => useCloudFrontDistribution(null), { wrapper: createWrapper() });
+    expect(distIdle.result.current.fetchStatus).toBe("idle");
+    mockApi.mockResolvedValueOnce({ invalidations: [], total: 0 });
+    const inv = renderHook(() => useCloudFrontInvalidations("d1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(inv.result.current.isSuccess).toBe(true));
+    const invIdle = renderHook(() => useCloudFrontInvalidations(null), { wrapper: createWrapper() });
+    expect(invIdle.result.current.fetchStatus).toBe("idle");
+    mockApi.mockResolvedValueOnce({ tags: {} });
+    const tags = renderHook(() => useCloudFrontTags("arn:d"), { wrapper: createWrapper() });
+    await waitFor(() => expect(tags.result.current.isSuccess).toBe(true));
+    const tagsIdle = renderHook(() => useCloudFrontTags(null), { wrapper: createWrapper() });
+    expect(tagsIdle.result.current.fetchStatus).toBe("idle");
+  });
+
+  it("distribution create/delete", async () => {
+    mockApi.mockResolvedValueOnce({ id: "d1" });
+    const { result: createR } = renderHook(() => useCreateCloudFrontDistribution(), { wrapper: createWrapper() });
+    await createR.current.mutateAsync({});
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result: delR } = renderHook(() => useDeleteCloudFrontDistribution(), { wrapper: createWrapper() });
+    await delR.current.mutateAsync("d1");
+  });
+
+  it("invalidation create", async () => {
+    mockApi.mockResolvedValueOnce({ invalidation: {} });
+    const { result } = renderHook(() => useCreateCloudFrontInvalidation("d1"), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ paths: ["/*"] });
+    expect(mockApi).toHaveBeenCalledWith("/aws/cloudfront/distributions/d1/invalidations", {
+      method: "POST",
+      body: JSON.stringify({ paths: ["/*"] }),
+    });
+  });
+
+  it("cache/ORP/OAC/functions list queries", async () => {
+    mockApi.mockResolvedValue({ cachePolicies: [], originAccessControls: [], functions: [] });
+    const cp = renderHook(() => useCloudFrontCachePolicies(), { wrapper: createWrapper() });
+    await waitFor(() => expect(cp.result.current.isSuccess).toBe(true));
+    const oac = renderHook(() => useCloudFrontOriginAccessControls(), { wrapper: createWrapper() });
+    await waitFor(() => expect(oac.result.current.isSuccess).toBe(true));
+    const fn = renderHook(() => useCloudFrontFunctions(), { wrapper: createWrapper() });
+    await waitFor(() => expect(fn.result.current.isSuccess).toBe(true));
+  });
+});
+
+describe("useCloudFront — delete hooks without ifMatch", () => {
+  it("covers the default-ifMatch arm for all delete hooks", async () => {
+    mockApi.mockResolvedValue({ deleted: true });
+    const pairs: Array<[() => ReturnType<any>, unknown]> = [];
+    const dPol = renderHook(() => useDeleteCFPolicy("cache-policies"), { wrapper: createWrapper() });
+    await dPol.result.current.mutateAsync({ id: "x" });
+    const oai = renderHook(() => useDeleteCFOriginAccessIdentity(), { wrapper: createWrapper() });
+    await oai.result.current.mutateAsync({ id: "x" });
+    const fn = renderHook(() => useDeleteCFFunction(), { wrapper: createWrapper() });
+    await fn.result.current.mutateAsync({ name: "f" });
+    const { result: pk } = renderHook(() => useDeleteCFPublicKey(), { wrapper: createWrapper() });
+    await pk.current.mutateAsync({ id: "x" });
+    const { result: kg } = renderHook(() => useDeleteCFKeyGroup(), { wrapper: createWrapper() });
+    await kg.current.mutateAsync({ id: "x" });
+    expect(mockApi).toHaveBeenCalledTimes(5);
+    for (const call of mockApi.mock.calls) {
+      expect(String(call[0]).endsWith("ifMatch=")).toBe(true);
+    }
   });
 });

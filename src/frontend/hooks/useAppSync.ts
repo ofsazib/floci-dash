@@ -239,3 +239,136 @@ export function useDeleteAppSyncResolver() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "appsync"] }),
   });
 }
+
+// ─── P1 gap audit — AppSync extras ───────────────────────
+export function useUpdateAppSyncApi(apiId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name?: string; authenticationType?: string }) =>
+      api(`/aws/appsync/apis/${apiId}`, { method: "PUT", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "appsync", "apis"] }),
+  });
+}
+
+export function useGetAppSyncDataSource(apiId: string, name: string | null) {
+  return useQuery<{ dataSource: unknown }>({
+    queryKey: ["aws", "appsync", "data-source", apiId, name],
+    queryFn: () => api(`/aws/appsync/apis/${apiId}/data-sources/${name}`),
+    enabled: !!name,
+  });
+}
+
+export function useAppSyncResolversByType(apiId: string, typeName: string | null) {
+  return useQuery<{ resolvers: any[]; nextToken: string | null; total: number }>({
+    queryKey: ["aws", "appsync", "resolvers-by-type", apiId, typeName],
+    queryFn: () => api(`/aws/appsync/apis/${apiId}/resolvers-by-type/${typeName}/resolvers`),
+    enabled: !!typeName,
+  });
+}
+
+export function useAppSyncFunction(apiId: string, functionId: string | null) {
+  return useQuery<{ functionConfiguration: unknown }>({
+    queryKey: ["aws", "appsync", "function", apiId, functionId],
+    queryFn: () => api(`/aws/appsync/apis/${apiId}/functions/${functionId}`),
+    enabled: !!functionId,
+  });
+}
+
+export function useUpdateAppSyncApiKey(apiId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ keyId, ...rest }: { keyId: string; description?: string; expires?: number }) =>
+      api(`/aws/appsync/apis/${apiId}/api-keys/${keyId}`, { method: "PUT", body: JSON.stringify(rest) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "appsync", "api-keys", apiId] }),
+  });
+}
+
+export function usePutAppSyncEnvVars(apiId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (environmentVariables: Record<string, string>) =>
+      api(`/aws/appsync/apis/${apiId}/env-vars`, { method: "PUT", body: JSON.stringify({ environmentVariables }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "appsync", "env-vars", apiId] }),
+  });
+}
+
+export function useGetAppSyncEnvVars(apiId: string) {
+  return useQuery<{ environmentVariables: Record<string, string> }>({
+    queryKey: ["aws", "appsync", "env-vars", apiId],
+    queryFn: () => api(`/aws/appsync/apis/${apiId}/env-vars`),
+  });
+}
+
+export function useAppSyncDomainNames() {
+  return useQuery<{ domainNameConfigs: any[]; total: number }>({
+    queryKey: ["aws", "appsync", "domain-names"],
+    queryFn: () => api("/aws/appsync/domain-names"),
+  });
+}
+
+export function useCreateAppSyncDomainName() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { domainName: string; certificateArn: string }) =>
+      api("/aws/appsync/domain-names", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "appsync", "domain-names"] }),
+  });
+}
+
+export function useDeleteAppSyncDomainName() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (domainName: string) =>
+      api(`/aws/appsync/domain-names/${domainName}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "appsync", "domain-names"] }),
+  });
+}
+
+export function useAppSyncApiAssociation(domainName: string | null) {
+  return useQuery<{ apiAssociation: unknown }>({
+    queryKey: ["aws", "appsync", "api-association", domainName],
+    queryFn: () => api(`/aws/appsync/api-associations/${domainName}`),
+    enabled: !!domainName,
+  });
+}
+
+export function useAppSyncChannelNamespaces(apiId: string) {
+  return useQuery<{ channelNamespaces: any[]; total: number }>({
+    queryKey: ["aws", "appsync", "channel-namespaces", apiId],
+    queryFn: () => api(`/aws/appsync/apis/${apiId}/channel-namespaces`),
+  });
+}
+
+export function useCreateAppSyncChannelNamespace(apiId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string }) =>
+      api(`/aws/appsync/apis/${apiId}/channel-namespaces`, { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "appsync", "channel-namespaces", apiId] }),
+  });
+}
+
+export function useDeleteAppSyncChannelNamespace(apiId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api(`/aws/appsync/apis/${apiId}/channel-namespaces/${name}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "appsync", "channel-namespaces", apiId] }),
+  });
+}
+
+export function useTagAppSyncResource() {
+  return useMutation({
+    mutationFn: (body: { arn: string; tags: Record<string, string> }) =>
+      api("/aws/appsync/resources/tags", { method: "POST", body: JSON.stringify(body) }),
+  });
+}
+
+export function useUntagAppSyncResource() {
+  return useMutation({
+    mutationFn: ({ arn, tagKeys }: { arn: string; tagKeys: string[] }) =>
+      api(`/aws/appsync/resources/tags?arn=${encodeURIComponent(arn)}&tagKeys=${encodeURIComponent(tagKeys.join(","))}`, {
+        method: "DELETE",
+      }),
+  });
+}

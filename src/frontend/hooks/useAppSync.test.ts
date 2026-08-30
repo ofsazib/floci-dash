@@ -24,6 +24,22 @@ import {
   useStartSchemaCreation,
   useCreateAppSyncResolver,
   useDeleteAppSyncResolver,
+  useUpdateAppSyncApi,
+  useGetAppSyncDataSource,
+  useAppSyncResolversByType,
+  useAppSyncFunction,
+  useUpdateAppSyncApiKey,
+  usePutAppSyncEnvVars,
+  useGetAppSyncEnvVars,
+  useAppSyncDomainNames,
+  useCreateAppSyncDomainName,
+  useDeleteAppSyncDomainName,
+  useAppSyncApiAssociation,
+  useAppSyncChannelNamespaces,
+  useCreateAppSyncChannelNamespace,
+  useDeleteAppSyncChannelNamespace,
+  useTagAppSyncResource,
+  useUntagAppSyncResource,
 } from "./useAppSync";
 import { api } from "../lib/client";
 
@@ -314,5 +330,104 @@ describe("AppSync resolver hooks", () => {
     expect(mockedApi).toHaveBeenCalledWith("/aws/appsync/apis/a%2F1/types/T%201/resolvers/f%201", {
       method: "DELETE",
     });
+  });
+});
+
+describe("useAppSync — P1 gap hooks", () => {
+  it("api update", async () => {
+    mockedApi.mockResolvedValueOnce({ graphqlApi: {} });
+    const { result } = renderHook(() => useUpdateAppSyncApi("a1"), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ name: "n2" });
+    expect(mockedApi).toHaveBeenCalledWith("/aws/appsync/apis/a1", {
+      method: "PUT",
+      body: JSON.stringify({ name: "n2" }),
+    });
+  });
+
+  it("data source + function queries + disabled arms", async () => {
+    mockedApi.mockResolvedValueOnce({ dataSource: {} });
+    const ds = renderHook(() => useGetAppSyncDataSource("a1", "ds1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(ds.result.current.isSuccess).toBe(true));
+    const dsIdle = renderHook(() => useGetAppSyncDataSource("a1", null), { wrapper: createWrapper() });
+    expect(dsIdle.result.current.fetchStatus).toBe("idle");
+    mockedApi.mockResolvedValueOnce({ functionConfiguration: {} });
+    const fn = renderHook(() => useAppSyncFunction("a1", "f1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(fn.result.current.isSuccess).toBe(true));
+  });
+
+  it("resolvers by type query + disabled arm", async () => {
+    mockedApi.mockResolvedValueOnce({ resolvers: [], nextToken: null, total: 0 });
+    const rt = renderHook(() => useAppSyncResolversByType("a1", "Query"), { wrapper: createWrapper() });
+    await waitFor(() => expect(rt.result.current.isSuccess).toBe(true));
+    const idle = renderHook(() => useAppSyncResolversByType("a1", null), { wrapper: createWrapper() });
+    expect(idle.result.current.fetchStatus).toBe("idle");
+  });
+
+  it("api key update", async () => {
+    mockedApi.mockResolvedValueOnce({ apiKey: {} });
+    const { result } = renderHook(() => useUpdateAppSyncApiKey("a1"), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ keyId: "k1", description: "d" });
+    expect(mockedApi).toHaveBeenCalledWith("/aws/appsync/apis/a1/api-keys/k1", {
+      method: "PUT",
+      body: JSON.stringify({ description: "d" }),
+    });
+  });
+
+  it("env vars put/get", async () => {
+    mockedApi.mockResolvedValueOnce({ updated: true });
+    const { result: putR } = renderHook(() => usePutAppSyncEnvVars("a1"), { wrapper: createWrapper() });
+    await putR.current.mutateAsync({ A: "1" });
+    expect(mockedApi).toHaveBeenCalledWith("/aws/appsync/apis/a1/env-vars", {
+      method: "PUT",
+      body: JSON.stringify({ environmentVariables: { A: "1" } }),
+    });
+    mockedApi.mockResolvedValueOnce({ environmentVariables: { A: "1" } });
+    const getR = renderHook(() => useGetAppSyncEnvVars("a1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(getR.result.current.isSuccess).toBe(true));
+  });
+
+  it("domain names query/create/delete", async () => {
+    mockedApi.mockResolvedValueOnce({ domainNameConfigs: [], total: 0 });
+    const list = renderHook(() => useAppSyncDomainNames(), { wrapper: createWrapper() });
+    await waitFor(() => expect(list.result.current.isSuccess).toBe(true));
+    mockedApi.mockResolvedValueOnce({ domainNameConfig: {} });
+    const { result: createR } = renderHook(() => useCreateAppSyncDomainName(), { wrapper: createWrapper() });
+    await createR.current.mutateAsync({ domainName: "api.x", certificateArn: "arn:c" });
+    mockedApi.mockResolvedValueOnce({ deleted: true });
+    const { result: delR } = renderHook(() => useDeleteAppSyncDomainName(), { wrapper: createWrapper() });
+    await delR.current.mutateAsync("api.x");
+  });
+
+  it("api association query + disabled arm", async () => {
+    mockedApi.mockResolvedValueOnce({ apiAssociation: {} });
+    const assoc = renderHook(() => useAppSyncApiAssociation("api.x"), { wrapper: createWrapper() });
+    await waitFor(() => expect(assoc.result.current.isSuccess).toBe(true));
+    const idle = renderHook(() => useAppSyncApiAssociation(null), { wrapper: createWrapper() });
+    expect(idle.result.current.fetchStatus).toBe("idle");
+  });
+
+  it("channel namespaces query/create/delete", async () => {
+    mockedApi.mockResolvedValueOnce({ channelNamespaces: [], total: 0 });
+    const list = renderHook(() => useAppSyncChannelNamespaces("a1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(list.result.current.isSuccess).toBe(true));
+    mockedApi.mockResolvedValueOnce({ channelNamespace: {} });
+    const { result: createR } = renderHook(() => useCreateAppSyncChannelNamespace("a1"), { wrapper: createWrapper() });
+    await createR.current.mutateAsync({ name: "ns1" });
+    mockedApi.mockResolvedValueOnce({ deleted: true });
+    const { result: delR } = renderHook(() => useDeleteAppSyncChannelNamespace("a1"), { wrapper: createWrapper() });
+    await delR.current.mutateAsync("ns1");
+  });
+
+  it("tags tag/untag", async () => {
+    mockedApi.mockResolvedValueOnce({ tagged: true });
+    const { result: tag } = renderHook(() => useTagAppSyncResource(), { wrapper: createWrapper() });
+    await tag.current.mutateAsync({ arn: "arn:a", tags: { a: "b" } });
+    expect(mockedApi).toHaveBeenCalledWith("/aws/appsync/resources/tags", {
+      method: "POST",
+      body: JSON.stringify({ arn: "arn:a", tags: { a: "b" } }),
+    });
+    mockedApi.mockResolvedValueOnce({ untagged: true });
+    const { result: untag } = renderHook(() => useUntagAppSyncResource(), { wrapper: createWrapper() });
+    await untag.current.mutateAsync({ arn: "arn:a", tagKeys: ["a"] });
   });
 });

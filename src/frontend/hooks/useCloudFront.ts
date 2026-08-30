@@ -241,12 +241,15 @@ export function useCreateCFFunction() {
 export function usePublishCFFunction() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ name, ifMatch }: { name: string; ifMatch?: string }) =>
-      api(`/aws/cloudfront/functions/${name}/publish`, {
+    mutationFn: ({ name, ifMatch }: { name: string; ifMatch?: string }) => {
+      const headers: Record<string, string> = {};
+      if (ifMatch) headers["If-Match"] = ifMatch;
+      return api(`/aws/cloudfront/functions/${name}/publish`, {
         method: "POST",
-        headers: { "If-Match": ifMatch ?? "" },
+        headers,
         body: "{}",
-      }),
+      });
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cloudfront", "functions"] }),
   });
 }

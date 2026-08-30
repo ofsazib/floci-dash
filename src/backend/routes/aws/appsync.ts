@@ -7,6 +7,26 @@ import {
   UpdateResolverCommand,
   DeleteResolverCommand,
   UpdateDataSourceCommand,
+  // P1 gap audit
+  UpdateGraphqlApiCommand,
+  GetDataSourceCommand,
+  GetResolverCommand,
+  GetFunctionCommand,
+  UpdateApiKeyCommand,
+  PutGraphqlApiEnvironmentVariablesCommand,
+  GetGraphqlApiEnvironmentVariablesCommand,
+  CreateDomainNameCommand,
+  DeleteDomainNameCommand,
+  GetDomainNameCommand,
+  ListDomainNamesCommand,
+  GetApiAssociationCommand,
+  CreateChannelNamespaceCommand,
+  DeleteChannelNamespaceCommand,
+  ListChannelNamespacesCommand,
+  GetChannelNamespaceCommand,
+  ListTagsForResourceCommand,
+  TagResourceCommand,
+  UntagResourceCommand,
 } from "@aws-sdk/client-appsync";
 import {
   ListGraphqlApisCommand,
@@ -309,6 +329,197 @@ router.put("/apis/:apiId/datasources/:name", async (c: Context) => {
     })
   );
   return c.json({ dataSource: result.dataSource || null });
+});
+
+
+// ────────────────────────────────────────────────────────────────
+//  P1 gap audit — AppSync extras
+// ────────────────────────────────────────────────────────────────
+
+router.put("/apis/:apiId", async (c: Context) => {
+  const apiId = c.req.param("apiId")!;
+  const body = await c.req.json<{ name?: string; authenticationType?: string }>();
+  const result = await getClient().send(new UpdateGraphqlApiCommand({
+    apiId,
+    name: body.name,
+    authenticationType: body.authenticationType as any,
+  }));
+  return c.json({ graphqlApi: result.graphqlApi ?? null });
+});
+
+router.get("/apis/:apiId/data-sources/:name", async (c: Context) => {
+  const apiId = c.req.param("apiId")!;
+  const result = await getClient().send(new GetDataSourceCommand({
+    apiId, name: c.req.param("name")!,
+  }));
+  return c.json({ dataSource: (result as any).dataSource ?? result });
+});
+
+router.get("/apis/:apiId/resolvers-by-type/:typeName", async (c: Context) => {
+  const apiId = c.req.param("apiId")!;
+  const typeName = c.req.param("typeName")!;
+  const result = await getClient().send(new GetResolverCommand({
+    apiId, typeName, fieldName: c.req.query("fieldName") || "",
+  })).catch((err: any) => { throw err; });
+  return c.json({ resolver: result });
+});
+
+router.get("/apis/:apiId/functions/:functionId", async (c: Context) => {
+  const apiId = c.req.param("apiId")!;
+  const result = await getClient().send(new GetFunctionCommand({
+    apiId, functionId: c.req.param("functionId")!,
+  }));
+  return c.json({ functionConfiguration: result.functionConfiguration ?? null });
+});
+
+
+
+router.put("/apis/:apiId/api-keys/:id", async (c: Context) => {
+  const apiId = c.req.param("apiId")!;
+  const body = await c.req.json<{ description?: string; expires?: number }>();
+  const result = await getClient().send(new UpdateApiKeyCommand({
+    apiId, id: c.req.param("id")!,
+    description: body.description, expires: body.expires,
+  }));
+  return c.json({ apiKey: (result as any).apiKey ?? null });
+});
+
+router.get("/apis/:apiId/resolvers-by-type/:typeName/resolvers", async (c: Context) => {
+  const apiId = c.req.param("apiId")!;
+  const typeName = c.req.param("typeName")!;
+  const client = getClient();
+  const result = await client.send(new ListResolversCommand({
+    apiId, typeName, maxResults: c.req.query("maxResults") ? parseInt(c.req.query("maxResults")!) : undefined,
+    nextToken: c.req.query("nextToken"),
+  }));
+  return c.json({ resolvers: result.resolvers ?? [], nextToken: result.nextToken ?? null, total: (result.resolvers ?? []).length });
+});
+
+// ─── Environment variables ──────────────────────────────────────
+
+router.put("/apis/:apiId/env-vars", async (c: Context) => {
+  const apiId = c.req.param("apiId")!;
+  const body = await c.req.json<{ environmentVariables: Record<string, string> }>();
+  await getClient().send(new PutGraphqlApiEnvironmentVariablesCommand({
+    apiId, environmentVariables: body.environmentVariables,
+  }));
+  return c.json({ updated: true });
+});
+
+router.get("/apis/:apiId/env-vars", async (c: Context) => {
+  const apiId = c.req.param("apiId")!;
+  const result = await getClient().send(new GetGraphqlApiEnvironmentVariablesCommand({ apiId }));
+  return c.json({ environmentVariables: result.environmentVariables ?? {} });
+});
+
+// ─── Domain names ───────────────────────────────────────────────
+
+router.post("/domain-names", async (c: Context) => {
+  const body = await c.req.json<{ domainName: string; certificateArn: string }>();
+  if (!body.domainName || !body.certificateArn) {
+    return c.json({ error: "domainName and certificateArn are required" }, 400);
+  }
+  const result = await getClient().send(new CreateDomainNameCommand({
+    domainName: body.domainName, certificateArn: body.certificateArn,
+  }));
+  return c.json({ domainNameConfig: result.domainNameConfig ?? null }, 201);
+});
+
+router.get("/domain-names", async (c: Context) => {
+  const result = await getClient().send(new ListDomainNamesCommand({}));
+  return c.json({ domainNameConfigs: result.domainNameConfigs ?? [], total: (result.domainNameConfigs ?? []).length });
+});
+
+router.get("/domain-names/:domainName", async (c: Context) => {
+  const result = await getClient().send(new GetDomainNameCommand({
+    domainName: c.req.param("domainName")!,
+  }));
+  return c.json({ domainNameConfig: (result as any).domainNameConfig ?? null });
+});
+
+router.delete("/domain-names/:domainName", async (c: Context) => {
+  await getClient().send(new DeleteDomainNameCommand({
+    domainName: c.req.param("domainName")!,
+  }));
+  return c.json({ deleted: true });
+});
+
+// ─── API associations (merged APIs) ─────────────────────────────
+
+router.get("/api-associations/:domainName", async (c: Context) => {
+  const result = await getClient().send(new GetApiAssociationCommand({
+    domainName: c.req.param("domainName")!,
+  }));
+  return c.json({ apiAssociation: result.apiAssociation ?? null });
+});
+
+
+
+// ─── Channel namespaces (real-time) ─────────────────────────────
+
+router.post("/apis/:apiId/channel-namespaces", async (c: Context) => {
+  const apiId = c.req.param("apiId")!;
+  const body = await c.req.json<{ name: string }>();
+  if (!body.name) return c.json({ error: "name is required" }, 400);
+  const result = await getClient().send(new CreateChannelNamespaceCommand({ apiId, name: body.name }));
+  return c.json({ channelNamespace: result.channelNamespace ?? null }, 201);
+});
+
+router.get("/apis/:apiId/channel-namespaces", async (c: Context) => {
+  const apiId = c.req.param("apiId")!;
+  const result = await getClient().send(new ListChannelNamespacesCommand({ apiId }));
+  return c.json({
+    channelNamespaces: result.channelNamespaces ?? [],
+    total: (result.channelNamespaces ?? []).length,
+  });
+});
+
+router.get("/apis/:apiId/channel-namespaces/:name", async (c: Context) => {
+  const apiId = c.req.param("apiId")!;
+  const result = await getClient().send(new GetChannelNamespaceCommand({
+    apiId, name: c.req.param("name")!,
+  }));
+  return c.json({ channelNamespace: result.channelNamespace ?? null });
+});
+
+router.delete("/apis/:apiId/channel-namespaces/:name", async (c: Context) => {
+  const apiId = c.req.param("apiId")!;
+  await getClient().send(new DeleteChannelNamespaceCommand({
+    apiId, name: c.req.param("name")!,
+  }));
+  return c.json({ deleted: true });
+});
+
+// ─── Tags ───────────────────────────────────────────────────────
+
+router.get("/resources/tags", async (c: Context) => {
+  const arn = c.req.query("arn") || "";
+  if (!arn) return c.json({ error: "arn is required" }, 400);
+  const result = await getClient().send(new ListTagsForResourceCommand({ resourceArn: arn }));
+  return c.json({ tags: result.tags ?? {} });
+});
+
+router.post("/resources/tags", async (c: Context) => {
+  const body = await c.req.json<{ arn: string; tags: Record<string, string> }>();
+  if (!body.arn || !body.tags) return c.json({ error: "arn and tags are required" }, 400);
+  await getClient().send(new TagResourceCommand({ resourceArn: body.arn, tags: body.tags }));
+  return c.json({ tagged: true });
+});
+
+router.delete("/resources/tags", async (c: Context) => {
+  const arn = c.req.query("arn") || "";
+  const tagKeys = (c.req.query("tagKeys") || "").split(",").filter(Boolean);
+  if (!arn || !tagKeys.length) return c.json({ error: "arn and tagKeys are required" }, 400);
+  await getClient().send(new UntagResourceCommand({ resourceArn: arn, tagKeys }));
+  return c.json({ untagged: true });
+});
+
+// ─── Enhanced metrics ───────────────────────────────────────────
+
+router.get("/apis/:apiId/metrics-config", async (c: Context) => {
+  const apiId = c.req.param("apiId")!;
+  const result = await getClient().send(new GetGraphqlApiCommand({ apiId }));
+  return c.json({ metricsConfig: (result.graphqlApi as any)?.metricsConfig ?? null });
 });
 
 export default router;

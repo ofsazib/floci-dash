@@ -40,6 +40,25 @@ vi.mock("@aws-sdk/client-appsync", () => ({
   UpdateResolverCommand: createCmd("UpdateResolverCommand"),
   DeleteResolverCommand: createCmd("DeleteResolverCommand"),
   UpdateDataSourceCommand: createCmd("UpdateDataSourceCommand"),
+  UpdateGraphqlApiCommand: createCmd("UpdateGraphqlApiCommand"),
+  GetDataSourceCommand: createCmd("GetDataSourceCommand"),
+  GetResolverCommand: createCmd("GetResolverCommand"),
+  GetFunctionCommand: createCmd("GetFunctionCommand"),
+  UpdateApiKeyCommand: createCmd("UpdateApiKeyCommand"),
+  PutGraphqlApiEnvironmentVariablesCommand: createCmd("PutGraphqlApiEnvironmentVariablesCommand"),
+  GetGraphqlApiEnvironmentVariablesCommand: createCmd("GetGraphqlApiEnvironmentVariablesCommand"),
+  CreateDomainNameCommand: createCmd("CreateDomainNameCommand"),
+  DeleteDomainNameCommand: createCmd("DeleteDomainNameCommand"),
+  GetDomainNameCommand: createCmd("GetDomainNameCommand"),
+  GetApiAssociationCommand: createCmd("GetApiAssociationCommand"),
+  CreateChannelNamespaceCommand: createCmd("CreateChannelNamespaceCommand"),
+  DeleteChannelNamespaceCommand: createCmd("DeleteChannelNamespaceCommand"),
+  ListChannelNamespacesCommand: createCmd("ListChannelNamespacesCommand"),
+  GetChannelNamespaceCommand: createCmd("GetChannelNamespaceCommand"),
+  ListTagsForResourceCommand: createCmd("ListTagsForResourceCommand"),
+  TagResourceCommand: createCmd("TagResourceCommand"),
+  UntagResourceCommand: createCmd("UntagResourceCommand"),
+  ListDomainNamesCommand: createCmd("ListDomainNamesCommand"),
 }));
 
 import app from "../../index";
@@ -588,5 +607,109 @@ async function del(path: string) {
       const res = await put("/apis/api-1/datasources/ds-1", {});
       expect((await res.json()).dataSource).toBeNull();
     });
+  });
+});
+
+// ─── P1 gap audit — AppSync extras ──────────────────────
+
+const AG = "/api/aws/appsync";
+const j = async (r: Response) => await r.json();
+
+describe("AppSync extras", () => {
+  it("update API", async () => {
+    mockSend.mockResolvedValueOnce({ graphqlApi: { apiId: "a1", name: "renamed" } });
+    const res = await app.request(`${AG}/apis/a1`, { method: "PUT", body: JSON.stringify({ name: "renamed" }), headers: { "content-type": "application/json" } });
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0]).toMatchObject({ __cmdName: "UpdateGraphqlApiCommand", apiId: "a1", name: "renamed" });
+  });
+
+  it("get data source / resolver / function / api key / update key", async () => {
+    mockSend
+      .mockResolvedValueOnce({ dataSource: { name: "ds1" } })
+      .mockResolvedValueOnce({ resolver: { fieldName: "f1" } })
+      .mockResolvedValueOnce({ resolvers: [], nextToken: null })
+      .mockResolvedValueOnce({ functionConfiguration: { functionId: "fn1" } })
+      .mockResolvedValueOnce({ apiKey: { id: "k1" } });
+    const ds = await app.request(`${AG}/apis/a1/data-sources/ds1`);
+    expect((await ds.json()).dataSource.name).toBe("ds1");
+    const resolver = await app.request(`${AG}/apis/a1/resolvers-by-type/Query/resolvers?fieldName=f1`);
+    expect(resolver.status).toBe(200);
+    // single-get resolver (GetResolver)
+    mockSend.mockResolvedValueOnce({ resolver: { fieldName: "f1" } });
+    const getRes = await app.request(`${AG}/apis/a1/resolvers-by-type/Query?fieldName=f1`);
+    expect(getRes.status).toBe(200);
+    expect(mockSend.mock.calls[2][0]).toMatchObject({ __cmdName: "GetResolverCommand", typeName: "Query", fieldName: "f1" });
+    // list resolvers-by-type with maxResults
+    mockSend.mockResolvedValueOnce({ resolvers: [], nextToken: null });
+    const listByType = await app.request(`${AG}/apis/a1/resolvers-by-type/Query/resolvers?maxResults=5`);
+    expect(listByType.status).toBe(200);
+    expect(mockSend.mock.calls[3][0].maxResults).toBe(5);
+
+    const fn = await app.request(`${AG}/apis/a1/functions/fn1`);
+    expect(fn.status).toBe(200);
+    expect(mockSend.mock.calls[4][0].functionId).toBe("fn1");
+    const up = await app.request(`${AG}/apis/a1/api-keys/k1`, { method: "PUT", body: JSON.stringify({ description: "d" }), headers: { "content-type": "application/json" } });
+    expect(up.status).toBe(200);
+  });
+
+  it("GetResolver error arm — rethrows to 500", async () => {
+    mockSend.mockRejectedValueOnce(Object.assign(new Error("boom"), { $metadata: { httpStatusCode: 500 } }));
+    const errRes = await app.request(`${AG}/apis/a1/resolvers-by-type/Query?fieldName=f1`);
+    expect(errRes.status).toBe(500);
+  });
+
+  it("env vars put/get", async () => {
+    mockSend
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ environmentVariables: { A: "1" } });
+    expect((await app.request(`${AG}/apis/a1/env-vars`, { method: "PUT", body: JSON.stringify({ environmentVariables: { A: "1" } }), headers: { "content-type": "application/json" } })).status).toBe(200);
+    expect((await j(await app.request(`${AG}/apis/a1/env-vars`))).environmentVariables).toEqual({ A: "1" });
+  });
+
+  it("domain names create/list/get/delete", async () => {
+    mockSend
+      .mockResolvedValueOnce({ domainNameConfig: { domainName: "api.x" } })
+      .mockResolvedValueOnce({ domainNameConfigs: [{ domainName: "api.x" }] })
+      .mockResolvedValueOnce({ domainNameConfig: { domainName: "api.x" } })
+      .mockResolvedValueOnce({});
+    expect((await app.request(`${AG}/domain-names`, { method: "POST", body: JSON.stringify({ domainName: "api.x", certificateArn: "arn:c" }), headers: { "content-type": "application/json" } })).status).toBe(201);
+    expect((await j(await app.request(`${AG}/domain-names`))).total).toBe(1);
+    expect((await app.request(`${AG}/domain-names/api.x`)).status).toBe(200);
+    expect((await app.request(`${AG}/domain-names/api.x`, { method: "DELETE" })).status).toBe(200);
+    expect((await app.request(`${AG}/domain-names`, { method: "POST", body: "{}", headers: { "content-type": "application/json" } })).status).toBe(400);
+  });
+
+  it("api association get + delete missing command skipped", async () => {
+    mockSend.mockResolvedValueOnce({ apiAssociation: { associationId: "as-1" } });
+    const res = await app.request(`${AG}/api-associations/api.x`);
+    expect((await res.json()).apiAssociation.associationId).toBe("as-1");
+  });
+
+  it("channel namespaces CRUD", async () => {
+    mockSend
+      .mockResolvedValueOnce({ channelNamespace: { name: "ns1" } })
+      .mockResolvedValueOnce({ channelNamespaces: [{ name: "ns1" }] })
+      .mockResolvedValueOnce({ channelNamespace: { name: "ns1" } })
+      .mockResolvedValueOnce({});
+    expect((await app.request(`${AG}/apis/a1/channel-namespaces`, { method: "POST", body: JSON.stringify({ name: "ns1" }), headers: { "content-type": "application/json" } })).status).toBe(201);
+    expect((await j(await app.request(`${AG}/apis/a1/channel-namespaces`))).total).toBe(1);
+    expect((await app.request(`${AG}/apis/a1/channel-namespaces/ns1`)).status).toBe(200);
+    expect((await app.request(`${AG}/apis/a1/channel-namespaces/ns1`, { method: "DELETE" })).status).toBe(200);
+    expect((await app.request(`${AG}/apis/a1/channel-namespaces`, { method: "POST", body: "{}", headers: { "content-type": "application/json" } })).status).toBe(400);
+  });
+
+  it("tags get/put/delete + metrics config", async () => {
+    mockSend
+      .mockResolvedValueOnce({ tags: { a: "b" } })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ graphqlApi: { metricsConfig: { enabled: true } } });
+    expect((await j(await app.request(`${AG}/resources/tags?arn=arn%3Aa`))).tags).toEqual({ a: "b" });
+    expect((await app.request(`${AG}/resources/tags`, { method: "POST", body: JSON.stringify({ arn: "arn:a", tags: { a: "b" } }), headers: { "content-type": "application/json" } })).status).toBe(200);
+    expect((await app.request(`${AG}/resources/tags?arn=arn%3Aa&tagKeys=a`, { method: "DELETE" })).status).toBe(200);
+    expect((await j(await app.request(`${AG}/apis/a1/metrics-config`))).metricsConfig.enabled).toBe(true);
+    expect((await app.request(`${AG}/resources/tags`, { method: "POST", body: "{}", headers: { "content-type": "application/json" } })).status).toBe(400);
+    expect((await app.request(`${AG}/resources/tags`, { method: "DELETE" })).status).toBe(400);
+    expect((await app.request(`${AG}/resources/tags`)).status).toBe(400);
   });
 });
