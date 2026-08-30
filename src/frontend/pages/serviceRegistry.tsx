@@ -73,6 +73,7 @@ import { RUMDashboard } from "./services/RUMDashboard";
 import { S3Dashboard } from "./services/S3Dashboard";
 import { LambdaDashboard } from "./services/LambdaDashboard";
 import { CloudFormationDashboard } from "./services/CloudFormationDashboard";
+import { LambdaMicrovmsDashboard } from "./services/LambdaMicrovmsDashboard";
 
 import type { ComponentType } from "react";
 
@@ -152,4 +153,5 @@ export const SERVICE_DASHBOARDS: Record<string, ComponentType> = {
   "cloudhsm": CloudHSMDashboard,
   "applicationautoscaling": AppAutoScalingDashboard,
   "cloudformation": CloudFormationDashboard,
+  "lambdamicrovms": LambdaMicrovmsDashboard,
 };
