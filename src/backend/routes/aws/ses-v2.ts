@@ -145,11 +145,13 @@ router.post("/email-identities/:identity/policies/:policyName", async (c: Contex
   const identity = decodeURIComponent(c.req.param("identity")!);
   const policyName = decodeURIComponent(c.req.param("policyName")!);
   const body = await c.req.json<{ policy?: string }>();
-  if (!body.policy) return c.json({ error: "policy is required" }, 400);
-  await v2().send(new UpdateEmailIdentityPolicyCommand({
-    EmailIdentity: identity, PolicyName: policyName, Policy: body.policy,
-  }));
-  return c.json({ updated: true });
+  if (body.policy) {
+    await v2().send(new UpdateEmailIdentityPolicyCommand({
+      EmailIdentity: identity, PolicyName: policyName, Policy: body.policy,
+    }));
+    return c.json({ updated: true });
+  }
+  return c.json({ error: "policy is required" }, 400);
 });
 
 router.delete("/email-identities/:identity/policies/:policyName", async (c: Context) => {
@@ -180,9 +182,8 @@ router.post("/send", async (c: Context) => {
 
 router.post("/send-bulk", async (c: Context) => {
   const body = await c.req.json<any>();
-  if (!body.from) return c.json({ error: "from is required" }, 400);
-  if (!Array.isArray(body.bulkEmailEntries) || !body.bulkEmailEntries.length) {
-    return c.json({ error: "bulkEmailEntries is required" }, 400);
+  if (!body.from || !Array.isArray(body.bulkEmailEntries) || !body.bulkEmailEntries.length) {
+    return c.json({ error: "from and bulkEmailEntries are required" }, 400);
   }
   const result = await v2().send(new SendBulkEmailCommand({
     FromEmailAddress: body.from,
@@ -240,10 +241,12 @@ router.get("/templates/:name", async (c: Context) => {
 router.put("/templates/:name", async (c: Context) => {
   const name = decodeURIComponent(c.req.param("name")!);
   const body = await c.req.json<{ subject?: string; html?: string; text?: string }>();
+  let subject = body.subject;
+  if (!subject) subject = "";
   await v2().send(new UpdateEmailTemplateCommand({
     TemplateName: name,
     TemplateContent: {
-      Subject: body.subject ?? "",
+      Subject: subject,
       Html: body.html,
       Text: body.text,
     },

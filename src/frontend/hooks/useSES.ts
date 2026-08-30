@@ -723,3 +723,92 @@ export function useDeleteSESv2SuppressedDestination() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ses", "v2", "suppression"] }),
   });
 }
+
+// ─── SES v1 extras (P1 gap audit) ────────────────────────
+export function useSendSESv1BulkTemplated() {
+  return useMutation({
+    mutationFn: (body: { source: string; template: string; destinations: unknown[]; defaultTemplateData?: string }) =>
+      api("/aws/email/send-bulk-templated", { method: "POST", body: JSON.stringify(body) }),
+  });
+}
+
+export function useSESv1CVETs() {
+  return useQuery<{ templates: any[]; total: number }>({
+    queryKey: ["aws", "ses", "v1", "cvets"],
+    queryFn: () => api("/aws/email/custom-verification-templates"),
+  });
+}
+
+export function useCreateSESv1CVET() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { templateName: string; fromEmailAddress: string; templateSubject?: string; templateHtml?: string; templateText?: string; successRedirectionURL?: string; failureRedirectionURL?: string }) =>
+      api("/aws/email/custom-verification-templates", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ses", "v1", "cvets"] }),
+  });
+}
+
+export function useDeleteSESv1CVET() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api(`/aws/email/custom-verification-templates/${encodeURIComponent(name)}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ses", "v1", "cvets"] }),
+  });
+}
+
+export function useSendSESv1CustomVerification() {
+  return useMutation({
+    mutationFn: (body: { emailAddress: string; templateName: string; configurationSetName?: string }) =>
+      api("/aws/email/send-custom-verification", { method: "POST", body: JSON.stringify(body) }),
+  });
+}
+
+export function useVerifySESv1DomainDkim() {
+  return useMutation({
+    mutationFn: (domain: string) =>
+      api(`/aws/email/domains/${domain}/dkim`, { method: "POST", body: "{}" }),
+  });
+}
+
+export function useSESv1IdentityPolicies(identity: string | null) {
+  return useQuery<{ policies: Record<string, string> }>({
+    queryKey: ["aws", "ses", "v1", "identity-policies", identity],
+    queryFn: () => api(`/aws/email/identities/${encodeURIComponent(identity!)}/policies`),
+    enabled: !!identity,
+  });
+}
+
+export function useSESv1ReceiptRuleSets() {
+  return useQuery<{ ruleSets: any[]; total: number }>({
+    queryKey: ["aws", "ses", "v1", "receipt-rule-sets"],
+    queryFn: () => api("/aws/email/receipt-rule-sets"),
+  });
+}
+
+export function useCreateSESv1ReceiptRuleSet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { ruleSetName: string }) =>
+      api("/aws/email/receipt-rule-sets", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ses", "v1", "receipt-rule-sets"] }),
+  });
+}
+
+export function useDeleteSESv1ReceiptRuleSet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api(`/aws/email/receipt-rule-sets/${encodeURIComponent(name)}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ses", "v1", "receipt-rule-sets"] }),
+  });
+}
+
+export function useActivateSESv1ReceiptRuleSet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api(`/aws/email/receipt-rule-sets/${name}/activate`, { method: "POST", body: "{}" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ses", "v1", "receipt-rule-sets"] }),
+  });
+}

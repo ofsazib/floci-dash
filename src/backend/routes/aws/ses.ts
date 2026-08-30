@@ -48,6 +48,25 @@ import {
   SendRawEmailCommand,
   VerifyEmailAddressCommand,
   DeleteVerifiedEmailAddressCommand,
+  // P1 gap audit — v1 extras
+  SendBulkTemplatedEmailCommand,
+  CreateCustomVerificationEmailTemplateCommand,
+  GetCustomVerificationEmailTemplateCommand,
+  ListCustomVerificationEmailTemplatesCommand,
+  UpdateCustomVerificationEmailTemplateCommand,
+  DeleteCustomVerificationEmailTemplateCommand,
+  SendCustomVerificationEmailCommand,
+  VerifyDomainDkimCommand,
+  PutIdentityPolicyCommand,
+  GetIdentityPoliciesCommand,
+  ListIdentityPoliciesCommand,
+  DeleteIdentityPolicyCommand,
+  CreateReceiptRuleSetCommand,
+  DescribeReceiptRuleSetCommand,
+  ListReceiptRuleSetsCommand,
+  DeleteReceiptRuleSetCommand,
+  SetActiveReceiptRuleSetCommand,
+  DescribeActiveReceiptRuleSetCommand,
 } from "@aws-sdk/client-ses";
 
 const router = new Hono();
@@ -679,6 +698,197 @@ router.post("/send-templated", async (c: Context) => {
     })
   );
   return c.json({ messageId: result.MessageId }, 201);
+});
+
+
+// ────────────────────────────────────────────────────────────────
+//  P1 gap audit — v1 extras
+// ────────────────────────────────────────────────────────────────
+
+router.post("/send-bulk-templated", async (c: Context) => {
+  const body = await c.req.json<{ source?: string; template?: string; destinations?: any[]; defaultTemplateData?: string }>();
+  if (!body.source) return c.json({ error: "source is required" }, 400);
+  if (!body.template) return c.json({ error: "template is required" }, 400);
+  if (!Array.isArray(body.destinations) || !body.destinations.length) {
+    return c.json({ error: "destinations is required" }, 400);
+  }
+  const result = await getClient().send(new SendBulkTemplatedEmailCommand({
+    Source: body.source,
+    Template: body.template,
+    Destinations: body.destinations,
+    DefaultTemplateData: body.defaultTemplateData || "{}",
+  }));
+  return c.json({
+    status: (result.Status || []).map((s: any) => ({
+      status: s.Status,
+      messageId: s.MessageId ?? null,
+      error: s.Error ?? null,
+    })),
+  }, 201);
+});
+
+// ─── Custom verification email templates (CVET) ────────────────
+
+router.post("/custom-verification-templates", async (c: Context) => {
+  const body = await c.req.json<{ templateName?: string; fromEmailAddress?: string; templateSubject?: string; templateHtml?: string; templateText?: string; successRedirectionURL?: string; failureRedirectionURL?: string }>();
+  if (!body.templateName) return c.json({ error: "templateName is required" }, 400);
+  if (!body.fromEmailAddress) return c.json({ error: "fromEmailAddress is required" }, 400);
+  await getClient().send(new CreateCustomVerificationEmailTemplateCommand({
+    TemplateName: body.templateName,
+    FromEmailAddress: body.fromEmailAddress,
+    TemplateSubject: body.templateSubject || "",
+    TemplateContent: body.templateHtml || body.templateText || "",
+    SuccessRedirectionURL: body.successRedirectionURL,
+    FailureRedirectionURL: body.failureRedirectionURL,
+  }));
+  return c.json({ created: true }, 201);
+});
+
+router.get("/custom-verification-templates", async (c: Context) => {
+  const result = await getClient().send(new ListCustomVerificationEmailTemplatesCommand({ MaxItems: 100 } as any));
+  return c.json({
+    templates: (result.CustomVerificationEmailTemplates || []).map((t: any) => ({
+      name: t.TemplateName,
+      from: t.FromEmailAddress,
+      successUrl: t.SuccessRedirectionURL,
+      failureUrl: t.FailureRedirectionURL,
+    })),
+    total: (result.CustomVerificationEmailTemplates || []).length,
+  });
+});
+
+router.get("/custom-verification-templates/:name", async (c: Context) => {
+  const name = decodeURIComponent(c.req.param("name")!);
+  const result = await getClient().send(new GetCustomVerificationEmailTemplateCommand({ TemplateName: name }));
+  return c.json({
+    templateName: result.TemplateName ?? name,
+    from: result.FromEmailAddress ?? null,
+    subject: result.TemplateSubject ?? null,
+    content: result.TemplateContent ?? null,
+    successUrl: result.SuccessRedirectionURL ?? null,
+    failureUrl: result.FailureRedirectionURL ?? null,
+  });
+});
+
+router.put("/custom-verification-templates/:name", async (c: Context) => {
+  const name = decodeURIComponent(c.req.param("name")!);
+  const body = await c.req.json<any>();
+  await getClient().send(new UpdateCustomVerificationEmailTemplateCommand({
+    TemplateName: name,
+    FromEmailAddress: body.fromEmailAddress,
+    TemplateSubject: body.templateSubject || "",
+    TemplateContent: body.templateHtml || body.templateText || "",
+    SuccessRedirectionURL: body.successRedirectionURL,
+    FailureRedirectionURL: body.failureRedirectionURL,
+  } as any));
+  return c.json({ updated: true });
+});
+
+router.delete("/custom-verification-templates/:name", async (c: Context) => {
+  const name = decodeURIComponent(c.req.param("name")!);
+  await getClient().send(new DeleteCustomVerificationEmailTemplateCommand({ TemplateName: name }));
+  return c.json({ deleted: true });
+});
+
+router.post("/send-custom-verification", async (c: Context) => {
+  const body = await c.req.json<{ emailAddress?: string; templateName?: string; configurationSetName?: string }>();
+  if (!body.emailAddress) return c.json({ error: "emailAddress is required" }, 400);
+  if (!body.templateName) return c.json({ error: "templateName is required" }, 400);
+  await getClient().send(new SendCustomVerificationEmailCommand({
+    EmailAddress: body.emailAddress,
+    TemplateName: body.templateName,
+    ConfigurationSetName: body.configurationSetName,
+  }));
+  return c.json({ sent: true }, 201);
+});
+
+// ─── DKIM + identity policies (v1) ──────────────────────────────
+
+router.post("/domains/:domain/dkim", async (c: Context) => {
+  const domain = c.req.param("domain")!;
+  const result = await getClient().send(new VerifyDomainDkimCommand({ Domain: domain }));
+  return c.json({ dkimTokens: result.DkimTokens ?? [] }, 201);
+});
+
+router.put("/identities/:identity/policies/:policyName", async (c: Context) => {
+  const identity = decodeURIComponent(c.req.param("identity")!);
+  const policyName = decodeURIComponent(c.req.param("policyName")!);
+  const body = await c.req.json<{ policy?: string }>();
+  if (!body.policy) return c.json({ error: "policy is required" }, 400);
+  await getClient().send(new PutIdentityPolicyCommand({
+    Identity: identity, PolicyName: policyName, Policy: body.policy,
+  }));
+  return c.json({ created: true }, 201);
+});
+
+router.get("/identities/:identity/policies", async (c: Context) => {
+  const identity = decodeURIComponent(c.req.param("identity")!);
+  const result = await getClient().send(new GetIdentityPoliciesCommand({
+    Identity: identity,
+    PolicyNames: (c.req.query("policyNames") || "").split(",").filter(Boolean),
+  }));
+  return c.json({ policies: result.Policies ?? {} });
+});
+
+router.delete("/identities/:identity/policies/:policyName", async (c: Context) => {
+  const identity = decodeURIComponent(c.req.param("identity")!);
+  const policyName = decodeURIComponent(c.req.param("policyName")!);
+  await getClient().send(new DeleteIdentityPolicyCommand({
+    Identity: identity, PolicyName: policyName,
+  }));
+  return c.json({ deleted: true });
+});
+
+// ─── Receipt rule sets ──────────────────────────────────────────
+
+router.post("/receipt-rule-sets", async (c: Context) => {
+  const body = await c.req.json<{ ruleSetName?: string }>();
+  if (!body.ruleSetName) return c.json({ error: "ruleSetName is required" }, 400);
+  await getClient().send(new CreateReceiptRuleSetCommand({ RuleSetName: body.ruleSetName }));
+  return c.json({ created: true }, 201);
+});
+
+router.get("/receipt-rule-sets/:name", async (c: Context) => {
+  const name = decodeURIComponent(c.req.param("name")!);
+  const result = await getClient().send(new DescribeReceiptRuleSetCommand({ RuleSetName: name }));
+  return c.json({
+    name: result.Metadata?.Name ?? name,
+    created: result.Metadata?.CreatedTimestamp ?? null,
+    rules: (result.Rules || []).map((r: any) => ({ name: r.Name, enabled: r.Enabled })),
+    total: (result.Rules || []).length,
+  });
+});
+
+router.get("/receipt-rule-sets", async (c: Context) => {
+  const result = await getClient().send(new ListReceiptRuleSetsCommand({ NextToken: c.req.query("nextToken") }));
+  return c.json({
+    ruleSets: (result.RuleSets || []).map((r: any) => ({
+      name: r.Name,
+      created: r.CreatedTimestamp,
+    })),
+    total: (result.RuleSets || []).length,
+  });
+});
+
+router.delete("/receipt-rule-sets/:name", async (c: Context) => {
+  const name = decodeURIComponent(c.req.param("name")!);
+  await getClient().send(new DeleteReceiptRuleSetCommand({ RuleSetName: name }));
+  return c.json({ deleted: true });
+});
+
+router.post("/receipt-rule-sets/:name/activate", async (c: Context) => {
+  const name = c.req.param("name")!;
+  await getClient().send(new SetActiveReceiptRuleSetCommand({ RuleSetName: name }));
+  return c.json({ activated: true });
+});
+
+router.get("/receipt-rule-sets-active", async (c: Context) => {
+  const result = await getClient().send(new DescribeActiveReceiptRuleSetCommand({}));
+  return c.json({
+    name: result.Metadata?.Name ?? null,
+    created: result.Metadata?.CreatedTimestamp ?? null,
+    rules: (result.Rules || []).map((r: any) => ({ name: r.Name, enabled: r.Enabled })),
+  });
 });
 
 export default router;

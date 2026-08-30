@@ -934,6 +934,38 @@ describe("SESDashboard — identity notification detail", () => {
     expect(screen.getAllByRole("button", { name: /Cancel/i }).length).toBeGreaterThanOrEqual(1);
     expect(mockSetMailFrom).not.toHaveBeenCalled();
   });
+
+  it("submits mail-from domain and closes on success", async () => {
+    mockSetMailFrom.mockImplementation((_p: any, opts: any) => opts?.onSuccess?.());
+    const user = userEvent.setup();
+    setupIdentities();
+    mockNotifAttrs.mockReturnValue({
+      data: { forwardingEnabled: false },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    render(<SESDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText(IDENTITY)).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Notifications/i }));
+    await waitFor(() => screen.getByText("DKIM Signing"));
+    const setBtns = screen.getAllByRole("button", { name: /Set/i });
+    await user.click(setBtns[setBtns.length - 1]);
+    await waitFor(() => {
+      expect(screen.getByText("Set MAIL FROM Domain")).toBeTruthy();
+    });
+    const input = within(screen.getByRole("dialog", { name: /Set MAIL FROM Domain/i })).getByPlaceholderText("mail.example.com");
+    // Save disabled while input empty
+    const saveBtn = within(screen.getByRole("dialog", { name: /Set MAIL FROM Domain/i })).getByRole("button", { name: /^Save$/i }) as HTMLButtonElement;
+    expect(saveBtn.disabled).toBe(true);
+    await user.type(input, "mail.example.com");
+    expect(saveBtn.disabled).toBe(false);
+    await user.click(saveBtn);
+    await waitFor(() => expect(mockSetMailFrom).toHaveBeenCalledWith(
+      { identity: IDENTITY, mailFromDomain: "mail.example.com" },
+      expect.any(Object),
+    ));
+  });
 });
 
 describe("SESDashboard — event destinations", () => {

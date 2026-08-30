@@ -141,6 +141,9 @@ describe("SES v2 — sending", () => {
   it("send-bulk 400 without entries", async () => {
     expect((await router.request(`${AG}/send-bulk`, { method: "POST", body: JSON.stringify({ from: "a@b.c" }), headers: { "content-type": "application/json" } })).status).toBe(400);
   });
+  it("send-bulk 400 without from", async () => {
+    expect((await router.request(`${AG}/send-bulk`, { method: "POST", body: JSON.stringify({ bulkEmailEntries: [{ Destination: {} }] }), headers: { "content-type": "application/json" } })).status).toBe(400);
+  });
 });
 
 describe("SES v2 — templates", () => {
@@ -336,5 +339,46 @@ describe("SES v2 — tags", () => {
     expect((await router.request(`${AG}/resources/tags?arn=arn%3Ai&tagKeys=a`, { method: "DELETE" })).status).toBe(200);
     expect((await router.request(`${AG}/resources/tags`, { method: "POST", body: "{}", headers: { "content-type": "application/json" } })).status).toBe(400);
     expect((await router.request(`${AG}/resources/tags`, { method: "DELETE" })).status).toBe(400);
+  });
+});
+
+describe("SES v2 — edge arms", () => {
+  it("400s for policy/content/from + empty-list arms + tag 400s", async () => {
+    // policy PUT 400 without policy
+    expect((await router.request(`${AG}/email-identities/x%40y.z/policies/p1`, { method: "PUT", body: "{}", headers: { "content-type": "application/json" } })).status).toBe(400);
+    // send 400s: content missing / from missing
+    expect((await router.request(`${AG}/send`, { method: "POST", body: JSON.stringify({ from: "a@b.c", destination: {} }), headers: { "content-type": "application/json" } })).status).toBe(400);
+    expect((await router.request(`${AG}/send`, { method: "POST", body: JSON.stringify({ destination: {}, content: {} }), headers: { "content-type": "application/json" } })).status).toBe(400);
+    // empty-list arms
+    mockSend.mockResolvedValue({});
+    expect((await j(await router.request(`${AG}/templates`))).total).toBe(0);
+    expect((await j(await router.request(`${AG}/configuration-sets`))).total).toBe(0);
+    expect((await j(await router.request(`${AG}/dedicated-ip-pools`))).total).toBe(0);
+    expect((await j(await router.request(`${AG}/contact-lists`))).total).toBe(0);
+    expect((await j(await router.request(`${AG}/suppressed-destinations`))).total).toBe(0);
+    // pool get sparse
+    expect((await j(await router.request(`${AG}/dedicated-ip-pools/pool1`))).pool).toBeNull();
+    // contact list create WITH topicName
+    mockSend.mockResolvedValueOnce({});
+    expect((await router.request(`${AG}/contact-lists`, { method: "POST", body: JSON.stringify({ listName: "cl2", topicName: "news" }), headers: { "content-type": "application/json" } })).status).toBe(201);
+    // contacts list item without UnsubscribeAll
+    mockSend.mockResolvedValueOnce({ Contacts: [{ Email: "n@x.y" }] });
+    const contacts = await router.request(`${AG}/contact-lists/cl1/contacts`);
+    expect((await j(contacts)).contacts[0].unsubscribeAll).toBe(false);
+    // identity create without identityType in response
+    mockSend.mockResolvedValueOnce({});
+    const ident = await router.request(`${AG}/email-identities`, { method: "POST", body: JSON.stringify({ emailIdentity: "n@x.y" }), headers: { "content-type": "application/json" } });
+    expect((await j(ident)).identityType).toBeNull();
+    // identities list item without SendingEnabled
+    mockSend.mockResolvedValueOnce({ EmailIdentities: [{ IdentityName: "n@x.y" }] });
+    const idlist = await router.request(`${AG}/email-identities`);
+    expect((await j(idlist)).identities[0].sendingEnabled).toBe(false);
+    // template create without subject -> ""
+    mockSend.mockResolvedValueOnce({});
+    expect((await router.request(`${AG}/templates`, { method: "POST", body: JSON.stringify({ templateName: "t3" }), headers: { "content-type": "application/json" } })).status).toBe(201);
+    // tags GET without arn -> 400
+    expect((await router.request(`${AG}/resources/tags`, { method: "GET" })).status).toBe(400);
+    // tags DELETE without arn -> 400
+    expect((await router.request(`${AG}/resources/tags?tagKeys=a`, { method: "DELETE" })).status).toBe(400);
   });
 });

@@ -51,6 +51,17 @@ import {
   useRenderSESTemplate,
   useSESSendTemplated,
   useSESv2Identities,
+  useSendSESv1BulkTemplated,
+  useSESv1CVETs,
+  useCreateSESv1CVET,
+  useDeleteSESv1CVET,
+  useSendSESv1CustomVerification,
+  useVerifySESv1DomainDkim,
+  useSESv1IdentityPolicies,
+  useSESv1ReceiptRuleSets,
+  useCreateSESv1ReceiptRuleSet,
+  useDeleteSESv1ReceiptRuleSet,
+  useActivateSESv1ReceiptRuleSet,
   useCreateSESv2Identity,
   useDeleteSESv2Identity,
   useSendSESv2Email,
@@ -785,5 +796,74 @@ describe("useSES v2 hooks", () => {
     mockApi.mockResolvedValueOnce({ deleted: true });
     const { result: delR } = renderHook(() => useDeleteSESv2SuppressedDestination(), { wrapper: createWrapper() });
     await delR.current.mutateAsync("b@x.y");
+  });
+});
+
+describe("useSES v1 extras hooks", () => {
+  it("bulk templated send", async () => {
+    mockApi.mockResolvedValueOnce({ status: [] });
+    const { result } = renderHook(() => useSendSESv1BulkTemplated(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ source: "a@b.c", template: "t", destinations: [] });
+    expect(mockApi).toHaveBeenCalledWith("/aws/email/send-bulk-templated", {
+      method: "POST",
+      body: JSON.stringify({ source: "a@b.c", template: "t", destinations: [] }),
+    });
+  });
+
+  it("CVET query/create/delete", async () => {
+    mockApi.mockResolvedValueOnce({ templates: [], total: 0 });
+    const list = renderHook(() => useSESv1CVETs(), { wrapper: createWrapper() });
+    await waitFor(() => expect(list.result.current.isSuccess).toBe(true));
+    mockApi.mockResolvedValueOnce({ created: true });
+    const { result: createR } = renderHook(() => useCreateSESv1CVET(), { wrapper: createWrapper() });
+    await createR.current.mutateAsync({ templateName: "cv1", fromEmailAddress: "a@b.c" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/email/custom-verification-templates", {
+      method: "POST",
+      body: JSON.stringify({ templateName: "cv1", fromEmailAddress: "a@b.c" }),
+    });
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result: delR } = renderHook(() => useDeleteSESv1CVET(), { wrapper: createWrapper() });
+    await delR.current.mutateAsync("cv1");
+  });
+
+  it("send custom verification + dkim", async () => {
+    mockApi.mockResolvedValueOnce({ sent: true });
+    const { result: send } = renderHook(() => useSendSESv1CustomVerification(), { wrapper: createWrapper() });
+    await send.current.mutateAsync({ emailAddress: "x@y.z", templateName: "cv1" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/email/send-custom-verification", {
+      method: "POST",
+      body: JSON.stringify({ emailAddress: "x@y.z", templateName: "cv1" }),
+    });
+    mockApi.mockResolvedValueOnce({ dkimTokens: [] });
+    const { result: dkim } = renderHook(() => useVerifySESv1DomainDkim(), { wrapper: createWrapper() });
+    await dkim.current.mutateAsync("example.com");
+    expect(mockApi).toHaveBeenCalledWith("/aws/email/domains/example.com/dkim", { method: "POST", body: "{}" });
+  });
+
+  it("identity policies query", async () => {
+    mockApi.mockResolvedValueOnce({ policies: { p1: "{}" } });
+    const policies = renderHook(() => useSESv1IdentityPolicies("x@y.z"), { wrapper: createWrapper() });
+    await waitFor(() => expect(policies.result.current.isSuccess).toBe(true));
+    const idle = renderHook(() => useSESv1IdentityPolicies(null), { wrapper: createWrapper() });
+    expect(idle.result.current.fetchStatus).toBe("idle");
+  });
+
+  it("receipt rule sets query/create/delete/activate", async () => {
+    mockApi.mockResolvedValueOnce({ ruleSets: [], total: 0 });
+    const list = renderHook(() => useSESv1ReceiptRuleSets(), { wrapper: createWrapper() });
+    await waitFor(() => expect(list.result.current.isSuccess).toBe(true));
+    mockApi.mockResolvedValueOnce({ created: true });
+    const { result: createR } = renderHook(() => useCreateSESv1ReceiptRuleSet(), { wrapper: createWrapper() });
+    await createR.current.mutateAsync({ ruleSetName: "rs1" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/email/receipt-rule-sets", {
+      method: "POST",
+      body: JSON.stringify({ ruleSetName: "rs1" }),
+    });
+    mockApi.mockResolvedValueOnce({ activated: true });
+    const { result: actR } = renderHook(() => useActivateSESv1ReceiptRuleSet(), { wrapper: createWrapper() });
+    await actR.current.mutateAsync("rs1");
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result: delR } = renderHook(() => useDeleteSESv1ReceiptRuleSet(), { wrapper: createWrapper() });
+    await delR.current.mutateAsync("rs1");
   });
 });

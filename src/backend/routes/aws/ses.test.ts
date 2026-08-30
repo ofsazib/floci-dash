@@ -60,6 +60,24 @@ vi.mock("@aws-sdk/client-ses", () => ({
   GetTemplateCommand: createCmd("GetTemplateCommand"),
   SendTemplatedEmailCommand: createCmd("SendTemplatedEmailCommand"),
   TestRenderTemplateCommand: createCmd("TestRenderTemplateCommand"),
+  SendBulkTemplatedEmailCommand: createCmd("SendBulkTemplatedEmailCommand"),
+  CreateCustomVerificationEmailTemplateCommand: createCmd("CreateCustomVerificationEmailTemplateCommand"),
+  GetCustomVerificationEmailTemplateCommand: createCmd("GetCustomVerificationEmailTemplateCommand"),
+  ListCustomVerificationEmailTemplatesCommand: createCmd("ListCustomVerificationEmailTemplatesCommand"),
+  UpdateCustomVerificationEmailTemplateCommand: createCmd("UpdateCustomVerificationEmailTemplateCommand"),
+  DeleteCustomVerificationEmailTemplateCommand: createCmd("DeleteCustomVerificationEmailTemplateCommand"),
+  SendCustomVerificationEmailCommand: createCmd("SendCustomVerificationEmailCommand"),
+  VerifyDomainDkimCommand: createCmd("VerifyDomainDkimCommand"),
+  PutIdentityPolicyCommand: createCmd("PutIdentityPolicyCommand"),
+  GetIdentityPoliciesCommand: createCmd("GetIdentityPoliciesCommand"),
+  ListIdentityPoliciesCommand: createCmd("ListIdentityPoliciesCommand"),
+  DeleteIdentityPolicyCommand: createCmd("DeleteIdentityPolicyCommand"),
+  CreateReceiptRuleSetCommand: createCmd("CreateReceiptRuleSetCommand"),
+  DescribeReceiptRuleSetCommand: createCmd("DescribeReceiptRuleSetCommand"),
+  ListReceiptRuleSetsCommand: createCmd("ListReceiptRuleSetsCommand"),
+  DeleteReceiptRuleSetCommand: createCmd("DeleteReceiptRuleSetCommand"),
+  SetActiveReceiptRuleSetCommand: createCmd("SetActiveReceiptRuleSetCommand"),
+  DescribeActiveReceiptRuleSetCommand: createCmd("DescribeActiveReceiptRuleSetCommand"),
 }));
 
 vi.mock("@aws-sdk/client-sesv2", () => ({
@@ -1029,4 +1047,139 @@ describe("SES Routes", () => {
     expect(await res.json()).toEqual({ details: null });
   });
 
+});
+
+// ─── P1 gap audit — v1 extras ───────────────────────────
+
+describe("SES v1 — send-bulk-templated", () => {
+  it("sends and maps per-destination status", async () => {
+    mockSend.mockResolvedValueOnce({ Status: [{ Status: "Success", MessageId: "m1" }, { Status: "Rejected", Error: "no" }] });
+    const res = await post("/send-bulk-templated", { source: "a@b.c", template: "t1", destinations: [{ Destination: { ToAddresses: ["x@y.z"] } }], defaultTemplateData: "{}" });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.status[0].messageId).toBe("m1");
+    expect(body.status[1].status).toBe("Rejected");
+  });
+  it("400s without source/template/destinations", async () => {
+    expect((await post("/send-bulk-templated", {})).status).toBe(400);
+    expect((await post("/send-bulk-templated", { source: "a@b.c" })).status).toBe(400);
+    expect((await post("/send-bulk-templated", { source: "a@b.c", template: "t" })).status).toBe(400);
+  });
+});
+
+describe("SES v1 — custom verification email templates", () => {
+  it("create/list/get/update/delete", async () => {
+    mockSend
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ CustomVerificationEmailTemplates: [{ TemplateName: "cv1", FromEmailAddress: "a@b.c", SuccessRedirectionURL: "https://s", FailureRedirectionURL: "https://f" }] })
+      .mockResolvedValueOnce({ TemplateName: "cv1", FromEmailAddress: "a@b.c", TemplateSubject: "s", TemplateContent: "<p/>", SuccessRedirectionURL: "https://s", FailureRedirectionURL: "https://f" })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({});
+    expect((await post("/custom-verification-templates", { templateName: "cv1", fromEmailAddress: "a@b.c", templateSubject: "s", templateHtml: "<p/>" })).status).toBe(201);
+    const list = await get("/custom-verification-templates");
+    const lb = await list.json();
+    expect(lb.templates[0].name).toBe("cv1");
+    const one = await get("/custom-verification-templates/cv1");
+    const ob = await one.json();
+    expect(ob.content).toBe("<p/>");
+    expect((await put("/custom-verification-templates/cv1", { fromEmailAddress: "a@b.c" })).status).toBe(200);
+    expect((await del("/custom-verification-templates/cv1")).status).toBe(200);
+    expect((await post("/custom-verification-templates", { fromEmailAddress: "a@b.c" })).status).toBe(400);
+    expect((await post("/custom-verification-templates", { templateName: "x" })).status).toBe(400);
+  });
+  it("v1 sends sparse defaults", async () => {
+    mockSend.mockResolvedValue({});
+    // bulk templated: no DefaultTemplateData -> "{}"
+    const bulk = await post("/send-bulk-templated", { source: "a@b.c", template: "t", destinations: [{ Destination: {} }] });
+    const bb = await bulk.json();
+    expect(bb.status).toEqual([]);
+    expect(mockSend.mock.calls[0][0].DefaultTemplateData).toBe("{}");
+    // CVET create sparse subject/content
+    expect((await post("/custom-verification-templates", { templateName: "cv2", fromEmailAddress: "a@b.c" })).status).toBe(201);
+    // CVET get sparse
+    const cv = await get("/custom-verification-templates/cv2");
+    const cvb = await cv.json();
+    expect(cvb.subject).toBeNull();
+    expect(cvb.content).toBeNull();
+    // CVET list sparse
+    const list = await get("/custom-verification-templates");
+    expect((await list.json()).total).toBe(0);
+    // identity policies sparse
+    const pol = await get("/identities/x%40y.z/policies");
+    expect((await pol.json()).policies).toEqual({});
+    // receipt rule set describe sparse rules
+    const rs = await get("/receipt-rule-sets/rs1");
+    expect((await rs.json()).total).toBe(0);
+    // rule sets list sparse
+    const rsl = await get("/receipt-rule-sets");
+    expect((await rsl.json()).total).toBe(0);
+    // dkim sparse
+    const dkim = await post("/domains/example.com/dkim", {});
+    expect((await dkim.json()).dkimTokens).toEqual([]);
+    // active rule set sparse
+    const active = await get("/receipt-rule-sets-active");
+    const activeBody = await active.json();
+    expect(activeBody.name).toBeNull();
+    expect(activeBody.rules).toEqual([]);
+    // describe with rules present (map arm)
+    mockSend.mockResolvedValueOnce({ Metadata: { Name: "rs2" }, Rules: [{ Name: "r", Enabled: false }] });
+    const rs2 = await get("/receipt-rule-sets/rs2");
+    expect((await rs2.json()).total).toBe(1);
+    // active with rules present (map arm)
+    mockSend.mockResolvedValueOnce({ Metadata: { Name: "rs3" }, Rules: [{ Name: "r3", Enabled: true }] });
+    const active3 = await get("/receipt-rule-sets-active");
+    expect((await active3.json()).rules).toHaveLength(1);
+  });
+
+  it("send custom verification email", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/send-custom-verification", { emailAddress: "x@y.z", templateName: "cv1" });
+    expect(res.status).toBe(201);
+    expect((await post("/send-custom-verification", { templateName: "cv1" })).status).toBe(400);
+    expect((await post("/send-custom-verification", { emailAddress: "x@y.z" })).status).toBe(400);
+  });
+});
+
+describe("SES v1 — DKIM + identity policies", () => {
+  it("verify domain dkim", async () => {
+    mockSend.mockResolvedValueOnce({ DkimTokens: ["tok1", "tok2"] });
+    const res = await post("/domains/example.com/dkim", {});
+    expect(res.status).toBe(201);
+    expect((await res.json()).dkimTokens).toEqual(["tok1", "tok2"]);
+  });
+  it("identity policies CRUD", async () => {
+    mockSend
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ Policies: { p1: "{}" } })
+      .mockResolvedValueOnce({});
+    expect((await put("/identities/x%40y.z/policies/p1", { policy: "{}" })).status).toBe(201);
+    const list = await get("/identities/x%40y.z/policies?policyNames=p1");
+    expect((await list.json()).policies).toEqual({ p1: "{}" });
+    expect((await del("/identities/x%40y.z/policies/p1")).status).toBe(200);
+    expect((await put("/identities/x%40y.z/policies/p1", {})).status).toBe(400);
+  });
+});
+
+describe("SES v1 — receipt rule sets", () => {
+  it("create/describe/list/delete/activate/active", async () => {
+    mockSend
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ Metadata: { Name: "rs1", CreatedTimestamp: new Date("2026-01-01") }, Rules: [{ Name: "r1", Enabled: true }] })
+      .mockResolvedValueOnce({ RuleSets: [{ Name: "rs1", CreatedTimestamp: new Date("2026-01-01") }] })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ Metadata: { Name: "rs1" }, Rules: [] })
+      .mockResolvedValueOnce({});
+    expect((await post("/receipt-rule-sets", { ruleSetName: "rs1" })).status).toBe(201);
+    const one = await get("/receipt-rule-sets/rs1");
+    const ob = await one.json();
+    expect(ob.name).toBe("rs1");
+    expect(ob.rules).toHaveLength(1);
+    const list = await get("/receipt-rule-sets");
+    expect((await list.json()).ruleSets).toHaveLength(1);
+    expect((await post("/receipt-rule-sets/rs1/activate", {})).status).toBe(200);
+    const active = await get("/receipt-rule-sets-active");
+    expect((await active.json()).name).toBe("rs1");
+    expect((await del("/receipt-rule-sets/rs1")).status).toBe(200);
+    expect((await post("/receipt-rule-sets", {})).status).toBe(400);
+  });
 });
