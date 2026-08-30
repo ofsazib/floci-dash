@@ -65,6 +65,7 @@ import { CloudControlDashboard } from "./services/CloudControlDashboard";
 import { S3TablesDashboard } from "./services/S3TablesDashboard";
 import { AgentCoreDashboard } from "./services/AgentCoreDashboard";
 import { CloudHSMDashboard } from "./services/CloudHSMDashboard";
+import { AppAutoScalingDashboard } from "./services/AppAutoScalingDashboard";
 import { KinesisAnalyticsDashboard } from "./services/KinesisAnalyticsDashboard";
 import { EmrServerlessDashboard } from "./services/EmrServerlessDashboard";
 import { MWAADashboard } from "./services/MWAADashboard";
@@ -148,4 +149,5 @@ export const SERVICE_DASHBOARDS: Record<string, ComponentType> = {
   "s3tables": S3TablesDashboard,
   "bedrockagentcore": AgentCoreDashboard,
   "cloudhsm": CloudHSMDashboard,
+  "applicationautoscaling": AppAutoScalingDashboard,
 };

@@ -1,5 +1,5 @@
 export const SERVICE_CATEGORIES: Record<string, string[]> = {
-  "Compute":        ["ec2", "lambda", "autoscaling", "lightsail"],
+  "Compute":        ["ec2", "lambda", "autoscaling", "lightsail", "applicationautoscaling"],
   "Containers":     ["ecs", "ecr", "eks"],
   "Storage":        ["s3", "s3tables"],
   "Database":       ["dynamodb", "rds", "neptune", "elasticache", "docdb", "memorydb"],
@@ -39,6 +39,7 @@ export const SERVICE_CATEGORY_MAP: Record<string, string> = {
   fis: "Management & Governance", cloudcontrol: "Management & Governance",
   guardduty: "Security, Identity & Compliance", cloudhsm: "Security, Identity & Compliance",
   bedrockagentcore: "Machine Learning",
+  applicationautoscaling: "Compute",
   dynamodb: "Database", rds: "Database", neptune: "Database", elasticache: "Database", docdb: "Database", memorydb: "Database",
   elasticloadbalancing: "Networking & Content Delivery", route53: "Networking & Content Delivery", cloudfront: "Networking & Content Delivery",
   apigateway: "Networking & Content Delivery", apigatewayv2: "Networking & Content Delivery", appsync: "Application Integration",
@@ -70,6 +71,7 @@ export const SERVICE_LABELS: Record<string, string> = {
   "cloudcontrol": "CloudControl",
   "bedrockagentcore": "Bedrock AgentCore",
   "cloudhsm": "CloudHSM",
+  "applicationautoscaling": "App Auto Scaling",
   "sqs": "SQS",
   "sns": "SNS",
   "lambda": "Lambda",

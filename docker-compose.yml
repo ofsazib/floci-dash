@@ -23,7 +23,7 @@ services:
       # (/app/data, backed by the floci-data volume below) every ~5s. Use
       # "persistent" to flush on every write, or "wal" for a write-ahead log.
       - FLOCI_STORAGE_MODE=${FLOCI_STORAGE_MODE:-hybrid}
-      - FLOCI_SERVICES=s3,dynamodb,sqs,sns,lambda,iam,ec2,ecs,eks,ecr,rds,elasticache,neptune,kms,secretsmanager,cloudformation,eventbridge,ssm,kinesis,cloudwatch,cognito,acm,route53,cloudfront,apigateway,apigatewayv2,athena,glue,firehose,stepfunctions,msk,opensearch,ses,cloudmap,scheduler,pipes,backup,transfer,cloudtrail,appconfig,bedrock-runtime,textract,transcribe,pricing,ce,cur,bcm-data-exports,resource-groups-tagging,autoscaling,codebuild,codedeploy,appsync,config,sts
+      - FLOCI_SERVICES=s3,dynamodb,sqs,sns,lambda,iam,ec2,ecs,eks,ecr,rds,elasticache,neptune,kms,secretsmanager,cloudformation,eventbridge,ssm,kinesis,cloudwatch,cognito,acm,route53,cloudfront,apigateway,apigatewayv2,athena,glue,firehose,stepfunctions,msk,opensearch,ses,cloudmap,scheduler,pipes,backup,transfer,cloudtrail,appconfig,bedrock-runtime,textract,transcribe,pricing,ce,cur,bcm-data-exports,resource-groups-tagging,autoscaling,codebuild,codedeploy,appsync,config,sts,applicationautoscaling
     volumes:
       - floci-data:/app/data
       - /var/run/docker.sock:/var/run/docker.sock

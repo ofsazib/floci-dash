@@ -420,6 +420,7 @@ These services have full CRUD operations in both backend and frontend:
 | **STS** | Caller identity (account, user ID, ARN), assume role (with session name/duration/policy, returns temporary credentials), get session token (with MFA/duration) |
 | **EKS** | Clusters (list, create, delete, describe with status/version/endpoint), node groups (list, create, delete, describe with scaling config/instance types/subnets) |
 | **Auto Scaling** | Auto Scaling Groups (list, create, update, delete, set desired capacity), launch configurations (list), scaling policies (list per ASG), scaling activities (list per ASG), instance refresh (start/list), ASG tags (create/delete), LB target groups (attach/detach/list), classic load balancers (attach/detach/list), describe types (notification types, termination policies, adjustment types, account limits, lifecycle hook types, metric collection types) |
+| **App Auto Scaling** | Scalable targets (register/list/deregister per service namespace), scaling policies (create/list/delete), resource tags (list/put/untag) |
 | **CloudFront** | Distributions (list, get, create, update, delete with ETag), invalidations (list, create, get per distribution), cache policies (list), origin access controls (list), functions (list), tags (list per resource) |
 | **Kinesis** | Streams (list with summaries, describe, create, delete), shards (list per stream, split, merge), consumers (list per stream, register/deregister, describe), records (put single, put batch, get via shard iterator), subscribe to shard (enhanced fan-out), stream settings tab (increase/decrease retention, start/stop KMS encryption, enable/disable enhanced shard-level metrics, switch stream mode PROVISIONED/ON_DEMAND), tags (list, add, remove) |
 | **Neptune** | Clusters (list, describe, create, delete), instances (list, describe, create with cluster attachment, delete) |
@@ -482,7 +483,7 @@ All services reported by Floci appear in the sidebar with status indicators.
 <details>
 <summary>Full list of navigable services</summary>
 
-**Compute:** EC2, ECS, EKS, Auto Scaling, Lambda, AWS Batch
+**Compute:** EC2, ECS, EKS, Auto Scaling, App Auto Scaling, Lambda, AWS Batch
 **Storage:** S3, S3 Vector Search, ECR
 **Database:** DynamoDB, DocumentDB, ElastiCache, MemoryDB, Neptune, RDS, RDS Data API
 **Networking:** API Gateway, API Gateway V2, AppSync, CloudFront, ELB, Route 53

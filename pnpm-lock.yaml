@@ -23,6 +23,9 @@ importers:
       '@aws-sdk/client-appconfigdata':
         specifier: ^3.1072.0
         version: 3.1072.0
+      '@aws-sdk/client-application-auto-scaling':
+        specifier: ^3.1121.0
+        version: 3.1121.0
       '@aws-sdk/client-appsync':
         specifier: ^3.1070.0
         version: 3.1070.0
@@ -218,6 +221,9 @@ importers:
       '@aws-sdk/client-secrets-manager':
         specifier: ^3.1068.0
         version: 3.1070.0
+      '@aws-sdk/client-service-quotas':
+        specifier: ^3.1121.0
+        version: 3.1121.0
       '@aws-sdk/client-servicediscovery':
         specifier: ^3.1072.0
         version: 3.1072.0
@@ -402,6 +408,10 @@ packages:
 
   '@aws-sdk/client-appconfigdata@3.1072.0':
     resolution: {integrity: sha512-Omqwt2yY9S3WGkf6pxODQfhGIvM8yMRODPtbTKTUneTv0axc1bOcJsV56uS0PdAo6RduLTKFXS5rKXyeQMofIQ==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/client-application-auto-scaling@3.1121.0':
+    resolution: {integrity: sha512-0Y5+HZdR1J45N4TskGGiAAbgOACiaSb/C1gF1QU5oVV1bCVJAo/WzCIVmD2IV5g+Zf0f2yEmJk//1/sHeIsGYQ==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-appsync@3.1070.0':
@@ -662,6 +672,10 @@ packages:
 
   '@aws-sdk/client-secrets-manager@3.1070.0':
     resolution: {integrity: sha512-5t6TmKsESxrrd6iD1tRXaiQxusjboZa846pLZZUwvt4M2xy3FsHUaQoZ50ZPnSr5DNWJubbrHuB+jKn4LGO1eQ==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/client-service-quotas@3.1121.0':
+    resolution: {integrity: sha512-lvzATm8LXprLIW0U+8xyRrYYNfo41r5SVT7E0bZZF8bPrlQqqqzxaoz1W8e/ty+Zr5yyZLFC9nmBkZsvTdZw5g==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-servicediscovery@3.1072.0':
@@ -2721,6 +2735,17 @@ snapshots:
       '@smithy/types': 4.15.0
       tslib: 2.8.1
 
+  '@aws-sdk/client-application-auto-scaling@3.1121.0':
+    dependencies:
+      '@aws-sdk/core': 3.977.9
+      '@aws-sdk/credential-provider-node': 3.972.81
+      '@aws-sdk/types': 3.974.5
+      '@smithy/core': 3.33.3
+      '@smithy/fetch-http-handler': 5.7.2
+      '@smithy/node-http-handler': 4.11.3
+      '@smithy/types': 4.17.2
+      tslib: 2.8.1
+
   '@aws-sdk/client-appsync@3.1070.0':
     dependencies:
       '@aws-crypto/sha256-browser': 5.2.0
@@ -3547,6 +3572,17 @@ snapshots:
       '@smithy/fetch-http-handler': 5.5.0
       '@smithy/node-http-handler': 4.8.0
       '@smithy/types': 4.15.0
+      tslib: 2.8.1
+
+  '@aws-sdk/client-service-quotas@3.1121.0':
+    dependencies:
+      '@aws-sdk/core': 3.977.9
+      '@aws-sdk/credential-provider-node': 3.972.81
+      '@aws-sdk/types': 3.974.5
+      '@smithy/core': 3.33.3
+      '@smithy/fetch-http-handler': 5.7.2
+      '@smithy/node-http-handler': 4.11.3
+      '@smithy/types': 4.17.2
       tslib: 2.8.1
 
   '@aws-sdk/client-servicediscovery@3.1072.0':
