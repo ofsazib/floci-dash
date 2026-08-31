@@ -81,7 +81,7 @@ describe("CloudWatch Logs Routes", () => {
     it("GET /log-groups — lists log groups", async () => {
       mockSend.mockResolvedValueOnce({
         logGroups: [
-          { logGroupName: "/aws/lambda/my-func", creationTime: 1000, arn: "arn:aws:logs:us-east-1::log-group:/aws/lambda/my-func", retentionInDays: 14, storedBytes: 0 },
+          { logGroupName: "/aws/lambda/my-func", creationTime: 1000, arn: "arn:aws:logs:us-east-1::log-group:/aws/lambda/my-func", retentionInDays: 14, storedBytes: 1024 },
         ],
       });
       const res = await get("/log-groups");
@@ -89,6 +89,87 @@ describe("CloudWatch Logs Routes", () => {
       const body = await res.json();
       expect(body.total).toBe(1);
       expect(body.logGroups[0].logGroupName).toBe("/aws/lambda/my-func");
+      expect(body.logGroups[0].storedBytes).toBe(1024);
+    });
+
+    it("GET /log-groups — sums stream storedBytes when the group reports 0", async () => {
+      mockSend
+        .mockResolvedValueOnce({
+          logGroups: [{ logGroupName: "/aws/lambda/my-func", storedBytes: 0 }],
+        })
+        .mockResolvedValueOnce({
+          logStreams: [{ logStreamName: "a", storedBytes: 512 }, { logStreamName: "b", storedBytes: 256 }],
+        });
+      const res = await get("/log-groups");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.logGroups[0].storedBytes).toBe(768);
+      expect(mockSend.mock.calls[1][0].__cmdName).toBe("DescribeLogStreamsCommand");
+      expect(mockSend.mock.calls[1][0].logGroupName).toBe("/aws/lambda/my-func");
+    });
+
+    it("GET /log-groups — treats missing group storedBytes as 0 and sums streams", async () => {
+      mockSend
+        .mockResolvedValueOnce({
+          logGroups: [{ logGroupName: "/aws/lambda/my-func" }],
+        })
+        .mockResolvedValueOnce({
+          logStreams: [{ logStreamName: "a", storedBytes: 100 }],
+        });
+      const res = await get("/log-groups");
+      const body = await res.json();
+      expect(body.logGroups[0].storedBytes).toBe(100);
+    });
+
+    it("GET /log-groups — paginates streams when summing storedBytes", async () => {
+      mockSend
+        .mockResolvedValueOnce({
+          logGroups: [{ logGroupName: "/aws/lambda/my-func", storedBytes: 0 }],
+        })
+        .mockResolvedValueOnce({
+          logStreams: [{ storedBytes: 10 }],
+          nextToken: "page-2",
+        })
+        .mockResolvedValueOnce({
+          logStreams: [{ storedBytes: 5 }, { storedBytes: undefined }],
+        });
+      const res = await get("/log-groups");
+      const body = await res.json();
+      expect(body.logGroups[0].storedBytes).toBe(15);
+      expect(mockSend.mock.calls[2][0].nextToken).toBe("page-2");
+    });
+
+    it("GET /log-groups — keeps 0 when stream describe fails", async () => {
+      mockSend
+        .mockResolvedValueOnce({
+          logGroups: [{ logGroupName: "/aws/lambda/my-func", storedBytes: 0 }],
+        })
+        .mockRejectedValueOnce(new Error("DescribeLogStreams failed"));
+      const res = await get("/log-groups");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.logGroups[0].storedBytes).toBe(0);
+    });
+
+    it("GET /log-groups — skips stream sum when group has no name", async () => {
+      mockSend.mockResolvedValueOnce({
+        logGroups: [{ storedBytes: 0 }],
+      });
+      const res = await get("/log-groups");
+      const body = await res.json();
+      expect(body.logGroups[0].storedBytes).toBe(0);
+      expect(mockSend).toHaveBeenCalledTimes(1);
+    });
+
+    it("GET /log-groups — empty streams keep storedBytes at 0", async () => {
+      mockSend
+        .mockResolvedValueOnce({
+          logGroups: [{ logGroupName: "/aws/lambda/empty", storedBytes: 0 }],
+        })
+        .mockResolvedValueOnce({});
+      const res = await get("/log-groups");
+      const body = await res.json();
+      expect(body.logGroups[0].storedBytes).toBe(0);
     });
 
     it("GET /log-groups — supports prefix query param", async () => {

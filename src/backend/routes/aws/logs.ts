@@ -29,26 +29,61 @@ function logs(): CloudWatchLogsClient {
   return new CloudWatchLogsClient(getAwsConfig());
 }
 
+async function storedBytesFromStreams(
+  client: CloudWatchLogsClient,
+  logGroupName: string
+): Promise<number> {
+  let nextToken: string | undefined;
+  let total = 0;
+  do {
+    const result = await client.send(
+      new DescribeLogStreamsCommand({
+        logGroupName,
+        nextToken,
+      })
+    );
+    for (const stream of result.logStreams || []) {
+      total += stream.storedBytes ?? 0;
+    }
+    nextToken = result.nextToken;
+  } while (nextToken);
+  return total;
+}
+
 // ──────────────────────────────────────────────
 //  Log Groups
 // ──────────────────────────────────────────────
 
 router.get("/log-groups", async (c: Context) => {
   const prefix = c.req.query("prefix");
-  const result = await logs().send(
+  const client = logs();
+  const result = await client.send(
     new DescribeLogGroupsCommand({
       logGroupNamePrefix: prefix || undefined,
     })
   );
-  const groups = (result.logGroups || []).map((g) => ({
-    logGroupName: g.logGroupName,
-    creationTime: g.creationTime,
-    retentionInDays: g.retentionInDays,
-    metricFilterCount: g.metricFilterCount,
-    arn: g.arn,
-    storedBytes: g.storedBytes,
-    kmsKeyId: g.kmsKeyId,
-  }));
+  // Floci's DescribeLogGroups always reports storedBytes: 0; streams carry the real size.
+  const groups = await Promise.all(
+    (result.logGroups || []).map(async (g) => {
+      let storedBytes = g.storedBytes ?? 0;
+      if (storedBytes === 0 && g.logGroupName) {
+        try {
+          storedBytes = await storedBytesFromStreams(client, g.logGroupName);
+        } catch {
+          storedBytes = 0;
+        }
+      }
+      return {
+        logGroupName: g.logGroupName,
+        creationTime: g.creationTime,
+        retentionInDays: g.retentionInDays,
+        metricFilterCount: g.metricFilterCount,
+        arn: g.arn,
+        storedBytes,
+        kmsKeyId: g.kmsKeyId,
+      };
+    })
+  );
   return c.json({ logGroups: groups, total: groups.length });
 });
 
