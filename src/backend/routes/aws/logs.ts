@@ -53,6 +53,11 @@ function pageLocally<T>(
   return { page, nextToken, total: items.length };
 }
 
+function matchesQuery(name: string | undefined, q: string | undefined): boolean {
+  if (!q) return true;
+  return (name ?? "").toLowerCase().includes(q);
+}
+
 async function storedBytesFromStreams(
   client: CloudWatchLogsClient,
   logGroupName: string
@@ -83,6 +88,7 @@ router.get("/log-groups", async (c: Context) => {
   const prefix = c.req.query("prefix");
   const limit = parsePageLimit(c.req.query("limit"));
   const token = c.req.query("nextToken") || undefined;
+  const q = c.req.query("q")?.trim().toLowerCase() || undefined;
   const client = logs();
   const result = await client.send(
     new DescribeLogGroupsCommand({
@@ -91,9 +97,9 @@ router.get("/log-groups", async (c: Context) => {
       nextToken: token && !token.startsWith(OFFSET_PREFIX) ? token : undefined,
     })
   );
-  // Floci ignores limit/nextToken and returns the full list. Page it here so
-  // stored-bytes summing only runs for the visible page.
-  const raw = result.logGroups || [];
+  // Floci ignores limit/nextToken and returns the full list. Filter, then page,
+  // so stored-bytes summing only runs for the visible matches.
+  const raw = (result.logGroups || []).filter((g) => matchesQuery(g.logGroupName, q));
   const local = !result.nextToken ? pageLocally(raw, limit, token) : null;
   const page = local?.page ?? raw;
   const nextToken = local ? local.nextToken : result.nextToken;
@@ -175,6 +181,7 @@ router.get("/log-groups/:name/streams", async (c: Context) => {
   const prefix = c.req.query("prefix");
   const limit = parsePageLimit(c.req.query("limit"));
   const token = c.req.query("nextToken") || undefined;
+  const q = c.req.query("q")?.trim().toLowerCase() || undefined;
   const result = await logs().send(
     new DescribeLogStreamsCommand({
       logGroupName: name,
@@ -185,7 +192,7 @@ router.get("/log-groups/:name/streams", async (c: Context) => {
       nextToken: token && !token.startsWith(OFFSET_PREFIX) ? token : undefined,
     })
   );
-  const raw = result.logStreams || [];
+  const raw = (result.logStreams || []).filter((s) => matchesQuery(s.logStreamName, q));
   const local = !result.nextToken ? pageLocally(raw, limit, token) : null;
   const page = local?.page ?? raw;
   const streams = page.map((s) => ({

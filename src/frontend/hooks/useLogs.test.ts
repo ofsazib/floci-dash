@@ -72,11 +72,25 @@ describe("useLogGroups", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith("/aws/logs/log-groups?limit=10&nextToken=offset%3A10");
   });
+
+  it("forwards q for a name search", async () => {
+    mockApi.mockResolvedValueOnce({ logGroups: [], total: 1 });
+    const { result } = renderHook(
+      () => useLogGroups(undefined, { q: "session" }),
+      { wrapper: createWrapper() }
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/logs/log-groups?limit=10&q=session");
+  });
 });
 
 describe("logsListQuery", () => {
   it("defaults limit when omitted", () => {
     expect(logsListQuery({})).toBe("?limit=10");
+  });
+
+  it("forwards q", () => {
+    expect(logsListQuery({ q: "session" })).toBe("?limit=10&q=session");
   });
 });
 
@@ -175,6 +189,18 @@ describe("useLogStreams", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith(
       `/aws/logs/log-groups/${encodeURIComponent("/aws/lambda/test")}/streams?limit=10&nextToken=offset%3A10`
+    );
+  });
+
+  it("forwards q for a name search", async () => {
+    mockApi.mockResolvedValueOnce({ logStreams: [], total: 1 });
+    const { result } = renderHook(
+      () => useLogStreams("/aws/lambda/test", undefined, { q: "session" }),
+      { wrapper: createWrapper() }
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/logs/log-groups/${encodeURIComponent("/aws/lambda/test")}/streams?limit=10&q=session`
     );
   });
 });

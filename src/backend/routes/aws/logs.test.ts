@@ -254,6 +254,52 @@ describe("CloudWatch Logs Routes", () => {
       expect(mockSend.mock.calls[3][0].limit).toBe(10);
     });
 
+    it("GET /log-groups — q filters the full list before paging and summing", async () => {
+      const groups = [
+        ...Array.from({ length: 11 }, (_, i) => ({
+          logGroupName: `/aws/lambda/other-${i}`,
+          storedBytes: 0,
+        })),
+        { logGroupName: "/aws/lambda/vle-session_finished_handler", storedBytes: 0 },
+      ];
+      mockSend.mockImplementation(async (cmd: any) => {
+        if (cmd.__cmdName === "DescribeLogGroupsCommand") {
+          return { logGroups: groups };
+        }
+        return { logStreams: [{ storedBytes: 9 }] };
+      });
+      const res = await get("/log-groups?limit=10&q=SESSION");
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(body.logGroups).toHaveLength(1);
+      expect(body.logGroups[0].logGroupName).toBe("/aws/lambda/vle-session_finished_handler");
+      expect(body.logGroups[0].storedBytes).toBe(9);
+      expect(body.nextToken).toBeUndefined();
+      const streamCalls = mockSend.mock.calls.filter((c: any[]) => c[0].__cmdName === "DescribeLogStreamsCommand");
+      expect(streamCalls).toHaveLength(1);
+    });
+
+    it("GET /log-groups — blank q is ignored; unnamed groups drop out of a search", async () => {
+      mockSend
+        .mockResolvedValueOnce({
+          logGroups: [
+            { storedBytes: 1 },
+            { logGroupName: "/aws/keep", storedBytes: 2 },
+          ],
+        })
+        .mockResolvedValueOnce({
+          logGroups: [
+            { storedBytes: 1 },
+            { logGroupName: "/aws/keep", storedBytes: 2 },
+          ],
+        });
+      const blank = await (await get("/log-groups?q=%20")).json();
+      expect(blank.total).toBe(2);
+      const named = await (await get("/log-groups?q=keep")).json();
+      expect(named.total).toBe(1);
+      expect(named.logGroups[0].logGroupName).toBe("/aws/keep");
+    });
+
     it("GET /log-groups — invalid offset token starts at the first page", async () => {
       const groups = Array.from({ length: 3 }, (_, i) => ({
         logGroupName: `/g/${i}`,
@@ -384,6 +430,20 @@ describe("CloudWatch Logs Routes", () => {
       const body = await res.json();
       expect(body.logStreams).toHaveLength(2);
       expect(body.logStreams[0].logStreamName).toBe("s-10");
+      expect(body.nextToken).toBeUndefined();
+    });
+
+    it("GET /log-groups/:name/streams — q filters the full list before paging", async () => {
+      const logStreams = [
+        ...Array.from({ length: 11 }, (_, i) => ({ logStreamName: `other-${i}`, storedBytes: 1 })),
+        { logStreamName: "2026/08/24/[$LATEST]session", storedBytes: 2 },
+      ];
+      mockSend.mockResolvedValueOnce({ logStreams });
+      const res = await get("/log-groups/%2Faws%2Flambda%2Fmy-func/streams?limit=10&q=SESSION");
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(body.logStreams).toHaveLength(1);
+      expect(body.logStreams[0].logStreamName).toContain("session");
       expect(body.nextToken).toBeUndefined();
     });
 

@@ -348,23 +348,24 @@ describe("CloudWatchLogsDashboard", () => {
 
   // ── Filter log groups ──────────────────────────────────
 
-  it("filters log groups by name", async () => {
+  it("searches log groups across pages", async () => {
     mockLogGroups.mockReturnValue({
       data: {
-        logGroups: [
-          { logGroupName: "/aws/lambda/alpha" },
-          { logGroupName: "/aws/lambda/beta" },
-        ],
-        total: 2,
+        logGroups: [{ logGroupName: "/aws/lambda/beta" }],
+        total: 1,
       },
       isLoading: false, isError: false, error: null,
     });
     const user = userEvent.setup();
     render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
-    await waitFor(() => expect(screen.getByText("/aws/lambda/alpha")).toBeTruthy());
     const filterInput = screen.getByPlaceholderText("Find log groups by name");
     await user.type(filterInput, "beta");
-    await waitFor(() => expect(screen.queryByText("/aws/lambda/alpha")).toBeNull());
+    await waitFor(() => {
+      expect(mockLogGroups).toHaveBeenCalledWith(
+        undefined,
+        expect.objectContaining({ q: "beta", nextToken: undefined }),
+      );
+    });
   });
 
   // ── Navigate to detail ─────────────────────────────────
@@ -488,29 +489,32 @@ describe("CloudWatchLogsDashboard", () => {
     expect(dashes.length).toBeGreaterThanOrEqual(1);
   });
 
-  it("filters log streams by name", async () => {
+  it("searches log streams across pages", async () => {
     mockLogGroups.mockReturnValue({
       data: { logGroups: [{ logGroupName: "/aws/lambda/test" }], total: 1 },
       isLoading: false, isError: false, error: null,
     });
     mockLogStreams.mockReturnValue({
       data: {
-        logStreams: [
-          { logStreamName: "alpha-stream", storedBytes: 256 },
-          { logStreamName: "beta-stream", storedBytes: 512 },
-        ],
-        total: 2,
+        logStreams: [{ logStreamName: "beta-stream", storedBytes: 512 }],
+        total: 1,
       },
       isLoading: false, isError: false, error: null,
     });
     const user = userEvent.setup();
     render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
     await user.click(screen.getByText("/aws/lambda/test"));
-    await waitFor(() => expect(screen.getByText("alpha-stream")).toBeTruthy());
+    await waitFor(() => expect(screen.getByPlaceholderText("Find streams by name")).toBeTruthy());
 
     const filterInput = screen.getByPlaceholderText("Find streams by name");
     await user.type(filterInput, "beta");
-    await waitFor(() => expect(screen.queryByText("alpha-stream")).toBeNull());
+    await waitFor(() => {
+      expect(mockLogStreams).toHaveBeenCalledWith(
+        "/aws/lambda/test",
+        undefined,
+        expect.objectContaining({ q: "beta", nextToken: undefined }),
+      );
+    });
   });
 
   it("shows create log stream error alert", async () => {

@@ -568,15 +568,23 @@ function LogsPagination({
 function CloudWatchLogGroupList({ onSelect }: { onSelect: (name: string) => void }) {
   const [pageIndex, setPageIndex] = useState(1);
   const [pageTokens, setPageTokens] = useState<Record<number, string | undefined>>({ 1: undefined });
+  const [query, setQuery] = useState("");
   const { data, isLoading, isError, error } = useLogGroups(undefined, {
     limit: LOGS_PAGE_SIZE,
     nextToken: pageTokens[pageIndex],
+    q: query || undefined,
   });
   const createGroup = useCreateLogGroup();
   const deleteGroup = useDeleteLogGroup();
 
   const [showCreate, setShowCreate] = useState(false);
   const [groupName, setGroupName] = useState("");
+
+  function setSearch(text: string) {
+    setQuery(text);
+    setPageIndex(1);
+    setPageTokens({ 1: undefined });
+  }
 
   useEffect(() => {
     if (data?.nextToken) {
@@ -666,9 +674,8 @@ function CloudWatchLogGroupList({ onSelect }: { onSelect: (name: string) => void
         emptyMessage="No log groups found. Create one to get started."
         filterEnabled
         filterPlaceholder="Find log groups by name"
-        filterFunction={(item: any, searchText: string) =>
-          item.logGroupName.toLowerCase().includes(searchText.toLowerCase())
-        }
+        filteringText={query}
+        onFilterChange={setSearch}
         onCreate={() => setShowCreate(true)}
         pagination={
           <LogsPagination
@@ -828,9 +835,11 @@ function CloudWatchLogStreamList({
 }) {
   const [pageIndex, setPageIndex] = useState(1);
   const [pageTokens, setPageTokens] = useState<Record<number, string | undefined>>({ 1: undefined });
+  const [query, setQuery] = useState("");
   const { data, isLoading, isError, error } = useLogStreams(logGroupName, undefined, {
     limit: LOGS_PAGE_SIZE,
     nextToken: pageTokens[pageIndex],
+    q: query || undefined,
   });
   const createStream = useCreateLogStream();
   const deleteStream = useDeleteLogStream();
@@ -838,9 +847,16 @@ function CloudWatchLogStreamList({
   const [showCreate, setShowCreate] = useState(false);
   const [streamName, setStreamName] = useState("");
 
+  function setSearch(text: string) {
+    setQuery(text);
+    setPageIndex(1);
+    setPageTokens({ 1: undefined });
+  }
+
   useEffect(() => {
     setPageIndex(1);
     setPageTokens({ 1: undefined });
+    setQuery("");
   }, [logGroupName]);
 
   useEffect(() => {
@@ -934,9 +950,8 @@ function CloudWatchLogStreamList({
         emptyMessage="No log streams found"
         filterEnabled
         filterPlaceholder="Find streams by name"
-        filterFunction={(item: any, searchText: string) =>
-          item.logStreamName.toLowerCase().includes(searchText.toLowerCase())
-        }
+        filteringText={query}
+        onFilterChange={setSearch}
         onCreate={() => setShowCreate(true)}
         pagination={
           <LogsPagination

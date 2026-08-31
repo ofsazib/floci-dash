@@ -25,6 +25,10 @@ interface Props {
   filterPlaceholder?: string;
   /** Custom filter function. Receives each item and the current search text. Return true to include. */
   filterFunction?: (item: any, searchText: string) => boolean;
+  /** Controlled filter text. Pair with onFilterChange to search on the server. */
+  filteringText?: string;
+  /** When set, the table does not filter `items` locally — the parent already did. */
+  onFilterChange?: (text: string) => void;
   /** Title for the table header. When set, shows a Header with counter instead of a bare button bar. */
   headerTitle?: string;
   /** Total count for the header counter (defaults to items.length) */
@@ -51,20 +55,24 @@ export default function ResourceTable({
   filterEnabled,
   filterPlaceholder,
   filterFunction,
+  filteringText,
+  onFilterChange,
   headerTitle,
   headerCounter,
   headerActions,
   pagination,
 }: Props) {
-  const [searchTerm, setSearchTerm] = useState("");
-
-  const filteredItems = filterEnabled
-    ? items.filter((item) => {
-        if (!searchTerm) return true;
-        const fn = filterFunction || defaultFilter;
-        return fn(item, searchTerm);
-      })
-    : items;
+  const [localSearch, setLocalSearch] = useState("");
+  const searchTerm = onFilterChange ? (filteringText ?? "") : localSearch;
+  const filteredItems =
+    filterEnabled && !onFilterChange
+      ? items.filter((item) => {
+          if (!searchTerm) return true;
+          const fn = filterFunction || defaultFilter;
+          return fn(item, searchTerm);
+        })
+      : items;
+  const matchCount = onFilterChange ? (headerCounter ?? items.length) : filteredItems.length;
 
   const colDefs = columns.map((c) => ({
     id: c.id,
@@ -105,8 +113,12 @@ export default function ResourceTable({
           <TextFilter
             filteringPlaceholder={filterPlaceholder || `Find ${resourceName.toLowerCase()}s`}
             filteringText={searchTerm}
-            onChange={({ detail }) => setSearchTerm(detail.filteringText)}
-            countText={`${filteredItems.length} match${filteredItems.length === 1 ? "" : "es"}`}
+            onChange={({ detail }) =>
+              onFilterChange
+                ? onFilterChange(detail.filteringText)
+                : setLocalSearch(detail.filteringText)
+            }
+            countText={`${matchCount} match${matchCount === 1 ? "" : "es"}`}
           />
         ) : undefined
       }
