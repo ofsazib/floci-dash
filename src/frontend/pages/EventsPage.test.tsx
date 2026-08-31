@@ -408,6 +408,83 @@ describe("EventsPage", () => {
     expect(screen.getByText("fn-target")).toBeTruthy();
   });
 
+  it("shows the event pattern when a rule is opened", async () => {
+    const user = userEvent.setup();
+    mockEventRules.mockReturnValue({
+      data: {
+        rules: [{
+          Name: "pattern-rule",
+          State: "ENABLED",
+          EventBusName: "default",
+          Description: "collection updates",
+          EventPattern: '{"source":["ordering"],"detail-type":["collection.update"]}',
+        }],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockEventTargets.mockReturnValue({ data: { targets: [] }, isLoading: false });
+    render(<EventsPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByText("pattern-rule"));
+    await waitFor(() => {
+      expect(screen.getByText("Rule: pattern-rule")).toBeTruthy();
+      expect(screen.getByText("Event pattern")).toBeTruthy();
+    });
+    expect(document.body.textContent).toContain("ordering");
+    expect(document.body.textContent).toContain("collection.update");
+    expect(screen.getByText("collection updates")).toBeTruthy();
+    expect(screen.queryByPlaceholderText("Find rules...")).toBeNull();
+  });
+
+  it("shows a schedule expression when a scheduled rule is opened", async () => {
+    const user = userEvent.setup();
+    mockEventRules.mockReturnValue({
+      data: {
+        rules: [{
+          Name: "sched-rule",
+          State: "ENABLED",
+          EventBusName: "custom-bus",
+          ScheduleExpression: "rate(1 minute)",
+        }],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockEventTargets.mockReturnValue({ data: { targets: [] }, isLoading: false });
+    render(<EventsPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByText("sched-rule"));
+    await waitFor(() => expect(screen.getByText("Rule: sched-rule")).toBeTruthy());
+    expect(screen.getByText("Schedule expression")).toBeTruthy();
+    expect(screen.getAllByText("rate(1 minute)").length).toBeGreaterThan(0);
+    expect(mockEventTargets).toHaveBeenCalledWith("sched-rule", "custom-bus");
+  });
+
+  it("shows invalid event pattern text as-is", async () => {
+    const user = userEvent.setup();
+    mockEventRules.mockReturnValue({
+      data: {
+        rules: [{ Name: "bad-rule", EventPattern: "{not-json" }],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockEventTargets.mockReturnValue({ data: { targets: [] }, isLoading: false });
+    render(<EventsPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByText("bad-rule"));
+    await waitFor(() => expect(screen.getByText("{not-json")).toBeTruthy());
+  });
+
+  it("shows an empty expression state when the rule has neither pattern nor schedule", async () => {
+    const user = userEvent.setup();
+    render(<EventsPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByText("my-rule"));
+    await waitFor(() => expect(screen.getByText("Rule: my-rule")).toBeTruthy());
+    expect(screen.getByText("No event pattern or schedule expression")).toBeTruthy();
+  });
+
   it("shows loading state for targets", async () => {
     const user = userEvent.setup();
     mockEventTargets.mockReturnValue({ data: undefined, isLoading: true });
