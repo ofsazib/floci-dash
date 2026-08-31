@@ -10,6 +10,7 @@ vi.mock("../lib/client", () => ({
 }));
 
 import {
+  logsListQuery,
   useLogGroups,
   useCreateLogGroup,
   useDeleteLogGroup,
@@ -48,7 +49,7 @@ describe("useLogGroups", () => {
     mockApi.mockResolvedValueOnce({ logGroups: [], total: 0 });
     const { result } = renderHook(() => useLogGroups(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(mockApi).toHaveBeenCalledWith("/aws/logs/log-groups");
+    expect(mockApi).toHaveBeenCalledWith("/aws/logs/log-groups?limit=10");
   });
 
   it("appends encoded prefix when provided", async () => {
@@ -58,8 +59,24 @@ describe("useLogGroups", () => {
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith(
-      `/aws/logs/log-groups?prefix=${encodeURIComponent("/aws/lambda")}`
+      `/aws/logs/log-groups?prefix=${encodeURIComponent("/aws/lambda")}&limit=10`
     );
+  });
+
+  it("forwards limit and nextToken for a later page", async () => {
+    mockApi.mockResolvedValueOnce({ logGroups: [], total: 12, nextToken: "offset:20" });
+    const { result } = renderHook(
+      () => useLogGroups(undefined, { limit: 10, nextToken: "offset:10" }),
+      { wrapper: createWrapper() }
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/logs/log-groups?limit=10&nextToken=offset%3A10");
+  });
+});
+
+describe("logsListQuery", () => {
+  it("defaults limit when omitted", () => {
+    expect(logsListQuery({})).toBe("?limit=10");
   });
 });
 
@@ -134,7 +151,7 @@ describe("useLogStreams", () => {
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith(
-      `/aws/logs/log-groups/${encodeURIComponent("/aws/lambda/test")}/streams`
+      `/aws/logs/log-groups/${encodeURIComponent("/aws/lambda/test")}/streams?limit=10`
     );
   });
 
@@ -145,7 +162,19 @@ describe("useLogStreams", () => {
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith(
-      `/aws/logs/log-groups/${encodeURIComponent("/aws/lambda/test")}/streams?prefix=2024`
+      `/aws/logs/log-groups/${encodeURIComponent("/aws/lambda/test")}/streams?prefix=2024&limit=10`
+    );
+  });
+
+  it("forwards limit and nextToken for a later page", async () => {
+    mockApi.mockResolvedValueOnce({ logStreams: [], total: 12, nextToken: "offset:20" });
+    const { result } = renderHook(
+      () => useLogStreams("/aws/lambda/test", undefined, { limit: 10, nextToken: "offset:10" }),
+      { wrapper: createWrapper() }
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/logs/log-groups/${encodeURIComponent("/aws/lambda/test")}/streams?limit=10&nextToken=offset%3A10`
     );
   });
 });

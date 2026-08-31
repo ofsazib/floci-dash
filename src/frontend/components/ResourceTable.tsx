@@ -31,6 +31,8 @@ interface Props {
   headerCounter?: number;
   /** Extra action buttons rendered in the header, before Create/Refresh. */
   headerActions?: React.ReactNode;
+  /** Cloudscape pagination (or any footer control) passed through to Table. */
+  pagination?: React.ReactNode;
 }
 
 function defaultFilter(item: any, searchText: string): boolean {
@@ -52,6 +54,7 @@ export default function ResourceTable({
   headerTitle,
   headerCounter,
   headerActions,
+  pagination,
 }: Props) {
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -111,6 +114,7 @@ export default function ResourceTable({
       items={filteredItems}
       loading={loading}
       loadingText="Loading resources..."
+      pagination={pagination}
       empty={
         filterEnabled && searchTerm ? (
           <EmptyState

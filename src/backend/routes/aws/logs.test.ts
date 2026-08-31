@@ -179,6 +179,94 @@ describe("CloudWatch Logs Routes", () => {
       expect(mockSend.mock.calls[0][0].logGroupNamePrefix).toBe("/aws/lambda");
     });
 
+    it("GET /log-groups — pages a full emulator list and sums only the current page", async () => {
+      const groups = Array.from({ length: 12 }, (_, i) => ({
+        logGroupName: `/g/${i}`,
+        storedBytes: 0,
+      }));
+      mockSend.mockImplementation(async (cmd: any) => {
+        if (cmd.__cmdName === "DescribeLogGroupsCommand") {
+          return { logGroups: groups };
+        }
+        return { logStreams: [{ storedBytes: 1 }] };
+      });
+      const res = await get("/log-groups?limit=10");
+      const body = await res.json();
+      expect(body.total).toBe(12);
+      expect(body.logGroups).toHaveLength(10);
+      expect(body.nextToken).toBe("offset:10");
+      expect(body.logGroups[0].storedBytes).toBe(1);
+      const streamCalls = mockSend.mock.calls.filter((c: any[]) => c[0].__cmdName === "DescribeLogStreamsCommand");
+      expect(streamCalls).toHaveLength(10);
+      expect(mockSend.mock.calls.find((c: any[]) => c[0].__cmdName === "DescribeLogGroupsCommand")![0].limit).toBe(10);
+    });
+
+    it("GET /log-groups — offset token returns the next page", async () => {
+      const groups = Array.from({ length: 12 }, (_, i) => ({
+        logGroupName: `/g/${i}`,
+        storedBytes: 5,
+      }));
+      mockSend.mockResolvedValueOnce({ logGroups: groups });
+      const res = await get("/log-groups?limit=10&nextToken=offset%3A10");
+      const body = await res.json();
+      expect(body.logGroups).toHaveLength(2);
+      expect(body.logGroups[0].logGroupName).toBe("/g/10");
+      expect(body.nextToken).toBeUndefined();
+      expect(mockSend).toHaveBeenCalledTimes(1);
+    });
+
+    it("GET /log-groups — forwards a non-offset nextToken to AWS", async () => {
+      mockSend.mockResolvedValueOnce({
+        logGroups: [{ logGroupName: "/aws/a", storedBytes: 4 }],
+        nextToken: "aws-page-2",
+      });
+      const res = await get("/log-groups?limit=10&nextToken=aws-page-1");
+      const body = await res.json();
+      expect(body.nextToken).toBe("aws-page-2");
+      expect(mockSend.mock.calls[0][0].nextToken).toBe("aws-page-1");
+      expect(body.logGroups).toHaveLength(1);
+    });
+
+    it("GET /log-groups — AWS last page without nextToken skips local paging", async () => {
+      mockSend.mockResolvedValueOnce({
+        logGroups: [{ logGroupName: "/aws/a", storedBytes: 4 }],
+      });
+      const res = await get("/log-groups?limit=10&nextToken=aws-last");
+      const body = await res.json();
+      expect(body.logGroups).toHaveLength(1);
+      expect(body.nextToken).toBeUndefined();
+      expect(mockSend.mock.calls[0][0].nextToken).toBe("aws-last");
+    });
+
+    it("GET /log-groups — invalid or huge limit falls back or caps", async () => {
+      mockSend
+        .mockResolvedValueOnce({ logGroups: [] })
+        .mockResolvedValueOnce({ logGroups: [] })
+        .mockResolvedValueOnce({ logGroups: [] })
+        .mockResolvedValueOnce({ logGroups: [] });
+      await get("/log-groups?limit=nope");
+      expect(mockSend.mock.calls[0][0].limit).toBe(10);
+      await get("/log-groups?limit=0");
+      expect(mockSend.mock.calls[1][0].limit).toBe(10);
+      await get("/log-groups?limit=99");
+      expect(mockSend.mock.calls[2][0].limit).toBe(50);
+      await get("/log-groups?limit=");
+      expect(mockSend.mock.calls[3][0].limit).toBe(10);
+    });
+
+    it("GET /log-groups — invalid offset token starts at the first page", async () => {
+      const groups = Array.from({ length: 3 }, (_, i) => ({
+        logGroupName: `/g/${i}`,
+        storedBytes: 1,
+      }));
+      mockSend.mockResolvedValueOnce({ logGroups: groups });
+      const res = await get("/log-groups?limit=10&nextToken=offset%3A-1");
+      const body = await res.json();
+      expect(body.logGroups).toHaveLength(3);
+      expect(body.logGroups[0].logGroupName).toBe("/g/0");
+      expect(mockSend.mock.calls[0][0].nextToken).toBeUndefined();
+    });
+
     it("GET /log-groups — returns empty list", async () => {
       mockSend.mockResolvedValueOnce({ logGroups: [] });
       const res = await get("/log-groups");
@@ -270,6 +358,45 @@ describe("CloudWatch Logs Routes", () => {
       const res = await get("/log-groups/%2Faws%2Flambda%2Fmy-func/streams?prefix=2025");
       expect(res.status).toBe(200);
       expect(mockSend.mock.calls[0][0].logStreamNamePrefix).toBe("2025");
+    });
+
+    it("GET /log-groups/:name/streams — pages a full emulator list", async () => {
+      const logStreams = Array.from({ length: 12 }, (_, i) => ({
+        logStreamName: `s-${i}`,
+        storedBytes: i,
+      }));
+      mockSend.mockResolvedValueOnce({ logStreams });
+      const res = await get("/log-groups/%2Faws%2Flambda%2Fmy-func/streams?limit=10");
+      const body = await res.json();
+      expect(body.total).toBe(12);
+      expect(body.logStreams).toHaveLength(10);
+      expect(body.nextToken).toBe("offset:10");
+      expect(mockSend.mock.calls[0][0].limit).toBe(10);
+    });
+
+    it("GET /log-groups/:name/streams — offset token returns the next page", async () => {
+      const logStreams = Array.from({ length: 12 }, (_, i) => ({
+        logStreamName: `s-${i}`,
+        storedBytes: i,
+      }));
+      mockSend.mockResolvedValueOnce({ logStreams });
+      const res = await get("/log-groups/%2Faws%2Flambda%2Fmy-func/streams?limit=10&nextToken=offset%3A10");
+      const body = await res.json();
+      expect(body.logStreams).toHaveLength(2);
+      expect(body.logStreams[0].logStreamName).toBe("s-10");
+      expect(body.nextToken).toBeUndefined();
+    });
+
+    it("GET /log-groups/:name/streams — forwards a non-offset nextToken to AWS", async () => {
+      mockSend.mockResolvedValueOnce({
+        logStreams: [{ logStreamName: "s1", storedBytes: 1 }],
+        nextToken: "aws-page-2",
+      });
+      const res = await get("/log-groups/%2Faws%2Flambda%2Fmy-func/streams?limit=10&nextToken=aws-page-1");
+      const body = await res.json();
+      expect(body.nextToken).toBe("aws-page-2");
+      expect(body.total).toBe(1);
+      expect(mockSend.mock.calls[0][0].nextToken).toBe("aws-page-1");
     });
 
     it("GET /log-groups/:name/streams — sparse response defaults to empty array", async () => {

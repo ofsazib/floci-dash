@@ -193,6 +193,19 @@ describe("ResourceTable", () => {
     expect(screen.getByText("Loading resources...")).toBeTruthy();
   });
 
+  it("renders a pagination slot when provided", () => {
+    render(
+      <ResourceTable
+        resourceName="Bucket"
+        items={items}
+        columns={columns}
+        pagination={<nav aria-label="table pages">Page 1</nav>}
+      />,
+    );
+    expect(screen.getByLabelText("table pages")).toBeTruthy();
+    expect(screen.getByText("Page 1")).toBeTruthy();
+  });
+
   it("renders rows without a filter and falls back to dashes in cells", () => {
     const cols = [
       { id: "name", header: "Name", cell: (i: any) => i.name },

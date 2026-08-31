@@ -78,6 +78,7 @@ const mockUntagGroup = vi.fn();
 const mockDataProtection = vi.fn();
 
 vi.mock("../../hooks/useLogs", () => ({
+  LOGS_PAGE_SIZE: 10,
   useLogGroups: (...args: any[]) => mockLogGroups(...args),
   useCreateLogGroup: () => ({
     mutate: mockCreateGroup,
@@ -243,6 +244,41 @@ describe("CloudWatchLogsDashboard", () => {
     expect(screen.getByText("Failed to load log groups")).toBeTruthy();
   });
 
+  it("requests the next log-groups page when pagination advances", async () => {
+    const user = userEvent.setup();
+    mockLogGroups.mockReturnValue({
+      data: {
+        logGroups: [{ logGroupName: "/page-1", storedBytes: 1 }],
+        total: 12,
+        nextToken: "offset:10",
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByLabelText("Log groups pagination")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: /Next page/i }));
+    await waitFor(() => {
+      expect(mockLogGroups).toHaveBeenCalledWith(undefined, expect.objectContaining({ nextToken: "offset:10" }));
+    });
+  });
+
+  it("keeps an open-ended next control when total is only the current AWS page", async () => {
+    const user = userEvent.setup();
+    mockLogGroups.mockReturnValue({
+      data: {
+        logGroups: [{ logGroupName: "/page-1", storedBytes: 1 }],
+        total: 10,
+        nextToken: "aws-page-2",
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /Next page/i }));
+    await waitFor(() => {
+      expect(mockLogGroups).toHaveBeenCalledWith(undefined, expect.objectContaining({ nextToken: "aws-page-2" }));
+    });
+  });
+
   // ── Create log group modal ─────────────────────────────
 
   it("opens create log group modal and submits", async () => {
@@ -387,6 +423,33 @@ describe("CloudWatchLogsDashboard", () => {
   });
 
   // ── Log streams ──────────────────────────────────────────
+
+  it("requests the next log-streams page when pagination advances", async () => {
+    const user = userEvent.setup();
+    mockLogGroups.mockReturnValue({
+      data: { logGroups: [{ logGroupName: "/aws/lambda/test", storedBytes: 1 }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockLogStreams.mockReturnValue({
+      data: {
+        logStreams: [{ logStreamName: "s1", storedBytes: 1 }],
+        total: 12,
+        nextToken: "offset:10",
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByText("/aws/lambda/test"));
+    await waitFor(() => expect(screen.getByLabelText("Log streams pagination")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Next page/i }));
+    await waitFor(() => {
+      expect(mockLogStreams).toHaveBeenCalledWith(
+        "/aws/lambda/test",
+        undefined,
+        expect.objectContaining({ nextToken: "offset:10" }),
+      );
+    });
+  });
 
   it("shows empty log streams in detail", async () => {
     mockLogGroups.mockReturnValue({

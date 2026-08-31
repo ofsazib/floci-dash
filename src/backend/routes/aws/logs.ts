@@ -25,8 +25,32 @@ import { getAwsConfig } from "../../clients/aws";
 
 const router = new Hono();
 
+const LOGS_PAGE_SIZE = 10;
+const LOGS_MAX_PAGE = 50;
+const OFFSET_PREFIX = "offset:";
+
 function logs(): CloudWatchLogsClient {
   return new CloudWatchLogsClient(getAwsConfig());
+}
+
+function parsePageLimit(raw: string | undefined): number {
+  if (raw == null || raw === "") return LOGS_PAGE_SIZE;
+  const n = Number.parseInt(raw, 10);
+  if (!Number.isFinite(n) || n < 1) return LOGS_PAGE_SIZE;
+  return Math.min(n, LOGS_MAX_PAGE);
+}
+
+function pageLocally<T>(
+  items: T[],
+  limit: number,
+  token: string | undefined
+): { page: T[]; nextToken?: string; total: number } | null {
+  if (token && !token.startsWith(OFFSET_PREFIX)) return null;
+  const offset = token ? Number.parseInt(token.slice(OFFSET_PREFIX.length), 10) : 0;
+  const start = Number.isFinite(offset) && offset >= 0 ? offset : 0;
+  const page = items.slice(start, start + limit);
+  const nextToken = start + limit < items.length ? `${OFFSET_PREFIX}${start + limit}` : undefined;
+  return { page, nextToken, total: items.length };
 }
 
 async function storedBytesFromStreams(
@@ -39,6 +63,7 @@ async function storedBytesFromStreams(
     const result = await client.send(
       new DescribeLogStreamsCommand({
         logGroupName,
+        limit: LOGS_MAX_PAGE,
         nextToken,
       })
     );
@@ -56,15 +81,26 @@ async function storedBytesFromStreams(
 
 router.get("/log-groups", async (c: Context) => {
   const prefix = c.req.query("prefix");
+  const limit = parsePageLimit(c.req.query("limit"));
+  const token = c.req.query("nextToken") || undefined;
   const client = logs();
   const result = await client.send(
     new DescribeLogGroupsCommand({
       logGroupNamePrefix: prefix || undefined,
+      limit,
+      nextToken: token && !token.startsWith(OFFSET_PREFIX) ? token : undefined,
     })
   );
+  // Floci ignores limit/nextToken and returns the full list. Page it here so
+  // stored-bytes summing only runs for the visible page.
+  const raw = result.logGroups || [];
+  const local = !result.nextToken ? pageLocally(raw, limit, token) : null;
+  const page = local?.page ?? raw;
+  const nextToken = local ? local.nextToken : result.nextToken;
+  const total = local ? local.total : page.length;
   // Floci's DescribeLogGroups always reports storedBytes: 0; streams carry the real size.
   const groups = await Promise.all(
-    (result.logGroups || []).map(async (g) => {
+    page.map(async (g) => {
       let storedBytes = g.storedBytes ?? 0;
       if (storedBytes === 0 && g.logGroupName) {
         try {
@@ -84,7 +120,7 @@ router.get("/log-groups", async (c: Context) => {
       };
     })
   );
-  return c.json({ logGroups: groups, total: groups.length });
+  return c.json({ logGroups: groups, total, nextToken });
 });
 
 router.post("/log-groups", async (c: Context) => {
@@ -137,15 +173,22 @@ router.delete("/log-groups/:name/retention", async (c: Context) => {
 router.get("/log-groups/:name/streams", async (c: Context) => {
   const name = c.req.param("name");
   const prefix = c.req.query("prefix");
+  const limit = parsePageLimit(c.req.query("limit"));
+  const token = c.req.query("nextToken") || undefined;
   const result = await logs().send(
     new DescribeLogStreamsCommand({
       logGroupName: name,
       logStreamNamePrefix: prefix || undefined,
-      orderBy: "LastEventTime",
-      descending: true,
+      orderBy: prefix ? undefined : "LastEventTime",
+      descending: prefix ? undefined : true,
+      limit,
+      nextToken: token && !token.startsWith(OFFSET_PREFIX) ? token : undefined,
     })
   );
-  const streams = (result.logStreams || []).map((s) => ({
+  const raw = result.logStreams || [];
+  const local = !result.nextToken ? pageLocally(raw, limit, token) : null;
+  const page = local?.page ?? raw;
+  const streams = page.map((s) => ({
     logStreamName: s.logStreamName,
     creationTime: s.creationTime,
     firstEventTimestamp: s.firstEventTimestamp,
@@ -154,7 +197,11 @@ router.get("/log-groups/:name/streams", async (c: Context) => {
     uploadSequenceToken: s.uploadSequenceToken,
     storedBytes: s.storedBytes,
   }));
-  return c.json({ logStreams: streams, total: streams.length });
+  return c.json({
+    logStreams: streams,
+    total: local ? local.total : streams.length,
+    nextToken: local ? local.nextToken : result.nextToken,
+  });
 });
 
 router.post("/log-groups/:name/streams", async (c: Context) => {

@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
-- **CloudWatch Logs stored bytes** — log groups that report `storedBytes: 0` (Floci always does) now show the sum of their streams' `storedBytes`
+- **CloudWatch Logs stored bytes** — log groups that report `storedBytes: 0` (Floci always does) now show the sum of their streams' `storedBytes`. Log groups and streams are paged (10 per page); the stream-size sum runs only for the current group page. Floci ignores AWS `limit`/`nextToken`, so the API slices the full emulator list and returns `offset:N` tokens.
 
 ## [0.2.0] — 2026-08-28
 
