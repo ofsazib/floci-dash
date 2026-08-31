@@ -29,6 +29,20 @@ import {
   ModifyDBSubnetGroupCommand,
   DeleteDBSubnetGroupCommand,
   DescribeOrderableDBInstanceOptionsCommand,
+  // P1 — DB Proxies
+  CreateDBProxyCommand,
+  DescribeDBProxiesCommand,
+  DeleteDBProxyCommand,
+  RegisterDBProxyTargetsCommand,
+  DeregisterDBProxyTargetsCommand,
+  DescribeDBProxyTargetGroupsCommand,
+  ModifyDBProxyTargetGroupCommand,
+  DescribeDBProxyTargetsCommand,
+  // P1 — Option Groups
+  CreateOptionGroupCommand,
+  DescribeOptionGroupsCommand,
+  ModifyOptionGroupCommand,
+  DeleteOptionGroupCommand,
 } from "@aws-sdk/client-rds";
 import { getAwsConfig } from "../../clients/aws";
 
@@ -742,6 +756,107 @@ router.delete("/tags", async (c: Context) => {
     })
   );
   return c.json({ untagged: true });
+});
+
+
+
+// ──────────────────────────────────────────────
+//  DB Proxies
+// ──────────────────────────────────────────────
+
+router.get("/db-proxies", async (c: Context) => {
+  const result = await rds().send(new DescribeDBProxiesCommand({}));
+  return c.json({ dbProxies: result.DBProxies || [] });
+});
+
+router.post("/db-proxies", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.DBProxyName) return c.json({ error: "DBProxyName is required" }, 400);
+  const result = await rds().send(new CreateDBProxyCommand(body));
+  return c.json({ dbProxy: result.DBProxy }, 201);
+});
+
+router.delete("/db-proxies/:name", async (c: Context) => {
+  const name = c.req.param("name")!;
+  await rds().send(new DeleteDBProxyCommand({ DBProxyName: name }));
+  return c.json({ deleted: true });
+});
+
+router.get("/db-proxies/:name/target-groups", async (c: Context) => {
+  const result = await rds().send(new DescribeDBProxyTargetGroupsCommand({
+    DBProxyName: c.req.param("name")!,
+  }));
+  return c.json({ targetGroups: result.TargetGroups || [] });
+});
+
+router.put("/db-proxies/:name/target-groups/:groupName", async (c: Context) => {
+  const body = await c.req.json<any>();
+  const result = await rds().send(new ModifyDBProxyTargetGroupCommand({
+    DBProxyName: c.req.param("name")!,
+    TargetGroupName: c.req.param("groupName")!,
+    ...body,
+  }));
+  return c.json({ targetGroup: result.DBProxyTargetGroup });
+});
+
+router.get("/db-proxies/:name/targets", async (c: Context) => {
+  const result = await rds().send(new DescribeDBProxyTargetsCommand({
+    DBProxyName: c.req.param("name")!,
+  }));
+  return c.json({ targets: result.Targets || [] });
+});
+
+router.post("/db-proxies/:name/targets", async (c: Context) => {
+  const body = await c.req.json<any>();
+  await rds().send(new RegisterDBProxyTargetsCommand({
+    DBProxyName: c.req.param("name")!,
+    TargetGroupName: body.targetGroupName,
+    DBInstanceIdentifiers: body.dbInstanceIdentifiers,
+    DBClusterIdentifiers: body.dbClusterIdentifiers,
+  }));
+  return c.json({ registered: true });
+});
+
+router.delete("/db-proxies/:name/targets", async (c: Context) => {
+  const body = await c.req.json<any>();
+  await rds().send(new DeregisterDBProxyTargetsCommand({
+    DBProxyName: c.req.param("name")!,
+    TargetGroupName: body.targetGroupName,
+    DBInstanceIdentifiers: body.dbInstanceIdentifiers,
+    DBClusterIdentifiers: body.dbClusterIdentifiers,
+  }));
+  return c.json({ deregistered: true });
+});
+
+// ──────────────────────────────────────────────
+//  Option Groups
+// ──────────────────────────────────────────────
+
+router.get("/option-groups", async (c: Context) => {
+  const result = await rds().send(new DescribeOptionGroupsCommand({}));
+  return c.json({ optionGroups: result.OptionGroupsList || [] });
+});
+
+router.post("/option-groups", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.OptionGroupName) return c.json({ error: "OptionGroupName is required" }, 400);
+  const result = await rds().send(new CreateOptionGroupCommand(body));
+  return c.json({ optionGroup: result.OptionGroup }, 201);
+});
+
+router.put("/option-groups/:name", async (c: Context) => {
+  const body = await c.req.json<any>();
+  const result = await rds().send(new ModifyOptionGroupCommand({
+    OptionGroupName: c.req.param("name")!,
+    ...body,
+  }));
+  return c.json({ optionGroup: result.OptionGroup });
+});
+
+router.delete("/option-groups/:name", async (c: Context) => {
+  const name = c.req.param("name")!;
+  await rds().send(new DeleteOptionGroupCommand({ OptionGroupName: name }));
+  return c.json({ deleted: true });
 });
 
 export default router;
