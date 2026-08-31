@@ -50,6 +50,15 @@ import {
   UntagResourceCommand,
   ListJobExecutionsForThingCommand,
   DescribeJobExecutionCommand,
+  CreateThingGroupCommand,
+  DescribeThingGroupCommand,
+  ListThingGroupsCommand,
+  UpdateThingGroupCommand,
+  DeleteThingGroupCommand,
+  ListThingsInThingGroupCommand,
+  ListThingGroupsForThingCommand,
+  AddThingToThingGroupCommand,
+  RemoveThingFromThingGroupCommand,
 } from "@aws-sdk/client-iot";
 import {
   GetThingShadowCommand,
@@ -679,6 +688,71 @@ router.delete("/tags", async (c: Context) => {
   const client = getClient();
   await client.send(new UntagResourceCommand({ resourceArn, tagKeys: tagKeys.split(",") }));
   return c.json({ untagged: true });
+});
+
+// ─── Thing Groups ─────────────────────────────────────
+
+router.get("/thing-groups", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new ListThingGroupsCommand({}));
+  return c.json({ thingGroups: result.thingGroups || [] });
+});
+
+router.get("/thing-groups/:groupName", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new DescribeThingGroupCommand({ thingGroupName: c.req.param("groupName")! }));
+  return c.json({ thingGroup: result });
+});
+
+router.post("/thing-groups", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.thingGroupName) return c.json({ error: "thingGroupName is required" }, 400);
+  const client = getClient();
+  const result = await client.send(new CreateThingGroupCommand(body));
+  return c.json({ thingGroupArn: result.thingGroupArn }, 201);
+});
+
+router.put("/thing-groups/:groupName", async (c: Context) => {
+  const body = await c.req.json<any>();
+  const client = getClient();
+  const result = await client.send(new UpdateThingGroupCommand({ thingGroupName: c.req.param("groupName")!, ...body }));
+  return c.json({ version: result.version });
+});
+
+router.delete("/thing-groups/:groupName", async (c: Context) => {
+  const client = getClient();
+  await client.send(new DeleteThingGroupCommand({ thingGroupName: c.req.param("groupName")! }));
+  return c.json({ deleted: true });
+});
+
+router.get("/thing-groups/:groupName/things", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new ListThingsInThingGroupCommand({ thingGroupName: c.req.param("groupName")! }));
+  return c.json({ things: result.things || [] });
+});
+
+router.get("/things/:thingName/thing-groups", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new ListThingGroupsForThingCommand({ thingName: c.req.param("thingName")! }));
+  return c.json({ thingGroups: result.thingGroups || [] });
+});
+
+router.post("/thing-groups/add-thing", async (c: Context) => {
+  const body = await c.req.json<{ thingName: string; thingGroupName: string }>();
+  if (!body.thingName) return c.json({ error: "thingName is required" }, 400);
+  if (!body.thingGroupName) return c.json({ error: "thingGroupName is required" }, 400);
+  const client = getClient();
+  await client.send(new AddThingToThingGroupCommand(body));
+  return c.json({ added: true });
+});
+
+router.post("/thing-groups/remove-thing", async (c: Context) => {
+  const body = await c.req.json<{ thingName: string; thingGroupName: string }>();
+  if (!body.thingName) return c.json({ error: "thingName is required" }, 400);
+  if (!body.thingGroupName) return c.json({ error: "thingGroupName is required" }, 400);
+  const client = getClient();
+  await client.send(new RemoveThingFromThingGroupCommand(body));
+  return c.json({ removed: true });
 });
 
 // ─── Jobs ────────────────────────────────────────────
