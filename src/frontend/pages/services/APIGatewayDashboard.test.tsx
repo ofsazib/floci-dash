@@ -26,6 +26,15 @@ const mockDeleteApi = vi.fn();
 const mockApiDetail = vi.fn();
 const mockResources = vi.fn();
 const mockDeployments = vi.fn();
+const mockStages = vi.fn();
+const mockAuthorizers = vi.fn();
+const mockValidators = vi.fn();
+const mockModels = vi.fn();
+const mockApiKeys = vi.fn();
+const mockUsagePlans = vi.fn();
+const mockDomainNames = vi.fn();
+const mockAccount = vi.fn();
+const noopMutation = vi.hoisted(() => () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false, isError: false, error: null }));
 
 vi.mock("../../hooks/useAPIGateway", () => ({
   useAPIGatewayApis: (...args: any[]) => mockApis(...args),
@@ -43,6 +52,32 @@ vi.mock("../../hooks/useAPIGateway", () => ({
   useAPIGatewayApi: (...args: any[]) => mockApiDetail(...args),
   useAPIGatewayResources: (...args: any[]) => mockResources(...args),
   useAPIGatewayDeployments: (...args: any[]) => mockDeployments(...args),
+  useAPIGatewayStages: (...args: any[]) => mockStages(...args),
+  useAPIGatewayAuthorizers: (...args: any[]) => mockAuthorizers(...args),
+  useAPIGatewayRequestValidators: (...args: any[]) => mockValidators(...args),
+  useAPIGatewayModels: (...args: any[]) => mockModels(...args),
+  useAPIGatewayApiKeys: (...args: any[]) => mockApiKeys(...args),
+  useAPIGatewayUsagePlans: (...args: any[]) => mockUsagePlans(...args),
+  useAPIGatewayDomainNames: (...args: any[]) => mockDomainNames(...args),
+  useAPIGatewayAccount: (...args: any[]) => mockAccount(...args),
+  useCreateAPIGatewayResource: noopMutation,
+  useDeleteAPIGatewayResource: noopMutation,
+  useCreateAPIGatewayDeployment: noopMutation,
+  useDeleteAPIGatewayDeployment: noopMutation,
+  useCreateAPIGatewayStage: noopMutation,
+  useDeleteAPIGatewayStage: noopMutation,
+  useCreateAPIGatewayAuthorizer: noopMutation,
+  useDeleteAPIGatewayAuthorizer: noopMutation,
+  useCreateAPIGatewayRequestValidator: noopMutation,
+  useDeleteAPIGatewayRequestValidator: noopMutation,
+  useCreateAPIGatewayModel: noopMutation,
+  useDeleteAPIGatewayModel: noopMutation,
+  useCreateAPIGatewayApiKey: noopMutation,
+  useDeleteAPIGatewayApiKey: noopMutation,
+  useCreateAPIGatewayUsagePlan: noopMutation,
+  useDeleteAPIGatewayUsagePlan: noopMutation,
+  useCreateAPIGatewayDomainName: noopMutation,
+  useDeleteAPIGatewayDomainName: noopMutation,
 }));
 
 import { APIGatewayDashboard } from "./APIGatewayDashboard";
@@ -78,6 +113,14 @@ beforeEach(() => {
   mockResources.mockReturnValue({ data: { resources: [], total: 0 }, isLoading: false, isError: false, error: null });
   mockDeployments.mockReturnValue({ data: { deployments: [], total: 0 }, isLoading: false });
   mockApiDetail.mockReturnValue({ data: undefined, isLoading: false });
+  mockStages.mockReturnValue({ data: { stages: [], total: 0 }, isLoading: false });
+  mockAuthorizers.mockReturnValue({ data: { authorizers: [], total: 0 }, isLoading: false });
+  mockValidators.mockReturnValue({ data: { requestValidators: [], total: 0 }, isLoading: false });
+  mockModels.mockReturnValue({ data: { models: [], total: 0 }, isLoading: false });
+  mockApiKeys.mockReturnValue({ data: { apiKeys: [], total: 0 }, isLoading: false });
+  mockUsagePlans.mockReturnValue({ data: { usagePlans: [], total: 0 }, isLoading: false });
+  mockDomainNames.mockReturnValue({ data: { domainNames: [], total: 0 }, isLoading: false });
+  mockAccount.mockReturnValue({ data: {}, isLoading: false });
 });
 
 describe("APIGatewayDashboard", () => {
@@ -170,7 +213,8 @@ describe("APIGatewayDashboard", () => {
     createApiState.error = new Error("API creation failed");
     const user = userEvent.setup();
     render(<APIGatewayDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /Create/i);
+    const btns = screen.getAllByRole("button", { name: /Create/i });
+    await user.click(btns[btns.length - 1]);
     await waitFor(() => {
       expect(screen.getByText("API creation failed")).toBeTruthy();
     });
@@ -291,6 +335,8 @@ describe("APIGatewayDashboard", () => {
     render(<APIGatewayDashboard />, { wrapper: createWrapper() });
     await waitFor(() => screen.getByText("my-api"));
     await user.click(screen.getByText("View"));
+    await waitFor(() => expect(screen.getByText(/Back to REST APIs/i)).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /Deployments/i }));
     await waitFor(() => expect(screen.getByText("dep-1")).toBeTruthy());
     expect(screen.getByText("prod")).toBeTruthy();
   });
@@ -310,6 +356,7 @@ describe("APIGatewayDashboard", () => {
     render(<APIGatewayDashboard />, { wrapper: createWrapper() });
     await waitFor(() => screen.getByText("my-api"));
     await user.click(screen.getByText("View"));
+    // Resources tab is active by default
     await waitFor(() => expect(screen.getByText("Failed to load resources")).toBeTruthy());
   });
 
@@ -397,7 +444,8 @@ describe("APIGatewayDashboard", () => {
     createApiState.error = {} as Error;
     const user = userEvent.setup();
     render(<APIGatewayDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /Create/i);
+    const btns = screen.getAllByRole("button", { name: /Create/i });
+    await user.click(btns[btns.length - 1]);
     await waitFor(() => expect(screen.getByText("Failed to create REST API")).toBeTruthy());
   });
 
@@ -416,6 +464,7 @@ describe("APIGatewayDashboard", () => {
     render(<APIGatewayDashboard />, { wrapper: createWrapper() });
     await waitFor(() => screen.getByText("my-api"));
     await user.click(screen.getByText("View"));
+    // Resources tab is active by default
     await waitFor(() => expect(screen.getByText("Failed to load resources")).toBeTruthy());
   });
 
@@ -437,6 +486,11 @@ describe("APIGatewayDashboard", () => {
     render(<APIGatewayDashboard />, { wrapper: createWrapper() });
     await waitFor(() => screen.getByText("my-api"));
     await user.click(screen.getByText("View"));
+    await waitFor(() => expect(screen.getByText(/Back to REST APIs/i)).toBeTruthy());
+    // Resources tab is active by default — check resource content
+    await waitFor(() => expect(screen.getByText("/")).toBeTruthy());
+    // Switch to deployments tab
+    await user.click(screen.getByRole("tab", { name: /Deployments/i }));
     await waitFor(() => expect(screen.getByText("dep-1")).toBeTruthy());
     expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2);
   });
@@ -453,6 +507,8 @@ describe("APIGatewayDashboard", () => {
     render(<APIGatewayDashboard />, { wrapper: createWrapper() });
     await waitFor(() => screen.getByText("my-api"));
     await user.click(screen.getByText("View"));
+    await waitFor(() => expect(screen.getByText(/Back to REST APIs/i)).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /Deployments/i }));
     await waitFor(() => expect(screen.getByText("No deployments found.")).toBeTruthy());
   });
 });

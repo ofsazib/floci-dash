@@ -113,6 +113,32 @@ import {
   useDeleteAPIGatewayApi,
   useAPIGatewayResources,
   useAPIGatewayDeployments,
+  useCreateAPIGatewayResource,
+  useDeleteAPIGatewayResource,
+  useCreateAPIGatewayDeployment,
+  useDeleteAPIGatewayDeployment,
+  useAPIGatewayStages,
+  useCreateAPIGatewayStage,
+  useDeleteAPIGatewayStage,
+  useAPIGatewayAuthorizers,
+  useCreateAPIGatewayAuthorizer,
+  useDeleteAPIGatewayAuthorizer,
+  useAPIGatewayApiKeys,
+  useCreateAPIGatewayApiKey,
+  useDeleteAPIGatewayApiKey,
+  useAPIGatewayUsagePlans,
+  useCreateAPIGatewayUsagePlan,
+  useDeleteAPIGatewayUsagePlan,
+  useAPIGatewayRequestValidators,
+  useCreateAPIGatewayRequestValidator,
+  useDeleteAPIGatewayRequestValidator,
+  useAPIGatewayModels,
+  useCreateAPIGatewayModel,
+  useDeleteAPIGatewayModel,
+  useAPIGatewayDomainNames,
+  useCreateAPIGatewayDomainName,
+  useDeleteAPIGatewayDomainName,
+  useAPIGatewayAccount,
 } from "../../hooks/useAPIGateway";
 import { useToast } from "../../components/Toast";
 import {
@@ -506,17 +532,44 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
 ];
 
 export function APIGatewayDashboard() {
-  const { data, isLoading, isError, error } = useAPIGatewayApis();
+  const { data, isLoading } = useAPIGatewayApis();
   const createApi = useCreateAPIGatewayApi();
   const deleteApi = useDeleteAPIGatewayApi();
   const [selectedApi, setSelectedApi] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-
+  const [activeTab, setActiveTab] = useState("apis");
   const [form, setForm] = useState({ name: "", description: "" });
+  const { showToast } = useToast();
+
+  // API Keys
+  const { data: keysData, isLoading: keysLoading } = useAPIGatewayApiKeys();
+  const createApiKey = useCreateAPIGatewayApiKey();
+  const deleteApiKey = useDeleteAPIGatewayApiKey();
+  const [showCreateKey, setShowCreateKey] = useState(false);
+  const [keyForm, setKeyForm] = useState({ name: "", description: "", enabled: true });
+
+  // Usage Plans
+  const { data: plansData, isLoading: plansLoading } = useAPIGatewayUsagePlans();
+  const createPlan = useCreateAPIGatewayUsagePlan();
+  const deletePlan = useDeleteAPIGatewayUsagePlan();
+  const [showCreatePlan, setShowCreatePlan] = useState(false);
+  const [planForm, setPlanForm] = useState({ name: "", description: "" });
+
+  // Domain Names
+  const { data: domainsData, isLoading: domainsLoading } = useAPIGatewayDomainNames();
+  const createDomain = useCreateAPIGatewayDomainName();
+  const deleteDomain = useDeleteAPIGatewayDomainName();
 
   const apis = data?.apis || [];
+  const apiKeys = keysData?.apiKeys || [];
+  const usagePlans = plansData?.usagePlans || [];
+  const domainNames = domainsData?.domainNames || [];
 
-  const columns = [
+  if (selectedApi) {
+    return <APIGatewayApiDetail apiId={selectedApi} onBack={() => setSelectedApi(null)} />;
+  }
+
+  const apiColumns = [
     { id: "name", header: "Name", cell: (item: any) => item.name, isRowHeader: true },
     { id: "id", header: "API ID", cell: (item: any) => item.id },
     { id: "description", header: "Description", cell: (item: any) => item.description || "—" },
@@ -540,113 +593,200 @@ export function APIGatewayDashboard() {
     },
   ];
 
-  if (selectedApi) {
-    return <APIGatewayApiDetail apiId={selectedApi} onBack={() => setSelectedApi(null)} />;
-  }
+  const tabs: TabsProps.Tab[] = [
+    {
+      id: "apis",
+      label: "REST APIs",
+      content: (
+        <>
+          <ResourceTable
+            resourceName="REST API"
+            headerCounter={data?.total}
+            items={apis}
+            columns={apiColumns}
+            loading={isLoading}
+            emptyMessage="No REST APIs found. Create one to get started."
+            filterEnabled
+            filterPlaceholder="Find APIs by name"
+            filterFunction={(item: any, searchText: string) =>
+              (item.name || "").toLowerCase().includes(searchText.toLowerCase())
+            }
+            onCreate={() => setShowCreate(true)}
+          />
+          <Modal
+            visible={showCreate}
+            onDismiss={() => setShowCreate(false)}
+            header="Create REST API"
+            footer={
+              <Box float="right">
+                <SpaceBetween direction="horizontal" size="xs">
+                  <Button variant="link" onClick={() => setShowCreate(false)}>Cancel</Button>
+                  <Button
+                    variant="primary"
+                    loading={createApi.isPending}
+                    disabled={!form.name.trim()}
+                    onClick={() => {
+                      createApi.mutate(form, {
+                        onSuccess: () => { setShowCreate(false); setForm({ name: "", description: "" }); },
+                      });
+                    }}
+                  >Create</Button>
+                </SpaceBetween>
+              </Box>
+            }
+          >
+            <Form>
+              {createApi.isError && (
+                <Alert type="error" dismissible>
+                  {(createApi.error as Error)?.message || "Failed to create REST API"}
+                </Alert>
+              )}
+              <SpaceBetween size="m">
+                <FormField label="API name"><Input value={form.name} onChange={({ detail }) => setForm((p) => ({ ...p, name: detail.value }))} placeholder="my-api" /></FormField>
+                <FormField label="Description (optional)"><Input value={form.description} onChange={({ detail }) => setForm((p) => ({ ...p, description: detail.value }))} /></FormField>
+              </SpaceBetween>
+            </Form>
+          </Modal>
+        </>
+      ),
+    },
+    {
+      id: "keys",
+      label: "API Keys",
+      content: (
+        <>
+          <ResourceTable
+            resourceName="API Key"
+            items={apiKeys}
+            columns={[
+              { id: "name", header: "Name", cell: (item: any) => item.name || item.id, isRowHeader: true },
+              { id: "id", header: "Key ID", cell: (item: any) => item.id },
+              { id: "enabled", header: "Enabled", cell: (item: any) => item.enabled !== false ? "Yes" : "No" },
+              { id: "created", header: "Created", cell: (item: any) => item.createdDate ? new Date(item.createdDate).toLocaleString() : "—" },
+            ]}
+            loading={keysLoading}
+            emptyMessage="No API keys found."
+            onCreate={() => setShowCreateKey(true)}
+          />
+          <Modal visible={showCreateKey} onDismiss={() => setShowCreateKey(false)} header="Create API Key"
+            footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreateKey(false)}>Cancel</Button>
+              <Button variant="primary" loading={createApiKey.isPending}
+                onClick={() => { createApiKey.mutate(keyForm, { onSuccess: () => { setShowCreateKey(false); setKeyForm({ name: "", description: "", enabled: true }); showToast("success", "API key created"); } }); }}>Create</Button>
+            </SpaceBetween></Box>}
+          >
+            <Form><SpaceBetween size="m">
+              <FormField label="Key name"><Input value={keyForm.name} onChange={({ detail }) => setKeyForm((p) => ({ ...p, name: detail.value }))} placeholder="my-api-key" /></FormField>
+              <FormField label="Description"><Input value={keyForm.description} onChange={({ detail }) => setKeyForm((p) => ({ ...p, description: detail.value }))} /></FormField>
+            </SpaceBetween></Form>
+          </Modal>
+        </>
+      ),
+    },
+    {
+      id: "plans",
+      label: "Usage Plans",
+      content: (
+        <>
+          <ResourceTable
+            resourceName="Usage Plan"
+            items={usagePlans}
+            columns={[
+              { id: "name", header: "Name", cell: (item: any) => item.name, isRowHeader: true },
+              { id: "id", header: "ID", cell: (item: any) => item.id },
+              { id: "description", header: "Description", cell: (item: any) => item.description || "—" },
+            ]}
+            loading={plansLoading}
+            emptyMessage="No usage plans found."
+            onCreate={() => setShowCreatePlan(true)}
+          />
+          <Modal visible={showCreatePlan} onDismiss={() => setShowCreatePlan(false)} header="Create Usage Plan"
+            footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreatePlan(false)}>Cancel</Button>
+              <Button variant="primary" loading={createPlan.isPending}
+                onClick={() => { createPlan.mutate(planForm, { onSuccess: () => { setShowCreatePlan(false); setPlanForm({ name: "", description: "" }); showToast("success", "Usage plan created"); } }); }}>Create</Button>
+            </SpaceBetween></Box>}
+          >
+            <Form><SpaceBetween size="m">
+              <FormField label="Plan name"><Input value={planForm.name} onChange={({ detail }) => setPlanForm((p) => ({ ...p, name: detail.value }))} placeholder="my-plan" /></FormField>
+              <FormField label="Description"><Input value={planForm.description} onChange={({ detail }) => setPlanForm((p) => ({ ...p, description: detail.value }))} /></FormField>
+            </SpaceBetween></Form>
+          </Modal>
+        </>
+      ),
+    },
+    {
+      id: "domains",
+      label: "Domain Names",
+      content: (
+        <ResourceTable
+          resourceName="Domain Name"
+          items={domainNames}
+          columns={[
+            { id: "domainName", header: "Domain Name", cell: (item: any) => item.domainName, isRowHeader: true },
+            { id: "certificateArn", header: "Certificate", cell: (item: any) => item.certificateArn ? item.certificateArn.split('/').pop() : "—" },
+          ]}
+          loading={domainsLoading}
+          emptyMessage="No domain names found."
+        />
+      ),
+    },
+  ];
 
   return (
-    <>
-      <ResourceTable
-        resourceName="REST API"
-        headerTitle="API Gateway REST APIs"
-        headerCounter={data?.total}
-        items={apis}
-        columns={columns}
-        loading={isLoading}
-        emptyMessage="No REST APIs found. Create one to get started."
-        filterEnabled
-        filterPlaceholder="Find APIs by name"
-        filterFunction={(item: any, searchText: string) =>
-          (item.name || "").toLowerCase().includes(searchText.toLowerCase())
-        }
-        onCreate={() => setShowCreate(true)}
-      />
-
-      <Modal
-        visible={showCreate}
-        onDismiss={() => setShowCreate(false)}
-        header="Create REST API"
-        footer={
-          <Box float="right">
-            <SpaceBetween direction="horizontal" size="xs">
-              <Button variant="link" onClick={() => setShowCreate(false)}>
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                loading={createApi.isPending}
-                disabled={!form.name.trim()}
-                onClick={() => {
-                  createApi.mutate(form, {
-                    onSuccess: () => {
-                      setShowCreate(false);
-                      setForm({ name: "", description: "" });
-                    },
-                  });
-                }}
-              >
-                Create
-              </Button>
-            </SpaceBetween>
-          </Box>
-        }
-      >
-        <Form>
-          {createApi.isError && (
-            <Alert type="error" dismissible>
-              {(createApi.error as Error)?.message || "Failed to create REST API"}
-            </Alert>
-          )}
-          <SpaceBetween size="m">
-            <FormField label="API name" description="A descriptive name for your REST API.">
-              <Input
-                value={form.name}
-                onChange={({ detail }) => setForm((p) => ({ ...p, name: detail.value }))}
-                placeholder="my-api"
-              />
-            </FormField>
-            <FormField label="Description (optional)">
-              <Input
-                value={form.description}
-                onChange={({ detail }) => setForm((p) => ({ ...p, description: detail.value }))}
-              />
-            </FormField>
-          </SpaceBetween>
-        </Form>
-      </Modal>
-    </>
+    <Tabs activeTabId={activeTab} onChange={({ detail }) => setActiveTab(detail.activeTabId)} tabs={tabs} />
   );
 }
 
 
 function APIGatewayApiDetail({ apiId, onBack }: { apiId: string; onBack: () => void }) {
-  const { data: apiData, isLoading: apiLoading } = useAPIGatewayApi(apiId);
-  const { data: resData, isLoading: resLoading, isError, error } = useAPIGatewayResources(apiId);
+  const { data: apiData } = useAPIGatewayApi(apiId);
+  const { data: resData, isLoading: resLoading, isError: resIsError, error: resError } = useAPIGatewayResources(apiId);
   const { data: deployData, isLoading: deployLoading } = useAPIGatewayDeployments(apiId);
-
-  const resources = resData?.resources || [];
-  const deployments = deployData?.deployments || [];
+  const { data: stagesData, isLoading: stagesLoading } = useAPIGatewayStages(apiId);
+  const { data: authData, isLoading: authLoading } = useAPIGatewayAuthorizers(apiId);
+  const { data: validatorsData, isLoading: validatorsLoading } = useAPIGatewayRequestValidators(apiId);
+  const { data: modelsData, isLoading: modelsLoading } = useAPIGatewayModels(apiId);
+  const createResource = useCreateAPIGatewayResource(apiId);
+  const deleteResource = useDeleteAPIGatewayResource(apiId);
+  const createDeployment = useCreateAPIGatewayDeployment(apiId);
+  const deleteDeployment = useDeleteAPIGatewayDeployment(apiId);
+  const createStage = useCreateAPIGatewayStage(apiId);
+  const deleteStage = useDeleteAPIGatewayStage(apiId);
+  const createAuth = useCreateAPIGatewayAuthorizer(apiId);
+  const deleteAuth = useDeleteAPIGatewayAuthorizer(apiId);
+  const createValidator = useCreateAPIGatewayRequestValidator(apiId);
+  const deleteValidator = useDeleteAPIGatewayRequestValidator(apiId);
+  const createModel = useCreateAPIGatewayModel(apiId);
+  const deleteModel = useDeleteAPIGatewayModel(apiId);
+  const { showToast } = useToast();
+  const [activeTab, setActiveTab] = useState("resources");
+  const [showCreate, setShowCreate] = useState(false);
+  const [createForm, setCreateForm] = useState<Record<string, string>>({});
 
   const api = apiData?.api;
+  const resources = resData?.resources || [];
+  const deployments = deployData?.deployments || [];
+  const stages = stagesData?.stages || [];
+  const authorizers = authData?.authorizers || [];
+  const validators = validatorsData?.requestValidators || [];
+  const models = modelsData?.models || [];
 
-  return (
-    <SpaceBetween size="l">
-      <Button variant="link" iconName="arrow-left" onClick={onBack}>
-        Back to REST APIs
-      </Button>
+  const loading = resLoading || deployLoading || stagesLoading || authLoading || validatorsLoading || modelsLoading;
 
-      <Header variant="h2" description={api?.description || `API ID: ${apiId}`}>
-        {api?.name || "REST API"}
-      </Header>
+  const resetCreate = () => { setShowCreate(false); setCreateForm({}); };
 
-      {isError && (
-        <StatusIndicator type="error">
-          {(error as Error)?.message || "Failed to load resources"}
-        </StatusIndicator>
-      )}
-
-      <SpaceBetween size="xl">
-        <Container header={<Header variant="h3">Resources</Header>}>
+  const tabs: TabsProps.Tab[] = [
+    {
+      id: "resources",
+      label: "Resources",
+      content: (
+        <>
+          {resIsError && (
+            <StatusIndicator type="error">
+              {(resError as Error)?.message || "Failed to load resources"}
+            </StatusIndicator>
+          )}
           <ResourceTable
             resourceName="Resource"
             items={resources}
@@ -665,32 +805,118 @@ function APIGatewayApiDetail({ apiId, onBack }: { apiId: string; onBack: () => v
             loading={resLoading}
             emptyMessage="No resources found."
           />
-        </Container>
+        </>
+      ),
+    },
+    {
+      id: "deployments",
+      label: "Deployments",
+      content: (
+        <ResourceTable
+          resourceName="Deployment"
+          items={deployments}
+          columns={[
+            { id: "id", header: "Deployment ID", cell: (item: any) => item.id, isRowHeader: true },
+            { id: "stage", header: "Stage", cell: (item: any) => item.stageName || "—" },
+            {
+              id: "date",
+              header: "Created",
+              cell: (item: any) => item.createdDate ? new Date(item.createdDate).toLocaleString() : "—",
+            },
+          ]}
+          loading={deployLoading}
+          emptyMessage="No deployments found."
+        />
+      ),
+    },
+    {
+      id: "stages",
+      label: "Stages",
+      content: (
+        <ResourceTable
+          resourceName="Stage"
+          items={stages}
+          columns={[
+            { id: "name", header: "Stage Name", cell: (item: any) => item.stageName, isRowHeader: true },
+            { id: "deploy", header: "Deployment ID", cell: (item: any) => item.deploymentId || "—" },
+            { id: "created", header: "Created", cell: (item: any) => item.createdDate ? new Date(item.createdDate).toLocaleString() : "—" },
+          ]}
+          loading={stagesLoading}
+          emptyMessage="No stages found."
+        />
+      ),
+    },
+    {
+      id: "authorizers",
+      label: "Authorizers",
+      content: (
+        <ResourceTable
+          resourceName="Authorizer"
+          items={authorizers}
+          columns={[
+            { id: "name", header: "Name", cell: (item: any) => item.name, isRowHeader: true },
+            { id: "type", header: "Type", cell: (item: any) => item.type || "—" },
+            { id: "id", header: "ID", cell: (item: any) => item.id },
+          ]}
+          loading={authLoading}
+          emptyMessage="No authorizers found."
+        />
+      ),
+    },
+    {
+      id: "validators",
+      label: "Request Validators",
+      content: (
+        <ResourceTable
+          resourceName="Request Validator"
+          items={validators}
+          columns={[
+            { id: "name", header: "Name", cell: (item: any) => item.name, isRowHeader: true },
+            { id: "id", header: "ID", cell: (item: any) => item.id },
+            { id: "validateRequestBody", header: "Body", cell: (item: any) => item.validateRequestBody ? "Yes" : "No" },
+            { id: "validateRequestParameters", header: "Params", cell: (item: any) => item.validateRequestParameters ? "Yes" : "No" },
+          ]}
+          loading={validatorsLoading}
+          emptyMessage="No request validators found."
+        />
+      ),
+    },
+    {
+      id: "models",
+      label: "Models",
+      content: (
+        <ResourceTable
+          resourceName="Model"
+          items={models}
+          columns={[
+            { id: "name", header: "Name", cell: (item: any) => item.name, isRowHeader: true },
+            { id: "contentType", header: "Content Type", cell: (item: any) => item.contentType || "—" },
+            { id: "id", header: "ID", cell: (item: any) => item.id },
+          ]}
+          loading={modelsLoading}
+          emptyMessage="No models found."
+        />
+      ),
+    },
+  ];
 
-        <Container header={<Header variant="h3">Deployments</Header>}>
-          <ResourceTable
-            resourceName="Deployment"
-            items={deployments}
-            columns={[
-              { id: "id", header: "Deployment ID", cell: (item: any) => item.id, isRowHeader: true },
-              { id: "stage", header: "Stage", cell: (item: any) => item.stageName || "—" },
-              {
-                id: "date",
-                header: "Created",
-                cell: (item: any) =>
-                  item.createdDate ? new Date(item.createdDate).toLocaleString() : "—",
-              },
-              {
-                id: "status",
-                header: "Status",
-                cell: (item: any) => item.apiSummary ? "—" : (item.statusDescription || "—"),
-              },
-            ]}
-            loading={deployLoading}
-            emptyMessage="No deployments found."
-          />
-        </Container>
-      </SpaceBetween>
+  return (
+    <SpaceBetween size="l">
+      <Button variant="link" iconName="arrow-left" onClick={onBack}>
+        Back to REST APIs
+      </Button>
+
+      <Header variant="h2" description={api?.description || `API ID: ${apiId}`}>
+        {api?.name || "REST API"}
+      </Header>
+
+      {loading && <Spinner />}
+
+      <Tabs
+        activeTabId={activeTab}
+        onChange={({ detail }) => setActiveTab(detail.activeTabId)}
+        tabs={tabs}
+      />
     </SpaceBetween>
   );
 }
