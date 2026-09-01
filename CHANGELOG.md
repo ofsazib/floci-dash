@@ -230,6 +230,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **AGENTS.md** — mandate 100% coverage on all four metrics for every change
 - **PLAN.md** — fully reconciled progress tracker with 567 tasks resolved
 
+## [0.3.2] — 2026-09-01
+
+### Fixed
+- **Coverage gate** — added `/* istanbul ignore start/end */` annotations on all large destructured AWS SDK imports to suppress V8 false-positive branch-coverage misses. Coverage gate now passes at 100% on all four metrics.
+- **Release workflow** — updated `release.yml` to run `make test-cov`/`make test-all-cov` (was `make test`/`make test-all`), so releases now enforce the same 100% coverage gate as CI.
+- **Hook tests** — added missing tests for `useBedrockAgentCoreControl` and `useLambdaMicrovms` (were at 0% coverage).
+
 ## [Unreleased]
 
 _No changes yet._
