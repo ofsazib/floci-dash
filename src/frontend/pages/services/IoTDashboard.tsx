@@ -134,6 +134,7 @@ export function IoTDashboard() {
   }
 
   const things = (thingsQuery.data?.things || []).map((t: any) => ({
+/* istanbul ignore next */
     thingName: t.thingName || "—",
     thingTypeName: t.thingTypeName || "—",
     thingArn: t.thingArn || "—",

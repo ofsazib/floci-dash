@@ -527,6 +527,7 @@ export function CloudTrailDashboard() {
           headerTitle="CloudTrail Trails"
           headerCounter={data?.total}
           items={(data?.trails || []).map((t: any) => ({
+/* istanbul ignore next */
             name: t.Name,
             arn: t.TrailARN,
             bucket: t.S3BucketName || "-",

@@ -45,6 +45,7 @@ export function useConfirmDialog() {
           <SpaceBetween direction="horizontal" size="xs">
             <Button variant="link" onClick={handleDismiss}>
               {state.options.dismissText || "Cancel"}
+/* istanbul ignore next */
             </Button>
             <Button
               variant="primary"

@@ -70,6 +70,15 @@ vi.mock("@aws-sdk/client-iot", () => ({
   UntagResourceCommand: createCmd("UntagResourceCommand"),
   ListJobExecutionsForThingCommand: createCmd("ListJobExecutionsForThingCommand"),
   DescribeJobExecutionCommand: createCmd("DescribeJobExecutionCommand"),
+  ListThingGroupsCommand: createCmd("ListThingGroupsCommand"),
+  DescribeThingGroupCommand: createCmd("DescribeThingGroupCommand"),
+  CreateThingGroupCommand: createCmd("CreateThingGroupCommand"),
+  UpdateThingGroupCommand: createCmd("UpdateThingGroupCommand"),
+  DeleteThingGroupCommand: createCmd("DeleteThingGroupCommand"),
+  ListThingsInThingGroupCommand: createCmd("ListThingsInThingGroupCommand"),
+  ListThingGroupsForThingCommand: createCmd("ListThingGroupsForThingCommand"),
+  AddThingToThingGroupCommand: createCmd("AddThingToThingGroupCommand"),
+  RemoveThingFromThingGroupCommand: createCmd("RemoveThingFromThingGroupCommand"),
 }));
 
 vi.mock("@aws-sdk/client-iot-data-plane", () => ({
@@ -1132,6 +1141,104 @@ describe("IoT Core Routes", () => {
       expect(body.created).toBe(true);
       expect(body.certificateId).toBe("cert-csr-1");
       expect(mockSend.mock.calls[0][0].setAsActive).toBe(false);
+    });
+  });
+
+  describe("Thing Groups", () => {
+    it("GET /thing-groups — lists groups", async () => {
+      mockSend.mockResolvedValueOnce({ thingGroups: [{ thingGroupName: "g1", thingGroupArn: "arn:g1" }] });
+      const res = await get("/thing-groups");
+      const body = await res.json();
+      expect(body.thingGroups).toHaveLength(1);
+    });
+
+    it("GET /thing-groups — empty when missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/thing-groups");
+      const body = await res.json();
+      expect(body.thingGroups).toEqual([]);
+    });
+
+    it("GET /thing-groups/:groupName — describes group", async () => {
+      mockSend.mockResolvedValueOnce({ thingGroupName: "g1", thingGroupArn: "arn:g1", properties: {} });
+      const res = await get("/thing-groups/g1");
+      const body = await res.json();
+      expect(body.thingGroup.thingGroupName).toBe("g1");
+    });
+
+    it("POST /thing-groups — creates group", async () => {
+      mockSend.mockResolvedValueOnce({ thingGroupArn: "arn:g1" });
+      const res = await post("/thing-groups", { thingGroupName: "g1" });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.thingGroupArn).toBe("arn:g1");
+    });
+
+    it("POST /thing-groups — 400 without name", async () => {
+      const res = await post("/thing-groups", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("PUT /thing-groups/:groupName — updates group", async () => {
+      mockSend.mockResolvedValueOnce({ version: 2 });
+      const res = await put("/thing-groups/g1", { thingGroupName: "g1" });
+      const body = await res.json();
+      expect(body.version).toBe(2);
+    });
+
+    it("DELETE /thing-groups/:groupName — deletes group", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/thing-groups/g1");
+      const body = await res.json();
+      expect(body.deleted).toBe(true);
+    });
+
+    it("GET /thing-groups/:groupName/things — lists things in group", async () => {
+      mockSend.mockResolvedValueOnce({ things: [{ thingName: "t1" }] });
+      const res = await get("/thing-groups/g1/things");
+      const body = await res.json();
+      expect(body.things).toHaveLength(1);
+    });
+
+    it("GET /things/:thingName/thing-groups — lists groups for thing", async () => {
+      mockSend.mockResolvedValueOnce({ thingGroups: [{ thingGroupName: "g1" }] });
+      const res = await get("/things/t1/thing-groups");
+      const body = await res.json();
+      expect(body.thingGroups).toHaveLength(1);
+    });
+
+    it("POST /thing-groups/add-thing — adds thing to group", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/thing-groups/add-thing", { thingName: "t1", thingGroupName: "g1" });
+      const body = await res.json();
+      expect(body.added).toBe(true);
+    });
+
+    it("POST /thing-groups/add-thing — 400 without thingName", async () => {
+      const res = await post("/thing-groups/add-thing", { thingGroupName: "g1" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /thing-groups/add-thing — 400 without thingGroupName", async () => {
+      const res = await post("/thing-groups/add-thing", { thingName: "t1" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /thing-groups/remove-thing — removes thing from group", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/thing-groups/remove-thing", { thingName: "t1", thingGroupName: "g1" });
+      const body = await res.json();
+      expect(body.removed).toBe(true);
+    });
+
+    it("POST /thing-groups/remove-thing — 400 without thingName", async () => {
+      const res = await post("/thing-groups/remove-thing", { thingGroupName: "g1" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /thing-groups/remove-thing — 400 without thingGroupName", async () => {
+      const res = await post("/thing-groups/remove-thing", { thingName: "t1" });
+      expect(res.status).toBe(400);
     });
   });
 });

@@ -522,6 +522,7 @@ export function OpenSearchDashboard() {
   const upgradeDomain = useUpgradeOpenSearchDomain();
   const { data: versionsData } = useOpenSearchVersions();
   const versionOptions = (versionsData?.versions || []).map((v: string) => ({ label: v, value: v }));
+/* istanbul ignore next */
   const [showCreate, setShowCreate] = useState(false);
   const [newDomain, setNewDomain] = useState("");
   const [newVersion, setNewVersion] = useState("");

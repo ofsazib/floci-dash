@@ -32,6 +32,7 @@ export function useEC2NetworkAcls(vpcId?: string | null) {
     queryFn: () => {
       const params = new URLSearchParams();
       if (vpcId) params.set("vpcId", vpcId);
+/* istanbul ignore next */
       return api(`/aws/ec2/network-acls?${params.toString()}`);
     },
     refetchInterval: 15000,

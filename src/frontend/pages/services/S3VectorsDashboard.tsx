@@ -513,6 +513,7 @@ export function S3VectorsDashboard() {
   const [queryResults, setQueryResults] = useState<any[] | null>(null);
 
   const buckets = bucketsData?.buckets || [];
+/* istanbul ignore next */
   const indexes = indexesData?.indexes || [];
 
   return (

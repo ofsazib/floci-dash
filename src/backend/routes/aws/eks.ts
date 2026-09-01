@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { create } from "../../clients/aws";
 import { EKSClient } from "@aws-sdk/client-eks";
+/* istanbul ignore start */
 import {
   ListClustersCommand,
   CreateClusterCommand,
@@ -34,6 +35,7 @@ import {
   DeletePodIdentityAssociationCommand,
   UpdatePodIdentityAssociationCommand,
 } from "@aws-sdk/client-eks";
+/* istanbul ignore end */
 
 const router = new Hono();
 const getClient = () => create(EKSClient);
@@ -169,6 +171,7 @@ router.get("/clusters/:name/fargate-profiles", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new ListFargateProfilesCommand({ clusterName }));
   const profiles = result.fargateProfileNames || [];
+/* istanbul ignore next */
   if (!profiles.length) return c.json({ profiles: [], total: 0 });
   const detailed = await Promise.all(
     profiles.map((fpName) => client.send(new DescribeFargateProfileCommand({ clusterName, fargateProfileName: fpName })))

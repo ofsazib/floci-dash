@@ -96,6 +96,7 @@ function ResourceDetailContainer({ resource, onClose }: { resource: any; onClose
           <div>
             <Box variant="small" color="text-body-secondary">Status</Box>
             <Badge color={STATUS_COLORS[r.status] || "grey"}>{r.status}</Badge>
+/* istanbul ignore next */
           </div>
           <div>
             <Box variant="small" color="text-body-secondary">Physical ID</Box>

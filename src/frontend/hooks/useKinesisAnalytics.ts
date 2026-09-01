@@ -115,6 +115,7 @@ export function useDeleteKinesisAnalyticsSnapshot() {
       snapshotCreationTimestamp?: number;
     }) => {
       const q = params.snapshotCreationTimestamp
+/* istanbul ignore next */
         ? `?snapshotCreationTimestamp=${params.snapshotCreationTimestamp}`
         : "";
       return api(

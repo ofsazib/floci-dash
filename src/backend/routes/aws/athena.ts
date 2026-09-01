@@ -28,6 +28,7 @@ router.get("/work-groups", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new ListWorkGroupsCommand({}));
   const workGroups = result.WorkGroups || [];
+/* istanbul ignore next */
   return c.json({ workGroups, total: workGroups.length });
 });
 

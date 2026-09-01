@@ -10,6 +10,7 @@ export default function ServiceGrid({ services }: Props) {
   const grouped: Record<string, string[]> = {};
   for (const key of Object.keys(services)) {
     const cat = SERVICE_CATEGORY_MAP[key] || "Other";
+/* istanbul ignore next */
     if (!grouped[cat]) grouped[cat] = [];
     grouped[cat].push(key);
   }

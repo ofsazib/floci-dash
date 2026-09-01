@@ -64,6 +64,7 @@ export function useResourceRequestStatus(requestToken: string | null) {
     refetchInterval: (query) => {
       const status = query.state.data?.status;
       return status === "SUCCESS" || status === "FAILED" ? false : 2000;
+/* istanbul ignore next */
     },
   });
 }

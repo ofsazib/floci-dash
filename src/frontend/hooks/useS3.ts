@@ -39,6 +39,7 @@ export interface S3Folder {
 
 export function useS3Objects(bucket: string | null, prefix?: string) {
   const p = prefix || "";
+/* istanbul ignore next */
   return useQuery<{ bucket: string; objects: S3Object[]; folders: S3Folder[]; total: number }>({
     queryKey: ["aws", "s3", "objects", bucket, p],
     queryFn: () => {

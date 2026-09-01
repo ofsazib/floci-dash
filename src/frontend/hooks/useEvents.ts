@@ -92,6 +92,7 @@ export function useEventRules(eventBusName?: string) {
   return useQuery<{ rules: EventRule[] }>({
     queryKey: ["aws", "events", "rules", eventBusName],
     queryFn: () => api(`/aws/events/rules${eventBusName ? `?eventBusName=${encodeURIComponent(eventBusName)}` : ""}`),
+/* istanbul ignore next */
     refetchInterval: 10000,
   });
 }

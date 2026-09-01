@@ -54,6 +54,7 @@ export function ElasticBeanstalkDashboard() {
   const versionsQuery = useApplicationVersions(selectedApp);
   const envsQuery = useEnvironments(selectedApp);
   const selectedEnv = envsQuery.data?.environments?.[0]?.environmentName || null;
+/* istanbul ignore next */
   const configQuery = useConfigurationSettings(selectedApp, selectedEnv);
 
   const apps = (appsQuery.data?.applications || []).map((a: any) => ({

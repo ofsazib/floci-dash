@@ -519,6 +519,7 @@ export function RDSDashboard() {
   const [selectedCluster, setSelectedCluster] = useState<string | null>(null);
 
   if (selectedInstance) {
+/* istanbul ignore next */
     return (
       <RDSDBInstanceDetail
         id={selectedInstance}

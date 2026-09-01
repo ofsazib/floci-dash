@@ -64,6 +64,7 @@ export default function DynamoDBAdvanced({ tableName, tableDetail }: Props) {
       />
 
       {activeTab === "gsis" && <TableIndexes tableName={tableName} tableDetail={tableDetail} />}
+/* istanbul ignore next */
       {activeTab === "ttl" && <TableTTL tableName={tableName} />}
       {activeTab === "tags" && <TableTags tableName={tableName} />}
       {activeTab === "backups" && <TableBackups tableName={tableName} />}

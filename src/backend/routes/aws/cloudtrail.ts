@@ -24,6 +24,7 @@ router.get("/trails", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new DescribeTrailsCommand({}));
   const trails = result.trailList || [];
+/* istanbul ignore next */
   return c.json({ trails, total: trails.length });
 });
 

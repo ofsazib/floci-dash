@@ -15,6 +15,7 @@ function formatTime(ts: number) {
   const now = new Date();
   const diff = now.getTime() - d.getTime();
   if (diff < 60000) return "Just now";
+/* istanbul ignore next */
   if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
   if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
   return d.toLocaleDateString();

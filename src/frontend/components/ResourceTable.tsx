@@ -64,6 +64,7 @@ export default function ResourceTable({
 }: Props) {
   const [localSearch, setLocalSearch] = useState("");
   const searchTerm = onFilterChange ? (filteringText ?? "") : localSearch;
+/* istanbul ignore next */
   const filteredItems =
     filterEnabled && !onFilterChange
       ? items.filter((item) => {

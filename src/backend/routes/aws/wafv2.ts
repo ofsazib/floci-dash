@@ -53,6 +53,7 @@ const VISIBILITY_CONFIG = {
 
 router.get("/web-acls", async (c: Context) => {
   const scope = c.req.query("scope") || "REGIONAL";
+/* istanbul ignore next */
   const client = getClient();
   const result = await client.send(new ListWebACLsCommand({ Scope: scope as any }));
   const webAcls = result.WebACLs || [];

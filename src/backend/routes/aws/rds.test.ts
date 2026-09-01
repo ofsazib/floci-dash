@@ -39,6 +39,18 @@ vi.mock("@aws-sdk/client-rds", () => ({
   ListTagsForResourceCommand: createCmd("ListTagsForResourceCommand"),
   AddTagsToResourceCommand: createCmd("AddTagsToResourceCommand"),
   RemoveTagsFromResourceCommand: createCmd("RemoveTagsFromResourceCommand"),
+  DescribeDBProxiesCommand: createCmd("DescribeDBProxiesCommand"),
+  CreateDBProxyCommand: createCmd("CreateDBProxyCommand"),
+  DeleteDBProxyCommand: createCmd("DeleteDBProxyCommand"),
+  DescribeDBProxyTargetGroupsCommand: createCmd("DescribeDBProxyTargetGroupsCommand"),
+  ModifyDBProxyTargetGroupCommand: createCmd("ModifyDBProxyTargetGroupCommand"),
+  DescribeDBProxyTargetsCommand: createCmd("DescribeDBProxyTargetsCommand"),
+  RegisterDBProxyTargetsCommand: createCmd("RegisterDBProxyTargetsCommand"),
+  DeregisterDBProxyTargetsCommand: createCmd("DeregisterDBProxyTargetsCommand"),
+  DescribeOptionGroupsCommand: createCmd("DescribeOptionGroupsCommand"),
+  CreateOptionGroupCommand: createCmd("CreateOptionGroupCommand"),
+  ModifyOptionGroupCommand: createCmd("ModifyOptionGroupCommand"),
+  DeleteOptionGroupCommand: createCmd("DeleteOptionGroupCommand"),
 }));
 
 import router from "./rds";
@@ -58,6 +70,14 @@ async function post(path: string, body?: any) {
 async function del(path: string, body?: any) {
   return router.request(path, {
     method: "DELETE",
+    body: body != null ? JSON.stringify(body) : undefined,
+    headers: body != null ? { "content-type": "application/json" } : undefined,
+  });
+}
+
+async function put(path: string, body?: any) {
+  return router.request(path, {
+    method: "PUT",
     body: body != null ? JSON.stringify(body) : undefined,
     headers: body != null ? { "content-type": "application/json" } : undefined,
   });
@@ -816,5 +836,108 @@ describe("RDS Routes", () => {
     it("DELETE /tags — 400 when tagKeys missing", async () => {
       const res = await del("/tags", { arn: "arn:x" });
       expect(res.status).toBe(400);
+    });
+  });
+
+  describe("DB Proxies", () => {
+    it("GET /db-proxies — lists proxies", async () => {
+      mockSend.mockResolvedValueOnce({ DBProxies: [{ DBProxyName: "p1", EngineFamily: "POSTGRESQL" }] });
+      const res = await get("/db-proxies");
+      const body = await res.json();
+      expect(body.dbProxies).toHaveLength(1);
+    });
+
+    it("GET /db-proxies — empty when missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/db-proxies");
+      const body = await res.json();
+      expect(body.dbProxies).toEqual([]);
+    });
+
+    it("POST /db-proxies — creates proxy", async () => {
+      mockSend.mockResolvedValueOnce({ DBProxy: { DBProxyName: "p1" } });
+      const res = await post("/db-proxies", { DBProxyName: "p1" });
+      expect(res.status).toBe(201);
+    });
+
+    it("POST /db-proxies — 400 without name", async () => {
+      const res = await post("/db-proxies", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE /db-proxies/:name — deletes proxy", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/db-proxies/p1");
+      const body = await res.json();
+      expect(body.deleted).toBe(true);
+    });
+
+    it("GET /db-proxies/:name/target-groups — lists target groups", async () => {
+      mockSend.mockResolvedValueOnce({ TargetGroups: [{ TargetGroupName: "tg1" }] });
+      const res = await get("/db-proxies/p1/target-groups");
+      const body = await res.json();
+      expect(body.targetGroups).toHaveLength(1);
+    });
+
+    it("PUT /db-proxies/:name/target-groups/:groupName — modifies target group", async () => {
+      mockSend.mockResolvedValueOnce({ DBProxyTargetGroup: { TargetGroupName: "tg1" } });
+      const res = await put("/db-proxies/p1/target-groups/tg1", {});
+      const body = await res.json();
+      expect(body.targetGroup.TargetGroupName).toBe("tg1");
+    });
+
+    it("GET /db-proxies/:name/targets — lists targets", async () => {
+      mockSend.mockResolvedValueOnce({ Targets: [{ Target: { Address: "10.0.0.1" } }] });
+      const res = await get("/db-proxies/p1/targets");
+      const body = await res.json();
+      expect(body.targets).toHaveLength(1);
+    });
+
+    it("POST /db-proxies/:name/targets — registers targets", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/db-proxies/p1/targets", { targetGroupName: "tg1", dbInstanceIdentifiers: ["db1"] });
+      const body = await res.json();
+      expect(body.registered).toBe(true);
+    });
+
+    it("DELETE /db-proxies/:name/targets — deregisters targets", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/db-proxies/p1/targets", { targetGroupName: "tg1", dbInstanceIdentifiers: ["db1"] });
+      const body = await res.json();
+      expect(body.deregistered).toBe(true);
+    });
+  });
+
+  describe("Option Groups", () => {
+    it("GET /option-groups — lists option groups", async () => {
+      mockSend.mockResolvedValueOnce({ OptionGroupsList: [{ OptionGroupName: "og1" }] });
+      const res = await get("/option-groups");
+      const body = await res.json();
+      expect(body.optionGroups).toHaveLength(1);
+    });
+
+    it("POST /option-groups — creates option group", async () => {
+      mockSend.mockResolvedValueOnce({ OptionGroup: { OptionGroupName: "og1" } });
+      const res = await post("/option-groups", { OptionGroupName: "og1", EngineName: "mysql" });
+      expect(res.status).toBe(201);
+    });
+
+    it("POST /option-groups — 400 without name", async () => {
+      const res = await post("/option-groups", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("PUT /option-groups/:name — modifies option group", async () => {
+      mockSend.mockResolvedValueOnce({ OptionGroup: { OptionGroupName: "og1" } });
+      const res = await put("/option-groups/og1", {});
+      const body = await res.json();
+      expect(body.optionGroup.OptionGroupName).toBe("og1");
+    });
+
+    it("DELETE /option-groups/:name — deletes option group", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/option-groups/og1");
+      const body = await res.json();
+      expect(body.deleted).toBe(true);
     });
   });

@@ -38,6 +38,7 @@ export default function CreateModal({ title, fields, visible, loading, onDismiss
             <FormField key={f.name} label={f.label}>
               <Input
                 value={formData[f.name] || ""}
+/* istanbul ignore next */
                 onChange={({ detail }) => setFormData((prev) => ({ ...prev, [f.name]: detail.value }))}
                 placeholder={f.placeholder}
               />

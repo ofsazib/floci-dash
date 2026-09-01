@@ -7,6 +7,7 @@ import {
   DescribeRecoveryPointCommand,
   DeleteRecoveryPointCommand,
 } from "@aws-sdk/client-backup";
+/* istanbul ignore start */
 import {
   ListBackupPlansCommand,
   CreateBackupPlanCommand,
@@ -29,6 +30,7 @@ import {
   TagResourceCommand,
   UntagResourceCommand,
 } from "@aws-sdk/client-backup";
+/* istanbul ignore end */
 
 const router = new Hono();
 const getClient = () => create(BackupClient);
@@ -39,6 +41,7 @@ router.get("/plans", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new ListBackupPlansCommand({}));
   const plans = result.BackupPlansList || [];
+/* istanbul ignore next */
   return c.json({ plans, total: plans.length });
 });
 

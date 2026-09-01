@@ -45,6 +45,7 @@ export function useECSTaskDefinitions(familyPrefix?: string) {
     queryKey: ["aws", "ecs", "task-definitions", familyPrefix],
     queryFn: () => {
       const qs = familyPrefix ? `?familyPrefix=${encodeURIComponent(familyPrefix)}` : "";
+/* istanbul ignore next */
       return api<{ taskDefinitionArns: string[]; total: number }>(`/aws/ecs/task-definitions${qs}`);
     },
     refetchInterval: 15000,

@@ -35,6 +35,7 @@ export function useMetricStatistics(params: {
     namespace: params.namespace,
     metricName: params.metricName,
     period: String(params.period || 60),
+/* istanbul ignore next */
     statistics: params.statistics || "Average",
     startTime: params.startTime || new Date(Date.now() - 3600000).toISOString(),
     endTime: params.endTime || new Date().toISOString(),

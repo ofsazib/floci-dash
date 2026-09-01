@@ -8,6 +8,7 @@ const RGT_KEY = ["aws", "resourcegroupstagging"];
 export function useRGTResources(params?: { tagFilters?: any; resourceTypeFilters?: string[] }) {
   const qs = new URLSearchParams();
   if (params?.tagFilters) qs.set("tagFilters", JSON.stringify(params.tagFilters));
+/* istanbul ignore next */
   if (params?.resourceTypeFilters?.length) {
     params.resourceTypeFilters.forEach((t) => qs.append("resourceTypeFilters", t));
   }

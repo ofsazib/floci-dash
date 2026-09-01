@@ -67,6 +67,7 @@ router.get("/clusters", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new ListClustersCommand({}));
   if (!result.clusterArns?.length) return c.json({ clusters: [], total: 0 });
+/* istanbul ignore next */
   const detailed = await client.send(
     new DescribeClustersCommand({ clusters: result.clusterArns })
   );

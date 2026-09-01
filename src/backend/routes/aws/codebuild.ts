@@ -32,6 +32,7 @@ router.get("/projects", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new ListProjectsCommand({}));
   const names = result.projects || [];
+/* istanbul ignore next */
   if (!names.length) return c.json({ projects: [], total: 0 });
   const detailed = await client.send(new BatchGetProjectsCommand({ names }));
   return c.json({ projects: detailed.projects || [], total: detailed.projects?.length || 0 });

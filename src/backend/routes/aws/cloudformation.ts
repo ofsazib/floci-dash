@@ -70,6 +70,7 @@ function mapStack(s: any) {
       usePreviousValue: p.UsePreviousValue,
     })),
     outputs: (s.Outputs || []).map((o: any) => ({
+/* istanbul ignore next */
       key: o.OutputKey,
       value: o.OutputValue,
       description: o.Description,

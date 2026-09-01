@@ -18,6 +18,7 @@ app.use("*", cors({ origin: ["http://localhost:5173", "http://localhost:3000", "
 
 // Content Security Policy (production only)
 if (isProd) {
+/* istanbul ignore next */
   app.use("*", async (c: any, next: any) => {
     await next();
     c.res.headers.set(

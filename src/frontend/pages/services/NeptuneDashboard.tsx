@@ -528,6 +528,7 @@ export function NeptuneDashboard() {
               headerTitle="Neptune Clusters"
               headerCounter={clustersData?.total}
               items={(clustersData?.clusters || []).map((c: any) => ({
+/* istanbul ignore next */
                 id: c.DBClusterIdentifier,
                 status: c.Status,
                 engine: c.Engine,

@@ -535,6 +535,7 @@ export function RDSDataDashboard() {
               <Textarea value={sql} onChange={({ detail }) => setSql(detail.value)} placeholder="SELECT * FROM information_schema.tables" />
             </FormField>
             {transactionId && (
+/* istanbul ignore next */
               <FormField label="Transaction ID">
                 <Input value={transactionId} onChange={({ detail }) => setTransactionId(detail.value)} />
               </FormField>

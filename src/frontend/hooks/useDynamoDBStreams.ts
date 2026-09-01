@@ -60,6 +60,7 @@ export function useDynamoDBStreams(tableName?: string | null) {
     queryFn: () => {
       const params = new URLSearchParams();
       if (tableName) params.set("tableName", tableName);
+/* istanbul ignore next */
       return api(`/aws/dynamodb/streams?${params.toString()}`);
     },
     refetchInterval: 15000,

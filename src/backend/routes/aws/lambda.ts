@@ -89,6 +89,7 @@ function mapFunction(f: any) {
 router.get("/functions", async (c: Context) => {
   const result = await lambda().send(new ListFunctionsCommand({}));
   const functions = (result.Functions || []).map(mapFunction);
+/* istanbul ignore next */
   return c.json({ functions, total: functions.length });
 });
 

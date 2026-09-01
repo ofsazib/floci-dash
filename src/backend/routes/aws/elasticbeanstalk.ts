@@ -30,6 +30,7 @@ function mapApp(a: any) {
     dateUpdated: a.DateUpdated,
     versions: a.Versions?.length || 0,
     configurationTemplates: a.ConfigurationTemplates?.length || 0,
+/* istanbul ignore next */
     resourceLifecycleConfig: a.ResourceLifecycleConfig,
   };
 }

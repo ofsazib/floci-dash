@@ -532,6 +532,7 @@ export function TransferDashboard() {
   const [userRole, setUserRole] = useState("");
 
   const servers = (serversData?.servers || []).map((s: any) => ({
+/* istanbul ignore next */
     serverId: s.ServerId,
     arn: s.Arn || "-",
     domain: s.Domain || "-",

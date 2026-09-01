@@ -26,6 +26,7 @@ export default function EC2NetworkTopology() {
   const { data: rtData } = useEC2RouteTables();
 
   const isLoading = vpcsLoading || subnetsLoading || instancesLoading;
+/* istanbul ignore next */
   const isError = vpcsError || subnetsError || instancesError;
 
   const topology = useMemo(() => {

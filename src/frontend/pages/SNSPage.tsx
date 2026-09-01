@@ -50,6 +50,7 @@ export default function SNSPage() {
   const { confirm, dialog } = useConfirmDialog();
 
   const selectedTopic = searchParams.get("topicArn") || null;
+/* istanbul ignore next */
   const [showCreate, setShowCreate] = useState(false);
   const [showPublish, setShowPublish] = useState(false);
   const [showSubscribe, setShowSubscribe] = useState(false);

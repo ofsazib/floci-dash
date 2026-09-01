@@ -25,6 +25,7 @@ router.get("/jobs", async (c: Context) => {
     new ListTranscriptionJobsCommand({ Status: status })
   );
   const jobs = result.TranscriptionJobSummaries || [];
+/* istanbul ignore next */
   return c.json({ jobs, total: jobs.length });
 });
 

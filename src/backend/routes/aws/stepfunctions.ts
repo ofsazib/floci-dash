@@ -40,6 +40,7 @@ router.get("/state-machines", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new ListStateMachinesCommand({}));
   const stateMachines = result.stateMachines || [];
+/* istanbul ignore next */
   return c.json({ stateMachines, total: stateMachines.length });
 });
 

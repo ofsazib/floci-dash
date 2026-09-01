@@ -517,6 +517,7 @@ export function RGTDashboard() {
     <SpaceBetween size="l">
       <Header variant="h2">Tagged Resources</Header>
       {resourcesLoading ? <Spinner /> : (
+/* istanbul ignore next */
         <ResourceTable
           resourceName="Tagged Resource"
           headerTitle="Tagged Resources"

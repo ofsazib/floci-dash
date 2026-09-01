@@ -84,6 +84,12 @@ import {
   useSESv2SuppressionList,
   useSuppressSESv2Destination,
   useDeleteSESv2SuppressedDestination,
+  useSESv2Account,
+  useSESv2CustomVerificationTemplates,
+  useCreateSESv2CustomVerificationTemplate,
+  useDeleteSESv2CustomVerificationTemplate,
+  useSESv2ConfigSetEventDestinations,
+  useSESv2TemplateRender,
 } from "./useSES";
 
 function createWrapper() {
@@ -865,5 +871,59 @@ describe("useSES v1 extras hooks", () => {
     mockApi.mockResolvedValueOnce({ deleted: true });
     const { result: delR } = renderHook(() => useDeleteSESv1ReceiptRuleSet(), { wrapper: createWrapper() });
     await delR.current.mutateAsync("rs1");
+  });
+
+  it("useSESv2Account", async () => {
+    mockApi.mockResolvedValueOnce({ account: { ProductionAccessEnabled: true } });
+    const { result } = renderHook(() => useSESv2Account(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/email/v2/account");
+  });
+
+  it("useSESv2CustomVerificationTemplates", async () => {
+    mockApi.mockResolvedValueOnce({ templates: [] });
+    const { result } = renderHook(() => useSESv2CustomVerificationTemplates(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/email/v2/custom-verification-email-templates");
+  });
+
+  it("useCreateSESv2CustomVerificationTemplate", async () => {
+    mockApi.mockResolvedValueOnce({ created: true });
+    const { result } = renderHook(() => useCreateSESv2CustomVerificationTemplate(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ TemplateName: "t1" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/email/v2/custom-verification-email-templates", {
+      method: "POST",
+      body: JSON.stringify({ TemplateName: "t1" }),
+    });
+  });
+
+  it("useDeleteSESv2CustomVerificationTemplate", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useDeleteSESv2CustomVerificationTemplate(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("t1");
+    expect(mockApi).toHaveBeenCalledWith("/aws/email/v2/custom-verification-email-templates/t1", { method: "DELETE" });
+  });
+
+  it("useSESv2ConfigSetEventDestinations", async () => {
+    mockApi.mockResolvedValueOnce({ eventDestinations: [] });
+    const { result } = renderHook(() => useSESv2ConfigSetEventDestinations("cs1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/email/v2/configuration-sets/cs1/event-destinations");
+  });
+
+  it("useSESv2ConfigSetEventDestinations disabled when null", async () => {
+    const { result } = renderHook(() => useSESv2ConfigSetEventDestinations(null), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.fetchStatus).toBe("idle"));
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("useSESv2TemplateRender", async () => {
+    mockApi.mockResolvedValueOnce({ renderedTemplate: "Hi" });
+    const { result } = renderHook(() => useSESv2TemplateRender("t1"), { wrapper: createWrapper() });
+    await result.current.mutateAsync("{\"name\":\"John\"}");
+    expect(mockApi).toHaveBeenCalledWith("/aws/email/v2/templates/t1/render", {
+      method: "POST",
+      body: JSON.stringify({ TemplateData: "{\"name\":\"John\"}" }),
+    });
   });
 });

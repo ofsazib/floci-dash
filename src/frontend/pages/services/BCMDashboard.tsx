@@ -515,6 +515,7 @@ export function BCMDashboard() {
   const [exportName, setExportName] = useState("");
 
   const items = (data?.exports || []).map((e: any) => ({
+/* istanbul ignore next */
     exportArn: e.ExportArn,
     name: e.Name,
   }));

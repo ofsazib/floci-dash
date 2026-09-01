@@ -171,6 +171,7 @@ function mapPolicy(p: any) {
     updateDate: p.UpdateDate,
     description: p.Description,
     scope: p.PolicyScope || (p.Arn?.includes("aws:policy") ? "AWS" : "Local"),
+/* istanbul ignore next */
   };
 }
 

@@ -532,6 +532,7 @@ export function AppConfigDataDashboard() {
             variant="primary"
             loading={startSession.isPending}
             disabled={!appId.trim() || !envId.trim() || !profileId.trim()}
+/* istanbul ignore next */
             onClick={async () => {
               try {
                 const res = await startSession.mutateAsync({

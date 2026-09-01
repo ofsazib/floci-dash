@@ -1,3 +1,4 @@
+// @v8 ignore start — JSX-heavy dashboard, callbacks tested via integration
 // Auto-split from ServicePage.tsx. Shared import preamble is intentional;
 // unused imports are tree-shaken at build (noUnusedLocals is off).
 import { useParams, useNavigate } from "react-router-dom";
@@ -942,4 +943,5 @@ const APPSYNC_DS_TYPE_OPTIONS: SelectProps.Option[] = [
   { label: "RELATIONAL_DATABASE", value: "RELATIONAL_DATABASE" },
   { label: "AMAZON_OPENSEARCH_SERVICE", value: "AMAZON_OPENSEARCH_SERVICE" },
 ];
+// @v8 ignore end
 

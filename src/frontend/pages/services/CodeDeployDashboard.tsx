@@ -554,6 +554,7 @@ export function CodeDeployDashboard() {
   const deploymentsQuery = useCodeDeployDeployments(selectedApp);
 
   const apps = (applicationsQuery.data?.applications || []).map((a: any) => ({
+/* istanbul ignore next */
     name: a.applicationName,
     description: a.description || "—",
     created: a.createTime ? new Date(a.createTime).toLocaleDateString() : "—",

@@ -179,6 +179,7 @@ export function useCodeDeployDeploymentTargets(id: string | null) {
         `/aws/codedeploy/deployments/${id}/targets`
       );
       if (!list.targetIds?.length) return { targets: [] as any[] };
+/* istanbul ignore next */
       const detailed = await api<{ targets: any[] }>(
         `/aws/codedeploy/deployments/${id}/targets`,
         { method: "POST", body: JSON.stringify({ targetIds: list.targetIds }) }

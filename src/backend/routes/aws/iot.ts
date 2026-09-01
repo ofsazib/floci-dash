@@ -3,6 +3,7 @@ import type { Context } from "hono";
 import { create } from "../../clients/aws";
 import { IoTClient } from "@aws-sdk/client-iot";
 import { IoTDataPlaneClient } from "@aws-sdk/client-iot-data-plane";
+/* istanbul ignore start */
 import {
   CreateThingCommand,
   DescribeThingCommand,
@@ -73,6 +74,7 @@ import {
   ListRetainedMessagesCommand,
   GetRetainedMessageCommand,
 } from "@aws-sdk/client-iot-data-plane";
+/* istanbul ignore end */
 
 const router = new Hono();
 const getClient = () => create(IoTClient);

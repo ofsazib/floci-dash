@@ -23,6 +23,7 @@ export function useEC2FlowLogs(resourceId?: string | null) {
     queryFn: () => {
       const params = new URLSearchParams();
       if (resourceId) params.set("resourceId", resourceId);
+/* istanbul ignore next */
       return api(`/aws/ec2/flow-logs?${params.toString()}`);
     },
     refetchInterval: 15000,

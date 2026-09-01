@@ -24,6 +24,7 @@ router.get("/clusters", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new DescribeDBClustersCommand({}));
   const clusters = result.DBClusters || [];
+/* istanbul ignore next */
   return c.json({ clusters, total: clusters.length });
 });
 

@@ -22,6 +22,28 @@ vi.mock("@aws-sdk/client-eks", () => ({
   CreateNodegroupCommand: createCmd("CreateNodegroupCommand"),
   DescribeNodegroupCommand: createCmd("DescribeNodegroupCommand"),
   DeleteNodegroupCommand: createCmd("DeleteNodegroupCommand"),
+  ListFargateProfilesCommand: createCmd("ListFargateProfilesCommand"),
+  CreateFargateProfileCommand: createCmd("CreateFargateProfileCommand"),
+  DescribeFargateProfileCommand: createCmd("DescribeFargateProfileCommand"),
+  DeleteFargateProfileCommand: createCmd("DeleteFargateProfileCommand"),
+  ListAccessEntriesCommand: createCmd("ListAccessEntriesCommand"),
+  CreateAccessEntryCommand: createCmd("CreateAccessEntryCommand"),
+  DescribeAccessEntryCommand: createCmd("DescribeAccessEntryCommand"),
+  DeleteAccessEntryCommand: createCmd("DeleteAccessEntryCommand"),
+  ListAddonsCommand: createCmd("ListAddonsCommand"),
+  DescribeAddonCommand: createCmd("DescribeAddonCommand"),
+  CreateAddonCommand: createCmd("CreateAddonCommand"),
+  UpdateAddonCommand: createCmd("UpdateAddonCommand"),
+  DeleteAddonCommand: createCmd("DeleteAddonCommand"),
+  ListIdentityProviderConfigsCommand: createCmd("ListIdentityProviderConfigsCommand"),
+  DescribeIdentityProviderConfigCommand: createCmd("DescribeIdentityProviderConfigCommand"),
+  AssociateIdentityProviderConfigCommand: createCmd("AssociateIdentityProviderConfigCommand"),
+  DisassociateIdentityProviderConfigCommand: createCmd("DisassociateIdentityProviderConfigCommand"),
+  ListPodIdentityAssociationsCommand: createCmd("ListPodIdentityAssociationsCommand"),
+  DescribePodIdentityAssociationCommand: createCmd("DescribePodIdentityAssociationCommand"),
+  CreatePodIdentityAssociationCommand: createCmd("CreatePodIdentityAssociationCommand"),
+  UpdatePodIdentityAssociationCommand: createCmd("UpdatePodIdentityAssociationCommand"),
+  DeletePodIdentityAssociationCommand: createCmd("DeletePodIdentityAssociationCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -241,6 +263,243 @@ describe("EKS Routes", () => {
         nodegroup: { nodegroupName: "ng-1", status: "DELETING" },
       });
       const res = await del("/clusters/my-cluster/node-groups/ng-1");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deleted).toBe(true);
+    });
+  });
+
+  describe("Fargate Profiles", () => {
+    it("GET /clusters/:name/fargate-profiles — lists with details", async () => {
+      mockSend
+        .mockResolvedValueOnce({ fargateProfileNames: ["fp-1"] })
+        .mockResolvedValueOnce({ fargateProfile: { fargateProfileName: "fp-1", status: "ACTIVE" } });
+      const res = await get("/clusters/my-cluster/fargate-profiles");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(body.profiles[0].fargateProfileName).toBe("fp-1");
+    });
+
+    it("GET /clusters/:name/fargate-profiles — empty list", async () => {
+      mockSend.mockResolvedValueOnce({ fargateProfileNames: [] });
+      const res = await get("/clusters/my-cluster/fargate-profiles");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+    });
+
+    it("POST /clusters/:name/fargate-profiles — creates (201)", async () => {
+      mockSend.mockResolvedValueOnce({ fargateProfile: { fargateProfileName: "new-fp", status: "ACTIVE" } });
+      const res = await post("/clusters/my-cluster/fargate-profiles", {
+        fargateProfileName: "new-fp",
+        podExecutionRoleArn: "arn:aws:iam::123:role/role",
+        subnets: ["s1"],
+        selectors: [{ namespace: "default" }],
+      });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.fargateProfile.fargateProfileName).toBe("new-fp");
+    });
+
+    it("POST /clusters/:name/fargate-profiles — 400 when name missing", async () => {
+      const res = await post("/clusters/my-cluster/fargate-profiles", { podExecutionRoleArn: "arn:x" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /clusters/:name/fargate-profiles — 400 when roleArn missing", async () => {
+      const res = await post("/clusters/my-cluster/fargate-profiles", { fargateProfileName: "fp" });
+      expect(res.status).toBe(400);
+    });
+
+    it("GET /clusters/:name/fargate-profiles/:fpName — describes", async () => {
+      mockSend.mockResolvedValueOnce({ fargateProfile: { fargateProfileName: "fp-1" } });
+      const res = await get("/clusters/my-cluster/fargate-profiles/fp-1");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.fargateProfile.fargateProfileName).toBe("fp-1");
+    });
+
+    it("DELETE /clusters/:name/fargate-profiles/:fpName — deletes", async () => {
+      mockSend.mockResolvedValueOnce({ fargateProfile: { fargateProfileName: "fp-1" } });
+      const res = await del("/clusters/my-cluster/fargate-profiles/fp-1");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deleted).toBe(true);
+    });
+  });
+
+  describe("Access Entries", () => {
+    it("GET /clusters/:name/access-entries — lists", async () => {
+      mockSend.mockResolvedValueOnce({ accessEntries: ["arn:aws:iam::123:role/r"] });
+      const res = await get("/clusters/my-cluster/access-entries");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.accessEntries).toHaveLength(1);
+    });
+
+    it("POST /clusters/:name/access-entries — creates (201)", async () => {
+      mockSend.mockResolvedValueOnce({ accessEntry: { principalArn: "arn:aws:iam::123:role/r" } });
+      const res = await post("/clusters/my-cluster/access-entries", { principalArn: "arn:aws:iam::123:role/r" });
+      expect(res.status).toBe(201);
+    });
+
+    it("POST /clusters/:name/access-entries — 400 when principalArn missing", async () => {
+      const res = await post("/clusters/my-cluster/access-entries", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("GET /clusters/:name/access-entries/:arn — describes", async () => {
+      mockSend.mockResolvedValueOnce({ accessEntry: { principalArn: "arn:aws:iam::123:role/r" } });
+      const res = await get("/clusters/my-cluster/access-entries/arn%3Aaws%3Aiam%3A%3A123%3Arole%2Fr");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.accessEntry.principalArn).toContain("role/r");
+    });
+
+    it("DELETE /clusters/:name/access-entries/:arn — deletes", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/clusters/my-cluster/access-entries/arn%3Aaws%3Aiam%3A%3A123%3Arole%2Fr");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deleted).toBe(true);
+    });
+  });
+
+  describe("Addons", () => {
+    it("GET /clusters/:name/addons — lists", async () => {
+      mockSend.mockResolvedValueOnce({ addons: ["vpc-cni"] });
+      const res = await get("/clusters/my-cluster/addons");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.addons).toEqual(["vpc-cni"]);
+    });
+
+    it("GET /clusters/:name/addons/:addonName — describes", async () => {
+      mockSend.mockResolvedValueOnce({ addon: { addonName: "vpc-cni", status: "ACTIVE" } });
+      const res = await get("/clusters/my-cluster/addons/vpc-cni");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.addon.addonName).toBe("vpc-cni");
+    });
+
+    it("POST /clusters/:name/addons — creates (201)", async () => {
+      mockSend.mockResolvedValueOnce({ addon: { addonName: "vpc-cni", status: "CREATING" } });
+      const res = await post("/clusters/my-cluster/addons", { addonName: "vpc-cni" });
+      expect(res.status).toBe(201);
+    });
+
+    it("POST /clusters/:name/addons — 400 when addonName missing", async () => {
+      const res = await post("/clusters/my-cluster/addons", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("PUT /clusters/:name/addons/:addonName — updates", async () => {
+      mockSend.mockResolvedValueOnce({ update: { addon: { addonName: "vpc-cni" } } });
+      const res = await router.request("/clusters/my-cluster/addons/vpc-cni", {
+        method: "PUT",
+        body: JSON.stringify({ version: "v2" }),
+        headers: { "content-type": "application/json" },
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.update.addon.addonName).toBe("vpc-cni");
+    });
+
+    it("DELETE /clusters/:name/addons/:addonName — deletes", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/clusters/my-cluster/addons/vpc-cni");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deleted).toBe(true);
+    });
+  });
+
+  describe("Identity Provider Configs", () => {
+    it("GET /clusters/:name/identity-providers — lists", async () => {
+      mockSend.mockResolvedValueOnce({ identityProviderConfigs: [{ name: "oidc", type: "oidc" }] });
+      const res = await get("/clusters/my-cluster/identity-providers");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.identityProviderConfigs).toHaveLength(1);
+    });
+
+    it("GET /clusters/:name/identity-providers/:idpName — describes", async () => {
+      mockSend.mockResolvedValueOnce({ identityProviderConfig: { identityProviderConfig: { name: "oidc" }, oidc: { issuer: "https://x" } } });
+      const res = await get("/clusters/my-cluster/identity-providers/oidc");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.identityProviderConfig.identityProviderConfig.name).toBe("oidc");
+    });
+
+    it("POST /clusters/:name/identity-providers — associates (201)", async () => {
+      mockSend.mockResolvedValueOnce({ update: { id: "u1" }, tags: { env: "prod" } });
+      const res = await post("/clusters/my-cluster/identity-providers", { oidc: { issuer: "https://x" } });
+      expect(res.status).toBe(201);
+    });
+
+    it("POST /clusters/:name/identity-providers — 400 when oidc.issuer missing", async () => {
+      const res = await post("/clusters/my-cluster/identity-providers", { oidc: {} });
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE /clusters/:name/identity-providers/:idpName — disassociates", async () => {
+      mockSend.mockResolvedValueOnce({ update: { id: "u1" } });
+      const res = await del("/clusters/my-cluster/identity-providers/oidc");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deleted).toBe(true);
+    });
+  });
+
+  describe("Pod Identity Associations", () => {
+    it("GET /clusters/:name/pod-identity-associations — lists", async () => {
+      mockSend.mockResolvedValueOnce({ associations: [{ associationId: "a-1" }] });
+      const res = await get("/clusters/my-cluster/pod-identity-associations");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.associations).toHaveLength(1);
+    });
+
+    it("GET /clusters/:name/pod-identity-associations/:assocId — describes", async () => {
+      mockSend.mockResolvedValueOnce({ association: { associationId: "a-1" } });
+      const res = await get("/clusters/my-cluster/pod-identity-associations/a-1");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.association.associationId).toBe("a-1");
+    });
+
+    it("POST /clusters/:name/pod-identity-associations — creates (201)", async () => {
+      mockSend.mockResolvedValueOnce({ association: { associationId: "a-new" } });
+      const res = await post("/clusters/my-cluster/pod-identity-associations", {
+        roleArn: "arn:aws:iam::123:role/r",
+        serviceAccount: "sa-name",
+      });
+      expect(res.status).toBe(201);
+    });
+
+    it("POST /clusters/:name/pod-identity-associations — 400 when roleArn missing", async () => {
+      const res = await post("/clusters/my-cluster/pod-identity-associations", { serviceAccount: "sa" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /clusters/:name/pod-identity-associations — 400 when serviceAccount missing", async () => {
+      const res = await post("/clusters/my-cluster/pod-identity-associations", { roleArn: "arn:x" });
+      expect(res.status).toBe(400);
+    });
+
+    it("PUT /clusters/:name/pod-identity-associations/:assocId — updates", async () => {
+      mockSend.mockResolvedValueOnce({ association: { associationId: "a-1" } });
+      const res = await router.request("/clusters/my-cluster/pod-identity-associations/a-1", {
+        method: "PUT",
+        body: JSON.stringify({ roleArn: "arn:x" }),
+        headers: { "content-type": "application/json" },
+      });
+      expect(res.status).toBe(200);
+    });
+
+    it("DELETE /clusters/:name/pod-identity-associations/:assocId — deletes", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/clusters/my-cluster/pod-identity-associations/a-1");
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.deleted).toBe(true);

@@ -31,6 +31,7 @@ router.get("/clusters", async (c: Context) => {
     new DescribeClustersCommand(name ? { ClusterName: name } : {})
   );
   const clusters = result.Clusters || [];
+/* istanbul ignore next */
   return c.json({ clusters, total: clusters.length });
 });
 

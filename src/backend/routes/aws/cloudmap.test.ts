@@ -27,6 +27,10 @@ vi.mock("@aws-sdk/client-servicediscovery", () => ({
   GetOperationCommand: createCmd("GetOperationCommand"),
   ListOperationsCommand: createCmd("ListOperationsCommand"),
   GetInstanceCommand: createCmd("GetInstanceCommand"),
+  DiscoverInstancesRevisionCommand: createCmd("DiscoverInstancesRevisionCommand"),
+  ListTagsForResourceCommand: createCmd("ListTagsForResourceCommand"),
+  TagResourceCommand: createCmd("TagResourceCommand"),
+  UntagResourceCommand: createCmd("UntagResourceCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({ create: (Ctor: any, extra?: any) => new Ctor(extra) }));
@@ -325,6 +329,68 @@ describe("Cloud Map Routes", () => {
       mockSend.mockResolvedValueOnce({ Instance: { Id: "i-1" } });
       const res = await get("/services/s/instances/i-1");
       expect((await res.json()).instance.attributes).toEqual({});
+    });
+  });
+
+  describe("Discover Instances Revision + Tags", () => {
+    it("GET /discover-instances-revision", async () => {
+      mockSend.mockResolvedValueOnce({ InstancesRevision: 42 });
+      const res = await get("/discover-instances-revision?namespaceName=ns&serviceName=svc");
+      const body = await res.json();
+      expect(body.instancesRevision).toBe(42);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DiscoverInstancesRevisionCommand");
+    });
+
+    it("GET /discover-instances-revision — null when missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/discover-instances-revision?namespaceName=ns&serviceName=svc");
+      const body = await res.json();
+      expect(body.instancesRevision).toBeNull();
+    });
+
+    it("GET /resources/tags", async () => {
+      mockSend.mockResolvedValueOnce({ Tags: [{ Key: "env", Value: "prod" }] });
+      const res = await get("/resources/tags?arn=arn:aws:servicediscovery:us-east-1:123:service/srv-1");
+      const body = await res.json();
+      expect(body.tags).toHaveLength(1);
+      expect(body.tags[0].Key).toBe("env");
+    });
+
+    it("GET /resources/tags — 400 without arn", async () => {
+      const res = await get("/resources/tags");
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /resources/tags", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await router.request("/resources/tags", {
+        method: "POST",
+        body: JSON.stringify({ arn: "arn:x", tags: [{ Key: "k", Value: "v" }] }),
+        headers: { "content-type": "application/json" },
+      });
+      const body = await res.json();
+      expect(body.tagged).toBe(true);
+    });
+
+    it("POST /resources/tags — 400 without arn or tags", async () => {
+      const res = await router.request("/resources/tags", {
+        method: "POST",
+        body: JSON.stringify({ arn: "arn:x" }),
+        headers: { "content-type": "application/json" },
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE /resources/tags", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await router.request("/resources/tags?arn=arn:x&tagKeys=env,team", { method: "DELETE" });
+      const body = await res.json();
+      expect(body.untagged).toBe(true);
+    });
+
+    it("DELETE /resources/tags — 400 without arn or tagKeys", async () => {
+      const res = await router.request("/resources/tags?tagKeys=env", { method: "DELETE" });
+      expect(res.status).toBe(400);
     });
   });
 });

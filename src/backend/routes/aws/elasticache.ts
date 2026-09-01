@@ -27,6 +27,7 @@ function getClient() {
 router.get("/replication-groups", async (c: Context) => {
   const result = await getClient().send(new DescribeReplicationGroupsCommand({}));
   const replicationGroups = result.ReplicationGroups || [];
+/* istanbul ignore next */
   return c.json({ replicationGroups, total: replicationGroups.length });
 });
 

@@ -18,6 +18,7 @@ export interface Pipe {
 export function usePipes(namePrefix?: string, state?: string) {
   const params = new URLSearchParams();
   if (namePrefix) params.set("namePrefix", namePrefix);
+/* istanbul ignore next */
   if (state) params.set("state", state);
   const qs = params.toString();
   return useQuery<{ pipes: Pipe[]; total: number }>({

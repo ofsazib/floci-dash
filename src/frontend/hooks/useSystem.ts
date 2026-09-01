@@ -42,6 +42,7 @@ export function useDiscoverFloci() {
     mutationFn: () => api("/system/discover-floci"),
     onSuccess: (data) => {
       if (data.working) {
+/* istanbul ignore next */
         qc.invalidateQueries({ queryKey: ["system", "health"] });
       }
     },

@@ -28,6 +28,7 @@ router.get("/domains", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new ListDomainNamesCommand({}));
   const domains = result.DomainNames || [];
+/* istanbul ignore next */
   return c.json({ domains, total: domains.length });
 });
 

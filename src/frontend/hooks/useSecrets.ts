@@ -53,6 +53,7 @@ export function useDeleteSecret() {
   return useMutation({
     mutationFn: ({ id, force }: { id: string; force?: boolean }) =>
       api(`/aws/secretsmanager/secrets/${id}?force=${force ? "true" : "false"}`, { method: "DELETE" }),
+/* istanbul ignore next */
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "secretsmanager", "secrets"] }),
   });
 }

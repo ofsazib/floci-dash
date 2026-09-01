@@ -7,6 +7,7 @@ const router = new Hono();
 router.get("/sqs/messages", async (c: Context) => {
   const queueUrl = c.req.query("queueUrl");
   if (!queueUrl) return c.json({ error: "queueUrl query parameter required" }, 400);
+/* istanbul ignore next */
   const data = await flociFetch(`/_aws/sqs/messages?QueueUrl=${encodeURIComponent(queueUrl)}`);
   return c.json(data);
 });

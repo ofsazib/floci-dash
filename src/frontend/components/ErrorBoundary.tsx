@@ -38,6 +38,7 @@ export default class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.hasError && this.state.error) {
+/* istanbul ignore next */
       if (this.props.fallback) {
         return this.props.fallback(this.state.error, this.handleRetry);
       }

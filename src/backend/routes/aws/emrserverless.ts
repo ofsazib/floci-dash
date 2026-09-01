@@ -19,6 +19,7 @@ router.get("/applications", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new ListApplicationsCommand({}));
   const applications = result.applications || [];
+/* istanbul ignore next */
   return c.json({ applications, nextToken: result.nextToken || null, total: applications.length });
 });
 

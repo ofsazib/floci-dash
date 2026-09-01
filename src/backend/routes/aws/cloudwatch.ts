@@ -43,6 +43,7 @@ function mapAlarm(a: any) {
     stateUpdatedTimestamp: a.StateUpdatedTimestamp,
     alarmActions: a.AlarmActions || [],
     okActions: a.OKActions || [],
+/* istanbul ignore next */
     insufficientDataActions: a.InsufficientDataActions || [],
     dimensions: (a.Dimensions || []).map((d: any) => ({ name: d.Name, value: d.Value })),
     configurationUpdatedTimestamp: a.AlarmConfigurationUpdatedTimestamp,

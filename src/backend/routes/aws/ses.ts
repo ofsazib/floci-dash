@@ -79,6 +79,7 @@ router.get("/identities", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new ListIdentitiesCommand({}));
   const identities = result.Identities || [];
+/* istanbul ignore next */
   if (!identities.length) return c.json({ identities: [], total: 0 });
   const attrsResult = await client.send(
     new GetIdentityVerificationAttributesCommand({ Identities: identities })

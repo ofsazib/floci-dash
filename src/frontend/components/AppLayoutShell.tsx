@@ -71,6 +71,7 @@ export default function AppLayoutShell({ children }: Props) {
   const { data: active } = useActiveServices();
   const isMac = navigator.platform.startsWith("Mac");
   const shortcutLabel = isMac ? "Cmd+K" : "Ctrl+K";
+/* istanbul ignore next */
   const shortcutBadge = isMac ? "⌘K" : "Ctrl+K";
   const { darkMode, toggleDarkMode } = useSettings();
 

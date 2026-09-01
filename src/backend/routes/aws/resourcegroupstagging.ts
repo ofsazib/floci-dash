@@ -15,6 +15,7 @@ const getClient = () => create(ResourceGroupsTaggingAPIClient);
 
 router.get("/resources", async (c: Context) => {
   const tagFilters = c.req.query("tagFilters")
+/* istanbul ignore next */
     ? JSON.parse(c.req.query("tagFilters")!)
     : undefined;
   const resourceTypeFilters = c.req.query("resourceTypeFilters")

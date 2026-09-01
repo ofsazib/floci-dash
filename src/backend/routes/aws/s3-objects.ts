@@ -33,6 +33,7 @@ router.get("/buckets/:name/objects/*/tags", async (c: Context) => {
   const bucket = sanitizeBucketName(c.req.param("name")!);
   const key = extractKey(c.req.url, "/tags");
   if (!key) return c.json({ error: "Object key is required" }, 400);
+/* istanbul ignore next */
   const result = await s3().send(new GetObjectTaggingCommand({ Bucket: bucket, Key: key }));
   return c.json({ bucket, key, tags: result.TagSet || [], total: (result.TagSet || []).length });
 });

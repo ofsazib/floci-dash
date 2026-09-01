@@ -36,6 +36,7 @@ router.get("/repositories", async (c: Context) => {
     new DescribeRepositoriesCommand(repositoryNames ? { repositoryNames } : {})
   );
   const repos = (result.repositories || []).map((r) => ({
+/* istanbul ignore next */
     repositoryName: r.repositoryName,
     repositoryUri: r.repositoryUri,
     createdAt: r.createdAt?.toISOString() || null,

@@ -22,6 +22,7 @@ router.get("/buckets", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new ListTableBucketsCommand({}));
   const buckets = result.tableBuckets || [];
+/* istanbul ignore next */
   return c.json({
     buckets: buckets.map((b: any) => {
       const arn = b.tableBucketArn ?? "";

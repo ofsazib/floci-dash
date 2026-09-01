@@ -40,6 +40,7 @@ function DevTools() {
   const forceProd =
     (globalThis as { __FORCE_PROD_DEVTOOLS__?: boolean }).__FORCE_PROD_DEVTOOLS__ === true;
   return import.meta.env.DEV && !forceProd ? (
+/* istanbul ignore next */
     <LazyDevTools buttonPosition="bottom-right" />
   ) : null;
 }

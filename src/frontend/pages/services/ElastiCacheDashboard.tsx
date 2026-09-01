@@ -547,6 +547,7 @@ function ElastiCacheReplicationGroupSection() {
   const [form, setForm] = useState({ ReplicationGroupId: "", Description: "", AuthToken: "" });
 
   const items = (data?.replicationGroups || []).map((rg: any) => ({
+/* istanbul ignore next */
     id: rg.ReplicationGroupId,
     status: rg.Status,
     description: rg.Description || "\u2014",

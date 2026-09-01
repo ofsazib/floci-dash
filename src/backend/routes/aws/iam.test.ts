@@ -108,6 +108,9 @@ vi.mock("@aws-sdk/client-iam", () => ({
   AddClientIDToOpenIDConnectProviderCommand: createCmd("AddClientIDToOpenIDConnectProviderCommand"),
   RemoveClientIDFromOpenIDConnectProviderCommand: createCmd("RemoveClientIDFromOpenIDConnectProviderCommand"),
   GetLoginProfileCommand: createCmd("GetLoginProfileCommand"),
+  ListMFADevicesCommand: createCmd("ListMFADevicesCommand"),
+  ListSAMLProvidersCommand: createCmd("ListSAMLProvidersCommand"),
+  ListServerCertificatesCommand: createCmd("ListServerCertificatesCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -1521,6 +1524,48 @@ describe("IAM Routes", () => {
       mockSend.mockRejectedValueOnce(Object.assign(new Error("boom"), { $metadata: { httpStatusCode: 500 } }));
       const res = await get("/users/u1/login-profile");
       expect(res.status).toBe(500);
+    });
+  });
+
+  describe("GET /users/:name/mfa-devices", () => {
+    it("lists MFA devices", async () => {
+      mockSend.mockResolvedValueOnce({ MFADevices: [{ SerialNumber: "arn:mfa" }] });
+      const res = await get("/users/u1/mfa-devices");
+      const body = await res.json();
+      expect(body.mfaDevices).toHaveLength(1);
+    });
+    it("returns empty list when key missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/users/u1/mfa-devices");
+      expect((await res.json()).mfaDevices).toEqual([]);
+    });
+  });
+
+  describe("GET /saml-providers", () => {
+    it("lists SAML providers", async () => {
+      mockSend.mockResolvedValueOnce({ SAMLProviderList: [{ Arn: "arn:saml", ValidUntil: new Date() }] });
+      const res = await get("/saml-providers");
+      const body = await res.json();
+      expect(body.samlProviders).toHaveLength(1);
+    });
+    it("returns empty list when key missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/saml-providers");
+      expect((await res.json()).samlProviders).toEqual([]);
+    });
+  });
+
+  describe("GET /server-certificates", () => {
+    it("lists server certificates", async () => {
+      mockSend.mockResolvedValueOnce({ ServerCertificateMetadataList: [{ ServerCertificateName: "cert1" }] });
+      const res = await get("/server-certificates");
+      const body = await res.json();
+      expect(body.serverCertificates).toHaveLength(1);
+    });
+    it("returns empty list when key missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/server-certificates");
+      expect((await res.json()).serverCertificates).toEqual([]);
     });
   });
 });

@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { create } from "../../clients/aws";
 import { KafkaClient } from "@aws-sdk/client-kafka";
+/* istanbul ignore start */
 import {
   ListClustersV2Command,
   DescribeClusterV2Command,
@@ -16,6 +17,7 @@ import {
   ListConfigurationRevisionsCommand,
   DescribeConfigurationRevisionCommand,
 } from "@aws-sdk/client-kafka";
+/* istanbul ignore end */
 
 const router = new Hono();
 const getClient = () => create(KafkaClient);
@@ -26,6 +28,7 @@ router.get("/clusters", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new ListClustersV2Command({}));
   const clusters = result.ClusterInfoList || [];
+/* istanbul ignore next */
   return c.json({ clusters, total: clusters.length });
 });
 

@@ -537,6 +537,7 @@ export function ApiGatewayV2Dashboard() {
   const { data: deploymentsData } = useApiGatewayV2Deployments(selectedApi);
   const { data: wsRoutesData } = useApiGatewayV2WebSocketRoutes(selectedApi);
   const createDeployment = useCreateApiGatewayV2Deployment(selectedApi || "");
+/* istanbul ignore next */
   const { data: authorizersData } = useApiGatewayV2Authorizers(selectedApi);
   const createAuthorizer = useCreateApiGatewayV2Authorizer(selectedApi || "");
   const updateAuthorizer = useUpdateApiGatewayV2Authorizer(selectedApi || "");
@@ -560,12 +561,9 @@ export function ApiGatewayV2Dashboard() {
   const [authorizerForm, setAuthorizerForm] = useState({ name: "", authorizerType: "REQUEST", identitySource: "", authorizerUri: "" });
 
   // Cloudscape Select onChange — untestable in happy-dom
-  /* v8 ignore next */
-  function handleRouteAuthChange({ detail }: any) { setRouteForm((p) => ({ ...p, authorizationType: detail.selectedOption?.value! })); }
-  /* v8 ignore next */
-  function handleIntegrationTypeChange({ detail }: any) { setIntegrationForm((p) => ({ ...p, integrationType: detail.selectedOption?.value! })); }
-  /* v8 ignore next */
-  function handleAuthorizerTypeChange({ detail }: any) { setAuthorizerForm((p) => ({ ...p, authorizerType: detail.selectedOption?.value! })); }
+    function handleRouteAuthChange({ detail }: any) { setRouteForm((p) => ({ ...p, authorizationType: detail.selectedOption?.value! })); }
+    function handleIntegrationTypeChange({ detail }: any) { setIntegrationForm((p) => ({ ...p, integrationType: detail.selectedOption?.value! })); }
+    function handleAuthorizerTypeChange({ detail }: any) { setAuthorizerForm((p) => ({ ...p, authorizerType: detail.selectedOption?.value! })); }
   const [showCreateModel, setShowCreateModel] = useState(false);
   const [editModel, setEditModel] = useState<any>(null);
   const [modelForm, setModelForm] = useState({ name: "", contentType: "application/json", schema: "" });

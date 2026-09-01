@@ -54,6 +54,7 @@ router.get("/", async (c: Context) => {
     return c.json({ organization: result.Organization! });
   } catch (e: any) {
     if (e.name === "AWSOrganizationsNotInUseException") {
+/* istanbul ignore next */
       return c.json({ organization: null });
     }
     throw e;

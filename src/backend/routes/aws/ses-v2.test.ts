@@ -35,6 +35,14 @@ vi.mock("@aws-sdk/client-sesv2", () => {
     "PutSuppressedDestinationCommand", "ListSuppressedDestinationsCommand",
     "GetSuppressedDestinationCommand", "DeleteSuppressedDestinationCommand",
     "ListTagsForResourceCommand", "TagResourceCommand", "UntagResourceCommand",
+    "GetConfigurationSetEventDestinationsCommand", "CreateConfigurationSetEventDestinationCommand",
+    "UpdateConfigurationSetEventDestinationCommand", "DeleteConfigurationSetEventDestinationCommand",
+    "ListCustomVerificationEmailTemplatesCommand", "GetCustomVerificationEmailTemplateCommand",
+    "CreateCustomVerificationEmailTemplateCommand", "UpdateCustomVerificationEmailTemplateCommand",
+    "DeleteCustomVerificationEmailTemplateCommand",
+    "PutEmailIdentityConfigurationSetAttributesCommand", "PutEmailIdentityDkimAttributesCommand",
+    "PutEmailIdentityDkimSigningAttributesCommand", "PutEmailIdentityFeedbackAttributesCommand",
+    "TestRenderEmailTemplateCommand",
   ];
   for (const n of names) commands[n] = createCmd(n);
   return commands;
@@ -339,6 +347,185 @@ describe("SES v2 — tags", () => {
     expect((await router.request(`${AG}/resources/tags?arn=arn%3Ai&tagKeys=a`, { method: "DELETE" })).status).toBe(200);
     expect((await router.request(`${AG}/resources/tags`, { method: "POST", body: "{}", headers: { "content-type": "application/json" } })).status).toBe(400);
     expect((await router.request(`${AG}/resources/tags`, { method: "DELETE" })).status).toBe(400);
+  });
+});
+
+describe("SES v2 — configuration set event destinations", () => {
+  it("GET /configuration-sets/:name/event-destinations", async () => {
+    mockSend.mockResolvedValueOnce({ EventDestinationConfiguration: { SNS: { TopicArn: "arn:topic" } } });
+    const res = await router.request(`${AG}/configuration-sets/cs1/event-destinations`);
+    const body = await res.json();
+    expect(body.eventDestinations).toBeDefined();
+  });
+
+  it("POST /configuration-sets/:name/event-destinations", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await router.request(`${AG}/configuration-sets/cs1/event-destinations`, {
+      method: "POST",
+      body: JSON.stringify({ EventDestinationName: "ed1", EventDestination: { SNS: { TopicArn: "arn:topic" } } }),
+      headers: { "content-type": "application/json" },
+    });
+    expect(res.status).toBe(201);
+  });
+
+  it("POST /configuration-sets/:name/event-destinations — 400 without fields", async () => {
+    const res = await router.request(`${AG}/configuration-sets/cs1/event-destinations`, {
+      method: "POST",
+      body: JSON.stringify({}),
+      headers: { "content-type": "application/json" },
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("PUT /configuration-sets/:name/event-destinations/:edName", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await router.request(`${AG}/configuration-sets/cs1/event-destinations/ed1`, {
+      method: "PUT",
+      body: JSON.stringify({ EventDestination: { SNS: { TopicArn: "arn:topic" } } }),
+      headers: { "content-type": "application/json" },
+    });
+    expect((await res.json()).updated).toBe(true);
+  });
+
+  it("PUT /configuration-sets/:name/event-destinations/:edName — 400 without EventDestination", async () => {
+    const res = await router.request(`${AG}/configuration-sets/cs1/event-destinations/ed1`, {
+      method: "PUT",
+      body: JSON.stringify({}),
+      headers: { "content-type": "application/json" },
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("DELETE /configuration-sets/:name/event-destinations/:edName", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await router.request(`${AG}/configuration-sets/cs1/event-destinations/ed1`, { method: "DELETE" });
+    expect((await res.json()).deleted).toBe(true);
+  });
+});
+
+describe("SES v2 — custom verification email templates", () => {
+  it("GET /custom-verification-email-templates", async () => {
+    mockSend.mockResolvedValueOnce({ CustomVerificationEmailTemplates: [{ TemplateName: "t1" }] });
+    const res = await router.request(`${AG}/custom-verification-email-templates`);
+    const body = await res.json();
+    expect(body.templates).toHaveLength(1);
+  });
+
+  it("GET /custom-verification-email-templates/:name", async () => {
+    mockSend.mockResolvedValueOnce({ TemplateName: "t1", TemplateSubject: "Hi" });
+    const res = await router.request(`${AG}/custom-verification-email-templates/t1`);
+    const body = await res.json();
+    expect(body.template.TemplateName).toBe("t1");
+  });
+
+  it("POST /custom-verification-email-templates", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await router.request(`${AG}/custom-verification-email-templates`, {
+      method: "POST",
+      body: JSON.stringify({ TemplateName: "t1" }),
+      headers: { "content-type": "application/json" },
+    });
+    expect(res.status).toBe(201);
+  });
+
+  it("POST /custom-verification-email-templates — 400 without TemplateName", async () => {
+    const res = await router.request(`${AG}/custom-verification-email-templates`, {
+      method: "POST",
+      body: JSON.stringify({}),
+      headers: { "content-type": "application/json" },
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("PUT /custom-verification-email-templates/:name", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await router.request(`${AG}/custom-verification-email-templates/t1`, {
+      method: "PUT",
+      body: JSON.stringify({ TemplateSubject: "Hi" }),
+      headers: { "content-type": "application/json" },
+    });
+    expect((await res.json()).updated).toBe(true);
+  });
+
+  it("DELETE /custom-verification-email-templates/:name", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await router.request(`${AG}/custom-verification-email-templates/t1`, { method: "DELETE" });
+    expect((await res.json()).deleted).toBe(true);
+  });
+});
+
+describe("SES v2 — email identity attributes", () => {
+  it("PUT /email-identities/:identity/configuration-set", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await router.request(`${AG}/email-identities/id1/configuration-set`, {
+      method: "PUT",
+      body: JSON.stringify({ ConfigurationSetName: "cs1" }),
+      headers: { "content-type": "application/json" },
+    });
+    expect((await res.json()).updated).toBe(true);
+  });
+
+  it("PUT /email-identities/:identity/dkim", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await router.request(`${AG}/email-identities/id1/dkim`, {
+      method: "PUT",
+      body: JSON.stringify({ SigningEnabled: true }),
+      headers: { "content-type": "application/json" },
+    });
+    expect((await res.json()).updated).toBe(true);
+  });
+
+  it("PUT /email-identities/:identity/dkim/signing", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await router.request(`${AG}/email-identities/id1/dkim/signing`, {
+      method: "PUT",
+      body: JSON.stringify({ SigningAttributesOrigin: "AWS_SES" }),
+      headers: { "content-type": "application/json" },
+    });
+    expect((await res.json()).updated).toBe(true);
+  });
+
+  it("PUT /email-identities/:identity/feedback", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await router.request(`${AG}/email-identities/id1/feedback`, {
+      method: "PUT",
+      body: JSON.stringify({ EmailForwardingEnabled: true }),
+      headers: { "content-type": "application/json" },
+    });
+    expect((await res.json()).updated).toBe(true);
+  });
+});
+
+describe("SES v2 — template render", () => {
+  it("POST /templates/:name/render", async () => {
+    mockSend.mockResolvedValueOnce({ RenderedTemplate: "<h1>Hello</h1>" });
+    const res = await router.request(`${AG}/templates/t1/render`, {
+      method: "POST",
+      body: JSON.stringify({ TemplateData: "{\"name\":\"John\"}" }),
+      headers: { "content-type": "application/json" },
+    });
+    const body = await res.json();
+    expect(body.renderedTemplate).toBe("<h1>Hello</h1>");
+  });
+
+  it("POST /templates/:name/render — defaults TemplateData to {}", async () => {
+    mockSend.mockResolvedValueOnce({ RenderedTemplate: "rendered" });
+    const res = await router.request(`${AG}/templates/t1/render`, {
+      method: "POST",
+      body: JSON.stringify({}),
+      headers: { "content-type": "application/json" },
+    });
+    expect((await res.json()).renderedTemplate).toBe("rendered");
+  });
+});
+
+describe("SES v2 — account", () => {
+  it("GET /account", async () => {
+    mockSend.mockResolvedValueOnce({ ProductionAccessEnabled: true, EnforcementStatus: "ENABLED" });
+    const res = await router.request(`${AG}/account`);
+    const body = await res.json();
+    expect(body.account.ProductionAccessEnabled).toBe(true);
+    expect(body.account.EnforcementStatus).toBe("ENABLED");
   });
 });
 

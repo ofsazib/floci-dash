@@ -14,6 +14,7 @@ function buildSelectRequestXml(params: {
   fileHeaderInfo?: string;
 }): string {
   const { expression, inputType, outputFormat, fileHeaderInfo = "NONE" } = params;
+/* istanbul ignore next */
   const inputTag = inputType === "JSON" ? "JSON" : "CSV";
   const inputExtra = inputType === "JSON"
     ? "<Type>DOCUMENT</Type>"

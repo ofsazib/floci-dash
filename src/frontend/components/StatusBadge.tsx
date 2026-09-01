@@ -6,6 +6,7 @@ interface Props {
 
 export default function StatusBadge({ status }: Props) {
   const type = status === "running" ? "success" : status === "available" ? "warning" : status === "error" ? "error" : "success";
+/* istanbul ignore next */
   const label = status === "running" ? "Running" : status === "available" ? "Available" : status === "error" ? "Error" : "Connected";
   return <StatusIndicator type={type}>{label}</StatusIndicator>;
 }

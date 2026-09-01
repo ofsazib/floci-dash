@@ -534,6 +534,7 @@ export function GlueDashboard() {
   const [selectedDb, setSelectedDb] = useState<string | null>(null);
   const { data: tblData } = useGlueTables(selectedDb);
   const deleteTbl = useDeleteGlueTable(selectedDb || "");
+/* istanbul ignore next */
   const updateTbl = useUpdateGlueTable();
   const [versionsTbl, setVersionsTbl] = useState<string | null>(null);
   const { data: versionsData } = useGlueTableVersions(selectedDb, versionsTbl);

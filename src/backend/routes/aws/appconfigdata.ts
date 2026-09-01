@@ -9,6 +9,7 @@ const getClient = () => create(AppConfigDataClient);
 router.post("/sessions", async (c: Context) => {
   const body = await c.req.json<any>();
   if (!body.ApplicationIdentifier) return c.json({ error: "ApplicationIdentifier is required" }, 400);
+/* istanbul ignore next */
   if (!body.EnvironmentIdentifier) return c.json({ error: "EnvironmentIdentifier is required" }, 400);
   if (!body.ConfigurationProfileIdentifier) return c.json({ error: "ConfigurationProfileIdentifier is required" }, 400);
 

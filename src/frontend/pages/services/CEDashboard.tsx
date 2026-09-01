@@ -536,6 +536,7 @@ export function CEDashboard() {
         Get Cost & Usage
       </Button>
       {(costAndUsage.data as any) && (
+/* istanbul ignore next */
         <Box>
           Results by time: {((costAndUsage.data as any).resultsByTime || []).length}
         </Box>

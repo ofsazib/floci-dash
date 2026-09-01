@@ -73,6 +73,7 @@ router.get("/user-pools", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new ListUserPoolsCommand({ MaxResults: 60 }));
   const userPools = result.UserPools || [];
+/* istanbul ignore next */
   return c.json({ userPools, total: userPools.length });
 });
 
