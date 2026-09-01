@@ -20,6 +20,7 @@ import {
   Alert,
   Link,
   Toggle,
+  ColumnLayout,
 } from "@cloudscape-design/components";
 import StatCard from "../components/StatCard";
 import StatusBadge from "../components/StatusBadge";
@@ -60,6 +61,14 @@ import {
   type EventArchive,
   type EventReplay,
 } from "../hooks/useEvents";
+
+function formatEventPattern(pattern: string): string {
+  try {
+    return JSON.stringify(JSON.parse(pattern), null, 2);
+  } catch {
+    return pattern;
+  }
+}
 
 export default function EventsPage() {
   const navigate = useNavigate();
@@ -155,7 +164,7 @@ function RulesTab({
 }) {
   const [searchFilter, setSearchFilter] = useState("");
   const [showCreate, setShowCreate] = useState(false);
-  const [selectedRule, setSelectedRule] = useState<string | null>(null);
+  const [selectedRule, setSelectedRule] = useState<EventRule | null>(null);
   const { data, isLoading, isError, error } = useEventRules();
   const deleteRule = useDeleteEventRule();
   const { enable, disable } = useToggleEventRule();
@@ -164,6 +173,17 @@ function RulesTab({
   const filtered = searchFilter
     ? rules.filter((r) => r.Name.toLowerCase().includes(searchFilter.toLowerCase()))
     : rules;
+
+  if (selectedRule) {
+    return (
+      <RuleDetailPanel
+        rule={selectedRule}
+        showToast={showToast}
+        confirm={confirm}
+        onBack={() => setSelectedRule(null)}
+      />
+    );
+  }
 
   return (
     <SpaceBetween size="l">
@@ -193,13 +213,13 @@ function RulesTab({
           loading={isLoading}
           loadingText="Loading rules..."
           trackBy="Name"
-          onRowClick={({ detail }) => setSelectedRule(detail.item.Name)}
+          onRowClick={({ detail }) => setSelectedRule(detail.item)}
           columnDefinitions={[
             {
               id: "name",
               header: "Name",
               cell: (item: EventRule) => (
-                <Link onFollow={() => setSelectedRule(item.Name)}>{item.Name}</Link>
+                <Link onFollow={() => setSelectedRule(item)}>{item.Name}</Link>
               ),
             },
             {
@@ -301,10 +321,6 @@ function RulesTab({
         />
       </Container>
 
-      {selectedRule && (
-        <TargetsSection rule={selectedRule} showToast={showToast} confirm={confirm} onBack={() => setSelectedRule(null)} />
-      )}
-
       {showCreate && (
         <CreateRuleModal visible={showCreate} onDismiss={() => setShowCreate(false)} showToast={showToast} />
       )}
@@ -312,18 +328,88 @@ function RulesTab({
   );
 }
 
-function TargetsSection({
+function RuleDetailPanel({
   rule,
   showToast,
   confirm,
   onBack,
 }: {
-  rule: string;
+  rule: EventRule;
   showToast: (type: "success" | "error" | "info" | "warning", msg: string) => void;
   confirm: (opts: { title: string; message: string; confirmText?: string; variant?: "primary" | "danger" }) => Promise<boolean>;
   onBack: () => void;
 }) {
-  const { data, isLoading } = useEventTargets(rule);
+  return (
+    <SpaceBetween size="l">
+      <Container
+        header={
+          <Header
+            variant="h2"
+            actions={<Button variant="link" onClick={onBack}>Back to rules</Button>}
+          >
+            Rule: {rule.Name}
+          </Header>
+        }
+      >
+        <SpaceBetween size="m">
+          <ColumnLayout columns={3} variant="text-grid">
+            <div>
+              <Box variant="awsui-key-label">State</Box>
+              <Box>{rule.State || "—"}</Box>
+            </div>
+            <div>
+              <Box variant="awsui-key-label">Event bus</Box>
+              <Box>{rule.EventBusName || "default"}</Box>
+            </div>
+            <div>
+              <Box variant="awsui-key-label">Description</Box>
+              <Box>{rule.Description || "—"}</Box>
+            </div>
+          </ColumnLayout>
+          {rule.ScheduleExpression && (
+            <div>
+              <Box variant="awsui-key-label">Schedule expression</Box>
+              <Box><code>{rule.ScheduleExpression}</code></Box>
+            </div>
+          )}
+          {rule.EventPattern && (
+            <div>
+              <Box variant="awsui-key-label">Event pattern</Box>
+              <Box fontSize="body-s">
+                <pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>{formatEventPattern(rule.EventPattern)}</pre>
+              </Box>
+            </div>
+          )}
+          {!rule.EventPattern && !rule.ScheduleExpression && (
+            <Box color="text-body-secondary">No event pattern or schedule expression</Box>
+          )}
+        </SpaceBetween>
+      </Container>
+      <TargetsSection
+        rule={rule.Name}
+        eventBusName={rule.EventBusName}
+        showToast={showToast}
+        confirm={confirm}
+        onBack={onBack}
+      />
+    </SpaceBetween>
+  );
+}
+
+function TargetsSection({
+  rule,
+  eventBusName,
+  showToast,
+  confirm,
+  onBack,
+}: {
+  rule: string;
+  eventBusName?: string;
+  showToast: (type: "success" | "error" | "info" | "warning", msg: string) => void;
+  confirm: (opts: { title: string; message: string; confirmText?: string; variant?: "primary" | "danger" }) => Promise<boolean>;
+  onBack: () => void;
+}) {
+  const { data, isLoading } = useEventTargets(rule, eventBusName);
   const removeTarget = useRemoveEventTarget();
   const [newTargetArn, setNewTargetArn] = useState("");
   const [newTargetId, setNewTargetId] = useState("");
