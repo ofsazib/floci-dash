@@ -57,13 +57,27 @@ jobs:
       - name: TypeScript typecheck
         run: make typecheck
 
-      - name: Unit tests
-        run: make test
+      - name: Unit tests + coverage
+        run: make test-cov
 
-      - name: Full test suite (unit + integration)
-        run: make test-all
+      - name: Full suite + coverage (gates the 100% thresholds end-to-end)
+        run: make test-all-cov
         env:
           FLOCI_URL: http://localhost:9878
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-release
+          path: coverage/
+          retention-days: 7
+
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v7
+        with:
+          directory: coverage/
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   # ── Build each platform natively (no QEMU emulation) ──
   build:
