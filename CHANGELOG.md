@@ -5,11 +5,38 @@ All notable changes to Floci Dash will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.0] — 2026-09-01
+
+### Added
+- **CloudFormation dashboard** — Stacks, Exports, Stack Sets with detail panels, change sets, create/view templates
+- **Lambda MicroVMs dashboard** — 17 backend routes, 3 tabs (MicroVM Images, Managed, MicroVMs)
+- **Bedrock AgentCore Control dashboard** — 11 backend routes, Runtimes + Endpoints tabs
+- **API Gateway v1 dashboard** — Tabs for Stages, Authorizers, Request Validators, Models, API Keys, Usage Plans, Domain Names
+- **EC2 Transit Gateway** — 27 ops (VPCs, attachments, VPC associations, peering, route tables)
+- **EC2 Managed Prefix Lists** — 9 ops (CRUD, entries)
+- **CloudFront** — 38 ops (cache policies, OAC/OAI, functions, response headers, keys, tags)
+- **SES v1 extras** — 18 ops (bulk send, custom verification templates, DKIM, policies, receipt rules)
+- **SES v2** — 62 routes across 11 families (identities, templates, config sets, suppression, tags, event destinations, custom verification, DKIM, template render, account)
+- **IAM** — 33 ops (attach/detach policies, policy versions, service-linked roles, OIDC providers, account settings)
+- **RDS** — DB Proxy (9 ops) + Option Groups (4 ops)
+- **MSK** — Configuration routes (7 ops)
+- **EKS** — Fargate profiles, access entries, addons, identity providers, pod identity (16 ops)
+- **IoT** — Thing Groups (8 ops)
+- **App Auto Scaling** — New dashboard with scalable targets + scaling policies
+- **Step Functions** — UpdateStateMachine + CloudControl request status polling
 
 ### Fixed
-- **CloudWatch Logs stored bytes** — log groups that report `storedBytes: 0` (Floci always does) now show the sum of their streams' `storedBytes`. Log groups and streams are paged (10 per page); the stream-size sum runs only for the current group page. Find-by-name searches the full list (`q`), then pages the matches. Floci ignores AWS `limit`/`nextToken`, so the API slices the full emulator list and returns `offset:N` tokens.
-- **EventBridge rule click** — opening a rule now drills into its event pattern or schedule expression (and targets), instead of appending a targets-only panel below the table
+- **AmazonMQ** — Fixed double `/api` prefix and wrong Floci path; registered 6 orphaned dashboards (FIS, GuardDuty, CloudControl, S3Tables, AgentCore, CloudHSM)
+- **CloudWatch Logs stored bytes** — Log groups that report `storedBytes: 0` now show the sum of their streams' `storedBytes`. Added server-side pagination and name search.
+- **EventBridge rule click** — Opening a rule now drills into its event pattern or schedule expression (and targets), instead of appending a targets-only panel below the table
+- **RDS** — Added missing PUT /plans, POST/DELETE /tags, GET /supported-resource-types routes
+- **Route 53** — Added total field to hosted-zones-by-name response
+- **Cloud Map** — Added discover-instances-revision and tags routes
+
+### Improved
+- **ResourceTable** — Added controlled filter (`filteringText`/`onFilterChange`) and `pagination` slot for server-side search/pagination
+- Removed superpowers spec docs
+- Updated README with all new services and features
 
 ## [0.2.0] — 2026-08-28
 
