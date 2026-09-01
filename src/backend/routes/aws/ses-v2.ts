@@ -54,6 +54,20 @@ import {
   ListTagsForResourceCommand,
   TagResourceCommand,
   UntagResourceCommand,
+  GetConfigurationSetEventDestinationsCommand,
+  CreateConfigurationSetEventDestinationCommand,
+  UpdateConfigurationSetEventDestinationCommand,
+  DeleteConfigurationSetEventDestinationCommand,
+  CreateCustomVerificationEmailTemplateCommand,
+  GetCustomVerificationEmailTemplateCommand,
+  ListCustomVerificationEmailTemplatesCommand,
+  UpdateCustomVerificationEmailTemplateCommand,
+  DeleteCustomVerificationEmailTemplateCommand,
+  PutEmailIdentityConfigurationSetAttributesCommand,
+  PutEmailIdentityDkimAttributesCommand,
+  PutEmailIdentityDkimSigningAttributesCommand,
+  PutEmailIdentityFeedbackAttributesCommand,
+  TestRenderEmailTemplateCommand,
 } from "@aws-sdk/client-sesv2";
 
 const router = new Hono();
@@ -518,6 +532,147 @@ router.delete("/resources/tags", async (c: Context) => {
   if (!arn || !tagKeys.length) return c.json({ error: "arn and tagKeys are required" }, 400);
   await v2().send(new UntagResourceCommand({ ResourceArn: arn, TagKeys: tagKeys }));
   return c.json({ untagged: true });
+});
+
+// ─── Configuration Set Event Destinations ───────────────
+
+router.get("/configuration-sets/:name/event-destinations", async (c: Context) => {
+  const name = c.req.param("name");
+  const result = await v2().send(new GetConfigurationSetEventDestinationsCommand({ ConfigurationSetName: name }));
+  return c.json({ eventDestinations: result.EventDestinations ?? [] });
+});
+
+router.post("/configuration-sets/:name/event-destinations", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<{ EventDestinationName: string; EventDestination: any }>();
+  if (!body.EventDestinationName || !body.EventDestination) return c.json({ error: "EventDestinationName and EventDestination are required" }, 400);
+  await v2().send(new CreateConfigurationSetEventDestinationCommand({
+    ConfigurationSetName: name,
+    EventDestinationName: body.EventDestinationName,
+    EventDestination: body.EventDestination,
+  }));
+  return c.json({ created: true }, 201);
+});
+
+router.put("/configuration-sets/:name/event-destinations/:edName", async (c: Context) => {
+  const name = c.req.param("name");
+  const edName = c.req.param("edName");
+  const body = await c.req.json<{ EventDestination: any }>();
+  if (!body.EventDestination) return c.json({ error: "EventDestination is required" }, 400);
+  await v2().send(new UpdateConfigurationSetEventDestinationCommand({
+    ConfigurationSetName: name,
+    EventDestinationName: edName,
+    EventDestination: body.EventDestination,
+  }));
+  return c.json({ updated: true });
+});
+
+router.delete("/configuration-sets/:name/event-destinations/:edName", async (c: Context) => {
+  const name = c.req.param("name");
+  const edName = c.req.param("edName");
+  await v2().send(new DeleteConfigurationSetEventDestinationCommand({
+    ConfigurationSetName: name,
+    EventDestinationName: edName,
+  }));
+  return c.json({ deleted: true });
+});
+
+// ─── Custom Verification Email Templates ─────────────────
+
+router.get("/custom-verification-email-templates", async (c: Context) => {
+  const result = await v2().send(new ListCustomVerificationEmailTemplatesCommand({}));
+  return c.json({ templates: result.CustomVerificationEmailTemplates ?? [], nextToken: result.NextToken });
+});
+
+router.get("/custom-verification-email-templates/:name", async (c: Context) => {
+  const name = c.req.param("name");
+  const result = await v2().send(new GetCustomVerificationEmailTemplateCommand({ TemplateName: name }));
+  return c.json({ template: result });
+});
+
+router.post("/custom-verification-email-templates", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.TemplateName) return c.json({ error: "TemplateName is required" }, 400);
+  await v2().send(new CreateCustomVerificationEmailTemplateCommand(body));
+  return c.json({ created: true }, 201);
+});
+
+router.put("/custom-verification-email-templates/:name", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<any>();
+  await v2().send(new UpdateCustomVerificationEmailTemplateCommand({ TemplateName: name, ...body }));
+  return c.json({ updated: true });
+});
+
+router.delete("/custom-verification-email-templates/:name", async (c: Context) => {
+  const name = c.req.param("name");
+  await v2().send(new DeleteCustomVerificationEmailTemplateCommand({ TemplateName: name }));
+  return c.json({ deleted: true });
+});
+
+// ─── Email Identity Attributes ──────────────────────────
+
+router.put("/email-identities/:identity/configuration-set", async (c: Context) => {
+  const identity = c.req.param("identity");
+  const body = await c.req.json<{ ConfigurationSetName?: string }>();
+  await v2().send(new PutEmailIdentityConfigurationSetAttributesCommand({
+    EmailIdentity: identity,
+    ConfigurationSetName: body.ConfigurationSetName,
+  }));
+  return c.json({ updated: true });
+});
+
+router.put("/email-identities/:identity/dkim", async (c: Context) => {
+  const identity = c.req.param("identity");
+  const body = await c.req.json<{ SigningEnabled?: boolean }>();
+  await v2().send(new PutEmailIdentityDkimAttributesCommand({
+    EmailIdentity: identity,
+    SigningEnabled: body.SigningEnabled,
+  }));
+  return c.json({ updated: true });
+});
+
+router.put("/email-identities/:identity/dkim/signing", async (c: Context) => {
+  const identity = c.req.param("identity");
+  const body = await c.req.json<Record<string, any>>();
+  await v2().send(new PutEmailIdentityDkimSigningAttributesCommand({
+    EmailIdentity: identity,
+    SigningAttributesOrigin: body.SigningAttributesOrigin,
+    SigningAttributes: body.SigningAttributes,
+  } as any));
+  return c.json({ updated: true });
+});
+
+router.put("/email-identities/:identity/feedback", async (c: Context) => {
+  const identity = c.req.param("identity");
+  const body = await c.req.json<{ EmailForwardingEnabled?: boolean }>();
+  await v2().send(new PutEmailIdentityFeedbackAttributesCommand({
+    EmailIdentity: identity,
+    EmailForwardingEnabled: body.EmailForwardingEnabled,
+  }));
+  return c.json({ updated: true });
+});
+
+// ─── Template Render ─────────────────────────────────────
+
+router.post("/templates/:name/render", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<{ TemplateData: string }>();
+  const result = await v2().send(new TestRenderEmailTemplateCommand({
+    TemplateName: name,
+    TemplateData: body.TemplateData || "{}",
+  }));
+  return c.json({ renderedTemplate: result.RenderedTemplate });
+});
+
+// ─── Account ─────────────────────────────────────────────
+
+router.get("/account", async (c: Context) => {
+  const result = await v2().send(new GetAccountCommand({}));
+  return c.json({ account: {
+    ProductionAccessEnabled: result.ProductionAccessEnabled,
+    EnforcementStatus: result.EnforcementStatus,
+  }});
 });
 
 export default router;

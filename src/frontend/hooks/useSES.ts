@@ -812,3 +812,52 @@ export function useActivateSESv1ReceiptRuleSet() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ses", "v1", "receipt-rule-sets"] }),
   });
 }
+
+// ─── SES v2 — Additional operations ─────────────────────
+
+export function useSESv2Account() {
+  return useQuery({
+    queryKey: ["aws", "ses", "v2", "account"],
+    queryFn: () => api("/aws/email/v2/account"),
+  });
+}
+
+export function useSESv2CustomVerificationTemplates() {
+  return useQuery({
+    queryKey: ["aws", "ses", "v2", "custom-verification-templates"],
+    queryFn: () => api("/aws/email/v2/custom-verification-email-templates"),
+  });
+}
+
+export function useCreateSESv2CustomVerificationTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: any) =>
+      api("/aws/email/v2/custom-verification-email-templates", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ses", "v2", "custom-verification-templates"] }),
+  });
+}
+
+export function useDeleteSESv2CustomVerificationTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api(`/aws/email/v2/custom-verification-email-templates/${encodeURIComponent(name)}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ses", "v2", "custom-verification-templates"] }),
+  });
+}
+
+export function useSESv2ConfigSetEventDestinations(configSetName: string | null) {
+  return useQuery({
+    queryKey: ["aws", "ses", "v2", "config-set-events", configSetName],
+    queryFn: () => api(`/aws/email/v2/configuration-sets/${configSetName}/event-destinations`),
+    enabled: !!configSetName,
+  });
+}
+
+export function useSESv2TemplateRender(templateName: string | null) {
+  return useMutation({
+    mutationFn: (templateData: string) =>
+      api(`/aws/email/v2/templates/${templateName}/render`, { method: "POST", body: JSON.stringify({ TemplateData: templateData }) }),
+  });
+}
