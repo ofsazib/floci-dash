@@ -23,6 +23,7 @@ import {
   Container,
   Spinner,
   Checkbox,
+  Pagination,
   type SelectProps,
   type TabsProps,
 } from "@cloudscape-design/components";
@@ -37,6 +38,7 @@ import {
   useDynamoDBDeleteTable,
 } from "../../hooks/useDynamoDB";
 import {
+  LOGS_PAGE_SIZE,
   useLogGroups,
   useCreateLogGroup,
   useDeleteLogGroup,
@@ -532,13 +534,63 @@ export function CloudWatchLogsDashboard() {
 // ─── Log Group List ────────────────────────────────────
 
 
+function LogsPagination({
+  pageIndex,
+  total,
+  nextToken,
+  onPageChange,
+  label,
+}: {
+  pageIndex: number;
+  total?: number;
+  nextToken?: string;
+  onPageChange: (page: number) => void;
+  label: string;
+}) {
+  const knownPages = total && total > 0 ? Math.ceil(total / LOGS_PAGE_SIZE) : pageIndex;
+  const pagesCount = Math.max(1, knownPages);
+  return (
+    <Pagination
+      currentPageIndex={pageIndex}
+      pagesCount={pagesCount}
+      openEnd={!!nextToken && pagesCount <= pageIndex}
+      onChange={({ detail }) => onPageChange(detail.currentPageIndex)}
+      ariaLabels={{
+        nextPageLabel: "Next page",
+        previousPageLabel: "Previous page",
+        paginationLabel: label,
+        pageLabel: (n) => `Page ${n}`,
+      }}
+    />
+  );
+}
+
 function CloudWatchLogGroupList({ onSelect }: { onSelect: (name: string) => void }) {
-  const { data, isLoading, isError, error } = useLogGroups();
+  const [pageIndex, setPageIndex] = useState(1);
+  const [pageTokens, setPageTokens] = useState<Record<number, string | undefined>>({ 1: undefined });
+  const [query, setQuery] = useState("");
+  const { data, isLoading, isError, error } = useLogGroups(undefined, {
+    limit: LOGS_PAGE_SIZE,
+    nextToken: pageTokens[pageIndex],
+    q: query || undefined,
+  });
   const createGroup = useCreateLogGroup();
   const deleteGroup = useDeleteLogGroup();
 
   const [showCreate, setShowCreate] = useState(false);
   const [groupName, setGroupName] = useState("");
+
+  function setSearch(text: string) {
+    setQuery(text);
+    setPageIndex(1);
+    setPageTokens({ 1: undefined });
+  }
+
+  useEffect(() => {
+    if (data?.nextToken) {
+      setPageTokens((tokens) => ({ ...tokens, [pageIndex + 1]: data.nextToken }));
+    }
+  }, [data?.nextToken, pageIndex]);
 
   const items = (data?.logGroups || []).map((g) => ({
     logGroupName: g.logGroupName,
@@ -622,10 +674,18 @@ function CloudWatchLogGroupList({ onSelect }: { onSelect: (name: string) => void
         emptyMessage="No log groups found. Create one to get started."
         filterEnabled
         filterPlaceholder="Find log groups by name"
-        filterFunction={(item: any, searchText: string) =>
-          item.logGroupName.toLowerCase().includes(searchText.toLowerCase())
-        }
+        filteringText={query}
+        onFilterChange={setSearch}
         onCreate={() => setShowCreate(true)}
+        pagination={
+          <LogsPagination
+            pageIndex={pageIndex}
+            total={data?.total}
+            nextToken={data?.nextToken}
+            onPageChange={setPageIndex}
+            label="Log groups pagination"
+          />
+        }
       />
 
       <Modal
@@ -773,12 +833,37 @@ function CloudWatchLogStreamList({
   logGroupName: string;
   onSelect: (name: string) => void;
 }) {
-  const { data, isLoading, isError, error } = useLogStreams(logGroupName);
+  const [pageIndex, setPageIndex] = useState(1);
+  const [pageTokens, setPageTokens] = useState<Record<number, string | undefined>>({ 1: undefined });
+  const [query, setQuery] = useState("");
+  const { data, isLoading, isError, error } = useLogStreams(logGroupName, undefined, {
+    limit: LOGS_PAGE_SIZE,
+    nextToken: pageTokens[pageIndex],
+    q: query || undefined,
+  });
   const createStream = useCreateLogStream();
   const deleteStream = useDeleteLogStream();
 
   const [showCreate, setShowCreate] = useState(false);
   const [streamName, setStreamName] = useState("");
+
+  function setSearch(text: string) {
+    setQuery(text);
+    setPageIndex(1);
+    setPageTokens({ 1: undefined });
+  }
+
+  useEffect(() => {
+    setPageIndex(1);
+    setPageTokens({ 1: undefined });
+    setQuery("");
+  }, [logGroupName]);
+
+  useEffect(() => {
+    if (data?.nextToken) {
+      setPageTokens((tokens) => ({ ...tokens, [pageIndex + 1]: data.nextToken }));
+    }
+  }, [data?.nextToken, pageIndex]);
 
   const items = (data?.logStreams || []).map((s) => ({
     logStreamName: s.logStreamName,
@@ -865,10 +950,18 @@ function CloudWatchLogStreamList({
         emptyMessage="No log streams found"
         filterEnabled
         filterPlaceholder="Find streams by name"
-        filterFunction={(item: any, searchText: string) =>
-          item.logStreamName.toLowerCase().includes(searchText.toLowerCase())
-        }
+        filteringText={query}
+        onFilterChange={setSearch}
         onCreate={() => setShowCreate(true)}
+        pagination={
+          <LogsPagination
+            pageIndex={pageIndex}
+            total={data?.total}
+            nextToken={data?.nextToken}
+            onPageChange={setPageIndex}
+            label="Log streams pagination"
+          />
+        }
       />
 
       <Modal

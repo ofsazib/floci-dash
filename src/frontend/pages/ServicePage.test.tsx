@@ -29,6 +29,7 @@ const mockPutSubFilterMutate = vi.fn();
 const mockTagLogGroupMutate = vi.fn();
 
 vi.mock("../hooks/useLogs", () => ({
+  LOGS_PAGE_SIZE: 10,
   useLogGroups: (...args: any[]) => mockLogGroups(...args),
   useCreateLogGroup: () => ({ mutate: mockCreateLogGroupMutate, isPending: false, isError: false, error: null }),
   useDeleteLogGroup: () => ({ mutate: vi.fn(), isPending: false, variables: null }),

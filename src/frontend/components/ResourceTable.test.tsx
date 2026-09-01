@@ -193,6 +193,105 @@ describe("ResourceTable", () => {
     expect(screen.getByText("Loading resources...")).toBeTruthy();
   });
 
+  it("forwards a controlled filter without hiding the current items", async () => {
+    const user = userEvent.setup();
+    const onFilterChange = vi.fn();
+    render(
+      <ResourceTable
+        resourceName="Bucket"
+        items={items}
+        columns={columns}
+        filterEnabled
+        filterPlaceholder="Find buckets"
+        filteringText="z"
+        onFilterChange={onFilterChange}
+        headerCounter={12}
+      />,
+    );
+    expect(screen.getByText("alpha")).toBeTruthy();
+    expect(screen.getByText("beta")).toBeTruthy();
+    expect(screen.getAllByText("12 matches").length).toBeGreaterThan(0);
+    await user.type(screen.getByPlaceholderText("Find buckets"), "z");
+    expect(onFilterChange).toHaveBeenCalled();
+  });
+
+  it("shows no-matches empty state for a controlled filter", () => {
+    render(
+      <ResourceTable
+        resourceName="Bucket"
+        items={[]}
+        columns={columns}
+        filterEnabled
+        filteringText="zzz"
+        onFilterChange={() => {}}
+        headerCounter={0}
+      />,
+    );
+    expect(screen.getByText("No matches")).toBeTruthy();
+    expect(screen.getAllByText("0 matches").length).toBeGreaterThan(0);
+  });
+
+  it("treats a missing controlled filteringText as empty", async () => {
+    const user = userEvent.setup();
+    const onFilterChange = vi.fn();
+    render(
+      <ResourceTable
+        resourceName="Bucket"
+        items={[{ name: "alpha" }]}
+        columns={columns}
+        filterEnabled
+        filterPlaceholder="Find buckets"
+        onFilterChange={onFilterChange}
+        headerCounter={1}
+      />,
+    );
+    expect(screen.getByText("alpha")).toBeTruthy();
+    await user.type(screen.getByPlaceholderText("Find buckets"), "x");
+    expect(onFilterChange).toHaveBeenCalledWith("x");
+  });
+
+  it("uses items.length for the controlled match count when headerCounter is omitted", () => {
+    render(
+      <ResourceTable
+        resourceName="Bucket"
+        items={items}
+        columns={columns}
+        filterEnabled
+        filteringText="a"
+        onFilterChange={() => {}}
+      />,
+    );
+    expect(screen.getAllByText("2 matches").length).toBeGreaterThan(0);
+  });
+
+  it("shows a singular controlled match count", () => {
+    render(
+      <ResourceTable
+        resourceName="Bucket"
+        items={[{ name: "alpha" }]}
+        columns={columns}
+        filterEnabled
+        filteringText="a"
+        onFilterChange={() => {}}
+        headerCounter={1}
+      />,
+    );
+    expect(screen.getAllByText("1 match").length).toBeGreaterThan(0);
+  });
+
+  it("renders a pagination slot when provided", () => {
+    render(
+      <ResourceTable
+        resourceName="Bucket"
+        items={items}
+        columns={columns}
+        pagination={<nav aria-label="table pages">Page 1</nav>}
+      />,
+    );
+    expect(screen.getByLabelText("table pages")).toBeTruthy();
+    expect(screen.getByText("Page 1")).toBeTruthy();
+  });
+
   it("renders rows without a filter and falls back to dashes in cells", () => {
     const cols = [
       { id: "name", header: "Name", cell: (i: any) => i.name },

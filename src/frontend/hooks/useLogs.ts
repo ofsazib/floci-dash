@@ -16,6 +16,23 @@ export interface LogGroup {
 export interface LogGroupListResponse {
   logGroups: LogGroup[];
   total: number;
+  nextToken?: string;
+}
+
+export const LOGS_PAGE_SIZE = 10;
+
+export function logsListQuery(opts: {
+  prefix?: string;
+  limit?: number;
+  nextToken?: string;
+  q?: string;
+}): string {
+  const qs = new URLSearchParams();
+  if (opts.prefix) qs.set("prefix", opts.prefix);
+  qs.set("limit", String(opts.limit ?? LOGS_PAGE_SIZE));
+  if (opts.nextToken) qs.set("nextToken", opts.nextToken);
+  if (opts.q) qs.set("q", opts.q);
+  return `?${qs.toString()}`;
 }
 
 // ─── Log Stream Types ─────────────────────────────────
@@ -33,6 +50,7 @@ export interface LogStream {
 export interface LogStreamListResponse {
   logStreams: LogStream[];
   total: number;
+  nextToken?: string;
 }
 
 // ─── Log Event Types ──────────────────────────────────
@@ -76,11 +94,17 @@ export interface SubscriptionFilterListResponse {
 
 // ─── Log Group Hooks ──────────────────────────────────
 
-export function useLogGroups(prefix?: string) {
+export function useLogGroups(
+  prefix?: string,
+  page?: { limit?: number; nextToken?: string; q?: string }
+) {
+  const limit = page?.limit ?? LOGS_PAGE_SIZE;
+  const nextToken = page?.nextToken;
+  const q = page?.q;
   return useQuery<LogGroupListResponse>({
-    queryKey: ["aws", "logs", "log-groups", prefix],
+    queryKey: ["aws", "logs", "log-groups", prefix, limit, nextToken, q],
     queryFn: () =>
-      api(`/aws/logs/log-groups${prefix ? `?prefix=${encodeURIComponent(prefix)}` : ""}`),
+      api(`/aws/logs/log-groups${logsListQuery({ prefix, limit, nextToken, q })}`),
     refetchInterval: 15000,
   });
 }
@@ -137,12 +161,19 @@ export function useDeleteRetentionPolicy() {
 
 // ─── Log Stream Hooks ─────────────────────────────────
 
-export function useLogStreams(logGroupName: string | null, prefix?: string) {
+export function useLogStreams(
+  logGroupName: string | null,
+  prefix?: string,
+  page?: { limit?: number; nextToken?: string; q?: string }
+) {
+  const limit = page?.limit ?? LOGS_PAGE_SIZE;
+  const nextToken = page?.nextToken;
+  const q = page?.q;
   return useQuery<LogStreamListResponse>({
-    queryKey: ["aws", "logs", "log-groups", logGroupName, "streams", prefix],
+    queryKey: ["aws", "logs", "log-groups", logGroupName, "streams", prefix, limit, nextToken, q],
     queryFn: () =>
       api(
-        `/aws/logs/log-groups/${encodeURIComponent(logGroupName!)}/streams${prefix ? `?prefix=${encodeURIComponent(prefix)}` : ""}`
+        `/aws/logs/log-groups/${encodeURIComponent(logGroupName!)}/streams${logsListQuery({ prefix, limit, nextToken, q })}`
       ),
     enabled: !!logGroupName,
     refetchInterval: 10000,
