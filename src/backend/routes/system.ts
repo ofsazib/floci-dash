@@ -28,7 +28,6 @@ router.get("/health", async (c: Context) => {
     services: health.services,
     edition: health.edition || info.edition,
     original_edition: health.original_edition || info.original_edition,
-/* istanbul ignore next */
     version: info.version || health.version,
     stats: { total, running, available: total - running },
   };

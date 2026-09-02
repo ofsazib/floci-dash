@@ -2,7 +2,6 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { create } from "../../clients/aws";
 import { ApplicationAutoScalingClient } from "@aws-sdk/client-application-auto-scaling";
-/* istanbul ignore start */
 import {
   RegisterScalableTargetCommand,
   DescribeScalableTargetsCommand,
@@ -14,7 +13,6 @@ import {
   TagResourceCommand,
   UntagResourceCommand,
 } from "@aws-sdk/client-application-auto-scaling";
-/* istanbul ignore end */
 
 const router = new Hono();
 
@@ -25,7 +23,6 @@ const getClient = () => create(ApplicationAutoScalingClient);
 router.post("/scalable-targets", async (c: Context) => {
   const body = await c.req.json<any>();
   if (!body.serviceNamespace) return c.json({ error: "serviceNamespace is required" }, 400);
-/* istanbul ignore next */
   if (!body.resourceId) return c.json({ error: "resourceId is required" }, 400);
   if (!body.scalableDimension) return c.json({ error: "scalableDimension is required" }, 400);
   if (body.minCapacity == null || body.maxCapacity == null) {
@@ -46,13 +43,10 @@ router.get("/scalable-targets", async (c: Context) => {
   const client = getClient();
   const result = await getClient().send(new DescribeScalableTargetsCommand({
     ServiceNamespace: (c.req.query("serviceNamespace") as any) || "ecs",
-/* istanbul ignore next */
     ResourceIds: c.req.query("resourceIds") ? c.req.query("resourceIds")!.split(",") : undefined,
-/* istanbul ignore next */
     ScalableDimension: (c.req.query("scalableDimension") as any) || undefined,
   }));
   const scalableTargets = (result.ScalableTargets || []).map((t: any) => ({
-/* istanbul ignore next */
     serviceNamespace: t.ServiceNamespace,
     resourceId: t.ResourceId,
     scalableDimension: t.ScalableDimension,
@@ -83,9 +77,7 @@ router.post("/scalable-policies", async (c: Context) => {
   if (!body.policyName) return c.json({ error: "policyName is required" }, 400);
   if (!body.serviceNamespace) return c.json({ error: "serviceNamespace is required" }, 400);
   if (!body.resourceId) return c.json({ error: "resourceId is required" }, 400);
-/* istanbul ignore next */
   if (!body.scalableDimension) return c.json({ error: "scalableDimension is required" }, 400);
-/* istanbul ignore next */
   const result = await getClient().send(new PutScalingPolicyCommand({
     PolicyName: body.policyName,
     ServiceNamespace: body.serviceNamespace,
@@ -97,9 +89,7 @@ router.post("/scalable-policies", async (c: Context) => {
   }));
   return c.json({
     policyArn: result.PolicyARN ?? null,
-/* istanbul ignore next */
     alarms: result.Alarms ?? [],
-/* istanbul ignore next */
   }, 201);
 });
 
@@ -107,14 +97,11 @@ router.get("/scalable-policies", async (c: Context) => {
   const client = getClient();
   const result = await getClient().send(new DescribeScalingPoliciesCommand({
     ServiceNamespace: (c.req.query("serviceNamespace") as any) || "ecs",
-/* istanbul ignore next */
     ResourceId: c.req.query("resourceId"),
     ScalableDimension: (c.req.query("scalableDimension") as any) || undefined,
     PolicyNames: c.req.query("policyNames") ? c.req.query("policyNames")!.split(",") : undefined,
-/* istanbul ignore next */
   }));
   const scalingPolicies = (result.ScalingPolicies || []).map((p: any) => ({
-/* istanbul ignore next */
     name: p.PolicyName,
     arn: p.PolicyARN,
     serviceNamespace: p.ServiceNamespace,
@@ -122,7 +109,6 @@ router.get("/scalable-policies", async (c: Context) => {
     scalableDimension: p.ScalableDimension,
     policyType: p.PolicyType,
     targetTracking: p.TargetTrackingScalingPolicyConfiguration ?? null,
-/* istanbul ignore next */
     creationTime: p.CreationTime,
   }));
   return c.json({ scalingPolicies, total: scalingPolicies.length });
@@ -131,7 +117,6 @@ router.get("/scalable-policies", async (c: Context) => {
 router.delete("/scalable-policies/:policyName", async (c: Context) => {
   const policyName = c.req.param("policyName")!;
   const serviceNamespace = (c.req.query("serviceNamespace") as any) || "ecs";
-/* istanbul ignore next */
   const resourceId = c.req.query("resourceId") || "";
   const scalableDimension = (c.req.query("scalableDimension") as any) || "";
   if (!resourceId) return c.json({ error: "resourceId is required" }, 400);
@@ -151,7 +136,6 @@ router.get("/resources/:resourceId/tags", async (c: Context) => {
   const result: any = await getClient().send(new ListTagsForResourceCommand({ ResourceId: resourceId } as any));
   return c.json({
     tags: (result.Tags || []).map((t: any) => ({ Key: t.Key, Value: t.Value })),
-/* istanbul ignore next */
     total: (result.Tags || []).length,
   });
 });

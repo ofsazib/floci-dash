@@ -1,4 +1,3 @@
-// @v8 ignore start — JSX-heavy dashboard, callbacks tested via integration
 import { useState } from "react";
 import {
   Header,
@@ -328,4 +327,3 @@ export function CloudFormationDashboard() {
     </SpaceBetween>
   );
 }
-// @v8 ignore end

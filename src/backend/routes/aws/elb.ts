@@ -55,7 +55,6 @@ router.get("/load-balancers", async (c: Context) => {
     new DescribeLoadBalancersCommand({
       LoadBalancerArns: arns || undefined,
       Names: names || undefined,
-/* istanbul ignore next */
     })
   );
   const lbs = (result.LoadBalancers || []).map((lb) => ({

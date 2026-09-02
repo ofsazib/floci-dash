@@ -19,7 +19,6 @@ router.get("/environments", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new ListEnvironmentsCommand({}));
   const environments = result.Environments || [];
-/* istanbul ignore next */
   return c.json({ environments, total: environments.length });
 });
 

@@ -20,7 +20,6 @@ const getClient = () => create(CostExplorerClient);
 router.post("/cost-and-usage", async (c: Context) => {
   const body = await c.req.json<any>();
   if (!body.timePeriod?.start || !body.timePeriod?.end) return c.json({ error: "timePeriod.start and timePeriod.end are required" }, 400);
-/* istanbul ignore next */
   if (!body.granularity) return c.json({ error: "granularity is required" }, 400);
   if (!body.metrics?.length) return c.json({ error: "metrics is required" }, 400);
 

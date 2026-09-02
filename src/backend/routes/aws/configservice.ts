@@ -34,7 +34,6 @@ router.get("/rules", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new DescribeConfigRulesCommand({}));
   const rules = result.ConfigRules || [];
-/* istanbul ignore next */
   return c.json({ rules, total: rules.length });
 });
 

@@ -23,7 +23,6 @@ export default function StatCard({
   subtext,
   isText,
   size = "md",
-/* istanbul ignore next */
 }: Props) {
   // The variant prop is a closed union over all four VARIANTS keys
   const v = VARIANTS[variant];

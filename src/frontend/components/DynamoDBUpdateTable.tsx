@@ -90,7 +90,6 @@ export default function DynamoDBUpdateTable({ tableName, tableDetail }: Props) {
   // Initialize from tableDetail — only when tableName changes
   useEffect(() => {
     if (prevTableName.current !== tableName) {
-/* istanbul ignore next */
       prevTableName.current = tableName;
       return;
     }

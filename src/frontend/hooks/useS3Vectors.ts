@@ -119,7 +119,6 @@ export function useS3VectorsGetVectors(
   keys: string[]
 ) {
   const keysParam = keys.length ? `keys=${encodeURIComponent(keys.join(","))}` : "";
-/* istanbul ignore next */
   return useQuery({
     queryKey: ["aws", "s3vectors", "buckets", bucketName, "indexes", indexName, "vectors", keys],
     queryFn: () =>

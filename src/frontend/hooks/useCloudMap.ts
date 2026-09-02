@@ -56,7 +56,6 @@ export function useDeleteCloudMapNamespace() {
 
 export function useCloudMapServices(namespaceId: string | null) {
   const qs = namespaceId ? `?namespaceId=${encodeURIComponent(namespaceId)}` : "";
-/* istanbul ignore next */
   return useQuery<{ services: CloudMapService[]; total: number }>({
     queryKey: ["aws", "cloudmap", "services", namespaceId],
     queryFn: () => api(`/aws/servicediscovery/services${qs}`),

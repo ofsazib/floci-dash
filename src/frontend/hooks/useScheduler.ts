@@ -35,7 +35,6 @@ export function useDeleteSchedulerGroup() {
 
 export function useSchedules(groupName?: string) {
   const g = groupName || "";
-/* istanbul ignore next */
   return useQuery({
     queryKey: ["aws", "scheduler", "schedules", g],
     queryFn: () => {

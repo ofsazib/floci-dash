@@ -23,7 +23,6 @@ export default function ServiceCard({ serviceKey, status }: Props) {
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" || e.key === " ") {
-/* istanbul ignore next */
       e.preventDefault();
       navigate(`/services/${serviceKey}`);
     }

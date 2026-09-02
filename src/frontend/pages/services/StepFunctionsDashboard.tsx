@@ -537,7 +537,6 @@ export function StepFunctionsDashboard() {
   const [editRoleArn, setEditRoleArn] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
   const updateSm = useUpdateStateMachine(editArn ?? "");
-/* istanbul ignore next */
   const deleteVersion = useDeleteStateMachineVersion();
   const startExecution = useStartExecution();
   const stopExecution = useStopExecution();

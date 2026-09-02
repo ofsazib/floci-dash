@@ -30,7 +30,6 @@ router.get("/certificates", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new ListCertificatesCommand({}));
   const certificates = result.CertificateSummaryList || [];
-/* istanbul ignore next */
   return c.json({ certificates, total: certificates.length });
 });
 

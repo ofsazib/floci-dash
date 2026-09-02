@@ -21,7 +21,6 @@ router.get("/flow-logs", async (c: Context) => {
   const filterName = c.req.query("resourceId");
   const params: any = {};
   if (filterName) {
-/* istanbul ignore next */
     params.Filter = [{ Name: "resource-id", Values: [filterName] }];
   }
 

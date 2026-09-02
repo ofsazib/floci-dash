@@ -535,7 +535,6 @@ export function KinesisDashboard() {
   // Shards
   const { data: shardsData } = useKinesisShards(selectedStream);
   const putRecord = usePutKinesisRecord(selectedStream || "");
-/* istanbul ignore next */
   const [showPutRecord, setShowPutRecord] = useState(false);
   const [recordData, setRecordData] = useState("");
   const [recordKey, setRecordKey] = useState("");

@@ -2,17 +2,20 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { create } from "../../clients/aws";
 import { ServiceDiscoveryClient } from "@aws-sdk/client-servicediscovery";
-/* istanbul ignore start */
 import {
   CreatePrivateDnsNamespaceCommand,
   CreatePublicDnsNamespaceCommand,
   GetOperationCommand,
   ListOperationsCommand,
   GetInstanceCommand,
+} from "@aws-sdk/client-servicediscovery";
+import {
   RegisterInstanceCommand,
   DeregisterInstanceCommand,
   DiscoverInstancesCommand,
   GetInstancesHealthStatusCommand,
+} from "@aws-sdk/client-servicediscovery";
+import {
   ListNamespacesCommand,
   GetNamespaceCommand,
   CreateHttpNamespaceCommand,
@@ -27,7 +30,6 @@ import {
   TagResourceCommand,
   UntagResourceCommand,
 } from "@aws-sdk/client-servicediscovery";
-/* istanbul ignore end */
 
 const router = new Hono();
 const getClient = () => create(ServiceDiscoveryClient);

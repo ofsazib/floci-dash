@@ -21,7 +21,6 @@ router.get("/experiment-templates", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new ListExperimentTemplatesCommand({}));
   const templates = result.experimentTemplates || [];
-/* istanbul ignore next */
   return c.json({ experimentTemplates: templates, total: templates.length });
 });
 

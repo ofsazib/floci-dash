@@ -1,6 +1,5 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
-/* istanbul ignore start */
 import {
   KMSClient,
   ListKeysCommand,
@@ -43,7 +42,6 @@ import {
   VerifyMacCommand,
   RotateKeyOnDemandCommand,
 } from "@aws-sdk/client-kms";
-/* istanbul ignore end */
 import { getAwsConfig } from "../../clients/aws";
 
 const router = new Hono();
@@ -93,7 +91,6 @@ function mapGrant(g: any) {
     granteePrincipal: g.GranteePrincipal,
     name: g.Name,
     operations: g.Operations || [],
-/* istanbul ignore next */
     creationDate: g.CreationDate,
     issuingAccount: g.IssuingAccount,
     constraints: g.Constraints,
@@ -462,21 +459,17 @@ router.post("/keys/retirable", async (c: Context) => {
   const body = await c.req.json<{ retiringPrincipal?: string; limit?: number; marker?: string }>();
   const result = await kms().send(new ListRetirableGrantsCommand({
     RetiringPrincipal: body.retiringPrincipal || "",
-/* istanbul ignore next */
     Limit: body.limit,
     Marker: body.marker,
   }));
   return c.json({
     grants: (result.Grants || []).map((g: any) => ({
-/* istanbul ignore next */
       grantId: g.GrantId,
       keyId: g.KeyId,
       name: g.Name ?? null,
-/* istanbul ignore next */
       creationDate: g.CreationDate,
     })),
     truncate: result.Truncated ?? false,
-/* istanbul ignore next */
     marker: result.NextMarker ?? null,
   });
 });
@@ -493,9 +486,7 @@ router.post("/keys/:keyId/re-encrypt", async (c: Context) => {
   }));
   return c.json({
     ciphertextBlob: result.CiphertextBlob ? Buffer.from(result.CiphertextBlob).toString("base64") : null,
-/* istanbul ignore next */
     sourceKeyId: result.SourceKeyId ?? null,
-/* istanbul ignore next */
     keyId: result.KeyId ?? null,
   });
 });
@@ -506,15 +497,12 @@ router.post("/keys/:keyId/data-key-plaintext-free", async (c: Context) => {
   const result = await kms().send(new GenerateDataKeyWithoutPlaintextCommand({
     KeyId: keyId,
     KeySpec: (body.keySpec as any) || "AES_256",
-/* istanbul ignore next */
     NumberOfBytes: body.numberOfBytes,
     EncryptionContext: body.encryptionContext,
   }));
   return c.json({
     ciphertextBlob: result.CiphertextBlob ? Buffer.from(result.CiphertextBlob).toString("base64") : null,
-/* istanbul ignore next */
     keyId: result.KeyId ?? null,
-/* istanbul ignore next */
   }, 201);
 });
 
@@ -524,7 +512,6 @@ router.put("/aliases/:aliasName", async (c: Context) => {
   if (!body.targetKeyId) return c.json({ error: "targetKeyId is required" }, 400);
   await kms().send(new UpdateAliasCommand({
     AliasName: aliasName.startsWith("alias/") ? aliasName : `alias/${aliasName}`,
-/* istanbul ignore next */
     TargetKeyId: body.targetKeyId,
   }));
   return c.json({ updated: true });

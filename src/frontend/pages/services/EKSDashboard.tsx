@@ -516,7 +516,6 @@ export function EKSDashboard() {
   const [selectedCluster, setSelectedCluster] = useState<string | null>(null);
   const { data: nodegroupsData, isLoading: nodegroupsLoading } = useEKSNodegroups(selectedCluster);
   const createNodegroup = useEKSCreateNodegroup(selectedCluster || "");
-/* istanbul ignore next */
   const deleteNodegroup = useEKSDeleteNodegroup(selectedCluster || "");
   const [showCreateNodegroup, setShowCreateNodegroup] = useState(false);
   const [ngName, setNgName] = useState("");

@@ -22,7 +22,6 @@ router.get("/runtimes", async (c: Context) => {
   const client = getControlClient();
   const result = await client.send(new ListAgentRuntimesCommand({}));
   const runtimes = result.agentRuntimes || [];
-/* istanbul ignore next */
   return c.json({ agentRuntimes: runtimes, total: runtimes.length, nextToken: result.nextToken ?? null });
 });
 

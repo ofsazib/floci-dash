@@ -65,7 +65,6 @@ function pickKey(
 ): Record<string, any> {
   const key: Record<string, any> = {};
   if (hashKey) key[hashKey] = item[hashKey];
-/* istanbul ignore next */
   if (rangeKey) key[rangeKey] = item[rangeKey];
   return key;
 }

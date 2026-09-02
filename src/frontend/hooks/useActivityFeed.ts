@@ -16,7 +16,6 @@ function getEntries(): ActivityEntry[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     return raw ? (JSON.parse(raw) as ActivityEntry[]) : [];
-/* istanbul ignore next */
   } catch {
     return [];
   }

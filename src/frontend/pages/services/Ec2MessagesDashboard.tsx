@@ -509,7 +509,6 @@ export function Ec2MessagesDashboard() {
   const [destination, setDestination] = useState("");
   const [activated, setActivated] = useState(false);
   const { data, isLoading, refetch } = useEc2Messages(activated ? destination.trim() : null);
-/* istanbul ignore next */
   const acknowledge = useAcknowledgeMessage();
   const { showToast } = useToast();
 

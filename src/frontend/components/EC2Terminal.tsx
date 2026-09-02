@@ -56,7 +56,6 @@ function TerminalInner({ instanceId }: { instanceId: string }) {
     term.open(terminalRef.current!);
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-/* istanbul ignore next */
     const host = window.location.host;
     const wsUrl = `${protocol}//${host}/api/aws/ec2/instances/${encodeURIComponent(instanceId)}/terminal`;
 

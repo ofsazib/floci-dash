@@ -225,7 +225,6 @@ export function useDeleteCFOriginAccessIdentity() {
   return useMutation({
     mutationFn: ({ id, ifMatch }: { id: string; ifMatch?: string }) =>
       api(`/aws/cloudfront/oai/${id}?ifMatch=${encodeURIComponent(ifMatch ?? "")}`, { method: "DELETE" }),
-/* istanbul ignore next */
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cloudfront", "oai"] }),
   });
 }

@@ -510,7 +510,6 @@ export function SchedulerDashboard() {
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
 
   if (selectedGroup) {
-/* istanbul ignore next */
     return (
       <SchedulerGroupDetail
         groupName={selectedGroup}

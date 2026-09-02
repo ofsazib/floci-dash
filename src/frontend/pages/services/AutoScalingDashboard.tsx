@@ -657,7 +657,6 @@ export function AutoScalingDashboard() {
   const metricCollectionTypes = useASGMetricCollectionTypes();
 
   const selectedGroupTags = selectedASG
-/* istanbul ignore next */
     ? (data?.groups?.find((g: any) => g.AutoScalingGroupName === selectedASG)?.Tags || [])
     : [];
   const scalingPoliciesList = scalingPolicies.data?.policies || [];

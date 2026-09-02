@@ -83,7 +83,6 @@ export function useMemoryDBUsers(userName?: string) {
     queryFn: () =>
       api<{ users: any[]; total: number }>(
         `/aws/memorydb/users${userName ? `?userName=${encodeURIComponent(userName)}` : ""}`
-/* istanbul ignore next */
       ),
   });
 }

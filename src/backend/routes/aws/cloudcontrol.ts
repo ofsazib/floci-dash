@@ -16,7 +16,6 @@ const getClient = () => create(CloudControlClient);
 router.post("/resources/list", async (c: Context) => {
   const body = await c.req.json<any>();
   if (!body.typeName) return c.json({ error: "typeName is required" }, 400);
-/* istanbul ignore next */
   const client = getClient();
   const result = await client.send(
     new ListResourcesCommand({

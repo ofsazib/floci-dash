@@ -527,7 +527,6 @@ export function BackupDashboard() {
   const [vaultName, setVaultName] = useState("");
 
   const plans = (plansData?.plans || []).map((p: any) => ({
-/* istanbul ignore next */
     id: p.BackupPlanId,
     name: p.BackupPlanName || p.BackupPlan?.BackupPlanName || "-",
     created: p.CreationDate ? new Date(p.CreationDate).toLocaleDateString() : "-",

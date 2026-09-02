@@ -69,7 +69,6 @@ router.get("/databases", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new GetDatabasesCommand({}));
   const databases = result.DatabaseList || [];
-/* istanbul ignore next */
   return c.json({ databases, total: databases.length });
 });
 

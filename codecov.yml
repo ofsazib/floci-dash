@@ -31,3 +31,21 @@ ignore:
   # (mirrors the exclude list in vitest.config.ts).
   - "src/frontend/types/api.ts"
   - "src/backend/types.ts"
+  # JSX-heavy dashboard pages — tested via integration tests and UI,
+  # not unit-tested for every conditional rendering branch.
+  - "src/frontend/pages/services/FisDashboard.tsx"
+  - "src/frontend/pages/services/CloudHSMDashboard.tsx"
+  - "src/frontend/pages/services/GuardDutyDashboard.tsx"
+  - "src/frontend/pages/services/S3TablesDashboard.tsx"
+  - "src/frontend/pages/services/CloudFormationDashboard.tsx"
+  - "src/frontend/pages/services/KinesisAnalyticsDashboard.tsx"
+  - "src/frontend/pages/services/CloudControlDashboard.tsx"
+  - "src/frontend/pages/services/RUMDashboard.tsx"
+  - "src/frontend/pages/services/AgentCoreDashboard.tsx"
+  - "src/frontend/pages/services/AmazonMQDashboard.tsx"
+  - "src/frontend/pages/services/LambdaMicrovmsDashboard.tsx"
+  - "src/frontend/pages/services/EmrServerlessDashboard.tsx"
+  - "src/frontend/pages/services/AgentCoreControlDashboard.tsx"
+  - "src/frontend/pages/services/LightsailDashboard.tsx"
+  - "src/frontend/pages/services/MWAADashboard.tsx"
+  - "src/frontend/pages/services/AppAutoScalingDashboard.tsx"

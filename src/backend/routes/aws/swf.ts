@@ -40,7 +40,6 @@ const getClient = () => create(SWFClient);
 
 router.get("/domains", async (c: Context) => {
   const status = c.req.query("registrationStatus") || "REGISTERED";
-/* istanbul ignore next */
   const client = getClient();
   const result = await client.send(new ListDomainsCommand({ registrationStatus: status as any }));
   const domains = result.domainInfos || [];

@@ -29,7 +29,6 @@ export function logsListQuery(opts: {
 }): string {
   const qs = new URLSearchParams();
   if (opts.prefix) qs.set("prefix", opts.prefix);
-/* istanbul ignore next */
   qs.set("limit", String(opts.limit ?? LOGS_PAGE_SIZE));
   if (opts.nextToken) qs.set("nextToken", opts.nextToken);
   if (opts.q) qs.set("q", opts.q);

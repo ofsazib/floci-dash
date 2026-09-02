@@ -60,7 +60,6 @@ export function useToggleRotation() {
   return useMutation({
     mutationFn: ({ id, enable }: { id: string; enable: boolean }) =>
       api(`/aws/kms/keys/${id}/${enable ? "enable-rotation" : "disable-rotation"}`, { method: "POST" }),
-/* istanbul ignore next */
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "kms"] }),
   });
 }

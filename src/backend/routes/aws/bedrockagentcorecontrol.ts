@@ -1,8 +1,6 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
-/* istanbul ignore start */
 import { flociFetch } from "../../clients/floci";
-/* istanbul ignore end */
 
 const router = new Hono();
 
@@ -23,7 +21,6 @@ router.get("/runtimes/:id", async (c: Context) => {
   const id = c.req.param("id")!;
   const version = c.req.query("version");
   const qs = version ? `?version=${encodeURIComponent(version)}` : "";
-/* istanbul ignore next */
   const result = await flociFetch(`/runtimes/${encodeURIComponent(id)}/${qs}`);
   return c.json(result);
 });

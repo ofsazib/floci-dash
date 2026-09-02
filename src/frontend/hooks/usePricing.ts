@@ -8,7 +8,6 @@ const PRICING_KEY = ["aws", "pricing"];
 export function usePricingServices(params?: { formatVersion?: string; maxResults?: number; serviceCode?: string }) {
   const qs = new URLSearchParams();
   if (params?.formatVersion) qs.set("formatVersion", params.formatVersion);
-/* istanbul ignore next */
   if (params?.maxResults != null) qs.set("maxResults", String(params.maxResults));
   if (params?.serviceCode) qs.set("serviceCode", params.serviceCode);
   const q = qs.toString();

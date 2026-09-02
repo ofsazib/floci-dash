@@ -29,7 +29,6 @@ export function clearGlobalErrorReporter() {
  */
 export function reportError(error: unknown, context?: string) {
   if (!_reporter) return;
-/* istanbul ignore next */
   const message =
     error instanceof Error ? error.message : typeof error === "string" ? error : "An unexpected error occurred";
   _reporter(message, context);

@@ -15,7 +15,6 @@ interface PropertyTableProps {
 
 function PropertyRow({ item, labelWidth }: { item: PropertyItem; labelWidth: string }) {
   const renderedValue = item.href ? (
-/* istanbul ignore next */
     <Button variant="link" href={item.href}>
       {item.value}
     </Button>

@@ -35,7 +35,6 @@ function logs(): CloudWatchLogsClient {
 
 function parsePageLimit(raw: string | undefined): number {
   if (raw == null || raw === "") return LOGS_PAGE_SIZE;
-/* istanbul ignore next */
   const n = Number.parseInt(raw, 10);
   if (!Number.isFinite(n) || n < 1) return LOGS_PAGE_SIZE;
   return Math.min(n, LOGS_MAX_PAGE);

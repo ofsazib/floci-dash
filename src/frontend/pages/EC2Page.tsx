@@ -96,7 +96,6 @@ export default function EC2Page() {
   const [selectedVpc, setSelectedVpc] = useState<string | null>(null);
 
   if (selectedInstance) {
-/* istanbul ignore next */
     return <EC2InstanceDetail id={selectedInstance} onBack={() => setSelectedInstance(null)} />;
   }
 

@@ -103,6 +103,13 @@ describe("MSK Configurations", () => {
     expect(body.configurations).toHaveLength(1);
   });
 
+  it("GET /configurations — empty fallback", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/configurations");
+    const body = await res.json();
+    expect(body.configurations).toEqual([]);
+  });
+
   it("GET /configurations/:arn — describes configuration", async () => {
     mockSend.mockResolvedValueOnce({ Arn: CONFIG_ARN, Name: "my-config", State: "ACTIVE" });
     const res = await get(`/configurations/${CONFIG_ARN_ENC}`);
@@ -150,6 +157,13 @@ describe("MSK Configurations", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.revisions).toHaveLength(2);
+  });
+
+  it("GET /configurations/:arn/revisions — empty fallback", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get(`/configurations/${CONFIG_ARN_ENC}/revisions`);
+    const body = await res.json();
+    expect(body.revisions).toEqual([]);
   });
 
   it("GET /configurations/:arn/revisions/:rev — describes revision", async () => {

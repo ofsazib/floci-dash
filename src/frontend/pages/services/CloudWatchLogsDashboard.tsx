@@ -512,7 +512,6 @@ export function CloudWatchLogsDashboard() {
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
 
   if (selectedGroup) {
-/* istanbul ignore next */
     return (
       <CloudWatchLogGroupDetail
         name={selectedGroup}

@@ -96,7 +96,6 @@ export default function S3BucketConfig({ bucket }: Props) {
           <Button
             key={tab.id}
             variant={activeTab === tab.id ? "primary" : "normal"}
-/* istanbul ignore next */
             onClick={() => setActiveTab(tab.id)}
           >
             {tab.label}

@@ -15,7 +15,6 @@ const getClient = () => create(PricingClient);
 
 router.get("/services", async (c: Context) => {
   const formatVersion = c.req.query("formatVersion") || "aws_v1";
-/* istanbul ignore next */
   const maxResults = Number(c.req.query("maxResults")) || 100;
   const serviceCode = c.req.query("serviceCode") || undefined;
 

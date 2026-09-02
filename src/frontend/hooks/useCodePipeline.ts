@@ -145,7 +145,6 @@ export function usePutApprovalResult() {
 
 export function useActionExecutions(name: string | null, executionId?: string | null) {
   const searchParams = executionId ? `?executionId=${encodeURIComponent(executionId)}` : "";
-/* istanbul ignore next */
   return useQuery({
     queryKey: ["aws", "codepipeline", "pipelines", name, "actions", executionId],
     queryFn: () => api<{ actions: any[]; total: number }>(

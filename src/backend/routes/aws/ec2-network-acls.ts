@@ -25,7 +25,6 @@ router.get("/network-acls", async (c: Context) => {
   const filterVpc = c.req.query("vpcId");
   const params: any = {};
   if (filterVpc) {
-/* istanbul ignore next */
     params.Filters = [{ Name: "vpc-id", Values: [filterVpc] }];
   }
 

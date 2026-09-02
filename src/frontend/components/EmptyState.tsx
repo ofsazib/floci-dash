@@ -13,7 +13,6 @@ export default function EmptyState({ title, description, actionText, onAction, i
     <Box textAlign="center" padding={{ top: "xxl", bottom: "xxl" }}>
       <SpaceBetween size="m" direction="vertical" alignItems="center">
         {icon && (
-/* istanbul ignore next */
           <Box fontSize="display-l" color="text-status-inactive">
             {icon}
           </Box>

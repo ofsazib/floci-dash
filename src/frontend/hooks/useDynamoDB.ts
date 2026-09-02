@@ -116,7 +116,6 @@ export function useDynamoDBFilteredScan(
   exclusiveStartKey?: Record<string, any> | null
 ) {
   const hasFilters = filterParams && filterParams.filters.length > 0;
-/* istanbul ignore next */
   return useQuery<ScanResult>({
     queryKey: ["aws", "dynamodb", "items", table, filterParams, exclusiveStartKey],
     queryFn: () =>

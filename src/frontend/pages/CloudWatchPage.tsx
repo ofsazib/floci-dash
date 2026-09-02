@@ -67,7 +67,6 @@ const ALARM_STATES: Record<string, "red" | "green" | "blue"> = {
 
 function Sparkline({ values }: { values: number[] }) {
   if (values.length === 0) return <span className="fd-text-muted">-</span>;
-/* istanbul ignore next */
   const max = Math.max(...values);
   const min = Math.min(...values);
   const range = max - min || 1;

@@ -63,7 +63,6 @@ export default function S3Page() {
   const selectedBucket = searchParams.get("bucket");
   const selectedObject = searchParams.get("object");
   const [activeTab, setActiveTab] = useState(selectedBucket ? "objects" : "buckets");
-/* istanbul ignore next */
   const [showCreateBucket, setShowCreateBucket] = useState(false);
   const [showUploadObject, setShowUploadObject] = useState(false);
   const [newBucketName, setNewBucketName] = useState("");

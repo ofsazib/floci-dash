@@ -122,6 +122,7 @@ describe("SES v2 — identities", () => {
     expect((await j(list)).policies).toEqual({ p1: "{}" });
     expect((await router.request(`${AG}/email-identities/x%40y.z/policies/p1`, { method: "PUT", body: JSON.stringify({ policy: "{}" }), headers: { "content-type": "application/json" } })).status).toBe(201);
     expect((await router.request(`${AG}/email-identities/x%40y.z/policies/p1`, { method: "POST", body: JSON.stringify({ policy: "{}" }), headers: { "content-type": "application/json" } })).status).toBe(200);
+    expect((await router.request(`${AG}/email-identities/x%40y.z/policies/p1`, { method: "POST", body: "{}", headers: { "content-type": "application/json" } })).status).toBe(400);
     expect((await router.request(`${AG}/email-identities/x%40y.z/policies/p1`, { method: "DELETE" })).status).toBe(200);
     expect((await router.request(`${AG}/email-identities/x%40y.z/policies/p1`, { method: "PUT", body: "{}", headers: { "content-type": "application/json" } })).status).toBe(400);
   });

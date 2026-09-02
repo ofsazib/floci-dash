@@ -7,7 +7,6 @@ import { useDiscoverFloci } from "../hooks/useSystem";
 export default function Settings() {
   const { darkMode, refreshInterval, toggleDarkMode, setRefreshInterval, flociEndpoint, setFlociEndpoint } = useSettings();
   const [endpointInput, setEndpointInput] = useState(flociEndpoint || "http://localhost:4566");
-/* istanbul ignore next */
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [maintenanceBusy, setMaintenanceBusy] = useState(false);

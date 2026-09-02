@@ -28,7 +28,6 @@ router.get("/pipes", async (c: Context) => {
     })
   );
   const pipes = result.Pipes || [];
-/* istanbul ignore next */
   return c.json({ pipes, total: pipes.length });
 });
 

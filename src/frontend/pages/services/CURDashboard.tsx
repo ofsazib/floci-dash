@@ -527,7 +527,6 @@ export function CURDashboard() {
   ];
 
   const items = (data?.reportDefinitions || []).map((r: any) => ({
-/* istanbul ignore next */
     name: r.ReportName,
     timeUnit: r.TimeUnit,
     format: r.Format,

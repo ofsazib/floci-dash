@@ -1,5 +1,4 @@
 // @vitest-environment happy-dom
-// @v8 ignore start — JSX-heavy dashboard, callbacks tested via integration
 import { useState } from "react";
 import {
   AppLayout,
@@ -68,41 +67,6 @@ export function AppAutoScalingDashboard() {
   const [policyResourceId, setPolicyResourceId] = useState("");
   const [policyDimension, setPolicyDimension] = useState(DIMENSION_OPTIONS[0].value);
   const [targetValue, setTargetValue] = useState("50");
-
-  const submitTarget = async () => {
-    setTargetError(null);
-    try {
-      await registerTarget.mutateAsync({
-        resourceId: resourceId.trim(),
-        scalableDimension: dimension,
-        minCapacity: parseInt(minCapacity, 10) || 1,
-        maxCapacity: parseInt(maxCapacity, 10) || 4,
-      });
-      setShowTargetModal(false);
-    } catch (e: any) {
-      setTargetError(e?.message || "Failed to register scalable target");
-    }
-  };
-
-  const submitPolicy = async () => {
-    setPolicyError(null);
-    try {
-      await putPolicy.mutateAsync({
-        policyName: policyName.trim(),
-        resourceId: policyResourceId.trim(),
-        scalableDimension: policyDimension,
-        targetTrackingConfiguration: {
-          TargetValue: parseFloat(targetValue) || 50,
-          PredefinedMetricSpecification: {
-            PredefinedMetricType: "ECSServiceAverageCPUUtilization",
-          },
-        },
-      });
-      setShowPolicyModal(false);
-    } catch (e: any) {
-      setPolicyError(e?.message || "Failed to create scaling policy");
-    }
-  };
 
   return (
     <>
@@ -330,4 +294,3 @@ export function AppAutoScalingDashboard() {
     </>
   );
 }
-// @v8 ignore end

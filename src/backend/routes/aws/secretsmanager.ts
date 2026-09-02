@@ -52,7 +52,6 @@ function mapSecret(s: any) {
 router.get("/secrets", async (c: Context) => {
   const result = await sm().send(new ListSecretsCommand({}));
   const secrets = (result.SecretList || []).map(mapSecret);
-/* istanbul ignore next */
   return c.json({ secrets, total: secrets.length });
 });
 

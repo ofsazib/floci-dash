@@ -513,7 +513,6 @@ export function CloudFrontDashboard() {
   const [activeTab, setActiveTab] = useState("distributions");
   const { data: invData } = useCloudFrontInvalidations(selectedDist);
   const createInvalidation = useCreateCloudFrontInvalidation(selectedDist || "");
-/* istanbul ignore next */
   const [showInvalidation, setShowInvalidation] = useState(false);
   const [invPaths, setInvPaths] = useState("/*");
 

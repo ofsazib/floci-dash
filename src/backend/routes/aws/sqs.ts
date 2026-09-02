@@ -56,7 +56,6 @@ router.get("/queues", async (c: Context) => {
   const prefix = c.req.query("prefix");
   const client = getClient();
   const cmd = new ListQueuesCommand(prefix ? { QueueNamePrefix: prefix } : {});
-/* istanbul ignore next */
   const result = await client.send(cmd);
   return c.json({ queueUrls: result.QueueUrls || [] });
 });

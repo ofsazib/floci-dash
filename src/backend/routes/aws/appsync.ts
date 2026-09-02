@@ -2,7 +2,6 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { getAwsConfig } from "../../clients/aws";
 import { AppSyncClient } from "@aws-sdk/client-appsync";
-/* istanbul ignore start */
 import {
   CreateResolverCommand,
   UpdateResolverCommand,
@@ -28,6 +27,8 @@ import {
   ListTagsForResourceCommand,
   TagResourceCommand,
   UntagResourceCommand,
+} from "@aws-sdk/client-appsync";
+import {
   ListGraphqlApisCommand,
   CreateGraphqlApiCommand,
   GetGraphqlApiCommand,
@@ -47,7 +48,6 @@ import {
   DeleteApiKeyCommand,
   ListTypesCommand,
 } from "@aws-sdk/client-appsync";
-/* istanbul ignore end */
 
 const router = new Hono();
 const getClient = () => new AppSyncClient(getAwsConfig());

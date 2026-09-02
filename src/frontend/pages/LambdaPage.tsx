@@ -63,7 +63,6 @@ export default function LambdaPage() {
   const [selectedFunction, setSelectedFunction] = useState<string | null>(null);
 
   if (selectedFunction) {
-/* istanbul ignore next */
     return (
       <LambdaFunctionDetail
         name={selectedFunction}

@@ -697,6 +697,16 @@ describe("KMS extras", () => {
     expect(body.keyId).toBe("k1");
   });
 
+  it("generate data key without plaintext — catches invalid JSON body", async () => {
+    mockSend.mockResolvedValueOnce({ CiphertextBlob: new Uint8Array([1, 2]), KeyId: "k1" });
+    const res = await router.request("/keys/k1/data-key-plaintext-free", {
+      method: "POST",
+      body: "not-json",
+      headers: { "content-type": "application/json" },
+    });
+    expect(res.status).toBe(201);
+  });
+
   it("update alias + 400 + prefix normalization", async () => {
     mockSend.mockResolvedValue({});
     const res = await put("/aliases/prod-key", { targetKeyId: "k2" });

@@ -513,7 +513,6 @@ export function PricingDashboard() {
     selectedServiceCode ? { serviceCode: selectedServiceCode } : null
   );
   const { data: priceListsData } = usePricingPriceLists(selectedServiceCode ? selectedServiceCode : null);
-/* istanbul ignore next */
   const getUrl = usePricingPriceListFileUrl();
 
   return (

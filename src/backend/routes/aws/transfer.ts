@@ -31,7 +31,6 @@ router.get("/servers", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new ListServersCommand({}));
   if (!result.Servers?.length) return c.json({ servers: [], total: 0 });
-/* istanbul ignore next */
   const detailed = await Promise.all(
     result.Servers.map((s: any) =>
       client.send(new DescribeServerCommand({ ServerId: s.ServerId }))

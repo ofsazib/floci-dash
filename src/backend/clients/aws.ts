@@ -1,7 +1,6 @@
 import { getFlociEndpoint } from "./config";
 
 const REGION = process.env.AWS_REGION || "us-east-1";
-/* istanbul ignore next */
 const CREDS = { accessKeyId: "test", secretAccessKey: "test" };
 
 function create<T>(Ctor: new (c: any) => T, extra?: any): T {

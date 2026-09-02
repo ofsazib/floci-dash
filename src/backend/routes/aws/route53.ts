@@ -2,13 +2,14 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { getAwsConfig } from "../../clients/aws";
 import { Route53Client } from "@aws-sdk/client-route-53";
-/* istanbul ignore start */
 import {
   ListTagsForResourceCommand,
   ChangeTagsForResourceCommand,
   GetChangeCommand,
   GetDNSSECCommand,
   GetAccountLimitCommand,
+} from "@aws-sdk/client-route-53";
+import {
   ListHostedZonesCommand,
   GetHostedZoneCommand,
   CreateHostedZoneCommand,
@@ -23,7 +24,6 @@ import {
   GetHealthCheckCommand,
   UpdateHealthCheckCommand,
 } from "@aws-sdk/client-route-53";
-/* istanbul ignore end */
 
 const router = new Hono();
 const getClient = () => new Route53Client(getAwsConfig());

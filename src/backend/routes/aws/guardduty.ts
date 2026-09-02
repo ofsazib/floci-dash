@@ -17,7 +17,6 @@ router.get("/detectors", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new ListDetectorsCommand({}));
   const detectorIds = result.DetectorIds || [];
-/* istanbul ignore next */
   return c.json({ detectorIds, total: detectorIds.length, nextToken: result.NextToken ?? null });
 });
 

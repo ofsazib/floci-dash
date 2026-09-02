@@ -6,6 +6,5 @@ export async function flociFetch(path: string, init?: RequestInit) {
     headers: { "Content-Type": "application/json", ...init?.headers },
   });
   if (!res.ok) throw new Error(`Floci ${res.status}: ${res.statusText}`);
-/* istanbul ignore next */
   return res.json();
 }

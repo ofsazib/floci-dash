@@ -55,7 +55,6 @@ router.put("/tables/:name/update", async (c: Context) => {
   }>();
 
   if (!body || Object.keys(body).length === 0) {
-/* istanbul ignore next */
     return c.json({ error: "At least one update parameter is required" }, 400);
   }
 

@@ -568,7 +568,6 @@ export function WafV2Dashboard() {
   const [submittedWebACLArn, setSubmittedWebACLArn] = useState("");
   const [submittedPermissionArn, setSubmittedPermissionArn] = useState("");
   const webAclForResourceQuery = useGetWebACLForResource(submittedResourceArn || null);
-/* istanbul ignore next */
   const resourcesForWebAclQuery = useResourcesForWebACL(submittedWebACLArn || null);
   const permissionQuery = usePermissionPolicy(submittedPermissionArn || null);
 

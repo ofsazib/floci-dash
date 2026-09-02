@@ -34,7 +34,6 @@ function statusBadge(status: string) {
     CANCELLED: { color: "grey", label: "Cancelled" },
   };
   const m = map[status] || { color: "blue" as const, label: status };
-/* istanbul ignore next */
   return <Badge color={m.color}>{m.label}</Badge>;
 }
 

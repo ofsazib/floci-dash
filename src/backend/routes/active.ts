@@ -20,7 +20,6 @@ router.get("/", async (c: Context) => {
     const s3 = new S3Client({ ...config, forcePathStyle: true });
     const buckets = await s3.send(new ListBucketsCommand({}));
     if ((buckets.Buckets?.length ?? 0) > 0) {
-/* istanbul ignore next */
       activeCount++;
       activeServices.push("s3");
     }

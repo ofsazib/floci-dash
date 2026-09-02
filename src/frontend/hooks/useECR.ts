@@ -162,7 +162,6 @@ export function useECRImageManifest() {
     mutationFn: ({ repoName, tag, digest }) => {
       const params = new URLSearchParams();
       if (tag) params.set("tag", tag);
-/* istanbul ignore next */
       if (digest) params.set("digest", digest);
       return api(
         `/aws/ecr/repositories/${encodeURIComponent(repoName)}/images/manifest?${params.toString()}`,

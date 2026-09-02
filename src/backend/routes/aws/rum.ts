@@ -20,7 +20,6 @@ router.get("/appmonitors", async (c: Context) => {
     new ListAppMonitorsCommand({ NextToken: nextToken || undefined })
   );
   const monitors = result.AppMonitorSummaries || [];
-/* istanbul ignore next */
   return c.json({ appMonitors: monitors, total: monitors.length, nextToken: result.NextToken ?? null });
 });
 

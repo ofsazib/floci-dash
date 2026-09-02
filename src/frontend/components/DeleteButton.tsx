@@ -21,7 +21,6 @@ export default function DeleteButton({ itemName, resourceType, loading, onDelete
       variant: "danger",
     });
     if (!ok) return;
-/* istanbul ignore next */
     setDeleting(true);
     try {
       await onDelete();

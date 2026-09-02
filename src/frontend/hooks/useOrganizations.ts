@@ -234,7 +234,6 @@ export function useCloseOrgAccount() {
 // ── Policies ─────────────────────────────────────────────
 
 export function useOrgPolicies(filter = "SERVICE_CONTROL_POLICY") {
-/* istanbul ignore next */
   return useQuery<{ policies: OrgPolicy[]; total: number }>({
     queryKey: ["aws", "org", "policies", filter],
     queryFn: () => api(`/aws/organizations/policies?filter=${filter}`),

@@ -1,4 +1,3 @@
-// @v8 ignore start — JSX-heavy dashboard, callbacks tested via integration
 import { useState } from "react";
 import {
   Box,
@@ -296,4 +295,3 @@ export function S3TablesDashboard() {
     </SpaceBetween>
   );
 }
-// @v8 ignore end

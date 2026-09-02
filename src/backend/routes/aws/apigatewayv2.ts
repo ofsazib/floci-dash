@@ -61,7 +61,6 @@ router.get("/apis", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new GetApisCommand({}));
   const apis = result.Items || [];
-/* istanbul ignore next */
   return c.json({ apis, total: apis.length });
 });
 

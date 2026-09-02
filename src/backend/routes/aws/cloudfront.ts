@@ -2,7 +2,6 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { create } from "../../clients/aws";
 import { CloudFrontClient } from "@aws-sdk/client-cloudfront";
-/* istanbul ignore start */
 import {
   ListDistributionsCommand,
   GetDistributionCommand,
@@ -62,7 +61,6 @@ import {
   TagResourceCommand,
   UntagResourceCommand,
 } from "@aws-sdk/client-cloudfront";
-/* istanbul ignore end */
 
 const router = new Hono();
 const getClient = () => create(CloudFrontClient);
@@ -73,7 +71,6 @@ router.get("/distributions", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new ListDistributionsCommand({}));
   const distributions = result.DistributionList?.Items || [];
-/* istanbul ignore next */
   return c.json({ distributions, total: distributions.length });
 });
 
@@ -233,7 +230,6 @@ const configFor = (body: any, configName: string, nameKey: string) => {
   if (body[configName]) return body[configName];
   if (body.config) return body.config;
   return { [nameKey]: body.name ?? "" };
-/* istanbul ignore next */
 };
 
 for (const [route, fam] of Object.entries(policyFamilies)) {
@@ -252,7 +248,6 @@ for (const [route, fam] of Object.entries(policyFamilies)) {
     const client = getClient();
     const result = await client.send(new fam.list({}));
     const list = (result as any)[fam.listField]?.Items || [];
-/* istanbul ignore next */
     return c.json({ [route]: list, total: list.length });
   });
 
@@ -318,7 +313,6 @@ router.delete("/origin-access-controls/:id", async (c: Context) => {
   const client = getClient();
   await client.send(new DeleteOriginAccessControlCommand({
     Id: c.req.param("id")!, IfMatch: c.req.query("ifMatch") || undefined,
-/* istanbul ignore next */
   }));
   return c.json({ deleted: true });
 });
@@ -342,7 +336,6 @@ router.get("/oai", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new ListCloudFrontOriginAccessIdentitiesCommand({ MaxItems: "100" } as any));
   const items = result.CloudFrontOriginAccessIdentityList?.Items || [];
-/* istanbul ignore next */
   return c.json({ items, total: items.length });
 });
 
@@ -367,7 +360,6 @@ router.delete("/oai/:id", async (c: Context) => {
   const client = getClient();
   await client.send(new DeleteCloudFrontOriginAccessIdentityCommand({
     Id: c.req.param("id")!, IfMatch: c.req.query("ifMatch") || undefined,
-/* istanbul ignore next */
   }));
   return c.json({ deleted: true });
 });
@@ -397,7 +389,6 @@ router.get("/functions/:name/code", async (c: Context) => {
   const result = await client.send(new GetFunctionCommand({ Name: c.req.param("name")! }));
   return c.json({
     etag: result.ETag ?? null,
-/* istanbul ignore next */
     codeBase64: result.FunctionCode ? Buffer.from(result.FunctionCode).toString("base64") : null,
   });
 });
@@ -418,7 +409,6 @@ router.post("/functions/:name/publish", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new PublishFunctionCommand({
     Name: c.req.param("name")!, IfMatch: c.req.header("If-Match") || c.req.query("ifMatch") || undefined,
-/* istanbul ignore next */
   }));
   return c.json({ functionSummary: result.FunctionSummary ?? null });
 });
@@ -427,7 +417,6 @@ router.delete("/functions/:name", async (c: Context) => {
   const client = getClient();
   await client.send(new DeleteFunctionCommand({
     Name: c.req.param("name")!, IfMatch: c.req.header("If-Match") || c.req.query("ifMatch") || undefined,
-/* istanbul ignore next */
   }));
   return c.json({ deleted: true });
 });
@@ -438,7 +427,6 @@ router.post("/public-keys", async (c: Context) => {
   const body = await c.req.json<any>();
   const config = body.PublicKeyConfig || body.config || (body.name ? {
     Name: body.name, CallerReference: body.callerReference || body.name, EncodedKey: body.encodedKey || "",
-/* istanbul ignore next */
   } : null);
   if (!config) return c.json({ error: "config is required" }, 400);
   const client = getClient();
@@ -450,7 +438,6 @@ router.get("/public-keys", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new ListPublicKeysCommand({}));
   const items = result.PublicKeyList?.Items || [];
-/* istanbul ignore next */
   return c.json({ items, total: items.length });
 });
 
@@ -475,7 +462,6 @@ router.delete("/public-keys/:id", async (c: Context) => {
   const client = getClient();
   await client.send(new DeletePublicKeyCommand({
     Id: c.req.param("id")!, IfMatch: c.req.query("ifMatch") || undefined,
-/* istanbul ignore next */
   }));
   return c.json({ deleted: true });
 });
@@ -484,7 +470,6 @@ router.post("/key-groups", async (c: Context) => {
   const body = await c.req.json<any>();
   const config = body.KeyGroupConfig || body.config || (body.name ? {
     Name: body.name, Items: body.items || [],
-/* istanbul ignore next */
   } : null);
   if (!config) return c.json({ error: "config is required" }, 400);
   const client = getClient();
@@ -496,7 +481,6 @@ router.get("/key-groups", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new ListKeyGroupsCommand({}));
   const items = result.KeyGroupList?.Items || [];
-/* istanbul ignore next */
   return c.json({ items, total: items.length });
 });
 
@@ -521,7 +505,6 @@ router.delete("/key-groups/:id", async (c: Context) => {
   const client = getClient();
   await client.send(new DeleteKeyGroupCommand({
     Id: c.req.param("id")!, IfMatch: c.req.query("ifMatch") || undefined,
-/* istanbul ignore next */
   }));
   return c.json({ deleted: true });
 });
@@ -536,7 +519,6 @@ router.post("/distributions-with-tags", async (c: Context) => {
     DistributionConfigWithTags: {
       DistributionConfig: body.distributionConfig,
       Tags: { Items: (body.tags || []).map((t: any) => ({ Key: t.Key ?? t.key, Value: t.Value ?? t.value })) },
-/* istanbul ignore next */
     },
   } as any));
   return c.json({ distribution: result.Distribution ?? null }, 201);
@@ -567,7 +549,6 @@ router.post("/tags", async (c: Context) => {
   await client.send(new TagResourceCommand({
     ResourceARN: body.resourceArn,
     Tags: { Items: (body.tags || []).map((t: any) => ({ Key: t.Key ?? t.key, Value: t.Value ?? t.value })) },
-/* istanbul ignore next */
   } as any));
   return c.json({ tagged: true });
 });

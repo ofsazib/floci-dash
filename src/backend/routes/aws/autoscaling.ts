@@ -50,7 +50,6 @@ router.get("/groups", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new DescribeAutoScalingGroupsCommand({}));
   const groups = result.AutoScalingGroups || [];
-/* istanbul ignore next */
   return c.json({ groups, total: groups.length });
 });
 

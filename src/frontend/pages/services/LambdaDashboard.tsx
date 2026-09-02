@@ -56,7 +56,6 @@ export function LambdaDashboard() {
   const [selectedFunction, setSelectedFunction] = useState<string | null>(null);
 
   if (selectedFunction) {
-/* istanbul ignore next */
     return (
       <LambdaFunctionDetail
         name={selectedFunction}

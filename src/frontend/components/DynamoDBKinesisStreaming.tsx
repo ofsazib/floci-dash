@@ -32,7 +32,6 @@ function statusBadge(status: string) {
     ENABLE_FAILED: { color: "red", label: "Enable Failed" },
   };
   const m = map[status] || { color: "blue" as const, label: status };
-/* istanbul ignore next */
   return <Badge color={m.color}>{m.label}</Badge>;
 }
 

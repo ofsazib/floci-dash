@@ -55,7 +55,6 @@ export default function SQSPage() {
   const { confirm, dialog } = useConfirmDialog();
 
   const selectedQueue = searchParams.get("queueUrl") || null;
-/* istanbul ignore next */
   const [showCreate, setShowCreate] = useState(false);
   const [showSendMessage, setShowSendMessage] = useState(false);
   const [searchFilter, setSearchFilter] = useState("");

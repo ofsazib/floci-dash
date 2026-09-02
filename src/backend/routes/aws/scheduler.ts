@@ -22,7 +22,6 @@ router.get("/groups", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new ListScheduleGroupsCommand({}));
   const groups = result.ScheduleGroups || [];
-/* istanbul ignore next */
   return c.json({ groups, total: groups.length });
 });
 

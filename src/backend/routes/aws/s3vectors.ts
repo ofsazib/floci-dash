@@ -8,7 +8,6 @@ const router = new Hono();
 
 router.get("/buckets", async (c: Context) => {
   const maxResults = c.req.query("maxResults") ? parseInt(c.req.query("maxResults")!) : undefined;
-/* istanbul ignore next */
   const nextToken = c.req.query("nextToken");
   const prefix = c.req.query("prefix");
   const data = await flociFetch("/ListVectorBuckets", {

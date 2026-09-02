@@ -49,7 +49,6 @@ router.get("/applications", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new ListApplicationsCommand({}));
   const names = result.applications || [];
-/* istanbul ignore next */
   if (!names.length) return c.json({ applications: [], total: 0 });
   const detailed = await client.send(new BatchGetApplicationsCommand({ applicationNames: names }));
   return c.json({
