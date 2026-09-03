@@ -1046,7 +1046,7 @@ function CloudWatchLogStreamDetail({
   const [timeRange, setTimeRange] = useState(TIME_RANGE_OPTIONS[2]); // Last 1 hour
   const isSearchMode = appliedFilter.trim().length > 0;
 
-  const limitNum = parseInt((limit.value || "500") as string);
+  const limitNum = parseInt(limit.value!);
   const startTimeOffsetMs =
     timeRange.value && timeRange.value !== "0"
       ? parseInt(timeRange.value as string)

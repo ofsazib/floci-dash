@@ -1778,6 +1778,44 @@ describe("CloudWatchLogsDashboard", () => {
       )
     );
   });
+
+  it("runs the search on Enter and ignores other keys", async () => {
+    const user = userEvent.setup();
+    await gotoStream(user);
+    const input = screen.getByLabelText("Filter pattern");
+    await user.type(input, "ERROR");
+    // A non-Enter key must not commit the filter.
+    await user.type(input, "{Escape}");
+    expect(mockFilteredLogEvents).not.toHaveBeenCalledWith(
+      "/aws/lambda/test", "my-stream",
+      expect.objectContaining({ filterPattern: "ERROR" }),
+      expect.anything()
+    );
+    await user.type(input, "{Enter}");
+    await waitFor(() =>
+      expect(mockFilteredLogEvents).toHaveBeenLastCalledWith(
+        "/aws/lambda/test", "my-stream",
+        expect.objectContaining({ filterPattern: "ERROR" }),
+        expect.anything()
+      )
+    );
+  });
+
+  it("drops the time window when the range is switched to All time", async () => {
+    const user = userEvent.setup();
+    await gotoStream(user);
+    await user.click(screen.getByRole("button", { name: /Time range/i }));
+    await user.click(screen.getAllByRole("option", { name: /All time/i })[0]);
+    await user.type(screen.getByLabelText("Filter pattern"), "ERROR");
+    await user.click(screen.getByRole("button", { name: /^Search$/i }));
+    await waitFor(() =>
+      expect(mockFilteredLogEvents).toHaveBeenLastCalledWith(
+        "/aws/lambda/test", "my-stream",
+        expect.objectContaining({ filterPattern: "ERROR", startTimeOffsetMs: undefined }),
+        expect.anything()
+      )
+    );
+  });
 });
 
 describe("CloudWatchLogsDashboard — Data Protection tab", () => {

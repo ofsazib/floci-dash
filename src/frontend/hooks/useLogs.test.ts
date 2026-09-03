@@ -386,6 +386,35 @@ describe("useFilteredLogEvents", () => {
       })
     );
   });
+
+  it("omits limit when none is given", async () => {
+    mockApi.mockResolvedValueOnce({ events: [] });
+    const { result } = renderHook(
+      () => useFilteredLogEvents("/g", "s", { filterPattern: "ERROR" }),
+      { wrapper: createWrapper() }
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/logs/log-groups/${encodeURIComponent("/g")}/filter-events`,
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          filterPattern: "ERROR",
+          logStreamNames: ["s"],
+        }),
+      })
+    );
+  });
+
+  it("disables polling when autoRefresh is false", async () => {
+    mockApi.mockResolvedValueOnce({ events: [] });
+    const { result } = renderHook(
+      () => useFilteredLogEvents("/g", "s", { filterPattern: "ERROR" }, false),
+      { wrapper: createWrapper() }
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledTimes(1);
+  });
 });
 
 // ─── Subscription Filter Hooks ────────────────────────
