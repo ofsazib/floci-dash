@@ -26,7 +26,7 @@ An AWS Console-style web dashboard for Floci, the local AWS emulator. The dashbo
 | Shared components | Done | ResourceTable, CreateModal, DeleteButton, ServiceCard, ServiceGrid, StatCard, StatusBadge |
 | Layout | Done | AppLayoutShell with TopNavigation, SideNavigation, dark mode |
 | Settings | Done | Dark mode toggle, refresh interval |
-| ~89 services implemented | ServicePage: browse, create, delete | 16 newer Floci services (N.1–N.19; N.9 + N.16 + N.17 shipped) still need dashboards — see GAP ANALYSIS |
+| ~89 services implemented | ServicePage: browse, create, delete | 15 newer Floci services (N.1–N.19; N.9 + N.15 + N.16 + N.17 shipped) still need dashboards — see GAP ANALYSIS |
 
 ### Architecture Constraints
 
@@ -1826,7 +1826,7 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 
 > **Audit date:** 2026-08-25 → refreshed 2026-09-04 (after pulling latest Floci `3600038a`)
 > **Method:** Full diff of every `floci/services/` directory against `src/backend/routes/aws/`, `src/frontend/hooks/`, and `src/frontend/pages/serviceRegistry.tsx`. Checked every `case`/action in Floci Java handlers against dashboard SDK commands. Verified controller-based services (REST endpoints) and JSON-handler services (JSON 1.1 dispatch).
-> **Result:** All previously tracked gaps (G.1–G.97, M.1–M.14) are resolved (Done or N/A). **17 Floci services added between 2026-08-25 and 2026-09-04** remain without dashboard implementation — see N.1–N.19 below (N.9 Service Quotas, N.17 Translate and N.16 Rekognition shipped 2026-09-04).
+> **Result:** All previously tracked gaps (G.1–G.97, M.1–M.14) are resolved (Done or N/A). **17 Floci services added between 2026-08-25 and 2026-09-04** remain without dashboard implementation — see N.1–N.19 below (N.9 Service Quotas, N.15 Comprehend, N.16 Rekognition and N.17 Translate shipped 2026-09-04).
 
 ---
 
@@ -1930,8 +1930,10 @@ From `CodeGuruReviewerController.java`: associateRepository, describeRepositoryA
 #### N.14 Route 53 Resolver (`@aws-sdk/client-route53resolver`) — 18 ops
 From `Route53ResolverJsonHandler.java`: firewall domain lists (Create/Get/List/Delete), resolver endpoints (Create/Get/List/Update/Delete), resolver rules (Create/Get/List/Update/Delete), rule associations (Associate/Disassociate/Get/List). Dashboard: 3 tables (endpoints, rules, domain lists) + association display. Ships alongside existing Route53 dashboard or its own tab/page.
 
-#### N.15 Comprehend (`@aws-sdk/client-comprehend`) — 5 ops
+#### N.15 Comprehend (`@aws-sdk/client-comprehend`) — 5 ops — ✅ **SHIPPED** (2026-09-04)
 DetectSentiment, DetectKeyPhrases, DetectDominantLanguage, DetectPiiEntities, ContainsPiiEntities. Dashboard: text-area test console with per-op result panels. No CRUD.
+
+Files: `src/backend/routes/aws/comprehend.ts` (+test), `src/frontend/hooks/useComprehend.ts` (+test), `src/frontend/pages/services/ComprehendDashboard.tsx` (+test), registered in `routes/aws/index.ts` (`/comprehend`), `serviceRegistry.tsx`, `types/services.ts` (Machine Learning). Backend: `POST /detect-sentiment`, `/detect-key-phrases`, `/detect-dominant-language`, `/detect-pii-entities`, `/contains-pii-entities` (text + optional languageCode). UI: operation select + text area + per-op language select (general 12 codes, PII ops limited to en/es, none for dominant-language); Analyze/Clear buttons; pretty-JSON success/error alerts. Added `@aws-sdk/client-comprehend` dep.
 
 #### N.16 Rekognition (`@aws-sdk/client-rekognition`) — 5 ops — ✅ **SHIPPED** (2026-09-04)
 DetectLabels, DetectFaces, DetectText, CompareFaces, DetectModerationLabels. Dashboard: image-URL + test console with result JSON panels. No CRUD.
@@ -2014,19 +2016,19 @@ Quick wins first (Small), then Medium, then Large — each adds a full backend r
 | ~~1~~ | ~~**Service Quotas** (N.9)~~ | ~~5 ops~~ — ✅ shipped 2026-09-04 |
 | ~~2~~ | ~~**Translate** (N.17)~~ | ~~3 ops~~ — ✅ shipped 2026-09-04 |
 | ~~1~~ | ~~**Rekognition** (N.16)~~ | ~~5 ops, console-only~~ — ✅ shipped 2026-09-04 |
-| 1 | **Comprehend** (N.15) | 5 ops, console-only |
-| 2 | **SSO Admin** (N.19) | 1 op today, tiny starter |
-| 3 | **AMP** (N.12) | 8 ops, workspace CRUD |
-| 4 | **CodeGuru Reviewer** (N.13) | 7 ops, association CRUD |
-| 5 | **AWS RAM** (N.10) | 12 ops, shares + principals |
-| 6 | **AWS Sign-In** (N.18) | raw proxy console, small |
-| 7 | **Amazon Connect** (N.1) | 15 ops, 3 tab types, high value |
-| 8 | **ELB Classic** (N.6) | 20 ops; note classic ≠ v2 SDK/prefix |
-| 9 | **Lake Formation** (N.4) | 16 ops, permissions model |
-| 10 | **Route 53 Resolver** (N.14) | 18 ops, 3 tables |
-| 11 | **Control Tower** (N.11) | 15 ops, landing zones + baselines |
-| 12 | **Resource Explorer 2** (N.5) | 32 ops, index/views/search |
-| 13 | **Redshift** (N.2) | 21 ops, Docker-backed, high value |
-| 14 | **EFS** (N.3) | 17 ops, Docker-backed, high value |
+| ~~1~~ | ~~**Comprehend** (N.15)~~ | ~~5 ops, console-only~~ — ✅ shipped 2026-09-04 |
+| 1 | **SSO Admin** (N.19) | 1 op today, tiny starter |
+| 2 | **AMP** (N.12) | 8 ops, workspace CRUD |
+| 3 | **CodeGuru Reviewer** (N.13) | 7 ops, association CRUD |
+| 4 | **AWS RAM** (N.10) | 12 ops, shares + principals |
+| 5 | **AWS Sign-In** (N.18) | raw proxy console, small |
+| 6 | **Amazon Connect** (N.1) | 15 ops, 3 tab types, high value |
+| 7 | **ELB Classic** (N.6) | 20 ops; note classic ≠ v2 SDK/prefix |
+| 8 | **Lake Formation** (N.4) | 16 ops, permissions model |
+| 9 | **Route 53 Resolver** (N.14) | 18 ops, 3 tables |
+| 10 | **Control Tower** (N.11) | 15 ops, landing zones + baselines |
+| 11 | **Resource Explorer 2** (N.5) | 32 ops, index/views/search |
+| 12 | **Redshift** (N.2) | 21 ops, Docker-backed, high value |
+| 13 | **EFS** (N.3) | 17 ops, Docker-backed, high value |
 | 16 | **Network Firewall** (N.7) | 27 ops, 3 nested configs |
 | 17 | **Service Catalog** (N.8) | 89 ops — stage v1 (portfolios/products/tag-options/provisioned), defer plans/actions/shares |

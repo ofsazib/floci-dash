@@ -478,6 +478,7 @@ These services have full CRUD operations in both backend and frontend:
 | **Service Quotas** | Applied + AWS-default quotas per service code (list/get), request quota increases |
 | **Translate** | Text/document translation console (translate text or pasted document content, list supported languages) |
 | **Rekognition** | Image analysis console (detect labels/faces/text/moderation, compare faces — bytes or S3 object) |
+| **Comprehend** | Text analysis console (sentiment, key phrases, dominant language, PII detection) |
 
 ### Navigation + status (75 services)
 
@@ -494,7 +495,7 @@ All services reported by Floci appear in the sidebar with status indicators.
 **Security:** ACM, Cognito, IAM, KMS, Secrets Manager, WAF v2
 **Management:** AppConfig, AppConfig Data, CloudFormation, CloudTrail, CloudWatch Logs, CloudWatch Metrics, Config, Service Discovery (Cloud Map), Service Quotas, SSM (Systems Manager)
 **Analytics:** Athena, Glue, MSK (Kafka), OpenSearch, Step Functions, Amazon EMR
-**ML/AI:** Bedrock Runtime, Rekognition, Textract, Transcribe, Translate
+**ML/AI:** Bedrock Runtime, Comprehend, Rekognition, Textract, Transcribe, Translate
 **Billing:** BCM Data Exports, Cost Explorer, Cost & Usage Report, Pricing, Resource Groups Tagging
 **Developer Tools:** CodeBuild, CodeDeploy, CodePipeline, Elastic Beanstalk
 **Internet of Things:** IoT Core

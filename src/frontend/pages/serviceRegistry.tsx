@@ -78,6 +78,7 @@ import { AgentCoreControlDashboard } from "./services/AgentCoreControlDashboard"
 import { ServiceQuotasDashboard } from "./services/ServiceQuotasDashboard";
 import { TranslateDashboard } from "./services/TranslateDashboard";
 import { RekognitionDashboard } from "./services/RekognitionDashboard";
+import { ComprehendDashboard } from "./services/ComprehendDashboard";
 
 import type { ComponentType } from "react";
 
@@ -162,4 +163,5 @@ export const SERVICE_DASHBOARDS: Record<string, ComponentType> = {
   "servicequotas": ServiceQuotasDashboard,
   "translate": TranslateDashboard,
   "rekognition": RekognitionDashboard,
+  "comprehend": ComprehendDashboard,
 };
