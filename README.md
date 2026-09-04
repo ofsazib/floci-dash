@@ -475,6 +475,7 @@ These services have full CRUD operations in both backend and frontend:
 | **CloudHSM** | Clusters (list/create/delete), backups (list/delete) |
 | **S3 Tables** | Table buckets, namespaces, tables (list/create/delete each) |
 | **CloudControl** | Generic resources by TypeName (list/describe/create/delete), async request status polling (GetResourceRequestStatus) |
+| **Service Quotas** | Applied + AWS-default quotas per service code (list/get), request quota increases |
 
 ### Navigation + status (75 services)
 
@@ -489,7 +490,7 @@ All services reported by Floci appear in the sidebar with status indicators.
 **Networking:** API Gateway, API Gateway V2, AppSync, CloudFront, ELB, Route 53
 **Messaging:** EventBridge (Events), EventBridge Pipes, EventBridge Scheduler, Kinesis, Kinesis Firehose, SES, SNS, SQS
 **Security:** ACM, Cognito, IAM, KMS, Secrets Manager, WAF v2
-**Management:** AppConfig, AppConfig Data, CloudFormation, CloudTrail, CloudWatch Logs, CloudWatch Metrics, Config, Service Discovery (Cloud Map), SSM (Systems Manager)
+**Management:** AppConfig, AppConfig Data, CloudFormation, CloudTrail, CloudWatch Logs, CloudWatch Metrics, Config, Service Discovery (Cloud Map), Service Quotas, SSM (Systems Manager)
 **Analytics:** Athena, Glue, MSK (Kafka), OpenSearch, Step Functions, Amazon EMR
 **ML/AI:** Bedrock Runtime, Textract, Transcribe
 **Billing:** BCM Data Exports, Cost Explorer, Cost & Usage Report, Pricing, Resource Groups Tagging

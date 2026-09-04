@@ -6,7 +6,7 @@ export const SERVICE_CATEGORIES: Record<string, string[]> = {
   "Networking & Content Delivery": ["elasticloadbalancing", "route53", "cloudfront", "apigateway", "apigatewayv2", "appsync"],
   "Application Integration": ["sqs", "sns", "events", "kinesis", "pipes", "scheduler", "email", "states", "appsync", "swf", "mq"],
   "Security, Identity & Compliance": ["iam", "sts", "cognito-idp", "kms", "secretsmanager", "acm", "wafv2", "guardduty", "cloudhsm"],
-  "Management & Governance": ["organizations", "cloudformation", "monitoring", "logs", "ssm", "config", "appconfig", "appconfigdata", "cloudtrail", "servicediscovery", "fis", "cloudcontrol"],
+  "Management & Governance": ["organizations", "cloudformation", "monitoring", "logs", "ssm", "config", "appconfig", "appconfigdata", "cloudtrail", "servicediscovery", "fis", "cloudcontrol", "servicequotas"],
   "Analytics":      ["athena", "glue", "firehose", "kafka", "es", "emr", "kinesisanalytics", "emrserverless"],
   "Machine Learning": ["bedrock-runtime", "textract", "transcribe", "bedrockagentcore"],
   "Cost Management": ["ce", "cur", "bcm-data-exports", "pricing", "tagging"],
@@ -51,6 +51,7 @@ export const SERVICE_CATEGORY_MAP: Record<string, string> = {
   kms: "Security, Identity & Compliance", secretsmanager: "Security, Identity & Compliance", acm: "Security, Identity & Compliance",
   wafv2: "Security, Identity & Compliance",
   cloudformation: "Management & Governance", monitoring: "Management & Governance", logs: "Management & Governance",
+  servicequotas: "Management & Governance",
   ssm: "Management & Governance", config: "Management & Governance", appconfig: "Management & Governance",
   appconfigdata: "Management & Governance", cloudtrail: "Management & Governance", servicediscovery: "Management & Governance",
   athena: "Analytics", glue: "Analytics", firehose: "Analytics", kafka: "Analytics", es: "Analytics", emr: "Analytics", kinesisanalytics: "Analytics", emrserverless: "Analytics",
@@ -144,6 +145,7 @@ export const SERVICE_LABELS: Record<string, string> = {
   "mq": "AmazonMQ",
   "kinesisanalytics": "Kinesis Analytics V2",
   "emrserverless": "EMR Serverless",
+  "servicequotas": "Service Quotas",
 };
 
 export function getServiceLabel(externalKey: string): string {
