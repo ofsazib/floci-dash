@@ -455,3 +455,24 @@ These dashboard calls have no Floci implementation — they 404/error at runtime
 | Transcribe | 8 | 8 | 0 | vocabulary detail |
 | Transfer | 17 | 17 | 0 | UpdateUser no UI |
 | WAFv2 | 36 | 36 | 0 | ok |
+
+---
+
+## Update — 2026-09-04 (Floci pulled to `3600038a`)
+
+A fresh sweep against the latest Floci (which added many services between 2026-08-25 and 2026-09-04) found **19 completely missing services** that post-date this audit's snapshot. They are tracked in **`PLAN.md` → "Missing Services (N.1–N.19, Sept 2026 audit)"** with per-service implementation specs (endpoints, op lists, SDK packages, dashboard sketches). Quick summary:
+
+| # | Service | Ops | # | Service | Ops |
+|---|---------|-----|---|---------|-----|
+| N.1 | Amazon Connect | 15 | N.11 | Control Tower | 15 |
+| N.2 | Redshift (PG-backed) | 21 | N.12 | Managed Prometheus (AMP) | 8 |
+| N.3 | EFS | 17 | N.13 | CodeGuru Reviewer | 7 |
+| N.4 | Lake Formation | 16 | N.14 | Route 53 Resolver | 18 |
+| N.5 | Resource Explorer 2 | 32 | N.15 | Comprehend | 5 |
+| N.6 | ELB Classic (v1) | 20 | N.16 | Rekognition | 5 |
+| N.7 | Network Firewall | 27 | N.17 | Translate | 3 |
+| N.8 | Service Catalog | 89 | N.18 | AWS Sign-In | 2 |
+| N.9 | Service Quotas | 5 | N.19 | SSO Admin | 1 |
+| N.10 | AWS RAM | 12 | | | |
+
+The services previously flagged in this audit as "missing" (EFS, Lake Formation, Network Firewall, RAM, Resource Explorer, Route 53 Resolver, Service Catalog, Service Quotas) are included in N.1–N.19; the M.1–M.14 milestone services in PLAN.md are all shipped. This file is retained as the historical 2026-08-28 record — **PLAN.md is now the source of truth for remaining work.**

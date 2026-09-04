@@ -26,7 +26,7 @@ An AWS Console-style web dashboard for Floci, the local AWS emulator. The dashbo
 | Shared components | Done | ResourceTable, CreateModal, DeleteButton, ServiceCard, ServiceGrid, StatCard, StatusBadge |
 | Layout | Done | AppLayoutShell with TopNavigation, SideNavigation, dark mode |
 | Settings | Done | Dark mode toggle, refresh interval |
-| 66 services implemented — all Floci services covered! | ServicePage: browse, create, delete | 66 of 66 Floci services covered |
+| ~88 services implemented | ServicePage: browse, create, delete | 18 newer Floci services (N.1–N.19, N.9 Service Quotas shipped) still need dashboards — see GAP ANALYSIS |
 
 ### Architecture Constraints
 
@@ -1824,9 +1824,126 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 ## GAP ANALYSIS — Floci vs Dashboard Parity
 ## ═══════════════════════════════════════════════════════════
 
-> **Audit date:** 2026-08-25 (comprehensive parity audit after v0.1.0 release)
+> **Audit date:** 2026-08-25 → refreshed 2026-09-04 (after pulling latest Floci `3600038a`)
 > **Method:** Full diff of every `floci/services/` directory against `src/backend/routes/aws/`, `src/frontend/hooks/`, and `src/frontend/pages/serviceRegistry.tsx`. Checked every `case`/action in Floci Java handlers against dashboard SDK commands. Verified controller-based services (REST endpoints) and JSON-handler services (JSON 1.1 dispatch).
-> **Result:** All previously tracked gaps (G.1–G.97) are resolved (Done or N/A). **14 Floci services** have NO dashboard implementation. **3 existing services** have new operations added since last audit.
+> **Result:** All previously tracked gaps (G.1–G.97, M.1–M.14) are resolved (Done or N/A). **18 Floci services added between 2026-08-25 and 2026-09-04** remain without dashboard implementation — see N.1–N.19 below (N.9 Service Quotas shipped 2026-09-04).
+
+---
+
+### Missing Services (19 services in Floci, zero in dashboard — Sept 2026 audit)
+
+These are Floci services merged into Floci **after 2026-08-25** (EFS `#2371`, Service Catalog `#2e843e9f`, APS `#2604`, Connect `#2740`, Redshift `#2472`/`#2751`, Network Firewall, Route 53 Resolver, RAM, Control Tower, CodeGuru Reviewer, Comprehend, Rekognition, Translate, Lake Formation, Resource Explorer 2, ELB Classic, AWS Sign-In, SSO Admin). None have a backend route, frontend hook, or dashboard in floci-dash.
+
+| # | Service | Floci Package | Protocol | Ops | Dashboard Sketch | Complexity |
+|---|---------|--------------|----------|-----|------------------|------------|
+| N.1 | **Amazon Connect** | `connect/` | REST JSON `/instance` | 15 | Instance CRUD + attributes + storage-config tabs | Medium |
+| N.2 | **Redshift** | `redshift/` | Query + PG container | 21 | Cluster CRUD, snapshots, parameter groups, subnet groups, tags | Large |
+| N.3 | **EFS** | `efs/` | REST JSON | 17 | File system CRUD, mount targets, access points, policies, lifecycle | Large |
+| N.4 | **Lake Formation** | `lakeformation/` | REST JSON | 16 | Data lake settings, resources, permissions, LF-tags | Medium |
+| N.5 | **Resource Explorer 2** | `resourceexplorer2/` | REST JSON (rewritten `/re2/*`) | 32 | Index/view CRUD + search/query | Medium |
+| N.6 | **ELB Classic (v1)** | `elb/` | Query `2012-06-01` | 20 | Load balancer CRUD + listeners, health checks, instances, AZs, tags | Medium |
+| N.7 | **Network Firewall** | `networkfirewall/` | JSON 1.0 | 27 | Firewall/policy/rule-group CRUD + associations | Large |
+| N.8 | **Service Catalog** | `servicecatalog/` | JSON 1.1 | 89 | Portfolio/product/artifact CRUD, provision, tag options, constraints | Very Large |
+| N.9 | **Service Quotas** | `servicequotas/` | JSON 1.1 | 5 | Quota list/get + increase request | ✅ **Done** |
+| N.10 | **AWS RAM** | `ram/` | REST JSON (lowercase ops) | 12 | Resource share CRUD, principals, invitations, tags | Small |
+| N.11 | **Control Tower** | `controltower/` | REST JSON | 15 | Landing zone CRUD, baselines, operations | Medium |
+| N.12 | **Managed Prometheus (AMP)** | `aps/` | REST JSON | 8 | Workspace CRUD + alias + tags | Small |
+| N.13 | **CodeGuru Reviewer** | `codegurureviewer/` | REST JSON | 7 | Repository association CRUD + tags | Small |
+| N.14 | **Route 53 Resolver** | `route53resolver/` | JSON 1.1 | 18 | Firewall domain lists, resolver endpoints/rules/associations | Medium |
+| N.15 | **Comprehend** | `comprehend/` | JSON 1.1 | 5 | Detect sentiment/key-phrases/language/PII test console | Small |
+| N.16 | **Rekognition** | `rekognition/` | JSON 1.1 | 5 | Detect labels/faces/text/moderation test console | Small |
+| N.17 | **Translate** | `translate/` | JSON 1.1 | 3 | Translate text/document + list languages | Small |
+| N.18 | **AWS Sign-In** | `signin/` | REST OAuth `/v1/authorize`, `/v1/token` | 2 | Token/authorize console (no SDK shape — raw proxy) | Small |
+| N.19 | **SSO Admin** | `ssoadmin/` | JSON 1.1 | 1 | Instance list (very new; grows as Floci adds ops) | Tiny |
+
+---
+
+### Per-Service Implementation Specs (N.1–N.19)
+
+For each service: create `src/backend/routes/aws/{service}.ts`, register in `src/backend/routes/aws/index.ts`, create `src/frontend/hooks/use{Service}.ts`, add a `{Service}Dashboard.tsx`, register in `serviceRegistry.tsx` + `types/services.ts`, then write backend/hook/component tests (100% gate). Verify SDK commands exist via `node -e "console.log(Object.keys(require('@aws-sdk/client-{svc}')))"` before coding; confirm response shapes against Floci source `../floci/src/main/java/io/github/hectorvent/floci/services/{pkg}/`.
+
+#### N.1 Amazon Connect (`@aws-sdk/client-connect`) — 15 ops
+Endpoints from `ConnectController.java` (`@Path("/instance")`):
+- `PUT /instance` → CreateInstance (returns Id + Arn, ACTIVE immediately)
+- `GET /instance` → ListInstances; `GET /instance/{instanceId}` → DescribeInstance (full shape incl. tags)
+- `DELETE /instance/{instanceId}` → DeleteInstance
+- `POST /instance/{instanceId}/attribute/{attributeType}` → UpdateInstanceAttribute; `GET` → DescribeInstanceAttribute; `GET /instance/{instanceId}/attributes` → ListInstanceAttributes
+- `PUT /instance/{instanceId}/storage-config` → AssociateInstanceStorageConfig; `GET /.../storage-config/{associationId}` → Describe; `POST /.../storage-config/{associationId}` → Update; `DELETE` → Disassociate; `GET /instance/{instanceId}/storage-configs` → ListInstanceStorageConfigs
+- Tags via shared `/tags/{resourceArn}` route (TagResource/UntagResource/ListTagsForResource)
+- Dashboard: instances table; detail modal w/ attribute + storage-config sub-tabs; create modal (identity-management-type, alias, inbound/outbound toggles); delete.
+
+#### N.2 Redshift (`@aws-sdk/client-redshift`) — 21 ops (real PostgreSQL container per cluster)
+From `RedshiftQueryHandler.java` (Query protocol, `Action=` param):
+- Clusters: CreateCluster, DescribeClusters (returns dynamic Endpoint.Address/Port), DeleteCluster, ModifyCluster, RebootCluster
+- Snapshots: CreateClusterSnapshot, DescribeClusterSnapshots, DeleteClusterSnapshot, RestoreFromClusterSnapshot
+- Parameter groups: Create/Describe/Modify/Delete ClusterParameterGroup + DescribeClusterParameters
+- Subnet groups: Create/Describe/Modify/Delete ClusterSubnetGroup
+- Tags: CreateTags, DeleteTags, DescribeTags
+- ⚠ Docker-backed (needs Floci Docker socket; per-cluster auth proxy ports 7100–7199). Dashboard = metadata + container-status display; no data plane UI.
+
+#### N.3 EFS (`@aws-sdk/client-efs`) — 17 ops
+From `EfsController.java` (REST, path args FileSystemId/MountTargetId/AccessPointId):
+- File systems: Create/Describe/Update/Delete, UpdateFileSystemProtection
+- Mount targets: Create/Describe/Delete, Describe/Modify MountTargetSecurityGroups
+- Access points: Create/Describe/Delete
+- Policies: Put/Describe/Delete FileSystemPolicy; Put/Describe BackupPolicy; Put/Describe LifecycleConfiguration
+- Tags: CreateTags/DescribeTags/DeleteTags + TagResource/UntagResource/ListTagsForResource
+- Dashboard: file-system table + detail (mount targets, access points, policies, lifecycle); create/delete; ⚠ mostly metadata except create/delete return real container-backed ids.
+
+#### N.4 Lake Formation (`@aws-sdk/client-lakeformation`) — 16 ops
+From `LakeFormationController.java`: put/getDataLakeSettings, register/deregister/list/describeResource, grant/revoke/listPermissions, create/get/update/delete/list LFTags, add/removeLFTagsToResource.
+- Dashboard: settings view + resource table + permissions table + LF-tag table with grant/revoke modal.
+
+#### N.5 Resource Explorer 2 (`@aws-sdk/client-resource-explorer-2`) — 32 ops
+From `ResourceExplorer2Controller.java`: listResources, search, listSupportedResourceTypes; index CRUD (create/get/delete/list/updateIndexType/listIndexes/listIndexesForMembers); views (create/get/delete/update/list/batchGetView/associate/disassociate/getDefaultView/listManagedViews/listServiceViews/listServiceIndexes); config (getAccountLevelServiceConfiguration, streaming access, setup CRUD).
+- Dashboard: index + views tables, search console, view details.
+
+#### N.6 ELB Classic (`@aws-sdk/client-elastic-load-balancing`, package ≠ v2) — 20 ops
+From `ElbClassicQueryHandler.java` (Query, `Version=2012-06-01`): CreateLoadBalancer, DeleteLoadBalancer, DescribeLoadBalancers, Create/DeleteLoadBalancerListeners, ConfigureHealthCheck, Register/DeregisterInstancesWithLoadBalancer, DescribeInstanceHealth, Modify/DescribeLoadBalancerAttributes, ApplySecurityGroupsToLoadBalancer, Attach/DetachLoadBalancerToSubnets, Enable/DisableAvailabilityZonesForLoadBalancer, AddTags, RemoveTags, DescribeTags, DescribeAccountLimits.
+- ⚠ Ship alongside existing ELBv2 (`elb.ts` currently maps `elasticloadbalancing` → v2). Register classic under a distinct route prefix (e.g. `/aws/elb-classic/*`) and map dashboard service key `elasticloadbalancing-classic`.
+
+#### N.7 Network Firewall (`@aws-sdk/client-network-firewall`) — 27 ops
+From `NetworkFirewallJsonHandler.java`: Rule groups (Create/Describe/Update/Delete/ListRuleGroups), Firewall policies (Create/Describe/Update/Delete/List), Firewalls (Create/Describe/Delete/List, UpdateFirewallDeleteProtection, Associate/DisassociateSubnets, AssociateFirewallPolicy), logging (Update/DescribeLoggingConfiguration) + AZ association ops.
+- Dashboard: 3 tables (firewalls, policies, rule groups) + create modals with nested config forms.
+
+#### N.8 Service Catalog (`@aws-sdk/client-service-catalog`) — 89 ops
+From `ServiceCatalogJsonHandler.java`: Portfolios (Create/Update/Describe/List/Delete), Products (Create/Update/Describe/Delete/Search, DescribeProductAsAdmin/View), Provisioning artifacts (Create/Update/Describe/List/Delete), Provisioned products (Provision/Describe/Search/Update/Terminate + plans + service actions), Tag options (CRUD/List + associate/disassociate), Constraints, shares (Accept/Reject/Delete/UpdatePortfolioShare + status), budgets/principals associations.
+- Dashboard (v1): portfolios table, products table (per portfolio), tag-options table, provisioned-products table; create/delete + provision modal. Defer long tail of plan/action/share ops.
+
+#### N.9 Service Quotas (`@aws-sdk/client-service-quotas`) — 5 ops — ✅ **SHIPPED** (2026-09-04)
+ListServiceQuotas, GetServiceQuota, GetAWSDefaultServiceQuota, ListAWSDefaultServiceQuotas, RequestServiceQuotaIncrease. Dashboard: quota table + request-increase modal. Trivial — good starter task.
+
+Files: `src/backend/routes/aws/servicequotas.ts` (+`servicequotas.test.ts`), `src/frontend/hooks/useServiceQuotas.ts` (+test), `src/frontend/pages/services/ServiceQuotasDashboard.tsx` (+test), registered in `routes/aws/index.ts`, `serviceRegistry.tsx`, `types/services.ts`. Backend exposes `/quotas?serviceCode=&useDefaults=`, `/quota?serviceCode=&quotaCode=`, `/request-increase` (POST). UI: service-code loader (button or Enter), Applied/AWS-default tab toggle, filterable quota table, request-increase modal with success/error alerts.
+
+#### N.10 AWS RAM (`@aws-sdk/client-ram`) — 12 ops
+From `RamController.java` (lowercase REST ops): enableSharingWithAwsOrganization, createResourceShare, getResourceShares, delete/updateResourceShare, associate/disassociateResourceShare, listPrincipals, tag/untagResource, getResourceShareInvitations, listResources. Dashboard: resource shares table + principals tab + create modal.
+
+#### N.11 Control Tower (`@aws-sdk/client-controltower`) — 15 ops
+From `ControlTowerController.java`: Landing zones (list/get/create/update/delete/reset), operations (get/list), baselines (listBaselines, list/getEnabledBaseline, enable/reset/updateEnabledBaseline, getBaselineOperation). Dashboard: landing-zone card + baselines table + operation history.
+
+#### N.12 Managed Prometheus — AMP (`@aws-sdk/client-amp`) — 8 ops
+From `ApsController.java`: createWorkspace, listWorkspaces, describeWorkspace, deleteWorkspace, updateWorkspaceAlias + tags (list/tag/untag). Dashboard: workspace table + alias edit + tag editor. Small.
+
+#### N.13 CodeGuru Reviewer (`@aws-sdk/client-codeguru-reviewer`) — 7 ops
+From `CodeGuruReviewerController.java`: associateRepository, describeRepositoryAssociation, disassociateRepository, listRepositoryAssociations + tags. Dashboard: association table + create/delete. Small.
+
+#### N.14 Route 53 Resolver (`@aws-sdk/client-route53resolver`) — 18 ops
+From `Route53ResolverJsonHandler.java`: firewall domain lists (Create/Get/List/Delete), resolver endpoints (Create/Get/List/Update/Delete), resolver rules (Create/Get/List/Update/Delete), rule associations (Associate/Disassociate/Get/List). Dashboard: 3 tables (endpoints, rules, domain lists) + association display. Ships alongside existing Route53 dashboard or its own tab/page.
+
+#### N.15 Comprehend (`@aws-sdk/client-comprehend`) — 5 ops
+DetectSentiment, DetectKeyPhrases, DetectDominantLanguage, DetectPiiEntities, ContainsPiiEntities. Dashboard: text-area test console with per-op result panels. No CRUD.
+
+#### N.16 Rekognition (`@aws-sdk/client-rekognition`) — 5 ops
+DetectLabels, DetectFaces, DetectText, CompareFaces, DetectModerationLabels. Dashboard: image-URL + test console with result JSON panels. No CRUD.
+
+#### N.17 Translate (`@aws-sdk/client-translate`) — 3 ops
+TranslateText, TranslateDocument, ListLanguages. Dashboard: translator console (source/target language selects + text area). No CRUD.
+
+#### N.18 AWS Sign-In (`signin/`) — 2 endpoints, no SDK
+`SigninController.java` exposes OAuth `/v1/authorize` + `/v1/token` (+ consent page) for Cognito/identity-center federation. No AWS SDK model exists — implement as raw `flociFetch` proxy routes (`/api/signin/authorize`, `/api/signin/token`) and a small console for testing the flow.
+
+#### N.19 SSO Admin (`@aws-sdk/client-sso-admin`) — 1 op today
+Currently only `case "ListInstances"` (returns the `floci-identity-center` instance). Build the minimal backend route + instance list card now; extend as Floci adds CreateInstance/assignment ops. Tiny.
 
 ---
 
@@ -1839,9 +1956,9 @@ All 97 gap items from the first, second, and third audit passes are **Done** or 
 
 ---
 
-### Missing Services (14 services in Floci, zero in dashboard)
+### Resolved Milestone Services (M.1–M.14 — all shipped)
 
-These are Floci services with handler directories that have **no** corresponding backend route, frontend hook, or dashboard component.
+These were Floci services that previously had **no** corresponding backend route, frontend hook, or dashboard component. All are now fully implemented (see G.1–G.97 history and git log for each).
 
 | # | Service | Floci Package | Operations | Complexity |
 |---|---------|--------------|------------|------------|
@@ -1877,29 +1994,35 @@ These are Floci services with handler directories that have **no** corresponding
 | Metric | Count |
 |--------|-------|
 | Previously resolved gaps (G.1–G.97) | 97 (all Done/N/A) |
-| Missing services (M.1–M.14) | 0 — **all 14 milestone services shipped** |
+| Resolved milestone services (M.1–M.14) | 0 — **all 14 shipped** |
+| Missing services (N.1–N.19, added to Floci 2026-08-25 → 09-04) | **18 left (N.9 Service Quotas shipped)** |
 | New ops in existing services | 2 actionable (SES + Cognito) |
-| **Total remaining gaps** | **6** |
+| **Total remaining gaps** | **18 full services + 2 op-level** |
 
 ---
 
 ### Recommended Implementation Priority
 
+Quick wins first (Small), then Medium, then Large — each adds a full backend route + hooks + dashboard + 100% tests:
+
 | Priority | Service | Rationale |
 |----------|---------|-----------|
-| 1 | **Organizations** (M.2) | Commonly used in AWS accounts, medium complexity |
-| 2 | **GuardDuty** (M.8) | Security monitoring, high value |
-| 3 | **Lightsail** (M.3) | Simple servers, large but high value |
-| 4 | **SWF** (M.1) | Legacy but still used, medium complexity |
-| 5 | **AmazonMQ** (M.4) | Message broker, medium complexity |
-| 6 | **EMR Serverless** (M.6) | Modern EMR, medium complexity |
-| 7 | **CloudHSM V2** (M.9) | Security/compliance, medium complexity |
-| 8 | **FIS** (M.7) | Chaos engineering, medium complexity |
-| 9 | **Kinesis Analytics V2** (M.5) | Analytics, small complexity |
-| 10 | **MWAA** (M.10) | Airflow, small complexity |
-| 11 | **RUM** (M.11) | Monitoring, small complexity |
-| 12 | **S3 Tables** (M.12) | Iceberg tables, medium complexity |
-| 13 | **Bedrock AgentCore** (M.13) | AI/ML, small complexity |
-| 14 | **CloudControl** (M.14) | Generic CRUD, medium complexity |
-| — | **SES v2 account ops** | New in existing service, small |
-| — | **Cognito GlobalSignOut/RevokeToken** | New in existing service, small |
+| ~~1~~ | ~~**Service Quotas** (N.9)~~ | ~~5 ops~~ — ✅ shipped 2026-09-04 |
+| 1 | **Translate** (N.17) | 3 ops, console-only, no CRUD |
+| 2 | **Rekognition** (N.16) | 5 ops, console-only |
+| 3 | **Comprehend** (N.15) | 5 ops, console-only |
+| 4 | **SSO Admin** (N.19) | 1 op today, tiny starter |
+| 5 | **AMP** (N.12) | 8 ops, workspace CRUD |
+| 6 | **CodeGuru Reviewer** (N.13) | 7 ops, association CRUD |
+| 7 | **AWS RAM** (N.10) | 12 ops, shares + principals |
+| 8 | **AWS Sign-In** (N.18) | raw proxy console, small |
+| 9 | **Amazon Connect** (N.1) | 15 ops, 3 tab types, high value |
+| 10 | **ELB Classic** (N.6) | 20 ops; note classic ≠ v2 SDK/prefix |
+| 11 | **Lake Formation** (N.4) | 16 ops, permissions model |
+| 12 | **Route 53 Resolver** (N.14) | 18 ops, 3 tables |
+| 13 | **Control Tower** (N.11) | 15 ops, landing zones + baselines |
+| 14 | **Resource Explorer 2** (N.5) | 32 ops, index/views/search |
+| 15 | **Redshift** (N.2) | 21 ops, Docker-backed, high value |
+| 16 | **EFS** (N.3) | 17 ops, Docker-backed, high value |
+| 17 | **Network Firewall** (N.7) | 27 ops, 3 nested configs |
+| 18 | **Service Catalog** (N.8) | 89 ops — stage v1 (portfolios/products/tag-options/provisioned), defer plans/actions/shares |
