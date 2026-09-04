@@ -26,7 +26,7 @@ An AWS Console-style web dashboard for Floci, the local AWS emulator. The dashbo
 | Shared components | Done | ResourceTable, CreateModal, DeleteButton, ServiceCard, ServiceGrid, StatCard, StatusBadge |
 | Layout | Done | AppLayoutShell with TopNavigation, SideNavigation, dark mode |
 | Settings | Done | Dark mode toggle, refresh interval |
-| ~88 services implemented | ServicePage: browse, create, delete | 18 newer Floci services (N.1–N.19, N.9 Service Quotas shipped) still need dashboards — see GAP ANALYSIS |
+| ~89 services implemented | ServicePage: browse, create, delete | 17 newer Floci services (N.1–N.19; N.9 + N.17 shipped) still need dashboards — see GAP ANALYSIS |
 
 ### Architecture Constraints
 
@@ -1826,7 +1826,7 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 
 > **Audit date:** 2026-08-25 → refreshed 2026-09-04 (after pulling latest Floci `3600038a`)
 > **Method:** Full diff of every `floci/services/` directory against `src/backend/routes/aws/`, `src/frontend/hooks/`, and `src/frontend/pages/serviceRegistry.tsx`. Checked every `case`/action in Floci Java handlers against dashboard SDK commands. Verified controller-based services (REST endpoints) and JSON-handler services (JSON 1.1 dispatch).
-> **Result:** All previously tracked gaps (G.1–G.97, M.1–M.14) are resolved (Done or N/A). **18 Floci services added between 2026-08-25 and 2026-09-04** remain without dashboard implementation — see N.1–N.19 below (N.9 Service Quotas shipped 2026-09-04).
+> **Result:** All previously tracked gaps (G.1–G.97, M.1–M.14) are resolved (Done or N/A). **17 Floci services added between 2026-08-25 and 2026-09-04** remain without dashboard implementation — see N.1–N.19 below (N.9 Service Quotas and N.17 Translate shipped 2026-09-04).
 
 ---
 
@@ -1852,7 +1852,7 @@ These are Floci services merged into Floci **after 2026-08-25** (EFS `#2371`, Se
 | N.14 | **Route 53 Resolver** | `route53resolver/` | JSON 1.1 | 18 | Firewall domain lists, resolver endpoints/rules/associations | Medium |
 | N.15 | **Comprehend** | `comprehend/` | JSON 1.1 | 5 | Detect sentiment/key-phrases/language/PII test console | Small |
 | N.16 | **Rekognition** | `rekognition/` | JSON 1.1 | 5 | Detect labels/faces/text/moderation test console | Small |
-| N.17 | **Translate** | `translate/` | JSON 1.1 | 3 | Translate text/document + list languages | Small |
+| N.17 | **Translate** | `translate/` | JSON 1.1 | 3 | Translate text/document + list languages | ✅ **Done** |
 | N.18 | **AWS Sign-In** | `signin/` | REST OAuth `/v1/authorize`, `/v1/token` | 2 | Token/authorize console (no SDK shape — raw proxy) | Small |
 | N.19 | **SSO Admin** | `ssoadmin/` | JSON 1.1 | 1 | Instance list (very new; grows as Floci adds ops) | Tiny |
 
@@ -1936,8 +1936,10 @@ DetectSentiment, DetectKeyPhrases, DetectDominantLanguage, DetectPiiEntities, Co
 #### N.16 Rekognition (`@aws-sdk/client-rekognition`) — 5 ops
 DetectLabels, DetectFaces, DetectText, CompareFaces, DetectModerationLabels. Dashboard: image-URL + test console with result JSON panels. No CRUD.
 
-#### N.17 Translate (`@aws-sdk/client-translate`) — 3 ops
+#### N.17 Translate (`@aws-sdk/client-translate`) — 3 ops — ✅ **SHIPPED** (2026-09-04)
 TranslateText, TranslateDocument, ListLanguages. Dashboard: translator console (source/target language selects + text area). No CRUD.
+
+Files: `src/backend/routes/aws/translate.ts` (+test), `src/frontend/hooks/useTranslate.ts` (+test), `src/frontend/pages/services/TranslateDashboard.tsx` (+test), registered in `routes/aws/index.ts` (`/translate`), `serviceRegistry.tsx`, `types/services.ts` (Machine Learning). Backend: `GET /languages`, `POST /translate-text`, `POST /translate-document` (content text → utf8 bytes for the SDK blob). UI: Text + Document tabs; source/target/content-type selects fed by ListLanguages; success/error alerts. Added `@aws-sdk/client-translate` dep.
 
 #### N.18 AWS Sign-In (`signin/`) — 2 endpoints, no SDK
 `SigninController.java` exposes OAuth `/v1/authorize` + `/v1/token` (+ consent page) for Cognito/identity-center federation. No AWS SDK model exists — implement as raw `flociFetch` proxy routes (`/api/signin/authorize`, `/api/signin/token`) and a small console for testing the flow.
@@ -1995,9 +1997,9 @@ These were Floci services that previously had **no** corresponding backend route
 |--------|-------|
 | Previously resolved gaps (G.1–G.97) | 97 (all Done/N/A) |
 | Resolved milestone services (M.1–M.14) | 0 — **all 14 shipped** |
-| Missing services (N.1–N.19, added to Floci 2026-08-25 → 09-04) | **18 left (N.9 Service Quotas shipped)** |
+| Missing services (N.1–N.19, added to Floci 2026-08-25 → 09-04) | **17 left (N.9 Service Quotas + N.17 Translate shipped)** |
 | New ops in existing services | 2 actionable (SES + Cognito) |
-| **Total remaining gaps** | **18 full services + 2 op-level** |
+| **Total remaining gaps** | **17 full services + 2 op-level** |
 
 ---
 
@@ -2008,21 +2010,21 @@ Quick wins first (Small), then Medium, then Large — each adds a full backend r
 | Priority | Service | Rationale |
 |----------|---------|-----------|
 | ~~1~~ | ~~**Service Quotas** (N.9)~~ | ~~5 ops~~ — ✅ shipped 2026-09-04 |
-| 1 | **Translate** (N.17) | 3 ops, console-only, no CRUD |
-| 2 | **Rekognition** (N.16) | 5 ops, console-only |
-| 3 | **Comprehend** (N.15) | 5 ops, console-only |
-| 4 | **SSO Admin** (N.19) | 1 op today, tiny starter |
-| 5 | **AMP** (N.12) | 8 ops, workspace CRUD |
-| 6 | **CodeGuru Reviewer** (N.13) | 7 ops, association CRUD |
-| 7 | **AWS RAM** (N.10) | 12 ops, shares + principals |
-| 8 | **AWS Sign-In** (N.18) | raw proxy console, small |
-| 9 | **Amazon Connect** (N.1) | 15 ops, 3 tab types, high value |
-| 10 | **ELB Classic** (N.6) | 20 ops; note classic ≠ v2 SDK/prefix |
-| 11 | **Lake Formation** (N.4) | 16 ops, permissions model |
-| 12 | **Route 53 Resolver** (N.14) | 18 ops, 3 tables |
-| 13 | **Control Tower** (N.11) | 15 ops, landing zones + baselines |
-| 14 | **Resource Explorer 2** (N.5) | 32 ops, index/views/search |
-| 15 | **Redshift** (N.2) | 21 ops, Docker-backed, high value |
-| 16 | **EFS** (N.3) | 17 ops, Docker-backed, high value |
-| 17 | **Network Firewall** (N.7) | 27 ops, 3 nested configs |
-| 18 | **Service Catalog** (N.8) | 89 ops — stage v1 (portfolios/products/tag-options/provisioned), defer plans/actions/shares |
+| ~~2~~ | ~~**Translate** (N.17)~~ | ~~3 ops~~ — ✅ shipped 2026-09-04 |
+| 1 | **Rekognition** (N.16) | 5 ops, console-only |
+| 2 | **Comprehend** (N.15) | 5 ops, console-only |
+| 3 | **SSO Admin** (N.19) | 1 op today, tiny starter |
+| 4 | **AMP** (N.12) | 8 ops, workspace CRUD |
+| 5 | **CodeGuru Reviewer** (N.13) | 7 ops, association CRUD |
+| 6 | **AWS RAM** (N.10) | 12 ops, shares + principals |
+| 7 | **AWS Sign-In** (N.18) | raw proxy console, small |
+| 8 | **Amazon Connect** (N.1) | 15 ops, 3 tab types, high value |
+| 9 | **ELB Classic** (N.6) | 20 ops; note classic ≠ v2 SDK/prefix |
+| 10 | **Lake Formation** (N.4) | 16 ops, permissions model |
+| 11 | **Route 53 Resolver** (N.14) | 18 ops, 3 tables |
+| 12 | **Control Tower** (N.11) | 15 ops, landing zones + baselines |
+| 13 | **Resource Explorer 2** (N.5) | 32 ops, index/views/search |
+| 14 | **Redshift** (N.2) | 21 ops, Docker-backed, high value |
+| 15 | **EFS** (N.3) | 17 ops, Docker-backed, high value |
+| 16 | **Network Firewall** (N.7) | 27 ops, 3 nested configs |
+| 17 | **Service Catalog** (N.8) | 89 ops — stage v1 (portfolios/products/tag-options/provisioned), defer plans/actions/shares |

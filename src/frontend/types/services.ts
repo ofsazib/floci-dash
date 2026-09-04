@@ -8,7 +8,7 @@ export const SERVICE_CATEGORIES: Record<string, string[]> = {
   "Security, Identity & Compliance": ["iam", "sts", "cognito-idp", "kms", "secretsmanager", "acm", "wafv2", "guardduty", "cloudhsm"],
   "Management & Governance": ["organizations", "cloudformation", "monitoring", "logs", "ssm", "config", "appconfig", "appconfigdata", "cloudtrail", "servicediscovery", "fis", "cloudcontrol", "servicequotas"],
   "Analytics":      ["athena", "glue", "firehose", "kafka", "es", "emr", "kinesisanalytics", "emrserverless"],
-  "Machine Learning": ["bedrock-runtime", "textract", "transcribe", "bedrockagentcore"],
+  "Machine Learning": ["bedrock-runtime", "textract", "transcribe", "bedrockagentcore", "translate"],
   "Cost Management": ["ce", "cur", "bcm-data-exports", "pricing", "tagging"],
   "Developer Tools":["codedeploy", "codebuild", "codepipeline", "elasticbeanstalk"],
   "Migration & Transfer": ["backup", "transfer"],
@@ -55,7 +55,7 @@ export const SERVICE_CATEGORY_MAP: Record<string, string> = {
   ssm: "Management & Governance", config: "Management & Governance", appconfig: "Management & Governance",
   appconfigdata: "Management & Governance", cloudtrail: "Management & Governance", servicediscovery: "Management & Governance",
   athena: "Analytics", glue: "Analytics", firehose: "Analytics", kafka: "Analytics", es: "Analytics", emr: "Analytics", kinesisanalytics: "Analytics", emrserverless: "Analytics",
-  "bedrock-runtime": "Machine Learning", textract: "Machine Learning", transcribe: "Machine Learning",
+  "bedrock-runtime": "Machine Learning", textract: "Machine Learning", transcribe: "Machine Learning", translate: "Machine Learning",
   ce: "Cost Management", cur: "Cost Management", "bcm-data-exports": "Cost Management", pricing: "Cost Management", tagging: "Cost Management",
   codedeploy: "Developer Tools", codebuild: "Developer Tools", codepipeline: "Developer Tools", elasticbeanstalk: "Developer Tools",
   backup: "Migration & Transfer", transfer: "Migration & Transfer",
@@ -146,6 +146,7 @@ export const SERVICE_LABELS: Record<string, string> = {
   "kinesisanalytics": "Kinesis Analytics V2",
   "emrserverless": "EMR Serverless",
   "servicequotas": "Service Quotas",
+  "translate": "Translate",
 };
 
 export function getServiceLabel(externalKey: string): string {
