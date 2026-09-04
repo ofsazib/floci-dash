@@ -77,6 +77,7 @@ import { LambdaMicrovmsDashboard } from "./services/LambdaMicrovmsDashboard";
 import { AgentCoreControlDashboard } from "./services/AgentCoreControlDashboard";
 import { ServiceQuotasDashboard } from "./services/ServiceQuotasDashboard";
 import { TranslateDashboard } from "./services/TranslateDashboard";
+import { RekognitionDashboard } from "./services/RekognitionDashboard";
 
 import type { ComponentType } from "react";
 
@@ -160,4 +161,5 @@ export const SERVICE_DASHBOARDS: Record<string, ComponentType> = {
   "bedrockagentcorecontrol": AgentCoreControlDashboard,
   "servicequotas": ServiceQuotasDashboard,
   "translate": TranslateDashboard,
+  "rekognition": RekognitionDashboard,
 };

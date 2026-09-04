@@ -95,6 +95,7 @@ import lambdaMicrovmsRoutes from "./lambdamicrovms";
 import bedrockAgentCoreControlRoutes from "./bedrockagentcorecontrol";
 import serviceQuotasRoutes from "./servicequotas";
 import translateRoutes from "./translate";
+import rekognitionRoutes from "./rekognition";
 
 const router = new Hono();
 
@@ -193,6 +194,7 @@ router.route("/lambda/microvms", lambdaMicrovmsRoutes);
 router.route("/bedrockagentcorecontrol", bedrockAgentCoreControlRoutes);
 router.route("/servicequotas", serviceQuotasRoutes);
 router.route("/translate", translateRoutes);
+router.route("/rekognition", rekognitionRoutes);
 
   router.get("/", (c: Context) => {
     return c.json({ message: "AWS routes available. Services registered: s3, dynamodb, rds, ec2, sqs, sns, events, logs, lambda, cloudwatch, iam, secretsmanager, cloudformation, kms, ecs, ssm, route53, apigateway, sts, appsync, scheduler, ecr, elasticloadbalancing, email, eks, autoscaling, cloudfront, kinesis, neptune, pipes, cognito, apigatewayv2, acm, cloudtrail, config, appconfig, servicediscovery, athena, glue, firehose, stepfunctions, opensearch, msk, bedrockruntime, textract, transcribe, ce, pricing, tagging, codebuild, codedeploy, backup, transfer, cur, bcmdataexports, wafv2, elasticache, ec2messages, batch, docdb, emr, rdsdata, memorydb, s3vectors, codepipeline, elasticbeanstalk, iot" });
