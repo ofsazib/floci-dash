@@ -479,6 +479,7 @@ These services have full CRUD operations in both backend and frontend:
 | **Translate** | Text/document translation console (translate text or pasted document content, list supported languages) |
 | **Rekognition** | Image analysis console (detect labels/faces/text/moderation, compare faces — bytes or S3 object) |
 | **Comprehend** | Text analysis console (sentiment, key phrases, dominant language, PII detection) |
+| **Managed Prometheus (AMP)** | Workspaces (list/create/delete), alias editing, tag add/remove per workspace |
 
 ### Navigation + status (75 services)
 
@@ -493,7 +494,7 @@ All services reported by Floci appear in the sidebar with status indicators.
 **Networking:** API Gateway, API Gateway V2, AppSync, CloudFront, ELB, Route 53
 **Messaging:** EventBridge (Events), EventBridge Pipes, EventBridge Scheduler, Kinesis, Kinesis Firehose, SES, SNS, SQS
 **Security:** ACM, Cognito, IAM, KMS, Secrets Manager, WAF v2
-**Management:** AppConfig, AppConfig Data, CloudFormation, CloudTrail, CloudWatch Logs, CloudWatch Metrics, Config, Service Discovery (Cloud Map), Service Quotas, SSM (Systems Manager)
+**Management:** AppConfig, AppConfig Data, CloudFormation, CloudTrail, CloudWatch Logs, CloudWatch Metrics, Config, Managed Prometheus (AMP), Service Discovery (Cloud Map), Service Quotas, SSM (Systems Manager)
 **Analytics:** Athena, Glue, MSK (Kafka), OpenSearch, Step Functions, Amazon EMR
 **ML/AI:** Bedrock Runtime, Comprehend, Rekognition, Textract, Transcribe, Translate
 **Billing:** BCM Data Exports, Cost Explorer, Cost & Usage Report, Pricing, Resource Groups Tagging

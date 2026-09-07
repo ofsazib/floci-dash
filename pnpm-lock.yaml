@@ -11,6 +11,9 @@ importers:
       '@aws-sdk/client-acm':
         specifier: ^3.1071.0
         version: 3.1071.0
+      '@aws-sdk/client-amp':
+        specifier: ^3.1127.0
+        version: 3.1127.0
       '@aws-sdk/client-api-gateway':
         specifier: ^3.1070.0
         version: 3.1070.0
@@ -401,6 +404,10 @@ packages:
 
   '@aws-sdk/client-acm@3.1071.0':
     resolution: {integrity: sha512-lK7e9O/cnQUGUdNaLtreWI8z545varaiEX7qaFLi0fSQ6FqmbL3zvDrbN6Hdsnl3yGHgxmUY/4ybSXzoRZQMuA==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/client-amp@3.1127.0':
+    resolution: {integrity: sha512-CAgabaffIsKzCIkd7wFqLzmlO1yrNPDgdeyCKhW84aAqHNXWsTl8OSNIzwnamUa5z8HaN+raTIEcJfYwjgZSNA==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-api-gateway@3.1070.0':
@@ -2705,6 +2712,17 @@ snapshots:
       '@smithy/fetch-http-handler': 5.5.0
       '@smithy/node-http-handler': 4.8.0
       '@smithy/types': 4.15.0
+      tslib: 2.8.1
+
+  '@aws-sdk/client-amp@3.1127.0':
+    dependencies:
+      '@aws-sdk/core': 3.977.9
+      '@aws-sdk/credential-provider-node': 3.972.82
+      '@aws-sdk/types': 3.974.5
+      '@smithy/core': 3.33.3
+      '@smithy/fetch-http-handler': 5.7.2
+      '@smithy/node-http-handler': 4.11.3
+      '@smithy/types': 4.17.2
       tslib: 2.8.1
 
   '@aws-sdk/client-api-gateway@3.1070.0':

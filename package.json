@@ -31,6 +31,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-acm": "^3.1071.0",
+    "@aws-sdk/client-amp": "^3.1127.0",
     "@aws-sdk/client-api-gateway": "^3.1070.0",
     "@aws-sdk/client-apigatewayv2": "^3.1071.0",
     "@aws-sdk/client-appconfig": "^3.1072.0",

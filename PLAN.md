@@ -1847,7 +1847,7 @@ These are Floci services merged into Floci **after 2026-08-25** (EFS `#2371`, Se
 | N.9 | **Service Quotas** | `servicequotas/` | JSON 1.1 | 5 | Quota list/get + increase request | ✅ **Done** |
 | N.10 | **AWS RAM** | `ram/` | REST JSON (lowercase ops) | 12 | Resource share CRUD, principals, invitations, tags | Small |
 | N.11 | **Control Tower** | `controltower/` | REST JSON | 15 | Landing zone CRUD, baselines, operations | Medium |
-| N.12 | **Managed Prometheus (AMP)** | `aps/` | REST JSON | 8 | Workspace CRUD + alias + tags | Small |
+| N.12 | **Managed Prometheus (AMP)** | `aps/` | REST JSON | 8 | Workspace CRUD + alias + tags | ✅ **Done** |
 | N.13 | **CodeGuru Reviewer** | `codegurureviewer/` | REST JSON | 7 | Repository association CRUD + tags | Small |
 | N.14 | **Route 53 Resolver** | `route53resolver/` | JSON 1.1 | 18 | Firewall domain lists, resolver endpoints/rules/associations | Medium |
 | N.15 | **Comprehend** | `comprehend/` | JSON 1.1 | 5 | Detect sentiment/key-phrases/language/PII test console | Small |
@@ -1921,8 +1921,10 @@ From `RamController.java` (lowercase REST ops): enableSharingWithAwsOrganization
 #### N.11 Control Tower (`@aws-sdk/client-controltower`) — 15 ops
 From `ControlTowerController.java`: Landing zones (list/get/create/update/delete/reset), operations (get/list), baselines (listBaselines, list/getEnabledBaseline, enable/reset/updateEnabledBaseline, getBaselineOperation). Dashboard: landing-zone card + baselines table + operation history.
 
-#### N.12 Managed Prometheus — AMP (`@aws-sdk/client-amp`) — 8 ops
+#### N.12 Managed Prometheus — AMP (`@aws-sdk/client-amp`) — 8 ops — ✅ **SHIPPED** (2026-09-07)
 From `ApsController.java`: createWorkspace, listWorkspaces, describeWorkspace, deleteWorkspace, updateWorkspaceAlias + tags (list/tag/untag). Dashboard: workspace table + alias edit + tag editor. Small.
+
+Files: `src/backend/routes/aws/amp.ts` (+test), `src/frontend/hooks/useAMP.ts` (+test), `src/frontend/pages/services/AMPDashboard.tsx` (+test), registered in `routes/aws/index.ts` (`/amp`), `serviceRegistry.tsx`, `types/services.ts` (Management & Governance). Backend: `GET/POST /workspaces`, `GET/DELETE /workspaces/:id`, `PUT /workspaces/:id/alias`, `GET/POST /tags`, `POST /tags/untag`. UI: workspace table (alias/id/status/created), create modal, Edit-alias modal, tag editor (add/remove against the workspace ARN), filter, delete. Added `@aws-sdk/client-amp` dep.
 
 #### N.13 CodeGuru Reviewer (`@aws-sdk/client-codeguru-reviewer`) — 7 ops
 From `CodeGuruReviewerController.java`: associateRepository, describeRepositoryAssociation, disassociateRepository, listRepositoryAssociations + tags. Dashboard: association table + create/delete. Small.
@@ -2018,9 +2020,8 @@ Quick wins first (Small), then Medium, then Large — each adds a full backend r
 | ~~1~~ | ~~**Rekognition** (N.16)~~ | ~~5 ops, console-only~~ — ✅ shipped 2026-09-04 |
 | ~~1~~ | ~~**Comprehend** (N.15)~~ | ~~5 ops, console-only~~ — ✅ shipped 2026-09-04 |
 | 1 | **SSO Admin** (N.19) | 1 op today, tiny starter |
-| 2 | **AMP** (N.12) | 8 ops, workspace CRUD |
-| 3 | **CodeGuru Reviewer** (N.13) | 7 ops, association CRUD |
-| 4 | **AWS RAM** (N.10) | 12 ops, shares + principals |
+| 2 | **CodeGuru Reviewer** (N.13) | 7 ops, association CRUD |
+| 3 | **AWS RAM** (N.10) | 12 ops, shares + principals |
 | 5 | **AWS Sign-In** (N.18) | raw proxy console, small |
 | 6 | **Amazon Connect** (N.1) | 15 ops, 3 tab types, high value |
 | 7 | **ELB Classic** (N.6) | 20 ops; note classic ≠ v2 SDK/prefix |
