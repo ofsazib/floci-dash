@@ -83,6 +83,9 @@ importers:
       '@aws-sdk/client-codedeploy':
         specifier: ^3.1072.0
         version: 3.1072.0
+      '@aws-sdk/client-codeguru-reviewer':
+        specifier: ^3.1127.0
+        version: 3.1127.0
       '@aws-sdk/client-codepipeline':
         specifier: ^3.1073.0
         version: 3.1073.0
@@ -506,6 +509,10 @@ packages:
 
   '@aws-sdk/client-codedeploy@3.1072.0':
     resolution: {integrity: sha512-KVrrL4sjLK6SCxYmWjF+Cc+etgY2u3nqLZQPtmwWN9kkiQHymIC4uP/0fje2Fm5WyYSYzLIaGVB4lQ3ZVudYpg==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/client-codeguru-reviewer@3.1127.0':
+    resolution: {integrity: sha512-58Zhh5MBbc50ePqiG3BYKdwdES88ygL8XbLeYPjnlCx0A49AdE8rkKTeEuxgdB8i1NWiai6/GdYo3GxsB9q4zQ==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-codepipeline@3.1073.0':
@@ -3032,6 +3039,17 @@ snapshots:
       '@smithy/fetch-http-handler': 5.5.0
       '@smithy/node-http-handler': 4.8.0
       '@smithy/types': 4.15.0
+      tslib: 2.8.1
+
+  '@aws-sdk/client-codeguru-reviewer@3.1127.0':
+    dependencies:
+      '@aws-sdk/core': 3.977.9
+      '@aws-sdk/credential-provider-node': 3.972.82
+      '@aws-sdk/types': 3.974.5
+      '@smithy/core': 3.33.3
+      '@smithy/fetch-http-handler': 5.7.2
+      '@smithy/node-http-handler': 4.11.3
+      '@smithy/types': 4.17.2
       tslib: 2.8.1
 
   '@aws-sdk/client-codepipeline@3.1073.0':

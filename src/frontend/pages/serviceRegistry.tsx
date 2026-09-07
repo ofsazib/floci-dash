@@ -82,6 +82,7 @@ import { ComprehendDashboard } from "./services/ComprehendDashboard";
 import { AMPDashboard } from "./services/AMPDashboard";
 import { SSOAdminDashboard } from "./services/SSOAdminDashboard";
 import { RAMDashboard } from "./services/RAMDashboard";
+import { CodeGuruReviewerDashboard } from "./services/CodeGuruReviewerDashboard";
 
 import type { ComponentType } from "react";
 
@@ -170,4 +171,5 @@ export const SERVICE_DASHBOARDS: Record<string, ComponentType> = {
   "aps": AMPDashboard,
   "sso": SSOAdminDashboard,
   "ram": RAMDashboard,
+  "codeguru-reviewer": CodeGuruReviewerDashboard,
 };

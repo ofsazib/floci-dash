@@ -26,7 +26,7 @@ An AWS Console-style web dashboard for Floci, the local AWS emulator. The dashbo
 | Shared components | Done | ResourceTable, CreateModal, DeleteButton, ServiceCard, ServiceGrid, StatCard, StatusBadge |
 | Layout | Done | AppLayoutShell with TopNavigation, SideNavigation, dark mode |
 | Settings | Done | Dark mode toggle, refresh interval |
-| ~89 services implemented | ServicePage: browse, create, delete | 15 newer Floci services (N.1–N.19; N.9 + N.10 + N.12 + N.15 + N.16 + N.17 + N.19 shipped) still need dashboards — see GAP ANALYSIS |
+| ~89 services implemented | ServicePage: browse, create, delete | 15 newer Floci services (N.1–N.19; N.9 + N.10 + N.12 + N.13 + N.15 + N.16 + N.17 + N.19 shipped) still need dashboards — see GAP ANALYSIS |
 
 ### Architecture Constraints
 
@@ -1848,7 +1848,7 @@ These are Floci services merged into Floci **after 2026-08-25** (EFS `#2371`, Se
 | N.10 | **AWS RAM** | `ram/` | REST JSON (lowercase ops) | 12 | Resource share CRUD, principals, invitations, tags | ✅ **Done** |
 | N.11 | **Control Tower** | `controltower/` | REST JSON | 15 | Landing zone CRUD, baselines, operations | Medium |
 | N.12 | **Managed Prometheus (AMP)** | `aps/` | REST JSON | 8 | Workspace CRUD + alias + tags | ✅ **Done** |
-| N.13 | **CodeGuru Reviewer** | `codegurureviewer/` | REST JSON | 7 | Repository association CRUD + tags | Small |
+| N.13 | **CodeGuru Reviewer** | `codegurureviewer/` | REST JSON | 7 | Repository association CRUD + tags | ✅ **Done** |
 | N.14 | **Route 53 Resolver** | `route53resolver/` | JSON 1.1 | 18 | Firewall domain lists, resolver endpoints/rules/associations | Medium |
 | N.15 | **Comprehend** | `comprehend/` | JSON 1.1 | 5 | Detect sentiment/key-phrases/language/PII test console | Small |
 | N.16 | **Rekognition** | `rekognition/` | JSON 1.1 | 5 | Detect labels/faces/text/moderation test console | Small |
@@ -1928,8 +1928,10 @@ From `ApsController.java`: createWorkspace, listWorkspaces, describeWorkspace, d
 
 Files: `src/backend/routes/aws/amp.ts` (+test), `src/frontend/hooks/useAMP.ts` (+test), `src/frontend/pages/services/AMPDashboard.tsx` (+test), registered in `routes/aws/index.ts` (`/amp`), `serviceRegistry.tsx`, `types/services.ts` (Management & Governance). Backend: `GET/POST /workspaces`, `GET/DELETE /workspaces/:id`, `PUT /workspaces/:id/alias`, `GET/POST /tags`, `POST /tags/untag`. UI: workspace table (alias/id/status/created), create modal, Edit-alias modal, tag editor (add/remove against the workspace ARN), filter, delete. Added `@aws-sdk/client-amp` dep.
 
-#### N.13 CodeGuru Reviewer (`@aws-sdk/client-codeguru-reviewer`) — 7 ops
+#### N.13 CodeGuru Reviewer (`@aws-sdk/client-codeguru-reviewer`) — 7 ops — ✅ **SHIPPED** (2026-09-07)
 From `CodeGuruReviewerController.java`: associateRepository, describeRepositoryAssociation, disassociateRepository, listRepositoryAssociations + tags. Dashboard: association table + create/delete. Small.
+
+Files: `src/backend/routes/aws/codegurureviewer.ts` (+test), `src/frontend/hooks/useCodeGuruReviewer.ts` (+test), `src/frontend/pages/services/CodeGuruReviewerDashboard.tsx` (+test), registered in `routes/aws/index.ts` (`/codegurureviewer`), `serviceRegistry.tsx` (key `codeguru-reviewer`), `types/services.ts` (Developer Tools). Backend: `GET/POST /associations`, `GET/DELETE /associations/:arn`, `GET/POST /tags`, `POST /tags/untag`. UI: associations table (name/owner/provider/state), associate modal with provider select (GitHub/Bitbucket/GHES/S3/CodeCommit — owner field hidden for S3/CodeCommit), tag editor, delete. Added `@aws-sdk/client-codeguru-reviewer` dep.
 
 #### N.14 Route 53 Resolver (`@aws-sdk/client-route53resolver`) — 18 ops
 From `Route53ResolverJsonHandler.java`: firewall domain lists (Create/Get/List/Delete), resolver endpoints (Create/Get/List/Update/Delete), resolver rules (Create/Get/List/Update/Delete), rule associations (Associate/Disassociate/Get/List). Dashboard: 3 tables (endpoints, rules, domain lists) + association display. Ships alongside existing Route53 dashboard or its own tab/page.
@@ -2023,9 +2025,9 @@ Quick wins first (Small), then Medium, then Large — each adds a full backend r
 | ~~2~~ | ~~**Translate** (N.17)~~ | ~~3 ops~~ — ✅ shipped 2026-09-04 |
 | ~~1~~ | ~~**Rekognition** (N.16)~~ | ~~5 ops, console-only~~ — ✅ shipped 2026-09-04 |
 | ~~1~~ | ~~**Comprehend** (N.15)~~ | ~~5 ops, console-only~~ — ✅ shipped 2026-09-04 |
-| 1 | **CodeGuru Reviewer** (N.13) | 7 ops, association CRUD |
-| 2 | **AWS Sign-In** (N.18) | raw proxy console, small |
-| 3 | **Amazon Connect** (N.1) | 15 ops, 3 tab types, high value |
+| ~~1~~ | ~~**CodeGuru Reviewer** (N.13)~~ | ~~7 ops, association CRUD~~ — ✅ shipped 2026-09-07 |
+| 1 | **AWS Sign-In** (N.18) | raw proxy console, small |
+| 2 | **Amazon Connect** (N.1) | 15 ops, 3 tab types, high value |
 | 7 | **ELB Classic** (N.6) | 20 ops; note classic ≠ v2 SDK/prefix |
 | 8 | **Lake Formation** (N.4) | 16 ops, permissions model |
 | 9 | **Route 53 Resolver** (N.14) | 18 ops, 3 tables |

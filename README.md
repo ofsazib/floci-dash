@@ -482,6 +482,7 @@ These services have full CRUD operations in both backend and frontend:
 | **Managed Prometheus (AMP)** | Workspaces (list/create/delete), alias editing, tag add/remove per workspace |
 | **Resource Access Manager (RAM)** | Resource shares (list/create/update/delete), associate/disassociate principals + resources, principals/resources detail tabs, invitations, org-sharing enablement |
 | **IAM Identity Center (SSO)** | Identity Center instances (list) — read-only view of the single Floci instance |
+| **CodeGuru Reviewer** | Repository associations (list/associate/disassociate) with provider selection and tag add/remove per association |
 
 ### Navigation + status (75 services)
 
@@ -500,7 +501,7 @@ All services reported by Floci appear in the sidebar with status indicators.
 **Analytics:** Athena, Glue, MSK (Kafka), OpenSearch, Step Functions, Amazon EMR
 **ML/AI:** Bedrock Runtime, Comprehend, Rekognition, Textract, Transcribe, Translate
 **Billing:** BCM Data Exports, Cost Explorer, Cost & Usage Report, Pricing, Resource Groups Tagging
-**Developer Tools:** CodeBuild, CodeDeploy, CodePipeline, Elastic Beanstalk
+**Developer Tools:** CodeBuild, CodeDeploy, CodeGuru Reviewer, CodePipeline, Elastic Beanstalk
 **Internet of Things:** IoT Core
 **Migration:** Backup, Transfer Family
 **Workflow:** SWF (Simple Workflow)
