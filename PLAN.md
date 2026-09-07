@@ -26,7 +26,7 @@ An AWS Console-style web dashboard for Floci, the local AWS emulator. The dashbo
 | Shared components | Done | ResourceTable, CreateModal, DeleteButton, ServiceCard, ServiceGrid, StatCard, StatusBadge |
 | Layout | Done | AppLayoutShell with TopNavigation, SideNavigation, dark mode |
 | Settings | Done | Dark mode toggle, refresh interval |
-| ~89 services implemented | ServicePage: browse, create, delete | 15 newer Floci services (N.1–N.19; N.9 + N.15 + N.16 + N.17 shipped) still need dashboards — see GAP ANALYSIS |
+| ~89 services implemented | ServicePage: browse, create, delete | 15 newer Floci services (N.1–N.19; N.9 + N.10 + N.12 + N.15 + N.16 + N.17 + N.19 shipped) still need dashboards — see GAP ANALYSIS |
 
 ### Architecture Constraints
 
@@ -1826,7 +1826,7 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 
 > **Audit date:** 2026-08-25 → refreshed 2026-09-04 (after pulling latest Floci `3600038a`)
 > **Method:** Full diff of every `floci/services/` directory against `src/backend/routes/aws/`, `src/frontend/hooks/`, and `src/frontend/pages/serviceRegistry.tsx`. Checked every `case`/action in Floci Java handlers against dashboard SDK commands. Verified controller-based services (REST endpoints) and JSON-handler services (JSON 1.1 dispatch).
-> **Result:** All previously tracked gaps (G.1–G.97, M.1–M.14) are resolved (Done or N/A). **17 Floci services added between 2026-08-25 and 2026-09-04** remain without dashboard implementation — see N.1–N.19 below (N.9 Service Quotas, N.15 Comprehend, N.16 Rekognition and N.17 Translate shipped 2026-09-04).
+> **Result:** All previously tracked gaps (G.1–G.97, M.1–M.14) are resolved (Done or N/A). **17 Floci services added between 2026-08-25 and 2026-09-04** remain without dashboard implementation — see N.1–N.19 below (N.9 Service Quotas, N.10 AWS RAM, N.12 AMP, N.15 Comprehend, N.16 Rekognition, N.17 Translate and N.19 SSO Admin shipped).
 
 ---
 
@@ -1845,7 +1845,7 @@ These are Floci services merged into Floci **after 2026-08-25** (EFS `#2371`, Se
 | N.7 | **Network Firewall** | `networkfirewall/` | JSON 1.0 | 27 | Firewall/policy/rule-group CRUD + associations | Large |
 | N.8 | **Service Catalog** | `servicecatalog/` | JSON 1.1 | 89 | Portfolio/product/artifact CRUD, provision, tag options, constraints | Very Large |
 | N.9 | **Service Quotas** | `servicequotas/` | JSON 1.1 | 5 | Quota list/get + increase request | ✅ **Done** |
-| N.10 | **AWS RAM** | `ram/` | REST JSON (lowercase ops) | 12 | Resource share CRUD, principals, invitations, tags | Small |
+| N.10 | **AWS RAM** | `ram/` | REST JSON (lowercase ops) | 12 | Resource share CRUD, principals, invitations, tags | ✅ **Done** |
 | N.11 | **Control Tower** | `controltower/` | REST JSON | 15 | Landing zone CRUD, baselines, operations | Medium |
 | N.12 | **Managed Prometheus (AMP)** | `aps/` | REST JSON | 8 | Workspace CRUD + alias + tags | ✅ **Done** |
 | N.13 | **CodeGuru Reviewer** | `codegurureviewer/` | REST JSON | 7 | Repository association CRUD + tags | Small |
@@ -1854,7 +1854,7 @@ These are Floci services merged into Floci **after 2026-08-25** (EFS `#2371`, Se
 | N.16 | **Rekognition** | `rekognition/` | JSON 1.1 | 5 | Detect labels/faces/text/moderation test console | Small |
 | N.17 | **Translate** | `translate/` | JSON 1.1 | 3 | Translate text/document + list languages | ✅ **Done** |
 | N.18 | **AWS Sign-In** | `signin/` | REST OAuth `/v1/authorize`, `/v1/token` | 2 | Token/authorize console (no SDK shape — raw proxy) | Small |
-| N.19 | **SSO Admin** | `ssoadmin/` | JSON 1.1 | 1 | Instance list (very new; grows as Floci adds ops) | Tiny |
+| N.19 | **SSO Admin** | `ssoadmin/` | JSON 1.1 | 1 | Instance list (very new; grows as Floci adds ops) | ✅ **Done** |
 
 ---
 
@@ -1915,8 +1915,10 @@ ListServiceQuotas, GetServiceQuota, GetAWSDefaultServiceQuota, ListAWSDefaultSer
 
 Files: `src/backend/routes/aws/servicequotas.ts` (+`servicequotas.test.ts`), `src/frontend/hooks/useServiceQuotas.ts` (+test), `src/frontend/pages/services/ServiceQuotasDashboard.tsx` (+test), registered in `routes/aws/index.ts`, `serviceRegistry.tsx`, `types/services.ts`. Backend exposes `/quotas?serviceCode=&useDefaults=`, `/quota?serviceCode=&quotaCode=`, `/request-increase` (POST). UI: service-code loader (button or Enter), Applied/AWS-default tab toggle, filterable quota table, request-increase modal with success/error alerts.
 
-#### N.10 AWS RAM (`@aws-sdk/client-ram`) — 12 ops
+#### N.10 AWS RAM (`@aws-sdk/client-ram`) — 12 ops — ✅ **SHIPPED** (2026-09-07)
 From `RamController.java` (lowercase REST ops): enableSharingWithAwsOrganization, createResourceShare, getResourceShares, delete/updateResourceShare, associate/disassociateResourceShare, listPrincipals, tag/untagResource, getResourceShareInvitations, listResources. Dashboard: resource shares table + principals tab + create modal.
+
+Files: `src/backend/routes/aws/ram.ts` (+test), `src/frontend/hooks/useRAM.ts` (+test), `src/frontend/pages/services/RAMDashboard.tsx` (+test), registered in `routes/aws/index.ts` (`/ram`), `serviceRegistry.tsx`, `types/services.ts` (Security, Identity & Compliance). Backend: `POST /enable-sharing`, `GET/POST /shares`, `PUT/DELETE /shares/:arn`, `POST /shares/:arn/associate|disassociate`, `GET /principals`, `GET /resources`, `GET /invitations`, `POST /tags`, `POST /tags/untag`. UI: shares table (create/delete), Associate/Disassociate modals (newline lists for principals + resource ARNs), Details modal with Principals/Resources tabs, Invitations tab, org-sharing toggle. Added `@aws-sdk/client-ram` dep.
 
 #### N.11 Control Tower (`@aws-sdk/client-controltower`) — 15 ops
 From `ControlTowerController.java`: Landing zones (list/get/create/update/delete/reset), operations (get/list), baselines (listBaselines, list/getEnabledBaseline, enable/reset/updateEnabledBaseline, getBaselineOperation). Dashboard: landing-zone card + baselines table + operation history.
@@ -1950,8 +1952,10 @@ Files: `src/backend/routes/aws/translate.ts` (+test), `src/frontend/hooks/useTra
 #### N.18 AWS Sign-In (`signin/`) — 2 endpoints, no SDK
 `SigninController.java` exposes OAuth `/v1/authorize` + `/v1/token` (+ consent page) for Cognito/identity-center federation. No AWS SDK model exists — implement as raw `flociFetch` proxy routes (`/api/signin/authorize`, `/api/signin/token`) and a small console for testing the flow.
 
-#### N.19 SSO Admin (`@aws-sdk/client-sso-admin`) — 1 op today
+#### N.19 SSO Admin (`@aws-sdk/client-sso-admin`) — 1 op today — ✅ **SHIPPED** (2026-09-07)
 Currently only `case "ListInstances"` (returns the `floci-identity-center` instance). Build the minimal backend route + instance list card now; extend as Floci adds CreateInstance/assignment ops. Tiny.
+
+Files: `src/backend/routes/aws/ssoadmin.ts` (+test), `src/frontend/hooks/useSSOAdmin.ts` (+test), `src/frontend/pages/services/SSOAdminDashboard.tsx` (+test), registered in `routes/aws/index.ts` (`/ssoadmin`), `serviceRegistry.tsx` (key `sso`), `types/services.ts` (Security, Identity & Compliance). Backend: `GET /instances`. UI: read-only instances table (name/ARN/identity-store/owner/status) with filter. Added `@aws-sdk/client-sso-admin` dep.
 
 ---
 
@@ -2019,11 +2023,9 @@ Quick wins first (Small), then Medium, then Large — each adds a full backend r
 | ~~2~~ | ~~**Translate** (N.17)~~ | ~~3 ops~~ — ✅ shipped 2026-09-04 |
 | ~~1~~ | ~~**Rekognition** (N.16)~~ | ~~5 ops, console-only~~ — ✅ shipped 2026-09-04 |
 | ~~1~~ | ~~**Comprehend** (N.15)~~ | ~~5 ops, console-only~~ — ✅ shipped 2026-09-04 |
-| 1 | **SSO Admin** (N.19) | 1 op today, tiny starter |
-| 2 | **CodeGuru Reviewer** (N.13) | 7 ops, association CRUD |
-| 3 | **AWS RAM** (N.10) | 12 ops, shares + principals |
-| 5 | **AWS Sign-In** (N.18) | raw proxy console, small |
-| 6 | **Amazon Connect** (N.1) | 15 ops, 3 tab types, high value |
+| 1 | **CodeGuru Reviewer** (N.13) | 7 ops, association CRUD |
+| 2 | **AWS Sign-In** (N.18) | raw proxy console, small |
+| 3 | **Amazon Connect** (N.1) | 15 ops, 3 tab types, high value |
 | 7 | **ELB Classic** (N.6) | 20 ops; note classic ≠ v2 SDK/prefix |
 | 8 | **Lake Formation** (N.4) | 16 ops, permissions model |
 | 9 | **Route 53 Resolver** (N.14) | 18 ops, 3 tables |

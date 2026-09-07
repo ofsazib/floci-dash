@@ -480,6 +480,8 @@ These services have full CRUD operations in both backend and frontend:
 | **Rekognition** | Image analysis console (detect labels/faces/text/moderation, compare faces — bytes or S3 object) |
 | **Comprehend** | Text analysis console (sentiment, key phrases, dominant language, PII detection) |
 | **Managed Prometheus (AMP)** | Workspaces (list/create/delete), alias editing, tag add/remove per workspace |
+| **Resource Access Manager (RAM)** | Resource shares (list/create/update/delete), associate/disassociate principals + resources, principals/resources detail tabs, invitations, org-sharing enablement |
+| **IAM Identity Center (SSO)** | Identity Center instances (list) — read-only view of the single Floci instance |
 
 ### Navigation + status (75 services)
 
@@ -493,7 +495,7 @@ All services reported by Floci appear in the sidebar with status indicators.
 **Database:** DynamoDB, DocumentDB, ElastiCache, MemoryDB, Neptune, RDS, RDS Data API
 **Networking:** API Gateway, API Gateway V2, AppSync, CloudFront, ELB, Route 53
 **Messaging:** EventBridge (Events), EventBridge Pipes, EventBridge Scheduler, Kinesis, Kinesis Firehose, SES, SNS, SQS
-**Security:** ACM, Cognito, IAM, KMS, Secrets Manager, WAF v2
+**Security:** ACM, Cognito, IAM, IAM Identity Center (SSO), KMS, Resource Access Manager (RAM), Secrets Manager, WAF v2
 **Management:** AppConfig, AppConfig Data, CloudFormation, CloudTrail, CloudWatch Logs, CloudWatch Metrics, Config, Managed Prometheus (AMP), Service Discovery (Cloud Map), Service Quotas, SSM (Systems Manager)
 **Analytics:** Athena, Glue, MSK (Kafka), OpenSearch, Step Functions, Amazon EMR
 **ML/AI:** Bedrock Runtime, Comprehend, Rekognition, Textract, Transcribe, Translate
