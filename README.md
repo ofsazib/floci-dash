@@ -483,6 +483,8 @@ These services have full CRUD operations in both backend and frontend:
 | **Resource Access Manager (RAM)** | Resource shares (list/create/update/delete), associate/disassociate principals + resources, principals/resources detail tabs, invitations, org-sharing enablement |
 | **IAM Identity Center (SSO)** | Identity Center instances (list) — read-only view of the single Floci instance |
 | **CodeGuru Reviewer** | Repository associations (list/associate/disassociate) with provider selection and tag add/remove per association |
+| **Amazon Connect** | Instances (list/create/delete), attributes (list + value toggles), storage configs (associate/disassociate) with per-instance details modal |
+| **AWS Sign-In** | Local OAuth console — authorize → consent (approve/deny) → token exchange with JSON body editor |
 
 ### Navigation + status (75 services)
 
@@ -496,11 +498,12 @@ All services reported by Floci appear in the sidebar with status indicators.
 **Database:** DynamoDB, DocumentDB, ElastiCache, MemoryDB, Neptune, RDS, RDS Data API
 **Networking:** API Gateway, API Gateway V2, AppSync, CloudFront, ELB, Route 53
 **Messaging:** EventBridge (Events), EventBridge Pipes, EventBridge Scheduler, Kinesis, Kinesis Firehose, SES, SNS, SQS
-**Security:** ACM, Cognito, IAM, IAM Identity Center (SSO), KMS, Resource Access Manager (RAM), Secrets Manager, WAF v2
+**Security:** ACM, AWS Sign-In, Cognito, IAM, IAM Identity Center (SSO), KMS, Resource Access Manager (RAM), Secrets Manager, WAF v2
 **Management:** AppConfig, AppConfig Data, CloudFormation, CloudTrail, CloudWatch Logs, CloudWatch Metrics, Config, Managed Prometheus (AMP), Service Discovery (Cloud Map), Service Quotas, SSM (Systems Manager)
 **Analytics:** Athena, Glue, MSK (Kafka), OpenSearch, Step Functions, Amazon EMR
 **ML/AI:** Bedrock Runtime, Comprehend, Rekognition, Textract, Transcribe, Translate
 **Billing:** BCM Data Exports, Cost Explorer, Cost & Usage Report, Pricing, Resource Groups Tagging
+**Customer Engagement:** Amazon Connect
 **Developer Tools:** CodeBuild, CodeDeploy, CodeGuru Reviewer, CodePipeline, Elastic Beanstalk
 **Internet of Things:** IoT Core
 **Migration:** Backup, Transfer Family

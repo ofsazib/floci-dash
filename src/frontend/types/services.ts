@@ -11,6 +11,7 @@ export const SERVICE_CATEGORIES: Record<string, string[]> = {
   "Machine Learning": ["bedrock-runtime", "textract", "transcribe", "bedrockagentcore", "translate", "rekognition", "comprehend"],
   "Cost Management": ["ce", "cur", "bcm-data-exports", "pricing", "tagging"],
   "Developer Tools":["codedeploy", "codebuild", "codepipeline", "elasticbeanstalk", "codeguru-reviewer"],
+  "Business Applications": ["connect"],
   "Migration & Transfer": ["backup", "transfer"],
   "Internet of Things": ["iot"],
 };
@@ -29,6 +30,7 @@ export const CATEGORY_ORDER = [
   "Machine Learning",
   "Cost Management",
   "Migration & Transfer",
+  "Business Applications",
   "Internet of Things",
 ] as const;
 
@@ -53,6 +55,8 @@ export const SERVICE_CATEGORY_MAP: Record<string, string> = {
   sso: "Security, Identity & Compliance",
   ram: "Security, Identity & Compliance",
   "codeguru-reviewer": "Developer Tools",
+  "connect": "Business Applications",
+  "signin": "Security, Identity & Compliance",
   cloudformation: "Management & Governance", monitoring: "Management & Governance", logs: "Management & Governance",
   servicequotas: "Management & Governance", aps: "Management & Governance",
   ssm: "Management & Governance", config: "Management & Governance", appconfig: "Management & Governance",
@@ -153,6 +157,8 @@ export const SERVICE_LABELS: Record<string, string> = {
   "sso": "IAM Identity Center (SSO)",
   "ram": "Resource Access Manager",
   "codeguru-reviewer": "CodeGuru Reviewer",
+  "connect": "Amazon Connect",
+  "signin": "AWS Sign-In",
   "translate": "Translate",
   "rekognition": "Rekognition",
   "comprehend": "Comprehend",

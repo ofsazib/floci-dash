@@ -101,6 +101,8 @@ import ampRoutes from "./amp";
 import ssoAdminRoutes from "./ssoadmin";
 import ramRoutes from "./ram";
 import codeGuruReviewerRoutes from "./codegurureviewer";
+import connectRoutes from "./connect";
+import signinRoutes from "./signin";
 
 const router = new Hono();
 
@@ -205,6 +207,8 @@ router.route("/amp", ampRoutes);
 router.route("/ssoadmin", ssoAdminRoutes);
 router.route("/ram", ramRoutes);
 router.route("/codegurureviewer", codeGuruReviewerRoutes);
+router.route("/connect", connectRoutes);
+router.route("/signin", signinRoutes);
 
   router.get("/", (c: Context) => {
     return c.json({ message: "AWS routes available. Services registered: s3, dynamodb, rds, ec2, sqs, sns, events, logs, lambda, cloudwatch, iam, secretsmanager, cloudformation, kms, ecs, ssm, route53, apigateway, sts, appsync, scheduler, ecr, elasticloadbalancing, email, eks, autoscaling, cloudfront, kinesis, neptune, pipes, cognito, apigatewayv2, acm, cloudtrail, config, appconfig, servicediscovery, athena, glue, firehose, stepfunctions, opensearch, msk, bedrockruntime, textract, transcribe, ce, pricing, tagging, codebuild, codedeploy, backup, transfer, cur, bcmdataexports, wafv2, elasticache, ec2messages, batch, docdb, emr, rdsdata, memorydb, s3vectors, codepipeline, elasticbeanstalk, iot" });

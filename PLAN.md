@@ -1826,7 +1826,7 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 
 > **Audit date:** 2026-08-25 → refreshed 2026-09-04 (after pulling latest Floci `3600038a`)
 > **Method:** Full diff of every `floci/services/` directory against `src/backend/routes/aws/`, `src/frontend/hooks/`, and `src/frontend/pages/serviceRegistry.tsx`. Checked every `case`/action in Floci Java handlers against dashboard SDK commands. Verified controller-based services (REST endpoints) and JSON-handler services (JSON 1.1 dispatch).
-> **Result:** All previously tracked gaps (G.1–G.97, M.1–M.14) are resolved (Done or N/A). **17 Floci services added between 2026-08-25 and 2026-09-04** remain without dashboard implementation — see N.1–N.19 below (N.9 Service Quotas, N.10 AWS RAM, N.12 AMP, N.15 Comprehend, N.16 Rekognition, N.17 Translate and N.19 SSO Admin shipped).
+> **Result:** All previously tracked gaps (G.1–G.97, M.1–M.14) are resolved (Done or N/A). **17 Floci services added between 2026-08-25 and 2026-09-04** remain without dashboard implementation — see N.1–N.19 below (N.1 Amazon Connect, N.9 Service Quotas, N.10 AWS RAM, N.12 AMP, N.13 CodeGuru Reviewer, N.15 Comprehend, N.16 Rekognition, N.17 Translate, N.18 AWS Sign-In and N.19 SSO Admin shipped).
 
 ---
 
@@ -1836,7 +1836,7 @@ These are Floci services merged into Floci **after 2026-08-25** (EFS `#2371`, Se
 
 | # | Service | Floci Package | Protocol | Ops | Dashboard Sketch | Complexity |
 |---|---------|--------------|----------|-----|------------------|------------|
-| N.1 | **Amazon Connect** | `connect/` | REST JSON `/instance` | 15 | Instance CRUD + attributes + storage-config tabs | Medium |
+| N.1 | **Amazon Connect** | `connect/` | REST JSON `/instance` | 15 | Instance CRUD + attributes + storage-config tabs | ✅ **Done** |
 | N.2 | **Redshift** | `redshift/` | Query + PG container | 21 | Cluster CRUD, snapshots, parameter groups, subnet groups, tags | Large |
 | N.3 | **EFS** | `efs/` | REST JSON | 17 | File system CRUD, mount targets, access points, policies, lifecycle | Large |
 | N.4 | **Lake Formation** | `lakeformation/` | REST JSON | 16 | Data lake settings, resources, permissions, LF-tags | Medium |
@@ -1853,7 +1853,7 @@ These are Floci services merged into Floci **after 2026-08-25** (EFS `#2371`, Se
 | N.15 | **Comprehend** | `comprehend/` | JSON 1.1 | 5 | Detect sentiment/key-phrases/language/PII test console | Small |
 | N.16 | **Rekognition** | `rekognition/` | JSON 1.1 | 5 | Detect labels/faces/text/moderation test console | Small |
 | N.17 | **Translate** | `translate/` | JSON 1.1 | 3 | Translate text/document + list languages | ✅ **Done** |
-| N.18 | **AWS Sign-In** | `signin/` | REST OAuth `/v1/authorize`, `/v1/token` | 2 | Token/authorize console (no SDK shape — raw proxy) | Small |
+| N.18 | **AWS Sign-In** | `signin/` | REST OAuth `/v1/authorize`, `/v1/token` | 2 | Token/authorize console (no SDK shape — raw proxy) | ✅ **Done** |
 | N.19 | **SSO Admin** | `ssoadmin/` | JSON 1.1 | 1 | Instance list (very new; grows as Floci adds ops) | ✅ **Done** |
 
 ---
@@ -1862,7 +1862,7 @@ These are Floci services merged into Floci **after 2026-08-25** (EFS `#2371`, Se
 
 For each service: create `src/backend/routes/aws/{service}.ts`, register in `src/backend/routes/aws/index.ts`, create `src/frontend/hooks/use{Service}.ts`, add a `{Service}Dashboard.tsx`, register in `serviceRegistry.tsx` + `types/services.ts`, then write backend/hook/component tests (100% gate). Verify SDK commands exist via `node -e "console.log(Object.keys(require('@aws-sdk/client-{svc}')))"` before coding; confirm response shapes against Floci source `../floci/src/main/java/io/github/hectorvent/floci/services/{pkg}/`.
 
-#### N.1 Amazon Connect (`@aws-sdk/client-connect`) — 15 ops
+#### N.1 Amazon Connect (`@aws-sdk/client-connect`) — 15 ops — ✅ **SHIPPED** (2026-09-08)
 Endpoints from `ConnectController.java` (`@Path("/instance")`):
 - `PUT /instance` → CreateInstance (returns Id + Arn, ACTIVE immediately)
 - `GET /instance` → ListInstances; `GET /instance/{instanceId}` → DescribeInstance (full shape incl. tags)
@@ -1871,6 +1871,7 @@ Endpoints from `ConnectController.java` (`@Path("/instance")`):
 - `PUT /instance/{instanceId}/storage-config` → AssociateInstanceStorageConfig; `GET /.../storage-config/{associationId}` → Describe; `POST /.../storage-config/{associationId}` → Update; `DELETE` → Disassociate; `GET /instance/{instanceId}/storage-configs` → ListInstanceStorageConfigs
 - Tags via shared `/tags/{resourceArn}` route (TagResource/UntagResource/ListTagsForResource)
 - Dashboard: instances table; detail modal w/ attribute + storage-config sub-tabs; create modal (identity-management-type, alias, inbound/outbound toggles); delete.
+- ✅ **SHIPPED** (2026-09-08). Files: `src/backend/routes/aws/connect.ts` (+test), `src/frontend/hooks/useConnect.ts` (+test), `src/frontend/pages/services/ConnectDashboard.tsx` (+test), registered in `routes/aws/index.ts` (`/connect`), `serviceRegistry.tsx` (key `connect`), `types/services.ts` (Customer Engagement). Backend: `GET/PUT /instances`, `GET/DELETE /instances/:id`, `GET /instances/:id/attributes`, `GET/POST /instances/:id/attributes/:type`, `GET/PUT/DELETE /instances/:id/storage-configs`, `GET/POST/DELETE /instances/:id/storage-configs/:associationId`. UI: instances table (alias/status/identity type), create modal (alias, identity-management-type select, inbound/outbound toggles), details modal with Attributes (toggle values) and Storage configs (associate/disassociate) tabs, delete confirm. Added `@aws-sdk/client-connect` dep.
 
 #### N.2 Redshift (`@aws-sdk/client-redshift`) — 21 ops (real PostgreSQL container per cluster)
 From `RedshiftQueryHandler.java` (Query protocol, `Action=` param):
@@ -1951,8 +1952,10 @@ TranslateText, TranslateDocument, ListLanguages. Dashboard: translator console (
 
 Files: `src/backend/routes/aws/translate.ts` (+test), `src/frontend/hooks/useTranslate.ts` (+test), `src/frontend/pages/services/TranslateDashboard.tsx` (+test), registered in `routes/aws/index.ts` (`/translate`), `serviceRegistry.tsx`, `types/services.ts` (Machine Learning). Backend: `GET /languages`, `POST /translate-text`, `POST /translate-document` (content text → utf8 bytes for the SDK blob). UI: Text + Document tabs; source/target/content-type selects fed by ListLanguages; success/error alerts. Added `@aws-sdk/client-translate` dep.
 
-#### N.18 AWS Sign-In (`signin/`) — 2 endpoints, no SDK
-`SigninController.java` exposes OAuth `/v1/authorize` + `/v1/token` (+ consent page) for Cognito/identity-center federation. No AWS SDK model exists — implement as raw `flociFetch` proxy routes (`/api/signin/authorize`, `/api/signin/token`) and a small console for testing the flow.
+#### N.18 AWS Sign-In (`signin/`) — 2 endpoints, no SDK — ✅ **SHIPPED** (2026-09-08)
+`SigninController.java` exposes OAuth `/v1/authorize` + `/v1/token` (+ consent page) for Cognito/identity-center federation. No AWS SDK model exists — implemented as raw fetch proxy routes and a small console for testing the flow.
+
+Files: `src/backend/routes/aws/signin.ts` (+test), `src/frontend/hooks/useSignIn.ts` (+test), `src/frontend/pages/services/SignInDashboard.tsx` (+test), registered in `routes/aws/index.ts` (`/signin`), `serviceRegistry.tsx` (under `iam` external key), `types/services.ts` (Security, Identity & Compliance). Backend: `GET /authorize` (query forwarding, `redirect: manual`), `POST /consent` (form-encoded, validates requestId + action), `POST /token` (JSON passthrough, surfaces Floci errors). UI: three-step OAuth console — authorize params → request_id extraction → approve/deny → token exchange with JSON body editor.
 
 #### N.19 SSO Admin (`@aws-sdk/client-sso-admin`) — 1 op today — ✅ **SHIPPED** (2026-09-07)
 Currently only `case "ListInstances"` (returns the `floci-identity-center` instance). Build the minimal backend route + instance list card now; extend as Floci adds CreateInstance/assignment ops. Tiny.
