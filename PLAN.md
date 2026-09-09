@@ -1837,7 +1837,7 @@ These are Floci services merged into Floci **after 2026-08-25** (EFS `#2371`, Se
 | # | Service | Floci Package | Protocol | Ops | Dashboard Sketch | Complexity |
 |---|---------|--------------|----------|-----|------------------|------------|
 | N.1 | **Amazon Connect** | `connect/` | REST JSON `/instance` | 15 | Instance CRUD + attributes + storage-config tabs | ✅ **Done** |
-| N.2 | **Redshift** | `redshift/` | Query + PG container | 21 | Cluster CRUD, snapshots, parameter groups, subnet groups, tags | Large |
+| N.2 | **Redshift** | `redshift/` | Query + PG container | 21 | Cluster CRUD, snapshots, parameter groups, subnet groups, tags | ✅ **Done** |
 | N.3 | **EFS** | `efs/` | REST JSON | 17 | File system CRUD, mount targets, access points, policies, lifecycle | Large |
 | N.4 | **Lake Formation** | `lakeformation/` | REST JSON | 16 | Data lake settings, resources, permissions, LF-tags | Medium |
 | N.5 | **Resource Explorer 2** | `resourceexplorer2/` | REST JSON (rewritten `/re2/*`) | 32 | Index/view CRUD + search/query | Medium |
@@ -1873,7 +1873,7 @@ Endpoints from `ConnectController.java` (`@Path("/instance")`):
 - Dashboard: instances table; detail modal w/ attribute + storage-config sub-tabs; create modal (identity-management-type, alias, inbound/outbound toggles); delete.
 - ✅ **SHIPPED** (2026-09-08). Files: `src/backend/routes/aws/connect.ts` (+test), `src/frontend/hooks/useConnect.ts` (+test), `src/frontend/pages/services/ConnectDashboard.tsx` (+test), registered in `routes/aws/index.ts` (`/connect`), `serviceRegistry.tsx` (key `connect`), `types/services.ts` (Customer Engagement). Backend: `GET/PUT /instances`, `GET/DELETE /instances/:id`, `GET /instances/:id/attributes`, `GET/POST /instances/:id/attributes/:type`, `GET/PUT/DELETE /instances/:id/storage-configs`, `GET/POST/DELETE /instances/:id/storage-configs/:associationId`. UI: instances table (alias/status/identity type), create modal (alias, identity-management-type select, inbound/outbound toggles), details modal with Attributes (toggle values) and Storage configs (associate/disassociate) tabs, delete confirm. Added `@aws-sdk/client-connect` dep.
 
-#### N.2 Redshift (`@aws-sdk/client-redshift`) — 21 ops (real PostgreSQL container per cluster)
+#### N.2 Redshift (`@aws-sdk/client-redshift`) — 21 ops (real PostgreSQL container per cluster) — ✅ **Done** (backend route, hooks, dashboard, 143 tests @ 100%)
 From `RedshiftQueryHandler.java` (Query protocol, `Action=` param):
 - Clusters: CreateCluster, DescribeClusters (returns dynamic Endpoint.Address/Port), DeleteCluster, ModifyCluster, RebootCluster
 - Snapshots: CreateClusterSnapshot, DescribeClusterSnapshots, DeleteClusterSnapshot, RestoreFromClusterSnapshot

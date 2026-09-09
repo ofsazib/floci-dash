@@ -484,6 +484,7 @@ These services have full CRUD operations in both backend and frontend:
 | **IAM Identity Center (SSO)** | Identity Center instances (list) — read-only view of the single Floci instance |
 | **CodeGuru Reviewer** | Repository associations (list/associate/disassociate) with provider selection and tag add/remove per association |
 | **Amazon Connect** | Instances (list/create/delete), attributes (list + value toggles), storage configs (associate/disassociate) with per-instance details modal |
+| **Amazon Redshift** | Clusters (list/create/delete/reboot/modify), snapshots (create/delete/restore), parameter groups (create/delete/params editing), subnet groups (create/edit/delete), tags |
 | **AWS Sign-In** | Local OAuth console — authorize → consent (approve/deny) → token exchange with JSON body editor |
 
 ### Navigation + status (75 services)
@@ -495,12 +496,12 @@ All services reported by Floci appear in the sidebar with status indicators.
 
 **Compute:** EC2, ECS, EKS, Auto Scaling, App Auto Scaling, Lambda, AWS Batch
 **Storage:** S3, S3 Vector Search, ECR
-**Database:** DynamoDB, DocumentDB, ElastiCache, MemoryDB, Neptune, RDS, RDS Data API
+**Database:** DynamoDB, DocumentDB, ElastiCache, MemoryDB, Neptune, RDS, RDS Data API, Amazon Redshift
 **Networking:** API Gateway, API Gateway V2, AppSync, CloudFront, ELB, Route 53
 **Messaging:** EventBridge (Events), EventBridge Pipes, EventBridge Scheduler, Kinesis, Kinesis Firehose, SES, SNS, SQS
 **Security:** ACM, AWS Sign-In, Cognito, IAM, IAM Identity Center (SSO), KMS, Resource Access Manager (RAM), Secrets Manager, WAF v2
 **Management:** AppConfig, AppConfig Data, CloudFormation, CloudTrail, CloudWatch Logs, CloudWatch Metrics, Config, Managed Prometheus (AMP), Service Discovery (Cloud Map), Service Quotas, SSM (Systems Manager)
-**Analytics:** Athena, Glue, MSK (Kafka), OpenSearch, Step Functions, Amazon EMR
+**Analytics:** Athena, Glue, MSK (Kafka), OpenSearch, Step Functions, Amazon EMR, Amazon Redshift
 **ML/AI:** Bedrock Runtime, Comprehend, Rekognition, Textract, Transcribe, Translate
 **Billing:** BCM Data Exports, Cost Explorer, Cost & Usage Report, Pricing, Resource Groups Tagging
 **Customer Engagement:** Amazon Connect
