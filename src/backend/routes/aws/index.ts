@@ -102,6 +102,7 @@ import ssoAdminRoutes from "./ssoadmin";
 import ramRoutes from "./ram";
 import codeGuruReviewerRoutes from "./codegurureviewer";
 import connectRoutes from "./connect";
+import redshiftRoutes from "./redshift";
 import signinRoutes from "./signin";
 
 const router = new Hono();
@@ -208,6 +209,7 @@ router.route("/ssoadmin", ssoAdminRoutes);
 router.route("/ram", ramRoutes);
 router.route("/codegurureviewer", codeGuruReviewerRoutes);
 router.route("/connect", connectRoutes);
+router.route("/redshift", redshiftRoutes);
 router.route("/signin", signinRoutes);
 
   router.get("/", (c: Context) => {

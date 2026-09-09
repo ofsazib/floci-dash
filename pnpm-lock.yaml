@@ -215,6 +215,9 @@ importers:
       '@aws-sdk/client-rds-data':
         specifier: ^3.1073.0
         version: 3.1073.0
+      '@aws-sdk/client-redshift':
+        specifier: ^3.1127.0
+        version: 3.1127.0
       '@aws-sdk/client-rekognition':
         specifier: ^3.1126.0
         version: 3.1126.0
@@ -688,6 +691,10 @@ packages:
 
   '@aws-sdk/client-rds@3.1070.0':
     resolution: {integrity: sha512-ifPpp5izdTztL07ZGXKbxHCrLuPOBh6dDa6dYEhAAjrpiilMFDj/93a96aVVafV67rjR5Xd5h8sWGaBMMAWNZA==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/client-redshift@3.1127.0':
+    resolution: {integrity: sha512-0Hk8+zwWXDIJdu1g71BFho6/bNxZyFFC7a34nZL0iGkW1WxMT3r4Mk2n1fSDGsdj6Si9pJlnK63DN5tJzzLwiQ==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-rekognition@3.1126.0':
@@ -3595,6 +3602,17 @@ snapshots:
       '@smithy/fetch-http-handler': 5.5.0
       '@smithy/node-http-handler': 4.8.0
       '@smithy/types': 4.15.0
+      tslib: 2.8.1
+
+  '@aws-sdk/client-redshift@3.1127.0':
+    dependencies:
+      '@aws-sdk/core': 3.977.9
+      '@aws-sdk/credential-provider-node': 3.972.82
+      '@aws-sdk/types': 3.974.5
+      '@smithy/core': 3.33.3
+      '@smithy/fetch-http-handler': 5.7.2
+      '@smithy/node-http-handler': 4.11.3
+      '@smithy/types': 4.17.2
       tslib: 2.8.1
 
   '@aws-sdk/client-rekognition@3.1126.0':

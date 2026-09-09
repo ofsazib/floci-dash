@@ -329,7 +329,7 @@ describe("AppLayoutShell — search", () => {
           sqs: "running",
           sns: "running",
           kms: "running",
-          redshift: "running",
+          efs: "running",
         },
         stats: { running: 8, total: 8 },
       },
@@ -341,8 +341,8 @@ describe("AppLayoutShell — search", () => {
       { wrapper: createWrapper() },
     );
     const input = screen.getByPlaceholderText(/^Find services/);
-    await user.type(input, "redshift");
-    expect(screen.getByText("redshift")).toBeTruthy();
+    await user.type(input, "efs");
+    expect(screen.getByText("efs")).toBeTruthy();
   });
 });
 
@@ -653,11 +653,11 @@ describe("AppLayoutShell — favorites", () => {
   it("shows raw key for favorite without a label", () => {
     (useHealth as any).mockReturnValue({
       data: {
-        services: { s3: "running", redshift: "running" },
+        services: { s3: "running", efs: "running" },
         stats: { running: 2, total: 2 },
       },
     });
-    favState.favorites = ["redshift"];
+    favState.favorites = ["efs"];
     render(
       <AppLayoutShell>
         <div>Content</div>
@@ -665,7 +665,7 @@ describe("AppLayoutShell — favorites", () => {
       { wrapper: createWrapper() },
     );
     expect(screen.getByText("★ Favorites")).toBeTruthy();
-    expect(screen.getAllByText("redshift").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("efs").length).toBeGreaterThan(0);
   });
 });
 
@@ -697,11 +697,11 @@ describe("AppLayoutShell — recently visited", () => {
   it("shows raw key for recently visited without a label", () => {
     (useHealth as any).mockReturnValue({
       data: {
-        services: { s3: "running", redshift: "running" },
+        services: { s3: "running", efs: "running" },
         stats: { running: 2, total: 2 },
       },
     });
-    recentState.recentlyVisited = ["redshift"];
+    recentState.recentlyVisited = ["efs"];
     render(
       <AppLayoutShell>
         <div>Content</div>
@@ -709,7 +709,7 @@ describe("AppLayoutShell — recently visited", () => {
       { wrapper: createWrapper() },
     );
     expect(screen.getByText("Recently Visited")).toBeTruthy();
-    expect(screen.getAllByText("redshift").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("efs").length).toBeGreaterThan(0);
   });
 });
 
@@ -717,7 +717,7 @@ describe("AppLayoutShell — category grouping", () => {
   it("renders category groups for non-implemented services", () => {
     (useHealth as any).mockReturnValue({
       data: {
-        services: { s3: "running", athena: "running", redshift: "running" },
+        services: { s3: "running", athena: "running", efs: "running" },
         stats: { running: 3, total: 3 },
       },
     });
@@ -735,7 +735,7 @@ describe("AppLayoutShell — category grouping", () => {
   it("sorts non-implemented services alphabetically within a category", () => {
     (useHealth as any).mockReturnValue({
       data: {
-        services: { redshift: "running", glue: "running", athena: "running" },
+        services: { efs: "running", glue: "running", athena: "running" },
         stats: { running: 3, total: 3 },
       },
     });
@@ -894,7 +894,7 @@ describe("AppLayoutShell — global search select", () => {
   it("navigates to an unlabeled non-implemented service", async () => {
     (useHealth as any).mockReturnValue({
       data: {
-        services: { s3: "running", redshift: "running" },
+        services: { s3: "running", efs: "running" },
         stats: { running: 2, total: 2 },
       },
     });
@@ -905,11 +905,11 @@ describe("AppLayoutShell — global search select", () => {
       </AppLayoutShell>,
       { wrapper: createWrapper() },
     );
-    await user.type(screen.getAllByPlaceholderText(/Search services/)[1], "redshift");
-    const options = await screen.findAllByRole("option", { name: /redshift/ });
+    await user.type(screen.getAllByPlaceholderText(/Search services/)[1], "efs");
+    const options = await screen.findAllByRole("option", { name: /efs/ });
     const option = options.find((o) => !o.textContent?.includes("Search for"))!;
     await user.click(option);
-    expect(mockNavigate).toHaveBeenCalledWith("/services/redshift");
+    expect(mockNavigate).toHaveBeenCalledWith("/services/efs");
   });
 
   it("does not navigate when a non-service value is selected", async () => {
