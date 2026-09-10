@@ -1882,7 +1882,7 @@ From `RedshiftQueryHandler.java` (Query protocol, `Action=` param):
 - Tags: CreateTags, DeleteTags, DescribeTags
 - ⚠ Docker-backed (needs Floci Docker socket; per-cluster auth proxy ports 7100–7199). Dashboard = metadata + container-status display; no data plane UI.
 
-#### N.3 EFS (`@aws-sdk/client-efs`) — 17 ops
+#### N.3 EFS (`@aws-sdk/client-efs`) — 17 ops — ✅ Done (2026-09-10)
 From `EfsController.java` (REST, path args FileSystemId/MountTargetId/AccessPointId):
 - File systems: Create/Describe/Update/Delete, UpdateFileSystemProtection
 - Mount targets: Create/Describe/Delete, Describe/Modify MountTargetSecurityGroups
@@ -2037,6 +2037,6 @@ Quick wins first (Small), then Medium, then Large — each adds a full backend r
 | 10 | **Control Tower** (N.11) | 15 ops, landing zones + baselines |
 | 11 | **Resource Explorer 2** (N.5) | 32 ops, index/views/search |
 | 12 | **Redshift** (N.2) | 21 ops, Docker-backed, high value |
-| 13 | **EFS** (N.3) | 17 ops, Docker-backed, high value |
+| 13 | **EFS** (N.3) | ✅ **Done** (2026-09-10) — 17 ops |
 | 16 | **Network Firewall** (N.7) | 27 ops, 3 nested configs |
 | 17 | **Service Catalog** (N.8) | 89 ops — stage v1 (portfolios/products/tag-options/provisioned), defer plans/actions/shares |

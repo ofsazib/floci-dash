@@ -485,6 +485,7 @@ These services have full CRUD operations in both backend and frontend:
 | **CodeGuru Reviewer** | Repository associations (list/associate/disassociate) with provider selection and tag add/remove per association |
 | **Amazon Connect** | Instances (list/create/delete), attributes (list + value toggles), storage configs (associate/disassociate) with per-instance details modal |
 | **Amazon Redshift** | Clusters (list/create/delete/reboot/modify), snapshots (create/delete/restore), parameter groups (create/delete/params editing), subnet groups (create/edit/delete), tags |
+| **Amazon EFS** | File systems (list/create/delete), mount targets (create/delete), access points (create/delete), tags (add/remove per file system) |
 | **AWS Sign-In** | Local OAuth console — authorize → consent (approve/deny) → token exchange with JSON body editor |
 
 ### Navigation + status (75 services)
@@ -496,7 +497,7 @@ All services reported by Floci appear in the sidebar with status indicators.
 
 **Compute:** EC2, ECS, EKS, Auto Scaling, App Auto Scaling, Lambda, AWS Batch
 **Storage:** S3, S3 Vector Search, ECR
-**Database:** DynamoDB, DocumentDB, ElastiCache, MemoryDB, Neptune, RDS, RDS Data API, Amazon Redshift
+**Database:** DynamoDB, DocumentDB, ElastiCache, MemoryDB, Neptune, RDS, RDS Data API, Amazon Redshift, EFS
 **Networking:** API Gateway, API Gateway V2, AppSync, CloudFront, ELB, Route 53
 **Messaging:** EventBridge (Events), EventBridge Pipes, EventBridge Scheduler, Kinesis, Kinesis Firehose, SES, SNS, SQS
 **Security:** ACM, AWS Sign-In, Cognito, IAM, IAM Identity Center (SSO), KMS, Resource Access Manager (RAM), Secrets Manager, WAF v2
