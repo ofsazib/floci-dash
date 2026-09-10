@@ -486,6 +486,7 @@ These services have full CRUD operations in both backend and frontend:
 | **Amazon Connect** | Instances (list/create/delete), attributes (list + value toggles), storage configs (associate/disassociate) with per-instance details modal |
 | **Amazon Redshift** | Clusters (list/create/delete/reboot/modify), snapshots (create/delete/restore), parameter groups (create/delete/params editing), subnet groups (create/edit/delete), tags |
 | **Amazon EFS** | File systems (list/create/delete), mount targets (create/delete), access points (create/delete), tags (add/remove per file system) |
+| **Lake Formation** | Data lake settings (admins + external filtering), registered resources (register/update-role/deregister), permissions (grant/revoke SELECT or ALL), LF-tags (create/update/delete + add values) |
 | **AWS Sign-In** | Local OAuth console — authorize → consent (approve/deny) → token exchange with JSON body editor |
 
 ### Navigation + status (75 services)

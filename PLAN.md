@@ -1891,9 +1891,11 @@ From `EfsController.java` (REST, path args FileSystemId/MountTargetId/AccessPoin
 - Tags: CreateTags/DescribeTags/DeleteTags + TagResource/UntagResource/ListTagsForResource
 - Dashboard: file-system table + detail (mount targets, access points, policies, lifecycle); create/delete; ⚠ mostly metadata except create/delete return real container-backed ids.
 
-#### N.4 Lake Formation (`@aws-sdk/client-lakeformation`) — 16 ops
+#### N.4 Lake Formation (`@aws-sdk/client-lakeformation`) — 16 ops ✅ Done (2026-09-10)
 From `LakeFormationController.java`: put/getDataLakeSettings, register/deregister/list/describeResource, grant/revoke/listPermissions, create/get/update/delete/list LFTags, add/removeLFTagsToResource.
-- Dashboard: settings view + resource table + permissions table + LF-tag table with grant/revoke modal.
+- Backend `lakeformation.ts` (18 routes): settings GET/PUT, resources list/register/deregister/detail/update, permissions list/grant/revoke, LF-tags list/create/get/update/delete, LF-tags-to-resource add/remove. Permission[] cast on grant/revoke inputs.
+- Hooks `useLakeFormation.ts`: 13 query/mutation hooks.
+- Dashboard: 4 tabs — Settings (admins editor + external-filtering toggle), Resources (register/edit-role/deregister modals), Permissions (grant SELECT/ALL + revoke), LF-tags (create, add-value, delete).
 
 #### N.5 Resource Explorer 2 (`@aws-sdk/client-resource-explorer-2`) — 32 ops
 From `ResourceExplorer2Controller.java`: listResources, search, listSupportedResourceTypes; index CRUD (create/get/delete/list/updateIndexType/listIndexes/listIndexesForMembers); views (create/get/delete/update/list/batchGetView/associate/disassociate/getDefaultView/listManagedViews/listServiceViews/listServiceIndexes); config (getAccountLevelServiceConfiguration, streaming access, setup CRUD).
@@ -2032,7 +2034,7 @@ Quick wins first (Small), then Medium, then Large — each adds a full backend r
 | 1 | **AWS Sign-In** (N.18) | raw proxy console, small |
 | 2 | **Amazon Connect** (N.1) | 15 ops, 3 tab types, high value |
 | 7 | **ELB Classic** (N.6) | 20 ops; note classic ≠ v2 SDK/prefix |
-| 8 | **Lake Formation** (N.4) | 16 ops, permissions model |
+| ~~8~~ | ~~**Lake Formation** (N.4)~~ | ✅ **Done** (2026-09-10) — 16 ops |
 | 9 | **Route 53 Resolver** (N.14) | 18 ops, 3 tables |
 | 10 | **Control Tower** (N.11) | 15 ops, landing zones + baselines |
 | 11 | **Resource Explorer 2** (N.5) | 32 ops, index/views/search |
