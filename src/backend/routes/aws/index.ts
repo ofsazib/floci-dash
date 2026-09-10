@@ -104,6 +104,7 @@ import codeGuruReviewerRoutes from "./codegurureviewer";
 import connectRoutes from "./connect";
 import redshiftRoutes from "./redshift";
 import efsRoutes from "./efs";
+import lakeformationRoutes from "./lakeformation";
 import signinRoutes from "./signin";
 
 const router = new Hono();
@@ -212,6 +213,7 @@ router.route("/codegurureviewer", codeGuruReviewerRoutes);
 router.route("/connect", connectRoutes);
 router.route("/redshift", redshiftRoutes);
 router.route("/efs", efsRoutes);
+router.route("/lakeformation", lakeformationRoutes);
 router.route("/signin", signinRoutes);
 
   router.get("/", (c: Context) => {

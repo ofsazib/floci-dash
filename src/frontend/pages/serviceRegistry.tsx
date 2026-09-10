@@ -87,6 +87,7 @@ import { ConnectDashboard } from "./services/ConnectDashboard";
 import { RedshiftDashboard } from "./services/RedshiftDashboard";
 import SignInDashboard from "./services/SignInDashboard";
 import EFSDashboard from "./services/EFSDashboard";
+import LakeFormationDashboard from "./services/LakeFormationDashboard";
 
 import type { ComponentType } from "react";
 
@@ -179,5 +180,6 @@ export const SERVICE_DASHBOARDS: Record<string, ComponentType> = {
   "connect": ConnectDashboard,
   "redshift": RedshiftDashboard,
   "efs": EFSDashboard,
+  "lakeformation": LakeFormationDashboard,
   "signin": SignInDashboard,
 };
