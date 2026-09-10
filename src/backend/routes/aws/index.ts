@@ -103,6 +103,7 @@ import ramRoutes from "./ram";
 import codeGuruReviewerRoutes from "./codegurureviewer";
 import connectRoutes from "./connect";
 import redshiftRoutes from "./redshift";
+import efsRoutes from "./efs";
 import signinRoutes from "./signin";
 
 const router = new Hono();
@@ -210,6 +211,7 @@ router.route("/ram", ramRoutes);
 router.route("/codegurureviewer", codeGuruReviewerRoutes);
 router.route("/connect", connectRoutes);
 router.route("/redshift", redshiftRoutes);
+router.route("/efs", efsRoutes);
 router.route("/signin", signinRoutes);
 
   router.get("/", (c: Context) => {

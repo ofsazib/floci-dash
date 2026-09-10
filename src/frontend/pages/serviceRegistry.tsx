@@ -86,6 +86,7 @@ import { CodeGuruReviewerDashboard } from "./services/CodeGuruReviewerDashboard"
 import { ConnectDashboard } from "./services/ConnectDashboard";
 import { RedshiftDashboard } from "./services/RedshiftDashboard";
 import SignInDashboard from "./services/SignInDashboard";
+import EFSDashboard from "./services/EFSDashboard";
 
 import type { ComponentType } from "react";
 
@@ -177,5 +178,6 @@ export const SERVICE_DASHBOARDS: Record<string, ComponentType> = {
   "codeguru-reviewer": CodeGuruReviewerDashboard,
   "connect": ConnectDashboard,
   "redshift": RedshiftDashboard,
+  "efs": EFSDashboard,
   "signin": SignInDashboard,
 };

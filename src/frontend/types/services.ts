@@ -1,7 +1,7 @@
 export const SERVICE_CATEGORIES: Record<string, string[]> = {
   "Compute":        ["ec2", "lambda", "autoscaling", "lightsail", "applicationautoscaling"],
   "Containers":     ["ecs", "ecr", "eks"],
-  "Storage":        ["s3", "s3tables"],
+  "Storage":        ["s3", "s3tables", "efs"],
   "Database":       ["dynamodb", "rds", "neptune", "elasticache", "docdb", "memorydb"],
   "Networking & Content Delivery": ["elasticloadbalancing", "route53", "cloudfront", "apigateway", "apigatewayv2", "appsync"],
   "Application Integration": ["sqs", "sns", "events", "kinesis", "pipes", "scheduler", "email", "states", "appsync", "swf", "mq"],
@@ -37,7 +37,7 @@ export const CATEGORY_ORDER = [
 export const SERVICE_CATEGORY_MAP: Record<string, string> = {
   ec2: "Compute", lambda: "Compute", autoscaling: "Compute", lightsail: "Compute",
   ecs: "Containers", ecr: "Containers", eks: "Containers",
-  s3: "Storage", s3vectors: "Storage", s3tables: "Storage",
+  s3: "Storage", s3vectors: "Storage", s3tables: "Storage", efs: "Storage",
   fis: "Management & Governance", cloudcontrol: "Management & Governance",
   guardduty: "Security, Identity & Compliance", cloudhsm: "Security, Identity & Compliance",
   bedrockagentcore: "Machine Learning",
@@ -160,6 +160,7 @@ export const SERVICE_LABELS: Record<string, string> = {
   "codeguru-reviewer": "CodeGuru Reviewer",
   "connect": "Amazon Connect",
   "redshift": "Amazon Redshift",
+  "efs": "Elastic File System (EFS)",
   "signin": "AWS Sign-In",
   "translate": "Translate",
   "rekognition": "Rekognition",
