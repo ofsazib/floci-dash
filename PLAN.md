@@ -26,7 +26,7 @@ An AWS Console-style web dashboard for Floci, the local AWS emulator. The dashbo
 | Shared components | Done | ResourceTable, CreateModal, DeleteButton, ServiceCard, ServiceGrid, StatCard, StatusBadge |
 | Layout | Done | AppLayoutShell with TopNavigation, SideNavigation, dark mode |
 | Settings | Done | Dark mode toggle, refresh interval |
-| ~89 services implemented | ServicePage: browse, create, delete | 5 newer Floci services (of N.1–N.19; N.1–N.4, N.9, N.10, N.12–N.19 shipped) still need dashboards — see GAP ANALYSIS |
+| ~89 services implemented | ServicePage: browse, create, delete | 4 newer Floci services (of N.1–N.19; remaining N.5, N.6, N.7, N.8) still need dashboards — see GAP ANALYSIS |
 
 ### Architecture Constraints
 
@@ -1846,7 +1846,7 @@ These are Floci services merged into Floci **after 2026-08-25** (EFS `#2371`, Se
 | N.8 | **Service Catalog** | `servicecatalog/` | JSON 1.1 | 89 | Portfolio/product/artifact CRUD, provision, tag options, constraints | Very Large |
 | N.9 | **Service Quotas** | `servicequotas/` | JSON 1.1 | 5 | Quota list/get + increase request | ✅ **Done** |
 | N.10 | **AWS RAM** | `ram/` | REST JSON (lowercase ops) | 12 | Resource share CRUD, principals, invitations, tags | ✅ **Done** |
-| N.11 | **Control Tower** | `controltower/` | REST JSON | 15 | Landing zone CRUD, baselines, operations | Medium |
+| N.11 | **Control Tower** | `controltower/` | REST JSON | 15 | Landing zone CRUD, baselines, operations | ✅ **Done** |
 | N.12 | **Managed Prometheus (AMP)** | `aps/` | REST JSON | 8 | Workspace CRUD + alias + tags | ✅ **Done** |
 | N.13 | **CodeGuru Reviewer** | `codegurureviewer/` | REST JSON | 7 | Repository association CRUD + tags | ✅ **Done** |
 | N.14 | **Route 53 Resolver** | `route53resolver/` | JSON 1.1 | 18 | Firewall domain lists, resolver endpoints/rules/associations | ✅ **Done** |
@@ -1923,8 +1923,12 @@ From `RamController.java` (lowercase REST ops): enableSharingWithAwsOrganization
 
 Files: `src/backend/routes/aws/ram.ts` (+test), `src/frontend/hooks/useRAM.ts` (+test), `src/frontend/pages/services/RAMDashboard.tsx` (+test), registered in `routes/aws/index.ts` (`/ram`), `serviceRegistry.tsx`, `types/services.ts` (Security, Identity & Compliance). Backend: `POST /enable-sharing`, `GET/POST /shares`, `PUT/DELETE /shares/:arn`, `POST /shares/:arn/associate|disassociate`, `GET /principals`, `GET /resources`, `GET /invitations`, `POST /tags`, `POST /tags/untag`. UI: shares table (create/delete), Associate/Disassociate modals (newline lists for principals + resource ARNs), Details modal with Principals/Resources tabs, Invitations tab, org-sharing toggle. Added `@aws-sdk/client-ram` dep.
 
-#### N.11 Control Tower (`@aws-sdk/client-controltower`) — 15 ops
-From `ControlTowerController.java`: Landing zones (list/get/create/update/delete/reset), operations (get/list), baselines (listBaselines, list/getEnabledBaseline, enable/reset/updateEnabledBaseline, getBaselineOperation). Dashboard: landing-zone card + baselines table + operation history.
+#### N.11 Control Tower (`@aws-sdk/client-controltower`) — 15 ops — ✅ Done (2026-09-11)
+From `ControlTowerController.java`: Landing zones (list/get/create/update/delete/reset), operations (get/list), baselines (listBaselines, list/getEnabledBaseline, enable/reset/updateEnabledBaseline, getBaselineOperation).
+- Backend `controltower.ts` (14 routes): landing-zones GET (list hydrated via GetLandingZone per arn)/POST/PUT update/reset/DELETE, operations list/detail, baselines list, enabled-baselines list/detail/enable/update/reset, baseline-operation detail. Manifest/parameters accepted as JSON strings or objects; ARNs via `?identifier=` query params.
+- Hooks `useControlTower.ts`: 13 query/mutation hooks.
+- Dashboard: 4 tabs — Landing zone (create with manifest JSON + version, update with inheritance-drift remediation toggle, reset, delete), Baselines (catalog + enable modal with rule picker, version, target ARN, parameters), Enabled baselines (update version/parameters with live current-parameters view, reset), Operations (LZ operation details + baseline operation lookup).
+- Note: Floci lazily seeds one ACTIVE landing zone per region — create returns 409 while one exists.
 
 #### N.12 Managed Prometheus — AMP (`@aws-sdk/client-amp`) — 8 ops — ✅ **SHIPPED** (2026-09-07)
 From `ApsController.java`: createWorkspace, listWorkspaces, describeWorkspace, deleteWorkspace, updateWorkspaceAlias + tags (list/tag/untag). Dashboard: workspace table + alias edit + tag editor. Small.
@@ -2017,9 +2021,9 @@ These were Floci services that previously had **no** corresponding backend route
 |--------|-------|
 | Previously resolved gaps (G.1–G.97) | 97 (all Done/N/A) |
 | Resolved milestone services (M.1–M.14) | 0 — **all 14 shipped** |
-| Missing services (N.1–N.19, added to Floci 2026-08-25 → 09-04) | **5 left (14 of 19 shipped: N.1–N.4, N.9, N.10, N.12–N.19)** |
+| Missing services (N.1–N.19, added to Floci 2026-08-25 → 09-04) | **4 left (15 of 19 shipped; remaining: N.5, N.6, N.7, N.8)** |
 | New ops in existing services | 2 actionable (SES + Cognito) |
-| **Total remaining gaps** | **5 full services + 2 op-level** |
+| **Total remaining gaps** | **4 full services + 2 op-level** |
 
 ---
 
@@ -2039,7 +2043,7 @@ Quick wins first (Small), then Medium, then Large — each adds a full backend r
 | 7 | **ELB Classic** (N.6) | 20 ops; note classic ≠ v2 SDK/prefix |
 | ~~8~~ | ~~**Lake Formation** (N.4)~~ | ✅ **Done** (2026-09-10) — 16 ops |
 | ~~9~~ | ~~**Route 53 Resolver** (N.14)~~ | ✅ **Done** (2026-09-10) — 18 ops |
-| 10 | **Control Tower** (N.11) | 15 ops, landing zones + baselines |
+| ~~10~~ | ~~**Control Tower** (N.11)~~ | ✅ **Done** (2026-09-11) — 15 ops |
 | 11 | **Resource Explorer 2** (N.5) | 32 ops, index/views/search |
 | 12 | **Redshift** (N.2) | 21 ops, Docker-backed, high value |
 | 13 | **EFS** (N.3) | ✅ **Done** (2026-09-10) — 17 ops |

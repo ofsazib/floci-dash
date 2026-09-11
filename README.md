@@ -505,9 +505,10 @@ These services have full CRUD operations in both backend and frontend:
 | **Amazon EFS** | File systems (list/create/delete), mount targets (create/delete), access points (create/delete), tags (add/remove per file system) |
 | **Lake Formation** | Data lake settings (admins + external filtering), registered resources (register/update-role/deregister), permissions (grant/revoke SELECT or ALL), LF-tags (create/update/delete + add values) |
 | **Route 53 Resolver** | Resolver endpoints (list/create/delete, rename + endpoint-type edit), rules (list/create/delete, FORWARD/SYSTEM/RECURSIVE with domain + target IPs, rename/retarget edit), rule associations (associate/disassociate rule ↔ VPC with rule picker), firewall domain lists (list/create/delete) |
+| **Control Tower** | Landing zone (list/create/update with inheritance-drift remediation, reset, delete), baseline catalog (list), enable baseline (with version/target/parameters), enabled baselines (list/update/reset with current-parameters view), landing-zone + baseline operation details |
 | **AWS Sign-In** | Local OAuth console — authorize → consent (approve/deny) → token exchange with JSON body editor |
 
-### Navigation + status (75 services)
+### Navigation + status (76 services)
 
 All services reported by Floci appear in the sidebar with status indicators.
 
