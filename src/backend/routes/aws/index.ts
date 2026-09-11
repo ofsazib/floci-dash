@@ -105,6 +105,7 @@ import connectRoutes from "./connect";
 import redshiftRoutes from "./redshift";
 import efsRoutes from "./efs";
 import lakeformationRoutes from "./lakeformation";
+import route53resolverRoutes from "./route53resolver";
 import signinRoutes from "./signin";
 
 const router = new Hono();
@@ -214,6 +215,7 @@ router.route("/connect", connectRoutes);
 router.route("/redshift", redshiftRoutes);
 router.route("/efs", efsRoutes);
 router.route("/lakeformation", lakeformationRoutes);
+router.route("/route53resolver", route53resolverRoutes);
 router.route("/signin", signinRoutes);
 
   router.get("/", (c: Context) => {
