@@ -256,11 +256,12 @@ The project includes **11,013 tests across 281 test files** with **100% statemen
 ```bash
 make test           # Fast unit tests (no Floci needed)
 make test-cov       # Unit tests with coverage report
+make verify         # Typecheck + unit coverage in parallel (fast local gate)
 make test-all       # Unit + integration tests (requires Floci service container)
 make test-all-cov   # Full suite + coverage (unit + integration) — gates the 100% thresholds end-to-end
 ```
 
-Run the full suite with Floci up (`make up-bg`) to include the 295 integration tests: `npx vitest run` → **273/273 files, 9,250/9,250 tests, exit 0**. CI runs `make test-cov` (fast unit gate) followed by `make test-all-cov` (full combined coverage gate, worker pool capped at 4 to stay within runner RAM).
+Run the full suite with Floci up (`make up-bg`) to include the 295 integration tests: `npx vitest run` → **273/273 files, 9,250/9,250 tests, exit 0**. CI runs typecheck, unit coverage, and the full Floci suite as **three parallel jobs** (`typecheck` / `unit` / `integration`), so gating takes as long as the slowest check rather than the sum; locally `make verify` runs typecheck and unit coverage concurrently (worker pool capped at 4 to stay within runner RAM).
 
 ### Key design decisions
 
@@ -487,6 +488,7 @@ These services have full CRUD operations in both backend and frontend:
 | **Amazon Redshift** | Clusters (list/create/delete/reboot/modify), snapshots (create/delete/restore), parameter groups (create/delete/params editing), subnet groups (create/edit/delete), tags |
 | **Amazon EFS** | File systems (list/create/delete), mount targets (create/delete), access points (create/delete), tags (add/remove per file system) |
 | **Lake Formation** | Data lake settings (admins + external filtering), registered resources (register/update-role/deregister), permissions (grant/revoke SELECT or ALL), LF-tags (create/update/delete + add values) |
+| **Route 53 Resolver** | Resolver endpoints (list/create/delete, rename + endpoint-type edit), rules (list/create/delete, FORWARD/SYSTEM/RECURSIVE with domain + target IPs, rename/retarget edit), rule associations (associate/disassociate rule ↔ VPC with rule picker), firewall domain lists (list/create/delete) |
 | **AWS Sign-In** | Local OAuth console — authorize → consent (approve/deny) → token exchange with JSON body editor |
 
 ### Navigation + status (75 services)

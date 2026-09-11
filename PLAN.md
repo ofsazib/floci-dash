@@ -26,7 +26,7 @@ An AWS Console-style web dashboard for Floci, the local AWS emulator. The dashbo
 | Shared components | Done | ResourceTable, CreateModal, DeleteButton, ServiceCard, ServiceGrid, StatCard, StatusBadge |
 | Layout | Done | AppLayoutShell with TopNavigation, SideNavigation, dark mode |
 | Settings | Done | Dark mode toggle, refresh interval |
-| ~89 services implemented | ServicePage: browse, create, delete | 15 newer Floci services (N.1–N.19; N.9 + N.10 + N.12 + N.13 + N.15 + N.16 + N.17 + N.19 shipped) still need dashboards — see GAP ANALYSIS |
+| ~89 services implemented | ServicePage: browse, create, delete | 5 newer Floci services (of N.1–N.19; N.1–N.4, N.9, N.10, N.12–N.19 shipped) still need dashboards — see GAP ANALYSIS |
 
 ### Architecture Constraints
 
@@ -1849,7 +1849,7 @@ These are Floci services merged into Floci **after 2026-08-25** (EFS `#2371`, Se
 | N.11 | **Control Tower** | `controltower/` | REST JSON | 15 | Landing zone CRUD, baselines, operations | Medium |
 | N.12 | **Managed Prometheus (AMP)** | `aps/` | REST JSON | 8 | Workspace CRUD + alias + tags | ✅ **Done** |
 | N.13 | **CodeGuru Reviewer** | `codegurureviewer/` | REST JSON | 7 | Repository association CRUD + tags | ✅ **Done** |
-| N.14 | **Route 53 Resolver** | `route53resolver/` | JSON 1.1 | 18 | Firewall domain lists, resolver endpoints/rules/associations | Medium |
+| N.14 | **Route 53 Resolver** | `route53resolver/` | JSON 1.1 | 18 | Firewall domain lists, resolver endpoints/rules/associations | ✅ **Done** |
 | N.15 | **Comprehend** | `comprehend/` | JSON 1.1 | 5 | Detect sentiment/key-phrases/language/PII test console | Small |
 | N.16 | **Rekognition** | `rekognition/` | JSON 1.1 | 5 | Detect labels/faces/text/moderation test console | Small |
 | N.17 | **Translate** | `translate/` | JSON 1.1 | 3 | Translate text/document + list languages | ✅ **Done** |
@@ -1936,8 +1936,11 @@ From `CodeGuruReviewerController.java`: associateRepository, describeRepositoryA
 
 Files: `src/backend/routes/aws/codegurureviewer.ts` (+test), `src/frontend/hooks/useCodeGuruReviewer.ts` (+test), `src/frontend/pages/services/CodeGuruReviewerDashboard.tsx` (+test), registered in `routes/aws/index.ts` (`/codegurureviewer`), `serviceRegistry.tsx` (key `codeguru-reviewer`), `types/services.ts` (Developer Tools). Backend: `GET/POST /associations`, `GET/DELETE /associations/:arn`, `GET/POST /tags`, `POST /tags/untag`. UI: associations table (name/owner/provider/state), associate modal with provider select (GitHub/Bitbucket/GHES/S3/CodeCommit — owner field hidden for S3/CodeCommit), tag editor, delete. Added `@aws-sdk/client-codeguru-reviewer` dep.
 
-#### N.14 Route 53 Resolver (`@aws-sdk/client-route53resolver`) — 18 ops
-From `Route53ResolverJsonHandler.java`: firewall domain lists (Create/Get/List/Delete), resolver endpoints (Create/Get/List/Update/Delete), resolver rules (Create/Get/List/Update/Delete), rule associations (Associate/Disassociate/Get/List). Dashboard: 3 tables (endpoints, rules, domain lists) + association display. Ships alongside existing Route53 dashboard or its own tab/page.
+#### N.14 Route 53 Resolver (`@aws-sdk/client-route53resolver`) — 18 ops — ✅ Done (2026-09-10)
+From `Route53ResolverJsonHandler.java`: firewall domain lists (Create/Get/List/Delete), resolver endpoints (Create/Get/List/Update/Delete), resolver rules (Create/Get/List/Update/Delete), rule associations (Associate/Disassociate/Get/List).
+- Backend `route53resolver.ts` (16 routes): firewall-domain-lists list/create/detail/delete, endpoints list/create/detail/patch/delete, rules list/create/detail/patch/delete, rule-associations list/associate/disassociate/detail. Endpoint create sends SDK `IpAddresses` (wire `IpAddressRequests`, which Floci parses).
+- Hooks `useRoute53Resolver.ts`: 14 query/mutation hooks.
+- Dashboard: 4 tabs — Endpoints (create with direction + IP/subnet lines + SGs, rename/type edit, delete), Rules (create FORWARD/SYSTEM/RECURSIVE with domain + target-IP lines + endpoint, rename/retarget edit, delete), Rule associations (associate rule↔VPC with rule picker, disassociate), Firewall domain lists (create/delete).
 
 #### N.15 Comprehend (`@aws-sdk/client-comprehend`) — 5 ops — ✅ **SHIPPED** (2026-09-04)
 DetectSentiment, DetectKeyPhrases, DetectDominantLanguage, DetectPiiEntities, ContainsPiiEntities. Dashboard: text-area test console with per-op result panels. No CRUD.
@@ -2014,9 +2017,9 @@ These were Floci services that previously had **no** corresponding backend route
 |--------|-------|
 | Previously resolved gaps (G.1–G.97) | 97 (all Done/N/A) |
 | Resolved milestone services (M.1–M.14) | 0 — **all 14 shipped** |
-| Missing services (N.1–N.19, added to Floci 2026-08-25 → 09-04) | **17 left (N.9 Service Quotas + N.17 Translate shipped)** |
+| Missing services (N.1–N.19, added to Floci 2026-08-25 → 09-04) | **5 left (14 of 19 shipped: N.1–N.4, N.9, N.10, N.12–N.19)** |
 | New ops in existing services | 2 actionable (SES + Cognito) |
-| **Total remaining gaps** | **17 full services + 2 op-level** |
+| **Total remaining gaps** | **5 full services + 2 op-level** |
 
 ---
 
@@ -2035,7 +2038,7 @@ Quick wins first (Small), then Medium, then Large — each adds a full backend r
 | 2 | **Amazon Connect** (N.1) | 15 ops, 3 tab types, high value |
 | 7 | **ELB Classic** (N.6) | 20 ops; note classic ≠ v2 SDK/prefix |
 | ~~8~~ | ~~**Lake Formation** (N.4)~~ | ✅ **Done** (2026-09-10) — 16 ops |
-| 9 | **Route 53 Resolver** (N.14) | 18 ops, 3 tables |
+| ~~9~~ | ~~**Route 53 Resolver** (N.14)~~ | ✅ **Done** (2026-09-10) — 18 ops |
 | 10 | **Control Tower** (N.11) | 15 ops, landing zones + baselines |
 | 11 | **Resource Explorer 2** (N.5) | 32 ops, index/views/search |
 | 12 | **Redshift** (N.2) | 21 ops, Docker-backed, high value |
