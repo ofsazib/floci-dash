@@ -5,6 +5,7 @@ COMPOSE := docker compose
 
 .PHONY: help install setup dev dev-backend dev-frontend build build-frontend \
         build-backend typecheck start clean test test-cov test-all test-all-cov integration-test \
+        verify \
         _ensure-floci \
         up up-bg down restart rebuild logs logs-floci logs-dashboard \
         ps shell shell-floci prod prod-bg prod-down \
@@ -65,6 +66,9 @@ test: ## Run unit tests only (fast, no Floci needed)
 
 test-cov: ## Run unit tests with coverage report (no Floci needed)
 	pnpm run test:cov
+
+verify: ## Run typecheck + unit coverage in parallel (fast local gate)
+	$(MAKE) -j 2 typecheck test-cov
 
 test-all: ## Run all tests including integration (requires Floci)
 	$(MAKE) _ensure-floci

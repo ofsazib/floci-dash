@@ -23,6 +23,52 @@ permissions:
   packages: write
 
 jobs:
+  # Verification runs as three PARALLEL jobs (typecheck / unit / test)
+  # so release gating takes as long as the slowest check, not the sum.
+  typecheck:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: TypeScript typecheck
+        run: make typecheck
+
+  unit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Unit tests + coverage
+        run: make test-cov
+
   test:
     runs-on: ubuntu-latest
 
@@ -50,15 +96,10 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 22
+          cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      - name: TypeScript typecheck
-        run: make typecheck
-
-      - name: Unit tests + coverage
-        run: make test-cov
 
       - name: Full suite + coverage (gates the 100% thresholds end-to-end)
         run: make test-all-cov
@@ -81,7 +122,7 @@ jobs:
 
   # ── Build each platform natively (no QEMU emulation) ──
   build:
-    needs: test
+    needs: [typecheck, unit, test]
     strategy:
       fail-fast: false
       matrix:

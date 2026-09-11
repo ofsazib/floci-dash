@@ -1,9 +1,11 @@
 # ─── Floci Dash — CI ───
 #
 # Runs on every push/PR to main.
-#   - TypeScript typecheck
-#   - Unit tests + coverage (fast, no dependencies)
-#   - Full suite + coverage against Floci (service container) — gates the 100% thresholds end-to-end
+# Three independent checks run in PARALLEL:
+#   - typecheck:   TypeScript type checking
+#   - unit:        Unit tests + coverage (fast, no dependencies)
+#   - integration: Full suite + coverage against Floci — gates the thresholds end-to-end
+# Docker builds (main branch only) start once all three pass.
 
 name: CI
 
@@ -18,7 +20,51 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
+  typecheck:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: TypeScript typecheck
+        run: make typecheck
+
+  unit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Unit tests + coverage (no Floci needed)
+        run: make test-cov
+
+  integration:
     runs-on: ubuntu-latest
 
     services:
@@ -45,17 +91,12 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 22
+          cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: TypeScript typecheck
-        run: make typecheck
-
-      - name: Unit tests + coverage (no Floci needed)
-        run: make test-cov
-
-      - name: Full suite + coverage against Floci (gates the 100% thresholds end-to-end)
+      - name: Full suite + coverage against Floci (gates the thresholds end-to-end)
         run: make test-all-cov
         env:
           FLOCI_URL: http://localhost:9878
@@ -76,7 +117,7 @@ jobs:
 
   # ── Build each platform natively (no QEMU emulation) ──
   build:
-    needs: test
+    needs: [typecheck, unit, integration]
     if: github.ref == 'refs/heads/main'
     strategy:
       fail-fast: false
