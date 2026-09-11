@@ -148,16 +148,32 @@ That's it. No `pnpm install`, no `.env` files, no AWS credentials.
 
 ### Configurable ports
 
-Override with environment variables:
+Local development intentionally runs Floci on **host port 9878** (not Floci's default 4566), so the dev stack never conflicts with another Floci instance on your machine — for example a release `*-combined` image already running on 4566. Both ports can be pinned per machine by copying `.env.example` to `.env` (`.env` is gitignored and read by docker compose automatically):
 
 ```bash
-FLOCI_PORT=4566 DASHBOARD_PORT=3000 make up-bg
+cp .env.example .env   # pins FLOCI_PORT=9878, DASHBOARD_PORT=9877
+make up-bg
+```
+
+Or override inline for a one-off:
+
+```bash
+FLOCI_PORT=9900 DASHBOARD_PORT=9901 make up-bg
 ```
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `FLOCI_PORT` | `9878` | Host port for Floci |
+| `FLOCI_PORT` | `9878` | Host port for Floci (container-internal port is always 4566) |
 | `DASHBOARD_PORT` | `9877` | Host port for Dashboard |
+
+**Port layout at a glance:**
+
+| Context | Floci | Dashboard |
+|---------|-------|-----------|
+| Local dev (`make up-bg`) | host **9878** → container 4566 | host **9877** → container 3000 |
+| Release `*-combined` image | **4566** (Floci default) | 3000 |
+
+> Only deviating from 9878 locally? Remember `make test-all-cov` and friends target `http://localhost:$FLOCI_PORT` — pass `FLOCI_PORT=<port>` to match.
 
 ### Data persistence
 
