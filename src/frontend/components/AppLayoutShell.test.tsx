@@ -329,7 +329,7 @@ describe("AppLayoutShell — search", () => {
           sqs: "running",
           sns: "running",
           kms: "running",
-          efs: "running",
+          newservice: "running",
         },
         stats: { running: 8, total: 8 },
       },
@@ -341,8 +341,8 @@ describe("AppLayoutShell — search", () => {
       { wrapper: createWrapper() },
     );
     const input = screen.getByPlaceholderText(/^Find services/);
-    await user.type(input, "efs");
-    expect(screen.getByText("efs")).toBeTruthy();
+    await user.type(input, "newservice");
+    expect(screen.getByText("newservice")).toBeTruthy();
   });
 });
 
@@ -653,11 +653,11 @@ describe("AppLayoutShell — favorites", () => {
   it("shows raw key for favorite without a label", () => {
     (useHealth as any).mockReturnValue({
       data: {
-        services: { s3: "running", efs: "running" },
+        services: { s3: "running", newservice: "running" },
         stats: { running: 2, total: 2 },
       },
     });
-    favState.favorites = ["efs"];
+    favState.favorites = ["newservice"];
     render(
       <AppLayoutShell>
         <div>Content</div>
@@ -665,7 +665,7 @@ describe("AppLayoutShell — favorites", () => {
       { wrapper: createWrapper() },
     );
     expect(screen.getByText("★ Favorites")).toBeTruthy();
-    expect(screen.getAllByText("efs").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("newservice").length).toBeGreaterThan(0);
   });
 });
 
@@ -697,11 +697,11 @@ describe("AppLayoutShell — recently visited", () => {
   it("shows raw key for recently visited without a label", () => {
     (useHealth as any).mockReturnValue({
       data: {
-        services: { s3: "running", efs: "running" },
+        services: { s3: "running", newservice: "running" },
         stats: { running: 2, total: 2 },
       },
     });
-    recentState.recentlyVisited = ["efs"];
+    recentState.recentlyVisited = ["newservice"];
     render(
       <AppLayoutShell>
         <div>Content</div>
@@ -709,7 +709,7 @@ describe("AppLayoutShell — recently visited", () => {
       { wrapper: createWrapper() },
     );
     expect(screen.getByText("Recently Visited")).toBeTruthy();
-    expect(screen.getAllByText("efs").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("newservice").length).toBeGreaterThan(0);
   });
 });
 
@@ -717,7 +717,7 @@ describe("AppLayoutShell — category grouping", () => {
   it("renders category groups for non-implemented services", () => {
     (useHealth as any).mockReturnValue({
       data: {
-        services: { s3: "running", athena: "running", efs: "running" },
+        services: { s3: "running", athena: "running", newservice: "running" },
         stats: { running: 3, total: 3 },
       },
     });
