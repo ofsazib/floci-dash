@@ -89,6 +89,7 @@ import SignInDashboard from "./services/SignInDashboard";
 import EFSDashboard from "./services/EFSDashboard";
 import LakeFormationDashboard from "./services/LakeFormationDashboard";
 import Route53ResolverDashboard from "./services/Route53ResolverDashboard";
+import ControlTowerDashboard from "./services/ControlTowerDashboard";
 
 import type { ComponentType } from "react";
 
@@ -183,5 +184,6 @@ export const SERVICE_DASHBOARDS: Record<string, ComponentType> = {
   "efs": EFSDashboard,
   "lakeformation": LakeFormationDashboard,
   "route53resolver": Route53ResolverDashboard,
+  "controltower": ControlTowerDashboard,
   "signin": SignInDashboard,
 };
