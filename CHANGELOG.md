@@ -5,6 +5,25 @@ All notable changes to Floci Dash will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] — 2026-09-12
+
+### Added
+- **15 new service dashboards (gap-analysis N.1–N.19 backlog closed):** Amazon Connect, AWS Sign-In, Amazon Redshift, Amazon EFS, Lake Formation, Service Quotas, Resource Access Manager (RAM), IAM Identity Center (SSO Admin), Managed Prometheus (AMP), CodeGuru Reviewer, Comprehend, Rekognition, Translate, Route 53 Resolver, Network Firewall
+- **Service Catalog dashboard (v1)** — portfolios, products, provisioning, tag options, constraints (plans/actions/shares deferred)
+- **Resource Explorer 2 dashboard** — indexes, views, search console
+- **ELB Classic dashboard** — load balancers, listeners, instance health, networking, tags (distinct `/elb-classic` prefix alongside ELBv2)
+- **IoT Data dashboard** — thing shadows (get/update/delete), named shadows, MQTT publish
+
+### Changed
+- **CI runs as three parallel jobs** — typecheck, unit coverage, and full integration suite against a Floci container now execute concurrently (was serial), with pnpm dependency caching
+- **Local dev ports pinned** — dev stack runs Floci on host 9878 / dashboard 9877 via `.env`, documented against the release image's default 4566; documented that `FLOCI_SERVICES` CSV is ignored by Floci 1.7.0
+
+### Fixed
+- **8 dashboards were unreachable** — registered under keys Floci never reports (Application Auto Scaling, BCM Data Exports, Bedrock AgentCore + Control, CloudHSM, EMR, EMR Serverless, RDS Data now keyed to Floci's dashed catalog keys)
+- **Route 53 Resolver endpoint creation** sent an invalid SDK field (`IpAddressRequests` instead of `IpAddresses`), causing Floci 400s
+- **Service Catalog registration** — dashboard registered under Floci's `servicecatalog` key with category, map and label entries
+- **AppLayoutShell fixtures** — tests used `efs` as an unlabeled service example; stale after EFS gained a dashboard
+
 ## [0.3.3] — 2026-09-02
 
 ### Fixed
