@@ -1044,7 +1044,7 @@ describe("ServicePage — CUR", () => {
 describe("ServicePage — BCM", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockParams.mockReturnValue({ service: "bcmdataexports" });
+    mockParams.mockReturnValue({ service: "bcm-data-exports" });
   });
 
   it("renders BCM exports with empty state", () => {

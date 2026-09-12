@@ -94,6 +94,7 @@ import ResourceExplorer2Dashboard from "./services/ResourceExplorer2Dashboard";
 import ElbClassicDashboard from "./services/ElbClassicDashboard";
 import NetworkFirewallDashboard from "./services/NetworkFirewallDashboard";
 import ServiceCatalogDashboard from "./services/ServiceCatalogDashboard";
+import IotDataDashboard from "./services/IotDataDashboard";
 
 import type { ComponentType } from "react";
 
@@ -141,13 +142,13 @@ export const SERVICE_DASHBOARDS: Record<string, ComponentType> = {
   "codedeploy": CodeDeployDashboard,
   "transfer": TransferDashboard,
   "cur": CURDashboard,
-  "bcmdataexports": BCMDashboard,
+  "bcm-data-exports": BCMDashboard,
   "wafv2": WafV2Dashboard,
   "elasticache": ElastiCacheDashboard,
   "batch": BatchDashboard,
   "docdb": DocDBDashboard,
-  "emr": EMRDashboard,
-  "rdsdata": RDSDataDashboard,
+  "elasticmapreduce": EMRDashboard,
+  "rds-data": RDSDataDashboard,
   "ec2messages": Ec2MessagesDashboard,
   "appconfigdata": AppConfigDataDashboard,
   "memorydb": MemoryDBDashboard,
@@ -159,7 +160,7 @@ export const SERVICE_DASHBOARDS: Record<string, ComponentType> = {
   "lightsail": LightsailDashboard,
   "mq": AmazonMQDashboard,
   "kinesisanalytics": KinesisAnalyticsDashboard,
-  "emrserverless": EmrServerlessDashboard,
+  "emr-serverless": EmrServerlessDashboard,
   "mwaa": MWAADashboard,
   "rum": RUMDashboard,
   "s3vectors": S3VectorsDashboard,
@@ -169,12 +170,12 @@ export const SERVICE_DASHBOARDS: Record<string, ComponentType> = {
   "guardduty": GuardDutyDashboard,
   "cloudcontrol": CloudControlDashboard,
   "s3tables": S3TablesDashboard,
-  "bedrockagentcore": AgentCoreDashboard,
-  "cloudhsm": CloudHSMDashboard,
-  "applicationautoscaling": AppAutoScalingDashboard,
+  "bedrock-agentcore": AgentCoreDashboard,
+  "cloudhsmv2": CloudHSMDashboard,
+  "application-autoscaling": AppAutoScalingDashboard,
   "cloudformation": CloudFormationDashboard,
   "lambdamicrovms": LambdaMicrovmsDashboard,
-  "bedrockagentcorecontrol": AgentCoreControlDashboard,
+  "bedrock-agentcore-control": AgentCoreControlDashboard,
   "servicequotas": ServiceQuotasDashboard,
   "translate": TranslateDashboard,
   "rekognition": RekognitionDashboard,
@@ -193,5 +194,6 @@ export const SERVICE_DASHBOARDS: Record<string, ComponentType> = {
   "elb": ElbClassicDashboard,
   "network-firewall": NetworkFirewallDashboard,
   "servicecatalog": ServiceCatalogDashboard,
+  "iotdata": IotDataDashboard,
   "signin": SignInDashboard,
 };

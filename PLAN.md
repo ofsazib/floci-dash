@@ -2037,6 +2037,17 @@ These were Floci services that previously had **no** corresponding backend route
 
 ---
 
+### Gap-Analysis Addendum — 2026-09-12 audit (post N-series completion)
+
+Full re-audit of Floci 1.7.0 (104 catalog keys) vs the dashboard registry:
+
+- **Fixed:** N.8 Service Catalog was never registered in `serviceRegistry.tsx`/`types/services.ts` (commit c08911e omission) — registered.
+- **Fixed:** 8 dashboards were registered under keys Floci never reports and were unreachable ("Coming soon"): applicationautoscaling→application-autoscaling, bcmdataexports→bcm-data-exports, bedrockagentcore→bedrock-agentcore, bedrockagentcorecontrol→bedrock-agentcore-control, cloudhsm→cloudhsmv2, emr→elasticmapreduce, emrserverless→emr-serverless, rdsdata→rds-data. All re-keyed.
+- **Fixed:** iotdata (IoT Data plane — shadows + publish) had no dashboard; added backend route, hooks, 2-tab dashboard (registry key `iotdata`, Internet of Things).
+- **Documented:** `FLOCI_SERVICES` CSV is ignored by Floci 1.7.0 (enablement via baked defaults / `FLOCI_SERVICES_<NAME>_ENABLED`); the 19 newest services require a Floci build newer than 1.7.0.
+- **Kept:** `lambdamicrovms` registry entry retained for older Floci compatibility (1.7.0 no longer reports it).
+- **Op-level sweep:** all N-series backend routes match their Floci handlers op-for-op (connect 12, redshift 24, efs 27, lakeformation 17, resourceexplorer2 30, elb 20, networkfirewall 27, route53resolver 18, iotdata 5 REST); servicecatalog v1 covers the core 30, long tail deferred.
+
 ### Recommended Implementation Priority
 
 Quick wins first (Small), then Medium, then Large — each adds a full backend route + hooks + dashboard + 100% tests:

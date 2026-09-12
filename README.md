@@ -175,6 +175,10 @@ FLOCI_PORT=9900 DASHBOARD_PORT=9901 make up-bg
 
 > Only deviating from 9878 locally? Remember `make test-all-cov` and friends target `http://localhost:$FLOCI_PORT` — pass `FLOCI_PORT=<port>` to match.
 
+### Floci service enablement (FLOCI_SERVICES caveat)
+
+> **Floci 1.7.0 note:** `FLOCI_SERVICES` (the CSV env in `docker-compose.yml`) is **ignored by Floci 1.7.0** — enablement comes from the image's baked defaults (~80 services). The 19 newest dashboards (Control Tower, Service Catalog, Network Firewall, Route 53 Resolver, etc.) require a Floci build that includes those services: build Floci from source or use a release newer than 1.7.0. Per-service overrides use `FLOCI_SERVICES_<NAME>_ENABLED=true` (e.g. `FLOCI_SERVICES_REDSHIFT_ENABLED=true`).
+
 ### Data persistence
 
 > **The dashboard is stateless** — it stores nothing itself. Every bucket, table, queue, etc. lives inside **Floci**. Data persistence is therefore entirely a Floci setting.
@@ -510,9 +514,10 @@ These services have full CRUD operations in both backend and frontend:
 | **ELB Classic** | Load balancers (list/create/delete), listeners (add/remove), instance health (describe/register/deregister), health-check configuration, zones enable/disable, subnets attach/detach, security groups, tags add/remove |
 | **Network Firewall** | Firewalls (list/create/delete, protection toggles, description, analysis settings, subnet associate/disassociate, policy association, logging config), firewall policies (list/create/delete), rule groups (list/create/delete with STATEFUL/STATELESS types and rules) |
 | **Service Catalog** | Portfolios (list/create/delete), products (list/create/delete), provisioning (provision product with artifact, list/terminate provisioned products), tag options (list/create/delete), constraints (list by portfolio/create/delete) |
+| **IoT Data** | Thing shadows (get/update/delete), named shadows (list per thing), MQTT publish to any topic |
 | **AWS Sign-In** | Local OAuth console — authorize → consent (approve/deny) → token exchange with JSON body editor |
 
-### Navigation + status (80 services)
+### Navigation + status (81 services)
 
 All services reported by Floci appear in the sidebar with status indicators.
 

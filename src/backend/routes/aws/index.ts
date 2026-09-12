@@ -111,6 +111,7 @@ import resourceexplorer2Routes from "./resourceexplorer2";
 import elbclassicRoutes from "./elbclassic";
 import networkfirewallRoutes from "./networkfirewall";
 import servicecatalogRoutes from "./servicecatalog";
+import iotdataRoutes from "./iotdata";
 import signinRoutes from "./signin";
 
 const router = new Hono();
@@ -226,6 +227,7 @@ router.route("/resourceexplorer2", resourceexplorer2Routes);
 router.route("/elb-classic", elbclassicRoutes);
 router.route("/networkfirewall", networkfirewallRoutes);
 router.route("/servicecatalog", servicecatalogRoutes);
+router.route("/iotdata", iotdataRoutes);
 router.route("/signin", signinRoutes);
 
   router.get("/", (c: Context) => {
