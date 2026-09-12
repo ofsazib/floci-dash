@@ -507,9 +507,10 @@ These services have full CRUD operations in both backend and frontend:
 | **Route 53 Resolver** | Resolver endpoints (list/create/delete, rename + endpoint-type edit), rules (list/create/delete, FORWARD/SYSTEM/RECURSIVE with domain + target IPs, rename/retarget edit), rule associations (associate/disassociate rule ↔ VPC with rule picker), firewall domain lists (list/create/delete) |
 | **Control Tower** | Landing zone (list/create/update with inheritance-drift remediation, reset, delete), baseline catalog (list), enable baseline (with version/target/parameters), enabled baselines (list/update/reset with current-parameters view), landing-zone + baseline operation details |
 | **Resource Explorer 2** | Indexes (list/create/delete, LOCAL↔AGGREGATOR type switch, region index state), views (list/create/update with current definition, delete, default-view associate/disassociate), search console (query + optional view ARN), supported resource types |
+| **ELB Classic** | Load balancers (list/create/delete), listeners (add/remove), instance health (describe/register/deregister), health-check configuration, zones enable/disable, subnets attach/detach, security groups, tags add/remove |
 | **AWS Sign-In** | Local OAuth console — authorize → consent (approve/deny) → token exchange with JSON body editor |
 
-### Navigation + status (77 services)
+### Navigation + status (78 services)
 
 All services reported by Floci appear in the sidebar with status indicators.
 

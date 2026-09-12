@@ -108,6 +108,7 @@ import lakeformationRoutes from "./lakeformation";
 import route53resolverRoutes from "./route53resolver";
 import controltowerRoutes from "./controltower";
 import resourceexplorer2Routes from "./resourceexplorer2";
+import elbclassicRoutes from "./elbclassic";
 import signinRoutes from "./signin";
 
 const router = new Hono();
@@ -220,6 +221,7 @@ router.route("/lakeformation", lakeformationRoutes);
 router.route("/route53resolver", route53resolverRoutes);
 router.route("/controltower", controltowerRoutes);
 router.route("/resourceexplorer2", resourceexplorer2Routes);
+router.route("/elb-classic", elbclassicRoutes);
 router.route("/signin", signinRoutes);
 
   router.get("/", (c: Context) => {

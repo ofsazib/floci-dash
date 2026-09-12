@@ -26,7 +26,7 @@ An AWS Console-style web dashboard for Floci, the local AWS emulator. The dashbo
 | Shared components | Done | ResourceTable, CreateModal, DeleteButton, ServiceCard, ServiceGrid, StatCard, StatusBadge |
 | Layout | Done | AppLayoutShell with TopNavigation, SideNavigation, dark mode |
 | Settings | Done | Dark mode toggle, refresh interval |
-| ~89 services implemented | ServicePage: browse, create, delete | 3 newer Floci services (of N.1–N.19; remaining N.6, N.7, N.8) still need dashboards — see GAP ANALYSIS |
+| ~89 services implemented | ServicePage: browse, create, delete | 2 newer Floci services (of N.1–N.19; remaining N.7, N.8) still need dashboards — see GAP ANALYSIS |
 
 ### Architecture Constraints
 
@@ -1903,9 +1903,12 @@ From `ResourceExplorer2Controller.java`: listResources, search, listSupportedRes
 - Hooks `useResourceExplorer2.ts`: 16 hooks (`useRe2*`) covering the UI-facing surface.
 - Dashboard: 3 tabs — Indexes (create with tags JSON, delete, LOCAL↔AGGREGATOR switch, service-access + region-index state cards), Views (default-view display + disassociate, create with filters/properties/scope, update with current-definition view, delete, make-default), Search (query + optional view ARN console, results table, supported resource types).
 
-#### N.6 ELB Classic (`@aws-sdk/client-elastic-load-balancing`, package ≠ v2) — 20 ops
+#### N.6 ELB Classic (`@aws-sdk/client-elastic-load-balancing`, package ≠ v2) — 20 ops — ✅ Done (2026-09-12)
 From `ElbClassicQueryHandler.java` (Query, `Version=2012-06-01`): CreateLoadBalancer, DeleteLoadBalancer, DescribeLoadBalancers, Create/DeleteLoadBalancerListeners, ConfigureHealthCheck, Register/DeregisterInstancesWithLoadBalancer, DescribeInstanceHealth, Modify/DescribeLoadBalancerAttributes, ApplySecurityGroupsToLoadBalancer, Attach/DetachLoadBalancerToSubnets, Enable/DisableAvailabilityZonesForLoadBalancer, AddTags, RemoveTags, DescribeTags, DescribeAccountLimits.
-- ⚠ Ship alongside existing ELBv2 (`elb.ts` currently maps `elasticloadbalancing` → v2). Register classic under a distinct route prefix (e.g. `/aws/elb-classic/*`) and map dashboard service key `elasticloadbalancing-classic`.
+- Backend `elbclassic.ts` (21 routes, all 20 ops) mounted at the distinct prefix `/elb-classic` — the existing `elb.ts` keeps mapping `elasticloadbalancing` → v2. Comma-separated inputs (zones, subnets, SGs, instances, ports, tag keys) parsed to arrays; attributes take a JSON object.
+- Hooks `useElbClassic.ts`: 21 hooks (`useElb*`).
+- Dashboard: 3 tabs — Load balancers (create with zones + first listener, delete), Listeners & instances (LB picker, listener table + add/remove, instance health table, register/deregister, health-check config), Networking & tags (zones enable/disable, subnets attach/detach, security groups, tags add/remove + list).
+- Dashboard service key: `elb` (Floci's catalog key for Classic), label "ELB Classic" — distinct from `elasticloadbalancing` (v2).
 
 #### N.7 Network Firewall (`@aws-sdk/client-network-firewall`) — 27 ops
 From `NetworkFirewallJsonHandler.java`: Rule groups (Create/Describe/Update/Delete/ListRuleGroups), Firewall policies (Create/Describe/Update/Delete/List), Firewalls (Create/Describe/Delete/List, UpdateFirewallDeleteProtection, Associate/DisassociateSubnets, AssociateFirewallPolicy), logging (Update/DescribeLoggingConfiguration) + AZ association ops.
@@ -2023,9 +2026,9 @@ These were Floci services that previously had **no** corresponding backend route
 |--------|-------|
 | Previously resolved gaps (G.1–G.97) | 97 (all Done/N/A) |
 | Resolved milestone services (M.1–M.14) | 0 — **all 14 shipped** |
-| Missing services (N.1–N.19, added to Floci 2026-08-25 → 09-04) | **3 left (16 of 19 shipped; remaining: N.6, N.7, N.8)** |
+| Missing services (N.1–N.19, added to Floci 2026-08-25 → 09-04) | **2 left (17 of 19 shipped; remaining: N.7, N.8)** |
 | New ops in existing services | 2 actionable (SES + Cognito) |
-| **Total remaining gaps** | **3 full services + 2 op-level** |
+| **Total remaining gaps** | **2 full services + 2 op-level** |
 
 ---
 
