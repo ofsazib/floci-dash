@@ -93,6 +93,7 @@ import ControlTowerDashboard from "./services/ControlTowerDashboard";
 import ResourceExplorer2Dashboard from "./services/ResourceExplorer2Dashboard";
 import ElbClassicDashboard from "./services/ElbClassicDashboard";
 import NetworkFirewallDashboard from "./services/NetworkFirewallDashboard";
+import ServiceCatalogDashboard from "./services/ServiceCatalogDashboard";
 
 import type { ComponentType } from "react";
 
@@ -191,5 +192,6 @@ export const SERVICE_DASHBOARDS: Record<string, ComponentType> = {
   "resource-explorer-2": ResourceExplorer2Dashboard,
   "elb": ElbClassicDashboard,
   "network-firewall": NetworkFirewallDashboard,
+  "servicecatalog": ServiceCatalogDashboard,
   "signin": SignInDashboard,
 };
