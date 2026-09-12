@@ -26,7 +26,7 @@ An AWS Console-style web dashboard for Floci, the local AWS emulator. The dashbo
 | Shared components | Done | ResourceTable, CreateModal, DeleteButton, ServiceCard, ServiceGrid, StatCard, StatusBadge |
 | Layout | Done | AppLayoutShell with TopNavigation, SideNavigation, dark mode |
 | Settings | Done | Dark mode toggle, refresh interval |
-| ~89 services implemented | ServicePage: browse, create, delete | 4 newer Floci services (of N.1–N.19; remaining N.5, N.6, N.7, N.8) still need dashboards — see GAP ANALYSIS |
+| ~89 services implemented | ServicePage: browse, create, delete | 3 newer Floci services (of N.1–N.19; remaining N.6, N.7, N.8) still need dashboards — see GAP ANALYSIS |
 
 ### Architecture Constraints
 
@@ -1840,7 +1840,7 @@ These are Floci services merged into Floci **after 2026-08-25** (EFS `#2371`, Se
 | N.2 | **Redshift** | `redshift/` | Query + PG container | 21 | Cluster CRUD, snapshots, parameter groups, subnet groups, tags | ✅ **Done** |
 | N.3 | **EFS** | `efs/` | REST JSON | 17 | File system CRUD, mount targets, access points, policies, lifecycle | Large |
 | N.4 | **Lake Formation** | `lakeformation/` | REST JSON | 16 | Data lake settings, resources, permissions, LF-tags | Medium |
-| N.5 | **Resource Explorer 2** | `resourceexplorer2/` | REST JSON (rewritten `/re2/*`) | 32 | Index/view CRUD + search/query | Medium |
+| N.5 | **Resource Explorer 2** | `resourceexplorer2/` | REST JSON (rewritten `/re2/*`) | 29 | Index/view CRUD + search/query | ✅ **Done** |
 | N.6 | **ELB Classic (v1)** | `elb/` | Query `2012-06-01` | 20 | Load balancer CRUD + listeners, health checks, instances, AZs, tags | Medium |
 | N.7 | **Network Firewall** | `networkfirewall/` | JSON 1.0 | 27 | Firewall/policy/rule-group CRUD + associations | Large |
 | N.8 | **Service Catalog** | `servicecatalog/` | JSON 1.1 | 89 | Portfolio/product/artifact CRUD, provision, tag options, constraints | Very Large |
@@ -1897,9 +1897,11 @@ From `LakeFormationController.java`: put/getDataLakeSettings, register/deregiste
 - Hooks `useLakeFormation.ts`: 13 query/mutation hooks.
 - Dashboard: 4 tabs — Settings (admins editor + external-filtering toggle), Resources (register/edit-role/deregister modals), Permissions (grant SELECT/ALL + revoke), LF-tags (create, add-value, delete).
 
-#### N.5 Resource Explorer 2 (`@aws-sdk/client-resource-explorer-2`) — 32 ops
-From `ResourceExplorer2Controller.java`: listResources, search, listSupportedResourceTypes; index CRUD (create/get/delete/list/updateIndexType/listIndexes/listIndexesForMembers); views (create/get/delete/update/list/batchGetView/associate/disassociate/getDefaultView/listManagedViews/listServiceViews/listServiceIndexes); config (getAccountLevelServiceConfiguration, streaming access, setup CRUD).
-- Dashboard: index + views tables, search console, view details.
+#### N.5 Resource Explorer 2 (`@aws-sdk/client-resource-explorer-2`) — 29 ops — ✅ Done (2026-09-12)
+From `ResourceExplorer2Controller.java`: listResources, search, listSupportedResourceTypes; index CRUD (create/get/delete/list/updateIndexType/listIndexes/listIndexesForMembers); views (create/get/delete/update/list/batchGetView/associate/disassociate/getDefaultView/listManagedViews/getManagedView/listServiceViews/getServiceView/listServiceIndexes/getServiceIndex); config (getAccountLevelServiceConfiguration, streaming access, setup create/delete/get).
+- Backend `resourceexplorer2.ts` (29 routes, all 29 ops): indexes list/create/detail/delete/type-switch, views list/create/detail/update/delete/batch-get/associate-default/disassociate-default/default, resources (optional FilterString), search, resource types, service config, member indexes, managed/service views + detail, service indexes/index, streaming access, setup create/delete/get. Tags/params as JSON strings or objects; ARNs via `?arn=` query params.
+- Hooks `useResourceExplorer2.ts`: 16 hooks (`useRe2*`) covering the UI-facing surface.
+- Dashboard: 3 tabs — Indexes (create with tags JSON, delete, LOCAL↔AGGREGATOR switch, service-access + region-index state cards), Views (default-view display + disassociate, create with filters/properties/scope, update with current-definition view, delete, make-default), Search (query + optional view ARN console, results table, supported resource types).
 
 #### N.6 ELB Classic (`@aws-sdk/client-elastic-load-balancing`, package ≠ v2) — 20 ops
 From `ElbClassicQueryHandler.java` (Query, `Version=2012-06-01`): CreateLoadBalancer, DeleteLoadBalancer, DescribeLoadBalancers, Create/DeleteLoadBalancerListeners, ConfigureHealthCheck, Register/DeregisterInstancesWithLoadBalancer, DescribeInstanceHealth, Modify/DescribeLoadBalancerAttributes, ApplySecurityGroupsToLoadBalancer, Attach/DetachLoadBalancerToSubnets, Enable/DisableAvailabilityZonesForLoadBalancer, AddTags, RemoveTags, DescribeTags, DescribeAccountLimits.
@@ -2021,9 +2023,9 @@ These were Floci services that previously had **no** corresponding backend route
 |--------|-------|
 | Previously resolved gaps (G.1–G.97) | 97 (all Done/N/A) |
 | Resolved milestone services (M.1–M.14) | 0 — **all 14 shipped** |
-| Missing services (N.1–N.19, added to Floci 2026-08-25 → 09-04) | **4 left (15 of 19 shipped; remaining: N.5, N.6, N.7, N.8)** |
+| Missing services (N.1–N.19, added to Floci 2026-08-25 → 09-04) | **3 left (16 of 19 shipped; remaining: N.6, N.7, N.8)** |
 | New ops in existing services | 2 actionable (SES + Cognito) |
-| **Total remaining gaps** | **4 full services + 2 op-level** |
+| **Total remaining gaps** | **3 full services + 2 op-level** |
 
 ---
 
@@ -2044,7 +2046,7 @@ Quick wins first (Small), then Medium, then Large — each adds a full backend r
 | ~~8~~ | ~~**Lake Formation** (N.4)~~ | ✅ **Done** (2026-09-10) — 16 ops |
 | ~~9~~ | ~~**Route 53 Resolver** (N.14)~~ | ✅ **Done** (2026-09-10) — 18 ops |
 | ~~10~~ | ~~**Control Tower** (N.11)~~ | ✅ **Done** (2026-09-11) — 15 ops |
-| 11 | **Resource Explorer 2** (N.5) | 32 ops, index/views/search |
+| ~~11~~ | ~~**Resource Explorer 2** (N.5)~~ | ✅ **Done** (2026-09-12) — 29 ops |
 | 12 | **Redshift** (N.2) | 21 ops, Docker-backed, high value |
 | 13 | **EFS** (N.3) | ✅ **Done** (2026-09-10) — 17 ops |
 | 16 | **Network Firewall** (N.7) | 27 ops, 3 nested configs |
