@@ -115,6 +115,7 @@
     "@aws-sdk/client-s3tables": "^3.1119.0",
     "@aws-sdk/client-scheduler": "^3.1070.0",
     "@aws-sdk/client-secrets-manager": "^3.1068.0",
+    "@aws-sdk/client-service-catalog": "^3.1131.0",
     "@aws-sdk/client-service-quotas": "^3.1121.0",
     "@aws-sdk/client-servicediscovery": "^3.1072.0",
     "@aws-sdk/client-ses": "^3.1070.0",

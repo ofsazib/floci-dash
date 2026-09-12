@@ -26,7 +26,7 @@ An AWS Console-style web dashboard for Floci, the local AWS emulator. The dashbo
 | Shared components | Done | ResourceTable, CreateModal, DeleteButton, ServiceCard, ServiceGrid, StatCard, StatusBadge |
 | Layout | Done | AppLayoutShell with TopNavigation, SideNavigation, dark mode |
 | Settings | Done | Dark mode toggle, refresh interval |
-| ~89 services implemented | ServicePage: browse, create, delete | 1 newer Floci service (of N.1–N.19; remaining N.8) still needs a dashboard — see GAP ANALYSIS |
+| ~89 services implemented | ServicePage: browse, create, delete | All 19 newer Floci services (N.1–N.19) have dashboards — N.8 Service Catalog shipped at v1 scope (plans/actions/shares deferred) |
 
 ### Architecture Constraints
 
@@ -1916,9 +1916,12 @@ From `NetworkFirewallJsonHandler.java`: Rule groups (Create/Describe/Update/Dele
 - Hooks `useNetworkFirewall.ts`: 27 hooks (`useNfw*`).
 - Dashboard: 3 tabs — Firewalls (create with vpc/subnets/policy, delete, Configure modal with 4 protection toggles, description, analysis settings, subnet associate/disassociate, policy association, logging JSON), Policies (list/create with stateless defaults, delete), Rule groups (list, create with STATEFUL/STATELESS toggle + capacity + rules, delete).
 
-#### N.8 Service Catalog (`@aws-sdk/client-service-catalog`) — 89 ops
+#### N.8 Service Catalog (`@aws-sdk/client-service-catalog`) — 89 ops — ✅ Done v1 (2026-09-12)
 From `ServiceCatalogJsonHandler.java`: Portfolios (Create/Update/Describe/List/Delete), Products (Create/Update/Describe/Delete/Search, DescribeProductAsAdmin/View), Provisioning artifacts (Create/Update/Describe/List/Delete), Provisioned products (Provision/Describe/Search/Update/Terminate + plans + service actions), Tag options (CRUD/List + associate/disassociate), Constraints, shares (Accept/Reject/Delete/UpdatePortfolioShare + status), budgets/principals associations.
-- Dashboard (v1): portfolios table, products table (per portfolio), tag-options table, provisioned-products table; create/delete + provision modal. Defer long tail of plan/action/share ops.
+- Backend `servicecatalog.ts` (22 routes, v1 scope): portfolios list/create/detail/delete + product associate/disassociate + for-product; products list/create/detail/delete; artifacts list/delete; provision (with backend-generated TerminateToken idempotency on terminate); provisioned list/terminate; tag options list/create/delete; constraints list/create (backend-generated IdempotencyToken)/delete.
+- Hooks `useServiceCatalog.ts`: 16 hooks (`useSc*`).
+- Dashboard: 4 tabs — Portfolios (create/delete), Products (create/delete + Provision modal with artifact lookup), Provisioned products (list/terminate), Tag options & constraints (tag create/delete, constraints list by portfolio + create LAUNCH/STACKSET + delete).
+- Deferred (v2 if needed): plans, service actions, shares, budgets, principals, CopyProduct, provisioning parameters.
 
 #### N.9 Service Quotas (`@aws-sdk/client-service-quotas`) — 5 ops — ✅ **SHIPPED** (2026-09-04)
 ListServiceQuotas, GetServiceQuota, GetAWSDefaultServiceQuota, ListAWSDefaultServiceQuotas, RequestServiceQuotaIncrease. Dashboard: quota table + request-increase modal. Trivial — good starter task.
@@ -2028,9 +2031,9 @@ These were Floci services that previously had **no** corresponding backend route
 |--------|-------|
 | Previously resolved gaps (G.1–G.97) | 97 (all Done/N/A) |
 | Resolved milestone services (M.1–M.14) | 0 — **all 14 shipped** |
-| Missing services (N.1–N.19, added to Floci 2026-08-25 → 09-04) | **1 left (18 of 19 shipped; remaining: N.8)** |
+| Missing services (N.1–N.19, added to Floci 2026-08-25 → 09-04) | **0 left — all 19 shipped (N.8 at v1 scope; long-tail ops deferred)** |
 | New ops in existing services | 2 actionable (SES + Cognito) |
-| **Total remaining gaps** | **1 full service + 2 op-level** |
+| **Total remaining gaps** | **0 full services (N.8 v1 shipped; deferred long tail tracked above) + 2 op-level** |
 
 ---
 
@@ -2055,4 +2058,4 @@ Quick wins first (Small), then Medium, then Large — each adds a full backend r
 | 12 | **Redshift** (N.2) | 21 ops, Docker-backed, high value |
 | 13 | **EFS** (N.3) | ✅ **Done** (2026-09-10) — 17 ops |
 | ~~16~~ | ~~**Network Firewall** (N.7)~~ | ✅ **Done** (2026-09-12) — 27 ops |
-| 17 | **Service Catalog** (N.8) | 89 ops — stage v1 (portfolios/products/tag-options/provisioned), defer plans/actions/shares |
+| ~~17~~ | ~~**Service Catalog** (N.8)~~ | ✅ **Done v1** (2026-09-12) — core CRUD + provisioning shipped; plans/actions/shares deferred |

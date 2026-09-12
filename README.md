@@ -509,9 +509,10 @@ These services have full CRUD operations in both backend and frontend:
 | **Resource Explorer 2** | Indexes (list/create/delete, LOCAL↔AGGREGATOR type switch, region index state), views (list/create/update with current definition, delete, default-view associate/disassociate), search console (query + optional view ARN), supported resource types |
 | **ELB Classic** | Load balancers (list/create/delete), listeners (add/remove), instance health (describe/register/deregister), health-check configuration, zones enable/disable, subnets attach/detach, security groups, tags add/remove |
 | **Network Firewall** | Firewalls (list/create/delete, protection toggles, description, analysis settings, subnet associate/disassociate, policy association, logging config), firewall policies (list/create/delete), rule groups (list/create/delete with STATEFUL/STATELESS types and rules) |
+| **Service Catalog** | Portfolios (list/create/delete), products (list/create/delete), provisioning (provision product with artifact, list/terminate provisioned products), tag options (list/create/delete), constraints (list by portfolio/create/delete) |
 | **AWS Sign-In** | Local OAuth console — authorize → consent (approve/deny) → token exchange with JSON body editor |
 
-### Navigation + status (79 services)
+### Navigation + status (80 services)
 
 All services reported by Floci appear in the sidebar with status indicators.
 
