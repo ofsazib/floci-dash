@@ -48,6 +48,7 @@ import {
   useCreateLogStream,
   useDeleteLogStream,
   useLogEvents,
+  useFilteredLogEvents,
   usePutLogEvents,
   useSubscriptionFilters,
   usePutSubscriptionFilter,
@@ -1037,13 +1038,34 @@ function CloudWatchLogStreamDetail({
   const [autoRefresh, setAutoRefresh] = useState(true);
   const deleteLogStream = useDeleteLogStream();
 
+  // Filter-pattern search state. `filterInput` is the live text box; `appliedFilter`
+  // is the committed pattern that actually drives the search (set on Search / Enter,
+  // emptied on Clear). A non-empty applied filter switches the view into search mode.
+  const [filterInput, setFilterInput] = useState("");
+  const [appliedFilter, setAppliedFilter] = useState("");
+  const [timeRange, setTimeRange] = useState(TIME_RANGE_OPTIONS[2]); // Last 1 hour
+  const isSearchMode = appliedFilter.trim().length > 0;
+
+  const limitNum = parseInt(limit.value!);
+  const startTimeOffsetMs =
+    timeRange.value && timeRange.value !== "0"
+      ? parseInt(timeRange.value as string)
+      : undefined;
+
   const { data, isLoading, isError, error, refetch } = useLogEvents(
     logGroupName,
     logStreamName,
     {
-      limit: parseInt(limit.value!),
+      limit: limitNum,
       startFromHead: false,
     },
+    autoRefresh && !isSearchMode
+  );
+
+  const filtered = useFilteredLogEvents(
+    logGroupName,
+    logStreamName,
+    { filterPattern: appliedFilter, startTimeOffsetMs, limit: limitNum },
     autoRefresh
   );
 
@@ -1051,13 +1073,35 @@ function CloudWatchLogStreamDetail({
   const eventsContainerRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
 
+  const activeData = isSearchMode ? filtered.data : data;
+  const activeError = isSearchMode ? filtered.error : error;
+  const isActiveError = isSearchMode ? filtered.isError : isError;
+  const isActiveLoading = isSearchMode ? filtered.isLoading : isLoading;
+
   useEffect(() => {
-    if (autoScroll && eventsContainerRef.current) {
+    if (autoScroll && !isSearchMode && eventsContainerRef.current) {
       eventsContainerRef.current.scrollTop = eventsContainerRef.current.scrollHeight;
     }
-  }, [data?.events, autoScroll]);
+  }, [activeData?.events, autoScroll, isSearchMode]);
 
-  const events = (data?.events || []).slice().reverse(); // newest first
+  const events = (activeData?.events || []).slice().reverse(); // newest first
+
+  // When a search returns nothing within a bounded window, the events may simply be
+  // older than the window (live-tail ignores time, so they can still show there).
+  // Nudge the user to widen the range rather than assume there's no match at all.
+  const searchEmptyMessage = startTimeOffsetMs
+    ? `No events matched this filter within ${timeRange.label} — widen the time range to search further back.`
+    : "No events matched this filter.";
+
+  function handleSearch() {
+    setAppliedFilter(filterInput.trim());
+    setAutoScroll(false);
+  }
+
+  function handleClearSearch() {
+    setFilterInput("");
+    setAppliedFilter("");
+  }
 
   return (
     <SpaceBetween size="l">
@@ -1115,19 +1159,57 @@ function CloudWatchLogStreamDetail({
         Log Events
       </Header>
 
-      {isError && (
+      <Container>
+        <SpaceBetween size="xs">
+          <div style={{ display: "flex", gap: "8px", alignItems: "flex-start" }}>
+            <div style={{ flex: 1 }}>
+              <Input
+                value={filterInput}
+                onChange={({ detail }) => setFilterInput(detail.value)}
+                onKeyDown={({ detail }) => {
+                  if (detail.key === "Enter") handleSearch();
+                }}
+                placeholder={"Search log events — e.g. Application startup complete"}
+                ariaLabel="Filter pattern"
+                type="search"
+              />
+            </div>
+            <Select
+              selectedOption={timeRange}
+              onChange={({ detail }) => setTimeRange(detail.selectedOption)}
+              options={TIME_RANGE_OPTIONS}
+              ariaLabel="Time range"
+            />
+            <Button variant="primary" onClick={handleSearch}>
+              Search
+            </Button>
+            {isSearchMode && (
+              <Button variant="normal" iconName="close" onClick={handleClearSearch}>
+                Clear
+              </Button>
+            )}
+          </div>
+          <Box fontSize="body-s" color="text-body-secondary">
+            {isSearchMode
+              ? `Searching this stream (${timeRange.label}) — case-sensitive substring match.`
+              : 'Case-sensitive substring match — type any word or phrase (e.g. Application startup complete). Floci matches the literal text; CloudWatch operators like ?A ?B and { $.level = "ERROR" } are not supported.'}
+          </Box>
+        </SpaceBetween>
+      </Container>
+
+      {isActiveError && (
         <Alert type="error" dismissible>
-          {(error as Error)?.message || "Failed to load log events"}
+          {(activeError as Error)?.message || "Failed to load log events"}
         </Alert>
       )}
 
-      {isLoading && events.length === 0 && (
+      {isActiveLoading && events.length === 0 && (
         <StatusIndicator type="loading">Loading log events...</StatusIndicator>
       )}
 
-      {events.length === 0 && !isLoading && !isError && (
+      {events.length === 0 && !isActiveLoading && !isActiveError && (
         <Box textAlign="center" padding="xl" color="text-body-secondary">
-          No log events found for this stream.
+          {isSearchMode ? searchEmptyMessage : "No log events found for this stream."}
         </Box>
       )}
 
@@ -1185,11 +1267,11 @@ function CloudWatchLogStreamDetail({
         ))}
       </div>
 
-      {isLoading && events.length > 0 && (
+      {isActiveLoading && events.length > 0 && (
         <StatusIndicator type="loading">Refreshing events...</StatusIndicator>
       )}
 
-      {data && (
+      {activeData && (
         <Box textAlign="center" fontSize="body-s" color="text-body-secondary">
           {events.length} events displayed
         </Box>
@@ -1650,4 +1732,16 @@ const LOG_VIEW_LIMIT_OPTIONS: SelectProps.Option[] = [
   { label: "500", value: "500" },
   { label: "1000", value: "1000" },
   { label: "10000", value: "10000" },
+];
+
+// Relative time-range presets for filter-pattern search. `value` is the window size in
+// milliseconds; "0" means all time (no startTime bound).
+const TIME_RANGE_OPTIONS: SelectProps.Option[] = [
+  { label: "Last 5 minutes", value: String(5 * 60 * 1000) },
+  { label: "Last 15 minutes", value: String(15 * 60 * 1000) },
+  { label: "Last 1 hour", value: String(60 * 60 * 1000) },
+  { label: "Last 3 hours", value: String(3 * 60 * 60 * 1000) },
+  { label: "Last 12 hours", value: String(12 * 60 * 60 * 1000) },
+  { label: "Last 24 hours", value: String(24 * 60 * 60 * 1000) },
+  { label: "All time", value: "0" },
 ];

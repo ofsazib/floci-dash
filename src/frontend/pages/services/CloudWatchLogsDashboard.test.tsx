@@ -67,6 +67,7 @@ const mockLogStreams = vi.fn();
 const mockCreateStream = vi.fn();
 const mockDeleteStream = vi.fn();
 const mockLogEvents = vi.fn();
+const mockFilteredLogEvents = vi.fn();
 const mockPutRetention = vi.fn();
 const mockDeleteRetention = vi.fn();
 const mockSubFilters = vi.fn();
@@ -104,6 +105,7 @@ vi.mock("../../hooks/useLogs", () => ({
     get variables() { return deleteStreamState.variables; },
   }),
   useLogEvents: (...args: any[]) => mockLogEvents(...args),
+  useFilteredLogEvents: (...args: any[]) => mockFilteredLogEvents(...args),
   usePutRetentionPolicy: () => ({
     mutate: mockPutRetention,
     get isPending() { return putRetentionState.isPending; },
@@ -188,6 +190,7 @@ beforeEach(() => {
   mockLogGroups.mockReturnValue({ data: { logGroups: [], total: 0 }, isLoading: false, isError: false, error: null });
   mockLogStreams.mockReturnValue({ data: { logStreams: [], total: 0 }, isLoading: false, isError: false, error: null });
   mockLogEvents.mockReturnValue({ data: { events: [] }, isLoading: false, isError: false, error: null, refetch: vi.fn() });
+  mockFilteredLogEvents.mockReturnValue({ data: { events: [] }, isLoading: false, isError: false, error: null, refetch: vi.fn() });
   mockSubFilters.mockReturnValue({ data: { subscriptionFilters: [], total: 0 }, isLoading: false, isError: false, error: null });
   mockTags.mockReturnValue({ data: { tags: {} }, isLoading: false, isError: false, error: null });
 });
@@ -1690,6 +1693,128 @@ describe("CloudWatchLogsDashboard", () => {
     await user.click(screen.getAllByRole("option", { name: /Never expire/i })[0]);
     await clickButton(user, /Save retention/i);
     await waitFor(() => expect(mockDeleteRetention).toHaveBeenCalledWith("/aws/lambda/test"));
+  });
+
+  // ── Filter-pattern search (single stream) ───────────────
+
+  async function gotoStream(user: ReturnType<typeof userEvent.setup>) {
+    mockLogGroups.mockReturnValue({
+      data: { logGroups: [{ logGroupName: "/aws/lambda/test" }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockLogStreams.mockReturnValue({
+      data: { logStreams: [{ logStreamName: "my-stream", storedBytes: 512 }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("/aws/lambda/test"));
+    await user.click(screen.getByText("/aws/lambda/test"));
+    await waitFor(() => expect(screen.getByText("my-stream")).toBeTruthy());
+    await user.click(screen.getByText("my-stream"));
+    await waitFor(() => expect(screen.getByText(/Back to Log Streams/i)).toBeTruthy());
+  }
+
+  it("shows the filter-pattern search box in the stream viewer", async () => {
+    const user = userEvent.setup();
+    await gotoStream(user);
+    expect(screen.getByLabelText("Filter pattern")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Search$/i })).toBeTruthy();
+    // Hint reflects Floci's actual behaviour (case-sensitive substring match).
+    expect(screen.getByText(/case-sensitive/i)).toBeTruthy();
+  });
+
+  it("runs a filter-pattern search scoped to the current stream", async () => {
+    const user = userEvent.setup();
+    mockFilteredLogEvents.mockReturnValue({
+      data: { events: [{ eventId: "f1", timestamp: 1705000000000, message: "boom ERROR here" }] },
+      isLoading: false, isError: false, error: null, refetch: vi.fn(),
+    });
+    await gotoStream(user);
+    await user.type(screen.getByLabelText("Filter pattern"), "ERROR");
+    await user.click(screen.getByRole("button", { name: /^Search$/i }));
+    await waitFor(() =>
+      expect(mockFilteredLogEvents).toHaveBeenLastCalledWith(
+        "/aws/lambda/test",
+        "my-stream",
+        expect.objectContaining({ filterPattern: "ERROR" }),
+        expect.anything()
+      )
+    );
+    expect(screen.getByText("boom ERROR here")).toBeTruthy();
+  });
+
+  it("shows a no-match empty state when a search returns nothing", async () => {
+    const user = userEvent.setup();
+    mockFilteredLogEvents.mockReturnValue({
+      data: { events: [] }, isLoading: false, isError: false, error: null, refetch: vi.fn(),
+    });
+    await gotoStream(user);
+    await user.type(screen.getByLabelText("Filter pattern"), "NOPE");
+    await user.click(screen.getByRole("button", { name: /^Search$/i }));
+    // Default window is "Last 1 hour" — the empty state should nudge widening it.
+    await waitFor(() =>
+      expect(screen.getByText(/No events matched .* widen the time range/i)).toBeTruthy()
+    );
+  });
+
+  it("clears the search and returns to live-tail mode", async () => {
+    const user = userEvent.setup();
+    await gotoStream(user);
+    await user.type(screen.getByLabelText("Filter pattern"), "ERROR");
+    await user.click(screen.getByRole("button", { name: /^Search$/i }));
+    await waitFor(() =>
+      expect(mockFilteredLogEvents).toHaveBeenLastCalledWith(
+        "/aws/lambda/test", "my-stream",
+        expect.objectContaining({ filterPattern: "ERROR" }),
+        expect.anything()
+      )
+    );
+    await user.click(screen.getByRole("button", { name: /Clear/i }));
+    await waitFor(() =>
+      expect(mockFilteredLogEvents).toHaveBeenLastCalledWith(
+        "/aws/lambda/test", "my-stream",
+        expect.objectContaining({ filterPattern: "" }),
+        expect.anything()
+      )
+    );
+  });
+
+  it("runs the search on Enter and ignores other keys", async () => {
+    const user = userEvent.setup();
+    await gotoStream(user);
+    const input = screen.getByLabelText("Filter pattern");
+    await user.type(input, "ERROR");
+    // A non-Enter key must not commit the filter.
+    await user.type(input, "{Escape}");
+    expect(mockFilteredLogEvents).not.toHaveBeenCalledWith(
+      "/aws/lambda/test", "my-stream",
+      expect.objectContaining({ filterPattern: "ERROR" }),
+      expect.anything()
+    );
+    await user.type(input, "{Enter}");
+    await waitFor(() =>
+      expect(mockFilteredLogEvents).toHaveBeenLastCalledWith(
+        "/aws/lambda/test", "my-stream",
+        expect.objectContaining({ filterPattern: "ERROR" }),
+        expect.anything()
+      )
+    );
+  });
+
+  it("drops the time window when the range is switched to All time", async () => {
+    const user = userEvent.setup();
+    await gotoStream(user);
+    await user.click(screen.getByRole("button", { name: /Time range/i }));
+    await user.click(screen.getAllByRole("option", { name: /All time/i })[0]);
+    await user.type(screen.getByLabelText("Filter pattern"), "ERROR");
+    await user.click(screen.getByRole("button", { name: /^Search$/i }));
+    await waitFor(() =>
+      expect(mockFilteredLogEvents).toHaveBeenLastCalledWith(
+        "/aws/lambda/test", "my-stream",
+        expect.objectContaining({ filterPattern: "ERROR", startTimeOffsetMs: undefined }),
+        expect.anything()
+      )
+    );
   });
 });
 
