@@ -92,6 +92,7 @@ import Route53ResolverDashboard from "./services/Route53ResolverDashboard";
 import ControlTowerDashboard from "./services/ControlTowerDashboard";
 import ResourceExplorer2Dashboard from "./services/ResourceExplorer2Dashboard";
 import ElbClassicDashboard from "./services/ElbClassicDashboard";
+import NetworkFirewallDashboard from "./services/NetworkFirewallDashboard";
 
 import type { ComponentType } from "react";
 
@@ -189,5 +190,6 @@ export const SERVICE_DASHBOARDS: Record<string, ComponentType> = {
   "controltower": ControlTowerDashboard,
   "resource-explorer-2": ResourceExplorer2Dashboard,
   "elb": ElbClassicDashboard,
+  "network-firewall": NetworkFirewallDashboard,
   "signin": SignInDashboard,
 };

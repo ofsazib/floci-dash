@@ -109,6 +109,7 @@ import route53resolverRoutes from "./route53resolver";
 import controltowerRoutes from "./controltower";
 import resourceexplorer2Routes from "./resourceexplorer2";
 import elbclassicRoutes from "./elbclassic";
+import networkfirewallRoutes from "./networkfirewall";
 import signinRoutes from "./signin";
 
 const router = new Hono();
@@ -222,6 +223,7 @@ router.route("/route53resolver", route53resolverRoutes);
 router.route("/controltower", controltowerRoutes);
 router.route("/resourceexplorer2", resourceexplorer2Routes);
 router.route("/elb-classic", elbclassicRoutes);
+router.route("/networkfirewall", networkfirewallRoutes);
 router.route("/signin", signinRoutes);
 
   router.get("/", (c: Context) => {
