@@ -1658,3 +1658,48 @@ describe("DynamoDBTableDetail — Query tab", () => {
     });
   });
 });
+
+describe("DynamoDBTableDetail — hook order across the loading transition", () => {
+  it("keeps its hook count stable when the data lands on an already-mounted table", () => {
+    (useDynamoDBTableDetail as any).mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+      error: null,
+    });
+    (useDynamoDBFilteredScan as any).mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+      error: null,
+    });
+
+    const { rerender, container } = render(
+      <DynamoDBTableDetail tableName="users" onBack={vi.fn()} />,
+      { wrapper: createWrapper() },
+    );
+    expect(container.textContent).toContain("Loading table details");
+
+    // The queries resolve and React re-renders the same instance. Any hook
+    // placed below the loading/error early returns would only run now, and
+    // React would reject the render with "Rendered more hooks than during the
+    // previous render."
+    (useDynamoDBTableDetail as any).mockReturnValue({
+      data: detailData,
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    (useDynamoDBFilteredScan as any).mockReturnValue({
+      data: scanData,
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    expect(() =>
+      rerender(<DynamoDBTableDetail tableName="users" onBack={vi.fn()} />),
+    ).not.toThrow();
+    expect(container.textContent).not.toContain("Loading table details");
+  });
+});
