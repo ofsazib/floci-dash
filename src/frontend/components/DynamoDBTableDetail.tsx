@@ -311,37 +311,6 @@ export default function DynamoDBTableDetail({
     resetPagination();
   }
 
-  if (detailError || scanError) {
-    return (
-      <SpaceBetween size="l">
-        <Button variant="link" onClick={onBack}>
-          ← Tables
-        </Button>
-        <StatusIndicator type="error">
-          {(detailErr as Error)?.message ||
-            (scanErr as Error)?.message ||
-            "Failed to load table details"}
-        </StatusIndicator>
-      </SpaceBetween>
-    );
-  }
-
-  if (detailLoading || scanLoading) {
-    return (
-      <SpaceBetween size="l">
-        <Button variant="link" onClick={onBack}>
-          ← Tables
-        </Button>
-        <Box textAlign="center" padding={{ top: "xxxl" }}>
-          <Spinner size="large" />
-          <Box variant="p" padding={{ top: "m" }} color="text-body-secondary">
-            Loading table details...
-          </Box>
-        </Box>
-      </SpaceBetween>
-    );
-  }
-
   const items = scan?.items || [];
   const schema = detail?.keySchema || [];
   const hashKeyAttr = schema.find((k) => k.KeyType === "HASH")?.AttributeName;
@@ -436,6 +405,38 @@ export default function DynamoDBTableDetail({
 
     return cols;
   }, [hashKeyAttr, rangeKeyAttr, extraKeys, deleteItem]);
+
+  if (detailError || scanError) {
+    return (
+      <SpaceBetween size="l">
+        <Button variant="link" onClick={onBack}>
+          ← Tables
+        </Button>
+        <StatusIndicator type="error">
+          {(detailErr as Error)?.message ||
+            (scanErr as Error)?.message ||
+            "Failed to load table details"}
+        </StatusIndicator>
+      </SpaceBetween>
+    );
+  }
+
+  if (detailLoading || scanLoading) {
+    return (
+      <SpaceBetween size="l">
+        <Button variant="link" onClick={onBack}>
+          ← Tables
+        </Button>
+        <Box textAlign="center" padding={{ top: "xxxl" }}>
+          <Spinner size="large" />
+          <Box variant="p" padding={{ top: "m" }} color="text-body-secondary">
+            Loading table details...
+          </Box>
+        </Box>
+      </SpaceBetween>
+    );
+  }
+
 
   return (
     <SpaceBetween size="l">
