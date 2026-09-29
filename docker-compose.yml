@@ -28,7 +28,8 @@ services:
       - floci-data:/app/data
       - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:4566/_floci/health"]
+      # Floci 2.x images no longer ship curl — probe over bash's /dev/tcp instead.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost:4566 && printf 'GET /_floci/health HTTP/1.0\r\n\r\n' >&3 && grep -q '200 OK' <&3"]
       interval: 10s
       timeout: 5s
       retries: 30
