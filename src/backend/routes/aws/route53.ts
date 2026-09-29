@@ -9,6 +9,7 @@ import {
   GetDNSSECCommand,
   GetAccountLimitCommand,
 } from "@aws-sdk/client-route-53";
+import type { ResourceRecordSet } from "@aws-sdk/client-route-53";
 import {
   ListHostedZonesCommand,
   GetHostedZoneCommand,
@@ -129,6 +130,23 @@ router.delete("/hosted-zones/:id/record-sets", async (c: Context) => {
   const type = c.req.query("type");
   if (!name || !type)
     return c.json({ error: "name and type query parameters required" }, 400);
+  // AWS requires the full record-set body on DELETE: exactly one of AliasTarget
+  // or [TTL + ResourceRecords]. Floci 2.x enforces this, so the frontend passes
+  // the row's TTL/values along; without them the bare Name+Type form is sent
+  // for older emulators that accept it.
+  const ttlParam = c.req.query("ttl");
+  const recordsParam = c.req.query("records");
+  let resourceRecordSet: ResourceRecordSet = { Name: name, Type: type as any };
+  if (ttlParam && recordsParam) {
+    const ttl = Number(ttlParam);
+    if (!Number.isNaN(ttl)) {
+      resourceRecordSet = {
+        ...resourceRecordSet,
+        TTL: ttl,
+        ResourceRecords: recordsParam.split(",").map((v) => ({ Value: v })),
+      };
+    }
+  }
   const client = getClient();
   const result = await client.send(
     new ChangeResourceRecordSetsCommand({
@@ -137,10 +155,7 @@ router.delete("/hosted-zones/:id/record-sets", async (c: Context) => {
         Changes: [
           {
             Action: "DELETE",
-            ResourceRecordSet: {
-              Name: name,
-              Type: type as any,
-            },
+            ResourceRecordSet: resourceRecordSet,
           },
         ],
       },

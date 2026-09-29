@@ -1786,7 +1786,7 @@ describe("Route53 Integration", () => {
   it("deletes the record set", async () => {
     const { status, data } = await api(
       "DELETE",
-      `/api/aws/route53/hosted-zones/${zoneId}/record-sets?name=${encodeURIComponent(`www.${zoneName}`)}&type=A`
+      `/api/aws/route53/hosted-zones/${zoneId}/record-sets?name=${encodeURIComponent(`www.${zoneName}`)}&type=A&ttl=300&records=192.0.2.1`
     );
     expect(status).toBe(200);
     expect(data.changeInfo).toBeTruthy();

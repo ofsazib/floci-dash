@@ -181,11 +181,67 @@ describe("Route53 routes — Record Sets", () => {
     expect(res.status).toBe(201);
   });
 
-  it("DELETE /hosted-zones/:id/record-sets — deletes record", async () => {
+  it("DELETE /hosted-zones/:id/record-sets — deletes record (bare form without ttl/records)", async () => {
     mockSend.mockResolvedValueOnce({ ChangeInfo: { Status: "INSYNC" } });
     const res = await del("/hosted-zones/Z1/record-sets?name=www.example.com.&type=A");
     const json = await res.json();
     expect(json.changeInfo.Status).toBe("INSYNC");
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        __cmdName: "ChangeResourceRecordSetsCommand",
+        ChangeBatch: {
+          Changes: [
+            { Action: "DELETE", ResourceRecordSet: { Name: "www.example.com.", Type: "A" } },
+          ],
+        },
+      })
+    );
+  });
+
+  it("DELETE /hosted-zones/:id/record-sets — includes TTL and records when both provided", async () => {
+    mockSend.mockResolvedValueOnce({ ChangeInfo: { Status: "INSYNC" } });
+    const res = await del(
+      "/hosted-zones/Z1/record-sets?name=www.example.com.&type=A&ttl=300&records=1.2.3.4%2C5.6.7.8"
+    );
+    const json = await res.json();
+    expect(json.changeInfo.Status).toBe("INSYNC");
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        __cmdName: "ChangeResourceRecordSetsCommand",
+        ChangeBatch: {
+          Changes: [
+            {
+              Action: "DELETE",
+              ResourceRecordSet: {
+                Name: "www.example.com.",
+                Type: "A",
+                TTL: 300,
+                ResourceRecords: [{ Value: "1.2.3.4" }, { Value: "5.6.7.8" }],
+              },
+            },
+          ],
+        },
+      })
+    );
+  });
+
+  it("DELETE /hosted-zones/:id/record-sets — falls back to bare form on non-numeric ttl", async () => {
+    mockSend.mockResolvedValueOnce({ ChangeInfo: { Status: "INSYNC" } });
+    const res = await del(
+      "/hosted-zones/Z1/record-sets?name=www.example.com.&type=A&ttl=abc&records=1.2.3.4"
+    );
+    const json = await res.json();
+    expect(json.changeInfo.Status).toBe("INSYNC");
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        __cmdName: "ChangeResourceRecordSetsCommand",
+        ChangeBatch: {
+          Changes: [
+            { Action: "DELETE", ResourceRecordSet: { Name: "www.example.com.", Type: "A" } },
+          ],
+        },
+      })
+    );
   });
 
   it("DELETE /hosted-zones/:id/record-sets — 400 when missing params", async () => {

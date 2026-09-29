@@ -788,7 +788,13 @@ function Route53ZoneDetail({ zoneId, onBack }: { zoneId: string; onBack: () => v
             resourceType="record"
             loading={deleteRecord.isPending}
             onDelete={() =>
-              deleteRecord.mutateAsync({ zoneId, name: item.Name, type: item.Type })
+              deleteRecord.mutateAsync({
+                zoneId,
+                name: item.Name,
+                type: item.Type,
+                ttl: item.TTL,
+                records: (item.ResourceRecords || []).map((r: any) => r.Value),
+              })
             }
           />
         ),

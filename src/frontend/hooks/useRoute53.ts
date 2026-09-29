@@ -65,11 +65,28 @@ export function useCreateRoute53RecordSet() {
 export function useDeleteRoute53RecordSet() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ zoneId, name, type }: { zoneId: string; name: string; type: string }) =>
-      api(
-        `/aws/route53/hosted-zones/${zoneId}/record-sets?name=${encodeURIComponent(name)}&type=${encodeURIComponent(type)}`,
-        { method: "DELETE" }
-      ),
+    mutationFn: ({
+      zoneId,
+      name,
+      type,
+      ttl,
+      records,
+    }: {
+      zoneId: string;
+      name: string;
+      type: string;
+      ttl?: number;
+      records?: string[];
+    }) => {
+      const qs = new URLSearchParams({ name, type });
+      if (ttl != null && records?.length) {
+        qs.set("ttl", String(ttl));
+        qs.set("records", records.join(","));
+      }
+      return api(`/aws/route53/hosted-zones/${zoneId}/record-sets?${qs.toString()}`, {
+        method: "DELETE",
+      });
+    },
     onSuccess: () =>
       qc.invalidateQueries({ queryKey: ["aws", "route53", "hosted-zones"] }),
   });

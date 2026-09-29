@@ -608,7 +608,47 @@ describe("Route53Dashboard", () => {
     await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
     await clickButton(user, /^Delete$/i);
     await waitFor(() =>
-      expect(mockDeleteRecord).toHaveBeenCalledWith({ zoneId: "Z456", name: "www.test.com.", type: "A" })
+      expect(mockDeleteRecord).toHaveBeenCalledWith({
+        zoneId: "Z456",
+        name: "www.test.com.",
+        type: "A",
+        ttl: 300,
+        records: ["192.168.1.1"],
+      })
+    );
+  });
+
+  it("deletes a record set without TTL/records (alias row) after confirmation", async () => {
+    const user = userEvent.setup();
+    mockZones.mockReturnValue({
+      data: { hostedZones: [{ Id: "/hostedzone/Z456", Name: "test.com.", ResourceRecordSetCount: 2 }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockRecordSets.mockReturnValue({
+      data: {
+        recordSets: [
+          { Name: "test.com.", Type: "NS", TTL: 172800, ResourceRecords: [{ Value: "ns-1.awsdns.com." }] },
+          { Name: "alias.test.com.", Type: "A", AliasTarget: { DNSName: "lb.example.com." } },
+        ],
+        total: 2,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<Route53Dashboard />, { wrapper: createWrapper() });
+    await waitFor(() => screen.getByText("test.com."));
+    await user.click(screen.getByText("View"));
+    await waitFor(() => expect(screen.getByText(/alias.test.com./)).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Delete alias.test.com./i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() =>
+      expect(mockDeleteRecord).toHaveBeenCalledWith({
+        zoneId: "Z456",
+        name: "alias.test.com.",
+        type: "A",
+        ttl: undefined,
+        records: [],
+      })
     );
   });
 

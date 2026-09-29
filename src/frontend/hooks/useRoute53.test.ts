@@ -126,6 +126,38 @@ describe("useDeleteRoute53RecordSet", () => {
       expect.objectContaining({ method: "DELETE" })
     );
   });
+
+  it("appends ttl and records when both provided", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useDeleteRoute53RecordSet(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({
+      zoneId: "Z1",
+      name: "www.example.com.",
+      type: "A",
+      ttl: 300,
+      records: ["192.0.2.1", "192.0.2.2"],
+    });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/route53/hosted-zones/Z1/record-sets?name=www.example.com.&type=A&ttl=300&records=192.0.2.1%2C192.0.2.2",
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
+
+  it("omits ttl when records list is empty", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useDeleteRoute53RecordSet(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({
+      zoneId: "Z1",
+      name: "www.example.com.",
+      type: "A",
+      ttl: 300,
+      records: [],
+    });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/route53/hosted-zones/Z1/record-sets?name=www.example.com.&type=A",
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
 });
 
 // ── Health Checks ────────────────────────────────────────
