@@ -1828,9 +1828,9 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 
 | # | Task | Status | Date |
 |---|------|--------|------|
-| 26.1 | **Stack sync verification** — `make down && make up-bg` (compose floats `floci/floci:latest` → now 2.1.0), `make typecheck`, `make test-all-cov` full gate; triage any Floci 2.x wire drift the integration suite surfaces; refresh README min-Floci notes | Pending | — |
-| 26.2 | **mwaa/rum registration gap** — both dashboards shipped in Phase 15 but `types/services.ts` never got them: labels map (~line 79), per-key category map (~line 41), category arrays (lines 8–9). Home cards currently fall back to raw keys | Pending | — |
-| 26.3 | **P.1 Account** — `@aws-sdk/client-account`, 2 ops (getAlternateContact/putAlternateContact); backend `account.ts` + "Alternate contacts" card on the Settings page (instead of a full dashboard) | Pending | — |
+| 26.1 | **Stack sync verification** — synced to Floci 2.1.0 (`floci/floci:latest`); found + fixed **two real 2.x drifts**: (a) Route53 `DELETE record-set` now needs the full record body (Floci 2.x enforces real AWS `InvalidInput` validation) — backend route accepts optional `ttl`/`records` query params and sends `TTL`+`ResourceRecords`, hook/dashboard pass the row's values, integration test updated; (b) 2.x images dropped `curl` so the compose healthcheck never passed — replaced with a bash `/dev/tcp` HTTP probe. 26 unreleased-in-image services documented (SageMaker, DLM, DMS, CodeArtifact, Timestream InfluxDB, Redshift Serverless land after the 2.1.0 tag). Gates: typecheck exit 0, `make test-cov` 386 files/13,269 tests exit 0, `make test-all-cov` 385 files/13,539 tests exit 0 (99.9/99/99.9/99.9 thresholds), Route53 integration 7/7 green | Done | 2026-09-29 |
+| 26.2 | **mwaa/rum registration gap** — both dashboards shipped in Phase 15 but `types/services.ts` never got them: labels map (~line 79), per-key category map (~line 41), category arrays (lines 8–9). Home cards currently fall back to raw keys | Done | 2026-09-29 — added labels + categories for `mwaa`, `rum` **and all 26 new-service keys** (access-analyzer, account, app-integrations, bcm-pricing-calculator, bedrock, budgets, cognito-identity, codeartifact, controlcatalog, datasync, detective, dlm, dms, globalaccelerator, identitystore, inspector2, macie2, marketplace, oam, redshift-data, redshift-serverless, sagemaker, securityhub, sso-oidc, timestream-influxdb, verifiedpermissions); home cards now render proper names/categories; typecheck + map-consumer component tests green |
+| 26.3 | **P.1 Account** — `@aws-sdk/client-account`, 2 ops (getAlternateContact/putAlternateContact); backend `account.ts` + "Alternate contacts" card on the Settings page (instead of a full dashboard) | Done | 2026-09-29 — `account.ts` (GET maps Floci's 404 ResourceNotFoundException to `contact:null`; PUT validates type + all four fields), registered in `routes/aws/index.ts`; `useAccount.ts` (type-gated query + invalidating mutation); Settings "Alternate Contacts" card (type select, loading/not-set/set arms, 4-field form gated save, success/error/fallback alerts); +15 backend tests, +3 hook tests, +8 component tests; scoped runs 100/100/100/100 on all 3 files; typecheck + `make test-cov` exit 0 (386 files, 13,269 tests); README fully-implemented table + Floci-version notes refreshed |
 
 **Stage B — High-value new dashboards**
 
@@ -2179,7 +2179,7 @@ Local Floci pulled `3600038a` → `071a170c` on 2026-09-29 (**1,123 new commits*
 
 #### Registration debt (fix before/with Stage B)
 
-- **`mwaa` and `rum`** have dashboards + registry entries but were never added to `types/services.ts`: missing from the labels map, the per-key category map, and the category arrays → home cards fall back to raw keys. One-file fix.
+- **`mwaa` and `rum`** have dashboards + registry entries but were never added to `types/services.ts`: missing from the labels map, the per-key category map, and the category arrays → home cards fall back to raw keys. One-file fix. → **Fixed 2026-09-29** (tracker 26.2), together with labels/categories for all 26 new-service keys.
 - `redshift-data` exists in the Floci catalog; the dashboard has no route/label (P.4 covers it).
 
 #### New features in already-covered services (E.1–E.9 — implement against Floci source)
