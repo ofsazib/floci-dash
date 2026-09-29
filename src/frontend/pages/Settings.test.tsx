@@ -24,6 +24,22 @@ vi.mock("../hooks/useSystem", () => ({
   useDiscoverFloci: () => ({ mutateAsync: mockDiscoverMutateAsync, isPending: false }),
 }));
 
+const mockPutContact = vi.fn();
+const contactQueryState = vi.hoisted(() => ({
+  data: { contact: null as any },
+  isLoading: false,
+}));
+vi.mock("../hooks/useAccount", () => ({
+  useAlternateContact: () => ({
+    get data() { return contactQueryState.data; },
+    get isLoading() { return contactQueryState.isLoading; },
+  }),
+  usePutAlternateContact: () => ({
+    mutateAsync: mockPutContact,
+    get isPending() { return false; },
+  }),
+}));
+
 import Settings from "./Settings";
 
 function dismissModalWithEscape() {
@@ -444,5 +460,132 @@ describe("Settings", () => {
     const dismiss = document.querySelector('[class*="awsui_dismiss-button"]') as HTMLElement;
     fireEvent.click(dismiss);
     await waitFor(() => expect(screen.queryByText("x")).toBeNull());
+  });
+});
+
+describe("Settings — Alternate Contacts card", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    contactQueryState.data = { contact: null as any };
+    contactQueryState.isLoading = false;
+    mockUseSettings.mockReturnValue({
+      darkMode: false,
+      refreshInterval: 10000,
+      flociEndpoint: "http://localhost:4566",
+      toggleDarkMode: mockToggleDarkMode,
+      setRefreshInterval: mockSetRefreshInterval,
+      setFlociEndpoint: mockSetFlociEndpoint,
+    });
+  });
+
+  it("shows the not-set message when no contact exists", async () => {
+    render(<Settings />, { wrapper: createWrapper() });
+    await waitFor(() =>
+      expect(screen.getByText("No BILLING alternate contact is set.")).toBeTruthy()
+    );
+  });
+
+  it("shows the existing contact values", async () => {
+    contactQueryState.data = {
+      contact: {
+        AlternateContactType: "BILLING",
+        Name: "Jane Doe",
+        Title: "CFO",
+        EmailAddress: "jane@example.com",
+        PhoneNumber: "+1 555 0100",
+      },
+    };
+    render(<Settings />, { wrapper: createWrapper() });
+    await waitFor(() =>
+      expect(screen.getByText(/Jane Doe \(CFO\) — jane@example.com — \+1 555 0100/)).toBeTruthy()
+    );
+  });
+
+  it("shows the loading state", async () => {
+    contactQueryState.isLoading = true;
+    render(<Settings />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("Loading contact…")).toBeTruthy());
+  });
+
+  it("keeps Save disabled until all four fields are filled, then saves", async () => {
+    const user = userEvent.setup();
+    render(<Settings />, { wrapper: createWrapper() });
+    const save = screen.getByRole("button", { name: /Save contact/i }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    const inputs = screen.getAllByDisplayValue("");
+    await user.type(inputs[0], "Jane");
+    await user.type(inputs[1], "CFO");
+    await user.type(inputs[2], "jane@example.com");
+    await user.type(inputs[3], "+1 555 0100");
+    expect(save.disabled).toBe(false);
+    await user.click(save);
+    await waitFor(() =>
+      expect(mockPutContact).toHaveBeenCalledWith({
+        type: "BILLING",
+        name: "Jane",
+        title: "CFO",
+        emailAddress: "jane@example.com",
+        phoneNumber: "+1 555 0100",
+      })
+    );
+  });
+
+  it("shows the success alert after save and dismisses it", async () => {
+    mockPutContact.mockResolvedValueOnce({ ok: true });
+    const user = userEvent.setup();
+    render(<Settings />, { wrapper: createWrapper() });
+    const inputs = screen.getAllByDisplayValue("");
+    for (const [i, v] of ["Jane", "CFO", "jane@example.com", "+1 555 0100"].entries()) {
+      await user.type(inputs[i], v);
+    }
+    await user.click(screen.getByRole("button", { name: /Save contact/i }));
+    await waitFor(() => expect(screen.getByText("BILLING alternate contact saved.")).toBeTruthy());
+    const dismiss = document.querySelector('[class*="awsui_dismiss-button"]') as HTMLElement;
+    fireEvent.click(dismiss);
+    await waitFor(() =>
+      expect(screen.queryByText("BILLING alternate contact saved.")).toBeNull()
+    );
+  });
+
+  it("shows the error message on save failure and dismisses it", async () => {
+    mockPutContact.mockRejectedValueOnce(new Error("floci said no"));
+    const user = userEvent.setup();
+    render(<Settings />, { wrapper: createWrapper() });
+    const inputs = screen.getAllByDisplayValue("");
+    for (const [i, v] of ["Jane", "CFO", "jane@example.com", "+1 555 0100"].entries()) {
+      await user.type(inputs[i], v);
+    }
+    await user.click(screen.getByRole("button", { name: /Save contact/i }));
+    await waitFor(() => expect(screen.getByText("floci said no")).toBeTruthy());
+    const dismiss = document.querySelector('[class*="awsui_dismiss-button"]') as HTMLElement;
+    fireEvent.click(dismiss);
+    await waitFor(() => expect(screen.queryByText("floci said no")).toBeNull());
+  });
+
+  it("falls back to a generic message when the failure has no message", async () => {
+    mockPutContact.mockRejectedValueOnce({});
+    const user = userEvent.setup();
+    render(<Settings />, { wrapper: createWrapper() });
+    const inputs = screen.getAllByDisplayValue("");
+    for (const [i, v] of ["Jane", "CFO", "jane@example.com", "+1 555 0100"].entries()) {
+      await user.type(inputs[i], v);
+    }
+    await user.click(screen.getByRole("button", { name: /Save contact/i }));
+    await waitFor(() =>
+      expect(screen.getByText("Failed to save alternate contact")).toBeTruthy()
+    );
+  });
+
+  it("switches contact type via the select", async () => {
+    const user = userEvent.setup();
+    render(<Settings />, { wrapper: createWrapper() });
+    await waitFor(() =>
+      expect(screen.getByText("No BILLING alternate contact is set.")).toBeTruthy()
+    );
+    await user.click(screen.getAllByText("BILLING")[0]);
+    await user.click(screen.getByRole("option", { name: "OPERATIONS" }));
+    await waitFor(() =>
+      expect(screen.getByText("No OPERATIONS alternate contact is set.")).toBeTruthy()
+    );
   });
 });

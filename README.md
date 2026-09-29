@@ -177,7 +177,7 @@ FLOCI_PORT=9900 DASHBOARD_PORT=9901 make up-bg
 
 ### Floci service enablement (FLOCI_SERVICES caveat)
 
-> **Floci 1.7.0 note:** `FLOCI_SERVICES` (the CSV env in `docker-compose.yml`) is **ignored by Floci 1.7.0** — enablement comes from the image's baked defaults (~80 services). The 19 newest dashboards (Control Tower, Service Catalog, Network Firewall, Route 53 Resolver, etc.) require a Floci build that includes those services: build Floci from source or use a release newer than 1.7.0. Per-service overrides use `FLOCI_SERVICES_<NAME>_ENABLED=true` (e.g. `FLOCI_SERVICES_REDSHIFT_ENABLED=true`).
+> **Floci version note:** the stack pairs with `floci/floci:latest`. Verified against **Floci 2.1.0**. `FLOCI_SERVICES` (the CSV env in `docker-compose.yml`) is ignored — enablement comes from the image's baked defaults. Six services shipped in the dashboard are **not yet in the published 2.1.0 image** (SageMaker, Data Lifecycle Manager, DMS, CodeArtifact, Timestream for InfluxDB, Redshift Serverless landed in Floci after the 2.1.0 tag): their dashboards appear once you run a newer Floci release or build from source. Per-service overrides use `FLOCI_SERVICES_<NAME>_ENABLED=true` (e.g. `FLOCI_SERVICES_REDSHIFT_ENABLED=true`). The Floci container healthcheck uses a bash `/dev/tcp` probe because 2.x images no longer ship `curl`.
 
 ### Data persistence
 
@@ -449,6 +449,7 @@ These services have full CRUD operations in both backend and frontend:
 | **Cognito** | User pools (list, describe, create with username attributes, delete), users (list, admin create, delete, enable, disable, set password, confirm sign-up, delete attributes, global sign-out), groups (list, create, delete), app clients (list, describe, create, delete, client secrets list/create/delete), resource servers (list, create, describe, update, delete), MFA config, custom attributes, auth flow tester (InitiateAuth, AdminInitiateAuth, ConfirmSignUp, AdminRespondToAuthChallenge, ForgotPassword, ConfirmForgotPassword, GetUser, UpdateUserAttributes, DeleteUserAttributes, ChangePassword, SignUp, RespondToAuthChallenge, GlobalSignOut, RevokeToken) |
 | **API Gateway V2** | APIs (list, get, create, delete), routes (list, create, delete), integrations (list, create, delete), stages (list, create, delete), deployments (list, create, delete) with drill-down per API |
 | **ACM** | Certificates (list, describe with validation details, request, delete, get PEM), tags (list per certificate) |
+| **Account** | Alternate contacts (get/put per type — billing, operations, security) on the Settings page |
 | **CloudTrail** | Trails (list, create, update, delete), start/stop logging, get trail status |
 | **AWS Config** | Config rules (list, create, delete, tags), configuration recorders (list, create, start/stop, status), delivery channels (list, create), conformance packs (list, create, delete, tags), compliance by rule, rule evaluation status, pack status |
 | **AppConfig** | Applications (list, get, create, delete), environments (list, create, delete per app), configuration profiles (list, create, delete per app), hosted config versions (list per profile) |

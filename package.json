@@ -30,6 +30,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@aws-sdk/client-account": "^3.1142.0",
     "@aws-sdk/client-acm": "^3.1071.0",
     "@aws-sdk/client-amp": "^3.1127.0",
     "@aws-sdk/client-api-gateway": "^3.1070.0",

@@ -3,6 +3,79 @@ import { ContentLayout, Header, Container, Toggle, Select, SpaceBetween, Box, In
 import { useSettings } from "../stores/settings";
 import { api } from "../lib/client";
 import { useDiscoverFloci } from "../hooks/useSystem";
+import {
+  useAlternateContact,
+  usePutAlternateContact,
+  type AlternateContactType,
+} from "../hooks/useAccount";
+
+const CONTACT_TYPE_OPTIONS: AlternateContactType[] = ["BILLING", "OPERATIONS", "SECURITY"];
+
+/** Account alternate contacts (P.1 — Floci's account service exposes get/put only). */
+function AlternateContactsCard() {
+  const [type, setType] = useState<AlternateContactType>("BILLING");
+  const contactQuery = useAlternateContact(type);
+  const putContact = usePutAlternateContact();
+  const [form, setForm] = useState({ name: "", title: "", emailAddress: "", phoneNumber: "" });
+  const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
+  const contact = contactQuery.data?.contact ?? null;
+  const canSave = !!(form.name && form.title && form.emailAddress && form.phoneNumber);
+
+  async function handleSave() {
+    setStatus(null);
+    try {
+      await putContact.mutateAsync({ type, ...form });
+      setStatus({ type: "success", message: `${type} alternate contact saved.` });
+    } catch (err) {
+      setStatus({ type: "error", message: (err as Error)?.message || "Failed to save alternate contact" });
+    }
+  }
+
+  return (
+    <Container header={<Header variant="h2">Alternate Contacts</Header>}>
+      <SpaceBetween size="m">
+        {status && (
+          <Alert type={status.type} dismissible onDismiss={() => setStatus(null)}>
+            {status.message}
+          </Alert>
+        )}
+        <FormField
+          label="Contact type"
+          description="Who Floci should pretend to contact for billing, operations or security notices."
+        >
+          <Select
+            selectedOption={{ value: type, label: type }}
+            options={CONTACT_TYPE_OPTIONS.map((t) => ({ value: t, label: t }))}
+            onChange={({ detail }: { detail: { selectedOption: { value?: string } } }) =>
+              setType(detail.selectedOption.value! as AlternateContactType)
+            }
+          />
+        </FormField>
+        {contactQuery.isLoading ? (
+          <Box variant="p">Loading contact…</Box>
+        ) : contact ? (
+          <Box variant="p">
+            {contact.Name} ({contact.Title}) — {contact.EmailAddress} — {contact.PhoneNumber}
+          </Box>
+        ) : (
+          <Box variant="p">No {type} alternate contact is set.</Box>
+        )}
+        <SpaceBetween direction="horizontal" size="xs">
+          <FormField label="Name"><Input value={form.name} onChange={({ detail }) => setForm({ ...form, name: detail.value })} /></FormField>
+          <FormField label="Title"><Input value={form.title} onChange={({ detail }) => setForm({ ...form, title: detail.value })} /></FormField>
+          <FormField label="Email address"><Input value={form.emailAddress} onChange={({ detail }) => setForm({ ...form, emailAddress: detail.value })} /></FormField>
+          <FormField label="Phone number"><Input value={form.phoneNumber} onChange={({ detail }) => setForm({ ...form, phoneNumber: detail.value })} /></FormField>
+        </SpaceBetween>
+        <Box float="right">
+          <Button variant="primary" disabled={!canSave} loading={putContact.isPending} onClick={handleSave}>
+            Save contact
+          </Button>
+        </Box>
+      </SpaceBetween>
+    </Container>
+  );
+}
 
 export default function Settings() {
   const { darkMode, refreshInterval, toggleDarkMode, setRefreshInterval, flociEndpoint, setFlociEndpoint } = useSettings();
@@ -149,6 +222,8 @@ export default function Settings() {
             )}
           </SpaceBetween>
         </Container>
+
+        <AlternateContactsCard />
 
         <Container header={<Header variant="h2">Floci Maintenance</Header>}>
           <SpaceBetween size="m">
