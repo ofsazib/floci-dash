@@ -1820,11 +1820,78 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 | 25.133 | **G.91 — ELBv2 DescribeTags / ModifyListener / ModifyTargetGroup** — backend `elb.ts` +3 routes: `GET /tags?arns=` (DescribeTags — 400 without arns, sparse `|| []`), `PUT /listeners` (ModifyListener — 400 without listenerArn, sslPolicy/certificates omitted when absent, certificates split/trim/filtered), `PUT /target-groups/health-check` (ModifyTargetGroup — 400 without targetGroupArn, numeric fields NaN-guarded to undefined); `useELB` +3 hooks (tags query gated on arns, modify-listener + modify-target-group mutations); ELBDashboard: per-load-balancer "Tags" modal (Badges, "No tags found." empty state, Close button + Escape dismiss), per-listener "Edit" modal (prefilled port `String(l.port ?? "")` + protocol `l.protocol \|\| "HTTP"` fallbacks, protocol Select, optional SSL policy + comma-separated certificate ARNs, error alert with dismiss), per-target-group "Health check" modal (path + 4 optional numeric fields with NaN guards, error alert with dismiss). Tests: +3 backend (tags happy/400/sparse, listener modify full/400/optionals-omitted, TG health-check full/400), +4 hook (tags URL+enabled gate, both mutations URL/method/body), +12 component (tags modal open/empty/close/escape, listener modal open+save-with-all-fields/portless-protocol-less fallbacks/error+clear-port/fallback-message/error-dismiss/cancel/escape, health-check save-with-all-fields/non-numeric-undefined/error-fallback+dismiss/cancel/escape). Verification: scoped runs 100/100/100/100 on all 3 files, typecheck clean, `make test-cov` exit 0 (273/273 files, 9,067 tests, 100% all metrics) | Done | 2026-08-17 |
 | 25.132 | **G.87 — SES account stats + raw send** — backend `ses.ts` +6 routes: `GET /account-sending` (GetAccountSendingEnabled), `PUT /account-sending` (UpdateAccountSendingEnabled — 400 without enabled), `GET /send-quota` (GetSendQuota), `GET /send-stats` (GetSendStatistics — sparse `|| []`), `POST /send-raw` (SendRawEmail — 400 without rawMessage; source optional), `POST /verify-email-address` (VerifyEmailAddress — 400 without emailAddress); `useSES` +6 hooks (account-sending query + update mutation, quota/stats queries, send-raw + verify-address mutations); SESDashboard new "Account" container: sending-enabled Toggle (`sendingEnabled?.enabled ?? false` unchecked arm), quota StatCards with dash fallbacks, send-statistics ResourceTable gated on `(sendStats?.sendDataPoints || []).length > 0`, "Send raw email" (MIME) modal (raw-message textarea + optional source, Send disabled until message typed, error alert dismissible), "Verify address" modal (disabled until email typed, generic error fallbacks for message-less failures). Tests: +6 backend (each route happy/400/sparse), +8 hook (all six hooks' URL/method/body + invalidation), +14 component (toggle on/off/error/dismiss/absent-null, quota dashes, stats table present/absent/absent-data, verify happy/error/generic-error, send-raw happy with source/error/generic-error/cancel/escape/alert-dismiss). Verification: scoped runs 100/100/100/100 on all 3 files, typecheck clean, `make test-cov` exit 0 (273/273 files, 9,054 tests, 100% all metrics) | Done | 2026-08-17 |
 
+### Phase 16: Floci 2.1.0 Parity Sync (Sept 2026)
+
+> Local Floci synced `3600038a` → `071a170c` on 2026-09-29 (1,123 commits; releases v2.0.0, v2.0.1, v2.1.0). Floci's service catalog grew 104 → 130 external keys: **26 brand-new services** have no dashboard at all (P.1–P.26), and already-covered services gained major features (E.1–E.9). Full specs live in "Gap-Analysis Addendum — 2026-09-29 audit (Floci 2.x sync)" at the bottom of this file. Every P.x/E.x task follows the standard checklist: consult Floci source first, backend route (`src/backend/routes/aws/{svc}.ts` + register in `routes/aws/index.ts`), hooks (`use{Svc}.ts`), dashboard component, 4-spot registration (`serviceRegistry.tsx`, `types/services.ts` labels + category map + category array), backend + hook + component tests at **100% on all four metrics**, `make typecheck`, `make test-cov` / `make test-all-cov`, README "Fully implemented" table update, tracker update.
+
+**Stage A — Compatibility & quick wins**
+
+| # | Task | Status | Date |
+|---|------|--------|------|
+| 26.1 | **Stack sync verification** — `make down && make up-bg` (compose floats `floci/floci:latest` → now 2.1.0), `make typecheck`, `make test-all-cov` full gate; triage any Floci 2.x wire drift the integration suite surfaces; refresh README min-Floci notes | Pending | — |
+| 26.2 | **mwaa/rum registration gap** — both dashboards shipped in Phase 15 but `types/services.ts` never got them: labels map (~line 79), per-key category map (~line 41), category arrays (lines 8–9). Home cards currently fall back to raw keys | Pending | — |
+| 26.3 | **P.1 Account** — `@aws-sdk/client-account`, 2 ops (getAlternateContact/putAlternateContact); backend `account.ts` + "Alternate contacts" card on the Settings page (instead of a full dashboard) | Pending | — |
+
+**Stage B — High-value new dashboards**
+
+| # | Task | Status | Date |
+|---|------|--------|------|
+| 26.4 | **P.2 Budgets** — `@aws-sdk/client-budgets`, 26 ops: budget CRUD + actions + notifications + subscribers + tags/execute; dashboard: budgets table → budget detail tabs (notifications, subscribers, actions, history) | Pending | — |
+| 26.5 | **P.3 Cognito Identity Pools** — `@aws-sdk/client-cognito-identity`, 12 ops: identity pool CRUD + roles + principal tag maps + tags; pairs with existing Cognito (user pool) dashboard — consider a tab or sibling page | Pending | — |
+| 26.6 | **P.4 Redshift Data** — `@aws-sdk/client-redshift-data`, 11 ops: ExecuteStatement/BatchExecuteStatement/CancelStatement/DescribeStatement/GetStatementResult + ListDatabases/Schemas/Tables; pairs with Redshift dashboard as a SQL console tab | Pending | — |
+| 26.7 | **P.5 Redshift Serverless** — `@aws-sdk/client-redshift-serverless`, 8 ops: namespace CRUD + tags; sibling card/tab next to Redshift | Pending | — |
+| 26.8 | **P.6 CloudWatch Observability Access Manager (OAM)** — `@aws-sdk/client-oam`, 11 ops: sink + link CRUD + policies; pairs with AMP dashboard (link source accounts → monitoring account) | Pending | — |
+| 26.9 | **P.7 Identity Store** — `@aws-sdk/client-identitystore`, 19 ops: users/groups CRUD + memberships + lookups; natural tab alongside SSO Admin (Identity Center directory) | Pending | — |
+| 26.10 | **P.8 SageMaker** — `@aws-sdk/client-sagemaker`, 20 ops: models, endpoint configs, endpoints (create/update/delete), training jobs (create/list/describe/stop), tags | Pending | — |
+| 26.11 | **P.9 Bedrock (guardrails)** — `@aws-sdk/client-bedrock`, guardrail CRUD + tags + versioning as Floci exposes it; completes the Bedrock family (runtime + AgentCore already shipped) | Pending | — |
+
+**Stage C — Mid-tier new dashboards**
+
+| # | Task | Status | Date |
+|---|------|--------|------|
+| 26.12 | **P.10 Global Accelerator** — `@aws-sdk/client-global-accelerator`, 22 ops: accelerator → listener → endpoint group hierarchy CRUD + attributes + tags | Pending | — |
+| 26.13 | **P.11 Verified Permissions** — `@aws-sdk/client-verifiedpermissions`, 34 ops: policy stores, policies, templates, identity sources, schema, IsAuthorized/BatchIsAuthorized test console | Pending | — |
+| 26.14 | **P.12 Timestream for InfluxDB** — `@aws-sdk/client-timestream-influxdb`, 24 ops: db instances/clusters/backups/parameter groups CRUD + reboot/restore + tags | Pending | — |
+| 26.15 | **P.13 DataSync** — `@aws-sdk/client-datasync`, ~17 real ops: agents, Azure Blob locations, tasks CRUD + tags (filter comparators in Floci source are model noise, not ops) | Pending | — |
+| 26.16 | **P.14 DMS** — `@aws-sdk/client-database-migration-service`, 6 ops: replication subnet group CRUD + tags | Pending | — |
+| 26.17 | **P.15 DLM** — `@aws-sdk/client-dlm`, lifecycle policies REST CRUD (`/policies`); small | Pending | — |
+| 26.18 | **P.16 Access Analyzer** — `@aws-sdk/client-accessanalyzer`, analyzers CRUD (query-protocol — ops live in `AccessAnalyzerService.java` methods; enumerate at implementation) | Pending | — |
+| 26.19 | **P.17 Control Catalog** — `@aws-sdk/client-controlcatalog`, 2 ops (get-control/list-controls); pairs with Control Tower — tab, not standalone | Pending | — |
+| 26.20 | **P.18 App Integrations** — `@aws-sdk/client-appintegrations`, data-integration + event-integration CRUD (REST `/dataIntegrations`, `/eventIntegrations`) | Pending | — |
+
+**Stage D — Security & marketplace family**
+
+| # | Task | Status | Date |
+|---|------|--------|------|
+| 26.21 | **P.19 Inspector2** — `@aws-sdk/client-inspector2`, 7 endpoints: enable/disable delegated admin, list, batch status, org configuration | Pending | — |
+| 26.22 | **P.20 Security Hub** — `@aws-sdk/client-securityhub`, ~10 endpoints: org admin/configuration, configuration policies + associations, finding aggregator, accounts | Pending | — |
+| 26.23 | **P.21 Detective** — `@aws-sdk/client-detective`, ~9 endpoints: graphs, members, monitoring state, org admin/configuration | Pending | — |
+| 26.24 | **P.22 Macie2** — `@aws-sdk/client-macie2`, ~6 endpoints: enable/status, admin, members | Pending | — |
+| 26.25 | **P.23 CodeArtifact** — `@aws-sdk/client-codeartifact`, domains/repositories/external-connections/auth-token CRUD (REST `v1/*`); note Floci backs repos with real sidecars (Verdaccio/Reposilite) — read-only or shallow-write UI first | Pending | — |
+| 26.26 | **P.24 Marketplace** — agreements/entitlements/metering (~26 real ops of the 57 `case` hits); spans `@aws-sdk/client-marketplace-agreement`, `client-marketplace-entitlement-service`, `client-meteringmarketplace` — verify client split via `node -e` before coding; tabbed dashboard | Pending | — |
+| 26.27 | **P.25 BCM Pricing Calculator** — `@aws-sdk/client-bcm-pricing-calculator`, 4 ops: workload estimate create/get/delete + batch usage create | Pending | — |
+| 26.28 | **P.26 SSO OIDC** — `@aws-sdk/client-sso-oidc`, 3 endpoints (register-client/device-authorize/token) — minimal "registered clients" console; decide at implementation whether a dashboard earns its keep or stays deferred | Pending | — |
+
+**Stage E — Existing-dashboard enhancements (new Floci features in covered services)**
+
+| # | Task | Status | Date |
+|---|------|--------|------|
+| 26.29 | **E.1 SES v2 surface** — Floci added export jobs, import jobs (suppression + contact lists), BatchGetMetricData, GetMessageInsights, dedicated IPs (pool/warmup/scaling), contact-list CVET flow, tenants, raw-fidelity SMTP relay; new SES sub-controllers (`SesContact/Cvet/DedicatedIp/ExportJob/ImportJob/Insights/Metrics/Tenant/Tag`). Extend SESDashboard tabs op-by-op | Pending | — |
+| 26.30 | **E.2 ECS** — ExecuteCommand, task metadata endpoint v4, task-role credentials over the wire, FireLens logging (fluentd + s3 config), capacity providers, service deployments/members; surface command-execution status + FireLens config in task/service detail | Pending | — |
+| 26.31 | **E.3 EKS** — addon management, access entries, pod identity associations, control-plane + audit log delivery, k3s-native versions/network CIDRs; extend EKSDashboard with addons/access/pod-identity tabs + logging toggles | Pending | — |
+| 26.32 | **E.4 RDS** — DB instance + cluster snapshots (create/copy/restore/delete), stop/start/reboot, read replicas, global clusters + failover, SQL Server engine, event subscriptions, parameter/option group copy, Aurora v2 pause/resume; big RDSDashboard refresh | Pending | — |
+| 26.33 | **E.5 IAM** — credential report (Generate/Get), GetAccountAuthorizationDetails, SimulateCustomPolicy/GetContextKeys policy simulator console, login profile CRUD, SAML provider lifecycle, last-accessed reporting, ListInstanceProfileTags; add "Policy simulator" + "Credential report" panels to IAMPage | Pending | — |
+| 26.34 | **E.6 EC2** — ModifyVolume + modification state, DescribeSpotPriceHistory, CreateImage/DeregisterImage/CopyImage, MonitorInstances, egress-only IGW, snapshot block public access, credit specs, real Docker-backed VPC networking (UI: show VPC CIDR/container mapping); extend EC2Page panels | Pending | — |
+| 26.35 | **E.7 IoT** — domain configurations (`IotDomainConfigurationController` — new dashboard section), MQTT-over-WebSocket `/mqtt`, configurable DescribeEndpoint address, rule-SQL function coverage; add "Domain configurations" tab to IoTDashboard | Pending | — |
+| 26.36 | **E.8 Cognito** — UserPoolDomain provisioning, managed login with PKCE, federated sign-in, USER_AUTH choice flow, ExplicitAuthFlows enforcement, user attribute verification (Verify/Pending); add "App client + domain" management to CognitoDashboard | Pending | — |
+| 26.37 | **E.9 Broad op re-audit sweep** — Lambda (7 feats), DynamoDB (6), Glue (11), CloudFormation (14 incl. leaf-provisioner refactor + AccessKey status), Step Functions (12), S3 (5), Firehose (5), KMS (4), EventBridge (2), CloudMap (2), ACM (2), CloudFront (3), Batch (3), Athena (3), Route53 (3), CloudTrail (3), others (1–2 each); diff each Floci service's handlers against its dashboard route file, close op gaps in batches | Pending | — |
+
+
 ## ═══════════════════════════════════════════════════════════
 ## GAP ANALYSIS — Floci vs Dashboard Parity
 ## ═══════════════════════════════════════════════════════════
 
-> **Audit date:** 2026-08-25 → refreshed 2026-09-04 (after pulling latest Floci `3600038a`)
+> **Audit date:** 2026-08-25 → refreshed 2026-09-04 (Floci `3600038a`) → re-synced 2026-09-29 (Floci `071a170c`, v2.0.0 → v2.1.0, catalog 104 → 130 keys — see "Gap-Analysis Addendum — 2026-09-29 audit (Floci 2.x sync)" near the end of this file, and Phase 16 in the tracker)
 > **Method:** Full diff of every `floci/services/` directory against `src/backend/routes/aws/`, `src/frontend/hooks/`, and `src/frontend/pages/serviceRegistry.tsx`. Checked every `case`/action in Floci Java handlers against dashboard SDK commands. Verified controller-based services (REST endpoints) and JSON-handler services (JSON 1.1 dispatch).
 > **Result:** All previously tracked gaps (G.1–G.97, M.1–M.14) are resolved (Done or N/A). **17 Floci services added between 2026-08-25 and 2026-09-04** remain without dashboard implementation — see N.1–N.19 below (N.1 Amazon Connect, N.9 Service Quotas, N.10 AWS RAM, N.12 AMP, N.13 CodeGuru Reviewer, N.15 Comprehend, N.16 Rekognition, N.17 Translate, N.18 AWS Sign-In and N.19 SSO Admin shipped).
 
@@ -2070,3 +2137,73 @@ Quick wins first (Small), then Medium, then Large — each adds a full backend r
 | 13 | **EFS** (N.3) | ✅ **Done** (2026-09-10) — 17 ops |
 | ~~16~~ | ~~**Network Firewall** (N.7)~~ | ✅ **Done** (2026-09-12) — 27 ops |
 | ~~17~~ | ~~**Service Catalog** (N.8)~~ | ✅ **Done v1** (2026-09-12) — core CRUD + provisioning shipped; plans/actions/shares deferred |
+
+---
+
+### Gap-Analysis Addendum — 2026-09-29 audit (Floci 2.x sync)
+
+Local Floci pulled `3600038a` → `071a170c` on 2026-09-29 (**1,123 new commits**; releases **v2.0.0, v2.0.1, v2.1.0**). Catalog external keys grew **104 → 130**. Method: `git diff` of `services/` trees, extraction of every `descriptor(...)` pair from `core/common/ResolvedServiceCatalog.java`, diff of external keys against `serviceRegistry.tsx` + `types/services.ts` (dedicated App.tsx routes counted as covered), then per-new-service op extraction from `case "Op"` switches and JAX-RS `@POST @Path` handlers.
+
+**Result: 26 services are in the Floci catalog but nowhere in the dashboard** (no route, no hook, no registry entry) → specs P.1–P.26 below; plus **mwaa/rum label debt** and **heavy feature growth inside already-covered services** → E.1–E.9. Tracked as **Phase 16** in the tracker above.
+
+#### New services missing dashboards (P.1–P.26)
+
+| # | Service | Floci pkg | Protocol / routing | Ops (verified) | SDK client | Dashboard sketch | Complexity |
+|---|---------|-----------|--------------------|----------------|------------|------------------|------------|
+| P.1 | **Account** | `account/` | JAX-RS POST `/putAlternateContact`, `/getAlternateContact` | 2 | `client-account` | Settings-page card (no full dashboard) | Small |
+| P.2 | **Budgets** | `budgets/` | JSON 1.1 (`BudgetsJsonHandler` case switch) | 26 | `client-budgets` | Budgets table → detail tabs (actions, notifications, subscribers, history, performance) | Large |
+| P.3 | **Cognito Identity Pools** | `cognitoidentity/` | JSON case switch | 12 | `client-cognito-identity` | Pool CRUD + roles + principal-tag map + tags; tab beside Cognito user pools | Medium |
+| P.4 | **Redshift Data** | `redshiftdata/` | JSON case switch | 11 | `client-redshift-data` | SQL console: ExecuteStatement/Batch/Cancel + results + catalog browsers; Redshift tab | Medium |
+| P.5 | **Redshift Serverless** | `redshiftserverless/` | JSON case switch | 8 | `client-redshift-serverless` | Namespace CRUD + tags; sibling of Redshift | Small |
+| P.6 | **Observability Access Manager** | `oam/` | REST POST `/CreateSink`, `/CreateLink`, … (CamelCase paths) | 11 | `client-oam` | Sinks + links CRUD + sink policy; pairs with AMP | Small |
+| P.7 | **Identity Store** | `identitystore/` | JSON case switch | 19 | `client-identitystore` | Users/groups CRUD, memberships, ID lookups; Identity Center tab with SSO Admin | Medium |
+| P.8 | **SageMaker** | `sagemaker/` | JSON case switch | 20 | `client-sagemaker` | Models / endpoint configs / endpoints / training jobs, tags | Medium |
+| P.9 | **Bedrock (guardrails)** | `bedrock/` | JAX-RS `/guardrails`, `/guardrails/{id}`, tags | 3+ | `client-bedrock` | Guardrail CRUD + tags; completes Bedrock family | Small |
+| P.10 | **Global Accelerator** | `globalaccelerator/` | JSON case switch | 22 | `client-global-accelerator` | Accelerator → listener → endpoint-group tree CRUD + attributes + tags | Medium |
+| P.11 | **Verified Permissions** | `verifiedpermissions/` | JSON case switch | 34 | `client-verifiedpermissions` | Policy stores → policies/templates/identity sources/schema + IsAuthorized test console | Large |
+| P.12 | **Timestream for InfluxDB** | `timestreaminfluxdb/` | JSON case switch | 24 | `client-timestream-influxdb` | DB instances/clusters/backups/parameter groups + reboot/restore + tags | Medium |
+| P.13 | **DataSync** | `datasync/` | JSON case switch (model filters are noise — count real ops at implementation) | ~17 | `client-datasync` | Agents, Azure Blob locations, tasks CRUD + tags | Medium |
+| P.14 | **DMS** | `dms/` | JSON case switch | 6 | `client-database-migration-service` | Replication subnet group CRUD + tags | Small |
+| P.15 | **DLM** | `dlm/` | REST `/policies` | 5 | `client-dlm` | Lifecycle policy CRUD | Small |
+| P.16 | **Access Analyzer** | `accessanalyzer/` | Query-protocol; ops as `AccessAnalyzerService` methods (createAnalyzer/deleteAnalyzer/listAnalyzers seen — enumerate all at implementation) | ~8 | `client-accessanalyzer` | Analyzers CRUD + findings if exposed | Small |
+| P.17 | **Control Catalog** | `controlcatalog/` | JAX-RS `/get-control`, `/list-controls` | 2 | `client-controlcatalog` | Control list/get; Control Tower tab | Small |
+| P.18 | **App Integrations** | `appintegrations/` | REST `/dataIntegrations`, `/eventIntegrations` (+ sub-paths) | ~10 | `client-appintegrations` | Data + event integration CRUD | Small |
+| P.19 | **Inspector2** | `inspector2/` | REST (`delegatedadminaccounts/*`, `status/batch/get`, `organizationconfiguration/*`) | 7 | `client-inspector2` | Enable/disable delegated admin, status, org config | Small |
+| P.20 | **Security Hub** | `securityhub/` | REST (`organization/*`, `configurationPolicy*`, `findingAggregator/*`, `accounts`) | ~10 | `client-securityhub` | Org admin/configuration, config policies + associations, aggregation | Medium |
+| P.21 | **Detective** | `detective/` | REST (`graphs/list`, `graph/members*`, `orgs/*`) | ~9 | `client-detective` | Graphs, members, monitoring state, org admin | Small |
+| P.22 | **Macie2** | `macie2/` | REST (`/macie`, `/admin`, `/members`) | ~6 | `client-macie2` | Enable/status, admin account, members | Small |
+| P.23 | **CodeArtifact** | `codeartifact/` | REST `v1/*` (domains, repositories, external-connection, auth-token, publish) | ~10 | `client-codeartifact` | Domain/repo CRUD + external connections + auth token; note Floci runs real Verdaccio/Reposilite sidecars — shallow UI first | Medium |
+| P.24 | **Marketplace** | `marketplace/` | JSON case switch (57 hits incl. model fields — ~26 real ops) | ~26 | split: `client-marketplace-agreement`, `client-marketplace-entitlement-service`, `client-meteringmarketplace` (verify via `node -e`) | Tabbed: agreements (+ cancellation/payment request flows), entitlements, metering/register usage | Large |
+| P.25 | **BCM Pricing Calculator** | `bcmpricingcalculator/` | JSON case switch | 4 | `client-bcm-pricing-calculator` | Workload estimates: create/get/delete + batch usage | Small |
+| P.26 | **SSO OIDC** | `ssooidc/` | REST `/client/register`, `/device_authorization`, `/token` | 3 | `client-sso-oidc` | Minimal registered-clients console — or defer if it reads as pure auth plumbing | Small |
+
+#### Registration debt (fix before/with Stage B)
+
+- **`mwaa` and `rum`** have dashboards + registry entries but were never added to `types/services.ts`: missing from the labels map, the per-key category map, and the category arrays → home cards fall back to raw keys. One-file fix.
+- `redshift-data` exists in the Floci catalog; the dashboard has no route/label (P.4 covers it).
+
+#### New features in already-covered services (E.1–E.9 — implement against Floci source)
+
+Highlights from the 1,123-commit feat log (PR numbers from Floci history; enumerate full op lists per service at implementation):
+
+| # | Dashboard | Floci additions worth surfacing |
+|---|-----------|--------------------------------|
+| E.1 | **SES** | v2 export jobs (#4327), import jobs for suppression/contact lists (#3892), BatchGetMetricData (#4302), GetMessageInsights (#4157), dedicated IP pool/warmup/scaling (#3420), CVET through shared send preamble (#4212), v1 receipt filters + rule-set clone/reorder (#3163, #3176), tenants, raw-fidelity SMTP relay; new sub-controllers: `SesContact/Cvet/DedicatedIp/ExportJob/ImportJob/Insights/Metrics/Tenant/Tag` |
+| E.2 | **ECS** | ExecuteCommand (#4121), task metadata endpoint v4 (#4120), task-role credentials over the wire (#4160, #4486), FireLens fluentd/s3 logging (#3768, #3790), capacity providers + service members/role (#4037), awsvpc port publishing (#3766), fargate launch surface completion (#4017, #4019) |
+| E.3 | **EKS** | addon management (#4038, #4371), access entries (#3745, #3805), pod identity associations (#4012, #4110, #4124), control-plane logs to CW Logs (#4111), audit/API-server log delivery (#4146), native k8s versions + network CIDRs (#4064), IMDS on pod network (#4039) |
+| E.4 | **RDS** | DB instance snapshots (#4066, #1894) + DB cluster snapshots (#4097), stop/start/reboot (#4071), read replicas with PIT copy (#3813), global clusters + failover (#3819), SQL Server (#3752), parameter/option group copy (#3781), event notification subscriptions (#4332, #4363), Aurora v2 pause/resume (#4232), IAM DB auth (#3395) |
+| E.5 | **IAM** | credential report Generate/Get (#4298), GetAccountAuthorizationDetails (#4208), SimulateCustomPolicy + GetContextKeys (#4185), login profile CRUD (#3865), SAML provider lifecycle (#4360), last-accessed reporting (#4488), instance profile tags (#4140), DeleteUser prerequisites + rename carry-through (#3918), tag condition keys (#3212) |
+| E.6 | **EC2** | ModifyVolume + modification state (#4320), volumes as real block devices (#4354), instance route targets (#4416), spot price history (#3359), CreateImage/Deregister/CopyImage (#3306), MonitorInstances (#3319), egress-only IGW (#3879), snapshot block public access (#3490), credit specs (#3492), per-VPC Docker networks (#3272), instance resource limits (#4189), external image catalog (#4144), arm64 AL2023 (#4163) |
+| E.7 | **IoT** | domain configurations (#3008), MQTT over WebSocket (#3150), device cert verification on TLS (#3180), configurable DescribeEndpoint (#3202), rule-SQL message functions (#3036) |
+| E.8 | **Cognito** | UserPoolDomain provisioning (#3005), managed login with PKCE (#4238), federated sign-in (#3748), USER_AUTH flow (#3930), ExplicitAuthFlows enforcement (#3974), attribute verification (#2018, #2531), password-policy validation (#4359) |
+| E.9 | **Sweep** | Lambda (7 feats), DynamoDB (6), Glue (11), CloudFormation (14 — leaf-provisioner refactor, AccessKey status #4060, nested-stack failure propagation #3921), Step Functions (12), S3 (5), Firehose (5), KMS (4), EventBridge (2), CloudMap (2), ACM (2), CloudFront (3), Batch (3), Athena (3), Route53 (3), Route53Resolver (1), CloudTrail (3), Backup (1), APS (1), GuardDuty (1), SecretsManager (2), ServiceQuotas (1), SSO Admin (1), Neptune (2), ECR (2), ElasticCache (3), ControlTower (3), LakeFormation (2), RAM (1), CE (1), AppConfig (1), ApiGatewayV2 (1), CodePipeline (1), ConfigService (1) — diff handlers vs each route file, close in batches |
+
+#### Verification notes from the sync
+
+- Compose floats `floci/floci:latest` — a `make down && make up-bg` after image pull puts the dev stack on 2.1.0; no pinned tag to bump. `FLOCI_SERVICES` CSV remains a no-op (documented in the 2026-09-12 addendum).
+- Floci 2.x breaking-change scan of the commit log surfaced nothing that obviously breaks dashboard routes (renames are internal, e.g. `SesController` → `SesSendController`); the integration suite in 26.1 is the authoritative check.
+- Dashboard-side totals at audit time: 130 Floci catalog keys vs 114 backend route files (several route files cover multiple catalog keys, e.g. `events.ts` → eventbridge, `logs.ts` → cloudwatchlogs); 26 keys uncovered after accounting for dedicated App.tsx routes.
+
+#### Recommended implementation priority (P/E)
+
+Quick wins (P.1, P.5, P.6, P.14, P.15, P.17, P.25) → high-value mediums (P.2, P.3, P.4, P.7, P.8, P.9, P.10) → large (P.11, P.24, P.23) → security family batch (P.16, P.18–P.22, P.26) → E-series enhancements in E.1→E.9 order, with 26.1 (stack verification) and 26.2 (label debt) done first regardless.
