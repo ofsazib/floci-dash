@@ -450,6 +450,7 @@ These services have full CRUD operations in both backend and frontend:
 | **API Gateway V2** | APIs (list, get, create, delete), routes (list, create, delete), integrations (list, create, delete), stages (list, create, delete), deployments (list, create, delete) with drill-down per API |
 | **ACM** | Certificates (list, describe with validation details, request, delete, get PEM), tags (list per certificate) |
 | **Account** | Alternate contacts (get/put per type — billing, operations, security) on the Settings page |
+| **Budgets** | Budgets (list, create with type/period/limit, delete), notifications (create with threshold + email subscriber, delete), subscribers (add/remove per notification), actions (create IAM-policy action with threshold/role, approve, delete), tags (list/add/remove per budget ARN) |
 | **CloudTrail** | Trails (list, create, update, delete), start/stop logging, get trail status |
 | **AWS Config** | Config rules (list, create, delete, tags), configuration recorders (list, create, start/stop, status), delivery channels (list, create), conformance packs (list, create, delete, tags), compliance by rule, rule evaluation status, pack status |
 | **AppConfig** | Applications (list, get, create, delete), environments (list, create, delete per app), configuration profiles (list, create, delete per app), hosted config versions (list per profile) |
