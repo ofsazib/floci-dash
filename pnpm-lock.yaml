@@ -218,6 +218,9 @@ importers:
       '@aws-sdk/client-network-firewall':
         specifier: ^3.1131.0
         version: 3.1131.0
+      '@aws-sdk/client-oam':
+        specifier: ^3.1143.0
+        version: 3.1143.0
       '@aws-sdk/client-opensearch':
         specifier: ^3.1072.0
         version: 3.1072.0
@@ -734,6 +737,10 @@ packages:
 
   '@aws-sdk/client-network-firewall@3.1131.0':
     resolution: {integrity: sha512-84wDH9yyXoKWFfJTYEMWm+yrroQr281Ox0JIkNQuP7WaVLdtj0bY7zuxQ7lyw5DnJENCI5IFu7UFMm07UMbS8g==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/client-oam@3.1143.0':
+    resolution: {integrity: sha512-Y8jMZ/13sXUXU3uNjWiy2qHJaEd8GZ24ZnIdtrxB6wRK4Det+i1exjfBT8a9pCS60d87jU7eRzCXasJ5YVoUdA==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-opensearch@3.1072.0':
@@ -3809,6 +3816,17 @@ snapshots:
       '@smithy/fetch-http-handler': 5.7.2
       '@smithy/node-http-handler': 4.11.3
       '@smithy/types': 4.17.2
+      tslib: 2.8.1
+
+  '@aws-sdk/client-oam@3.1143.0':
+    dependencies:
+      '@aws-sdk/core': 3.978.1
+      '@aws-sdk/credential-provider-node': 3.972.84
+      '@aws-sdk/types': 3.974.6
+      '@smithy/core': 3.35.0
+      '@smithy/fetch-http-handler': 5.8.0
+      '@smithy/node-http-handler': 4.12.1
+      '@smithy/types': 4.19.0
       tslib: 2.8.1
 
   '@aws-sdk/client-opensearch@3.1072.0':
