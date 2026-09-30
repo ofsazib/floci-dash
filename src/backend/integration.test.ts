@@ -4017,3 +4017,110 @@ describe("Redshift Data Integration", () => {
     expect(dbs.data.databases).toContain("dev");
   });
 });
+
+//  ─────────────────────────────────────────────────────────
+//  Redshift Serverless Integration Tests (Floci 2.1.0)
+//  ─────────────────────────────────────────────────────────
+
+describe("Redshift Serverless Integration", () => {
+  // redshift-serverless landed in Floci AFTER the 2.1.0 release tag, so the
+  // published image 404s these operations. Run when the emulator exposes it
+  // (newer image or a source build); skip silently otherwise.
+  let serverlessAvailable = false;
+
+  beforeAll(async () => {
+    try {
+      const res = await fetch(`${process.env.FLOCI_URL || "http://localhost:9878"}/_floci/health`);
+      const health = await res.json();
+      serverlessAvailable = health?.services?.["redshift-serverless"] === "running";
+    } catch {
+      serverlessAvailable = false;
+    }
+  });
+
+  const itWhenAvailable = (name: string, fn: () => Promise<void>) =>
+    it(name, async () => {
+      if (!serverlessAvailable) {
+        console.warn("Skipping: Floci image lacks redshift-serverless (needs > 2.1.0)");
+        return;
+      }
+      await fn();
+    });
+
+  const namespaceName = `it-rss-${Date.now()}`;
+
+  itWhenAvailable("creates a namespace", async () => {
+    const { status, data } = await api("POST", "/api/aws/redshiftserverless/namespaces", {
+      namespaceName,
+      dbName: "dev",
+      adminUsername: "admin",
+    });
+    expect(status).toBe(201);
+    expect(data.namespace.namespaceName).toBe(namespaceName);
+    expect(data.namespace.status).toBe("AVAILABLE");
+    expect(data.namespace.namespaceArn).toContain("redshift-serverless");
+  });
+
+  itWhenAvailable("lists namespaces and includes the new one", async () => {
+    const { status, data } = await api("GET", "/api/aws/redshiftserverless/namespaces");
+    expect(status).toBe(200);
+    const names = (data.namespaces || []).map((n: any) => n.namespaceName);
+    expect(names).toContain(namespaceName);
+  });
+
+  itWhenAvailable("gets the namespace", async () => {
+    const { status, data } = await api(
+      "GET",
+      `/api/aws/redshiftserverless/namespaces/${encodeURIComponent(namespaceName)}`
+    );
+    expect(status).toBe(200);
+    expect(data.namespace.dbName).toBe("dev");
+  });
+
+  itWhenAvailable("updates the admin username", async () => {
+    const { status, data } = await api(
+      "PUT",
+      `/api/aws/redshiftserverless/namespaces/${encodeURIComponent(namespaceName)}`,
+      { adminUsername: "root" }
+    );
+    expect(status).toBe(200);
+    expect(data.namespace.adminUsername).toBe("root");
+  });
+
+  itWhenAvailable("adds, lists and removes tags by namespace ARN", async () => {
+    const getRes = await api(
+      "GET",
+      `/api/aws/redshiftserverless/namespaces/${encodeURIComponent(namespaceName)}`
+    );
+    const arn = getRes.data.namespace.namespaceArn;
+    const add = await api(
+      "POST",
+      `/api/aws/redshiftserverless/namespaces/${encodeURIComponent(namespaceName)}/tags`,
+      { arn, tags: [{ key: "env", value: "integration" }] }
+    );
+    expect(add.status).toBe(200);
+    const list = await api(
+      "GET",
+      `/api/aws/redshiftserverless/namespaces/${encodeURIComponent(namespaceName)}/tags?arn=${encodeURIComponent(arn)}`
+    );
+    expect(list.status).toBe(200);
+    expect(list.data.tags).toContainEqual({ key: "env", value: "integration" });
+    const remove = await api(
+      "POST",
+      `/api/aws/redshiftserverless/namespaces/${encodeURIComponent(namespaceName)}/tags/untag`,
+      { arn, tagKeys: ["env"] }
+    );
+    expect(remove.status).toBe(200);
+  });
+
+  itWhenAvailable("deletes the namespace", async () => {
+    const { status } = await api(
+      "DELETE",
+      `/api/aws/redshiftserverless/namespaces/${encodeURIComponent(namespaceName)}`
+    );
+    expect(status).toBe(200);
+    const list = await api("GET", "/api/aws/redshiftserverless/namespaces");
+    const names = (list.data.namespaces || []).map((n: any) => n.namespaceName);
+    expect(names).not.toContain(namespaceName);
+  });
+});

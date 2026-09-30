@@ -73,6 +73,7 @@ import { RUMDashboard } from "./services/RUMDashboard";
 import BudgetsDashboard from "./services/BudgetsDashboard";
 import CognitoIdentityDashboard from "./services/CognitoIdentityDashboard";
 import RedshiftDataDashboard from "./services/RedshiftDataDashboard";
+import RedshiftServerlessDashboard from "./services/RedshiftServerlessDashboard";
 import { S3Dashboard } from "./services/S3Dashboard";
 import { LambdaDashboard } from "./services/LambdaDashboard";
 import { CloudFormationDashboard } from "./services/CloudFormationDashboard";
@@ -169,6 +170,7 @@ export const SERVICE_DASHBOARDS: Record<string, ComponentType> = {
   "budgets": BudgetsDashboard,
   "cognito-identity": CognitoIdentityDashboard,
   "redshift-data": RedshiftDataDashboard,
+  "redshift-serverless": RedshiftServerlessDashboard,
   "s3vectors": S3VectorsDashboard,
   "s3": S3Dashboard,
   "lambda": LambdaDashboard,
