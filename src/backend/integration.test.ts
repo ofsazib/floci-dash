@@ -4243,3 +4243,95 @@ describe("OAM Integration", () => {
     expect(names).not.toContain(sinkName);
   });
 });
+
+//  ─────────────────────────────────────────────────────────
+//  Identity Store Integration Tests (Floci 2.1.0)
+//  ─────────────────────────────────────────────────────────
+
+describe("Identity Store Integration", () => {
+  let storeId = "";
+
+  beforeAll(async () => {
+    const res = await api("GET", "/api/aws/ssoadmin/instances");
+    storeId = res.data.instances?.[0]?.IdentityStoreId ?? "";
+  });
+
+  it("creates a user", async () => {
+    expect(storeId).toContain("d-");
+    const userName = `it-user-${Date.now()}`;
+    const { status, data } = await api(
+      "POST",
+      `/api/aws/identitystore/users?identityStoreId=${storeId}`,
+      { userName, displayName: "Integration User" }
+    );
+    expect(status).toBe(201);
+    expect(data.userId).toBeTruthy();
+  });
+
+  it("lists users and includes the new one", async () => {
+    const { status, data } = await api(
+      "GET",
+      `/api/aws/identitystore/users?identityStoreId=${storeId}`
+    );
+    expect(status).toBe(200);
+    expect(data.total).toBeGreaterThanOrEqual(1);
+  });
+
+  it("creates a group, adds the membership, lists and removes it", async () => {
+    const groupName = `it-group-${Date.now()}`;
+    const group = await api(
+      "POST",
+      `/api/aws/identitystore/groups?identityStoreId=${storeId}`,
+      { displayName: groupName }
+    );
+    expect(group.status).toBe(201);
+
+    const users = await api(
+      "GET",
+      `/api/aws/identitystore/users?identityStoreId=${storeId}`
+    );
+    const userId = users.data.users[0].UserId;
+
+    const add = await api(
+      "POST",
+      `/api/aws/identitystore/groups/${encodeURIComponent(group.data.groupId)}/memberships?identityStoreId=${storeId}`,
+      { userId }
+    );
+    expect(add.status).toBe(201);
+
+    const list = await api(
+      "GET",
+      `/api/aws/identitystore/groups/${encodeURIComponent(group.data.groupId)}/memberships?identityStoreId=${storeId}`
+    );
+    expect(list.status).toBe(200);
+    expect(list.data.total).toBe(1);
+
+    const remove = await api(
+      "DELETE",
+      `/api/aws/identitystore/memberships/${encodeURIComponent(add.data.membershipId)}?identityStoreId=${storeId}`
+    );
+    expect(remove.status).toBe(200);
+
+    const delGroup = await api(
+      "DELETE",
+      `/api/aws/identitystore/groups/${encodeURIComponent(group.data.groupId)}?identityStoreId=${storeId}`
+    );
+    expect(delGroup.status).toBe(200);
+  });
+
+  it("404s a well-formed but missing user id", async () => {
+    const { status } = await api(
+      "GET",
+      `/api/aws/identitystore/users/00000000-0000-0000-0000-000000000000?identityStoreId=${storeId}`
+    );
+    expect(status).toBe(404);
+  });
+
+  it("400s a malformed user id", async () => {
+    const { status } = await api(
+      "GET",
+      `/api/aws/identitystore/users/nonexistent-user?identityStoreId=${storeId}`
+    );
+    expect(status).toBe(400);
+  });
+});

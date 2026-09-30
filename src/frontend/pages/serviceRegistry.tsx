@@ -75,6 +75,7 @@ import CognitoIdentityDashboard from "./services/CognitoIdentityDashboard";
 import RedshiftDataDashboard from "./services/RedshiftDataDashboard";
 import RedshiftServerlessDashboard from "./services/RedshiftServerlessDashboard";
 import OamDashboard from "./services/OamDashboard";
+import IdentityStoreDashboard from "./services/IdentityStoreDashboard";
 import { S3Dashboard } from "./services/S3Dashboard";
 import { LambdaDashboard } from "./services/LambdaDashboard";
 import { CloudFormationDashboard } from "./services/CloudFormationDashboard";
@@ -173,6 +174,7 @@ export const SERVICE_DASHBOARDS: Record<string, ComponentType> = {
   "redshift-data": RedshiftDataDashboard,
   "redshift-serverless": RedshiftServerlessDashboard,
   "oam": OamDashboard,
+  "identitystore": IdentityStoreDashboard,
   "s3vectors": S3VectorsDashboard,
   "s3": S3Dashboard,
   "lambda": LambdaDashboard,
