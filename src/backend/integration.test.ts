@@ -301,7 +301,12 @@ describe("CloudWatch Logs Integration", () => {
   });
 
   it("lists log groups and includes the new group", async () => {
-    const { status, data } = await api("GET", "/api/aws/logs/log-groups");
+    // List by prefix: Floci sorts groups alphabetically and the dashboard pages
+    // at 10, so a fresh group sorts past page 1 once unrelated groups accumulate.
+    const { status, data } = await api(
+      "GET",
+      `/api/aws/logs/log-groups?prefix=${encodeURIComponent("/integration-test/")}`
+    );
     expect(status).toBe(200);
     const names = data.logGroups.map((g: any) => g.logGroupName);
     expect(names).toContain(logGroupName);
@@ -3801,5 +3806,109 @@ describe("Budgets Integration", () => {
     const list = await api("GET", "/api/aws/budgets");
     const names = (list.data.budgets || []).map((b: any) => b.BudgetName);
     expect(names).not.toContain(budgetName);
+  });
+});
+
+//  ─────────────────────────────────────────────────────────
+//  Cognito Identity Pools Integration Tests (Floci 2.1.0)
+//  ─────────────────────────────────────────────────────────
+
+describe("Cognito Identity Pools Integration", () => {
+  const poolName = `it-pool-${Date.now()}`;
+  let poolId = "";
+
+  it("creates an identity pool", async () => {
+    const { status, data } = await api("POST", "/api/aws/cognitoidentity/pools", {
+      name: poolName,
+      allowUnauthenticated: true,
+    });
+    expect(status).toBe(201);
+    expect(data.pool.IdentityPoolName).toBe(poolName);
+    poolId = data.pool.IdentityPoolId;
+    expect(poolId).toContain("us-east-1:");
+  });
+
+  it("lists pools and includes the new one", async () => {
+    const { status, data } = await api("GET", "/api/aws/cognitoidentity/pools");
+    expect(status).toBe(200);
+    const names = (data.pools || []).map((p: any) => p.IdentityPoolName);
+    expect(names).toContain(poolName);
+  });
+
+  it("describes the pool", async () => {
+    const { status, data } = await api(
+      "GET",
+      `/api/aws/cognitoidentity/pools/${encodeURIComponent(poolId)}`
+    );
+    expect(status).toBe(200);
+    expect(data.pool.IdentityPoolName).toBe(poolName);
+    expect(data.pool.AllowUnauthenticatedIdentities).toBe(true);
+  });
+
+  it("sets and gets identity pool roles", async () => {
+    const setRes = await api(
+      "PUT",
+      `/api/aws/cognitoidentity/pools/${encodeURIComponent(poolId)}/roles`,
+      { roles: { authenticated: "arn:aws:iam::123456789012:role/auth" } }
+    );
+    expect(setRes.status).toBe(200);
+    const getRes = await api(
+      "GET",
+      `/api/aws/cognitoidentity/pools/${encodeURIComponent(poolId)}/roles`
+    );
+    expect(getRes.status).toBe(200);
+    expect(getRes.data.roles.authenticated).toBe("arn:aws:iam::123456789012:role/auth");
+  });
+
+  it("adds, lists and removes tags on the pool ARN", async () => {
+    const add = await api(
+      "POST",
+      `/api/aws/cognitoidentity/pools/${encodeURIComponent(poolId)}/tags`,
+      { tags: { env: "integration" } }
+    );
+    expect(add.status).toBe(200);
+    const list = await api(
+      "GET",
+      `/api/aws/cognitoidentity/pools/${encodeURIComponent(poolId)}/tags`
+    );
+    expect(list.status).toBe(200);
+    expect(list.data.tags.env).toBe("integration");
+    const remove = await api(
+      "POST",
+      `/api/aws/cognitoidentity/pools/${encodeURIComponent(poolId)}/tags/untag`,
+      { tagKeys: ["env"] }
+    );
+    expect(remove.status).toBe(200);
+  });
+
+  it("sets and gets the principal tag attribute map", async () => {
+    const setRes = await api(
+      "PUT",
+      `/api/aws/cognitoidentity/pools/${encodeURIComponent(poolId)}/provider-tags`,
+      {
+        identityProviderName: "login.myapp",
+        useDefaults: true,
+        principalTags: { sub: "${sub}" },
+      }
+    );
+    expect(setRes.status).toBe(200);
+    const getRes = await api(
+      "GET",
+      `/api/aws/cognitoidentity/pools/${encodeURIComponent(poolId)}/provider-tags?provider=login.myapp`
+    );
+    expect(getRes.status).toBe(200);
+    expect(getRes.data.useDefaults).toBe(true);
+    expect(getRes.data.principalTags.sub).toBe("${sub}");
+  });
+
+  it("deletes the identity pool", async () => {
+    const { status } = await api(
+      "DELETE",
+      `/api/aws/cognitoidentity/pools/${encodeURIComponent(poolId)}`
+    );
+    expect(status).toBe(200);
+    const list = await api("GET", "/api/aws/cognitoidentity/pools");
+    const names = (list.data.pools || []).map((p: any) => p.IdentityPoolName);
+    expect(names).not.toContain(poolName);
   });
 });
