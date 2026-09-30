@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { create } from "../../clients/aws";
+import { readJson } from "../../clients/read-json";
+import { callerAccountId, budgetArn } from "../../clients/arns";
 import {
   BudgetsClient,
   DescribeBudgetsCommand,
@@ -22,26 +24,13 @@ import {
   TagResourceCommand,
   UntagResourceCommand,
 } from "@aws-sdk/client-budgets";
-import { STSClient, GetCallerIdentityCommand } from "@aws-sdk/client-sts";
 
 const router = new Hono();
 const getClient = () => create(BudgetsClient);
 
-// The Budgets SDK (and Floci) require AccountId on every command; resolve the
-// caller account via STS so it matches whatever account Floci reports.
-async function accountId(): Promise<string> {
-  const sts = create(STSClient);
-  const identity: any = await sts.send(new GetCallerIdentityCommand({}));
-  return identity.Account;
-}
-
-async function budgetArn(name: string): Promise<string> {
-  return `arn:aws:budgets::${await accountId()}:budget/${name}`;
-}
-
 router.get("/", async (c: Context) => {
   const result: any = await getClient().send(
-    new DescribeBudgetsCommand({ AccountId: await accountId() })
+    new DescribeBudgetsCommand({ AccountId: await callerAccountId() })
   );
   return c.json({
     budgets: result.Budgets || [],
@@ -52,29 +41,29 @@ router.get("/", async (c: Context) => {
 router.get("/:name", async (c: Context) => {
   const name = c.req.param("name")!;
   const result: any = await getClient().send(
-    new DescribeBudgetCommand({ AccountId: await accountId(), BudgetName: name })
+    new DescribeBudgetCommand({ AccountId: await callerAccountId(), BudgetName: name })
   );
   return c.json({ budget: result.Budget || null });
 });
 
 router.post("/", async (c: Context) => {
-  const body: any = await c.req.json().catch(() => ({}));
+  const body: any = await readJson(c);
   if (!body?.budget)
     return c.json({ error: "budget is required" }, 400);
   await getClient().send(
-    new CreateBudgetCommand({ AccountId: await accountId(), Budget: body.budget })
+    new CreateBudgetCommand({ AccountId: await callerAccountId(), Budget: body.budget })
   );
   return c.json({ ok: true }, 201);
 });
 
 router.put("/:name", async (c: Context) => {
   const name = c.req.param("name")!;
-  const body: any = await c.req.json().catch(() => ({}));
+  const body: any = await readJson(c);
   if (!body?.budget)
     return c.json({ error: "budget is required" }, 400);
   await getClient().send(
     new UpdateBudgetCommand({
-      AccountId: await accountId(),
+      AccountId: await callerAccountId(),
       NewBudget: { ...body.budget, BudgetName: name },
     })
   );
@@ -84,7 +73,7 @@ router.put("/:name", async (c: Context) => {
 router.delete("/:name", async (c: Context) => {
   const name = c.req.param("name")!;
   await getClient().send(
-    new DeleteBudgetCommand({ AccountId: await accountId(), BudgetName: name })
+    new DeleteBudgetCommand({ AccountId: await callerAccountId(), BudgetName: name })
   );
   return c.json({ ok: true });
 });
@@ -101,7 +90,7 @@ router.get("/:name/tags", async (c: Context) => {
 
 router.post("/:name/tags", async (c: Context) => {
   const arn = await budgetArn(c.req.param("name")!);
-  const body: any = await c.req.json().catch(() => ({}));
+  const body: any = await readJson(c);
   if (!Array.isArray(body?.tags) || body.tags.length === 0)
     return c.json({ error: "tags array with at least one tag is required" }, 400);
   await getClient().send(
@@ -112,7 +101,7 @@ router.post("/:name/tags", async (c: Context) => {
 
 router.post("/:name/tags/untag", async (c: Context) => {
   const arn = await budgetArn(c.req.param("name")!);
-  const body: any = await c.req.json().catch(() => ({}));
+  const body: any = await readJson(c);
   if (!Array.isArray(body?.tagKeys) || body.tagKeys.length === 0)
     return c.json({ error: "tagKeys array with at least one key is required" }, 400);
   await getClient().send(
@@ -127,7 +116,7 @@ router.get("/:name/notifications", async (c: Context) => {
   const name = c.req.param("name")!;
   const result: any = await getClient().send(
     new DescribeNotificationsForBudgetCommand({
-      AccountId: await accountId(),
+      AccountId: await callerAccountId(),
       BudgetName: name,
     })
   );
@@ -139,14 +128,14 @@ router.get("/:name/notifications", async (c: Context) => {
 
 router.post("/:name/notifications", async (c: Context) => {
   const name = c.req.param("name")!;
-  const body: any = await c.req.json().catch(() => ({}));
+  const body: any = await readJson(c);
   if (!body?.notification)
     return c.json({ error: "notification is required" }, 400);
   if (!Array.isArray(body?.subscribers) || body.subscribers.length === 0)
     return c.json({ error: "subscribers array with at least one subscriber is required" }, 400);
   await getClient().send(
     new CreateNotificationCommand({
-      AccountId: await accountId(),
+      AccountId: await callerAccountId(),
       BudgetName: name,
       Notification: body.notification,
       Subscribers: body.subscribers,
@@ -157,12 +146,12 @@ router.post("/:name/notifications", async (c: Context) => {
 
 router.delete("/:name/notifications", async (c: Context) => {
   const name = c.req.param("name")!;
-  const body: any = await c.req.json().catch(() => ({}));
+  const body: any = await readJson(c);
   if (!body?.notification)
     return c.json({ error: "notification is required" }, 400);
   await getClient().send(
     new DeleteNotificationCommand({
-      AccountId: await accountId(),
+      AccountId: await callerAccountId(),
       BudgetName: name,
       Notification: body.notification,
     })
@@ -185,7 +174,7 @@ router.get("/:name/subscribers", async (c: Context) => {
   }
   const result: any = await getClient().send(
     new DescribeSubscribersForNotificationCommand({
-      AccountId: await accountId(),
+      AccountId: await callerAccountId(),
       BudgetName: name,
       Notification: parsed as any,
     })
@@ -198,14 +187,14 @@ router.get("/:name/subscribers", async (c: Context) => {
 
 router.post("/:name/subscribers", async (c: Context) => {
   const name = c.req.param("name")!;
-  const body: any = await c.req.json().catch(() => ({}));
+  const body: any = await readJson(c);
   if (!body?.notification)
     return c.json({ error: "notification is required" }, 400);
   if (!body?.subscriber)
     return c.json({ error: "subscriber is required" }, 400);
   await getClient().send(
     new CreateSubscriberCommand({
-      AccountId: await accountId(),
+      AccountId: await callerAccountId(),
       BudgetName: name,
       Notification: body.notification,
       Subscriber: body.subscriber,
@@ -216,14 +205,14 @@ router.post("/:name/subscribers", async (c: Context) => {
 
 router.delete("/:name/subscribers", async (c: Context) => {
   const name = c.req.param("name")!;
-  const body: any = await c.req.json().catch(() => ({}));
+  const body: any = await readJson(c);
   if (!body?.notification)
     return c.json({ error: "notification is required" }, 400);
   if (!body?.subscriber)
     return c.json({ error: "subscriber is required" }, 400);
   await getClient().send(
     new DeleteSubscriberCommand({
-      AccountId: await accountId(),
+      AccountId: await callerAccountId(),
       BudgetName: name,
       Notification: body.notification,
       Subscriber: body.subscriber,
@@ -238,7 +227,7 @@ router.get("/:name/actions", async (c: Context) => {
   const name = c.req.param("name")!;
   const result: any = await getClient().send(
     new DescribeBudgetActionsForBudgetCommand({
-      AccountId: await accountId(),
+      AccountId: await callerAccountId(),
       BudgetName: name,
     })
   );
@@ -250,12 +239,12 @@ router.get("/:name/actions", async (c: Context) => {
 
 router.post("/:name/actions", async (c: Context) => {
   const name = c.req.param("name")!;
-  const body: any = await c.req.json().catch(() => ({}));
+  const body: any = await readJson(c);
   if (!body?.actionType)
     return c.json({ error: "actionType is required" }, 400);
   const result: any = await getClient().send(
     new CreateBudgetActionCommand({
-      AccountId: await accountId(),
+      AccountId: await callerAccountId(),
       BudgetName: name,
       NotificationType: body.notificationType,
       ActionType: body.actionType,
@@ -281,7 +270,7 @@ router.delete("/:name/actions/:actionId", async (c: Context) => {
   const actionId = c.req.param("actionId");
   const result: any = await getClient().send(
     new DeleteBudgetActionCommand({
-      AccountId: await accountId(),
+      AccountId: await callerAccountId(),
       BudgetName: name,
       ActionId: actionId,
     })
@@ -292,12 +281,12 @@ router.delete("/:name/actions/:actionId", async (c: Context) => {
 router.post("/:name/actions/:actionId/execute", async (c: Context) => {
   const name = c.req.param("name")!;
   const actionId = c.req.param("actionId");
-  const body: any = await c.req.json().catch(() => ({}));
+  const body: any = await readJson(c);
   if (!body?.executionType)
     return c.json({ error: "executionType is required" }, 400);
   const result: any = await getClient().send(
     new ExecuteBudgetActionCommand({
-      AccountId: await accountId(),
+      AccountId: await callerAccountId(),
       BudgetName: name,
       ActionId: actionId,
       ExecutionType: body.executionType,

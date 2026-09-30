@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { create } from "../../clients/aws";
+import { readJson } from "../../clients/read-json";
 import {
   AccountClient,
   GetAlternateContactCommand,
@@ -31,7 +32,7 @@ router.get("/alternate-contact", async (c: Context) => {
 });
 
 router.put("/alternate-contact", async (c: Context) => {
-  const body = await c.req.json().catch(() => ({}));
+  const body: any = await readJson(c);
   const { type, name, title, emailAddress, phoneNumber } = body || {};
   if (!CONTACT_TYPES.includes(type))
     return c.json({ error: `type must be one of ${CONTACT_TYPES.join(", ")}` }, 400);

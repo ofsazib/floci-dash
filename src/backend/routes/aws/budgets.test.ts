@@ -1,17 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
 const mockSend = vi.hoisted(() => vi.fn());
-const mockStsSend = vi.hoisted(() => vi.fn());
 
 const mockBudgets = vi.hoisted(() =>
   vi.fn(function () {
     return { send: mockSend };
-  })
-);
-
-const mockSTS = vi.hoisted(() =>
-  vi.fn(function () {
-    return { send: mockStsSend };
   })
 );
 
@@ -45,14 +38,13 @@ vi.mock("@aws-sdk/client-budgets", () => ({
   UntagResourceCommand: createCmd("UntagResourceCommand"),
 }));
 
-vi.mock("@aws-sdk/client-sts", () => ({
-  STSClient: mockSTS,
-  GetCallerIdentityCommand: createCmd("GetCallerIdentityCommand"),
+vi.mock("../../clients/arns", () => ({
+  callerAccountId: async () => "123456789012",
+  budgetArn: async (name: string) => `arn:aws:budgets::123456789012:budget/${name}`,
 }));
 
 vi.mock("../../clients/aws", () => ({
-  create: (Client: any) =>
-    Client === mockSTS ? { send: mockStsSend } : { send: mockSend },
+  create: () => ({ send: mockSend }),
 }));
 
 import router from "./budgets";
@@ -96,8 +88,6 @@ const SUBSCRIBER = { SubscriptionType: "EMAIL", Address: "ops@example.com" };
 beforeEach(() => {
   vi.clearAllMocks();
   mockSend.mockReset();
-  mockStsSend.mockReset();
-  mockStsSend.mockResolvedValue({ Account: "123456789012" });
 });
 
 describe("GET /budgets", () => {
