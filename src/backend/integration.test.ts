@@ -3912,3 +3912,108 @@ describe("Cognito Identity Pools Integration", () => {
     expect(names).not.toContain(poolName);
   });
 });
+
+//  ─────────────────────────────────────────────────────────
+//  Redshift Data Integration Tests (Floci 2.1.0 — real Postgres)
+//  ─────────────────────────────────────────────────────────
+
+describe("Redshift Data Integration", () => {
+  const clusterId = `it-rsd-${Date.now()}`;
+  let clusterCreated = false;
+
+  async function ensureCluster(): Promise<void> {
+    if (clusterCreated) return;
+    const { status, data } = await api("POST", "/api/aws/redshift/clusters", {
+      identifier: clusterId,
+      masterUsername: "admin",
+      masterUserPassword: "Password123",
+      nodeType: "ra3.xlplus",
+      numberOfNodes: 1,
+    });
+    if (status !== 200 && status !== 201) {
+      throw new Error(`cluster create failed: ${status} ${JSON.stringify(data)}`);
+    }
+    clusterCreated = true;
+  }
+
+  it("executes a SELECT and fetches the result", async () => {
+    await ensureCluster();
+    const run = await api("POST", "/api/aws/redshiftdata/query", {
+      clusterIdentifier: clusterId,
+      database: "dev",
+      dbUser: "admin",
+      sql: "SELECT 41 + 1 AS answer",
+    });
+    expect(run.status).toBe(201);
+    const id = run.data.id;
+    expect(id).toBeTruthy();
+
+    const desc = await api("GET", `/api/aws/redshiftdata/statements/${encodeURIComponent(id)}`);
+    expect(desc.status).toBe(200);
+    expect(desc.data.status).toBe("FINISHED");
+    expect(desc.data.hasResultSet).toBe(true);
+
+    const result = await api(
+      "GET",
+      `/api/aws/redshiftdata/statements/${encodeURIComponent(id)}/result`
+    );
+    expect(result.status).toBe(200);
+    expect(result.data.columns[0].name).toBe("answer");
+    expect(JSON.stringify(result.data.records[0][0])).toContain("42");
+  });
+
+  it("creates a table via DDL and lists it in the catalog", async () => {
+    await ensureCluster();
+    const table = `it_rsd_t_${Date.now()}`;
+    const ddl = await api("POST", "/api/aws/redshiftdata/query", {
+      clusterIdentifier: clusterId,
+      database: "dev",
+      dbUser: "admin",
+      sql: `CREATE TABLE ${table} (id int)`,
+    });
+    expect(ddl.status).toBe(201);
+    expect(ddl.data.hasResultSet).toBe(false);
+
+    const desc = await api("GET", `/api/aws/redshiftdata/statements/${encodeURIComponent(ddl.data.id)}`);
+    expect(desc.data.status).toBe("FINISHED");
+
+    const tables = await api(
+      "GET",
+      `/api/aws/redshiftdata/tables?cluster=${encodeURIComponent(clusterId)}&database=dev&schema=public&dbUser=admin`
+    );
+    expect(tables.status).toBe(200);
+    const names = (tables.data.tables || []).map((t: any) => t.name);
+    expect(names).toContain(table);
+  });
+
+  it("reports statement errors for bad SQL", async () => {
+    await ensureCluster();
+    const run = await api("POST", "/api/aws/redshiftdata/query", {
+      clusterIdentifier: clusterId,
+      database: "dev",
+      dbUser: "admin",
+      sql: "SELECT * FROM does_not_exist",
+    });
+    expect(run.status).toBe(201);
+    const desc = await api(
+      "GET",
+      `/api/aws/redshiftdata/statements/${encodeURIComponent(run.data.id)}`
+    );
+    expect(desc.data.status).toBe("FAILED");
+    expect(desc.data.error).toBeTruthy();
+  });
+
+  it("lists statements and databases", async () => {
+    await ensureCluster();
+    const list = await api("GET", "/api/aws/redshiftdata/statements");
+    expect(list.status).toBe(200);
+    expect(list.data.total).toBeGreaterThanOrEqual(1);
+
+    const dbs = await api(
+      "GET",
+      `/api/aws/redshiftdata/databases?cluster=${encodeURIComponent(clusterId)}&dbUser=admin`
+    );
+    expect(dbs.status).toBe(200);
+    expect(dbs.data.databases).toContain("dev");
+  });
+});

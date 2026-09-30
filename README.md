@@ -452,6 +452,7 @@ These services have full CRUD operations in both backend and frontend:
 | **Account** | Alternate contacts (get/put per type — billing, operations, security) on the Settings page |
 | **Budgets** | Budgets (list, create with type/period/limit, delete), notifications (create with threshold + email subscriber, delete), subscribers (add/remove per notification), actions (create IAM-policy action with threshold/role, approve, delete), tags (list/add/remove per budget ARN) |
 | **Cognito Identity** | Identity pools (list, create with unauthenticated toggle, describe, delete), roles (get, set authenticated role), tags (list/add/remove per pool ARN), principal tag attribute map (get/set per provider) |
+| **Redshift Data** | SQL console (run statements with cluster/database/dbUser connection, results grid, statement errors), statements (list, detail with results, cancel running), catalog browser (databases → schemas → tables) |
 | **CloudTrail** | Trails (list, create, update, delete), start/stop logging, get trail status |
 | **AWS Config** | Config rules (list, create, delete, tags), configuration recorders (list, create, start/stop, status), delivery channels (list, create), conformance packs (list, create, delete, tags), compliance by rule, rule evaluation status, pack status |
 | **AppConfig** | Applications (list, get, create, delete), environments (list, create, delete per app), configuration profiles (list, create, delete per app), hosted config versions (list per profile) |
