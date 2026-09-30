@@ -71,15 +71,6 @@ export function useScDeletePortfolio() {
   });
 }
 
-export function useScAssociateProduct() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: { portfolioId: string; productId: string }) =>
-      api(`${BASE}/portfolios/associate-product`, { method: "POST", body: JSON.stringify(body) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["servicecatalog"] }),
-  });
-}
-
 // ---------- Products ----------
 
 export function useScProducts() {
