@@ -3697,3 +3697,109 @@ describe("EC2 Read-Only Resources", () => {
     await api("DELETE", `/api/aws/ec2/vpcs/${tempVpcId}`).catch(() => {});
   });
 });
+
+//  ─────────────────────────────────────────────────────────
+//  Budgets Integration Tests (Floci 2.1.0)
+//  ─────────────────────────────────────────────────────────
+
+describe("Budgets Integration", () => {
+  const budgetName = `it-budget-${Date.now()}`;
+
+  it("creates a budget", async () => {
+    const { status, data } = await api("POST", "/api/aws/budgets", {
+      budget: {
+        BudgetName: budgetName,
+        BudgetType: "COST",
+        TimeUnit: "MONTHLY",
+        BudgetLimit: { Amount: "100", Unit: "USD" },
+      },
+    });
+    expect(status).toBe(201);
+    expect(data.ok).toBe(true);
+  });
+
+  it("lists budgets and includes the new one", async () => {
+    const { status, data } = await api("GET", "/api/aws/budgets");
+    expect(status).toBe(200);
+    expect(data.total).toBeGreaterThanOrEqual(1);
+    const names = (data.budgets || []).map((b: any) => b.BudgetName);
+    expect(names).toContain(budgetName);
+  });
+
+  it("describes the budget with calculated spend defaults", async () => {
+    const { status, data } = await api("GET", `/api/aws/budgets/${encodeURIComponent(budgetName)}`);
+    expect(status).toBe(200);
+    expect(data.budget.BudgetName).toBe(budgetName);
+    expect(data.budget.CalculatedSpend.ActualSpend.Amount).toBe("0");
+  });
+
+  it("creates and lists a notification", async () => {
+    const { status } = await api("POST", `/api/aws/budgets/${encodeURIComponent(budgetName)}/notifications`, {
+      notification: {
+        NotificationType: "ACTUAL",
+        ComparisonOperator: "GREATER_THAN",
+        Threshold: 80,
+        ThresholdType: "PERCENTAGE",
+      },
+      subscribers: [{ SubscriptionType: "EMAIL", Address: "ops@example.com" }],
+    });
+    expect(status).toBe(201);
+    const list = await api("GET", `/api/aws/budgets/${encodeURIComponent(budgetName)}/notifications`);
+    expect(list.status).toBe(200);
+    expect(list.data.total).toBe(1);
+    expect(list.data.notifications[0].NotificationType).toBe("ACTUAL");
+  });
+
+  it("lists subscribers for the notification", async () => {
+    const notification = {
+      NotificationType: "ACTUAL",
+      ComparisonOperator: "GREATER_THAN",
+      Threshold: 80,
+      ThresholdType: "PERCENTAGE",
+    };
+    const { status, data } = await api(
+      "GET",
+      `/api/aws/budgets/${encodeURIComponent(budgetName)}/subscribers?notification=${encodeURIComponent(JSON.stringify(notification))}`
+    );
+    expect(status).toBe(200);
+    expect(data.total).toBe(1);
+    expect(data.subscribers[0].Address).toBe("ops@example.com");
+  });
+
+  it("adds and removes a tag on the budget ARN", async () => {
+    const add = await api("POST", `/api/aws/budgets/${encodeURIComponent(budgetName)}/tags`, {
+      tags: [{ Key: "env", Value: "integration" }],
+    });
+    expect(add.status).toBe(200);
+    const list = await api("GET", `/api/aws/budgets/${encodeURIComponent(budgetName)}/tags`);
+    expect(list.status).toBe(200);
+    expect(list.data.tags).toContainEqual({ Key: "env", Value: "integration" });
+    const remove = await api("POST", `/api/aws/budgets/${encodeURIComponent(budgetName)}/tags/untag`, {
+      tagKeys: ["env"],
+    });
+    expect(remove.status).toBe(200);
+  });
+
+  it("deletes the notification", async () => {
+    const notification = {
+      NotificationType: "ACTUAL",
+      ComparisonOperator: "GREATER_THAN",
+      Threshold: 80,
+      ThresholdType: "PERCENTAGE",
+    };
+    const { status } = await api("DELETE", `/api/aws/budgets/${encodeURIComponent(budgetName)}/notifications`, {
+      notification,
+    });
+    expect(status).toBe(200);
+    const list = await api("GET", `/api/aws/budgets/${encodeURIComponent(budgetName)}/notifications`);
+    expect(list.data.total).toBe(0);
+  });
+
+  it("deletes the budget", async () => {
+    const { status } = await api("DELETE", `/api/aws/budgets/${encodeURIComponent(budgetName)}`);
+    expect(status).toBe(200);
+    const list = await api("GET", "/api/aws/budgets");
+    const names = (list.data.budgets || []).map((b: any) => b.BudgetName);
+    expect(names).not.toContain(budgetName);
+  });
+});
