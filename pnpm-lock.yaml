@@ -173,6 +173,9 @@ importers:
       '@aws-sdk/client-fis':
         specifier: ^3.1119.0
         version: 3.1119.0
+      '@aws-sdk/client-global-accelerator':
+        specifier: ^3.1144.0
+        version: 3.1144.0
       '@aws-sdk/client-glue':
         specifier: ^3.1072.0
         version: 3.1072.0
@@ -686,6 +689,10 @@ packages:
 
   '@aws-sdk/client-fis@3.1119.0':
     resolution: {integrity: sha512-c6we/PuPhDdgC4wh33xrQX1FUqu51ta0i6b1BVGz0GeEro9Ph+3QlKqMGq3gtcx4tvAv+jPuVwOePwg15grcww==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/client-global-accelerator@3.1144.0':
+    resolution: {integrity: sha512-CocF08bFekc18ibs7LCyuouGGHI3qTOP7ImhKbbi1KPilE6Rqny5S8Nk1z2v9fyjfe3agOTlSzKWZxOpck0GeA==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-glue@3.1072.0':
@@ -3660,6 +3667,17 @@ snapshots:
       '@smithy/fetch-http-handler': 5.7.2
       '@smithy/node-http-handler': 4.11.3
       '@smithy/types': 4.17.2
+      tslib: 2.8.1
+
+  '@aws-sdk/client-global-accelerator@3.1144.0':
+    dependencies:
+      '@aws-sdk/core': 3.978.1
+      '@aws-sdk/credential-provider-node': 3.972.84
+      '@aws-sdk/types': 3.974.6
+      '@smithy/core': 3.35.0
+      '@smithy/fetch-http-handler': 5.8.0
+      '@smithy/node-http-handler': 4.12.1
+      '@smithy/types': 4.19.0
       tslib: 2.8.1
 
   '@aws-sdk/client-glue@3.1072.0':
