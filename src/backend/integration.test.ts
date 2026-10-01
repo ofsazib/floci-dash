@@ -4701,3 +4701,57 @@ describe("Timestream for InfluxDB Integration", () => {
     expect(status).toBe(201);
   });
 });
+
+//  ─────────────────────────────────────────────────────────
+//  DataSync Integration Tests (Floci 2.1.0)
+//  ─────────────────────────────────────────────────────────
+
+describe("DataSync Integration", () => {
+  const agentKey = `it-ds-${Date.now()}`;
+  let agentArn = "";
+
+  it("creates an agent", async () => {
+    const { status, data } = await api("POST", "/api/aws/datasync/agents", {
+      activationKey: agentKey,
+      agentName: "it-agent",
+    });
+    expect(status).toBe(201);
+    expect(data.agentArn).toContain("agent/");
+    agentArn = data.agentArn;
+  });
+
+  it("lists agents and includes the new one", async () => {
+    const { status, data } = await api("GET", "/api/aws/datasync/agents");
+    expect(status).toBe(200);
+    const arns = (data.agents || []).map((a: any) => a.AgentArn);
+    expect(arns).toContain(agentArn);
+  });
+
+  it("adds, lists and removes tags on the agent ARN", async () => {
+    const add = await api("POST", "/api/aws/datasync/resources/tags", {
+      resourceArn: agentArn,
+      tags: [{ Key: "env", Value: "integration" }],
+    });
+    console.log("TAG ADD:", add.status, JSON.stringify(add.data));
+    expect(add.status).toBe(200);
+    const list = await api(
+      "GET",
+      `/api/aws/datasync/resources/tags?arn=${encodeURIComponent(agentArn)}`
+    );
+    console.log("TAG LIST:", list.status, JSON.stringify(list.data));
+    expect(list.data.tags).toContainEqual({ Key: "env", Value: "integration" });
+    const remove = await api("POST", "/api/aws/datasync/resources/tags/untag", {
+      resourceArn: agentArn,
+      tagKeys: ["env"],
+    });
+    expect(remove.status).toBe(200);
+  });
+
+  it("deletes the agent", async () => {
+    const { status } = await api("DELETE", `/api/aws/datasync/agents/${agentArn}`);
+    expect(status).toBe(200);
+    const list = await api("GET", "/api/aws/datasync/agents");
+    const arns = (list.data.agents || []).map((a: any) => a.AgentArn);
+    expect(arns).not.toContain(agentArn);
+  });
+});

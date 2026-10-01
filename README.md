@@ -461,6 +461,7 @@ These services have full CRUD operations in both backend and frontend:
 | **Global Accelerator** | Accelerators (list, create, delete), listeners (list, create, delete per accelerator), endpoint groups (list, create, delete per listener) |
 | **Verified Permissions** | Policy stores (list, create, delete), policies (list, create Cedar statement, delete), IsAuthorized console (evaluate principal/action/resource with decision + determining policies) |
 | **Timestream for InfluxDB** | DB instances (list, create, reboot, delete), DB clusters (list, create, delete), backups (list, create, delete), parameter groups (list, create). Requires a Floci build newer than the 2.1.0 release |
+| **DataSync** | Agents (list, create by activation key, delete), Azure Blob locations (list, create, delete), tasks (list, create source→destination, delete), tags (list/add per resource ARN) |
 | **CloudTrail** | Trails (list, create, update, delete), start/stop logging, get trail status |
 | **AWS Config** | Config rules (list, create, delete, tags), configuration recorders (list, create, start/stop, status), delivery channels (list, create), conformance packs (list, create, delete, tags), compliance by rule, rule evaluation status, pack status |
 | **AppConfig** | Applications (list, get, create, delete), environments (list, create, delete per app), configuration profiles (list, create, delete per app), hosted config versions (list per profile) |

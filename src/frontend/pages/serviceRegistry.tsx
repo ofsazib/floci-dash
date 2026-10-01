@@ -81,6 +81,7 @@ import BedrockGuardrailsDashboard from "./services/BedrockGuardrailsDashboard";
 import GlobalAcceleratorDashboard from "./services/GlobalAcceleratorDashboard";
 import VerifiedPermissionsDashboard from "./services/VerifiedPermissionsDashboard";
 import TimestreamInfluxDBDashboard from "./services/TimestreamInfluxDBDashboard";
+import DataSyncDashboard from "./services/DataSyncDashboard";
 import { S3Dashboard } from "./services/S3Dashboard";
 import { LambdaDashboard } from "./services/LambdaDashboard";
 import { CloudFormationDashboard } from "./services/CloudFormationDashboard";
@@ -185,6 +186,7 @@ export const SERVICE_DASHBOARDS: Record<string, ComponentType> = {
   "globalaccelerator": GlobalAcceleratorDashboard,
   "verifiedpermissions": VerifiedPermissionsDashboard,
   "timestream-influxdb": TimestreamInfluxDBDashboard,
+  "datasync": DataSyncDashboard,
   "s3vectors": S3VectorsDashboard,
   "s3": S3Dashboard,
   "lambda": LambdaDashboard,
