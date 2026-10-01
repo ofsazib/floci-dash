@@ -4406,3 +4406,77 @@ describe("SageMaker Integration", () => {
     expect(names).toContain(`${modelName}-job`);
   });
 });
+
+//  ─────────────────────────────────────────────────────────
+//  Bedrock Guardrails Integration Tests (Floci 2.1.0)
+//  ─────────────────────────────────────────────────────────
+
+describe("Bedrock Guardrails Integration", () => {
+  const guardrailName = `it-gr-${Date.now()}`;
+  let guardrailArn = "";
+
+  it("creates a guardrail", async () => {
+    const { status, data } = await api("POST", "/api/aws/bedrock/guardrails", {
+      name: guardrailName,
+      description: "integration guardrail",
+      blockedInputMessaging: "blocked in",
+      blockedOutputsMessaging: "blocked out",
+      contentPolicyConfig: {
+        filtersConfig: [
+          { type: "MISCONDUCT", inputStrength: "HIGH", outputStrength: "HIGH" },
+        ],
+      },
+    });
+    expect(status).toBe(201);
+    expect(data.guardrail.guardrailArn).toBeTruthy();
+    guardrailArn = data.guardrail.guardrailArn;
+  });
+
+  it("lists guardrails and includes the new one", async () => {
+    const { status, data } = await api("GET", "/api/aws/bedrock/guardrails");
+    expect(status).toBe(200);
+    const names = (data.guardrails || []).map((g: any) => g.name ?? g.guardrailId);
+    expect(names.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("gets the guardrail", async () => {
+    const id = guardrailArn.split("/").pop();
+    const { status, data } = await api(
+      "GET",
+      `/api/aws/bedrock/guardrails/${encodeURIComponent(id!)}`
+    );
+    expect(status).toBe(200);
+    expect(data.guardrail.blockedInputMessaging).toBe("blocked in");
+  });
+
+  it("adds, lists and removes tags on the guardrail ARN", async () => {
+    const add = await api("POST", "/api/aws/bedrock/resources/tags", {
+      resourceARN: guardrailArn,
+      tags: [{ key: "env", value: "integration" }],
+    });
+    expect(add.status).toBe(200);
+    const list = await api(
+      "GET",
+      `/api/aws/bedrock/resources/tags?arn=${encodeURIComponent(guardrailArn)}`
+    );
+    expect(list.status).toBe(200);
+    expect(list.data.tags).toContainEqual({ key: "env", value: "integration" });
+    const remove = await api("POST", "/api/aws/bedrock/resources/tags/untag", {
+      resourceARN: guardrailArn,
+      tagKeys: ["env"],
+    });
+    expect(remove.status).toBe(200);
+  });
+
+  it("deletes the guardrail", async () => {
+    const id = guardrailArn.split("/").pop();
+    const { status } = await api(
+      "DELETE",
+      `/api/aws/bedrock/guardrails/${encodeURIComponent(id!)}`
+    );
+    expect(status).toBe(200);
+    const list = await api("GET", "/api/aws/bedrock/guardrails");
+    const names = (list.data.guardrails || []).map((g: any) => g.name);
+    expect(names).not.toContain(guardrailName);
+  });
+});

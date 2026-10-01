@@ -457,6 +457,7 @@ These services have full CRUD operations in both backend and frontend:
 | **OAM** | Monitoring sinks (list, create, delete), sink policy (get/put JSON), attached links per sink, links (list, create, delete) |
 | **Identity Store** | Users (list, create, delete), groups (list, create, delete), group memberships (list per group, add user, remove); store id auto-detected from the Identity Center instance |
 | **SageMaker** | Models (list, create with container image + role, delete), endpoint configs (list, create, delete), endpoints (list, create, update config, delete), training jobs (list, create, stop). Requires a Floci build newer than the 2.1.0 release |
+| **Bedrock** | Guardrails (list, create with blocked messaging + content policy, delete), tags (list/add/remove per guardrail ARN). Completes the Bedrock family with Runtime + AgentCore |
 | **CloudTrail** | Trails (list, create, update, delete), start/stop logging, get trail status |
 | **AWS Config** | Config rules (list, create, delete, tags), configuration recorders (list, create, start/stop, status), delivery channels (list, create), conformance packs (list, create, delete, tags), compliance by rule, rule evaluation status, pack status |
 | **AppConfig** | Applications (list, get, create, delete), environments (list, create, delete per app), configuration profiles (list, create, delete per app), hosted config versions (list per profile) |
