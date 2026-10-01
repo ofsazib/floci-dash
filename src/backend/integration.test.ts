@@ -4660,3 +4660,44 @@ describe("Verified Permissions Integration", () => {
     expect(status).toBe(200);
   });
 });
+
+//  ─────────────────────────────────────────────────────────
+//  Timestream for InfluxDB Integration Tests (needs Floci > 2.1.0)
+//  ─────────────────────────────────────────────────────────
+
+describe("Timestream for InfluxDB Integration", () => {
+  let tsAvailable = false;
+
+  beforeAll(async () => {
+    try {
+      const res = await fetch(`${process.env.FLOCI_URL || "http://localhost:9878"}/_floci/health`);
+      const health = await res.json();
+      tsAvailable = health?.services?.["timestream-influxdb"] === "running";
+    } catch {
+      tsAvailable = false;
+    }
+  });
+
+  const itWhenAvailable = (name: string, fn: () => Promise<void>) =>
+    it(name, async () => {
+      if (!tsAvailable) {
+        console.warn("Skipping: Floci image lacks timestream-influxdb (needs > 2.1.0)");
+        return;
+      }
+      await fn();
+    });
+
+  const instanceName = `it-ts-${Date.now()}`;
+
+  itWhenAvailable("creates a DB instance", async () => {
+    const { status, data } = await api("POST", "/api/aws/timestreaminfluxdb/db-instances", {
+      name: instanceName,
+      password: "Probe-Password-123",
+      dbInstanceType: "db.influx.medium",
+      vpcSubnetIds: ["subnet-8ac0ba41"],
+      vpcSecurityGroupIds: ["sg-default"],
+      allocatedStorage: 20,
+    });
+    expect(status).toBe(201);
+  });
+});
