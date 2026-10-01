@@ -4335,3 +4335,74 @@ describe("Identity Store Integration", () => {
     expect(status).toBe(400);
   });
 });
+
+//  ─────────────────────────────────────────────────────────
+//  SageMaker Integration Tests (needs Floci > 2.1.0)
+//  ─────────────────────────────────────────────────────────
+
+describe("SageMaker Integration", () => {
+  let sagemakerAvailable = false;
+
+  beforeAll(async () => {
+    try {
+      const res = await fetch(`${process.env.FLOCI_URL || "http://localhost:9878"}/_floci/health`);
+      const health = await res.json();
+      sagemakerAvailable = health?.services?.sagemaker === "running";
+    } catch {
+      sagemakerAvailable = false;
+    }
+  });
+
+  const itWhenAvailable = (name: string, fn: () => Promise<void>) =>
+    it(name, async () => {
+      if (!sagemakerAvailable) {
+        console.warn("Skipping: Floci image lacks sagemaker (needs > 2.1.0)");
+        return;
+      }
+      await fn();
+    });
+
+  const modelName = `it-sm-model-${Date.now()}`;
+
+  itWhenAvailable("creates a model and lists it", async () => {
+    const create = await api("POST", "/api/aws/sagemaker/models", {
+      modelName,
+      primaryContainer: { Image: " ghcr.io/floci/sklearn:latest" },
+      executionRoleArn: "arn:aws:iam::000000000000:role/admin",
+    });
+    expect(create.status).toBe(201);
+    const list = await api("GET", "/api/aws/sagemaker/models");
+    const names = (list.data.models || []).map((m: any) => m.ModelName);
+    expect(names).toContain(modelName);
+  });
+
+  itWhenAvailable("creates an endpoint config and endpoint", async () => {
+    const cfg = await api("POST", "/api/aws/sagemaker/endpoint-configs", {
+      endpointConfigName: `${modelName}-cfg`,
+      productionVariants: [
+        { ModelName: modelName, InstanceType: "ml.t2.medium", InitialInstanceCount: 1, VariantName: "AllTraffic" },
+      ],
+    });
+    expect(cfg.status).toBe(201);
+    const ep = await api("POST", "/api/aws/sagemaker/endpoints", {
+      endpointName: `${modelName}-ep`,
+      endpointConfigName: `${modelName}-cfg`,
+    });
+    expect(ep.status).toBe(201);
+  });
+
+  itWhenAvailable("creates a training job and lists it", async () => {
+    const job = await api("POST", "/api/aws/sagemaker/training-jobs", {
+      trainingJobName: `${modelName}-job`,
+      algorithmSpecification: { TrainingImage: "ghcr.io/floci/sklearn:latest", TrainingInputMode: "File" },
+      inputDataConfig: [
+        { ChannelName: "train", DataSource: { S3DataSource: { S3Uri: "s3://bucket/train", S3DataType: "S3Prefix" } } },
+      ],
+      roleArn: "arn:aws:iam::000000000000:role/admin",
+    });
+    expect(job.status).toBe(201);
+    const list = await api("GET", "/api/aws/sagemaker/training-jobs");
+    const names = (list.data.jobs || []).map((j: any) => j.TrainingJobName);
+    expect(names).toContain(`${modelName}-job`);
+  });
+});
