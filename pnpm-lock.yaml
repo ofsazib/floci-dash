@@ -341,6 +341,9 @@ importers:
       '@aws-sdk/client-translate':
         specifier: ^3.1126.0
         version: 3.1126.0
+      '@aws-sdk/client-verifiedpermissions':
+        specifier: ^3.1144.0
+        version: 3.1144.0
       '@aws-sdk/client-wafv2':
         specifier: ^3.1072.0
         version: 3.1072.0
@@ -913,6 +916,10 @@ packages:
 
   '@aws-sdk/client-translate@3.1126.0':
     resolution: {integrity: sha512-poY/NWDFQYRAYGdY9br2eFWY9fkdO/bKuqHOJ62AGyULcUmOKkTFl+tvdriva4psi8AQRMsTsEBCaG0NrkiFTQ==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/client-verifiedpermissions@3.1144.0':
+    resolution: {integrity: sha512-u1Trqtlh8160HPYzk05V/MOJX6BVRz6NGD11iI5TzuEf87xphTACzwIsXz53mVcn+UBEz5NVF/8RXhNyMoL+qw==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-wafv2@3.1072.0':
@@ -4349,6 +4356,17 @@ snapshots:
       '@smithy/fetch-http-handler': 5.7.2
       '@smithy/node-http-handler': 4.11.3
       '@smithy/types': 4.17.2
+      tslib: 2.8.1
+
+  '@aws-sdk/client-verifiedpermissions@3.1144.0':
+    dependencies:
+      '@aws-sdk/core': 3.978.1
+      '@aws-sdk/credential-provider-node': 3.972.84
+      '@aws-sdk/types': 3.974.6
+      '@smithy/core': 3.35.0
+      '@smithy/fetch-http-handler': 5.8.0
+      '@smithy/node-http-handler': 4.12.1
+      '@smithy/types': 4.19.0
       tslib: 2.8.1
 
   '@aws-sdk/client-wafv2@3.1072.0':

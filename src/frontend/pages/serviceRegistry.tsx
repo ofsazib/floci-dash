@@ -79,6 +79,7 @@ import IdentityStoreDashboard from "./services/IdentityStoreDashboard";
 import SageMakerDashboard from "./services/SageMakerDashboard";
 import BedrockGuardrailsDashboard from "./services/BedrockGuardrailsDashboard";
 import GlobalAcceleratorDashboard from "./services/GlobalAcceleratorDashboard";
+import VerifiedPermissionsDashboard from "./services/VerifiedPermissionsDashboard";
 import { S3Dashboard } from "./services/S3Dashboard";
 import { LambdaDashboard } from "./services/LambdaDashboard";
 import { CloudFormationDashboard } from "./services/CloudFormationDashboard";
@@ -181,6 +182,7 @@ export const SERVICE_DASHBOARDS: Record<string, ComponentType> = {
   "sagemaker": SageMakerDashboard,
   "bedrock": BedrockGuardrailsDashboard,
   "globalaccelerator": GlobalAcceleratorDashboard,
+  "verifiedpermissions": VerifiedPermissionsDashboard,
   "s3vectors": S3VectorsDashboard,
   "s3": S3Dashboard,
   "lambda": LambdaDashboard,

@@ -81,7 +81,7 @@ export const SERVICE_CATEGORY_MAP: Record<string, string> = {
   "redshift-data": "Analytics", "redshift-serverless": "Analytics", rum: "Management & Governance",
   sagemaker: "Machine Learning", securityhub: "Security, Identity & Compliance",
   "sso-oidc": "Security, Identity & Compliance", "timestream-influxdb": "Database",
-  verifiedpermissions: "Security, Identity & Compliance", dlm: "Management & Governance",
+  dlm: "Management & Governance",
 };
 
 export const SERVICE_LABELS: Record<string, string> = {

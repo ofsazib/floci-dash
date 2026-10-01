@@ -3930,6 +3930,12 @@ describe("Redshift Data Integration", () => {
       nodeType: "ra3.xlplus",
       numberOfNodes: 1,
     });
+    if (status === 500 && JSON.stringify(data || {}).includes("already exists")) {
+      // Hybrid-persisted from an earlier run — adopt it; the tests only need
+      // a reachable cluster with this identifier.
+      clusterCreated = true;
+      return;
+    }
     if (status !== 200 && status !== 201) {
       throw new Error(`cluster create failed: ${status} ${JSON.stringify(data)}`);
     }
@@ -4585,6 +4591,72 @@ describe("Global Accelerator Integration", () => {
       "DELETE",
       `/api/aws/globalaccelerator/accelerators/${acceleratorArn}`
     );
+    expect(status).toBe(200);
+  });
+});
+
+//  ─────────────────────────────────────────────────────────
+//  Verified Permissions Integration Tests (Floci 2.1.0)
+//  ─────────────────────────────────────────────────────────
+
+describe("Verified Permissions Integration", () => {
+  const storeName = `it-vp-${Date.now()}`;
+  let storeId = "";
+
+  it("creates a policy store", async () => {
+    const { status, data } = await api("POST", "/api/aws/verifiedpermissions/stores", {
+      name: storeName,
+      validationSettings: { mode: "OFF" },
+    });
+    expect(status).toBe(201);
+    expect(data.store.policyStoreId).toBeTruthy();
+    storeId = data.store.policyStoreId;
+  });
+
+  it("lists policy stores and includes the new one", async () => {
+    const { status, data } = await api("GET", "/api/aws/verifiedpermissions/stores");
+    expect(status).toBe(200);
+    const ids = (data.stores || []).map((s: any) => s.policyStoreId);
+    expect(ids).toContain(storeId);
+  });
+
+  it("creates, lists and deletes a policy", async () => {
+    const create = await api("POST", `/api/aws/verifiedpermissions/stores/${storeId}/policies`, {
+      name: "name/view-permit",
+      definition: {
+        static: { statement: 'permit(principal, action == Action::"view", resource);' },
+      },
+    });
+    expect(create.status).toBe(201);
+    const list = await api("GET", `/api/aws/verifiedpermissions/stores/${storeId}/policies`);
+    expect(list.status).toBe(200);
+    expect(list.data.total).toBeGreaterThanOrEqual(1);
+    const del = await api(
+      "DELETE",
+      `/api/aws/verifiedpermissions/stores/${storeId}/policies/${create.data.policy.policyId}`
+    );
+    expect(del.status).toBe(200);
+  });
+
+  it("evaluates IsAuthorized and deletes the store", async () => {
+    await api("POST", `/api/aws/verifiedpermissions/stores/${storeId}/policies`, {
+      name: "name/view-permit",
+      definition: {
+        static: { statement: 'permit(principal == User::"alice", action, resource);' },
+      },
+    });
+    const evalRes = await api(
+      "POST",
+      `/api/aws/verifiedpermissions/stores/${storeId}/is-authorized`,
+      {
+        principal: { entityType: "User", entityId: "alice" },
+        action: { actionType: "Action", actionId: "view" },
+        resource: { entityType: "Document", entityId: "doc1" },
+      }
+    );
+    expect(evalRes.status).toBe(200);
+    expect(evalRes.data.decision).toBe("ALLOW");
+    const { status } = await api("DELETE", `/api/aws/verifiedpermissions/stores/${storeId}`);
     expect(status).toBe(200);
   });
 });
