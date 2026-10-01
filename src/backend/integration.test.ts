@@ -4755,3 +4755,78 @@ describe("DataSync Integration", () => {
     expect(arns).not.toContain(agentArn);
   });
 });
+
+//  ─────────────────────────────────────────────────────────
+//  DMS Integration Tests (Floci 2.1.0)
+//  ─────────────────────────────────────────────────────────
+
+describe("DMS Integration", () => {
+  let dmsAvailable = false;
+
+  beforeAll(async () => {
+    try {
+      const res = await fetch(`${process.env.FLOCI_URL || "http://localhost:9878"}/_floci/health`);
+      const health = await res.json();
+      dmsAvailable = health?.services?.dms === "running";
+    } catch {
+      dmsAvailable = false;
+    }
+  });
+
+  const itWhenAvailable = (name: string, fn: () => Promise<void>) =>
+    it(name, async () => {
+      if (!dmsAvailable) {
+        console.warn("Skipping: Floci image lacks dms (needs > 2.1.0)");
+        return;
+      }
+      await fn();
+    });
+
+  const groupId = `it-dms-${Date.now()}`;
+  let groupArn = "";
+
+  itWhenAvailable("creates a replication subnet group", async () => {
+    const { status, data } = await api("POST", "/api/aws/dms/subnet-groups", {
+      replicationSubnetGroupIdentifier: groupId,
+      replicationSubnetGroupDescription: "integration group",
+      subnetIds: ["subnet-1", "subnet-2"],
+    });
+    expect(status).toBe(201);
+    expect(data.subnetGroup.ReplicationSubnetGroupIdentifier).toBe(groupId);
+    groupArn = `arn:aws:dms:us-east-1:000000000000:rep-subnet-group/${groupId}`;
+  });
+
+  itWhenAvailable("lists subnet groups and includes the new one", async () => {
+    const { status, data } = await api("GET", "/api/aws/dms/subnet-groups");
+    expect(status).toBe(200);
+    const ids = (data.subnetGroups || []).map((g: any) => g.ReplicationSubnetGroupIdentifier);
+    expect(ids).toContain(groupId);
+  });
+
+  itWhenAvailable("adds, lists and removes tags on the group ARN", async () => {
+    const add = await api("POST", "/api/aws/dms/resources/tags", {
+      resourceArn: groupArn,
+      tags: [{ Key: "env", Value: "integration", Key2: undefined } as any].map(({ Key, Value }) => ({ Key, Value })),
+    });
+    expect(add.status).toBe(200);
+    const list = await api(
+      "GET",
+      `/api/aws/dms/resources/tags?arn=${encodeURIComponent(groupArn)}`
+    );
+    expect(list.status).toBe(200);
+    expect(list.data.tagList).toContainEqual({ Key: "env", Value: "integration" });
+    const remove = await api("POST", "/api/aws/dms/resources/tags/untag", {
+      resourceArn: groupArn,
+      tagKeys: ["env"],
+    });
+    expect(remove.status).toBe(200);
+  });
+
+  itWhenAvailable("deletes the subnet group", async () => {
+    const { status } = await api("DELETE", `/api/aws/dms/subnet-groups/${groupId}`);
+    expect(status).toBe(200);
+    const list = await api("GET", "/api/aws/dms/subnet-groups");
+    const ids = (list.data.subnetGroups || []).map((g: any) => g.ReplicationSubnetGroupIdentifier);
+    expect(ids).not.toContain(groupId);
+  });
+});
