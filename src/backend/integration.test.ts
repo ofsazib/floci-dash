@@ -4937,3 +4937,39 @@ describe("Control Catalog Integration", () => {
     expect(data.control.Name).toBeTruthy();
   });
 });
+
+//  ─────────────────────────────────────────────────────────
+//  App Integrations Integration Tests (Floci 2.1.0)
+//  ─────────────────────────────────────────────────────────
+
+describe("App Integrations Integration", () => {
+  const eventName = `it-ai-${Date.now()}`;
+
+  it("creates an event integration", async () => {
+    const { status, data } = await api("POST", "/api/aws/appintegrations/event-integrations", {
+      name: eventName,
+      eventBridgeBus: "default",
+      eventFilter: { Source: "aws.connect" },
+    });
+    expect(status).toBe(201);
+    expect(data.eventIntegration.EventIntegrationArn).toBeTruthy();
+  });
+
+  it("lists event integrations and includes the new one", async () => {
+    const { status, data } = await api("GET", "/api/aws/appintegrations/event-integrations");
+    expect(status).toBe(200);
+    const names = (data.eventIntegrations || []).map((e: any) => e.Name);
+    expect(names).toContain(eventName);
+  });
+
+  it("deletes the event integration", async () => {
+    const { status } = await api(
+      "DELETE",
+      `/api/aws/appintegrations/event-integrations/${eventName}`
+    );
+    expect(status).toBe(200);
+    const list = await api("GET", "/api/aws/appintegrations/event-integrations");
+    const names = (list.data.eventIntegrations || []).map((e: any) => e.Name);
+    expect(names).not.toContain(eventName);
+  });
+});

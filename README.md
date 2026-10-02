@@ -466,6 +466,7 @@ These services have full CRUD operations in both backend and frontend:
 | **DLM** | Lifecycle policies (list, create with target tags, delete). Requires a Floci build newer than the 2.1.0 release |
 | **IAM Access Analyzer** | Analyzers (list, create ACCOUNT-type, delete) |
 | **Control Catalog** | Controls (list, view detail with behavior/severity/parameters) |
+| **App Integrations** | Event integrations (list, create with EventBridge bus + filter, delete), data integrations (list, create with KMS key + source URI, delete) |
 | **CloudTrail** | Trails (list, create, update, delete), start/stop logging, get trail status |
 | **AWS Config** | Config rules (list, create, delete, tags), configuration recorders (list, create, start/stop, status), delivery channels (list, create), conformance packs (list, create, delete, tags), compliance by rule, rule evaluation status, pack status |
 | **AppConfig** | Applications (list, get, create, delete), environments (list, create, delete per app), configuration profiles (list, create, delete per app), hosted config versions (list per profile) |
