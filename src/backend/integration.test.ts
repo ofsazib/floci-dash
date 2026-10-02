@@ -4830,3 +4830,51 @@ describe("DMS Integration", () => {
     expect(ids).not.toContain(groupId);
   });
 });
+
+//  ─────────────────────────────────────────────────────────
+//  DLM Integration Tests (needs Floci > 2.1.0)
+//  ─────────────────────────────────────────────────────────
+
+describe("DLM Integration", () => {
+  let dlmAvailable = false;
+
+  beforeAll(async () => {
+    try {
+      const res = await fetch(`${process.env.FLOCI_URL || "http://localhost:9878"}/_floci/health`);
+      const health = await res.json();
+      dlmAvailable = health?.services?.dlm === "running";
+    } catch {
+      dlmAvailable = false;
+    }
+  });
+
+  const itWhenAvailable = (name: string, fn: () => Promise<void>) =>
+    it(name, async () => {
+      if (!dlmAvailable) {
+        console.warn("Skipping: Floci image lacks dlm (needs > 2.1.0)");
+        return;
+      }
+      await fn();
+    });
+
+  itWhenAvailable("creates, lists and deletes a lifecycle policy", async () => {
+    const create = await api("POST", "/api/aws/dlm/policies", {
+      executionRoleArn: "arn:aws:iam::000000000000:role/dlm",
+      description: "integration policy",
+      state: "ENABLED",
+      policyDetails: [
+        {
+          ResourceTypes: ["VOLUME"],
+          TargetTags: [{ Key: "it", Value: "dlm" }],
+        },
+      ],
+    });
+    expect(create.status).toBe(201);
+    expect(create.data.policyId).toBeTruthy();
+    const list = await api("GET", "/api/aws/dlm/policies");
+    const ids = (list.data.policies || []).map((p: any) => p.PolicyId);
+    expect(ids).toContain(create.data.policyId);
+    const del = await api("DELETE", `/api/aws/dlm/policies/${create.data.policyId}`);
+    expect(del.status).toBe(200);
+  });
+});
