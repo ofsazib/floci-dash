@@ -87,6 +87,7 @@ import DlmDashboard from "./services/DlmDashboard";
 import AccessAnalyzerDashboard from "./services/AccessAnalyzerDashboard";
 import ControlCatalogDashboard from "./services/ControlCatalogDashboard";
 import AppIntegrationsDashboard from "./services/AppIntegrationsDashboard";
+import Inspector2Dashboard from "./services/Inspector2Dashboard";
 import { S3Dashboard } from "./services/S3Dashboard";
 import { LambdaDashboard } from "./services/LambdaDashboard";
 import { CloudFormationDashboard } from "./services/CloudFormationDashboard";
@@ -197,6 +198,7 @@ export const SERVICE_DASHBOARDS: Record<string, ComponentType> = {
   "access-analyzer": AccessAnalyzerDashboard,
   "controlcatalog": ControlCatalogDashboard,
   "app-integrations": AppIntegrationsDashboard,
+  "inspector2": Inspector2Dashboard,
   "s3vectors": S3VectorsDashboard,
   "s3": S3Dashboard,
   "lambda": LambdaDashboard,

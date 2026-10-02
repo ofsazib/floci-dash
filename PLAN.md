@@ -1857,13 +1857,13 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 | 26.17 | **P.15 DLM** — `@aws-sdk/client-dlm`, lifecycle policies REST CRUD (`/policies`); small | Done | 2026-09-30 — `dlm.ts` backend (5 routes: policies list/create/get/update/delete; create validates executionRoleArn/description/state/policyDetails per Floci; get null-guards a null SDK result); `useDLM.ts` 3 hooks; `DlmDashboard.tsx` (policies table, create modal with target-tags Key=Value parser). Registered key `dlm` (Management & Governance, label pre-registered in 26.2). Integration: 1 test availability-guarded (dlm landed after the 2.1.0 tag). Tests: +12 backend, +3 hook, +9 component. Gates: typecheck 0, unit+integration green |
 | 26.18 | **P.16 Access Analyzer** — `@aws-sdk/client-accessanalyzer`, analyzers CRUD (query-protocol — ops live in `AccessAnalyzerService.java` methods; enumerate at implementation) | Pending | — |
 | 26.19 | **P.17 Control Catalog** — `@aws-sdk/client-controlcatalog`, 2 ops (get-control/list-controls); pairs with Control Tower — tab, not standalone | Done | 2026-09-30 — `controlcatalog.ts` backend (2 routes: controls list, get-by-ARN with `{.+}` wildcard since ARNs contain slashes); `useControlCatalog.ts` 2 hooks; `ControlCatalogDashboard.tsx` (controls table → detail view with behavior/severity/parameters). Registered key `controlcatalog` (Management & Governance, label pre-registered in 26.2). Read-only by design — Floci exposes no control mutations. Tests: +4 backend, +3 hook, +11 component (dashboard 100/100/100/100 scoped after a v8-ignore on the multi-line import artifact). Integration: 2 tests vs live Floci 2.1.0. Gates: typecheck 0, unit+integration green |
-| 26.20 | **P.18 App Integrations** — `@aws-sdk/client-appintegrations`, data-integration + event-integration CRUD (REST `/dataIntegrations`, `/eventIntegrations`) | Pending | — |
+| 26.20 | **P.18 App Integrations** — `@aws-sdk/client-appintegrations`, data-integration + event-integration CRUD (REST `/dataIntegrations`, `/eventIntegrations`) | Done | 2026-10-01 |
 
 **Stage D — Security & marketplace family**
 
 | # | Task | Status | Date |
 |---|------|--------|------|
-| 26.21 | **P.19 Inspector2** — `@aws-sdk/client-inspector2`, 7 endpoints: enable/disable delegated admin, list, batch status, org configuration | Pending | — |
+| 26.21 | **P.19 Inspector2** — `@aws-sdk/client-inspector2`, 7 endpoints: enable/disable delegated admin, list, batch status, org configuration | Done | 2026-10-01 |
 | 26.22 | **P.20 Security Hub** — `@aws-sdk/client-securityhub`, ~10 endpoints: org admin/configuration, configuration policies + associations, finding aggregator, accounts | Pending | — |
 | 26.23 | **P.21 Detective** — `@aws-sdk/client-detective`, ~9 endpoints: graphs, members, monitoring state, org admin/configuration | Pending | — |
 | 26.24 | **P.22 Macie2** — `@aws-sdk/client-macie2`, ~6 endpoints: enable/status, admin, members | Pending | — |

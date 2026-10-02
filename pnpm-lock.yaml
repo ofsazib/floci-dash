@@ -206,6 +206,9 @@ importers:
       '@aws-sdk/client-identitystore':
         specifier: ^3.1143.0
         version: 3.1143.0
+      '@aws-sdk/client-inspector2':
+        specifier: ^3.1145.0
+        version: 3.1145.0
       '@aws-sdk/client-iot':
         specifier: ^3.1078.0
         version: 3.1078.0
@@ -757,6 +760,10 @@ packages:
 
   '@aws-sdk/client-identitystore@3.1143.0':
     resolution: {integrity: sha512-nxwOHf5fDeoB1hrydCHEtLOZm8d4IlXjajK9eYEIJPsUfHO3lytfzztFvt/sEQjN4wI3dBiI7Ay2CwxckwSDpQ==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/client-inspector2@3.1145.0':
+    resolution: {integrity: sha512-A5G30xXOO7k75D8atfet9IHDQ/zGNfremrlcqMXfM8uxZy4e9yAMCgIxtfCnAn6+wmRpl6I8xXSbLxHczbc3Wg==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-iot-data-plane@3.1078.0':
@@ -3840,6 +3847,17 @@ snapshots:
       tslib: 2.8.1
 
   '@aws-sdk/client-identitystore@3.1143.0':
+    dependencies:
+      '@aws-sdk/core': 3.978.1
+      '@aws-sdk/credential-provider-node': 3.972.84
+      '@aws-sdk/types': 3.974.6
+      '@smithy/core': 3.35.0
+      '@smithy/fetch-http-handler': 5.8.0
+      '@smithy/node-http-handler': 4.12.1
+      '@smithy/types': 4.19.0
+      tslib: 2.8.1
+
+  '@aws-sdk/client-inspector2@3.1145.0':
     dependencies:
       '@aws-sdk/core': 3.978.1
       '@aws-sdk/credential-provider-node': 3.972.84

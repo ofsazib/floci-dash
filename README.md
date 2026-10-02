@@ -467,6 +467,7 @@ These services have full CRUD operations in both backend and frontend:
 | **IAM Access Analyzer** | Analyzers (list, create ACCOUNT-type, delete) |
 | **Control Catalog** | Controls (list, view detail with behavior/severity/parameters) |
 | **App Integrations** | Event integrations (list, create with EventBridge bus + filter, delete), data integrations (list, create with KMS key + source URI, delete) |
+| **Inspector2** | Delegated admins (list, enable, disable), account status batch-get, scanning enable per resource type, organization configuration auto-enable (view/refresh) |
 | **CloudTrail** | Trails (list, create, update, delete), start/stop logging, get trail status |
 | **AWS Config** | Config rules (list, create, delete, tags), configuration recorders (list, create, start/stop, status), delivery channels (list, create), conformance packs (list, create, delete, tags), compliance by rule, rule evaluation status, pack status |
 | **AppConfig** | Applications (list, get, create, delete), environments (list, create, delete per app), configuration profiles (list, create, delete per app), hosted config versions (list per profile) |

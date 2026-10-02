@@ -15,6 +15,18 @@ import { cors } from "hono/cors";
 import systemRoutes from "./routes/system";
 import awsRoutes from "./routes/aws/index";
 import { setFlociEndpoint } from "./clients/config";
+import {
+  OrganizationsClient,
+  CreateOrganizationCommand,
+  ListAccountsCommand,
+  CreateAccountCommand,
+} from "@aws-sdk/client-organizations";
+import {
+  Inspector2Client,
+  BatchGetAccountStatusCommand,
+  DescribeOrganizationConfigurationCommand,
+  UpdateOrganizationConfigurationCommand,
+} from "@aws-sdk/client-inspector2";
 
 // ── Test App Setup ──────────────────────────────────────
 // Build a minimal Hono app from the same route modules used in production,
@@ -4971,5 +4983,117 @@ describe("App Integrations Integration", () => {
     const list = await api("GET", "/api/aws/appintegrations/event-integrations");
     const names = (list.data.eventIntegrations || []).map((e: any) => e.Name);
     expect(names).not.toContain(eventName);
+  });
+});
+
+//  ─────────────────────────────────────────────────────────
+//  Inspector2 Integration Tests (Floci 2.1.0)
+//  ─────────────────────────────────────────────────────────
+
+describe("Inspector2 Integration", () => {
+  // Floci enforces real AWS org semantics: delegated-admin and org-configuration
+  // ops require the caller to be the Organizations management account and the
+  // target admin to be a member of the same organization. Seed that state via
+  // the Organizations API (CreateOrganization makes the caller the master,
+  // CreateAccount adds a member), then drive the Inspector2 routes.
+  let adminAccountId: string | null = null;
+
+  beforeAll(async () => {
+    try {
+      const org = new OrganizationsClient({
+        endpoint: process.env.FLOCI_URL,
+        region: "us-east-1",
+        credentials: { accessKeyId: "test", secretAccessKey: "test" },
+      });
+      try {
+        await org.send(new CreateOrganizationCommand({ FeatureSet: "ALL" }));
+      } catch (err: any) {
+        if (!String(err?.name).includes("AlreadyInOrganization")) throw err;
+      }
+      const listed = await org.send(new ListAccountsCommand({}));
+      const existing = (listed.Accounts || []).find(
+        (a) => a.Id && a.Id !== "000000000000"
+      );
+      if (existing?.Id) {
+        adminAccountId = existing.Id;
+      } else {
+        const created = await org.send(
+          new CreateAccountCommand({
+            Email: `inspector2-${Date.now()}@floci.local`,
+            AccountName: "inspector2-admin",
+          })
+        );
+        adminAccountId = created.CreateAccountStatus?.AccountId || null;
+      }
+    } catch (err) {
+      console.warn(
+        "Skipping Inspector2 delegated-admin flows (org setup failed):",
+        err instanceof Error ? err.message : err
+      );
+      adminAccountId = null;
+    }
+  });
+
+  // Floci multi-account convention: a 12-digit access key ID is the account ID.
+  // BatchGetAccountStatus and organization configuration are delegated-admin
+  // operations, so they must be called AS the delegated admin member account.
+  const asDelegatedAdmin = (accountId: string) =>
+    new Inspector2Client({
+      endpoint: process.env.FLOCI_URL,
+      region: "us-east-1",
+      credentials: { accessKeyId: accountId, secretAccessKey: "test" },
+    });
+
+  const itWhenOrgReady = (name: string, fn: () => Promise<void>) =>
+    it(name, async () => {
+      if (!adminAccountId) {
+        console.warn("Skipping: no Organizations member account available");
+        return;
+      }
+      await fn();
+    });
+
+  it("enables Inspector2 scanning on the caller account", async () => {
+    const res = await api("POST", "/api/aws/inspector2/enable", {
+      resourceTypes: ["EC2", "ECR"],
+    });
+    expect(res.status).toBe(200);
+    expect(res.data.accounts?.length).toBeGreaterThan(0);
+  });
+
+  itWhenOrgReady("enables and lists a delegated admin account", async () => {
+    const enable = await api("POST", "/api/aws/inspector2/delegated-admins/enable", {
+      accountId: adminAccountId,
+    });
+    expect(enable.status).toBe(201);
+    const list = await api("GET", "/api/aws/inspector2/delegated-admins");
+    const ids = (list.data.delegatedAdminAccounts || []).map((a: any) => a.accountId);
+    expect(ids).toContain(adminAccountId);
+  });
+
+  itWhenOrgReady("batch-gets account status as the delegated admin", async () => {
+    const result = await asDelegatedAdmin(adminAccountId!).send(
+      new BatchGetAccountStatusCommand({ accountIds: [adminAccountId!] }),
+      { abortSignal: undefined }
+    );
+    expect(result.accounts?.[0]?.accountId).toBe(adminAccountId);
+  });
+
+  itWhenOrgReady("updates then describes the organization configuration as the delegated admin", async () => {
+    const client = asDelegatedAdmin(adminAccountId!);
+    await client.send(
+      new UpdateOrganizationConfigurationCommand({
+        autoEnable: { ec2: true, ecr: true },
+      })
+    );
+    const described = await client.send(new DescribeOrganizationConfigurationCommand({}));
+    expect(described.autoEnable?.ec2).toBe(true);
+  });
+
+  itWhenOrgReady("disables the delegated admin account", async () => {
+    const { status } = await api("POST", "/api/aws/inspector2/delegated-admins/disable", {
+      accountId: adminAccountId,
+    });
+    expect(status).toBe(200);
   });
 });
