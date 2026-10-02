@@ -4878,3 +4878,38 @@ describe("DLM Integration", () => {
     expect(del.status).toBe(200);
   });
 });
+
+//  ─────────────────────────────────────────────────────────
+//  Access Analyzer Integration Tests (Floci 2.1.0)
+//  ─────────────────────────────────────────────────────────
+
+describe("Access Analyzer Integration", () => {
+  const analyzerName = `it-aa-${Date.now()}`;
+
+  it("creates an analyzer", async () => {
+    const { status, data } = await api("POST", "/api/aws/accessanalyzer/analyzers", {
+      analyzerName,
+      type: "ACCOUNT",
+    });
+    expect(status).toBe(201);
+    expect(data.arn).toContain("access-analyzer");
+  });
+
+  it("lists analyzers and includes the new one", async () => {
+    const { status, data } = await api("GET", "/api/aws/accessanalyzer/analyzers");
+    expect(status).toBe(200);
+    const names = (data.analyzers || []).map((a: any) => a.name);
+    expect(names).toContain(analyzerName);
+  });
+
+  it("deletes the analyzer", async () => {
+    const { status } = await api(
+      "DELETE",
+      `/api/aws/accessanalyzer/analyzers/${analyzerName}`
+    );
+    expect(status).toBe(200);
+    const list = await api("GET", "/api/aws/accessanalyzer/analyzers");
+    const names = (list.data.analyzers || []).map((a: any) => a.name);
+    expect(names).not.toContain(analyzerName);
+  });
+});

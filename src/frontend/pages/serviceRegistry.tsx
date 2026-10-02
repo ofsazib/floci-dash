@@ -84,6 +84,7 @@ import TimestreamInfluxDBDashboard from "./services/TimestreamInfluxDBDashboard"
 import DataSyncDashboard from "./services/DataSyncDashboard";
 import DmsDashboard from "./services/DmsDashboard";
 import DlmDashboard from "./services/DlmDashboard";
+import AccessAnalyzerDashboard from "./services/AccessAnalyzerDashboard";
 import { S3Dashboard } from "./services/S3Dashboard";
 import { LambdaDashboard } from "./services/LambdaDashboard";
 import { CloudFormationDashboard } from "./services/CloudFormationDashboard";
@@ -191,6 +192,7 @@ export const SERVICE_DASHBOARDS: Record<string, ComponentType> = {
   "datasync": DataSyncDashboard,
   "dms": DmsDashboard,
   "dlm": DlmDashboard,
+  "access-analyzer": AccessAnalyzerDashboard,
   "s3vectors": S3VectorsDashboard,
   "s3": S3Dashboard,
   "lambda": LambdaDashboard,

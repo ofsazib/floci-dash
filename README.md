@@ -464,6 +464,7 @@ These services have full CRUD operations in both backend and frontend:
 | **DataSync** | Agents (list, create by activation key, delete), Azure Blob locations (list, create, delete), tasks (list, create source→destination, delete), tags (list/add per resource ARN) |
 | **DMS** | Replication subnet groups (list, create, delete), tags (list/add/remove per group ARN). Requires a Floci build newer than the 2.1.0 release |
 | **DLM** | Lifecycle policies (list, create with target tags, delete). Requires a Floci build newer than the 2.1.0 release |
+| **IAM Access Analyzer** | Analyzers (list, create ACCOUNT-type, delete) |
 | **CloudTrail** | Trails (list, create, update, delete), start/stop logging, get trail status |
 | **AWS Config** | Config rules (list, create, delete, tags), configuration recorders (list, create, start/stop, status), delivery channels (list, create), conformance packs (list, create, delete, tags), compliance by rule, rule evaluation status, pack status |
 | **AppConfig** | Applications (list, get, create, delete), environments (list, create, delete per app), configuration profiles (list, create, delete per app), hosted config versions (list per profile) |
