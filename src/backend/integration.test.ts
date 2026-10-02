@@ -4913,3 +4913,27 @@ describe("Access Analyzer Integration", () => {
     expect(names).not.toContain(analyzerName);
   });
 });
+
+//  ─────────────────────────────────────────────────────────
+//  Control Catalog Integration Tests (Floci 2.1.0)
+//  ─────────────────────────────────────────────────────────
+
+describe("Control Catalog Integration", () => {
+  it("lists controls", async () => {
+    const { status, data } = await api("GET", "/api/aws/controlcatalog/controls");
+    expect(status).toBe(200);
+    expect((data.controls || []).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("gets a control by ARN from the list", async () => {
+    const list = await api("GET", "/api/aws/controlcatalog/controls");
+    const control = (list.data.controls || [])[0];
+    expect(control).toBeTruthy();
+    const { status, data } = await api(
+      "GET",
+      `/api/aws/controlcatalog/controls/${control.Arn}`
+    );
+    expect(status).toBe(200);
+    expect(data.control.Name).toBeTruthy();
+  });
+});
