@@ -5363,3 +5363,64 @@ describe("Detective Integration", () => {
     expect(described.autoEnable ?? described.AutoEnable).toBe(true);
   });
 });
+
+describe("Macie2 Integration", () => {
+  // Floci's published 2.1.0 image ships Macie session/admin/org-configuration
+  // ops but NOT the member administration routes (added in 801edd863, after the
+  // tag). Member tests detect that 404 ("Unknown operation") and skip with a
+  // warning instead of failing.
+  let sessionReady = false;
+
+  beforeAll(async () => {
+    const enable = await api("POST", "/api/aws/macie2/session/enable");
+    sessionReady = enable.status === 201 || enable.status === 500;
+    // 500 here means "already enabled" (ConflictException surfaces as 500 via
+    // the generic onError handler) — either way the session exists now.
+  });
+
+  it("enables and describes the Macie session", async () => {
+    const session = await api("GET", "/api/aws/macie2/session");
+    expect(session.status).toBe(200);
+    expect(session.data.enabled).toBe(true);
+    expect(session.data.status).toBe("ENABLED");
+    expect(session.data.serviceRole).toContain("AWSServiceRoleForAmazonMacie");
+  });
+
+  it("enables and lists the Macie administrator", async () => {
+    const enable = await api("POST", "/api/aws/macie2/organization/admins/enable", {
+      accountId: "000000000000",
+    });
+    expect([201, 500]).toContain(enable.status);
+    if (enable.status !== 201) {
+      expect(String(enable.data.error)).toMatch(/already configured/i);
+    }
+    const list = await api("GET", "/api/aws/macie2/organization/admins");
+    const ids = (list.data.adminAccounts || []).map((a: any) => a.accountId);
+    expect(ids).toContain("000000000000");
+  });
+
+  it("updates then describes the organization configuration", async () => {
+    const put = await api("PATCH", "/api/aws/macie2/organization/configuration", {
+      autoEnable: true,
+    });
+    expect(put.status).toBe(200);
+    const conf = await api("GET", "/api/aws/macie2/organization/configuration");
+    expect(conf.status).toBe(200);
+    expect(conf.data.autoEnable).toBe(true);
+  });
+
+  it("creates and lists a member when the routes exist", async () => {
+    const created = await api("POST", "/api/aws/macie2/members", {
+      accountId: "222222222222",
+      email: `macie-${Date.now()}@floci.local`,
+    });
+    if (created.status === 500 && String(created.data.error).includes("Unknown operation")) {
+      console.warn("Skipping: member routes absent from the published 2.1.0 image");
+      return;
+    }
+    expect(created.status).toBe(201);
+    const list = await api("GET", "/api/aws/macie2/members");
+    const ids = (list.data.members || []).map((m: any) => m.accountId);
+    expect(ids).toContain("222222222222");
+  });
+});

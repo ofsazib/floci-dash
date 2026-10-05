@@ -1866,7 +1866,7 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 | 26.21 | **P.19 Inspector2** — `@aws-sdk/client-inspector2`, 7 endpoints: enable/disable delegated admin, list, batch status, org configuration | Done | 2026-10-01 |
 | 26.22 | **P.20 Security Hub** — `@aws-sdk/client-securityhub`, ~10 endpoints: org admin/configuration, configuration policies + associations, finding aggregator, accounts | Done | 2026-10-04 |
 | 26.23 | **P.21 Detective** — `@aws-sdk/client-detective`, ~9 endpoints: graphs, members, monitoring state, org admin/configuration | Done | 2026-10-04 |
-| 26.24 | **P.22 Macie2** — `@aws-sdk/client-macie2`, ~6 endpoints: enable/status, admin, members | Pending | — |
+| 26.24 | **P.22 Macie2** — `@aws-sdk/client-macie2`, ~6 endpoints: enable/status, admin, members | Done | 2026-10-05 |
 | 26.25 | **P.23 CodeArtifact** — `@aws-sdk/client-codeartifact`, domains/repositories/external-connections/auth-token CRUD (REST `v1/*`); note Floci backs repos with real sidecars (Verdaccio/Reposilite) — read-only or shallow-write UI first | Pending | — |
 | 26.26 | **P.24 Marketplace** — agreements/entitlements/metering (~26 real ops of the 57 `case` hits); spans `@aws-sdk/client-marketplace-agreement`, `client-marketplace-entitlement-service`, `client-meteringmarketplace` — verify client split via `node -e` before coding; tabbed dashboard | Pending | — |
 | 26.27 | **P.25 BCM Pricing Calculator** — `@aws-sdk/client-bcm-pricing-calculator`, 4 ops: workload estimate create/get/delete + batch usage create | Pending | — |
