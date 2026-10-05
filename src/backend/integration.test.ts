@@ -5613,3 +5613,55 @@ describe("BCM Pricing Calculator Integration", () => {
     expect(res.status).toBe(200);
   });
 });
+
+describe("SSO OIDC Integration", () => {
+  // Ships in the 2.1.0 image. REST-JSON with the sso-oauth credential scope;
+  // device tokens stay authorization_pending until the flow is approved in
+  // Floci's SSO portal, so the token test asserts the honest pending error.
+  let clientId: string | null = null;
+  let clientSecret: string | null = null;
+  let deviceCode: string | null = null;
+
+  it("registers a public client", async () => {
+    const res = await api("POST", "/api/aws/sso-oidc/clients", {
+      clientName: `it-sso-${Date.now()}`,
+    });
+    expect(res.status).toBe(200);
+    expect(res.data.clientId).toBeTruthy();
+    expect(res.data.clientSecret).toBeTruthy();
+    clientId = res.data.clientId;
+    clientSecret = res.data.clientSecret;
+  });
+
+  it("starts device authorization", async () => {
+    expect(clientId && clientSecret).toBeTruthy();
+    const res = await api("POST", "/api/aws/sso-oidc/device-authorization", {
+      clientId,
+      clientSecret,
+      startUrl: "https://view.awsapps.com/start",
+    });
+    expect(res.status).toBe(200);
+    expect(res.data.deviceCode).toBeTruthy();
+    expect(res.data.userCode).toMatch(/[A-Z0-9-]+/);
+    expect(res.data.verificationUriComplete).toContain("user_code");
+    deviceCode = res.data.deviceCode;
+  });
+
+  it("reports authorization_pending on the token poll (not yet approved)", async () => {
+    expect(deviceCode).toBeTruthy();
+    const res = await api("POST", "/api/aws/sso-oidc/token", {
+      clientId,
+      clientSecret,
+      deviceCode,
+    });
+    // Floci returns the OIDC pending error until the portal approves the code;
+    // the dashboard backend maps it to a 500 with the OIDC error name/message.
+    expect(res.status).toBe(500);
+    expect(String(res.data.error)).toMatch(/pending/i);
+  });
+
+  it("400s client registration without a name", async () => {
+    const res = await api("POST", "/api/aws/sso-oidc/clients", {});
+    expect(res.status).toBe(400);
+  });
+});

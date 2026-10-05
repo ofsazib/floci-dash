@@ -94,6 +94,7 @@ import Macie2Dashboard from "./services/Macie2Dashboard";
 import CodeArtifactDashboard from "./services/CodeArtifactDashboard";
 import MarketplaceDashboard from "./services/MarketplaceDashboard";
 import BcmPricingCalculatorDashboard from "./services/BcmPricingCalculatorDashboard";
+import SsoOidcDashboard from "./services/SsoOidcDashboard";
 import { S3Dashboard } from "./services/S3Dashboard";
 import { LambdaDashboard } from "./services/LambdaDashboard";
 import { CloudFormationDashboard } from "./services/CloudFormationDashboard";
@@ -211,6 +212,7 @@ export const SERVICE_DASHBOARDS: Record<string, ComponentType> = {
   "codeartifact": CodeArtifactDashboard,
   "marketplace": MarketplaceDashboard,
   "bcm-pricing-calculator": BcmPricingCalculatorDashboard,
+  "sso-oidc": SsoOidcDashboard,
   "s3vectors": S3VectorsDashboard,
   "s3": S3Dashboard,
   "lambda": LambdaDashboard,
