@@ -1864,7 +1864,7 @@ Deepen branch coverage on low-coverage dashboard component test files using `vi.
 | # | Task | Status | Date |
 |---|------|--------|------|
 | 26.21 | **P.19 Inspector2** — `@aws-sdk/client-inspector2`, 7 endpoints: enable/disable delegated admin, list, batch status, org configuration | Done | 2026-10-01 |
-| 26.22 | **P.20 Security Hub** — `@aws-sdk/client-securityhub`, ~10 endpoints: org admin/configuration, configuration policies + associations, finding aggregator, accounts | Pending | — |
+| 26.22 | **P.20 Security Hub** — `@aws-sdk/client-securityhub`, ~10 endpoints: org admin/configuration, configuration policies + associations, finding aggregator, accounts | Done | 2026-10-04 |
 | 26.23 | **P.21 Detective** — `@aws-sdk/client-detective`, ~9 endpoints: graphs, members, monitoring state, org admin/configuration | Pending | — |
 | 26.24 | **P.22 Macie2** — `@aws-sdk/client-macie2`, ~6 endpoints: enable/status, admin, members | Pending | — |
 | 26.25 | **P.23 CodeArtifact** — `@aws-sdk/client-codeartifact`, domains/repositories/external-connections/auth-token CRUD (REST `v1/*`); note Floci backs repos with real sidecars (Verdaccio/Reposilite) — read-only or shallow-write UI first | Pending | — |
