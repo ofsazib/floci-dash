@@ -5557,3 +5557,59 @@ describe("Marketplace Integration", () => {
     expect(Array.isArray(res.data.entities)).toBe(true);
   });
 });
+
+describe("BCM Pricing Calculator Integration", () => {
+  // Ships in the 2.1.0 image. Wire quirks: JSON 1.0 with camelCase members,
+  // rateType enum BEFORE_DISCOUNTS/AFTER_DISCOUNTS/AFTER_DISCOUNTS_AND_COMMITMENTS,
+  // identifiers are UUIDs, timestamps are epoch-float seconds.
+  const estimateName = `it-bcm-${Date.now()}`;
+  let estimateId: string | null = null;
+
+  it("creates a workload estimate", async () => {
+    const res = await api("POST", "/api/aws/bcm-pricing-calculator/estimates", {
+      name: estimateName,
+      rateType: "BEFORE_DISCOUNTS",
+    });
+    expect(res.status).toBe(201);
+    expect(res.data.estimate.id).toMatch(/[a-f0-9-]{36}/);
+    expect(res.data.estimate.status).toBe("VALID");
+    estimateId = res.data.estimate.id;
+  });
+
+  it("batch-creates usage (pricing lookup may reject synthetic entries)", async () => {
+    expect(estimateId).toBeTruthy();
+    const res = await api("POST", "/api/aws/bcm-pricing-calculator/estimates/usage", {
+      workloadEstimateId: estimateId,
+      usage: [
+        {
+          serviceCode: "AmazonEC2",
+          usageType: "BoxUsage:t3.micro",
+          operation: "RunInstances",
+          usageAccountId: "000000000000",
+          amount: 2,
+          key: "it-usage-1",
+        },
+      ],
+    });
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.data.items)).toBe(true);
+    expect(Array.isArray(res.data.errors)).toBe(true);
+  });
+
+  it("gets the estimate", async () => {
+    expect(estimateId).toBeTruthy();
+    const res = await api("POST", "/api/aws/bcm-pricing-calculator/estimates/get", {
+      identifier: estimateId,
+    });
+    expect(res.status).toBe(200);
+    expect(res.data.estimate.name).toBe(estimateName);
+  });
+
+  it("deletes the estimate", async () => {
+    expect(estimateId).toBeTruthy();
+    const res = await api("DELETE", "/api/aws/bcm-pricing-calculator/estimates", {
+      identifier: estimateId,
+    });
+    expect(res.status).toBe(200);
+  });
+});
