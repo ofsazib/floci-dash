@@ -28,6 +28,7 @@ import {
   type TabsProps,
 } from "@cloudscape-design/components";
 import StatCard from "../../components/StatCard";
+import SesExtrasPanel from "./SesExtrasPanel";
 import { useHealth } from "../../hooks/useSystem";
 import { getServiceLabel } from "../../types/services";
 import StatusBadge from "../../components/StatusBadge";
@@ -1848,6 +1849,7 @@ export function SESDashboard() {
           </SpaceBetween>
         </Form>
       </Modal>
+      <SesExtrasPanel />
     </>
   );
 }

@@ -5665,3 +5665,67 @@ describe("SSO OIDC Integration", () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe("SES v2 Extras Integration", () => {
+  // The base SES service ships in the 2.1.0 image, but the E.1 sub-controllers
+  // (export/import jobs, VDM metrics/insights, dedicated-IP extras, tenants)
+  // landed after the tag — the published image serves an HTML 404 page which
+  // surfaces as a deserialization 500. Probe one route and skip when absent.
+  let available = false;
+
+  beforeAll(async () => {
+    const probe = await api("POST", "/api/aws/email/v2/export-jobs/list", {});
+    available = probe.status === 200;
+    if (!available) {
+      console.warn("Skipping: Floci image lacks SES v2 E.1 routes (needs > 2.1.0)");
+    }
+  });
+
+  const itWhenAvailable = (name: string, fn: () => Promise<void>) =>
+    it(name, async () => {
+      if (!available) {
+        console.warn("Skipping: SES v2 E.1 routes unavailable");
+        return;
+      }
+      await fn();
+    });
+
+  itWhenAvailable("lists export jobs", async () => {
+    const res = await api("POST", "/api/aws/email/v2/export-jobs/list", {});
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.data.jobs)).toBe(true);
+  });
+
+  itWhenAvailable("creates and cancels an export job", async () => {
+    const created = await api("POST", "/api/aws/email/v2/export-jobs", {
+      exportDestination: { dataFormat: "CSV" },
+      exportDataSource: { metricsDataSource: { dimensions: {} } },
+    });
+    expect(created.status).toBe(201);
+    const cancelled = await api(
+      "PUT",
+      `/api/aws/email/v2/export-jobs/${encodeURIComponent(created.data.jobId)}/cancel`
+    );
+    expect(cancelled.status).toBe(200);
+  });
+
+  itWhenAvailable("lists import jobs", async () => {
+    const res = await api("POST", "/api/aws/email/v2/import-jobs/list", {});
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.data.importJobs)).toBe(true);
+  });
+
+  itWhenAvailable("batch-gets VDM metric data", async () => {
+    const res = await api("POST", "/api/aws/email/v2/metrics/batch", {
+      queries: [{ id: "it-send", metric: "SEND", namespace: "VDM" }],
+    });
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.data.results)).toBe(true);
+  });
+
+  itWhenAvailable("lists tenants", async () => {
+    const res = await api("POST", "/api/aws/email/v2/tenants/list", {});
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.data.tenants)).toBe(true);
+  });
+});

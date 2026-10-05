@@ -43,6 +43,12 @@ vi.mock("@aws-sdk/client-sesv2", () => {
     "PutEmailIdentityConfigurationSetAttributesCommand", "PutEmailIdentityDkimAttributesCommand",
     "PutEmailIdentityDkimSigningAttributesCommand", "PutEmailIdentityFeedbackAttributesCommand",
     "TestRenderEmailTemplateCommand",
+    "CreateExportJobCommand", "GetExportJobCommand", "ListExportJobsCommand",
+    "CancelExportJobCommand", "CreateImportJobCommand", "GetImportJobCommand",
+    "ListImportJobsCommand", "BatchGetMetricDataCommand", "GetMessageInsightsCommand",
+    "GetDedicatedIpsCommand", "PutDedicatedIpWarmupAttributesCommand",
+    "PutDedicatedIpPoolScalingAttributesCommand", "CreateTenantCommand", "GetTenantCommand",
+    "ListTenantsCommand", "DeleteTenantCommand",
   ];
   for (const n of names) commands[n] = createCmd(n);
   return commands;
@@ -568,5 +574,363 @@ describe("SES v2 — edge arms", () => {
     expect((await router.request(`${AG}/resources/tags`, { method: "GET" })).status).toBe(400);
     // tags DELETE without arn -> 400
     expect((await router.request(`${AG}/resources/tags?tagKeys=a`, { method: "DELETE" })).status).toBe(400);
+  });
+});
+
+async function get(path: string) {
+  return router.request(`${AG}${path}`);
+}
+
+async function post(path: string, body?: any) {
+  return router.request(`${AG}${path}`, {
+    method: "POST",
+    body: body != null ? JSON.stringify(body) : undefined,
+    headers: body != null ? { "content-type": "application/json" } : undefined,
+  });
+}
+
+async function put(path: string, body?: any) {
+  return router.request(`${AG}${path}`, {
+    method: "PUT",
+    body: body != null ? JSON.stringify(body) : undefined,
+    headers: body != null ? { "content-type": "application/json" } : undefined,
+  });
+}
+
+describe("template update arms", () => {
+  it("defaults a missing subject to an empty string", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await router.request(`${AG}/templates/no-subject`, {
+      method: "PUT",
+      body: JSON.stringify({ html: "<p>hi</p>" }),
+      headers: { "content-type": "application/json" },
+    });
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].TemplateContent.Subject).toBe("");
+  });
+
+  it("lists CVETs with an empty result", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await router.request(`${AG}/custom-verification-email-templates`);
+    const json = await res.json();
+    expect(json.templates).toEqual([]);
+  });
+});
+
+// ─── E.1: export jobs ────────────────────────────────────
+
+describe("export jobs", () => {
+  it("400 create without dataFormat or dataSource", async () => {
+    expect(
+      (await post("/export-jobs", { exportDestination: { dataFormat: "CSV" } })).status
+    ).toBe(400);
+    expect((await post("/export-jobs", {})).status).toBe(400);
+  });
+
+  it("creates an export job", async () => {
+    mockSend.mockResolvedValueOnce({ JobId: "job-1" });
+    const res = await post("/export-jobs", {
+      exportDestination: { dataFormat: "CSV" },
+      exportDataSource: { metricsDataSource: {} },
+    });
+    expect(res.status).toBe(201);
+    const json = await res.json();
+    expect(json.jobId).toBe("job-1");
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({ ExportDestination: { DataFormat: "CSV" } })
+    );
+  });
+
+  it("gets an export job", async () => {
+    mockSend.mockResolvedValueOnce({ JobId: "job-1", JobStatus: "COMPLETED" });
+    const res = await get("/export-jobs/job-1");
+    const json = await res.json();
+    expect(json.job.JobStatus).toBe("COMPLETED");
+  });
+
+  it("returns a null export job when get omits it", async () => {
+    mockSend.mockResolvedValueOnce(null);
+    const res = await get("/export-jobs/job-404");
+    const json = await res.json();
+    expect(json.job).toBeNull();
+  });
+
+  it("lists export jobs", async () => {
+    mockSend.mockResolvedValueOnce({ ExportJobs: [{ JobId: "job-1" }] });
+    const res = await post("/export-jobs/list", { pageSize: 10 });
+    const json = await res.json();
+    expect(json.jobs).toHaveLength(1);
+  });
+
+  it("returns an empty export job list when absent", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/export-jobs/list");
+    const json = await res.json();
+    expect(json.jobs).toEqual([]);
+  });
+
+  it("cancels an export job", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put("/export-jobs/job-1/cancel");
+    const json = await res.json();
+    expect(json.cancelled).toBe(true);
+  });
+});
+
+// ─── E.1: import jobs ────────────────────────────────────
+
+describe("import jobs", () => {
+  it("400 create without data source or destination", async () => {
+    expect((await post("/import-jobs", {})).status).toBe(400);
+    expect(
+      (
+        await post("/import-jobs", {
+          importDataSource: { s3Url: "s3://b/k", dataFormat: "CSV" },
+        })
+      ).status
+    ).toBe(400);
+  });
+
+  it("creates an import job", async () => {
+    mockSend.mockResolvedValueOnce({ JobId: "ijob-1" });
+    const res = await post("/import-jobs", {
+      importDataSource: { s3Url: "s3://bucket/key", dataFormat: "CSV" },
+      importDestination: {
+        suppressionListDestination: { suppressionListImportAction: "PUT" },
+      },
+    });
+    expect(res.status).toBe(201);
+    const json = await res.json();
+    expect(json.jobId).toBe("ijob-1");
+  });
+
+  it("gets an import job", async () => {
+    mockSend.mockResolvedValueOnce({ JobId: "ijob-1", ImportJobStatus: "COMPLETED" });
+    const res = await get("/import-jobs/ijob-1");
+    const json = await res.json();
+    expect(json.job.ImportJobStatus).toBe("COMPLETED");
+  });
+
+  it("returns a null import job when get omits it", async () => {
+    mockSend.mockResolvedValueOnce(null);
+    const res = await get("/import-jobs/ijob-404");
+    const json = await res.json();
+    expect(json.job).toBeNull();
+  });
+
+  it("lists import jobs", async () => {
+    mockSend.mockResolvedValueOnce({ ImportJobs: [{ JobId: "ijob-1" }] });
+    const res = await post("/import-jobs/list");
+    const json = await res.json();
+    expect(json.importJobs).toHaveLength(1);
+  });
+
+  it("returns an empty import job list when absent", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/import-jobs/list");
+    const json = await res.json();
+    expect(json.importJobs).toEqual([]);
+  });
+});
+
+// ─── E.1: metrics + insights ─────────────────────────────
+
+describe("VDM metrics and insights", () => {
+  it("400 metrics batch without queries", async () => {
+    expect((await post("/metrics/batch", {})).status).toBe(400);
+    expect((await post("/metrics/batch", { queries: [] })).status).toBe(400);
+  });
+
+  it("batch-gets metric data", async () => {
+    mockSend.mockResolvedValueOnce({
+      Results: [{ Id: "q1", Metric: "SEND" }],
+      Errors: [],
+    });
+    const res = await post("/metrics/batch", {
+      queries: [{ id: "q1", metric: "SEND", namespace: "VDM" }],
+    });
+    const json = await res.json();
+    expect(json.results).toHaveLength(1);
+    expect(json.errors).toEqual([]);
+  });
+
+  it("returns empty metric results when absent", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/metrics/batch", {
+      queries: [{ id: "q1", metric: "SEND", namespace: "VDM" }],
+    });
+    const json = await res.json();
+    expect(json.results).toEqual([]);
+    expect(json.errors).toEqual([]);
+  });
+
+  it("returns null insights when the SDK result is empty", async () => {
+    mockSend.mockResolvedValueOnce(null);
+    const res = await get("/insights/mid-404");
+    const json = await res.json();
+    expect(json.insights).toBeNull();
+  });
+
+  it("gets message insights", async () => {
+    mockSend.mockResolvedValueOnce({
+      MessageId: "mid-1",
+      FromEmailAddress: "a@b.c",
+    });
+    const res = await get("/insights/mid-1");
+    const json = await res.json();
+    expect(json.insights.MessageId).toBe("mid-1");
+  });
+});
+
+// ─── E.1: dedicated IP extras ────────────────────────────
+
+describe("dedicated IP extras", () => {
+  it("lists dedicated IPs with an optional pool filter", async () => {
+    mockSend.mockResolvedValueOnce({
+      DedicatedIps: [{ Ip: "1.2.3.4", Status: "DONE" }],
+    });
+    const res = await get("/dedicated-ips?pool=pool-1");
+    const json = await res.json();
+    expect(json.dedicatedIps).toHaveLength(1);
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({ PoolName: "pool-1" })
+    );
+  });
+
+  it("lists dedicated IPs without a pool", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/dedicated-ips");
+    const json = await res.json();
+    expect(json.dedicatedIps).toEqual([]);
+    const cmd = mockSend.mock.calls[0][0];
+    expect(cmd.PoolName).toBeUndefined();
+  });
+
+  it("400 warmup without a percentage", async () => {
+    expect((await put("/dedicated-ips/1.2.3.4/warmup", {})).status).toBe(400);
+    expect(
+      (await put("/dedicated-ips/1.2.3.4/warmup", { warmupPercentage: "x" })).status
+    ).toBe(400);
+  });
+
+  it("sets warmup percentage", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put("/dedicated-ips/1.2.3.4/warmup", { warmupPercentage: 25 });
+    const json = await res.json();
+    expect(json.updated).toBe(true);
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({ Ip: "1.2.3.4", WarmupPercentage: 25 })
+    );
+  });
+
+  it("400 scaling without a mode", async () => {
+    expect((await put("/dedicated-ip-pools/pool-1/scaling", {})).status).toBe(400);
+  });
+
+  it("sets the pool scaling mode", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put("/dedicated-ip-pools/pool-1/scaling", {
+      scalingMode: "MANAGED",
+    });
+    const json = await res.json();
+    expect(json.updated).toBe(true);
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({ PoolName: "pool-1", ScalingMode: "MANAGED" })
+    );
+  });
+});
+
+// ─── E.1: tenants ────────────────────────────────────────
+
+describe("tenants", () => {
+  it("400 create without tenantName", async () => {
+    expect((await post("/tenants", {})).status).toBe(400);
+  });
+
+  it("creates a tenant", async () => {
+    mockSend.mockResolvedValueOnce({
+      TenantId: "t-id-1",
+      TenantArn: "arn:t",
+      SendingStatus: "ENABLED",
+    });
+    const res = await post("/tenants", {
+      tenantName: "t1",
+      tags: { team: "mkt" },
+    });
+    expect(res.status).toBe(201);
+    const json = await res.json();
+    expect(json.tenant.tenantName).toBe("t1");
+    expect(json.tenant.tenantArn).toBe("arn:t");
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TenantName: "t1",
+        Tags: [{ Key: "team", Value: "mkt" }],
+      })
+    );
+  });
+
+  it("returns a null tenant when the SDK result is null", async () => {
+    mockSend.mockResolvedValueOnce(null);
+    const res = await post("/tenants", { tenantName: "t-null" });
+    const json = await res.json();
+    expect(json.tenant).toBeNull();
+  });
+
+  it("builds a tenant shell even when the SDK result is empty", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/tenants", { tenantName: "t1" });
+    const json = await res.json();
+    expect(json.tenant.tenantName).toBe("t1");
+    expect(json.tenant.tenantId).toBeUndefined();
+  });
+
+  it("400 get without tenantName", async () => {
+    expect((await post("/tenants/get", {})).status).toBe(400);
+  });
+
+  it("gets an empty tenant object when the SDK returns an empty Tenant", async () => {
+    mockSend.mockResolvedValueOnce({ Tenant: {} });
+    const res = await post("/tenants/get", { tenantName: "t-empty" });
+    const json = await res.json();
+    expect(json.tenant).toEqual({});
+  });
+
+  it("returns a null tenant when get omits it", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/tenants/get", { tenantName: "t404" });
+    const json = await res.json();
+    expect(json.tenant).toBeNull();
+  });
+
+  it("gets a tenant", async () => {
+    mockSend.mockResolvedValueOnce({ Tenant: { TenantName: "t1" } });
+    const res = await post("/tenants/get", { tenantName: "t1" });
+    const json = await res.json();
+    expect(json.tenant.TenantName).toBe("t1");
+  });
+
+  it("lists tenants", async () => {
+    mockSend.mockResolvedValueOnce({ Tenants: [{ TenantName: "t1" }] });
+    const res = await post("/tenants/list");
+    const json = await res.json();
+    expect(json.tenants).toHaveLength(1);
+  });
+
+  it("returns an empty tenant list when absent", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/tenants/list");
+    const json = await res.json();
+    expect(json.tenants).toEqual([]);
+  });
+
+  it("400 delete without tenantName", async () => {
+    expect((await post("/tenants/delete", {})).status).toBe(400);
+  });
+
+  it("deletes a tenant", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/tenants/delete", { tenantName: "t1" });
+    const json = await res.json();
+    expect(json.deleted).toBe(true);
   });
 });

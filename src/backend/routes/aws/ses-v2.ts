@@ -68,6 +68,22 @@ import {
   PutEmailIdentityDkimSigningAttributesCommand,
   PutEmailIdentityFeedbackAttributesCommand,
   TestRenderEmailTemplateCommand,
+  CreateExportJobCommand,
+  GetExportJobCommand,
+  ListExportJobsCommand,
+  CancelExportJobCommand,
+  CreateImportJobCommand,
+  GetImportJobCommand,
+  ListImportJobsCommand,
+  BatchGetMetricDataCommand,
+  GetMessageInsightsCommand,
+  GetDedicatedIpsCommand,
+  PutDedicatedIpWarmupAttributesCommand,
+  PutDedicatedIpPoolScalingAttributesCommand,
+  CreateTenantCommand,
+  GetTenantCommand,
+  ListTenantsCommand,
+  DeleteTenantCommand,
 } from "@aws-sdk/client-sesv2";
 
 const router = new Hono();
@@ -673,6 +689,211 @@ router.get("/account", async (c: Context) => {
     ProductionAccessEnabled: result.ProductionAccessEnabled,
     EnforcementStatus: result.EnforcementStatus,
   }});
+});
+
+// ─── E.1: export jobs ────────────────────────────────────
+
+router.post("/export-jobs", async (c: Context) => {
+  const body = await c.req.json<{
+    exportDestination: { dataFormat: string };
+    exportDataSource: Record<string, unknown>;
+  }>();
+  if (!body?.exportDestination?.dataFormat)
+    return c.json({ error: "exportDestination.dataFormat is required" }, 400);
+  if (!body?.exportDataSource)
+    return c.json({ error: "exportDataSource is required" }, 400);
+  const result = await v2().send(
+    new CreateExportJobCommand({
+      ExportDestination: {
+        DataFormat: body.exportDestination.dataFormat,
+      } as any,
+      ExportDataSource: body.exportDataSource as any,
+    })
+  );
+  return c.json({ jobId: result.JobId }, 201);
+});
+
+router.get("/export-jobs/:jobId", async (c: Context) => {
+  const result = await v2().send(
+    new GetExportJobCommand({ JobId: decodeURIComponent(c.req.param("jobId")!) })
+  );
+  return c.json({ job: result ?? null });
+});
+
+router.post("/export-jobs/list", async (c: Context) => {
+  const body = await c.req.json<{ nextToken?: string; pageSize?: number }>().catch(() => ({}));
+  const result = await v2().send(
+    new ListExportJobsCommand({
+      NextToken: (body as any)?.nextToken,
+      PageSize: (body as any)?.pageSize,
+    })
+  );
+  return c.json({ jobs: result.ExportJobs || [], nextToken: result.NextToken });
+});
+
+router.put("/export-jobs/:jobId/cancel", async (c: Context) => {
+  await v2().send(
+    new CancelExportJobCommand({ JobId: decodeURIComponent(c.req.param("jobId")!) })
+  );
+  return c.json({ cancelled: true });
+});
+
+// ─── E.1: import jobs ────────────────────────────────────
+
+router.post("/import-jobs", async (c: Context) => {
+  const body = await c.req.json<{
+    importDataSource: { s3Url: string; dataFormat: string };
+    importDestination: Record<string, unknown>;
+  }>();
+  if (!body?.importDataSource?.s3Url || !body?.importDataSource?.dataFormat)
+    return c.json({ error: "importDataSource.s3Url and dataFormat are required" }, 400);
+  if (!body?.importDestination)
+    return c.json({ error: "importDestination is required" }, 400);
+  const result = await v2().send(
+    new CreateImportJobCommand({
+      ImportDataSource: {
+        S3Url: body.importDataSource.s3Url,
+        DataFormat: body.importDataSource.dataFormat as any,
+      },
+      ImportDestination: body.importDestination as any,
+    })
+  );
+  return c.json({ jobId: result.JobId }, 201);
+});
+
+router.get("/import-jobs/:jobId", async (c: Context) => {
+  const result = await v2().send(
+    new GetImportJobCommand({ JobId: decodeURIComponent(c.req.param("jobId")!) })
+  );
+  return c.json({ job: result ?? null });
+});
+
+router.post("/import-jobs/list", async (c: Context) => {
+  const body = await c.req.json<{ nextToken?: string; pageSize?: number }>().catch(() => ({}));
+  const result = await v2().send(
+    new ListImportJobsCommand({
+      NextToken: (body as any)?.nextToken,
+      PageSize: (body as any)?.pageSize,
+    })
+  );
+  return c.json({ importJobs: result.ImportJobs || [], nextToken: result.NextToken });
+});
+
+// ─── E.1: VDM metrics + message insights ─────────────────
+
+router.post("/metrics/batch", async (c: Context) => {
+  const body = await c.req.json<{ queries: Record<string, unknown>[] }>();
+  if (!Array.isArray(body?.queries) || body.queries.length === 0)
+    return c.json({ error: "queries array with at least one entry is required" }, 400);
+  const result = await v2().send(
+    new BatchGetMetricDataCommand({ Queries: body.queries as any })
+  );
+  return c.json({
+    results: result.Results || [],
+    errors: result.Errors || [],
+  });
+});
+
+router.get("/insights/:messageId", async (c: Context) => {
+  const result = await v2().send(
+    new GetMessageInsightsCommand({
+      MessageId: decodeURIComponent(c.req.param("messageId")!),
+    })
+  );
+  return c.json({ insights: result ?? null });
+});
+
+// ─── E.1: dedicated IP warmup / scaling / listing ────────
+
+router.get("/dedicated-ips", async (c: Context) => {
+  const poolName = c.req.query("pool");
+  const result = await v2().send(
+    new GetDedicatedIpsCommand({ PoolName: poolName || undefined })
+  );
+  return c.json({ dedicatedIps: result.DedicatedIps || [] });
+});
+
+router.put("/dedicated-ips/:ip/warmup", async (c: Context) => {
+  const body = await c.req.json<{ warmupPercentage: number }>();
+  if (typeof body?.warmupPercentage !== "number")
+    return c.json({ error: "warmupPercentage number is required" }, 400);
+  await v2().send(
+    new PutDedicatedIpWarmupAttributesCommand({
+      Ip: decodeURIComponent(c.req.param("ip")!),
+      WarmupPercentage: body.warmupPercentage,
+    })
+  );
+  return c.json({ updated: true });
+});
+
+router.put("/dedicated-ip-pools/:name/scaling", async (c: Context) => {
+  const body = await c.req.json<{ scalingMode: string }>();
+  if (!body?.scalingMode) return c.json({ error: "scalingMode is required" }, 400);
+  await v2().send(
+    new PutDedicatedIpPoolScalingAttributesCommand({
+      PoolName: decodeURIComponent(c.req.param("name")!),
+      ScalingMode: body.scalingMode as any,
+    })
+  );
+  return c.json({ updated: true });
+});
+
+// ─── E.1: tenants ────────────────────────────────────────
+
+router.post("/tenants", async (c: Context) => {
+  const body = await c.req.json<{
+    tenantName: string;
+    tags?: Record<string, string>;
+  }>();
+  if (!body?.tenantName) return c.json({ error: "tenantName is required" }, 400);
+  const result = await v2().send(
+    new CreateTenantCommand({
+      TenantName: body.tenantName,
+      Tags: body.tags
+        ? Object.entries(body.tags).map(([Key, Value]) => ({ Key, Value }))
+        : undefined,
+    })
+  );
+  return c.json(
+    {
+      tenant: result
+        ? {
+            tenantName: body.tenantName,
+            tenantId: result.TenantId,
+            tenantArn: result.TenantArn,
+            sendingStatus: result.SendingStatus,
+          }
+        : null,
+    },
+    201
+  );
+});
+
+router.post("/tenants/get", async (c: Context) => {
+  const body = await c.req.json<{ tenantName: string }>();
+  if (!body?.tenantName) return c.json({ error: "tenantName is required" }, 400);
+  const result = await v2().send(
+    new GetTenantCommand({ TenantName: body.tenantName })
+  );
+  return c.json({ tenant: result.Tenant ?? null });
+});
+
+router.post("/tenants/list", async (c: Context) => {
+  const body = await c.req.json<{ nextToken?: string; pageSize?: number }>().catch(() => ({}));
+  const result = await v2().send(
+    new ListTenantsCommand({
+      NextToken: (body as any)?.nextToken,
+      PageSize: (body as any)?.pageSize,
+    })
+  );
+  return c.json({ tenants: result.Tenants || [], nextToken: result.NextToken });
+});
+
+router.post("/tenants/delete", async (c: Context) => {
+  const body = await c.req.json<{ tenantName: string }>();
+  if (!body?.tenantName) return c.json({ error: "tenantName is required" }, 400);
+  await v2().send(new DeleteTenantCommand({ TenantName: body.tenantName }));
+  return c.json({ deleted: true });
 });
 
 export default router;

@@ -112,6 +112,10 @@ let mockSetFeedbackForwarding = vi.fn();
 let mockSetDkimEnabled = vi.fn();
 let mockSetHeadersInNotifications = vi.fn();
 
+vi.mock("./SesExtrasPanel", () => ({
+  default: () => null,
+}));
+
 vi.mock("../../hooks/useSES", () => ({
   useSESIdentities: (...args: any[]) => mockIdentities(...args),
   useSESVerifiedEmails: (...args: any[]) => mockVerifiedEmails(...args),

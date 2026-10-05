@@ -475,6 +475,8 @@ These services have full CRUD operations in both backend and frontend:
 | **Marketplace** | Agreements (search, describe, cancel), entitlements (get by product code), metering (MeterUsage, ResolveCustomer), catalog entities (list, describe) |
 | **BCM Pricing Calculator** | Workload estimates (create, open by ID, delete), batch usage creation with per-entry error reporting |
 | **SSO OIDC** | Device-flow console: register a public client, start device authorization (user code + verification link), poll for the token (shows authorization pending until approved in Floci's SSO portal) |
+
+**SES v2 extras (E.1, first pass — needs a Floci build newer than 2.1.0):** the SES page gained a "SES v2 extras" panel — export jobs (create CSV export, list, cancel), import jobs (create suppression-list import, list), VDM metrics (BatchGetMetricData SEND query) and message insights (GetMessageInsights by message ID), dedicated IP listing + pool scaling mode, and tenants (create/list/delete). Requires a Floci build newer than the 2.1.0 release.
 | **CloudTrail** | Trails (list, create, update, delete), start/stop logging, get trail status |
 | **AWS Config** | Config rules (list, create, delete, tags), configuration recorders (list, create, start/stop, status), delivery channels (list, create), conformance packs (list, create, delete, tags), compliance by rule, rule evaluation status, pack status |
 | **AppConfig** | Applications (list, get, create, delete), environments (list, create, delete per app), configuration profiles (list, create, delete per app), hosted config versions (list per profile) |
