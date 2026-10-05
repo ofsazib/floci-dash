@@ -5512,3 +5512,48 @@ describe("CodeArtifact Integration", () => {
     expect(delDomain.status).toBe(200);
   });
 });
+
+describe("Marketplace Integration", () => {
+  // The marketplace family ships in the 2.1.0 image. Agreement inputs use
+  // camelCase members (Floci's hand-written service), entitlement/metering/
+  // catalog use PascalCase — the backend routes handle the casings.
+  it("fetches an authorization token equivalent: resolves a customer", async () => {
+    const res = await api("POST", "/api/aws/marketplace/metering/resolve-customer", {
+      registrationToken: `it-mp-${Date.now()}`,
+    });
+    expect(res.status).toBe(200);
+    expect(res.data.productCode).toBeTruthy();
+    expect(res.data.customerAWSAccountId).toMatch(/\d{12}/);
+    expect(res.data.licenseArn).toContain(":license:");
+  });
+
+  it("meters usage and returns a record id", async () => {
+    const res = await api("POST", "/api/aws/marketplace/metering/usage", {
+      productCode: "prod-it-mp",
+      usageDimension: "it-hours",
+      usageQuantity: 2,
+    });
+    expect(res.status).toBe(200);
+    expect(res.data.meteringRecordId).toBeTruthy();
+  });
+
+  it("gets entitlements (empty by default)", async () => {
+    const res = await api("POST", "/api/aws/marketplace/entitlements", {
+      productCode: "prod-it-mp",
+    });
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.data.entitlements)).toBe(true);
+  });
+
+  it("searches agreements (empty by default)", async () => {
+    const res = await api("GET", "/api/aws/marketplace/agreements");
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.data.agreements)).toBe(true);
+  });
+
+  it("lists catalog entities", async () => {
+    const res = await api("GET", "/api/aws/marketplace/catalog/entities");
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.data.entities)).toBe(true);
+  });
+});

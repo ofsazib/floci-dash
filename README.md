@@ -472,6 +472,7 @@ These services have full CRUD operations in both backend and frontend:
 | **Detective** | Behavior graph (list, created with the administrator), members (list, add with email, start monitoring), Detective administrators (list, enable), organization auto-enable (view/update) |
 | **Macie** | Session (describe, enable), Macie administrators (list, enable), organization auto-enable (view/update), member accounts (list, add with email). Member routes require a Floci build newer than the 2.1.0 release |
 | **CodeArtifact** | Domains (list, create, delete), repositories (list, create with upstreams, delete), authorization tokens, npm repository endpoints, external connections (associate/disassociate public:npmjs). Requires a Floci build newer than the 2.1.0 release |
+| **Marketplace** | Agreements (search, describe, cancel), entitlements (get by product code), metering (MeterUsage, ResolveCustomer), catalog entities (list, describe) |
 | **CloudTrail** | Trails (list, create, update, delete), start/stop logging, get trail status |
 | **AWS Config** | Config rules (list, create, delete, tags), configuration recorders (list, create, start/stop, status), delivery channels (list, create), conformance packs (list, create, delete, tags), compliance by rule, rule evaluation status, pack status |
 | **AppConfig** | Applications (list, get, create, delete), environments (list, create, delete per app), configuration profiles (list, create, delete per app), hosted config versions (list per profile) |
