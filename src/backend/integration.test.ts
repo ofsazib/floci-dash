@@ -22,6 +22,16 @@ import {
   CreateAccountCommand,
 } from "@aws-sdk/client-organizations";
 import {
+  DetectiveClient,
+  ListGraphsCommand,
+  ListMembersCommand,
+  CreateMembersCommand,
+  StartMonitoringMemberCommand,
+  // Aliased: the Inspector2 import above binds the unprefixed names.
+  DescribeOrganizationConfigurationCommand as DtDescribeOrganizationConfigurationCommand,
+  UpdateOrganizationConfigurationCommand as DtUpdateOrganizationConfigurationCommand,
+} from "@aws-sdk/client-detective";
+import {
   Inspector2Client,
   BatchGetAccountStatusCommand,
   DescribeOrganizationConfigurationCommand,
@@ -5231,5 +5241,125 @@ describe("Security Hub Integration", () => {
       configurationPolicyIdentifier: policyId,
     });
     expect(dis.status).toBe(200);
+  });
+});
+
+describe("Detective Integration", () => {
+  // Detective requires an organization: enabling the administrator (which also
+  // creates the behavior graph) needs the caller to be the org management
+  // account and the target to be an org member. Reuse the org state seeded for
+  // Inspector2 (CreateOrganization persists in Floci); the graph ops run AS the
+  // delegated admin via the 12-digit access-key convention.
+  let adminAccountId: string | null = null;
+  let graphArn: string | null = null;
+
+  beforeAll(async () => {
+    try {
+      const org = new OrganizationsClient({
+        endpoint: process.env.FLOCI_URL,
+        region: "us-east-1",
+        credentials: { accessKeyId: "test", secretAccessKey: "test" },
+      });
+      try {
+        await org.send(new CreateOrganizationCommand({ FeatureSet: "ALL" }));
+      } catch (err: any) {
+        if (!String(err?.name).includes("AlreadyInOrganization")) throw err;
+      }
+      const listed = await org.send(new ListAccountsCommand({}));
+      const existing = (listed.Accounts || []).find(
+        (a) => a.Id && a.Id !== "000000000000"
+      );
+      adminAccountId = existing?.Id || null;
+    } catch (err) {
+      console.warn(
+        "Skipping Detective graph flows (org setup failed):",
+        err instanceof Error ? err.message : err
+      );
+      adminAccountId = null;
+    }
+  });
+
+  const itWhenOrgReady = (name: string, fn: () => Promise<void>) =>
+    it(name, async () => {
+      if (!adminAccountId) {
+        console.warn("Skipping: no Organizations member account available");
+        return;
+      }
+      await fn();
+    });
+
+  it("lists organization administrators", async () => {
+    const res = await api("POST", "/api/aws/detective/organization/admins");
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.data.administrators)).toBe(true);
+  });
+
+  itWhenOrgReady("enables the administrator, which creates the behavior graph", async () => {
+    const enable = await api("POST", "/api/aws/detective/organization/admins/enable", {
+      accountId: adminAccountId,
+    });
+    expect(enable.status).toBe(201);
+    const list = await api("POST", "/api/aws/detective/organization/admins");
+    const ids = (list.data.administrators || []).map((a: any) => a.accountId);
+    expect(ids).toContain(adminAccountId);
+    const asAdmin = new DetectiveClient({
+      endpoint: process.env.FLOCI_URL,
+      region: "us-east-1",
+      credentials: { accessKeyId: adminAccountId!, secretAccessKey: "test" },
+    });
+    const graphs: any = await asAdmin.send(new ListGraphsCommand({}));
+    // Floci emits Detective responses in PascalCase which the schema-based SDK
+    // passes through unmapped — read both casings.
+    const graphList = graphs.graphList || graphs.GraphList || [];
+    graphArn = graphList[0]?.arn || graphList[0]?.Arn || null;
+    expect(graphArn).toBeTruthy();
+  });
+
+  itWhenOrgReady("creates a member, lists, and starts monitoring", async () => {
+    expect(graphArn).toBeTruthy();
+    const asAdmin = new DetectiveClient({
+      endpoint: process.env.FLOCI_URL,
+      region: "us-east-1",
+      credentials: { accessKeyId: adminAccountId!, secretAccessKey: "test" },
+    });
+    const managementId = "000000000000";
+    const created = await asAdmin.send(
+      new CreateMembersCommand({
+        GraphArn: graphArn!,
+        Accounts: [{ AccountId: managementId, EmailAddress: "mgmt@floci.local" }],
+      })
+    );
+    const createdAny: any = created;
+    const unprocessed = ((createdAny.unprocessedAccounts ||
+      createdAny.UnprocessedAccounts) || []).map((u: any) => u.AccountId || u.accountId);
+    if (unprocessed.includes(managementId)) {
+      console.warn("Member already in graph (durable state); continuing");
+    }
+    const members: any = await asAdmin.send(new ListMembersCommand({ GraphArn: graphArn! }));
+    const memberDetails = members.memberDetails || members.MemberDetails || [];
+    const ids = memberDetails.map((m: any) => m.AccountId || m.accountId);
+    expect(ids).toContain(managementId);
+    // Start monitoring is only valid once per member; tolerate the conflict.
+    const monitoring = await asAdmin
+      .send(new StartMonitoringMemberCommand({ GraphArn: graphArn!, AccountId: managementId }))
+      .catch((err: any) => err);
+    if (monitoring instanceof Error) {
+      expect(String(monitoring.name)).toMatch(/ConflictException/);
+    }
+  });
+
+  itWhenOrgReady("updates then describes the organization configuration", async () => {
+    const asAdmin = new DetectiveClient({
+      endpoint: process.env.FLOCI_URL,
+      region: "us-east-1",
+      credentials: { accessKeyId: adminAccountId!, secretAccessKey: "test" },
+    });
+    await asAdmin.send(
+      new DtUpdateOrganizationConfigurationCommand({ GraphArn: graphArn!, AutoEnable: true })
+    );
+    const described: any = await asAdmin.send(
+      new DtDescribeOrganizationConfigurationCommand({ GraphArn: graphArn! })
+    );
+    expect(described.autoEnable ?? described.AutoEnable).toBe(true);
   });
 });

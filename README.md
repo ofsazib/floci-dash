@@ -469,6 +469,7 @@ These services have full CRUD operations in both backend and frontend:
 | **App Integrations** | Event integrations (list, create with EventBridge bus + filter, delete), data integrations (list, create with KMS key + source URI, delete) |
 | **Inspector2** | Delegated admins (list, enable, disable), account status batch-get, scanning enable per resource type, organization configuration auto-enable (view/refresh) |
 | **Security Hub** | Hub (describe, enable, update auto-enable controls), delegated administrators (list, enable), organization configuration (auto-enable + standards, view/update), finding aggregators (create, get, update region linking), configuration policies (list, create, get, update), policy associations (associate, get, disassociate, list) |
+| **Detective** | Behavior graph (list, created with the administrator), members (list, add with email, start monitoring), Detective administrators (list, enable), organization auto-enable (view/update) |
 | **CloudTrail** | Trails (list, create, update, delete), start/stop logging, get trail status |
 | **AWS Config** | Config rules (list, create, delete, tags), configuration recorders (list, create, start/stop, status), delivery channels (list, create), conformance packs (list, create, delete, tags), compliance by rule, rule evaluation status, pack status |
 | **AppConfig** | Applications (list, get, create, delete), environments (list, create, delete per app), configuration profiles (list, create, delete per app), hosted config versions (list per profile) |
