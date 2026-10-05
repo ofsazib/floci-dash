@@ -5424,3 +5424,91 @@ describe("Macie2 Integration", () => {
     expect(ids).toContain("222222222222");
   });
 });
+
+describe("CodeArtifact Integration", () => {
+  // The entire CodeArtifact service landed in Floci AFTER the 2.1.0 release
+  // tag — the published image 404s every /v1/* route with "Unknown operation"
+  // (the service isn't in the claim filter's credential-scope catalog). Run
+  // against a newer image or a source build; skip silently otherwise.
+  let available = false;
+  const domainName = `it-ca-${Date.now()}`;
+  const repoName = `it-ca-repo-${Date.now()}`;
+
+  beforeAll(async () => {
+    try {
+      const res = await fetch(`${process.env.FLOCI_URL || "http://localhost:9878"}/_floci/health`);
+      const health = await res.json();
+      available = health?.services?.["codeartifact"] === "running";
+    } catch {
+      available = false;
+    }
+  });
+
+  const itWhenAvailable = (name: string, fn: () => Promise<void>) =>
+    it(name, async () => {
+      if (!available) {
+        console.warn("Skipping: Floci image lacks codeartifact (needs > 2.1.0)");
+        return;
+      }
+      await fn();
+    });
+
+  itWhenAvailable("creates and lists a domain", async () => {
+    const created = await api("POST", "/api/aws/codeartifact/domains", {
+      name: domainName,
+    });
+    expect(created.status).toBe(201);
+    const list = await api("GET", "/api/aws/codeartifact/domains");
+    const names = (list.data.domains || []).map((d: any) => d.name);
+    expect(names).toContain(domainName);
+  });
+
+  itWhenAvailable("fetches an authorization token", async () => {
+    const res = await api("POST", "/api/aws/codeartifact/authorization-token", {
+      domain: domainName,
+    });
+    expect(res.status).toBe(200);
+    expect(res.data.authorizationToken).toBeTruthy();
+  });
+
+  itWhenAvailable("creates a repository and fetches its npm endpoint", async () => {
+    const created = await api("POST", "/api/aws/codeartifact/repositories", {
+      domain: domainName,
+      name: repoName,
+    });
+    expect(created.status).toBe(201);
+    const ep = await api(
+      "GET",
+      `/api/aws/codeartifact/repositories/endpoint?domain=${domainName}&repository=${repoName}&format=npm`
+    );
+    expect(ep.status).toBe(200);
+    expect(ep.data.repositoryEndpoint).toContain(`/${repoName}`);
+  });
+
+  itWhenAvailable("associates and disassociates public:npmjs", async () => {
+    const assoc = await api("POST", "/api/aws/codeartifact/external-connections", {
+      domain: domainName,
+      repository: repoName,
+      externalConnection: "public:npmjs",
+    });
+    expect(assoc.status).toBe(200);
+    const dis = await api("DELETE", "/api/aws/codeartifact/external-connections", {
+      domain: domainName,
+      repository: repoName,
+      externalConnection: "public:npmjs",
+    });
+    expect(dis.status).toBe(200);
+  });
+
+  itWhenAvailable("deletes the repository and domain", async () => {
+    const delRepo = await api("DELETE", "/api/aws/codeartifact/repositories", {
+      domain: domainName,
+      name: repoName,
+    });
+    expect(delRepo.status).toBe(200);
+    const delDomain = await api("DELETE", "/api/aws/codeartifact/domains", {
+      name: domainName,
+    });
+    expect(delDomain.status).toBe(200);
+  });
+});

@@ -58,6 +58,7 @@
     "@aws-sdk/client-cloudtrail": "^3.1071.0",
     "@aws-sdk/client-cloudwatch": "^3.1068.0",
     "@aws-sdk/client-cloudwatch-logs": "^3.1068.0",
+    "@aws-sdk/client-codeartifact": "^3.1146.0",
     "@aws-sdk/client-codebuild": "^3.1072.0",
     "@aws-sdk/client-codedeploy": "^3.1072.0",
     "@aws-sdk/client-codeguru-reviewer": "^3.1127.0",

@@ -91,6 +91,7 @@ import Inspector2Dashboard from "./services/Inspector2Dashboard";
 import SecurityHubDashboard from "./services/SecurityHubDashboard";
 import DetectiveDashboard from "./services/DetectiveDashboard";
 import Macie2Dashboard from "./services/Macie2Dashboard";
+import CodeArtifactDashboard from "./services/CodeArtifactDashboard";
 import { S3Dashboard } from "./services/S3Dashboard";
 import { LambdaDashboard } from "./services/LambdaDashboard";
 import { CloudFormationDashboard } from "./services/CloudFormationDashboard";
@@ -205,6 +206,7 @@ export const SERVICE_DASHBOARDS: Record<string, ComponentType> = {
   "securityhub": SecurityHubDashboard,
   "detective": DetectiveDashboard,
   "macie2": Macie2Dashboard,
+  "codeartifact": CodeArtifactDashboard,
   "s3vectors": S3VectorsDashboard,
   "s3": S3Dashboard,
   "lambda": LambdaDashboard,

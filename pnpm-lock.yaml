@@ -92,6 +92,9 @@ importers:
       '@aws-sdk/client-cloudwatch-logs':
         specifier: ^3.1068.0
         version: 3.1070.0
+      '@aws-sdk/client-codeartifact':
+        specifier: ^3.1146.0
+        version: 3.1146.0
       '@aws-sdk/client-codebuild':
         specifier: ^3.1072.0
         version: 3.1072.0
@@ -617,6 +620,10 @@ packages:
 
   '@aws-sdk/client-cloudwatch@3.1070.0':
     resolution: {integrity: sha512-50JP4215shvkcockuGEMRUbtlCMevPxvJllUnyTjDqiNmVbLsN49Nvbd0p0XZNfC/aIZpevDNVpj4toXrtJSzA==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/client-codeartifact@3.1146.0':
+    resolution: {integrity: sha512-mzKuoWXfldl74Ckj+9UN4U+pKGBydDwZ7CNy+K1+mL6WQib06ImO4iofX16qwYe+e4+GOSnneQMT9rXUF9La6A==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-codebuild@3.1072.0':
@@ -3413,6 +3420,17 @@ snapshots:
       '@smithy/middleware-compression': 4.5.0
       '@smithy/node-http-handler': 4.8.0
       '@smithy/types': 4.15.0
+      tslib: 2.8.1
+
+  '@aws-sdk/client-codeartifact@3.1146.0':
+    dependencies:
+      '@aws-sdk/core': 3.978.1
+      '@aws-sdk/credential-provider-node': 3.972.84
+      '@aws-sdk/types': 3.974.6
+      '@smithy/core': 3.35.0
+      '@smithy/fetch-http-handler': 5.8.0
+      '@smithy/node-http-handler': 4.12.1
+      '@smithy/types': 4.19.0
       tslib: 2.8.1
 
   '@aws-sdk/client-codebuild@3.1072.0':
