@@ -933,13 +933,15 @@ router.post("/tenants/resources/list", async (c: Context) => {
     pageSize?: number;
   }>();
   if (!body?.tenantName) return c.json({ error: "tenantName is required" }, 400);
+  // Floci honors ResourceType on the wire even though the shipped SDK input
+  // type omits it (typing lag).
   const result = await v2().send(
     new ListTenantResourcesCommand({
       TenantName: body.tenantName,
-      ResourceType: body.resourceType as any,
+      ResourceType: body.resourceType,
       NextToken: body.nextToken,
       PageSize: body.pageSize,
-    })
+    } as any)
   );
   return c.json({
     resources: (result.TenantResources || []).map((r: any) => ({

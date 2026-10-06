@@ -5783,3 +5783,109 @@ describe("SES v2 Extras Integration", () => {
     expect(del.status).toBe(200);
   });
 });
+
+describe("ECS E.2 Integration", () => {
+  // ExecuteCommand and the enableExecuteCommand round-trip landed in Floci
+  // AFTER the 2.1.0 tag (the published image's DescribeServices omits the flag
+  // and ExecuteCommand 404s). Probe the op and skip when absent.
+  let available = false;
+  const clusterName = `it-ecs-e2-${Date.now()}`;
+
+  beforeAll(async () => {
+    try {
+      await api("POST", "/api/aws/ecs/clusters", { clusterName });
+      const run = await api("POST", "/api/aws/ecs/tasks/run", {
+        cluster: clusterName,
+        taskDefinition: "it-e2-nonexistent:1",
+        launchType: "FARGATE",
+        enableExecuteCommand: true,
+      });
+      // A source build parses enableExecuteCommand and fails with
+      // "task definition not found" (JSON error). The 2.1.0 image hangs on
+      // Fargate provisioning or 500s differently; treat non-JSON/timeout as
+      // unavailable via a quick marker: check the cluster-level flag instead.
+      const probe = await fetch(`${process.env.FLOCI_URL || "http://localhost:9878"}/`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/x-amz-json-1.1",
+          "x-amz-target": "AmazonEC2ContainerServiceV20141113.ExecuteCommand",
+          "x-amz-date": "20260101T000000Z",
+          authorization:
+            "AWS4-HMAC-SHA256 Credential=test/20260101/us-east-1/ecs/aws4_request, SignedHeaders=content-type;host;x-amz-date;x-amz-target, Signature=" +
+            "0".repeat(64),
+        },
+        body: JSON.stringify({ cluster: clusterName, task: "t", command: "ls" }),
+      });
+      available = probe.status !== 404;
+      if (!available) {
+        console.warn("Skipping: Floci image lacks ECS ExecuteCommand (needs > 2.1.0)");
+      }
+    } catch {
+      available = false;
+    }
+  });
+
+  const itWhenAvailable = (name: string, fn: () => Promise<void>) =>
+    it(name, async () => {
+      if (!available) {
+        console.warn("Skipping: ECS E.2 ops unavailable on this image");
+        return;
+      }
+      await fn();
+    });
+
+  it("creates a cluster for the suite", async () => {
+    const list = await api(
+      "GET",
+      `/api/aws/ecs/clusters`
+    );
+    expect(list.status).toBe(200);
+  });
+
+  itWhenAvailable("registers a task definition with FireLens logging", async () => {
+    const td = await api("POST", "/api/aws/ecs/task-definitions", {
+      family: `it-e2-family-${Date.now()}`,
+      containerDefinitions: [
+        {
+          name: "web",
+          image: "nginx:latest",
+          memory: 256,
+          essential: true,
+          logConfiguration: {
+            logDriver: "awsfirelens",
+            options: { Name: "s3", bucket: "it-bucket", region: "us-east-1" },
+          },
+        },
+      ],
+    });
+    expect(td.status).toBe(201);
+    const containers = td.data.taskDefinition?.containerDefinitions || [];
+    const logConfig = containers[0]?.logConfiguration;
+    expect(logConfig?.logDriver).toBe("awsfirelens");
+    expect(logConfig?.options?.Name).toBe("s3");
+  });
+
+  itWhenAvailable("creates a service with enableExecuteCommand", async () => {
+    const td = await api("POST", "/api/aws/ecs/task-definitions", {
+      family: `it-e2-svc-family-${Date.now()}`,
+      containerDefinitions: [
+        { name: "web", image: "nginx:latest", memory: 256, essential: true },
+      ],
+    });
+    const created = await api("POST", "/api/aws/ecs/services", {
+      cluster: clusterName,
+      serviceName: "it-e2-svc",
+      taskDefinition: td.data.taskDefinition?.taskDefinitionArn,
+      desiredCount: 0,
+      launchType: "FARGATE",
+      enableExecuteCommand: true,
+    });
+    expect(created.status).toBe(201);
+  });
+
+  afterAll(async () => {
+    await api("DELETE", `/api/aws/ecs/clusters/${encodeURIComponent(clusterName)}`).catch(
+      () => {}
+    );
+  });
+});

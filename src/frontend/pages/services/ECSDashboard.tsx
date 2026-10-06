@@ -109,6 +109,8 @@ import {
   useECSTaskProtection,
   useUpdateECSTaskProtection,
   useDiscoverECSPollEndpoint,
+  useEcsExecuteCommand,
+  useUpdateECSService,
 } from "../../hooks/useECS";
 import {
   useSSMParameters,
@@ -868,7 +870,14 @@ function ECSClusterDetail({ clusterName, onBack }: { clusterName: string; onBack
   const taskDefFamilies = useECSTaskDefinitionFamilies();
   const createService = useCreateECSService();
   const deleteService = useDeleteECSService();
+  const updateService = useUpdateECSService();
   const stopTask = useStopECSTask();
+  const executeCommand = useEcsExecuteCommand();
+  const [execTask, setExecTask] = useState<any>(null);
+  const [execContainer, setExecContainer] = useState("");
+  const [execCommand, setExecCommand] = useState("sh");
+  const [execResult, setExecResult] = useState<string | null>(null);
+  const [execError, setExecError] = useState<string | null>(null);
   const runTask = useRunECSTask();
   const containerInstancesQuery = useECSContainerInstances(clusterName);
   const deregisterInstance = useDeregisterECSContainerInstance();
@@ -916,21 +925,41 @@ function ECSClusterDetail({ clusterName, onBack }: { clusterName: string; onBack
               { id: "running", header: "Running", cell: (item: any) => item.runningCount ?? 0 },
               { id: "taskDef", header: "Task Definition", cell: (item: any) => item.taskDefinition?.split("/").pop() || "—" },
               {
+                id: "exec",
+                header: "Exec",
+                cell: (item: any) => (item.enableExecuteCommand ? "Enabled" : "Disabled"),
+              },
+              {
                 id: "actions",
                 header: "",
                 cell: (item: any) => (
-                  <DeleteButton
-                    itemName={item.serviceName}
-                    resourceType="service"
-                    loading={deleteService.isPending}
-                    onDelete={() =>
-                      deleteService.mutateAsync({
-                        cluster: clusterName,
-                        service: item.serviceName,
-                        force: true,
-                      })
-                    }
-                  />
+                  <SpaceBetween direction="horizontal" size="xs">
+                    <Button
+                      variant="link"
+                      loading={updateService.isPending}
+                      onClick={() =>
+                        updateService.mutateAsync({
+                          cluster: clusterName,
+                          service: item.serviceName,
+                          enableExecuteCommand: !item.enableExecuteCommand,
+                        })
+                      }
+                    >
+                      {item.enableExecuteCommand ? "Disable exec" : "Enable exec"}
+                    </Button>
+                    <DeleteButton
+                      itemName={item.serviceName}
+                      resourceType="service"
+                      loading={deleteService.isPending}
+                      onDelete={() =>
+                        deleteService.mutateAsync({
+                          cluster: clusterName,
+                          service: item.serviceName,
+                          force: true,
+                        })
+                      }
+                    />
+                  </SpaceBetween>
                 ),
               },
             ]}
@@ -1056,6 +1085,7 @@ function ECSClusterDetail({ clusterName, onBack }: { clusterName: string; onBack
               { id: "status", header: "Last Status", cell: (item: any) => <StatusBadge status={item.lastStatus || "UNKNOWN"} /> },
               { id: "desired", header: "Desired", cell: (item: any) => item.desiredStatus || "—" },
               { id: "taskDef", header: "Task Definition", cell: (item: any) => item.taskDefinitionArn?.split("/").pop() || "—" },
+              { id: "exec", header: "Exec", cell: (item: any) => (item.enableExecuteCommand ? "Enabled" : "Disabled") },
               { id: "group", header: "Group", cell: (item: any) => item.group || "—" },
               {
                 id: "actions",
@@ -1065,6 +1095,19 @@ function ECSClusterDetail({ clusterName, onBack }: { clusterName: string; onBack
                     <Button variant="link" onClick={() => { setProtectionTaskId(item.taskArn); setProtectEnabled(true); setProtectExpires(""); }}>
                       Protection
                     </Button>
+                    {item.lastStatus === "RUNNING" && (
+                      <Button
+                        variant="link"
+                        onClick={() => {
+                          setExecTask(item);
+                          setExecContainer(item.containers?.[0]?.name || "");
+                          setExecCommand("sh");
+                          setExecResult(null);
+                        }}
+                      >
+                        Run command
+                      </Button>
+                    )}
                     {item.lastStatus !== "STOPPED" && (
                       <Button
                         variant="link"
@@ -1127,6 +1170,55 @@ function ECSClusterDetail({ clusterName, onBack }: { clusterName: string; onBack
                   placeholder="my-task:1"
                 />
               </FormField>
+            </Form>
+          </Modal>
+          <Modal
+            visible={execTask !== null}
+            onDismiss={() => setExecTask(null)}
+            header={`Run command — ${execTask?.taskArn?.split("/").pop() ?? ""}`}
+          >
+            <Form>
+              <SpaceBetween size="m">
+                <FormField label="Container (optional)">
+                  <Input
+                    value={execContainer}
+                    onChange={({ detail }) => setExecContainer(detail.value)}
+                    placeholder="web"
+                  />
+                </FormField>
+                <FormField label="Command">
+                  <Input value={execCommand} onChange={({ detail }) => setExecCommand(detail.value)} />
+                </FormField>
+                <Button
+                  variant="primary"
+                  loading={executeCommand.isPending}
+                  disabled={!execCommand}
+                  onClick={async () => {
+                    setExecError(null);
+                    try {
+                      const result = await executeCommand.mutateAsync({
+                        cluster: clusterName,
+                        task: execTask!.taskArn,
+                        container: execContainer || undefined,
+                        command: execCommand,
+                      });
+                      setExecResult(JSON.stringify(result, null, 2));
+                    } catch (err) {
+                      setExecError(
+                        (err as Error)?.message || "Execute command failed"
+                      );
+                    }
+                  }}
+                >
+                  Execute
+                </Button>
+                {execResult && (
+                  <Box>
+                    <pre style={{ whiteSpace: "pre-wrap", fontSize: 12 }}>{execResult}</pre>
+                  </Box>
+                )}
+                {execError && <Alert type="error">{execError}</Alert>}
+              </SpaceBetween>
             </Form>
           </Modal>
         </>

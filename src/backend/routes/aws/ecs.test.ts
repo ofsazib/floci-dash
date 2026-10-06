@@ -18,6 +18,7 @@ const createCmd = vi.hoisted(() => {
 
 vi.mock("@aws-sdk/client-ecs", () => ({
   ECSClient: mockECS,
+  ExecuteCommandCommand: createCmd("ExecuteCommandCommand"),
   ListClustersCommand: createCmd("ListClustersCommand"),
   DescribeClustersCommand: createCmd("DescribeClustersCommand"),
   CreateClusterCommand: createCmd("CreateClusterCommand"),
@@ -1202,5 +1203,120 @@ describe("G.89 — container instances, task protection, poll endpoint", () => {
       const res = await put("/clusters/c1/capacity-providers", {});
       expect(res.status).toBe(400);
     });
+  });
+});
+
+// ─── E.2: execute command ────────────────────────────────
+
+describe("execute command", () => {
+  it("400 without cluster", async () => {
+    expect(
+      (
+        await router.request("/execute-command", {
+          method: "POST",
+          body: JSON.stringify({ task: "t1", command: "ls" }),
+          headers: { "content-type": "application/json" },
+        })
+      ).status
+    ).toBe(400);
+  });
+
+  it("400 without task", async () => {
+    expect(
+      (
+        await router.request("/execute-command", {
+          method: "POST",
+          body: JSON.stringify({ cluster: "c1", command: "ls" }),
+          headers: { "content-type": "application/json" },
+        })
+      ).status
+    ).toBe(400);
+  });
+
+  it("400 without command", async () => {
+    expect(
+      (
+        await router.request("/execute-command", {
+          method: "POST",
+          body: JSON.stringify({ cluster: "c1", task: "t1" }),
+          headers: { "content-type": "application/json" },
+        })
+      ).status
+    ).toBe(400);
+  });
+
+  it("executes a command and returns the session", async () => {
+    mockSend.mockResolvedValueOnce({
+      clusterArn: "arn:cluster",
+      taskArn: "arn:task",
+      containerName: "web",
+      containerArn: "arn:container",
+      interactive: true,
+      session: { sessionId: "s-1", streamUrl: "ws://stream", tokenValue: "tok" },
+    });
+    const res = await router.request("/execute-command", {
+      method: "POST",
+      body: JSON.stringify({ cluster: "c1", task: "t1", command: "ls -la" }),
+      headers: { "content-type": "application/json" },
+    });
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.containerName).toBe("web");
+    expect(json.session.sessionId).toBe("s-1");
+    expect(json.session.tokenValue).toBe("tok");
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cluster: "c1",
+        task: "t1",
+        command: "ls -la",
+        interactive: true,
+      })
+    );
+  });
+
+  it("returns a null session when absent", async () => {
+    mockSend.mockResolvedValueOnce({ clusterArn: "arn:cluster" });
+    const res = await router.request("/execute-command", {
+      method: "POST",
+      body: JSON.stringify({ cluster: "c1", task: "t1", command: "ls" }),
+      headers: { "content-type": "application/json" },
+    });
+    const json = await res.json();
+    expect(json.session).toBeNull();
+  });
+});
+
+describe("update service E.2 arms", () => {
+  it("passes enableExecuteCommand and forceNewDeployment", async () => {
+    mockSend.mockResolvedValueOnce({ service: { serviceName: "svc" } });
+    const res = await router.request("/services?cluster=c1&service=svc", {
+      method: "PUT",
+      body: JSON.stringify({ enableExecuteCommand: true, forceNewDeployment: true }),
+      headers: { "content-type": "application/json" },
+    });
+    expect(res.status).toBe(200);
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        enableExecuteCommand: true,
+        forceNewDeployment: true,
+      })
+    );
+  });
+
+  it("create service passes enableExecuteCommand", async () => {
+    mockSend.mockResolvedValueOnce({ service: { serviceName: "svc2" } });
+    const res = await router.request("/services", {
+      method: "POST",
+      body: JSON.stringify({
+        cluster: "c1",
+        serviceName: "svc2",
+        enableExecuteCommand: true,
+      }),
+      headers: { "content-type": "application/json" },
+    });
+    expect(res.status).toBe(201);
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({ enableExecuteCommand: true })
+    );
   });
 });

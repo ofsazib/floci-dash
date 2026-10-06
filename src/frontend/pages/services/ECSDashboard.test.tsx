@@ -17,6 +17,9 @@ const mockTaskDefFamilies = vi.fn();
 const mockCreateService = vi.fn();
 const mockDeleteService = vi.fn();
 const mockStopTask = vi.fn();
+const mockUpdateService = vi.fn();
+const mockExecuteCommand = vi.fn();
+const execCommandState = { isError: false, error: null as Error | null };
 const mockRunTask = vi.fn();
 const mockAccountSettings = vi.fn();
 const mockPutAccountSetting = vi.fn();
@@ -114,6 +117,16 @@ vi.mock("../../hooks/useECS", () => ({
   useStopECSTask: () => ({
     mutateAsync: mockStopTask,
     isPending: false,
+  }),
+  useUpdateECSService: () => ({
+    mutateAsync: mockUpdateService,
+    isPending: false,
+  }),
+  useEcsExecuteCommand: () => ({
+    mutateAsync: mockExecuteCommand,
+    isPending: false,
+    isError: execCommandState.isError,
+    error: execCommandState.error,
   }),
   useRunECSTask: () => ({
     mutate: mockRunTask,
@@ -425,7 +438,12 @@ describe("ECSDashboard — cluster detail", () => {
   createCpState.error = null;
   deleteCpState.isPending = false;
   deleteCpState.variables = null;
-  mockCapacityProviders.mockReturnValue({ data: { capacityProviders: [], total: 0 }, isLoading: false });
+  mockCapacityProviders.mockReturnValue({
+    data: { capacityProviders: [], total: 0 },
+    isLoading: false,
+  });
+  execCommandState.isError = false;
+  execCommandState.error = null;
     mockClusters.mockReturnValue({
       data: {
         clusters: [{ clusterName: "my-cluster", status: "ACTIVE", clusterArn: "arn:aws:ecs:::cluster/my-cluster" }],
@@ -451,6 +469,203 @@ describe("ECSDashboard — cluster detail", () => {
       expect(screen.getByRole("tab", { name: /tasks/i })).toBeTruthy();
       expect(screen.getByRole("tab", { name: /task definitions/i })).toBeTruthy();
     });
+  });
+
+  it("toggles enableExecuteCommand on a service", async () => {
+    const user = userEvent.setup();
+    mockServices.mockReturnValue({
+      data: {
+        services: [
+          { serviceName: "web", status: "ACTIVE", enableExecuteCommand: false },
+          { serviceName: "api", status: "ACTIVE", enableExecuteCommand: true },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    mockUpdateService.mockResolvedValueOnce({ service: { serviceName: "web" } });
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText("Disabled")).toBeTruthy());
+    expect(screen.getByText("Enabled")).toBeTruthy();
+    expect(screen.getByText("Disable exec")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: /Enable exec/i }));
+    await waitFor(() =>
+      expect(mockUpdateService).toHaveBeenCalledWith({
+        cluster: "my-cluster",
+        service: "web",
+        enableExecuteCommand: true,
+      })
+    );
+  });
+
+  it("opens the run-command modal and executes", async () => {
+    const user = userEvent.setup();
+    mockTasks.mockReturnValue({
+      data: {
+        tasks: [
+          {
+            taskArn: "arn:aws:ecs:us-east-1:0:task/c1/t1",
+            lastStatus: "RUNNING",
+            enableExecuteCommand: true,
+            containers: [{ name: "web" }],
+          },
+          {
+            taskArn: "arn:aws:ecs:us-east-1:0:task/c1/t2",
+            lastStatus: "RUNNING",
+            enableExecuteCommand: false,
+          },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    mockExecuteCommand.mockResolvedValueOnce({
+      containerName: "web",
+      session: { sessionId: "s-1", streamUrl: "ws://s", tokenValue: "tok" },
+    });
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("tab", { name: /tasks/i })).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /tasks/i }));
+    await waitFor(() =>
+      expect(screen.getAllByRole("button", { name: /Run command/i }).length).toBe(2)
+    );
+    const runButtons = screen.getAllByRole("button", { name: /Run command/i });
+    await user.click(runButtons[0]);
+    let dlg = screen
+      .getAllByText(/Run command —/)
+      .map((t) => t.closest('[role="dialog"]'))
+      .find((d) => d) as HTMLElement;
+    // The container input is pre-filled from the task's first container.
+    const containerInput = Array.from(dlg.querySelectorAll("input")).find(
+      (el) => (el as HTMLInputElement).value === "web"
+    ) as HTMLElement;
+    await user.clear(containerInput);
+    const commandInput = Array.from(dlg.querySelectorAll("input")).find(
+      (el) => (el as HTMLInputElement).value === "sh"
+    ) as HTMLElement;
+    await user.clear(commandInput);
+    await user.type(commandInput, "echo hi");
+    await user.click(
+      Array.from(dlg.querySelectorAll("button")).find((b) => b.textContent === "Execute")!
+    );
+    await waitFor(() =>
+      expect(mockExecuteCommand).toHaveBeenCalledWith({
+        cluster: "my-cluster",
+        task: "arn:aws:ecs:us-east-1:0:task/c1/t1",
+        container: undefined,
+        command: "echo hi",
+      })
+    );
+    await waitFor(() =>
+      expect(dlg.textContent).toContain('"sessionId": "s-1"')
+    );
+    document.querySelectorAll('[class*="awsui_dialog"]').forEach((d) => {
+      fireEvent.keyDown(d as HTMLElement, { keyCode: 27, key: "Escape" });
+    });
+    await waitFor(() => expect(runButtons.length).toBe(2));
+    // Second task has no containers — the empty-name fallback arm runs.
+    await user.click(runButtons[1]);
+    dlg = screen
+      .getAllByText(/Run command — t2/)
+      .map((t) => t.closest('[role="dialog"]'))
+      .find((d) => d) as HTMLElement;
+    expect(dlg).toBeTruthy();
+    mockExecuteCommand.mockResolvedValueOnce({
+      containerName: "web",
+      session: { sessionId: "s-2", streamUrl: "ws://s2", tokenValue: "tok2" },
+    });
+    await user.click(
+      Array.from(dlg.querySelectorAll("button")).find((b) => b.textContent === "Execute")!
+    );
+    await waitFor(() =>
+      expect(mockExecuteCommand).toHaveBeenCalledWith({
+        cluster: "my-cluster",
+        task: "arn:aws:ecs:us-east-1:0:task/c1/t1",
+        container: undefined,
+        command: "echo hi",
+      })
+    );
+    await waitFor(() =>
+      expect(dlg.textContent).toContain('"sessionId": "s-2"')
+    );
+  });
+
+  it("falls back to a default message when the rejection has none", async () => {
+    const user = userEvent.setup();
+    mockTasks.mockReturnValue({
+      data: {
+        tasks: [
+          {
+            taskArn: "arn:aws:ecs:us-east-1:0:task/c1/t4",
+            lastStatus: "RUNNING",
+            enableExecuteCommand: true,
+            containers: [{ name: "web" }],
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    mockExecuteCommand.mockRejectedValueOnce({});
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("tab", { name: /tasks/i })).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /tasks/i }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /Run command/i })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Run command/i }));
+    const dlg = screen
+      .getAllByText(/Run command —/)
+      .map((t) => t.closest('[role="dialog"]'))
+      .find((d) => d) as HTMLElement;
+    await user.click(
+      Array.from(dlg.querySelectorAll("button")).find((b) => b.textContent === "Execute")!
+    );
+    await waitFor(() =>
+      expect(screen.getByText("Execute command failed")).toBeTruthy()
+    );
+  });
+
+  it("shows the exec error alert when execution fails", async () => {
+    const user = userEvent.setup();
+    mockTasks.mockReturnValue({
+      data: {
+        tasks: [
+          {
+            taskArn: "arn:aws:ecs:us-east-1:0:task/c1/t3",
+            lastStatus: "RUNNING",
+            enableExecuteCommand: true,
+            containers: [{ name: "web" }],
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const failError = new Error("The execute command failed");
+    failError.name = "InvalidParameterException";
+    mockExecuteCommand.mockImplementationOnce(async () => {
+      execCommandState.isError = true;
+      execCommandState.error = failError;
+      throw failError;
+    });
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByRole("tab", { name: /tasks/i })).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /tasks/i }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /Run command/i })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Run command/i }));
+    const dlg = screen
+      .getAllByText(/Run command —/)
+      .map((t) => t.closest('[role="dialog"]'))
+      .find((d) => d) as HTMLElement;
+    await user.click(
+      Array.from(dlg.querySelectorAll("button")).find((b) => b.textContent === "Execute")!
+    );
+    await waitFor(() =>
+      expect(screen.getByText("The execute command failed")).toBeTruthy()
+    );
   });
 
   it("shows services with data", async () => {

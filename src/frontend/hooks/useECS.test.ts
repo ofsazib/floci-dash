@@ -53,6 +53,7 @@ import {
   useECSCapacityProviders,
   useCreateECSCapacityProvider,
   useDeleteECSCapacityProvider,
+  useEcsExecuteCommand,
 } from "./useECS";
 
 function createWrapper() {
@@ -658,5 +659,18 @@ describe("ECS capacity provider hooks", () => {
     result.current.mutate("cp 1");
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith("/aws/ecs/capacity-providers/cp%201", { method: "DELETE" });
+  });
+});
+
+describe("useEcsExecuteCommand", () => {
+  it("POSTs the command payload", async () => {
+    mockApi.mockResolvedValueOnce({ session: { sessionId: "s-1" } });
+    const { result } = renderHook(() => useEcsExecuteCommand(), { wrapper: createWrapper() });
+    const input = { cluster: "c1", task: "t1", command: "ls" };
+    await result.current.mutateAsync(input);
+    expect(mockApi).toHaveBeenCalledWith("/aws/ecs/execute-command", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
   });
 });

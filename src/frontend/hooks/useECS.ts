@@ -479,3 +479,31 @@ export function useDeleteECSCapacityProvider() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ecs", "capacity-providers"] }),
   });
 }
+
+// ─── E.2: ExecuteCommand ─────────────────────────────────
+
+export function useEcsExecuteCommand() {
+  return useMutation({
+    mutationFn: (input: {
+      cluster: string;
+      task: string;
+      container?: string;
+      command: string;
+      interactive?: boolean;
+    }) =>
+      api<{
+        clusterArn?: string;
+        taskArn?: string;
+        containerName?: string;
+        interactive?: boolean;
+        session: {
+          sessionId?: string;
+          streamUrl?: string;
+          tokenValue?: string;
+        } | null;
+      }>("/aws/ecs/execute-command", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+  });
+}

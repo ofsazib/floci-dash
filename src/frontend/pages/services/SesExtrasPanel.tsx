@@ -404,8 +404,9 @@ export default function SesExtrasPanel() {
                     wrap(
                       async () => {
                         await deleteTenant.mutateAsync(t.tenantName!);
-                        setTenants((prev) =>
-                          prev.filter((x) => x.tenantName !== t.tenantName)
+                        setTenants(
+                          (prev) =>
+                            prev?.filter((x) => x.tenantName !== t.tenantName) ?? null
                         );
                       },
                       `Tenant ${t.tenantName} deleted.`

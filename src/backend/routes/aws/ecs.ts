@@ -8,6 +8,7 @@ import {
   UpdateCapacityProviderCommand,
   DeleteCapacityProviderCommand,
   PutClusterCapacityProvidersCommand,
+  ExecuteCommandCommand,
 } from "@aws-sdk/client-ecs";
 import {
   ListClustersCommand,
@@ -197,6 +198,7 @@ router.post("/services", async (c: Context) => {
       launchType: body.launchType,
       loadBalancers: body.loadBalancers,
       networkConfiguration: body.networkConfiguration,
+      enableExecuteCommand: body.enableExecuteCommand,
     })
   );
   return c.json({ service: result.service }, 201);
@@ -215,9 +217,49 @@ router.put("/services", async (c: Context) => {
       service,
       taskDefinition: body.taskDefinition,
       desiredCount: body.desiredCount,
+      enableExecuteCommand: body.enableExecuteCommand,
+      forceNewDeployment: body.forceNewDeployment || undefined,
     })
   );
   return c.json({ service: result.service });
+});
+
+// ─── E.2: ExecuteCommand console ─────────────────────────
+
+router.post("/execute-command", async (c: Context) => {
+  const body = await c.req.json<{
+    cluster: string;
+    task: string;
+    container?: string;
+    command: string;
+    interactive?: boolean;
+  }>();
+  if (!body?.cluster) return c.json({ error: "cluster is required" }, 400);
+  if (!body?.task) return c.json({ error: "task is required" }, 400);
+  if (!body?.command) return c.json({ error: "command is required" }, 400);
+  const result = await getClient().send(
+    new ExecuteCommandCommand({
+      cluster: body.cluster,
+      task: body.task,
+      container: body.container,
+      command: body.command,
+      interactive: body.interactive ?? true,
+    })
+  );
+  return c.json({
+    clusterArn: result.clusterArn,
+    taskArn: result.taskArn,
+    containerName: result.containerName,
+    containerArn: result.containerArn,
+    interactive: result.interactive,
+    session: result.session
+      ? {
+          sessionId: result.session.sessionId,
+          streamUrl: result.session.streamUrl,
+          tokenValue: result.session.tokenValue,
+        }
+      : null,
+  });
 });
 
 router.delete("/services", async (c: Context) => {
