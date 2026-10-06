@@ -59,6 +59,7 @@ export function useEKSCreateCluster() {
       version?: string;
       roleArn: string;
       resourcesVpcConfig?: { subnetIds?: string[]; securityGroupIds?: string[] };
+      logging?: { clusterLogging: { types: string[]; enabled: boolean }[] };
       tags?: Record<string, string>;
     }) =>
       api("/aws/eks/clusters", {
@@ -131,5 +132,89 @@ export function useEKSDeleteNodegroup(clusterName: string) {
       ),
     onSuccess: () =>
       qc.invalidateQueries({ queryKey: ["aws", "eks", "nodegroups", clusterName] }),
+  });
+}
+
+// ─── E.3: access entries / addons / pod identity / logging ──
+
+export function useEKSAccessEntries(clusterName: string | null) {
+  return useQuery({
+    queryKey: ["aws", "eks", "access-entries", clusterName],
+    queryFn: () =>
+      api<{ accessEntries: any[]; total: number }>(
+        `/aws/eks/clusters/${encodeURIComponent(clusterName!)}/access-entries`
+      ),
+    enabled: !!clusterName,
+  });
+}
+
+export function useEKSAddons(clusterName: string | null) {
+  return useQuery({
+    queryKey: ["aws", "eks", "addons", clusterName],
+    queryFn: () =>
+      api<{ addons: any[]; total: number }>(
+        `/aws/eks/clusters/${encodeURIComponent(clusterName!)}/addons`
+      ),
+    enabled: !!clusterName,
+  });
+}
+
+export function useEKSCreateAddon(clusterName: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { addonName: string; addonVersion?: string }) =>
+      api(`/aws/eks/clusters/${encodeURIComponent(clusterName)}/addons`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "eks", "addons", clusterName] }),
+  });
+}
+
+export function useEKSDeleteAddon(clusterName: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (addonName: string) =>
+      api(`/aws/eks/clusters/${encodeURIComponent(clusterName)}/addons/${encodeURIComponent(addonName)}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "eks", "addons", clusterName] }),
+  });
+}
+
+export function useEKSPodIdentityAssociations(clusterName: string | null) {
+  return useQuery({
+    queryKey: ["aws", "eks", "pod-identity", clusterName],
+    queryFn: () =>
+      api<{ associations: any[]; nextToken?: string }>(
+        `/aws/eks/clusters/${encodeURIComponent(clusterName!)}/pod-identity-associations`
+      ),
+    enabled: !!clusterName,
+  });
+}
+
+export function useEKSCreatePodIdentityAssociation(clusterName: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { namespace: string; serviceAccount: string; roleArn: string }) =>
+      api<{ association: any }>(
+        `/aws/eks/clusters/${encodeURIComponent(clusterName)}/pod-identity-associations`,
+        { method: "POST", body: JSON.stringify(input) }
+      ),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "eks", "pod-identity", clusterName] }),
+  });
+}
+
+export function useEKSDeletePodIdentityAssociation(clusterName: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (associationId: string) =>
+      api<{ association: any }>(
+        `/aws/eks/clusters/${encodeURIComponent(clusterName)}/pod-identity-associations/${encodeURIComponent(associationId)}`,
+        { method: "DELETE" }
+      ),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "eks", "pod-identity", clusterName] }),
   });
 }

@@ -14,6 +14,11 @@ vi.mock("@aws-sdk/client-eks", () => ({
   EKSClient: vi.fn(function () {
     return { send: mockSend };
   }),
+  CreatePodIdentityAssociationCommand: createCmd("CreatePodIdentityAssociationCommand"),
+  ListPodIdentityAssociationsCommand: createCmd("ListPodIdentityAssociationsCommand"),
+  DescribePodIdentityAssociationCommand: createCmd("DescribePodIdentityAssociationCommand"),
+  UpdatePodIdentityAssociationCommand: createCmd("UpdatePodIdentityAssociationCommand"),
+  DeletePodIdentityAssociationCommand: createCmd("DeletePodIdentityAssociationCommand"),
   ListClustersCommand: createCmd("ListClustersCommand"),
   CreateClusterCommand: createCmd("CreateClusterCommand"),
   DescribeClusterCommand: createCmd("DescribeClusterCommand"),
@@ -39,11 +44,6 @@ vi.mock("@aws-sdk/client-eks", () => ({
   DescribeIdentityProviderConfigCommand: createCmd("DescribeIdentityProviderConfigCommand"),
   AssociateIdentityProviderConfigCommand: createCmd("AssociateIdentityProviderConfigCommand"),
   DisassociateIdentityProviderConfigCommand: createCmd("DisassociateIdentityProviderConfigCommand"),
-  ListPodIdentityAssociationsCommand: createCmd("ListPodIdentityAssociationsCommand"),
-  DescribePodIdentityAssociationCommand: createCmd("DescribePodIdentityAssociationCommand"),
-  CreatePodIdentityAssociationCommand: createCmd("CreatePodIdentityAssociationCommand"),
-  UpdatePodIdentityAssociationCommand: createCmd("UpdatePodIdentityAssociationCommand"),
-  DeletePodIdentityAssociationCommand: createCmd("DeletePodIdentityAssociationCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -504,5 +504,146 @@ describe("EKS Routes", () => {
       const body = await res.json();
       expect(body.deleted).toBe(true);
     });
+  });
+});
+
+const AG = "";
+const j = async (r: Response) => await r.json();
+
+// ─── E.3: pod identity associations + logging ────────────
+
+describe("pod identity associations", () => {
+  it("400 create without namespace/serviceAccount/roleArn", async () => {
+    expect(
+      (
+        await router.request(`${AG}/clusters/c1/pod-identity-associations`, {
+          method: "POST",
+          body: "{}",
+          headers: { "content-type": "application/json" },
+        })
+      ).status
+    ).toBe(400);
+    expect(
+      (
+        await router.request(`${AG}/clusters/c1/pod-identity-associations`, {
+          method: "POST",
+          body: JSON.stringify({ namespace: "ns" }),
+          headers: { "content-type": "application/json" },
+        })
+      ).status
+    ).toBe(400);
+    expect(
+      (
+        await router.request(`${AG}/clusters/c1/pod-identity-associations`, {
+          method: "POST",
+          body: JSON.stringify({ namespace: "ns", serviceAccount: "sa" }),
+          headers: { "content-type": "application/json" },
+        })
+      ).status
+    ).toBe(400);
+  });
+
+  it("creates a pod identity association", async () => {
+    mockSend.mockResolvedValueOnce({ association: { associationId: "a-1", clusterName: "c1" } });
+    const res = await router.request(`${AG}/clusters/c1/pod-identity-associations`, {
+      method: "POST",
+      body: JSON.stringify({ namespace: "ns", serviceAccount: "sa", roleArn: "arn:role" }),
+      headers: { "content-type": "application/json" },
+    });
+    const json = await res.json();
+    expect(json.association.associationId).toBe("a-1");
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clusterName: "c1",
+        namespace: "ns",
+        serviceAccount: "sa",
+        roleArn: "arn:role",
+      })
+    );
+  });
+
+  it("returns 201 even when the SDK omits the association", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await router.request(`${AG}/clusters/c1/pod-identity-associations`, {
+      method: "POST",
+      body: JSON.stringify({ namespace: "ns", serviceAccount: "sa", roleArn: "arn:role" }),
+      headers: { "content-type": "application/json" },
+    });
+    expect(res.status).toBe(201);
+  });
+
+  it("lists associations with a namespace filter", async () => {
+    mockSend.mockResolvedValueOnce({ associations: [{ associationId: "a-1" }] });
+    const res = await router.request(`${AG}/clusters/c1/pod-identity-associations?namespace=ns`);
+    const json = await res.json();
+    expect(json.associations).toHaveLength(1);
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({ clusterName: "c1", namespace: "ns" })
+    );
+  });
+
+  it("returns an empty association list when absent", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await router.request(`${AG}/clusters/c1/pod-identity-associations`);
+    const json = await res.json();
+    expect(json.associations).toEqual([]);
+  });
+
+  it("describes an association", async () => {
+    mockSend.mockResolvedValueOnce({ association: { associationId: "a-1" } });
+    const res = await router.request(`${AG}/clusters/c1/pod-identity-associations/a-1`);
+    const json = await res.json();
+    expect(json.association.associationId).toBe("a-1");
+  });
+
+  it("updates an association role", async () => {
+    mockSend.mockResolvedValueOnce({ association: { associationId: "a-1", roleArn: "arn:new" } });
+    const res = await router.request(`${AG}/clusters/c1/pod-identity-associations/a-1`, {
+      method: "PUT",
+      body: JSON.stringify({ roleArn: "arn:new" }),
+      headers: { "content-type": "application/json" },
+    });
+    const json = await res.json();
+    expect(json.association.roleArn).toBe("arn:new");
+  });
+
+  it("deletes an association", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await router.request(`${AG}/clusters/c1/pod-identity-associations/a-1`, {
+      method: "DELETE",
+    });
+    const json = await res.json();
+    expect(json.deleted).toBe(true);
+  });
+
+  it("covers empty arms of access/addons/idp lists", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const ae = await router.request(`${AG}/clusters/c1/access-entries`);
+    expect((await ae.json()).accessEntries).toEqual([]);
+    mockSend.mockResolvedValueOnce({});
+    const addons = await router.request(`${AG}/clusters/c1/addons`);
+    expect((await addons.json()).addons).toEqual([]);
+    mockSend.mockResolvedValueOnce({});
+    const idp = await router.request(`${AG}/clusters/c1/identity-providers`);
+    expect((await idp.json()).identityProviderConfigs).toEqual([]);
+  });
+
+  it("passes logging on cluster create", async () => {
+    mockSend.mockResolvedValueOnce({ cluster: { name: "logged" } });
+    const res = await router.request(`${AG}/clusters`, {
+      method: "POST",
+      body: JSON.stringify({
+        name: "logged",
+        roleArn: "arn:role",
+        logging: { clusterLogging: [{ types: ["api", "audit"], enabled: true }] },
+      }),
+      headers: { "content-type": "application/json" },
+    });
+    expect(res.status).toBe(201);
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        logging: { clusterLogging: [{ types: ["api", "audit"], enabled: true }] },
+      })
+    );
   });
 });

@@ -18,6 +18,13 @@ import {
   useEKSNodegroup,
   useEKSCreateNodegroup,
   useEKSDeleteNodegroup,
+  useEKSAccessEntries,
+  useEKSAddons,
+  useEKSCreateAddon,
+  useEKSDeleteAddon,
+  useEKSPodIdentityAssociations,
+  useEKSCreatePodIdentityAssociation,
+  useEKSDeletePodIdentityAssociation,
 } from "./useEKS";
 
 function createWrapper() {
@@ -239,6 +246,78 @@ describe("useEKSDeleteNodegroup", () => {
     await result.current.mutateAsync("my-ng");
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: ["aws", "eks", "nodegroups", "my-cluster"],
+    });
+  });
+});
+
+describe("E.3 hooks", () => {
+  function createWrapper() {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return ({ children }: { children: React.ReactNode }) =>
+      React.createElement(QueryClientProvider, { client: qc }, children);
+  }
+
+  it("useEKSAccessEntries fetches when cluster set", async () => {
+    mockApi.mockResolvedValueOnce({ accessEntries: [], total: 0 });
+    const { result } = renderHook(() => useEKSAccessEntries("c1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/eks/clusters/c1/access-entries");
+  });
+
+  it("useEKSAccessEntries disabled without cluster", () => {
+    renderHook(() => useEKSAccessEntries(null), { wrapper: createWrapper() });
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("useEKSAddons fetches when cluster set", async () => {
+    mockApi.mockResolvedValueOnce({ addons: [] });
+    const { result } = renderHook(() => useEKSAddons("c1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/eks/clusters/c1/addons");
+  });
+
+  it("useEKSCreateAddon POSTs addon", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useEKSCreateAddon("c1"), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ addonName: "vpc-cni" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/eks/clusters/c1/addons", {
+      method: "POST",
+      body: JSON.stringify({ addonName: "vpc-cni" }),
+    });
+  });
+
+  it("useEKSDeleteAddon DELETEs addon", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useEKSDeleteAddon("c1"), { wrapper: createWrapper() });
+    await result.current.mutateAsync("vpc-cni");
+    expect(mockApi).toHaveBeenCalledWith("/aws/eks/clusters/c1/addons/vpc-cni", {
+      method: "DELETE",
+    });
+  });
+
+  it("useEKSPodIdentityAssociations fetches when cluster set", async () => {
+    mockApi.mockResolvedValueOnce({ associations: [] });
+    const { result } = renderHook(() => useEKSPodIdentityAssociations("c1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/eks/clusters/c1/pod-identity-associations");
+  });
+
+  it("useEKSCreatePodIdentityAssociation POSTs association", async () => {
+    mockApi.mockResolvedValueOnce({ association: {} });
+    const { result } = renderHook(() => useEKSCreatePodIdentityAssociation("c1"), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ namespace: "ns", serviceAccount: "sa", roleArn: "arn:r" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/eks/clusters/c1/pod-identity-associations", {
+      method: "POST",
+      body: JSON.stringify({ namespace: "ns", serviceAccount: "sa", roleArn: "arn:r" }),
+    });
+  });
+
+  it("useEKSDeletePodIdentityAssociation DELETEs association", async () => {
+    mockApi.mockResolvedValueOnce({ association: {} });
+    const { result } = renderHook(() => useEKSDeletePodIdentityAssociation("c1"), { wrapper: createWrapper() });
+    await result.current.mutateAsync("a-1");
+    expect(mockApi).toHaveBeenCalledWith("/aws/eks/clusters/c1/pod-identity-associations/a-1", {
+      method: "DELETE",
     });
   });
 });

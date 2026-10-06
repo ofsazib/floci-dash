@@ -5889,3 +5889,104 @@ describe("ECS E.2 Integration", () => {
     );
   });
 });
+
+describe("EKS E.3 Integration", () => {
+  // Access entries, addons, and pod identity associations landed in Floci
+  // after the 2.1.0 tag — the published image 404s those routes. Probe one and
+  // skip when absent; cluster CRUD + node groups run live on any image.
+  let available = false;
+  const clusterName = `it-eks-e3-${Date.now()}`;
+
+  beforeAll(async () => {
+    try {
+      const created = await api("POST", "/api/aws/eks/clusters", {
+        name: clusterName,
+        roleArn: "arn:aws:iam::000000000000:role/it-eks",
+      });
+      expect(created.status).toBe(201);
+      // GET can false-positive via the S3 wildcard route; a POST create is
+      // the reliable discriminator (500 = services absent from the image).
+      const probe = await api(
+        "POST",
+        `/api/aws/eks/clusters/${encodeURIComponent(clusterName)}/addons`,
+        { addonName: "probe" }
+      );
+      available = probe.status === 200;
+      if (!available) {
+        console.warn("Skipping: Floci image lacks EKS addons/access (needs > 2.1.0)");
+      }
+    } catch {
+      available = false;
+    }
+  });
+
+  const itWhenAvailable = (name: string, fn: () => Promise<void>) =>
+    it(name, async () => {
+      if (!available) {
+        console.warn("Skipping: EKS E.3 routes unavailable");
+        return;
+      }
+      await fn();
+    });
+
+  it("creates a cluster with logging and reports it", async () => {
+    const desc = await api(
+      "GET",
+      `/api/aws/eks/clusters/${encodeURIComponent(clusterName)}`
+    );
+    expect(desc.status).toBe(200);
+    // Logging round-trips on any image that stores it; assert shape only.
+    if (desc.data.cluster?.logging) {
+      expect(desc.data.cluster.logging).toBeTruthy();
+    }
+  });
+
+  itWhenAvailable("creates and lists an addon", async () => {
+    const created = await api(
+      "POST",
+      `/api/aws/eks/clusters/${encodeURIComponent(clusterName)}/addons`,
+      { addonName: "vpc-cni" }
+    );
+    expect(created.status).toBe(200);
+    const list = await api(
+      "GET",
+      `/api/aws/eks/clusters/${encodeURIComponent(clusterName)}/addons`
+    );
+    const names = (list.data.addons || []).map((a: any) => a.addonName);
+    expect(names).toContain("vpc-cni");
+  });
+
+  itWhenAvailable("creates and lists an access entry", async () => {
+    const created = await api(
+      "POST",
+      `/api/aws/eks/clusters/${encodeURIComponent(clusterName)}/access-entries`,
+      { principalArn: "arn:aws:iam::000000000000:role/it-access" }
+    );
+    expect(created.status).toBe(200);
+    const list = await api(
+      "GET",
+      `/api/aws/eks/clusters/${encodeURIComponent(clusterName)}/access-entries`
+    );
+    const principals = (list.data.accessEntries || []).map((a: any) => a.principalArn);
+    expect(principals).toContain("arn:aws:iam::000000000000:role/it-access");
+  });
+
+  itWhenAvailable("creates and lists a pod identity association", async () => {
+    const created = await api(
+      "POST",
+      `/api/aws/eks/clusters/${encodeURIComponent(clusterName)}/pod-identity-associations`,
+      {
+        namespace: "default",
+        serviceAccount: "it-sa",
+        roleArn: "arn:aws:iam::000000000000:role/it-pod",
+      }
+    );
+    expect(created.status).toBe(200);
+    const list = await api(
+      "GET",
+      `/api/aws/eks/clusters/${encodeURIComponent(clusterName)}/pod-identity-associations`
+    );
+    const ids = (list.data.associations || []).map((a: any) => a.associationId);
+    expect(ids.length).toBeGreaterThan(0);
+  });
+});

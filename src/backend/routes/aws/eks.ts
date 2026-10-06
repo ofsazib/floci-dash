@@ -60,6 +60,7 @@ router.post("/clusters", async (c: Context) => {
     version?: string;
     roleArn: string;
     resourcesVpcConfig?: { subnetIds?: string[]; securityGroupIds?: string[] };
+    logging?: { clusterLogging: { types: string[]; enabled: boolean }[] };
     tags?: Record<string, string>;
   }>();
   if (!body.name) return c.json({ error: "name is required" }, 400);
@@ -72,6 +73,7 @@ router.post("/clusters", async (c: Context) => {
       version: body.version,
       roleArn: body.roleArn,
       resourcesVpcConfig: body.resourcesVpcConfig,
+      logging: body.logging as any,
       tags: body.tags,
     })
   );
@@ -325,8 +327,13 @@ router.delete("/clusters/:name/identity-providers/:idpName", async (c: Context) 
 
 router.get("/clusters/:name/pod-identity-associations", async (c: Context) => {
   const client = getClient();
-  const result = await client.send(new ListPodIdentityAssociationsCommand({ clusterName: c.req.param("name")! }));
-  return c.json({ associations: result.associations || [] });
+  const result = await client.send(
+    new ListPodIdentityAssociationsCommand({
+      clusterName: c.req.param("name")!,
+      namespace: c.req.query("namespace") || undefined,
+    })
+  );
+  return c.json({ associations: result.associations || [], nextToken: result.nextToken });
 });
 
 router.get("/clusters/:name/pod-identity-associations/:assocId", async (c: Context) => {

@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { fireEvent } from "@testing-library/react";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
 
@@ -41,10 +42,44 @@ const mockDeleteCluster = vi.fn();
 const mockCreateNodegroup = vi.fn();
 const mockDeleteNodegroup = vi.fn();
 
+
+const mockCreateAddon = vi.fn();
+const useEKSAccessEntriesMock = vi.fn();
+const useEKSAddonsMock = vi.fn();
+const useEKSPodIdentityMock = vi.fn();
+const useEKSCreateClusterMock = vi.fn();
+useEKSAccessEntriesMock.mockReturnValue({ data: { accessEntries: [] }, isLoading: false });
+useEKSAddonsMock.mockReturnValue({ data: { addons: [] }, isLoading: false });
+useEKSPodIdentityMock.mockReturnValue({ data: { associations: [] }, isLoading: false });
+const mockDeleteAddon = vi.fn();
+const mockCreateAssoc = vi.fn();
+const mockDeleteAssoc = vi.fn();
 vi.mock("../../hooks/useEKS", () => ({
+  useEKSAccessEntries: () => useEKSAccessEntriesMock(),
+  useEKSAddons: () => useEKSAddonsMock(),
+  useEKSPodIdentityAssociations: () => useEKSPodIdentityMock(),
+  useEKSCreatePodIdentityAssociation: () => ({
+    mutateAsync: mockCreateAssoc,
+    isPending: false,
+  }),
+  useEKSDeletePodIdentityAssociation: () => ({
+    mutateAsync: mockDeleteAssoc,
+    isPending: false,
+  }),
+  useEKSCreateAddon: () => ({
+    mutateAsync: mockCreateAddon,
+    isPending: false,
+  }),
+  useEKSDeleteAddon: () => ({
+    mutateAsync: mockDeleteAddon,
+    isPending: false,
+  }),
   useEKSClusters: (...args: any[]) => mockClusters(...args),
   useEKSCreateCluster: () => ({
-    mutate: mockCreateCluster,
+    mutate: (params: any, opts?: any) => {
+      useEKSCreateClusterMock(params);
+      mockCreateCluster(params, opts);
+    },
     get isPending() { return createClusterState.isPending; },
   }),
   useEKSDeleteCluster: () => ({
@@ -912,5 +947,237 @@ describe("EKSDashboard — cluster list", () => {
 
     await waitFor(() => expect(screen.queryByText("db-ng")).toBeNull());
     expect(screen.getByText("web-ng")).toBeTruthy();
+  });
+});
+
+describe("EKS E.3 — access / addons / pod identity", () => {
+  function drillIn() {
+    // clickButton available from helpers in scope of other describes; use user here
+  }
+
+  it("renders access entries, addons, and pod identity panels in cluster detail", async () => {
+    const user = userEvent.setup();
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [
+          { name: "e3-cluster", status: "ACTIVE", version: "1.30", createdAt: "2026" },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    useEKSAccessEntriesMock.mockReturnValue({
+      data: { accessEntries: [{ principalArn: "arn:principal", type: "STANDARD" }], total: 1 },
+      isLoading: false,
+    });
+    useEKSAddonsMock.mockReturnValue({
+      data: { addons: [{ addonName: "vpc-cni", addonStatus: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    useEKSPodIdentityMock.mockReturnValue({
+      data: {
+        associations: [
+          {
+            associationId: "a-1",
+            namespace: "default",
+            serviceAccount: "sa",
+            roleArn: "arn:role",
+          },
+        ],
+      },
+      isLoading: false,
+    });
+    render(<EKSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "e3-cluster" }));
+    await waitFor(() => expect(screen.getByText("arn:principal")).toBeTruthy());
+    expect(screen.getByText("arn:principal")).toBeTruthy();
+    expect(screen.getByText("vpc-cni")).toBeTruthy();
+    expect(screen.getByText("vpc-cni")).toBeTruthy();
+    expect(screen.getAllByText(/Pod identity associations/i).length).toBeGreaterThan(0);
+    expect(screen.getByText("a-1")).toBeTruthy();
+  });
+
+  it("creates and deletes an addon", async () => {
+    const user = userEvent.setup();
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [
+          { name: "e3-cluster", status: "ACTIVE", version: "1.30", createdAt: "2026" },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    useEKSAddonsMock.mockReturnValue({
+      data: { addons: [{ addonName: "vpc-cni", addonStatus: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    mockCreateAddon.mockResolvedValueOnce({ addon: { addonName: "coredns" } });
+    mockDeleteAddon.mockResolvedValueOnce({});
+    render(<EKSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "e3-cluster" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Create addon/i })).toBeTruthy()
+    );
+    await user.type(screen.getByPlaceholderText("vpc-cni"), "coredns");
+    await user.type(
+      screen.getAllByRole("textbox").find(
+        (el) => (el as HTMLInputElement).value === ""
+      ) as HTMLElement,
+      "1.15"
+    );
+    await user.click(screen.getByRole("button", { name: /Create addon/i }));
+    await waitFor(() => expect(mockCreateAddon).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(screen.getByText("Addon coredns created.")).toBeTruthy()
+    );
+    await user.click(screen.getByRole("button", { name: /Delete vpc-cni/i }));
+    await waitFor(() => expect(mockDeleteAddon).toHaveBeenCalledWith("vpc-cni"));
+  });
+
+  it("creates a pod identity association", async () => {
+    const user = userEvent.setup();
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [
+          { name: "e3-cluster", status: "ACTIVE", version: "1.30", createdAt: "2026" },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    mockCreateAssoc.mockResolvedValueOnce({ association: { associationId: "a-9" } });
+    render(<EKSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "e3-cluster" }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /Create association/i })
+      ).toBeTruthy()
+    );
+    await user.type(screen.getByPlaceholderText("default"), "sa");
+    await user.type(
+      screen.getByPlaceholderText("arn:aws:iam::123456789012:role/pod-role"),
+      "arn:pod-role"
+    );
+    await user.click(screen.getByRole("button", { name: /Create association/i }));
+    await waitFor(() =>
+      expect(mockCreateAssoc).toHaveBeenCalledWith({
+        namespace: "default",
+        serviceAccount: "sa",
+        roleArn: "arn:pod-role",
+      })
+    );
+  });
+
+  it("shows an error toast when addon creation fails and dismisses it", async () => {
+    const user = userEvent.setup();
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [
+          { name: "e3-cluster", status: "ACTIVE", version: "1.30", createdAt: "2026" },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    mockCreateAddon.mockRejectedValueOnce({});
+    render(<EKSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "e3-cluster" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Create addon/i })).toBeTruthy()
+    );
+    await user.type(screen.getByPlaceholderText("vpc-cni"), "bad-addon");
+    await user.click(screen.getByRole("button", { name: /Create addon/i }));
+    await waitFor(() => expect(screen.getByText("Request failed")).toBeTruthy());
+    fireEvent.click(document.querySelector('[class*="awsui_dismiss-button"]') as HTMLElement);
+    await waitFor(() => expect(screen.queryByText("Request failed")).toBeNull());
+  });
+
+  it("deletes a pod identity association from the table", async () => {
+    const user = userEvent.setup();
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [
+          { name: "e3-cluster", status: "ACTIVE", version: "1.30", createdAt: "2026" },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    useEKSPodIdentityMock.mockReturnValue({
+      data: {
+        associations: [
+          {
+            associationId: "a-del",
+            namespace: "default",
+            serviceAccount: "sa",
+            roleArn: "arn:role",
+          },
+        ],
+      },
+      isLoading: false,
+    });
+    mockDeleteAssoc.mockResolvedValueOnce({ association: { associationId: "a-del" } });
+    render(<EKSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "e3-cluster" }));
+    await waitFor(() => expect(screen.getByText("a-del")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Delete a-del/i }));
+    await waitFor(() => expect(mockDeleteAssoc).toHaveBeenCalledWith("a-del"));
+    await waitFor(() =>
+      expect(screen.getByText("Association a-del deleted.")).toBeTruthy()
+    );
+  });
+
+  it("edits the association namespace input", async () => {
+    const user = userEvent.setup();
+    useEKSAccessEntriesMock.mockReturnValue({ data: undefined, isLoading: false });
+    useEKSAddonsMock.mockReturnValue({ data: undefined, isLoading: false });
+    useEKSPodIdentityMock.mockReturnValue({ data: undefined, isLoading: false });
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [
+          { name: "e3-cluster", status: "ACTIVE", version: "1.30", createdAt: "2026" },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    render(<EKSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "e3-cluster" }));
+    const nsInput = screen
+      .getAllByRole("textbox")
+      .find((el) => (el as HTMLInputElement).value === "default") as HTMLElement;
+    await user.clear(nsInput);
+    await user.type(nsInput, "kube-system");
+    expect((nsInput as HTMLInputElement).value).toBe("kube-system");
+  });
+
+  it("includes logging when the checkboxes are ticked", async () => {
+    const user = userEvent.setup();
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [
+          { name: "e3-cluster", status: "ACTIVE", version: "1.30", createdAt: "2026" },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    useEKSCreateClusterMock.mockClear();
+    render(<EKSDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, /Create cluster/i);
+    await user.type(screen.getByPlaceholderText("my-cluster"), "logged-cluster");
+    await user.type(
+      screen.getByPlaceholderText("arn:aws:iam::123456789012:role/eks-role"),
+      "arn:role"
+    );
+    await user.click(screen.getByLabelText("API"));
+    await user.click(screen.getByLabelText("Audit"));
+    await user.click(screen.getByRole("button", { name: /^Create$/ }));
+    await waitFor(() => {
+      const call = useEKSCreateClusterMock.mock.calls[0][0];
+      expect(call.logging.clusterLogging[0].types).toEqual(["api", "audit"]);
+      expect(call.logging.clusterLogging[0].enabled).toBe(true);
+    });
   });
 });

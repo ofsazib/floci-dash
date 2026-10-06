@@ -185,6 +185,13 @@ import {
   useEKSNodegroups,
   useEKSCreateNodegroup,
   useEKSDeleteNodegroup,
+  useEKSAccessEntries,
+  useEKSAddons,
+  useEKSCreateAddon,
+  useEKSDeleteAddon,
+  useEKSPodIdentityAssociations,
+  useEKSCreatePodIdentityAssociation,
+  useEKSDeletePodIdentityAssociation,
 } from "../../hooks/useEKS";
 import {
   useAutoScalingGroups,
@@ -521,6 +528,32 @@ export function EKSDashboard() {
   const [ngName, setNgName] = useState("");
   const [ngNodeRole, setNgNodeRole] = useState("");
   const [ngSubnets, setNgSubnets] = useState("");
+  const [apiLogging, setApiLogging] = useState(false);
+  const [auditLogging, setAuditLogging] = useState(false);
+  const [showAddon, setShowAddon] = useState(false);
+  const [addonName, setAddonName] = useState("");
+  const [addonVersion, setAddonVersion] = useState("");
+  const [showAssoc, setShowAssoc] = useState(false);
+  const [assocNamespace, setAssocNamespace] = useState("default");
+  const [assocServiceAccount, setAssocServiceAccount] = useState("");
+  const [assocRoleArn, setAssocRoleArn] = useState("");
+  const accessEntriesQuery = useEKSAccessEntries(selectedCluster);
+  const addonsQuery = useEKSAddons(selectedCluster);
+  const createAddon = useEKSCreateAddon(selectedCluster || "");
+  const deleteAddon = useEKSDeleteAddon(selectedCluster || "");
+  const podIdentityQuery = useEKSPodIdentityAssociations(selectedCluster);
+  const createAssoc = useEKSCreatePodIdentityAssociation(selectedCluster || "");
+  const deleteAssoc = useEKSDeletePodIdentityAssociation(selectedCluster || "");
+  const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
+  async function runSafe(action: () => Promise<unknown>, success: string) {
+    try {
+      await action();
+      setToast({ type: "success", message: success });
+    } catch (err) {
+      setToast({ type: "error", message: (err as Error)?.message || "Request failed" });
+    }
+  }
 
   if (clustersLoading) return <TableSkeleton />;
 
@@ -547,6 +580,143 @@ export function EKSDashboard() {
           ngSubnets={ngSubnets}
           setNgSubnets={setNgSubnets}
         />
+        {toast && (
+          <Alert type={toast.type} dismissible onDismiss={() => setToast(null)}>
+            {toast.message}
+          </Alert>
+        )}
+        <Container header={<Header variant="h3">Access entries</Header>}>
+          <ResourceTable
+            resourceName="access entry"
+            headerTitle="Access entries"
+            items={accessEntriesQuery.data?.accessEntries || []}
+            loading={accessEntriesQuery.isLoading}
+            emptyMessage="No access entries"
+            columns={[
+              {
+                id: "principal",
+                header: "Principal ARN",
+                cell: (item: any) => item.principalArn,
+                isRowHeader: true,
+              },
+              { id: "type", header: "Type", cell: (item: any) => item.type },
+            ]}
+          />
+        </Container>
+        <Container header={<Header variant="h3">Addons</Header>}>
+          <SpaceBetween size="m">
+            <SpaceBetween direction="horizontal" size="s">
+              <FormField label="Addon name">
+                <Input value={addonName} onChange={({ detail }) => setAddonName(detail.value)} placeholder="vpc-cni" />
+              </FormField>
+              <FormField label="Version (optional)">
+                <Input value={addonVersion} onChange={({ detail }) => setAddonVersion(detail.value)} />
+              </FormField>
+              <Button
+                disabled={!addonName}
+                loading={createAddon.isPending}
+                onClick={() =>
+                  runSafe(
+                    () => createAddon.mutateAsync({ addonName, addonVersion: addonVersion || undefined }),
+                    `Addon ${addonName} created.`
+                  )
+                }
+              >
+                Create addon
+              </Button>
+            </SpaceBetween>
+            <ResourceTable
+              resourceName="addon"
+              headerTitle="Addons"
+              items={addonsQuery.data?.addons || []}
+              loading={addonsQuery.isLoading}
+              emptyMessage="No addons"
+              columns={[
+                { id: "name", header: "Addon", cell: (item: any) => item.addonName, isRowHeader: true },
+                { id: "status", header: "Status", cell: (item: any) => item.addonStatus },
+                {
+                  id: "actions",
+                  header: "",
+                  cell: (item: any) => (
+                    <DeleteButton
+                      itemName={item.addonName}
+                      resourceType="addon"
+                      loading={deleteAddon.isPending}
+                      onDelete={() =>
+                        runSafe(
+                          () => deleteAddon.mutateAsync(item.addonName),
+                          `Addon ${item.addonName} deleted.`
+                        )
+                      }
+                    />
+                  ),
+                },
+              ]}
+            />
+          </SpaceBetween>
+        </Container>
+        <Container header={<Header variant="h3">Pod identity associations</Header>}>
+          <SpaceBetween size="m">
+            <SpaceBetween direction="horizontal" size="s">
+              <FormField label="Namespace">
+                <Input value={assocNamespace} onChange={({ detail }) => setAssocNamespace(detail.value)} />
+              </FormField>
+              <FormField label="Service account">
+                <Input value={assocServiceAccount} onChange={({ detail }) => setAssocServiceAccount(detail.value)} placeholder="default" />
+              </FormField>
+              <FormField label="Role ARN">
+                <Input value={assocRoleArn} onChange={({ detail }) => setAssocRoleArn(detail.value)} placeholder="arn:aws:iam::123456789012:role/pod-role" />
+              </FormField>
+              <Button
+                disabled={!assocNamespace || !assocServiceAccount || !assocRoleArn}
+                loading={createAssoc.isPending}
+                onClick={() =>
+                  runSafe(
+                    () =>
+                      createAssoc.mutateAsync({
+                        namespace: assocNamespace,
+                        serviceAccount: assocServiceAccount,
+                        roleArn: assocRoleArn,
+                      }),
+                    "Pod identity association created."
+                  )
+                }
+              >
+                Create association
+              </Button>
+            </SpaceBetween>
+            <ResourceTable
+              resourceName="association"
+              headerTitle="Pod identity associations"
+              items={podIdentityQuery.data?.associations || []}
+              loading={podIdentityQuery.isLoading}
+              emptyMessage="No pod identity associations"
+              columns={[
+                { id: "id", header: "Association ID", cell: (item: any) => item.associationId, isRowHeader: true },
+                { id: "ns", header: "Namespace", cell: (item: any) => item.namespace },
+                { id: "sa", header: "Service account", cell: (item: any) => item.serviceAccount },
+                { id: "role", header: "Role ARN", cell: (item: any) => item.roleArn },
+                {
+                  id: "actions",
+                  header: "",
+                  cell: (item: any) => (
+                    <DeleteButton
+                      itemName={item.associationId}
+                      resourceType="association"
+                      loading={deleteAssoc.isPending}
+                      onDelete={() =>
+                        runSafe(
+                          () => deleteAssoc.mutateAsync(item.associationId),
+                          `Association ${item.associationId} deleted.`
+                        )
+                      }
+                    />
+                  ),
+                },
+              ]}
+            />
+          </SpaceBetween>
+        </Container>
       </SpaceBetween>
     );
   }
@@ -617,12 +787,22 @@ export function EKSDashboard() {
               <Button
                 variant="primary"
                 onClick={() => {
+                  const loggingTypes = [
+                    ...(apiLogging ? ["api"] : []),
+                    ...(auditLogging ? ["audit"] : []),
+                  ];
+                  const clusterPayload: Record<string, unknown> = {
+                    name: clusterName,
+                    roleArn: clusterRoleArn,
+                    version: clusterVersion || undefined,
+                  };
+                  if (loggingTypes.length > 0) {
+                    clusterPayload.logging = {
+                      clusterLogging: [{ types: loggingTypes, enabled: true }],
+                    };
+                  }
                   createCluster.mutate(
-                    {
-                      name: clusterName,
-                      roleArn: clusterRoleArn,
-                      version: clusterVersion || undefined,
-                    },
+                    clusterPayload as any,
                     {
                       onSuccess: () => {
                         setShowCreateCluster(false);
@@ -663,6 +843,16 @@ export function EKSDashboard() {
               onChange={({ detail }) => setClusterVersion(detail.value)}
               placeholder="1.27"
             />
+          </FormField>
+          <FormField label="Control plane logging (CloudWatch Logs)">
+            <SpaceBetween direction="horizontal" size="s">
+              <Checkbox checked={apiLogging} onChange={({ detail }) => setApiLogging(detail.checked)}>
+                API
+              </Checkbox>
+              <Checkbox checked={auditLogging} onChange={({ detail }) => setAuditLogging(detail.checked)}>
+                Audit
+              </Checkbox>
+            </SpaceBetween>
           </FormField>
         </Form>
       </Modal>
