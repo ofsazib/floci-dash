@@ -84,6 +84,9 @@ import {
   GetTenantCommand,
   ListTenantsCommand,
   DeleteTenantCommand,
+  CreateTenantResourceAssociationCommand,
+  DeleteTenantResourceAssociationCommand,
+  ListTenantResourcesCommand,
 } from "@aws-sdk/client-sesv2";
 
 const router = new Hono();
@@ -894,6 +897,57 @@ router.post("/tenants/delete", async (c: Context) => {
   if (!body?.tenantName) return c.json({ error: "tenantName is required" }, 400);
   await v2().send(new DeleteTenantCommand({ TenantName: body.tenantName }));
   return c.json({ deleted: true });
+});
+
+router.post("/tenants/resources", async (c: Context) => {
+  const body = await c.req.json<{ tenantName: string; resourceArn: string }>();
+  if (!body?.tenantName) return c.json({ error: "tenantName is required" }, 400);
+  if (!body?.resourceArn) return c.json({ error: "resourceArn is required" }, 400);
+  await v2().send(
+    new CreateTenantResourceAssociationCommand({
+      TenantName: body.tenantName,
+      ResourceArn: body.resourceArn,
+    })
+  );
+  return c.json({ associated: true });
+});
+
+router.post("/tenants/resources/delete", async (c: Context) => {
+  const body = await c.req.json<{ tenantName: string; resourceArn: string }>();
+  if (!body?.tenantName) return c.json({ error: "tenantName is required" }, 400);
+  if (!body?.resourceArn) return c.json({ error: "resourceArn is required" }, 400);
+  await v2().send(
+    new DeleteTenantResourceAssociationCommand({
+      TenantName: body.tenantName,
+      ResourceArn: body.resourceArn,
+    })
+  );
+  return c.json({ disassociated: true });
+});
+
+router.post("/tenants/resources/list", async (c: Context) => {
+  const body = await c.req.json<{
+    tenantName: string;
+    resourceType?: string;
+    nextToken?: string;
+    pageSize?: number;
+  }>();
+  if (!body?.tenantName) return c.json({ error: "tenantName is required" }, 400);
+  const result = await v2().send(
+    new ListTenantResourcesCommand({
+      TenantName: body.tenantName,
+      ResourceType: body.resourceType as any,
+      NextToken: body.nextToken,
+      PageSize: body.pageSize,
+    })
+  );
+  return c.json({
+    resources: (result.TenantResources || []).map((r: any) => ({
+      resourceArn: r.ResourceArn,
+      resourceType: r.ResourceType,
+    })),
+    nextToken: result.NextToken,
+  });
 });
 
 export default router;

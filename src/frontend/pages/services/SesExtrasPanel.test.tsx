@@ -18,6 +18,9 @@ const mockHooks = vi.hoisted(() => ({
   useSesCreateTenant: vi.fn(),
   useSesListTenants: vi.fn(),
   useSesDeleteTenant: vi.fn(),
+  useSesAssociateTenantResource: vi.fn(),
+  useSesDisassociateTenantResource: vi.fn(),
+  useSesListTenantResources: vi.fn(),
 }));
 
 vi.mock("../../hooks/useSesV2Extras", () => mockHooks);
@@ -34,6 +37,9 @@ const mockScaling = vi.fn();
 const mockCreateTenant = vi.fn();
 const mockListTenants = vi.fn();
 const mockDeleteTenant = vi.fn();
+const mockAssociateRes = vi.fn();
+const mockDisassociateRes = vi.fn();
+const mockListTenantResources = vi.fn();
 
 function okMutation(mock: ReturnType<typeof vi.fn>, isPending = false) {
   return { mutateAsync: mock, isPending };
@@ -59,6 +65,11 @@ beforeEach(() => {
   mockHooks.useSesCreateTenant.mockReturnValue(okMutation(mockCreateTenant));
   mockHooks.useSesListTenants.mockReturnValue(okMutation(mockListTenants));
   mockHooks.useSesDeleteTenant.mockReturnValue(okMutation(mockDeleteTenant));
+  mockHooks.useSesAssociateTenantResource.mockReturnValue(okMutation(mockAssociateRes));
+  mockHooks.useSesDisassociateTenantResource.mockReturnValue(
+    okMutation(mockDisassociateRes)
+  );
+  mockHooks.useSesListTenantResources.mockReturnValue(okMutation(mockListTenantResources));
 });
 
 describe("SesExtrasPanel — export jobs", () => {
@@ -282,5 +293,70 @@ describe("SesExtrasPanel — tenants", () => {
     render(<SesExtrasPanel />, { wrapper: createWrapper() });
     await user.click(screen.getByRole("button", { name: /^List tenants$/i }));
     await waitFor(() => expect(screen.getByText("No tenants")).toBeTruthy());
+  });
+});
+
+describe("SesExtrasPanel — tenant resources", () => {
+  async function typeTenantResource(user: ReturnType<typeof userEvent.setup>) {
+    const inputs = screen.getAllByPlaceholderText("arn:aws:ses:...");
+    await user.type(
+      screen.getAllByRole("textbox").find((el) => {
+        return true;
+      }) as HTMLElement,
+      ""
+    );
+    // Fill the two association inputs directly by order: tenant name input is
+    // the last textbox whose value is empty at panel bottom; use placeholders.
+    await user.type(inputs[0], "arn:aws:ses:us-east-1:0:identity/x@y.z");
+  }
+
+  it("associates and disassociates a resource", async () => {
+    const user = userEvent.setup();
+    mockAssociateRes.mockResolvedValueOnce({ associated: true });
+    mockDisassociateRes.mockResolvedValueOnce({ disassociated: true });
+    render(<SesExtrasPanel />, { wrapper: createWrapper() });
+    await user.type(screen.getByPlaceholderText("resource-tenant"), "t1");
+    await user.type(
+      screen.getByPlaceholderText("arn:aws:ses:..."),
+      "arn:identity"
+    );
+    await user.click(screen.getByRole("button", { name: /^Associate$/ }));
+    await waitFor(() =>
+      expect(mockAssociateRes).toHaveBeenCalledWith({
+        tenantName: "t1",
+        resourceArn: "arn:identity",
+      })
+    );
+    await waitFor(() => expect(screen.getByText("Resource associated.")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /^Disassociate$/ }));
+    await waitFor(() =>
+      expect(mockDisassociateRes).toHaveBeenCalledWith({
+        tenantName: "t1",
+        resourceArn: "arn:identity",
+      })
+    );
+  });
+
+  it("lists tenant resources and shows the empty message", async () => {
+    const user = userEvent.setup();
+    mockListTenantResources.mockResolvedValueOnce({
+      resources: [{ resourceArn: "arn:identity", resourceType: "identity" }],
+    });
+    render(<SesExtrasPanel />, { wrapper: createWrapper() });
+    await user.type(screen.getByPlaceholderText("resource-tenant"), "t1");
+    await user.click(screen.getByRole("button", { name: /^List resources$/ }));
+    await waitFor(() =>
+      expect(mockListTenantResources).toHaveBeenCalledWith({ tenantName: "t1" })
+    );
+    await waitFor(() => expect(screen.getByText("arn:identity")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("identity")).toBeTruthy());
+    // Relist with an empty result to render the empty message.
+    mockListTenantResources.mockResolvedValueOnce({ resources: [] });
+    await user.click(screen.getByRole("button", { name: /^List resources$/ }));
+    await waitFor(() =>
+      expect(
+        screen.getByText("No resources associated with this tenant")
+      ).toBeTruthy()
+    );
   });
 });

@@ -27,6 +27,9 @@ import {
   useSesCreateTenant,
   useSesListTenants,
   useSesDeleteTenant,
+  useSesAssociateTenantResource,
+  useSesDisassociateTenantResource,
+  useSesListTenantResources,
   type SesExportJob,
   type SesImportJob,
   type SesTenant,
@@ -91,6 +94,9 @@ export default function SesExtrasPanel() {
   const createTenant = useSesCreateTenant();
   const listTenants = useSesListTenants();
   const deleteTenant = useSesDeleteTenant();
+  const associateResource = useSesAssociateTenantResource();
+  const disassociateResource = useSesDisassociateTenantResource();
+  const listTenantResources = useSesListTenantResources();
 
   const [status, setStatus] = useState<Status | null>(null);
   const [exportJobs, setExportJobs] = useState<SesExportJob[] | null>(null);
@@ -105,6 +111,11 @@ export default function SesExtrasPanel() {
   const [metricResult, setMetricResult] = useState<string | null>(null);
   const [insightsMessageId, setInsightsMessageId] = useState("");
   const [insights, setInsights] = useState<string | null>(null);
+  const [resourceTenant, setResourceTenant] = useState("");
+  const [resourceArn, setResourceArn] = useState("");
+  const [tenantResources, setTenantResources] = useState<
+    { resourceArn?: string; resourceType?: string }[] | null
+  >(null);
 
   async function wrap(action: () => Promise<unknown>, success: string) {
     setStatus(null);
@@ -404,6 +415,81 @@ export default function SesExtrasPanel() {
                   Delete
                 </Button>
               )}
+            />
+          )}
+          <SpaceBetween direction="horizontal" size="s">
+            <FormField label="Tenant name">
+              <Input value={resourceTenant} onChange={({ detail }) => setResourceTenant(detail.value)} placeholder="resource-tenant" />
+            </FormField>
+            <FormField label="Resource ARN">
+              <Input value={resourceArn} onChange={({ detail }) => setResourceArn(detail.value)} placeholder="arn:aws:ses:..." />
+            </FormField>
+            <Button
+              disabled={!resourceTenant || !resourceArn}
+              loading={associateResource.isPending}
+              onClick={() =>
+                wrap(
+                  () =>
+                    associateResource.mutateAsync({
+                      tenantName: resourceTenant,
+                      resourceArn,
+                    }),
+                  "Resource associated."
+                )
+              }
+            >
+              Associate
+            </Button>
+            <Button
+              disabled={!resourceTenant || !resourceArn}
+              loading={disassociateResource.isPending}
+              onClick={() =>
+                wrap(
+                  () =>
+                    disassociateResource.mutateAsync({
+                      tenantName: resourceTenant,
+                      resourceArn,
+                    }),
+                  "Resource disassociated."
+                )
+              }
+            >
+              Disassociate
+            </Button>
+            <Button
+              disabled={!resourceTenant}
+              loading={listTenantResources.isPending}
+              onClick={() =>
+                wrap(
+                  async () => {
+                    const result = await listTenantResources.mutateAsync({
+                      tenantName: resourceTenant,
+                    });
+                    setTenantResources(result.resources);
+                  },
+                  "Tenant resources loaded."
+                )
+              }
+            >
+              List resources
+            </Button>
+          </SpaceBetween>
+          {tenantResources && (
+            <ResourceTableLite
+              emptyMessage="No resources associated with this tenant"
+              items={tenantResources}
+              columns={[
+                {
+                  id: "arn",
+                  header: "Resource ARN",
+                  render: (r: { resourceArn?: string }) => r.resourceArn,
+                },
+                {
+                  id: "type",
+                  header: "Type",
+                  render: (r: { resourceType?: string }) => r.resourceType,
+                },
+              ]}
             />
           )}
         </SpaceBetween>

@@ -5728,4 +5728,58 @@ describe("SES v2 Extras Integration", () => {
     expect(res.status).toBe(200);
     expect(Array.isArray(res.data.tenants)).toBe(true);
   });
+
+  itWhenAvailable("associates, lists, and disassociates tenant resources", async () => {
+    const assoc = await api("POST", "/api/aws/email/v2/tenants/resources", {
+      tenantName: "it-tenant",
+      resourceArn: "arn:aws:ses:us-east-1:000000000000:identity/it@floci.local",
+    });
+    expect(assoc.status).toBe(200);
+    const list = await api("POST", "/api/aws/email/v2/tenants/resources/list", {
+      tenantName: "it-tenant",
+    });
+    expect(list.status).toBe(200);
+    const dis = await api("POST", "/api/aws/email/v2/tenants/resources/delete", {
+      tenantName: "it-tenant",
+      resourceArn: "arn:aws:ses:us-east-1:000000000000:identity/it@floci.local",
+    });
+    expect(dis.status).toBe(200);
+  });
+
+  it("lists v1 receipt filters (SES v1 ships in the 2.1.0 image)", async () => {
+    const res = await api("GET", "/api/aws/email/receipt-filters");
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.data.filters)).toBe(true);
+  });
+
+  it("creates and deletes a v1 receipt filter", async () => {
+    const created = await api("POST", "/api/aws/email/receipt-filters", {
+      name: `it-filter-${Date.now()}`,
+      policy: "Block",
+      cidr: "10.99.0.0/16",
+    });
+    expect(created.status).toBe(201);
+  });
+
+  it("clones and reorders a v1 receipt rule set", async () => {
+    const setName = `it-rs-${Date.now()}`;
+    const cloneName = `${setName}-clone`;
+    const created = await api("POST", "/api/aws/email/receipt-rule-sets", {
+      ruleSetName: setName,
+    });
+    expect(created.status).toBe(201);
+    const clone = await api(
+      "POST",
+      `/api/aws/email/receipt-rule-sets/${cloneName}/clone`,
+      { originalRuleSetName: setName }
+    );
+    expect(clone.status).toBe(201);
+    const reorder = await api("PUT", `/api/aws/email/receipt-rule-sets/${setName}/reorder`, {
+      ruleNames: [],
+    });
+    expect(reorder.status).toBe(400);
+    await api("DELETE", `/api/aws/email/receipt-rule-sets/${cloneName}`);
+    const del = await api("DELETE", `/api/aws/email/receipt-rule-sets/${setName}`);
+    expect(del.status).toBe(200);
+  });
 });

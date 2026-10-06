@@ -90,6 +90,11 @@ import {
   useDeleteSESv2CustomVerificationTemplate,
   useSESv2ConfigSetEventDestinations,
   useSESv2TemplateRender,
+  useSESCloneReceiptRuleSet,
+  useSESReorderReceiptRuleSet,
+  useSESCreateReceiptFilter,
+  useSESListReceiptFilters,
+  useSESDeleteReceiptFilter,
 } from "./useSES";
 
 function createWrapper() {
@@ -924,6 +929,52 @@ describe("useSES v1 extras hooks", () => {
     expect(mockApi).toHaveBeenCalledWith("/aws/email/v2/templates/t1/render", {
       method: "POST",
       body: JSON.stringify({ TemplateData: "{\"name\":\"John\"}" }),
+    });
+  });
+
+  it("useSESCloneReceiptRuleSet", async () => {
+    mockApi.mockResolvedValueOnce({ cloned: true });
+    const { result } = renderHook(() => useSESCloneReceiptRuleSet(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ name: "copy", originalRuleSetName: "main" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/email/receipt-rule-sets/copy/clone", {
+      method: "POST",
+      body: JSON.stringify({ originalRuleSetName: "main" }),
+    });
+  });
+
+  it("useSESReorderReceiptRuleSet", async () => {
+    mockApi.mockResolvedValueOnce({ reordered: true });
+    const { result } = renderHook(() => useSESReorderReceiptRuleSet(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ name: "main", ruleNames: ["b", "a"] });
+    expect(mockApi).toHaveBeenCalledWith("/aws/email/receipt-rule-sets/main/reorder", {
+      method: "PUT",
+      body: JSON.stringify({ ruleNames: ["b", "a"] }),
+    });
+  });
+
+  it("useSESCreateReceiptFilter", async () => {
+    mockApi.mockResolvedValueOnce({ created: true });
+    const { result } = renderHook(() => useSESCreateReceiptFilter(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ name: "f1", policy: "Block", cidr: "10.0.0.0/8" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/email/receipt-filters", {
+      method: "POST",
+      body: JSON.stringify({ name: "f1", policy: "Block", cidr: "10.0.0.0/8" }),
+    });
+  });
+
+  it("useSESListReceiptFilters", async () => {
+    mockApi.mockResolvedValueOnce({ filters: [], total: 0 });
+    const { result } = renderHook(() => useSESListReceiptFilters(), { wrapper: createWrapper() });
+    await result.current.mutateAsync();
+    expect(mockApi).toHaveBeenCalledWith("/aws/email/receipt-filters");
+  });
+
+  it("useSESDeleteReceiptFilter", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useSESDeleteReceiptFilter(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("f1");
+    expect(mockApi).toHaveBeenCalledWith("/aws/email/receipt-filters/f1", {
+      method: "DELETE",
     });
   });
 });

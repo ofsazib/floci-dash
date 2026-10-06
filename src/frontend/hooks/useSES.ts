@@ -861,3 +861,53 @@ export function useSESv2TemplateRender(templateName: string | null) {
       api(`/aws/email/v2/templates/${templateName}/render`, { method: "POST", body: JSON.stringify({ TemplateData: templateData }) }),
   });
 }
+
+export function useSESCloneReceiptRuleSet() {
+  return useMutation({
+    mutationFn: (input: { name: string; originalRuleSetName: string }) =>
+      api<{ cloned: boolean }>(
+        `/aws/email/receipt-rule-sets/${encodeURIComponent(input.name)}/clone`,
+        { method: "POST", body: JSON.stringify({ originalRuleSetName: input.originalRuleSetName }) }
+      ),
+  });
+}
+
+export function useSESReorderReceiptRuleSet() {
+  return useMutation({
+    mutationFn: (input: { name: string; ruleNames: string[] }) =>
+      api<{ reordered: boolean }>(
+        `/aws/email/receipt-rule-sets/${encodeURIComponent(input.name)}/reorder`,
+        { method: "PUT", body: JSON.stringify({ ruleNames: input.ruleNames }) }
+      ),
+  });
+}
+
+export function useSESCreateReceiptFilter() {
+  return useMutation({
+    mutationFn: (input: { name: string; policy: string; cidr: string }) =>
+      api<{ created: boolean }>("/aws/email/receipt-filters", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+  });
+}
+
+export function useSESListReceiptFilters() {
+  return useMutation({
+    mutationFn: () =>
+      api<{
+        filters: { name?: string; policy?: string; cidr?: string }[];
+        total: number;
+      }>("/aws/email/receipt-filters"),
+  });
+}
+
+export function useSESDeleteReceiptFilter() {
+  return useMutation({
+    mutationFn: (name: string) =>
+      api<{ deleted: boolean }>(
+        `/aws/email/receipt-filters/${encodeURIComponent(name)}`,
+        { method: "DELETE" }
+      ),
+  });
+}

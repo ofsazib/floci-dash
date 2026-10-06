@@ -10,6 +10,9 @@ vi.mock("../lib/client", () => ({
 }));
 
 import {
+  useSesAssociateTenantResource,
+  useSesDisassociateTenantResource,
+  useSesListTenantResources,
   useSesCreateExportJob,
   useSesListExportJobs,
   useSesCancelExportJob,
@@ -138,6 +141,47 @@ describe("dedicated ip hooks", () => {
     expect(mockApi).toHaveBeenCalledWith("/aws/email/v2/dedicated-ip-pools/p1/scaling", {
       method: "PUT",
       body: JSON.stringify({ scalingMode: "MANAGED" }),
+    });
+  });
+});
+
+describe("tenant resource hooks", () => {
+  it("associates a resource", async () => {
+    mockApi.mockResolvedValueOnce({ associated: true });
+    const { result } = renderHook(() => useSesAssociateTenantResource(), {
+      wrapper: createWrapper(),
+    });
+    const input = { tenantName: "t1", resourceArn: "arn:x" };
+    await result.current.mutateAsync(input);
+    expect(mockApi).toHaveBeenCalledWith("/aws/email/v2/tenants/resources", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  });
+
+  it("disassociates a resource", async () => {
+    mockApi.mockResolvedValueOnce({ disassociated: true });
+    const { result } = renderHook(() => useSesDisassociateTenantResource(), {
+      wrapper: createWrapper(),
+    });
+    const input = { tenantName: "t1", resourceArn: "arn:x" };
+    await result.current.mutateAsync(input);
+    expect(mockApi).toHaveBeenCalledWith("/aws/email/v2/tenants/resources/delete", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  });
+
+  it("lists tenant resources", async () => {
+    mockApi.mockResolvedValueOnce({ resources: [] });
+    const { result } = renderHook(() => useSesListTenantResources(), {
+      wrapper: createWrapper(),
+    });
+    const input = { tenantName: "t1", resourceType: "identity" };
+    await result.current.mutateAsync(input);
+    expect(mockApi).toHaveBeenCalledWith("/aws/email/v2/tenants/resources/list", {
+      method: "POST",
+      body: JSON.stringify(input),
     });
   });
 });

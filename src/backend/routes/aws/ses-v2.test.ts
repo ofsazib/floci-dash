@@ -43,6 +43,8 @@ vi.mock("@aws-sdk/client-sesv2", () => {
     "PutEmailIdentityConfigurationSetAttributesCommand", "PutEmailIdentityDkimAttributesCommand",
     "PutEmailIdentityDkimSigningAttributesCommand", "PutEmailIdentityFeedbackAttributesCommand",
     "TestRenderEmailTemplateCommand",
+    "CreateTenantResourceAssociationCommand", "DeleteTenantResourceAssociationCommand",
+    "ListTenantResourcesCommand",
     "CreateExportJobCommand", "GetExportJobCommand", "ListExportJobsCommand",
     "CancelExportJobCommand", "CreateImportJobCommand", "GetImportJobCommand",
     "ListImportJobsCommand", "BatchGetMetricDataCommand", "GetMessageInsightsCommand",
@@ -932,5 +934,71 @@ describe("tenants", () => {
     const res = await post("/tenants/delete", { tenantName: "t1" });
     const json = await res.json();
     expect(json.deleted).toBe(true);
+  });
+});
+
+// ─── E.1b: tenant resource associations ──────────────────
+
+describe("tenant resources", () => {
+  it("400 associate without tenantName or resourceArn", async () => {
+    expect((await post("/tenants/resources", {})).status).toBe(400);
+    expect((await post("/tenants/resources", { tenantName: "t1" })).status).toBe(400);
+  });
+
+  it("associates a resource with a tenant", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/tenants/resources", {
+      tenantName: "t1",
+      resourceArn: "arn:identity",
+    });
+    const json = await res.json();
+    expect(json.associated).toBe(true);
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({ TenantName: "t1", ResourceArn: "arn:identity" })
+    );
+  });
+
+  it("400 disassociate without tenantName or resourceArn", async () => {
+    expect((await post("/tenants/resources/delete", {})).status).toBe(400);
+    expect(
+      (await post("/tenants/resources/delete", { tenantName: "t1" })).status
+    ).toBe(400);
+  });
+
+  it("disassociates a resource", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/tenants/resources/delete", {
+      tenantName: "t1",
+      resourceArn: "arn:identity",
+    });
+    const json = await res.json();
+    expect(json.disassociated).toBe(true);
+  });
+
+  it("400 list resources without tenantName", async () => {
+    expect((await post("/tenants/resources/list", {})).status).toBe(400);
+  });
+
+  it("lists tenant resources with a type filter", async () => {
+    mockSend.mockResolvedValueOnce({
+      TenantResources: [{ ResourceArn: "arn:identity", ResourceType: "identity" }],
+    });
+    const res = await post("/tenants/resources/list", {
+      tenantName: "t1",
+      resourceType: "identity",
+    });
+    const json = await res.json();
+    expect(json.resources).toHaveLength(1);
+    expect(json.resources[0].resourceType).toBe("identity");
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({ TenantName: "t1", ResourceType: "identity" })
+    );
+  });
+
+  it("returns an empty resource list when absent", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/tenants/resources/list", { tenantName: "t1" });
+    const json = await res.json();
+    expect(json.resources).toEqual([]);
   });
 });

@@ -61,6 +61,11 @@ import {
   GetIdentityPoliciesCommand,
   ListIdentityPoliciesCommand,
   DeleteIdentityPolicyCommand,
+  CreateReceiptFilterCommand,
+  ListReceiptFiltersCommand,
+  DeleteReceiptFilterCommand,
+  CloneReceiptRuleSetCommand,
+  ReorderReceiptRuleSetCommand,
   CreateReceiptRuleSetCommand,
   DescribeReceiptRuleSetCommand,
   ListReceiptRuleSetsCommand,
@@ -880,6 +885,72 @@ router.post("/receipt-rule-sets/:name/activate", async (c: Context) => {
   const name = c.req.param("name")!;
   await getClient().send(new SetActiveReceiptRuleSetCommand({ RuleSetName: name }));
   return c.json({ activated: true });
+});
+
+router.post("/receipt-rule-sets/:name/clone", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const body = await c.req.json<{ originalRuleSetName?: string }>();
+  await getClient().send(
+    new CloneReceiptRuleSetCommand({
+      RuleSetName: name,
+      OriginalRuleSetName: body.originalRuleSetName,
+    })
+  );
+  return c.json({ cloned: true }, 201);
+});
+
+router.put("/receipt-rule-sets/:name/reorder", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const body = await c.req.json<{ ruleNames: string[] }>();
+  if (!Array.isArray(body?.ruleNames) || body.ruleNames.length === 0)
+    return c.json({ error: "ruleNames array is required" }, 400);
+  await getClient().send(
+    new ReorderReceiptRuleSetCommand({
+      RuleSetName: name,
+      RuleNames: body.ruleNames,
+    })
+  );
+  return c.json({ reordered: true });
+});
+
+// ─── Receipt filters ─────────────────────────────────────────────
+
+router.post("/receipt-filters", async (c: Context) => {
+  const body = await c.req.json<{
+    name?: string;
+    policy?: string;
+    cidr?: string;
+  }>();
+  if (!body.name) return c.json({ error: "name is required" }, 400);
+  if (!body.policy || !body.cidr)
+    return c.json({ error: "policy and cidr are required" }, 400);
+  await getClient().send(
+    new CreateReceiptFilterCommand({
+      Filter: {
+        Name: body.name,
+        IpFilter: { Policy: body.policy as any, Cidr: body.cidr },
+      },
+    })
+  );
+  return c.json({ created: true }, 201);
+});
+
+router.get("/receipt-filters", async (c: Context) => {
+  const result = await getClient().send(new ListReceiptFiltersCommand({}));
+  return c.json({
+    filters: (result.Filters || []).map((f: any) => ({
+      name: f.Name,
+      policy: f.IpFilter?.Policy,
+      cidr: f.IpFilter?.Cidr,
+    })),
+    total: (result.Filters || []).length,
+  });
+});
+
+router.delete("/receipt-filters/:name", async (c: Context) => {
+  const name = decodeURIComponent(c.req.param("name")!);
+  await getClient().send(new DeleteReceiptFilterCommand({ FilterName: name }));
+  return c.json({ deleted: true });
 });
 
 router.get("/receipt-rule-sets-active", async (c: Context) => {

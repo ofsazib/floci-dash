@@ -136,6 +136,39 @@ export function useSesListTenants() {
   });
 }
 
+export function useSesAssociateTenantResource() {
+  return useMutation({
+    mutationFn: (input: { tenantName: string; resourceArn: string }) =>
+      api<{ associated: boolean }>("/aws/email/v2/tenants/resources", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+  });
+}
+
+export function useSesDisassociateTenantResource() {
+  return useMutation({
+    mutationFn: (input: { tenantName: string; resourceArn: string }) =>
+      api<{ disassociated: boolean }>("/aws/email/v2/tenants/resources/delete", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+  });
+}
+
+export function useSesListTenantResources() {
+  return useMutation({
+    mutationFn: (input: { tenantName: string; resourceType?: string }) =>
+      api<{
+        resources: { resourceArn?: string; resourceType?: string }[];
+        nextToken?: string;
+      }>("/aws/email/v2/tenants/resources/list", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+  });
+}
+
 export function useSesDeleteTenant() {
   return useMutation({
     mutationFn: (tenantName: string) =>

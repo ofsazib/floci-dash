@@ -18,6 +18,11 @@ const createCmd = vi.hoisted(() => {
 
 vi.mock("@aws-sdk/client-ses", () => ({
   SESClient: mockSES,
+  CreateReceiptFilterCommand: createCmd("CreateReceiptFilterCommand"),
+  ListReceiptFiltersCommand: createCmd("ListReceiptFiltersCommand"),
+  DeleteReceiptFilterCommand: createCmd("DeleteReceiptFilterCommand"),
+  CloneReceiptRuleSetCommand: createCmd("CloneReceiptRuleSetCommand"),
+  ReorderReceiptRuleSetCommand: createCmd("ReorderReceiptRuleSetCommand"),
   ListIdentitiesCommand: createCmd("ListIdentitiesCommand"),
   VerifyEmailIdentityCommand: createCmd("VerifyEmailIdentityCommand"),
   VerifyDomainIdentityCommand: createCmd("VerifyDomainIdentityCommand"),
@@ -1181,5 +1186,105 @@ describe("SES v1 — receipt rule sets", () => {
     expect((await active.json()).name).toBe("rs1");
     expect((await del("/receipt-rule-sets/rs1")).status).toBe(200);
     expect((await post("/receipt-rule-sets", {})).status).toBe(400);
+  });
+});
+
+// ─── E.1b: receipt filters + rule-set clone/reorder ─────
+
+describe("receipt filters", () => {
+  it("400 create without name", async () => {
+    expect((await post("/receipt-filters", {})).status).toBe(400);
+  });
+
+  it("400 create without policy or cidr", async () => {
+    expect((await post("/receipt-filters", { name: "f1" })).status).toBe(400);
+    expect(
+      (await post("/receipt-filters", { name: "f1", policy: "Block" })).status
+    ).toBe(400);
+  });
+
+  it("creates a receipt filter", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/receipt-filters", {
+      name: "block-bad",
+      policy: "Block",
+      cidr: "10.0.0.0/8",
+    });
+    expect(res.status).toBe(201);
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Filter: {
+          Name: "block-bad",
+          IpFilter: { Policy: "Block", Cidr: "10.0.0.0/8" },
+        },
+      })
+    );
+  });
+
+  it("lists receipt filters", async () => {
+    mockSend.mockResolvedValueOnce({
+      Filters: [{ Name: "block-bad", IpFilter: { Policy: "Block", Cidr: "10.0.0.0/8" } }],
+    });
+    const res = await get("/receipt-filters");
+    const json = await res.json();
+    expect(json.filters).toHaveLength(1);
+    expect(json.filters[0].name).toBe("block-bad");
+    expect(json.total).toBe(1);
+  });
+
+  it("returns an empty filter list when absent", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/receipt-filters");
+    const json = await res.json();
+    expect(json.filters).toEqual([]);
+    expect(json.total).toBe(0);
+  });
+
+  it("deletes a receipt filter", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await del("/receipt-filters/block-bad");
+    const json = await res.json();
+    expect(json.deleted).toBe(true);
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({ FilterName: "block-bad" })
+    );
+  });
+});
+
+describe("receipt rule-set clone and reorder", () => {
+  it("clones a rule set", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/receipt-rule-sets/copy-of-main/clone", {
+      originalRuleSetName: "main",
+    });
+    expect(res.status).toBe(201);
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        RuleSetName: "copy-of-main",
+        OriginalRuleSetName: "main",
+      })
+    );
+  });
+
+  it("400 reorder without ruleNames", async () => {
+    expect((await put("/receipt-rule-sets/main/reorder", {})).status).toBe(400);
+    expect(
+      (await put("/receipt-rule-sets/main/reorder", { ruleNames: [] })).status
+    ).toBe(400);
+  });
+
+  it("reorders rules in a rule set", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put("/receipt-rule-sets/main/reorder", {
+      ruleNames: ["second", "first"],
+    });
+    const json = await res.json();
+    expect(json.reordered).toBe(true);
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        RuleSetName: "main",
+        RuleNames: ["second", "first"],
+      })
+    );
   });
 });
