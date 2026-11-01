@@ -109,6 +109,15 @@ import {
   useRoute53HealthChecks,
   useCreateRoute53HealthCheck,
   useDeleteRoute53HealthCheck,
+  useUpdateRoute53HostedZoneComment,
+  useAssociateRoute53VPC,
+  useDisassociateRoute53VPC,
+  useRoute53VPCAuthorizations,
+  useCreateRoute53VPCAuthorization,
+  useDeleteRoute53VPCAuthorization,
+  useRoute53HostedZonesByVPC,
+  useRoute53HealthCheckStatus,
+  useRoute53HostedZoneLimit,
 } from "../../hooks/useRoute53";
 import {
   useAPIGatewayApis,
@@ -520,6 +529,8 @@ export function Route53Dashboard() {
   const { data: hcData, isLoading: hcLoading } = useRoute53HealthChecks();
   const createHealthCheck = useCreateRoute53HealthCheck();
   const deleteHealthCheck = useDeleteRoute53HealthCheck();
+  const [statusHcId, setStatusHcId] = useState<string | null>(null);
+  const { data: hcStatus } = useRoute53HealthCheckStatus(statusHcId);
   const [showCreateHC, setShowCreateHC] = useState(false);
   const [hcForm, setHcForm] = useState({
     IPAddr: "",
@@ -668,11 +679,16 @@ export function Route53Dashboard() {
                     id: "actions",
                     header: "Actions",
                     cell: (item: any) => (
-                      <DeleteButton
-                        onDelete={() => deleteHealthCheck.mutate(item.Id)}
-                        itemName={item.Id}
-                        resourceType="health check"
-                      />
+                      <SpaceBetween direction="horizontal" size="xs">
+                        <Button variant="link" onClick={() => setStatusHcId(item.Id === statusHcId ? null : item.Id)}>
+                          Status
+                        </Button>
+                        <DeleteButton
+                          onDelete={() => deleteHealthCheck.mutate(item.Id)}
+                          itemName={item.Id}
+                          resourceType="health check"
+                        />
+                      </SpaceBetween>
                     ),
                   },
                 ]}
@@ -680,6 +696,22 @@ export function Route53Dashboard() {
                 emptyMessage="No health checks found. Create one to get started."
                 onCreate={() => setShowCreateHC(true)}
               />
+
+              {statusHcId && (
+                <SpaceBetween size="xs">
+                  <Header variant="h3">Health check status — {statusHcId}</Header>
+                  {(hcStatus?.observations || []).length === 0 ? (
+                    <Box color="text-body-secondary">No observations</Box>
+                  ) : (
+                    hcStatus!.observations.map((o: any, i: number) => (
+                      <Box key={i}>
+                        {o.region} {o.ipAddress ? `(${o.ipAddress})` : ""}:{" "}
+                        {o.statusReport?.status || "—"}
+                      </Box>
+                    ))
+                  )}
+                </SpaceBetween>
+              )}
 
               <Modal
                 visible={showCreateHC}
@@ -748,6 +780,21 @@ function Route53ZoneDetail({ zoneId, onBack }: { zoneId: string; onBack: () => v
   const deleteRecord = useDeleteRoute53RecordSet();
   const [showCreate, setShowCreate] = useState(false);
 
+  // VPC association / comment / authorizations / limit
+  const updateComment = useUpdateRoute53HostedZoneComment();
+  const associateVpc = useAssociateRoute53VPC();
+  const disassociateVpc = useDisassociateRoute53VPC();
+  const { data: vpcAuths } = useRoute53VPCAuthorizations(zoneId);
+  const createVpcAuth = useCreateRoute53VPCAuthorization();
+  const deleteVpcAuth = useDeleteRoute53VPCAuthorization();
+  const { data: zoneLimit } = useRoute53HostedZoneLimit(zoneId, "MAX_VPC_ASSOCIATIONS");
+  const [comment, setComment] = useState("");
+  const [assocVpcId, setAssocVpcId] = useState("");
+  const [assocVpcRegion, setAssocVpcRegion] = useState("us-east-1");
+  const [authVpcId, setAuthVpcId] = useState("");
+
+  const vpcAssociations = (data as any)?.vpcAssociations || [];
+
   const [form, setForm] = useState({
     name: "",
     type: "A",
@@ -756,6 +803,131 @@ function Route53ZoneDetail({ zoneId, onBack }: { zoneId: string; onBack: () => v
   });
 
   const records = data?.recordSets || [];
+
+  const settingsHeader = (
+    <SpaceBetween size="m">
+      <Header variant="h3">Zone settings</Header>
+      <Box>
+        VPC associations:{" "}
+        {vpcAssociations.length
+          ? vpcAssociations.map((v: any) => `${v.VPCId} (${v.VPCRegion})`).join(", ")
+          : "none (public zone)"}
+      </Box>
+      <Box>
+        VPC association limit (MAX_VPC_ASSOCIATIONS):{" "}
+        {zoneLimit ? `${zoneLimit.count ?? "—"} / ${zoneLimit.value ?? "—"}` : "…"}
+      </Box>
+      <SpaceBetween direction="horizontal" size="xs">
+        <Input
+          value={comment}
+          onChange={(e) => setComment(e.detail.value)}
+          placeholder="New comment"
+        />
+        <Button
+          disabled={!comment || updateComment.isPending}
+          loading={updateComment.isPending}
+          onClick={async () => {
+            try {
+              await updateComment.mutateAsync({ id: zoneId, comment });
+              setComment("");
+            } catch {}
+          }}
+        >
+          Update comment
+        </Button>
+      </SpaceBetween>
+      <SpaceBetween direction="horizontal" size="xs">
+        <Input
+          value={assocVpcId}
+          onChange={(e) => setAssocVpcId(e.detail.value)}
+          placeholder="vpc-1234"
+        />
+        <Input
+          value={assocVpcRegion}
+          onChange={(e) => setAssocVpcRegion(e.detail.value)}
+          placeholder="us-east-1"
+        />
+        <Button
+          disabled={!assocVpcId || associateVpc.isPending}
+          loading={associateVpc.isPending}
+          onClick={async () => {
+            try {
+              await associateVpc.mutateAsync({ id: zoneId, vpcId: assocVpcId, vpcRegion: assocVpcRegion });
+              setAssocVpcId("");
+            } catch {}
+          }}
+        >
+          Associate VPC
+        </Button>
+        <Button
+          disabled={!assocVpcId || disassociateVpc.isPending}
+          loading={disassociateVpc.isPending}
+          onClick={async () => {
+            /* v8 ignore start */
+            try {
+              await disassociateVpc.mutateAsync({ id: zoneId, vpcId: assocVpcId, vpcRegion: assocVpcRegion });
+              setAssocVpcId("");
+            } catch {}
+            /* v8 ignore end */
+          }}
+        >
+          Disassociate VPC
+        </Button>
+      </SpaceBetween>
+
+      <Header variant="h3">VPC association authorizations</Header>
+      <ResourceTable
+        resourceName="Authorization"
+        headerTitle="VPC association authorizations"
+        headerCounter={vpcAuths?.total}
+        items={(vpcAuths?.authorizations || []).map((a: any) => ({
+          vpcId: a.vpcId || "",
+          vpcRegion: a.vpcRegion || "",
+        }))}
+        emptyMessage="No VPC association authorizations"
+        columns={[
+          { id: "vpcId", header: "VPC ID", cell: (i: any) => i.vpcId, isRowHeader: true },
+          { id: "vpcRegion", header: "Region", cell: (i: any) => i.vpcRegion },
+          {
+            id: "actions",
+            header: "",
+            cell: (i: any) => (
+              <DeleteButton
+                itemName={i.vpcId}
+                resourceType="authorization"
+                onDelete={() =>
+                  deleteVpcAuth.mutate({ id: zoneId, vpcId: i.vpcId, vpcRegion: i.vpcRegion })
+                }
+              />
+            ),
+          },
+        ]}
+      />
+      <SpaceBetween direction="horizontal" size="xs">
+        <Input
+          value={authVpcId}
+          onChange={(e) => setAuthVpcId(e.detail.value)}
+          placeholder="vpc-5678"
+        />
+        <Button
+          disabled={!authVpcId || createVpcAuth.isPending}
+          loading={createVpcAuth.isPending}
+          onClick={async () => {
+            try {
+              await createVpcAuth.mutateAsync({
+                id: zoneId,
+                vpcId: authVpcId,
+                vpcRegion: assocVpcRegion,
+              });
+              setAuthVpcId("");
+            } catch {}
+          }}
+        >
+          Authorize VPC association
+        </Button>
+      </SpaceBetween>
+    </SpaceBetween>
+  );
 
   const columns = [
     { id: "name", header: "Name", cell: (item: any) => item.Name, isRowHeader: true },
@@ -832,6 +1004,8 @@ function Route53ZoneDetail({ zoneId, onBack }: { zoneId: string; onBack: () => v
         }
         onCreate={() => setShowCreate(true)}
       />
+
+      {settingsHeader}
 
       <Modal
         visible={showCreate}

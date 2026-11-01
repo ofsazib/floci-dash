@@ -40,7 +40,25 @@ const hookState = {
   createVaultError: null as Error | null,
 };
 
+const policyHook = vi.fn((..._a: any[]) => ({ data: policyMockData }) as { data: any });
+const notifHook = vi.fn((..._a: any[]) => ({ data: notifMockData }) as { data: any });
+const policyMockData = { policy: null };
+const notifMockData = { notifications: { snsTopicArn: null, backupVaultEvents: [] } };
+const mockPutPolicy = vi.fn(() => Promise.resolve({}));
+const mockDeletePolicy = vi.fn(() => Promise.resolve({}));
+const mockPutNotifs = vi.fn(() => Promise.resolve({}));
+const mockDeleteNotifs = vi.fn(() => Promise.resolve({}));
+const mockPutLock = vi.fn(() => Promise.resolve({}));
+const mockDeleteLock = vi.fn(() => Promise.resolve({}));
 vi.mock("../../hooks/useBackup", () => ({
+  useBackupVaultAccessPolicy: (...a: any[]) => policyHook(...a),
+  usePutBackupVaultAccessPolicy: () => ({ mutateAsync: mockPutPolicy, isPending: false }),
+  useDeleteBackupVaultAccessPolicy: () => ({ mutateAsync: mockDeletePolicy, isPending: false }),
+  useBackupVaultNotifications: (...a: any[]) => notifHook(...a),
+  usePutBackupVaultNotifications: () => ({ mutateAsync: mockPutNotifs, isPending: false }),
+  useDeleteBackupVaultNotifications: () => ({ mutateAsync: mockDeleteNotifs, isPending: false }),
+  usePutBackupVaultLockConfiguration: () => ({ mutateAsync: mockPutLock, isPending: false }),
+  useDeleteBackupVaultLockConfiguration: () => ({ mutateAsync: mockDeleteLock, isPending: false }),
   useBackupPlans: (...args: any[]) => mockPlans(...args),
   useBackupVaults: (...args: any[]) => mockVaults(...args),
   useBackupJobs: (...args: any[]) => mockJobs(...args),
@@ -123,6 +141,8 @@ beforeEach(() => {
     isError: false,
     error: null,
   });
+  policyHook.mockReturnValue({ data: policyMockData });
+  notifHook.mockReturnValue({ data: notifMockData });
   mockVaults.mockReturnValue({
     data: { backupVaults: [], total: 0 },
     isLoading: false,
@@ -855,5 +875,95 @@ describe("BackupDashboard — recovery point edge arms", () => {
     expect(await screen.findByText("noslash-arn")).toBeTruthy();
     expect(screen.getByRole("button", { name: /Delete noslash-arn/i })).toBeTruthy();
     // slash-less ARN still names the delete button after itself
+  });
+
+  it("opens vault security modal and saves access policy", async () => {
+    setupVault();
+    const user = userEvent.setup();
+    render(<BackupDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: /Security/i }));
+    expect(await screen.findByText(/Vault Security — vault-1/)).toBeTruthy();
+    const areas = within(screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!).getAllByRole("textbox");
+    await user.type(areas[0], "policy-json");
+    await user.click(screen.getByRole("button", { name: /Save policy/i }));
+    expect(mockPutPolicy).toHaveBeenCalledWith({ vaultName: "vault-1", policy: "policy-json" });
+  });
+
+  it("saves vault notifications and applies vault lock", async () => {
+    setupVault();
+    const user = userEvent.setup();
+    render(<BackupDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: /Security/i }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const areas = within(dialog).getAllByRole("textbox");
+    await user.type(areas[1], "arn:sns:x");
+    await user.clear(areas[2]);
+    await user.type(areas[2], "BACKUP_JOB_COMPLETED");
+    await user.click(screen.getByRole("button", { name: /Save notifications/i }));
+    expect(mockPutNotifs).toHaveBeenCalledWith({
+      vaultName: "vault-1",
+      snsTopicArn: "arn:sns:x",
+      backupVaultEvents: ["BACKUP_JOB_COMPLETED"],
+    });
+    // Re-open security modal for the vault lock flow (saving notifications closes the modal)
+    await user.click(await screen.findByRole("button", { name: /Security/i }));
+    const lockDialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    await user.type(within(lockDialog).getAllByRole("textbox")[3], "7");
+    await user.click(screen.getByRole("button", { name: /Apply vault lock/i }));
+    expect(mockPutLock).toHaveBeenCalledWith({ vaultName: "vault-1", retentionDays: 7 });
+  });
+
+  it("deletes vault access policy, notifications and lock from security modal", async () => {
+    setupVault();
+    const user = userEvent.setup();
+    render(<BackupDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: /Security/i }));
+    await user.click(screen.getByRole("button", { name: /Delete policy/i }));
+    expect(mockDeletePolicy).toHaveBeenCalledWith("vault-1");
+    await user.click(screen.getByRole("button", { name: /Delete notifications/i }));
+    expect(mockDeleteNotifs).toHaveBeenCalledWith("vault-1");
+    await user.click(screen.getByRole("button", { name: /Delete vault lock/i }));
+    expect(mockDeleteLock).toHaveBeenCalledWith("vault-1");
+  });
+
+  it("applies vault lock with typed retention days and clears the input", async () => {
+    setupVault();
+    const user = userEvent.setup();
+    render(<BackupDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: /Security/i }));
+    const lockDialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const lockInput = within(lockDialog).getAllByRole("textbox")[3];
+    fireEvent.change(lockInput, { target: { value: "30" } });
+    expect((lockInput as HTMLInputElement).value).toBe("30");
+    await user.click(screen.getByRole("button", { name: /Apply vault lock/i }));
+    expect(mockPutLock).toHaveBeenCalledWith({ vaultName: "vault-1", retentionDays: 30 });
+    await waitFor(() => expect((lockInput as HTMLInputElement).value).toBe(""));
+  });
+
+  it("handles undefined policy and notification data in the security modal", async () => {
+    setupVault();
+    policyHook.mockImplementation(() => ({ data: undefined }));
+    notifHook.mockImplementation(() => ({ data: undefined }));
+    const user = userEvent.setup();
+    render(<BackupDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: /Security/i }));
+    // policy draft stays empty (undefined data arm), notifications inputs stay empty
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const areas = within(dialog).getAllByRole("textbox");
+    expect(areas[0]).toBeTruthy();
+  });
+
+  it("fills notification fields with fallbacks when events are missing", async () => {
+    setupVault();
+    policyHook.mockImplementation(() => ({ data: { policy: "existing-policy" } }));
+    notifHook.mockImplementation(() => ({ data: { notifications: { snsTopicArn: "arn:topic" } } }));
+    const user = userEvent.setup();
+    render(<BackupDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: /Security/i }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const areas = within(dialog).getAllByRole("textbox");
+    await waitFor(() => expect((areas[0] as HTMLTextAreaElement).value).toBe("existing-policy"));
+    await waitFor(() => expect((areas[1] as HTMLInputElement).value).toBe("arn:topic"));
+    await waitFor(() => expect((areas[2] as HTMLInputElement).value).toBe(""));
   });
 });

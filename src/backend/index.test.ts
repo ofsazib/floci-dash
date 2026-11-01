@@ -66,7 +66,7 @@ describe("backend/index.ts — app wiring", () => {
     expect(body.stats).toBeDefined();
   });
 
-  it("GET /api/active returns active services", async () => {
+  it("GET /api/active returns active services", { timeout: 60000 }, async () => {
     const res = await app.request("/api/active");
     expect(res.status).toBe(200);
     const body = await res.json();

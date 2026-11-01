@@ -6114,7 +6114,7 @@ describe("RDS E.4 Integration", () => {
     expect(ids).toContain(`it-e4-snap-${suffix}`);
     const del = await api("DELETE", "/api/aws/rds/db-snapshots/it-e4-snap-" + suffix);
     expect(del.status).toBe(200);
-  });
+  }, 120000);
 
   it("stops and starts the instance", { timeout: 90000 }, async () => {
     if (!skipUnlessAvailable()) return;

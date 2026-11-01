@@ -14,6 +14,11 @@ vi.mock("../../components/ConfirmDialog", () => ({
   }),
 }));
 
+const renewState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
+const mockRenewCert = vi.fn(() => Promise.resolve({ renewed: true }));
+const mockResendValidation = vi.fn(() => Promise.resolve({ sent: true }));
+const mockRevokeCert = vi.fn(() => Promise.resolve({ revoked: true }));
+const mockUpdateOptions = vi.fn(() => Promise.resolve({ updated: true }));
 const mockCertificates = vi.fn();
 const mockDeleteCert = vi.fn();
 const mockImportCert = vi.fn();
@@ -26,7 +31,20 @@ const deleteCertState = vi.hoisted(() => ({
   variables: null as string | null,
 }));
 
+const mockShowToast = vi.fn();
+vi.mock("../../components/Toast", () => ({
+  useToast: () => ({ showToast: mockShowToast }),
+}));
+
 vi.mock("../../hooks/useACM", () => ({
+    useRenewACMCertificate: () => ({
+    mutateAsync: mockRenewCert,
+    get isPending() { return renewState.isPending; },
+    get variables() { return renewState.variables; },
+  }),
+  useResendACMValidationEmail: () => ({ mutateAsync: mockResendValidation, isPending: false }),
+  useRevokeACMCertificate: () => ({ mutateAsync: mockRevokeCert, isPending: false }),
+  useUpdateACMCertificateOptions: () => ({ mutateAsync: mockUpdateOptions, isPending: false }),
   useACMCertificates: (...args: any[]) => mockCertificates(...args),
   useRequestACMCertificate: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteACMCertificate: () => ({
@@ -243,7 +261,7 @@ describe("ACMDashboard — import + export", () => {
     expect(await screen.findByText("CERTPEM")).toBeTruthy();
     expect(screen.getByText("CHAINPEM")).toBeTruthy();
     expect(screen.getByText("KEYPEM")).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: "Close" }));
+    await user.click(screen.getAllByRole("button", { name: "Close" }).find((b) => b.offsetParent !== null)!);
   });
 
   it("imports a certificate from the modal", async () => {
@@ -390,5 +408,127 @@ describe("ACMDashboard — export loading + error arms", () => {
     render(<ACMDashboard />, { wrapper: createWrapper() });
     await user.click((await screen.findAllByRole("button", { name: "Export" }))[0]);
     await waitFor(() => expect(mockExportCert).toHaveBeenCalled());
+  });
+
+  it("renews a certificate from the row action", async () => {
+    setupCert();
+    const user = userEvent.setup();
+    render(<ACMDashboard />, { wrapper: createWrapper() });
+    await user.click((await screen.findAllByRole("button", { name: "Renew" }))[0]);
+    await waitFor(() => expect(mockRenewCert).toHaveBeenCalledWith("arn:c1"));
+  });
+
+  it("manages a certificate: resend validation, revoke, update options", async () => {
+    setupCert();
+    const user = userEvent.setup();
+    render(<ACMDashboard />, { wrapper: createWrapper() });
+    await user.click((await screen.findAllByRole("button", { name: "Manage" }))[0]);
+    expect(screen.getByText(/Manage certificate/)).toBeTruthy();
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const inputs = Array.from(dialog.querySelectorAll("input"));
+    // validation domain
+    await user.type(inputs[0] as any, "example.com");
+    await user.click(screen.getByRole("button", { name: "Resend email" }));
+    expect(mockResendValidation).toHaveBeenCalledWith({
+      arn: "arn:c1", domain: "example.com", validationDomain: "example.com",
+    });
+    // revoke reason
+    await user.type(inputs[1] as any, "KEY_COMPROMISE");
+    await user.click(screen.getByRole("button", { name: "Revoke" }));
+    expect(mockRevokeCert).toHaveBeenCalledWith({ arn: "arn:c1", revocationReason: "KEY_COMPROMISE" });
+    // options
+    await user.type(inputs[2] as any, "d");
+    await user.click(screen.getByRole("button", { name: "Save options" }));
+    expect(mockUpdateOptions).toHaveBeenCalledWith({
+      arn: "arn:c1", certificateTransparencyLoggingPreference: "ENABLEDD",
+    });
+  });
+
+  it("renews a certificate and surfaces failure toast on error", async () => {
+    mockRenewCert.mockRejectedValueOnce(new Error("renew boom"));
+    setupCert();
+    const user = userEvent.setup();
+    render(<ACMDashboard />, { wrapper: createWrapper() });
+    await user.click((await screen.findAllByRole("button", { name: "Renew" }))[0]);
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "renew boom"));
+  });
+
+  it("closes the exported certificate modal with Close", async () => {
+    setupCert();
+    const user = userEvent.setup();
+    render(<ACMDashboard />, { wrapper: createWrapper() });
+    mockExportCert.mockImplementation((_b: any, opts: any) =>
+      opts?.onSuccess?.({ certificate: "C2", certificateChain: "CH2", privateKey: "K2" })
+    );
+    await user.click((await screen.findAllByRole("button", { name: "Export" }))[0]);
+    const pemText = await screen.findByText("C2");
+    const exportedDialog = pemText.closest('[role="dialog"]')!;
+    await user.click(
+      Array.from(exportedDialog.querySelectorAll("button")).find((b) => b.textContent?.trim() === "Close")!
+    );
+    // Modal closed without errors
+    expect(mockShowToast).not.toHaveBeenCalledWith("error", expect.anything());
+  });
+
+  it("surfaces error toasts for resend, revoke and options failures", async () => {
+    mockResendValidation.mockRejectedValueOnce(new Error("resend boom"));
+    mockRevokeCert.mockRejectedValueOnce(new Error("revoke boom"));
+    mockUpdateOptions.mockRejectedValueOnce(new Error("options boom"));
+    setupCert();
+    const user = userEvent.setup();
+    render(<ACMDashboard />, { wrapper: createWrapper() });
+    await user.click((await screen.findAllByRole("button", { name: "Manage" }))[0]);
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const inputs = Array.from(dialog.querySelectorAll("input"));
+    await user.type(inputs[0] as any, "example.com");
+    await user.click(screen.getByRole("button", { name: "Resend email" }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "resend boom"));
+    await user.type(inputs[1] as any, "KEY_COMPROMISE");
+    await user.click(screen.getByRole("button", { name: "Revoke" }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "revoke boom"));
+    await user.type(inputs[2] as any, "x");
+    await user.click(screen.getByRole("button", { name: "Save options" }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "options boom"));
+  });
+
+  it("shows renew loading state only for the in-flight certificate", () => {
+    renewState.isPending = true;
+    renewState.variables = "arn:c1";
+    setupCert();
+    render(<ACMDashboard />, { wrapper: createWrapper() });
+    const buttons = screen.getAllByRole("button", { name: "Renew" });
+    expect(buttons[0].className).toMatch(/disabled|loading/);
+    renewState.isPending = false;
+    renewState.variables = null;
+  });
+
+  it("surfaces fallback error message when renewal rejects without a message", async () => {
+    mockRenewCert.mockRejectedValueOnce("plain-rejection");
+    setupCert();
+    const user = userEvent.setup();
+    render(<ACMDashboard />, { wrapper: createWrapper() });
+    await user.click((await screen.findAllByRole("button", { name: "Renew" }))[0]);
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "Renewal failed"));
+  });
+
+  it("surfaces fallback messages when validation, revoke and options reject without messages", async () => {
+    mockResendValidation.mockRejectedValueOnce("no-msg-1");
+    mockRevokeCert.mockRejectedValueOnce("no-msg-2");
+    mockUpdateOptions.mockRejectedValueOnce("no-msg-3");
+    setupCert();
+    const user = userEvent.setup();
+    render(<ACMDashboard />, { wrapper: createWrapper() });
+    await user.click((await screen.findAllByRole("button", { name: "Manage" }))[0]);
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const inputs = Array.from(dialog.querySelectorAll("input"));
+    await user.type(inputs[0] as any, "example.com");
+    await user.click(screen.getByRole("button", { name: "Resend email" }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "Failed to send validation email"));
+    await user.type(inputs[1] as any, "KEY_COMPROMISE");
+    await user.click(screen.getByRole("button", { name: "Revoke" }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "Revocation failed"));
+    await user.type(inputs[2] as any, "x");
+    await user.click(screen.getByRole("button", { name: "Save options" }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "Failed to update options"));
   });
 });

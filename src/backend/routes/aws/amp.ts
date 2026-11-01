@@ -11,6 +11,11 @@ import {
   ListTagsForResourceCommand,
   TagResourceCommand,
   UntagResourceCommand,
+  CreateRuleGroupsNamespaceCommand,
+  ListRuleGroupsNamespacesCommand,
+  DescribeRuleGroupsNamespaceCommand,
+  PutRuleGroupsNamespaceCommand,
+  DeleteRuleGroupsNamespaceCommand,
 } from "@aws-sdk/client-amp";
 
 const router = new Hono();
@@ -86,6 +91,90 @@ router.post("/tags/untag", async (c: Context) => {
     new UntagResourceCommand({ resourceArn: body.resourceArn, tagKeys: body.tagKeys as string[] })
   );
   return c.json({ untagged: true });
+});
+
+// ── Rule Groups Namespaces ─────────────────────────────────
+
+router.get("/workspaces/:workspaceId/namespaces", async (c: Context) => {
+  const workspaceId = c.req.param("workspaceId");
+  const result: any = await getClient().send(
+    new ListRuleGroupsNamespacesCommand({ workspaceId, maxResults: 100 })
+  );
+  const namespaces = (result.ruleGroupsNamespaces || []).map((n: any) => ({
+    name: n.name,
+    arn: n.arn,
+    status: n.status?.statusCode ?? n.status,
+    createdAt: n.createdAt,
+    modifiedAt: n.modifiedAt,
+  }));
+  return c.json({ namespaces, total: namespaces.length });
+});
+
+router.post("/workspaces/:workspaceId/namespaces", async (c: Context) => {
+  const workspaceId = c.req.param("workspaceId");
+  const body = await c.req.json<any>();
+  if (!body.name) return c.json({ error: "name is required" }, 400);
+  if (!body.data) return c.json({ error: "data is required" }, 400);
+  const result: any = await getClient().send(
+    new CreateRuleGroupsNamespaceCommand({
+      workspaceId,
+      name: body.name,
+      data: body.data,
+      clientToken: body.clientToken,
+    })
+  );
+  return c.json({ name: result.name, arn: result.arn, status: result.status }, 202);
+});
+
+router.get("/workspaces/:workspaceId/namespaces/:name", async (c: Context) => {
+  const workspaceId = c.req.param("workspaceId");
+  const name = c.req.param("name");
+  try {
+    const result: any = await getClient().send(
+      new DescribeRuleGroupsNamespaceCommand({ workspaceId, name })
+    );
+    const ns = result.ruleGroupsNamespace;
+    return c.json({
+      namespace: ns
+        ? {
+            name: ns.name,
+            arn: ns.arn,
+            status: ns.status?.statusCode ?? ns.status,
+            createdAt: ns.createdAt,
+            modifiedAt: ns.modifiedAt,
+            data: ns.data,
+          }
+        : null,
+    });
+  } catch (err: any) {
+    if (err.name === "ResourceNotFoundException") {
+      return c.json({ error: "Namespace not found" }, 404);
+    }
+    throw err;
+  }
+});
+
+router.put("/workspaces/:workspaceId/namespaces/:name", async (c: Context) => {
+  const workspaceId = c.req.param("workspaceId");
+  const name = c.req.param("name");
+  const body = await c.req.json<any>();
+  if (!body.data) return c.json({ error: "data is required" }, 400);
+  const result: any = await getClient().send(
+    new PutRuleGroupsNamespaceCommand({
+      workspaceId,
+      name,
+      data: body.data,
+      clientToken: body.clientToken,
+    })
+  );
+  return c.json({ name: result.name, arn: result.arn, status: result.status, updatedAt: true });
+});
+
+router.delete("/workspaces/:workspaceId/namespaces/:name", async (c: Context) => {
+  const workspaceId = c.req.param("workspaceId");
+  const name = c.req.param("name");
+  await getClient().send(new DeleteRuleGroupsNamespaceCommand({ workspaceId, name }));
+  return c.json({ deleted: true });
 });
 
 export default router;

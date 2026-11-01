@@ -1,12 +1,22 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, within, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
 
 // ─── Mock hooks ─────────────────────────────────────────
 
+const mockAnomalyMonitors = vi.fn((..._a: any[]) => ({ data: { anomalyMonitors: [], total: 0 }, isLoading: false }) as { data: any; isLoading: boolean });
+const mockAnomalySubscriptions = vi.fn((..._a: any[]) => ({ data: { anomalySubscriptions: [], total: 0 }, isLoading: false }) as { data: any; isLoading: boolean });
+const mockResourceTags = vi.fn((..._a: any[]) => ({ data: { tags: {} }, isLoading: false }) as { data: any; isLoading: boolean });
+const ceDeleteState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
+const ceSubDeleteState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
+const mockCreateMonitor = vi.fn(() => Promise.resolve({ monitorArn: "arn:m" }));
+const mockUpdateMonitor = vi.fn();
+const mockDeleteMonitor = vi.fn(() => Promise.resolve({}));
+const mockCreateSubscription = vi.fn(() => Promise.resolve({ subscriptionArn: "arn:s" }));
+const mockDeleteSubscription = vi.fn(() => Promise.resolve({}));
 const mockCostAndUsageMutate = vi.fn();
 const mockDimensionValuesMutate = vi.fn();
 const mockCETagsMutate = vi.fn();
@@ -64,7 +74,36 @@ const mockCostCategoriesHook = vi.fn(() => ({
   data: undefined,
 }));
 
+const require0Mocks: Record<string, any> = {
+  useCEAnomalyMonitors: mockAnomalyMonitors,
+  useCEAnomalySubscriptions: mockAnomalySubscriptions,
+  useCEResourceTags: mockResourceTags,
+};
+
+const mockShowToast = vi.fn();
+vi.mock("../../components/Toast", () => ({
+  useToast: () => ({ showToast: mockShowToast }),
+}));
+
 vi.mock("../../hooks/useCE", () => ({
+  useCEAnomalyMonitors: (...args: any[]) => mockAnomalyMonitors(...args),
+  useCreateCEAnomalyMonitor: () => ({ mutateAsync: mockCreateMonitor, isPending: false }),
+  useUpdateCEAnomalyMonitor: () => ({ mutate: mockUpdateMonitor, isPending: false }),
+  useDeleteCEAnomalyMonitor: () => ({
+    mutateAsync: mockDeleteMonitor,
+    get isPending() { return ceDeleteState.isPending; },
+    get variables() { return ceDeleteState.variables; },
+  }),
+  useCEAnomalySubscriptions: (...args: any[]) => mockAnomalySubscriptions(...args),
+  useCreateCEAnomalySubscription: () => ({ mutateAsync: mockCreateSubscription, isPending: false }),
+  useDeleteCEAnomalySubscription: () => ({
+    mutateAsync: mockDeleteSubscription,
+    get isPending() { return ceSubDeleteState.isPending; },
+    get variables() { return ceSubDeleteState.variables; },
+  }),
+  useCEResourceTags: (...args: any[]) => mockResourceTags(...args),
+  useCETagResource: () => ({ mutateAsync: vi.fn(() => Promise.resolve({})), isPending: false }),
+  useCEUntagResource: () => ({ mutateAsync: vi.fn(() => Promise.resolve({})), isPending: false }),
   useCostAndUsage: () => mockCostAndUsageHook(),
   useCostAndUsageWithResources: () => mockCostWithResourcesHook(),
   useDimensionValues: () => mockDimensionValuesHook(),
@@ -88,6 +127,15 @@ beforeEach(() => {
     isPending: false,
     data: undefined,
   });
+  mockAnomalyMonitors.mockReturnValue({ data: { anomalyMonitors: [], total: 0 }, isLoading: false });
+  mockAnomalySubscriptions.mockReturnValue({ data: { anomalySubscriptions: [], total: 0 }, isLoading: false });
+  mockResourceTags.mockReturnValue({ data: { tags: {} }, isLoading: false });
+  ceDeleteState.isPending = false;
+  ceDeleteState.variables = null;
+  ceSubDeleteState.isPending = false;
+  ceSubDeleteState.variables = null;
+  mockCreateMonitor.mockImplementation(() => Promise.resolve({ monitorArn: "arn:m" }));
+  mockCreateSubscription.mockImplementation(() => Promise.resolve({ subscriptionArn: "arn:s" }));
   mockDimensionValuesHook.mockReturnValue({
     mutate: mockDimensionValuesMutate,
     isPending: false,
@@ -340,5 +388,262 @@ describe("CEDashboard — cost & usage with resources", () => {
     expect(mockCostWithResourcesMutate).toHaveBeenCalledWith(
       expect.objectContaining({ granularity: "MONTHLY", metrics: ["UnblendedCost"] })
     );
+  });
+});
+
+describe("CEDashboard — anomaly detection", () => {
+  it("lists anomaly monitors and subscriptions", async () => {
+    const user = userEvent.setup();
+    render(<CEDashboard />, { wrapper: createWrapper() });
+    expect(await screen.findByText("Cost Anomaly Detection")).toBeTruthy();
+    expect(screen.getByText("No anomaly monitors")).toBeTruthy();
+    expect(screen.getByText("No anomaly subscriptions")).toBeTruthy();
+  });
+
+  it("creates an anomaly monitor via modal", async () => {
+    const user = userEvent.setup();
+    render(<CEDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "Create Monitor" }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const inputs = Array.from(dialog.querySelectorAll("input"));
+    await user.type(inputs[0] as any, "m1");
+    await user.click(screen.getByRole("button", { name: "Create monitor" }));
+    expect(mockCreateMonitor).toHaveBeenCalledWith({
+      monitorName: "m1", monitorType: "DIMENSIONAL", monitorDimension: "SERVICE",
+    });
+  });
+
+  it("creates an anomaly subscription via modal", async () => {
+    const user = userEvent.setup();
+    render(<CEDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "Create Subscription" }));
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const inputs = Array.from(dialog.querySelectorAll("input"));
+    await user.type(inputs[0] as any, "s1");
+    await user.type(inputs[1] as any, "arn:m");
+    await user.type(inputs[2] as any, "a@b.c");
+    await user.click(screen.getByRole("button", { name: "Create subscription" }));
+    expect(mockCreateSubscription).toHaveBeenCalledWith({
+      subscriptionName: "s1",
+      monitorArn: "arn:m",
+      subscribers: [{ Type: "EMAIL", Address: "a@b.c" }],
+      threshold: undefined,
+    });
+  });
+});
+
+function visibleDeleteConfirm() {
+  const dialogs = screen.getAllByRole("dialog").filter((d) => !d.className.includes("hidden"));
+  const dlg = dialogs[dialogs.length - 1];
+  return Array.from(dlg.querySelectorAll("button")).find((b) => b.textContent?.trim() === "Delete")!;
+}
+
+describe("CEDashboard — anomaly actions with data", () => {
+  function setupAnomalyData() {
+    const { useCEAnomalyMonitors, useCEAnomalySubscriptions, useCEResourceTags } =
+      require0Mocks;
+    useCEAnomalyMonitors.mockReturnValue({
+      data: {
+        anomalyMonitors: [
+          { arn: "arn:m1", name: "m1", type: "DIMENSIONAL", dimension: "SERVICE", state: "ACTIVE" },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    useCEAnomalySubscriptions.mockReturnValue({
+      data: { anomalySubscriptions: [{ arn: "arn:s1", name: "s1", threshold: 10, frequency: "DAILY" }], total: 1 },
+      isLoading: false,
+    });
+    useCEResourceTags.mockReturnValue({ data: { tags: { env: "prod" } }, isLoading: false });
+  }
+
+  it("pauses a monitor, opens tags, adds and removes tags", async () => {
+    setupAnomalyData();
+    const user = userEvent.setup();
+    render(<CEDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "Pause" }));
+    expect(mockUpdateMonitor).toHaveBeenCalledWith({ arn: "arn:m1", monitorState: "PAUSED" });
+    await user.click(screen.getByRole("button", { name: "Tags" }));
+    expect(await screen.findByText("env")).toBeTruthy();
+    // remove tag
+    await user.click(screen.getByRole("button", { name: "Remove" }));
+    // add tag
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const inputs = within(dialog).getAllByRole("textbox");
+    await user.type(inputs[0], "team");
+    await user.type(inputs[1], "infra");
+    await user.click(screen.getByRole("button", { name: "Add tag" }));
+  });
+
+  it("deletes a monitor and a subscription with confirmation", async () => {
+    setupAnomalyData();
+    const user = userEvent.setup();
+    render(<CEDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: /Delete m1/i }));
+    await waitFor(() => expect(screen.getAllByText(/Are you sure/).length).toBeGreaterThan(0));
+    await user.click(visibleDeleteConfirm());
+    await waitFor(() => expect(mockDeleteMonitor).toHaveBeenCalledWith("arn:m1"));
+    await user.click(await screen.findByRole("button", { name: /Delete s1/i }));
+    await waitFor(() => expect(screen.getAllByText(/Are you sure/).length).toBeGreaterThan(0));
+    await user.click(visibleDeleteConfirm());
+    await waitFor(() => expect(mockDeleteSubscription).toHaveBeenCalledWith("arn:s1"));
+  });
+
+
+});
+
+describe("CEDashboard — anomaly modal interactions", () => {
+  function escapeModals() {
+    document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+      fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27, key: "Escape" });
+    });
+  }
+
+  it("fills all monitor modal fields and dismisses with Escape", async () => {
+    const user = userEvent.setup();
+    render(<CEDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "Create Monitor" }));
+    const dlg = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const inputs = within(dlg).getAllByRole("textbox");
+    await user.type(inputs[0], "m3");
+    await user.clear(inputs[1]);
+    await user.type(inputs[1], "CUSTOM");
+    await user.clear(inputs[2]);
+    await user.type(inputs[2], "OPERATION");
+    await user.click(within(dlg).getByRole("button", { name: "Create monitor" }));
+    expect(mockCreateMonitor).toHaveBeenCalledWith({
+      monitorName: "m3", monitorType: "CUSTOM", monitorDimension: undefined,
+    });
+    escapeModals();
+    const header = screen.getAllByText("Create anomaly monitor").find((h) => h.closest('[role="dialog"]'));
+    expect(header!.closest('[role="dialog"]')!.className).toContain("hidden");
+  });
+
+  it("fills subscription modal threshold and dismisses with Escape", async () => {
+    const user = userEvent.setup();
+    render(<CEDashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "Create Subscription" }));
+    const dlg = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const inputs = within(dlg).getAllByRole("textbox");
+    await user.type(inputs[0], "s3");
+    await user.type(inputs[1], "arn:m");
+    await user.type(inputs[2], "a@b.c");
+    await user.type(inputs[3], "50");
+    await user.click(within(dlg).getByRole("button", { name: "Create subscription" }));
+    expect(mockCreateSubscription).toHaveBeenCalledWith({
+      subscriptionName: "s3", monitorArn: "arn:m",
+      subscribers: [{ Type: "EMAIL", Address: "a@b.c" }], threshold: 50,
+    });
+    escapeModals();
+    const header = screen.getAllByText("Create anomaly subscription").find((h) => h.closest('[role="dialog"]'));
+    expect(header!.closest('[role="dialog"]')!.className).toContain("hidden");
+  });
+
+  it("dismisses the monitor tags modal with Escape", async () => {
+    mockAnomalyMonitors.mockReturnValue({
+      data: { anomalyMonitors: [{ arn: "arn:m1", name: "m1", type: "DIMENSIONAL", state: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    } as any);
+    const user = userEvent.setup();
+    render(<CEDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("m1")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "Tags" }));
+    await screen.findByText(/No tags on this monitor/);
+    escapeModals();
+    const header = screen.getAllByText("Monitor resource tags").find((h) => h.closest('[role="dialog"]'));
+    expect(header!.closest('[role="dialog"]')!.className).toContain("hidden");
+  });
+
+});
+
+describe("CEDashboard — anomaly sparse rows and arms", () => {
+  function setupSparse() {
+    // undefined query data exercises the `|| []` defaults
+    mockAnomalyMonitors.mockReturnValue({ data: undefined, isLoading: false });
+    mockAnomalySubscriptions.mockReturnValue({ data: undefined, isLoading: false });
+    mockResourceTags.mockReturnValue({ data: undefined, isLoading: false });
+  }
+
+  it("renders empty anomaly sections when query data is undefined", async () => {
+    setupSparse();
+    const user = userEvent.setup();
+    render(<CEDashboard />, { wrapper: createWrapper() });
+    expect(await screen.findByText("No anomaly monitors")).toBeTruthy();
+    expect(screen.getByText("No anomaly subscriptions")).toBeTruthy();
+  });
+
+  it("handles sparse rows, PAUSED rows and nameless entries", async () => {
+    mockAnomalyMonitors.mockReturnValue({
+      data: {
+        anomalyMonitors: [
+          { arn: "arn:bare" },
+          { arn: "arn:p", name: "paused", type: "DIMENSIONAL", dimension: "SERVICE", state: "PAUSED" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    mockAnomalySubscriptions.mockReturnValue({
+      data: { anomalySubscriptions: [{ arn: "arn:s-bare" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CEDashboard />, { wrapper: createWrapper() });
+    // sparse monitor cells fall back to em-dashes; nameless rows fall back to arn in DeleteButton
+    expect(await screen.findByRole("button", { name: /Delete arn:bare/i })).toBeTruthy();
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(6);
+    // DeleteButton falls back to arn for nameless entries
+    expect(screen.getByRole("button", { name: /Delete arn:bare/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Delete arn:s-bare/i })).toBeTruthy();
+    // PAUSED row shows Resume and sends ACTIVE
+    await user.click(screen.getByRole("button", { name: "Resume" }));
+    expect(mockUpdateMonitor).toHaveBeenCalledWith({ arn: "arn:p", monitorState: "ACTIVE" });
+  });
+
+  it("shows delete loading state only for the matching monitor and subscription", () => {
+    ceDeleteState.isPending = true;
+    ceDeleteState.variables = "arn:m1";
+    ceSubDeleteState.isPending = true;
+    ceSubDeleteState.variables = "arn:s1";
+    mockAnomalyMonitors.mockReturnValue({
+      data: {
+        anomalyMonitors: [
+          { arn: "arn:m1", name: "m1", type: "DIMENSIONAL", state: "ACTIVE" },
+          { arn: "arn:m2", name: "m2", type: "DIMENSIONAL", state: "ACTIVE" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    mockAnomalySubscriptions.mockReturnValue({
+      data: {
+        anomalySubscriptions: [
+          { arn: "arn:s1", name: "s1", threshold: 10, frequency: "DAILY" },
+          { arn: "arn:s2", name: "s2", threshold: 20, frequency: "DAILY" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    render(<CEDashboard />, { wrapper: createWrapper() });
+    expect(screen.getAllByRole("button", { name: /Delete m/i }).length).toBe(2);
+    ceDeleteState.isPending = false;
+    ceDeleteState.variables = null;
+    ceSubDeleteState.isPending = false;
+    ceSubDeleteState.variables = null;
+  });
+
+  it("renders the tags editor loading state", async () => {
+    mockAnomalyMonitors.mockReturnValue({
+      data: { anomalyMonitors: [{ arn: "arn:m1", name: "m1", type: "DIMENSIONAL", state: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    mockResourceTags.mockReturnValue({ data: undefined, isLoading: true });
+    const user = userEvent.setup();
+    render(<CEDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("m1")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "Tags" }));
+    expect(await screen.findByText("Loading tags…")).toBeTruthy();
   });
 });

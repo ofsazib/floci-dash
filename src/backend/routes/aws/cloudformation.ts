@@ -27,6 +27,14 @@ import {
   ListStackInstancesCommand,
   DeleteStackInstancesCommand,
   ListStackSetOperationsCommand,
+  UpdateStackSetCommand,
+  DescribeStackSetOperationCommand,
+  DescribeStackInstanceCommand,
+  UpdateTerminationProtectionCommand,
+  ListStackSetAutoDeploymentTargetsCommand,
+  ActivateOrganizationsAccessCommand,
+  DescribeOrganizationsAccessCommand,
+  GetTemplateSummaryCommand,
   GetStackPolicyCommand,
   SetStackPolicyCommand,
 } from "@aws-sdk/client-cloudformation";
@@ -506,6 +514,180 @@ router.delete("/stacksets/:name/instances", async (c: Context) => {
     })
   );
   return c.json({ name, instancesDeleted: true });
+});
+
+// ─── STACK SET OPERATIONS / INSTANCES ────────────────────
+
+router.get("/stacksets/:name/operations/:operationId", async (c: Context) => {
+  const name = c.req.param("name");
+  const operationId = c.req.param("operationId");
+  try {
+    const result = await cfn().send(
+      new DescribeStackSetOperationCommand({ StackSetName: name, OperationId: operationId })
+    );
+    const op = result.StackSetOperation;
+    return c.json({
+      operation: op
+        ? {
+            id: op.OperationId,
+            action: op.Action,
+            status: op.Status,
+            statusReason: op.StatusReason,
+            creationTime: op.CreationTimestamp,
+            endTime: op.EndTimestamp,
+            stackSetId: op.StackSetId,
+          }
+        : null,
+    });
+  } catch (err: any) {
+    if (err.name === "OperationNotFoundException" || err.name === "StackSetNotFoundException") {
+      return c.json({ error: "Stack set operation not found" }, 404);
+    }
+    throw err;
+  }
+});
+
+router.get("/stacksets/:name/instances/:account/:region", async (c: Context) => {
+  const name = c.req.param("name");
+  const account = c.req.param("account");
+  const region = c.req.param("region");
+  try {
+    const result: any = await cfn().send(
+      new DescribeStackInstanceCommand({
+        StackSetName: name,
+        AccountId: account,
+        Region: region,
+      } as any)
+    );
+    const inst = result.StackInstance;
+    return c.json({
+      instance: inst
+        ? {
+            account: inst.Account,
+            region: inst.Region,
+            stackId: inst.StackId,
+            status: inst.Status,
+            statusReason: inst.StatusReason,
+            stackSetStatus: inst.StackSetStatus,
+            driftStatus: inst.DriftStatus,
+          }
+        : null,
+    });
+  } catch (err: any) {
+    if (err.name === "StackInstanceNotFoundException" || err.name === "StackSetNotFoundException") {
+      return c.json({ error: "Stack instance not found" }, 404);
+    }
+    throw err;
+  }
+});
+
+router.put("/stacksets/:name", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<any>();
+  if (body.templateBody) {
+    const validation = validateJson(body.templateBody);
+    if (!validation.valid) {
+      return c.json({ error: `Invalid template: ${validation.error}` }, 400);
+    }
+  }
+  const result = await cfn().send(
+    new UpdateStackSetCommand({
+      StackSetName: name,
+      TemplateBody: body.templateBody,
+      Description: sanitizeText(body.description || "", 1024),
+      Parameters: (body.parameters || []).map((p: any) => ({
+        ParameterKey: sanitizeName(p.key || "", 256),
+        ParameterValue: sanitizeText(p.value || "", 4096),
+      })),
+      Capabilities: body.capabilities || ["CAPABILITY_IAM", "CAPABILITY_NAMED_IAM"],
+      OperationId: body.operationId ? sanitizeName(body.operationId, 64) : undefined,
+    } as any)
+  );
+  return c.json({ name, operationId: result.OperationId, updated: true });
+});
+
+router.get("/stacksets/:name/auto-deployment-targets", async (c: Context) => {
+  const name = c.req.param("name");
+  const result = await cfn().send(
+    new ListStackSetAutoDeploymentTargetsCommand({ StackSetName: name })
+  );
+  const targets = (result.Summaries || []).map((t: any) => ({
+    account: t.AccountId,
+    regions: t.Regions || [],
+    organizationalUnitId: t.OrganizationalUnitId,
+  }));
+  return c.json({ targets, total: targets.length });
+});
+
+// ─── TERMINATION PROTECTION ──────────────────────────────
+
+router.put("/stacks/:name/termination-protection", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<any>();
+  if (typeof body.enabled !== "boolean") {
+    return c.json({ error: "enabled boolean is required" }, 400);
+  }
+  await cfn().send(
+    new UpdateTerminationProtectionCommand({
+      StackName: name,
+      EnableTerminationProtection: body.enabled,
+    })
+  );
+  return c.json({ name, enabled: body.enabled });
+});
+
+// ─── ORGANIZATIONS ACCESS ────────────────────────────────
+
+router.get("/organizations-access", async (c: Context) => {
+  const result = await cfn().send(new DescribeOrganizationsAccessCommand({}));
+  return c.json({ status: result.Status || "DISABLED" });
+});
+
+router.post("/organizations-access/activate", async (c: Context) => {
+  await cfn().send(new ActivateOrganizationsAccessCommand({}));
+  return c.json({ activated: true });
+});
+
+// ─── TEMPLATE SUMMARY ────────────────────────────────────
+
+router.post("/template-summary", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.templateBody && !body.stackName) {
+    return c.json({ error: "templateBody or stackName is required" }, 400);
+  }
+  if (body.templateBody) {
+    const validation = validateJson(body.templateBody);
+    if (!validation.valid) {
+      return c.json({ error: `Invalid template: ${validation.error}` }, 400);
+    }
+  }
+  const result = await cfn().send(
+    new GetTemplateSummaryCommand({
+      TemplateBody: body.templateBody,
+      StackName: body.stackName,
+    })
+  );
+  return c.json({
+    summary: {
+      version: result.Version,
+      description: result.Description,
+      parameters: (result.Parameters || []).map((p: any) => ({
+        key: p.ParameterKey,
+        type: p.ParameterType,
+        defaultValue: p.DefaultValue,
+        description: p.Description,
+        noEcho: p.NoEcho,
+      })),
+      resourceTypes: result.ResourceTypes || [],
+      resources: (result.ResourceIdentifierSummaries || []).map((r: any) => ({
+        resourceType: r.ResourceType,
+        logicalResourceIds: r.LogicalResourceIds || [],
+      })),
+      capabilities: result.Capabilities || [],
+      capabilitiesReason: result.CapabilitiesReason,
+      metadata: result.Metadata,
+    },
+  });
 });
 
 export default router;

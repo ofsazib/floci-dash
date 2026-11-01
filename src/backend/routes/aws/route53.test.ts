@@ -36,6 +36,15 @@ vi.mock("@aws-sdk/client-route-53", () => ({
   GetHostedZoneCountCommand: createCmd("GetHostedZoneCountCommand"),
   GetHealthCheckCommand: createCmd("GetHealthCheckCommand"),
   UpdateHealthCheckCommand: createCmd("UpdateHealthCheckCommand"),
+  UpdateHostedZoneCommentCommand: createCmd("UpdateHostedZoneCommentCommand"),
+  AssociateVPCWithHostedZoneCommand: createCmd("AssociateVPCWithHostedZoneCommand"),
+  DisassociateVPCFromHostedZoneCommand: createCmd("DisassociateVPCFromHostedZoneCommand"),
+  CreateVPCAssociationAuthorizationCommand: createCmd("CreateVPCAssociationAuthorizationCommand"),
+  DeleteVPCAssociationAuthorizationCommand: createCmd("DeleteVPCAssociationAuthorizationCommand"),
+  ListVPCAssociationAuthorizationsCommand: createCmd("ListVPCAssociationAuthorizationsCommand"),
+  ListHostedZonesByVPCCommand: createCmd("ListHostedZonesByVPCCommand"),
+  GetHealthCheckStatusCommand: createCmd("GetHealthCheckStatusCommand"),
+  GetHostedZoneLimitCommand: createCmd("GetHostedZoneLimitCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -60,8 +69,20 @@ async function post(path: string, body?: any) {
   });
 }
 
-async function del(path: string) {
-  return router.request(path, { method: "DELETE" });
+async function put(path: string, body?: any) {
+  return router.request(path, {
+    method: "PUT",
+    body: body != null ? JSON.stringify(body) : undefined,
+    headers: body != null ? { "content-type": "application/json" } : undefined,
+  });
+}
+
+async function del(path: string, body?: any) {
+  return router.request(path, {
+    method: "DELETE",
+    body: body != null ? JSON.stringify(body) : undefined,
+    headers: body != null ? { "content-type": "application/json" } : undefined,
+  });
 }
 
 beforeEach(() => {
@@ -421,6 +442,91 @@ describe("Route53 routes — Health Checks", () => {
 
 // ─── P1 gap audit ─────────────────────────────────────────
 
+describe("Route53 P1 extras — sparse fallbacks", () => {
+  beforeEach(() => mockSend.mockReset());
+
+  it("list hosted zones by name — missing Config/NextDNSName/IsTruncated fall back", async () => {
+    mockSend.mockResolvedValueOnce({ HostedZones: [{ Id: "hz-2", Name: "y." }], IsTruncated: true });
+    const res = await router.request("/hosted-zones-by-name?dnsName=y.");
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.zones[0].private).toBe(false);
+    expect(body.truncated).toBe(true);
+  });
+
+  it("list hosted zones by name — sparse response defaults truncated/dnsName", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const body = await (await router.request("/hosted-zones-by-name")).json();
+    expect(body.zones).toEqual([]);
+    expect(body.total).toBe(0);
+    expect(body.dnsName).toBeNull();
+    expect(body.truncated).toBe(false);
+  });
+
+  it("list hosted zones by name — maxItems parses to integer", async () => {
+    mockSend.mockResolvedValueOnce({ HostedZones: [] });
+    await router.request("/hosted-zones-by-name?maxItems=5");
+    expect(mockSend.mock.calls[0][0].MaxItems).toBe(5);
+  });
+
+  it("PUT health check — missing HealthCheck falls back to null", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await router.request("/health-checks/h-8", {
+      method: "PUT",
+      body: JSON.stringify({ healthThreshold: 3 }),
+      headers: { "content-type": "application/json" },
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).healthCheck).toBeNull();
+  });
+
+  it("hosted zone count — missing count falls back to 0", async () => {
+    mockSend.mockResolvedValueOnce({});
+    expect((await (await router.request("/hosted-zone-count")).json()).count).toBe(0);
+  });
+
+  it("get health check — missing HealthCheck falls back to null", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const body = await (await router.request("/health-checks/h-9")).json();
+    expect(body.healthCheck).toBeNull();
+  });
+
+  it("associate-vpc — missing ChangeInfo falls back to null", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const body = await (await post("/hosted-zones/Z1/associate-vpc", { vpcId: "v", vpcRegion: "r" })).json();
+    expect(body.changeInfo).toBeNull();
+  });
+
+  it("disassociate-vpc — missing ChangeInfo falls back to null", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const body = await (await post("/hosted-zones/Z1/disassociate-vpc", { vpcId: "v", vpcRegion: "r" })).json();
+    expect(body.changeInfo).toBeNull();
+  });
+
+  it("hosted-zones-by-vpc — empty summaries fall back to empty array", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const body = await (await get("/hosted-zones-by-vpc?vpcId=vpc-1")).json();
+    expect(body.hostedZoneSummaries).toEqual([]);
+    expect(body.total).toBe(0);
+  });
+
+  it("hosted-zones-by-vpc — owner null when no owning account/service", async () => {
+    mockSend.mockResolvedValueOnce({ HostedZoneSummaries: [{ HostedZoneId: "Z9", Name: "z." }] });
+    const body = await (await get("/hosted-zones-by-vpc?vpcId=vpc-1")).json();
+    expect(body.hostedZoneSummaries[0].owner).toBeNull();
+  });
+
+  it("health check status — observation with statusReport but no region/ip", async () => {
+    mockSend.mockResolvedValueOnce({
+      HealthCheckObservations: [{ StatusReport: { Status: "Failure" } }],
+    });
+    const body = await (await get("/health-checks/H2/status")).json();
+    expect(body.observations[0].region).toBeNull();
+    expect(body.observations[0].ipAddress).toBeNull();
+    expect(body.observations[0].statusReport.status).toBe("Failure");
+  });
+});
+
 describe("Route53 P1 extras", () => {
   it("list hosted zones by name", async () => {
     mockSend.mockResolvedValueOnce({ HostedZones: [{ Id: "hz-1", Name: "x.", Config: { PrivateZone: false } }], IsTruncated: false });
@@ -439,5 +545,167 @@ describe("Route53 P1 extras", () => {
     expect((await router.request("/health-checks/h-1")).status).toBe(200);
     const res = await router.request("/health-checks/h-1", { method: "PUT", body: JSON.stringify({ healthThreshold: 3 }), headers: { "content-type": "application/json" } });
     expect(res.status).toBe(200);
+  });
+});
+
+// ── Comment / VPC association / authorizations / limits ────
+
+describe("Route53 — hosted zone comment and VPC association", () => {
+  beforeEach(() => mockSend.mockReset());
+
+  it("PUT /hosted-zones/:id/comment — updates comment", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put("/hosted-zones/Z123/comment", { comment: "hello" });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.updated).toBe(true);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("UpdateHostedZoneCommentCommand");
+    expect(mockSend.mock.calls[0][0].Comment).toBe("hello");
+  });
+
+  it("PUT /hosted-zones/:id/comment — 400 when comment not a string", async () => {
+    expect((await put("/hosted-zones/Z123/comment", { comment: 5 })).status).toBe(400);
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  it("POST /hosted-zones/:id/associate-vpc — associates a VPC", async () => {
+    mockSend.mockResolvedValueOnce({ ChangeInfo: { Id: "ch-1", Status: "PENDING" } });
+    const res = await post("/hosted-zones/Z123/associate-vpc", { vpcId: "vpc-1", vpcRegion: "us-east-1" });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.changeInfo.Id).toBe("ch-1");
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("AssociateVPCWithHostedZoneCommand");
+    expect(mockSend.mock.calls[0][0].VPC.VPCId).toBe("vpc-1");
+  });
+
+  it("POST /hosted-zones/:id/associate-vpc — 400 when vpc fields missing", async () => {
+    expect((await post("/hosted-zones/Z123/associate-vpc", { vpcId: "vpc-1" })).status).toBe(400);
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  it("POST /hosted-zones/:id/disassociate-vpc — disassociates a VPC", async () => {
+    mockSend.mockResolvedValueOnce({ ChangeInfo: { Id: "ch-2" } });
+    const res = await post("/hosted-zones/Z123/disassociate-vpc", { vpcId: "vpc-1", vpcRegion: "us-east-1" });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.changeInfo.Id).toBe("ch-2");
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("DisassociateVPCFromHostedZoneCommand");
+  });
+
+  it("POST /hosted-zones/:id/disassociate-vpc — 400 when vpc fields missing", async () => {
+    expect((await post("/hosted-zones/Z123/disassociate-vpc", {})).status).toBe(400);
+  });
+
+  it("POST /hosted-zones/:id/vpc-authorizations — creates authorization", async () => {
+    mockSend.mockResolvedValueOnce({ VPC: { VPCId: "vpc-1", VPCRegion: "us-east-1" } });
+    const res = await post("/hosted-zones/Z123/vpc-authorizations", { vpcId: "vpc-1", vpcRegion: "us-east-1" });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.vpc.vpcId).toBe("vpc-1");
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("CreateVPCAssociationAuthorizationCommand");
+  });
+
+  it("POST /hosted-zones/:id/vpc-authorizations — null vpc when missing", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const body = await (await post("/hosted-zones/Z123/vpc-authorizations", { vpcId: "v", vpcRegion: "r" })).json();
+    expect(body.vpc).toBeNull();
+  });
+
+  it("POST /hosted-zones/:id/vpc-authorizations — 400 when fields missing", async () => {
+    expect((await post("/hosted-zones/Z123/vpc-authorizations", { vpcId: "vpc-1" })).status).toBe(400);
+  });
+
+  it("DELETE /hosted-zones/:id/vpc-authorizations — deletes authorization", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const body = await (await del("/hosted-zones/Z123/vpc-authorizations", { vpcId: "vpc-1", vpcRegion: "us-east-1" })).json();
+    expect(body.deleted).toBe(true);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteVPCAssociationAuthorizationCommand");
+  });
+
+  it("DELETE /hosted-zones/:id/vpc-authorizations — 400 when fields missing", async () => {
+    expect((await del("/hosted-zones/Z123/vpc-authorizations", {})).status).toBe(400);
+  });
+
+  it("GET /hosted-zones/:id/vpc-authorizations — lists authorizations", async () => {
+    mockSend.mockResolvedValueOnce({
+      Authorizations: [{ VPCId: "vpc-1", VPCRegion: "us-east-1" }],
+    });
+    const res = await get("/hosted-zones/Z123/vpc-authorizations");
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.total).toBe(1);
+    expect(body.authorizations[0].vpcId).toBe("vpc-1");
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("ListVPCAssociationAuthorizationsCommand");
+  });
+
+  it("GET /hosted-zones/:id/vpc-authorizations — empty list", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const body = await (await get("/hosted-zones/Z123/vpc-authorizations")).json();
+    expect(body.authorizations).toEqual([]);
+  });
+
+  it("GET /hosted-zones-by-vpc — lists zones for a VPC", async () => {
+    mockSend.mockResolvedValueOnce({
+      HostedZoneSummaries: [{ HostedZoneId: "Z1", Name: "example.com.", Owner: { OwningAccount: "111" } }],
+    });
+    const res = await get("/hosted-zones-by-vpc?vpcId=vpc-1");
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.total).toBe(1);
+    expect(body.hostedZoneSummaries[0].owner).toBe("111");
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("ListHostedZonesByVPCCommand");
+    expect(mockSend.mock.calls[0][0].VPCRegion).toBe("us-east-1");
+  });
+
+  it("GET /hosted-zones-by-vpc — owner falls back to owning service", async () => {
+    mockSend.mockResolvedValueOnce({
+      HostedZoneSummaries: [{ HostedZoneId: "Z1", Name: "svc.", Owner: { OwningService: "cloudmap" } }],
+    });
+    const body = await (await get("/hosted-zones-by-vpc?vpcId=vpc-1")).json();
+    expect(body.hostedZoneSummaries[0].owner).toBe("cloudmap");
+  });
+
+  it("GET /hosted-zones-by-vpc — 400 when vpcId missing", async () => {
+    expect((await get("/hosted-zones-by-vpc")).status).toBe(400);
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  it("GET /health-checks/:id/status — returns observations", async () => {
+    mockSend.mockResolvedValueOnce({
+      HealthCheckObservations: [
+        { Region: "us-east-1", IPAddress: "1.2.3.4", StatusReport: { Status: "Success", CheckedTime: "t" } },
+        { Region: "us-west-2" },
+      ],
+    });
+    const res = await get("/health-checks/H1/status");
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.total).toBe(2);
+    expect(body.observations[0].statusReport.status).toBe("Success");
+    expect(body.observations[1].statusReport).toBeNull();
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetHealthCheckStatusCommand");
+  });
+
+  it("GET /health-checks/:id/status — empty observations", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const body = await (await get("/health-checks/H1/status")).json();
+    expect(body.observations).toEqual([]);
+  });
+
+  it("GET /hosted-zones/:id/limit/:type — returns limit", async () => {
+    mockSend.mockResolvedValueOnce({ Value: 500, Count: 3 });
+    const res = await get("/hosted-zones/Z123/limit/MAX_VPC_ASSOCIATIONS");
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.value).toBe(500);
+    expect(body.count).toBe(3);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetHostedZoneLimitCommand");
+  });
+
+  it("GET /hosted-zones/:id/limit/:type — null values when missing", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const body = await (await get("/hosted-zones/Z123/limit/MAX_VPC_ASSOCIATIONS")).json();
+    expect(body.value).toBeNull();
+    expect(body.count).toBeNull();
   });
 });

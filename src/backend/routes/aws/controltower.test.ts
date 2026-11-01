@@ -27,6 +27,12 @@ vi.mock("@aws-sdk/client-controltower", () => ({
   ResetLandingZoneCommand: createCmd("ResetLandingZoneCommand"),
   UpdateEnabledBaselineCommand: createCmd("UpdateEnabledBaselineCommand"),
   UpdateLandingZoneCommand: createCmd("UpdateLandingZoneCommand"),
+  EnableControlCommand: createCmd("EnableControlCommand"),
+  ListEnabledControlsCommand: createCmd("ListEnabledControlsCommand"),
+  GetEnabledControlCommand: createCmd("GetEnabledControlCommand"),
+  UpdateEnabledControlCommand: createCmd("UpdateEnabledControlCommand"),
+  ResetEnabledControlCommand: createCmd("ResetEnabledControlCommand"),
+  GetControlOperationCommand: createCmd("GetControlOperationCommand"),
 }));
 
 import controltowerRoutes from "./controltower";
@@ -441,5 +447,187 @@ describe("controltower — sparse response fallbacks", () => {
         endTime: null,
       },
     });
+  });
+});
+
+describe("controltower — enabled controls", () => {
+  beforeEach(() => mockSend.mockReset());
+
+  it("GET /enabled-controls — lists enabled controls", async () => {
+    mockSend.mockResolvedValueOnce({
+      enabledControls: [
+        {
+          arn: "arn:ctl", controlIdentifier: "AWS::SeC::X", targetIdentifier: "arn:ou",
+          statusSummary: { status: "SUCCEEDED" }, driftStatusSummary: { driftStatus: "IN_SYNC" },
+        },
+      ],
+    });
+    const res = await get("/enabled-controls");
+    const b = await res.json();
+    expect(res.status).toBe(200);
+    expect(b.total).toBe(1);
+    expect(b.enabledControls[0].controlIdentifier).toBe("AWS::SeC::X");
+    expect(b.enabledControls[0].status).toBe("SUCCEEDED");
+    expect(b.enabledControls[0].driftStatus).toBe("IN_SYNC");
+    expect(mockSend.mock.calls[0][0].__cmd).toBe("ListEnabledControlsCommand");
+  });
+
+  it("GET /enabled-controls — empty list", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const b = await (await get("/enabled-controls")).json();
+    expect(b.enabledControls).toEqual([]);
+    expect(b.total).toBe(0);
+  });
+
+  it("GET /enabled-controls — falls back to nulls for missing fields", async () => {
+    mockSend.mockResolvedValueOnce({
+      enabledControls: [{ arn: "arn:ctl" }],
+      nextToken: undefined,
+    });
+    const res = await get("/enabled-controls");
+    const b = await res.json();
+    expect(res.status).toBe(200);
+    expect(b.enabledControls[0].controlIdentifier).toBeNull();
+    expect(b.enabledControls[0].targetIdentifier).toBeNull();
+    expect(b.enabledControls[0].status).toBeNull();
+    expect(b.enabledControls[0].driftStatus).toBeNull();
+  });
+
+  it("GET /enabled-controls/detail — sparse detail fills defaults", async () => {
+    mockSend.mockResolvedValueOnce({ enabledControlDetail: {} });
+    const res = await get("/enabled-controls/detail?identifier=arn:ctl");
+    const b = await res.json();
+    expect(res.status).toBe(200);
+    expect(b.enabledControl.arn).toBe("arn:ctl");
+    expect(b.enabledControl.controlIdentifier).toBeNull();
+    expect(b.enabledControl.targetIdentifier).toBeNull();
+    expect(b.enabledControl.status).toBeNull();
+    expect(b.enabledControl.parameters).toEqual([]);
+  });
+
+  it("GET /enabled-controls/detail — undefined result falls back to identifier", async () => {
+    mockSend.mockResolvedValueOnce(undefined);
+    const res = await get("/enabled-controls/detail?identifier=arn:ctl");
+    const b = await res.json();
+    expect(res.status).toBe(200);
+    expect(b.enabledControl.arn).toBe("arn:ctl");
+  });
+
+  it("GET /control-operations/detail — sparse operation fills defaults", async () => {
+    mockSend.mockResolvedValueOnce({ controlOperation: {} });
+    const res = await get("/control-operations/detail?identifier=op-1");
+    const b = await res.json();
+    expect(res.status).toBe(200);
+    expect(b.controlOperation.operationIdentifier).toBe("op-1");
+    expect(b.controlOperation.operationType).toBeNull();
+    expect(b.controlOperation.status).toBeNull();
+    expect(b.controlOperation.startTime).toBeNull();
+    expect(b.controlOperation.endTime).toBeNull();
+  });
+
+  it("GET /control-operations/detail — undefined result falls back to identifier", async () => {
+    mockSend.mockResolvedValueOnce(undefined);
+    const res = await get("/control-operations/detail?identifier=op-x");
+    const b = await res.json();
+    expect(res.status).toBe(200);
+    expect(b.controlOperation.operationIdentifier).toBe("op-x");
+  });
+
+  it("GET /enabled-controls/detail — returns detail", async () => {
+    mockSend.mockResolvedValueOnce({
+      enabledControlDetail: {
+        arn: "arn:ctl", controlIdentifier: "AWS::SeC::X", targetIdentifier: "arn:ou",
+        statusSummary: { status: "SUCCEEDED" }, parameters: [{ key: "k", value: "v" }],
+      },
+    });
+    const res = await get("/enabled-controls/detail?identifier=arn:ctl");
+    const b = await res.json();
+    expect(res.status).toBe(200);
+    expect(b.enabledControl.controlIdentifier).toBe("AWS::SeC::X");
+    expect(b.enabledControl.parameters).toEqual([{ key: "k", value: "v" }]);
+    expect(mockSend.mock.calls[0][0].__cmd).toBe("GetEnabledControlCommand");
+  });
+
+  it("GET /enabled-controls/detail — 400 when identifier missing", async () => {
+    expect((await get("/enabled-controls/detail")).status).toBe(400);
+  });
+
+  it("POST /enabled-controls/enable — enables a control", async () => {
+    mockSend.mockResolvedValueOnce({ operationIdentifier: "op-1", arn: "arn:new" });
+    const res = await post("/enabled-controls/enable", {
+      controlIdentifier: "AWS::SeC::X", targetIdentifier: "arn:ou", parameters: [],
+    });
+    const b = await res.json();
+    expect(res.status).toBe(201);
+    expect(b.operationIdentifier).toBe("op-1");
+    expect(mockSend.mock.calls[0][0].__cmd).toBe("EnableControlCommand");
+  });
+
+  it("POST /enabled-controls/enable — 400 when controlIdentifier missing", async () => {
+    expect((await post("/enabled-controls/enable", { targetIdentifier: "x" })).status).toBe(400);
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  it("POST /enabled-controls/enable — 400 when targetIdentifier missing", async () => {
+    expect((await post("/enabled-controls/enable", { controlIdentifier: "x" })).status).toBe(400);
+  });
+
+  it("POST /enabled-controls/enable — 400 on invalid parameters JSON", async () => {
+    expect((await post("/enabled-controls/enable", {
+      controlIdentifier: "x", targetIdentifier: "y", parameters: "not json",
+    })).status).toBe(400);
+  });
+
+  it("POST /enabled-controls/update — updates a control", async () => {
+    mockSend.mockResolvedValueOnce({ operationIdentifier: "op-2" });
+    const res = await post("/enabled-controls/update", {
+      enabledControlIdentifier: "arn:ctl", parameters: [{ key: "k", value: "v" }],
+    });
+    const b = await res.json();
+    expect(res.status).toBe(200);
+    expect(b.operationIdentifier).toBe("op-2");
+    expect(mockSend.mock.calls[0][0].__cmd).toBe("UpdateEnabledControlCommand");
+  });
+
+  it("POST /enabled-controls/update — 400 on invalid parameters JSON", async () => {
+    expect((await post("/enabled-controls/update", {
+      enabledControlIdentifier: "arn:ctl", parameters: "not json",
+    })).status).toBe(400);
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  it("POST /enabled-controls/update — 400 when identifier missing", async () => {
+    expect((await post("/enabled-controls/update", { parameters: [] })).status).toBe(400);
+  });
+
+  it("POST /enabled-controls/reset — resets a control", async () => {
+    mockSend.mockResolvedValueOnce({ operationIdentifier: "op-3" });
+    const res = await post("/enabled-controls/reset", { enabledControlIdentifier: "arn:ctl" });
+    const b = await res.json();
+    expect(res.status).toBe(200);
+    expect(b.operationIdentifier).toBe("op-3");
+    expect(mockSend.mock.calls[0][0].__cmd).toBe("ResetEnabledControlCommand");
+  });
+
+  it("POST /enabled-controls/reset — 400 when identifier missing", async () => {
+    expect((await post("/enabled-controls/reset", {})).status).toBe(400);
+  });
+
+  it("GET /control-operations/detail — returns control operation", async () => {
+    mockSend.mockResolvedValueOnce({
+      controlOperation: {
+        operationIdentifier: "op-1", operationType: "ENABLE_CONTROL", status: "SUCCEEDED",
+      },
+    });
+    const res = await get("/control-operations/detail?identifier=op-1");
+    const b = await res.json();
+    expect(res.status).toBe(200);
+    expect(b.controlOperation.operationType).toBe("ENABLE_CONTROL");
+    expect(b.controlOperation.status).toBe("SUCCEEDED");
+    expect(mockSend.mock.calls[0][0].__cmd).toBe("GetControlOperationCommand");
+  });
+
+  it("GET /control-operations/detail — 400 when identifier missing", async () => {
+    expect((await get("/control-operations/detail")).status).toBe(400);
   });
 });

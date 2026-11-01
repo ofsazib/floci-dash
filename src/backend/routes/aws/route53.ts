@@ -24,6 +24,15 @@ import {
   GetHostedZoneCountCommand,
   GetHealthCheckCommand,
   UpdateHealthCheckCommand,
+  UpdateHostedZoneCommentCommand,
+  AssociateVPCWithHostedZoneCommand,
+  DisassociateVPCFromHostedZoneCommand,
+  CreateVPCAssociationAuthorizationCommand,
+  DeleteVPCAssociationAuthorizationCommand,
+  ListVPCAssociationAuthorizationsCommand,
+  ListHostedZonesByVPCCommand,
+  GetHealthCheckStatusCommand,
+  GetHostedZoneLimitCommand,
 } from "@aws-sdk/client-route-53";
 
 const router = new Hono();
@@ -321,5 +330,144 @@ router.put("/health-checks/:id", async (c: Context) => {
   return c.json({ healthCheck: result.HealthCheck ?? null });
 });
 
+
+// ── Hosted zone comment ──────────────────────────────────
+
+router.put("/hosted-zones/:id/comment", async (c: Context) => {
+  const id = c.req.param("id");
+  const body = await c.req.json<any>();
+  if (typeof body.comment !== "string") {
+    return c.json({ error: "comment string is required" }, 400);
+  }
+  await getClient().send(new UpdateHostedZoneCommentCommand({ Id: id, Comment: body.comment }));
+  return c.json({ id, comment: body.comment, updated: true });
+});
+
+// ── VPC association ──────────────────────────────────────
+
+router.post("/hosted-zones/:id/associate-vpc", async (c: Context) => {
+  const id = c.req.param("id");
+  const body = await c.req.json<any>();
+  if (!body.vpcId || !body.vpcRegion) {
+    return c.json({ error: "vpcId and vpcRegion are required" }, 400);
+  }
+  const result = await getClient().send(
+    new AssociateVPCWithHostedZoneCommand({
+      HostedZoneId: id,
+      VPC: { VPCId: body.vpcId, VPCRegion: body.vpcRegion },
+    } as any)
+  );
+  return c.json({ changeInfo: result.ChangeInfo || null });
+});
+
+router.post("/hosted-zones/:id/disassociate-vpc", async (c: Context) => {
+  const id = c.req.param("id");
+  const body = await c.req.json<any>();
+  if (!body.vpcId || !body.vpcRegion) {
+    return c.json({ error: "vpcId and vpcRegion are required" }, 400);
+  }
+  const result = await getClient().send(
+    new DisassociateVPCFromHostedZoneCommand({
+      HostedZoneId: id,
+      VPC: { VPCId: body.vpcId, VPCRegion: body.vpcRegion },
+    } as any)
+  );
+  return c.json({ changeInfo: result.ChangeInfo || null });
+});
+
+// ── VPC association authorizations ───────────────────────
+
+router.post("/hosted-zones/:id/vpc-authorizations", async (c: Context) => {
+  const id = c.req.param("id");
+  const body = await c.req.json<any>();
+  if (!body.vpcId || !body.vpcRegion) {
+    return c.json({ error: "vpcId and vpcRegion are required" }, 400);
+  }
+  const result = await getClient().send(
+    new CreateVPCAssociationAuthorizationCommand({
+      HostedZoneId: id,
+      VPC: { VPCId: body.vpcId, VPCRegion: body.vpcRegion },
+    } as any)
+  );
+  return c.json({
+    vpc: result.VPC ? { vpcId: result.VPC.VPCId, vpcRegion: result.VPC.VPCRegion } : null,
+    hostedZoneId: id,
+  });
+});
+
+router.delete("/hosted-zones/:id/vpc-authorizations", async (c: Context) => {
+  const id = c.req.param("id");
+  let body: any = {};
+  try { body = await c.req.json<any>(); } catch {}
+  if (!body.vpcId || !body.vpcRegion) {
+    return c.json({ error: "vpcId and vpcRegion are required" }, 400);
+  }
+  await getClient().send(
+    new DeleteVPCAssociationAuthorizationCommand({
+      HostedZoneId: id,
+      VPC: { VPCId: body.vpcId, VPCRegion: body.vpcRegion },
+    } as any)
+  );
+  return c.json({ deleted: true });
+});
+
+router.get("/hosted-zones/:id/vpc-authorizations", async (c: Context) => {
+  const id = c.req.param("id");
+  const result: any = await getClient().send(
+    new ListVPCAssociationAuthorizationsCommand({
+      HostedZoneId: id,
+      MaxResults: "10",
+    } as any)
+  );
+  const authorizations = (result.Authorizations || []).map((v: any) => ({
+    vpcId: v.VPCId,
+    vpcRegion: v.VPCRegion,
+  }));
+  return c.json({ authorizations, total: authorizations.length, hostedZoneId: id });
+});
+
+router.get("/hosted-zones-by-vpc", async (c: Context) => {
+  const vpcId = c.req.query("vpcId");
+  const vpcRegion = c.req.query("vpcRegion") || "us-east-1";
+  if (!vpcId) return c.json({ error: "vpcId query parameter required" }, 400);
+  const result = await getClient().send(
+    new ListHostedZonesByVPCCommand({ VPCId: vpcId, VPCRegion: vpcRegion as any })
+  );
+  const hostedZoneSummaries = (result.HostedZoneSummaries || []).map((z: any) => ({
+    hostedZoneId: z.HostedZoneId,
+    name: z.Name,
+    owner: z.Owner?.OwningAccount || z.Owner?.OwningService || null,
+  }));
+  return c.json({ hostedZoneSummaries, total: hostedZoneSummaries.length });
+});
+
+// ── Health check status & hosted zone limit ──────────────
+
+router.get("/health-checks/:id/status", async (c: Context) => {
+  const id = c.req.param("id");
+  const result = await getClient().send(new GetHealthCheckStatusCommand({ HealthCheckId: id }));
+  const statuses = (result.HealthCheckObservations || []).map((o: any) => ({
+    region: o.Region || null,
+    ipAddress: o.IPAddress || null,
+    statusReport: o.StatusReport
+      ? { status: o.StatusReport.Status, checkedTime: o.StatusReport.CheckedTime }
+      : null,
+  }));
+  return c.json({ observations: statuses, total: statuses.length });
+});
+
+router.get("/hosted-zones/:id/limit/:type", async (c: Context) => {
+  const id = c.req.param("id");
+  const type = c.req.param("type");
+  const result: any = await getClient().send(new GetHostedZoneLimitCommand({
+    HostedZoneId: id,
+    Type: type as any,
+  }));
+  return c.json({
+    limit: type,
+    value: result.Value ?? null,
+    count: result.Count ?? null,
+  });
+});
 
 export default router;

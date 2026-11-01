@@ -18,6 +18,11 @@ import {
   useAMPTags,
   useAMPTagResource,
   useAMPUntagResource,
+  useAMPNamespaces,
+  useAMPNamespace,
+  useCreateAMPNamespace,
+  useUpdateAMPNamespace,
+  useDeleteAMPNamespace,
 } from "./useAMP";
 
 function createWrapper() {
@@ -133,5 +138,71 @@ describe("useAMPUntagResource", () => {
       method: "POST",
       body: JSON.stringify({ resourceArn: "arn:aws:aps:ws-1", tagKeys: ["a"] }),
     });
+  });
+});
+
+// ─── Rule Groups Namespaces ──────────────────────────────
+
+describe("useAMPNamespaces", () => {
+  it("calls api with correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ namespaces: [], total: 0 });
+    const { result } = renderHook(() => useAMPNamespaces("w1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/amp/workspaces/w1/namespaces");
+  });
+
+  it("disabled when workspaceId is null", () => {
+    const { result } = renderHook(() => useAMPNamespaces(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+});
+
+describe("useAMPNamespace", () => {
+  it("calls api with encoded name", async () => {
+    mockApi.mockResolvedValueOnce({ namespace: { name: "ns1" } });
+    const { result } = renderHook(() => useAMPNamespace("w1", "ns1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/amp/workspaces/w1/namespaces/ns1");
+  });
+
+  it("disabled when name is null", () => {
+    const { result } = renderHook(() => useAMPNamespace("w1", null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+});
+
+describe("useCreateAMPNamespace", () => {
+  it("posts name and data", async () => {
+    mockApi.mockResolvedValueOnce({ name: "ns1" });
+    const { result } = renderHook(() => useCreateAMPNamespace(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ workspaceId: "w1", name: "ns1", data: "groups: []" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/amp/workspaces/w1/namespaces", {
+      method: "POST",
+      body: JSON.stringify({ name: "ns1", data: "groups: []" }),
+    });
+  });
+});
+
+describe("useUpdateAMPNamespace", () => {
+  it("sends PUT with data", async () => {
+    mockApi.mockResolvedValueOnce({ updatedAt: true });
+    const { result } = renderHook(() => useUpdateAMPNamespace(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ workspaceId: "w1", name: "ns1", data: "groups: [1]" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/amp/workspaces/w1/namespaces/ns1", {
+      method: "PUT",
+      body: JSON.stringify({ data: "groups: [1]" }),
+    });
+  });
+});
+
+describe("useDeleteAMPNamespace", () => {
+  it("sends DELETE", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useDeleteAMPNamespace(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ workspaceId: "w1", name: "ns1" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/amp/workspaces/w1/namespaces/ns1", { method: "DELETE" });
   });
 });

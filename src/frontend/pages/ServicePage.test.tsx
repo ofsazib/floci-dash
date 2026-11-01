@@ -1112,9 +1112,18 @@ vi.mock("../hooks/useFirehose", () => ({
 
 vi.mock("../hooks/useACM", () => ({
   useACMCertificates: (...args: any[]) => mockACMCertificates(...args),
+  useACMCertificate: vi.fn(() => ({ data: undefined })),
+  useRequestACMCertificate: () => ({ mutateAsync: vi.fn(), isPending: false, isError: false, error: null }),
   useImportACMCertificate: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
   useExportACMCertificate: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteACMCertificate: () => ({ mutateAsync: vi.fn(), isPending: false, variables: null }),
+  useACMCertificateTags: vi.fn(() => ({ data: { tags: [] } })),
+  useACMAccountConfiguration: vi.fn(() => ({ data: undefined })),
+  usePutACMAccountConfiguration: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useRenewACMCertificate: () => ({ mutateAsync: vi.fn(), isPending: false, variables: null }),
+  useResendACMValidationEmail: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useRevokeACMCertificate: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useUpdateACMCertificateOptions: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
 vi.mock("../hooks/useTranscribe", () => ({

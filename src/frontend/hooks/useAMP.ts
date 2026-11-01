@@ -83,3 +83,64 @@ export function useAMPUntagResource() {
       qc.invalidateQueries({ queryKey: ["aws", "amp", "tags", variables.resourceArn] }),
   });
 }
+
+// ─── Rule Groups Namespaces ─────────────────────────────
+
+export function useAMPNamespaces(workspaceId: string | null) {
+  return useQuery({
+    queryKey: ["aws", "amp", "workspaces", workspaceId, "namespaces"],
+    queryFn: () => api<{ namespaces: any[]; total: number }>(
+      `/aws/amp/workspaces/${encodeURIComponent(workspaceId!)}/namespaces`
+    ),
+    enabled: !!workspaceId,
+  });
+}
+
+export function useAMPNamespace(workspaceId: string | null, name: string | null) {
+  return useQuery({
+    queryKey: ["aws", "amp", "workspaces", workspaceId, "namespaces", name],
+    queryFn: () => api<{ namespace: any }>(
+      `/aws/amp/workspaces/${encodeURIComponent(workspaceId!)}/namespaces/${encodeURIComponent(name!)}`
+    ),
+    enabled: !!workspaceId && !!name,
+  });
+}
+
+export function useCreateAMPNamespace() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { workspaceId: string; name: string; data: string }) =>
+      api(`/aws/amp/workspaces/${encodeURIComponent(body.workspaceId)}/namespaces`, {
+        method: "POST",
+        body: JSON.stringify({ name: body.name, data: body.data }),
+      }),
+    onSuccess: (_d, v) =>
+      qc.invalidateQueries({ queryKey: ["aws", "amp", "workspaces", v.workspaceId, "namespaces"] }),
+  });
+}
+
+export function useUpdateAMPNamespace() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { workspaceId: string; name: string; data: string }) =>
+      api(
+        `/aws/amp/workspaces/${encodeURIComponent(body.workspaceId)}/namespaces/${encodeURIComponent(body.name)}`,
+        { method: "PUT", body: JSON.stringify({ data: body.data }) }
+      ),
+    onSuccess: (_d, v) =>
+      qc.invalidateQueries({ queryKey: ["aws", "amp", "workspaces", v.workspaceId, "namespaces"] }),
+  });
+}
+
+export function useDeleteAMPNamespace() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { workspaceId: string; name: string }) =>
+      api(
+        `/aws/amp/workspaces/${encodeURIComponent(body.workspaceId)}/namespaces/${encodeURIComponent(body.name)}`,
+        { method: "DELETE" }
+      ),
+    onSuccess: (_d, v) =>
+      qc.invalidateQueries({ queryKey: ["aws", "amp", "workspaces", v.workspaceId, "namespaces"] }),
+  });
+}

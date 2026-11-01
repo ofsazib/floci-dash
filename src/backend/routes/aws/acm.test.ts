@@ -21,6 +21,10 @@ vi.mock("@aws-sdk/client-acm", () => ({
   RemoveTagsFromCertificateCommand: createCmd("RemoveTagsFromCertificateCommand"),
   GetAccountConfigurationCommand: createCmd("GetAccountConfigurationCommand"),
   PutAccountConfigurationCommand: createCmd("PutAccountConfigurationCommand"),
+  RenewCertificateCommand: createCmd("RenewCertificateCommand"),
+  ResendValidationEmailCommand: createCmd("ResendValidationEmailCommand"),
+  RevokeCertificateCommand: createCmd("RevokeCertificateCommand"),
+  UpdateCertificateOptionsCommand: createCmd("UpdateCertificateOptionsCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({ create: (Ctor: any, extra?: any) => new Ctor(extra) }));
@@ -223,5 +227,77 @@ describe("ACM Routes", () => {
       expect((await putReq("/account-configuration", {})).status).toBe(400);
       expect((await putReq("/account-configuration", { daysBeforeExpiry: "30" })).status).toBe(400);
     });
+  });
+});
+
+describe("ACM — lifecycle actions", () => {
+  beforeEach(() => mockSend.mockReset());
+
+  it("POST /certificates/:arn/renew — renews a certificate", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res1 = await router.request("/certificates/arn%3Aacm%3Ax/renew", { method: "POST", body: "{}", headers: { "content-type": "application/json" } });
+    console.log("PLAIN:", res1.status);
+    const res = await post("/certificates/" + encodeURIComponent("arn:acm:x") + "/renew", {});
+    console.log("BODY:", await res.clone().text());
+    const b = await res.json();
+    expect(res.status).toBe(200);
+    expect(b.renewed).toBe(true);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("RenewCertificateCommand");
+    expect(mockSend.mock.calls[0][0].CertificateArn).toBe("arn:acm:x");
+  });
+
+  it("POST /certificates/:arn/resend-validation — resends validation email", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/certificates/" + encodeURIComponent("arn:acm:x") + "/resend-validation", {
+      domain: "example.com", validationDomain: "example.com",
+    });
+    const b = await res.json();
+    expect(res.status).toBe(200);
+    expect(b.sent).toBe(true);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("ResendValidationEmailCommand");
+    expect(mockSend.mock.calls[0][0].Domain).toBe("example.com");
+  });
+
+  it("POST /certificates/:arn/resend-validation — 400 when domain missing", async () => {
+    expect((await post("/certificates/" + encodeURIComponent("arn:acm:x") + "/resend-validation", { validationDomain: "d" })).status).toBe(400);
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  it("POST /certificates/:arn/resend-validation — 400 when validationDomain missing", async () => {
+    expect((await post("/certificates/" + encodeURIComponent("arn:acm:x") + "/resend-validation", { domain: "d" })).status).toBe(400);
+  });
+
+  it("POST /certificates/:arn/revoke — revokes with reason", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/certificates/" + encodeURIComponent("arn:acm:x") + "/revoke", { revocationReason: "KEY_COMPROMISE" });
+    const b = await res.json();
+    expect(res.status).toBe(200);
+    expect(b.revoked).toBe(true);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("RevokeCertificateCommand");
+    expect(mockSend.mock.calls[0][0].RevocationReason).toBe("KEY_COMPROMISE");
+  });
+
+  it("POST /certificates/:arn/revoke — revokes without reason", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/certificates/" + encodeURIComponent("arn:acm:x") + "/revoke", {});
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].RevocationReason).toBeUndefined();
+  });
+
+  it("PUT /certificates/:arn/options — updates certificate options", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await putReq("/certificates/" + encodeURIComponent("arn:acm:x") + "/options", {
+      certificateTransparencyLoggingPreference: "ENABLED",
+    });
+    const b = await res.json();
+    expect(res.status).toBe(200);
+    expect(b.updated).toBe(true);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("UpdateCertificateOptionsCommand");
+    expect(mockSend.mock.calls[0][0].Options.CertificateTransparencyLoggingPreference).toBe("ENABLED");
+  });
+
+  it("PUT /certificates/:arn/options — 400 when preference missing", async () => {
+    expect((await putReq("/certificates/" + encodeURIComponent("arn:acm:x") + "/options", {})).status).toBe(400);
+    expect(mockSend).not.toHaveBeenCalled();
   });
 });

@@ -18,6 +18,12 @@ import {
   ResetLandingZoneCommand,
   UpdateEnabledBaselineCommand,
   UpdateLandingZoneCommand,
+  EnableControlCommand,
+  ListEnabledControlsCommand,
+  GetEnabledControlCommand,
+  UpdateEnabledControlCommand,
+  ResetEnabledControlCommand,
+  GetControlOperationCommand,
 } from "@aws-sdk/client-controltower";
 
 const router = new Hono();
@@ -282,6 +288,97 @@ router.get("/baseline-operations/detail", async (c: Context) => {
   const d = result?.baselineOperation || {};
   return c.json({
     baselineOperation: {
+      operationIdentifier: d.operationIdentifier || operationIdentifier,
+      operationType: d.operationType || null,
+      status: d.status || null,
+      startTime: d.startTime || null,
+      endTime: d.endTime || null,
+    },
+  });
+});
+
+// ---------- Enabled controls ----------
+
+router.get("/enabled-controls", async (c: Context) => {
+  const result: any = await getClient().send(new ListEnabledControlsCommand({}));
+  const enabledControls = (result?.enabledControls || []).map((e: any) => ({
+    arn: e.arn,
+    controlIdentifier: e.controlIdentifier || null,
+    targetIdentifier: e.targetIdentifier || null,
+    status: e.statusSummary?.status || null,
+    driftStatus: e.driftStatusSummary?.driftStatus || null,
+  }));
+  return c.json({ enabledControls, total: enabledControls.length });
+});
+
+router.get("/enabled-controls/detail", async (c: Context) => {
+  const identifier = c.req.query("identifier");
+  if (!identifier) return badRequest(c, "identifier is required");
+  const result: any = await getClient().send(
+    new GetEnabledControlCommand({ enabledControlIdentifier: identifier }),
+  );
+  const d = result?.enabledControlDetail || {};
+  return c.json({
+    enabledControl: {
+      arn: d.arn || identifier,
+      controlIdentifier: d.controlIdentifier || null,
+      targetIdentifier: d.targetIdentifier || null,
+      status: d.statusSummary?.status || null,
+      parameters: d.parameters || [],
+    },
+  });
+});
+
+router.post("/enabled-controls/enable", async (c: Context) => {
+  const b = await body(c);
+  const controlIdentifier = b.controlIdentifier;
+  if (!controlIdentifier) return badRequest(c, "controlIdentifier is required");
+  const targetIdentifier = b.targetIdentifier;
+  if (!targetIdentifier) return badRequest(c, "targetIdentifier is required");
+  const { parameters, error } = parseParameters(b.parameters);
+  if (error) return badRequest(c, error);
+  const result: any = await getClient().send(
+    new EnableControlCommand({ controlIdentifier, targetIdentifier, parameters }),
+  );
+  return c.json(
+    { operationIdentifier: result?.operationIdentifier, arn: result?.arn },
+    201,
+  );
+});
+
+router.post("/enabled-controls/update", async (c: Context) => {
+  const b = await body(c);
+  const enabledControlIdentifier = b.enabledControlIdentifier;
+  if (!enabledControlIdentifier) return badRequest(c, "enabledControlIdentifier is required");
+  const { parameters, error } = parseParameters(b.parameters);
+  if (error) return badRequest(c, error);
+  const result: any = await getClient().send(
+    new UpdateEnabledControlCommand({ enabledControlIdentifier, parameters }),
+  );
+  return c.json({ operationIdentifier: result?.operationIdentifier });
+});
+
+router.post("/enabled-controls/reset", async (c: Context) => {
+  const b = await body(c);
+  const enabledControlIdentifier = b.enabledControlIdentifier;
+  if (!enabledControlIdentifier) return badRequest(c, "enabledControlIdentifier is required");
+  const result: any = await getClient().send(
+    new ResetEnabledControlCommand({ enabledControlIdentifier }),
+  );
+  return c.json({ operationIdentifier: result?.operationIdentifier });
+});
+
+// ---------- Control operations ----------
+
+router.get("/control-operations/detail", async (c: Context) => {
+  const operationIdentifier = c.req.query("identifier");
+  if (!operationIdentifier) return badRequest(c, "identifier is required");
+  const result: any = await getClient().send(
+    new GetControlOperationCommand({ operationIdentifier }),
+  );
+  const d = result?.controlOperation || {};
+  return c.json({
+    controlOperation: {
       operationIdentifier: d.operationIdentifier || operationIdentifier,
       operationType: d.operationType || null,
       status: d.status || null,

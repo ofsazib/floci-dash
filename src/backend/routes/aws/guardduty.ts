@@ -8,6 +8,12 @@ import {
   CreateDetectorCommand,
   UpdateDetectorCommand,
   DeleteDetectorCommand,
+  ListMembersCommand,
+  CreateMembersCommand,
+  DescribeOrganizationConfigurationCommand,
+  UpdateOrganizationConfigurationCommand,
+  EnableOrganizationAdminAccountCommand,
+  DisableOrganizationAdminAccountCommand,
 } from "@aws-sdk/client-guardduty";
 
 const router = new Hono();
@@ -69,6 +75,93 @@ router.delete("/detectors/:id", async (c: Context) => {
   const client = getClient();
   await client.send(new DeleteDetectorCommand({ DetectorId: id }));
   return c.json({ deleted: true });
+});
+
+// ── Members ────────────────────────────────────────────────
+
+router.get("/detectors/:id/members", async (c: Context) => {
+  const id = c.req.param("id")!;
+  const client = getClient();
+  const result = await client.send(new ListMembersCommand({ DetectorId: id }));
+  const members = (result.Members || []).map((m: any) => ({
+    accountId: m.AccountId,
+    email: m.Email,
+    masterId: m.MasterId,
+    administratorId: m.AdministratorId,
+    status: m.RelationshipStatus,
+    invitedAt: m.InvitedAt,
+    detectorId: m.DetectorId,
+  }));
+  return c.json({ members, total: members.length });
+});
+
+router.post("/detectors/:id/members", async (c: Context) => {
+  const id = c.req.param("id")!;
+  const body = await c.req.json<any>();
+  if (!Array.isArray(body.accounts) || body.accounts.length === 0) {
+    return c.json({ error: "accounts array is required" }, 400);
+  }
+  const client = getClient();
+  const result = await client.send(
+    new CreateMembersCommand({
+      DetectorId: id,
+      AccountDetails: body.accounts.map((a: any) => ({
+        AccountId: a.accountId,
+        Email: a.email,
+      })),
+    })
+  );
+  return c.json({ unprocessedAccounts: result.UnprocessedAccounts || [], created: true }, 201);
+});
+
+// ── Organization configuration ─────────────────────────────
+
+router.get("/detectors/:id/organization-config", async (c: Context) => {
+  const id = c.req.param("id")!;
+  const client = getClient();
+  const result = await client.send(
+    new DescribeOrganizationConfigurationCommand({ DetectorId: id })
+  );
+  return c.json({ autoEnable: result.AutoEnable ?? false, memberAccountLimitReached: result.MemberAccountLimitReached ?? false });
+});
+
+router.put("/detectors/:id/organization-config", async (c: Context) => {
+  const id = c.req.param("id")!;
+  const body = await c.req.json<any>();
+  if (typeof body.autoEnable !== "boolean") {
+    return c.json({ error: "autoEnable boolean is required" }, 400);
+  }
+  const client = getClient();
+  await client.send(
+    new UpdateOrganizationConfigurationCommand({ DetectorId: id, AutoEnable: body.autoEnable })
+  );
+  return c.json({ updated: true });
+});
+
+// ── Organization admin account ─────────────────────────────
+
+router.post("/admin/enable", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.adminAccountId) {
+    return c.json({ error: "adminAccountId is required" }, 400);
+  }
+  const client = getClient();
+  await client.send(
+    new EnableOrganizationAdminAccountCommand({ AdminAccountId: body.adminAccountId })
+  );
+  return c.json({ enabled: true });
+});
+
+router.post("/admin/disable", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.adminAccountId) {
+    return c.json({ error: "adminAccountId is required" }, 400);
+  }
+  const client = getClient();
+  await client.send(
+    new DisableOrganizationAdminAccountCommand({ AdminAccountId: body.adminAccountId })
+  );
+  return c.json({ disabled: true });
 });
 
 export default router;

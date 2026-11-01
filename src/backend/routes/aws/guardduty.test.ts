@@ -19,6 +19,12 @@ vi.mock("@aws-sdk/client-guardduty", () => ({
   CreateDetectorCommand: createCmd("CreateDetectorCommand"),
   UpdateDetectorCommand: createCmd("UpdateDetectorCommand"),
   DeleteDetectorCommand: createCmd("DeleteDetectorCommand"),
+  ListMembersCommand: createCmd("ListMembersCommand"),
+  CreateMembersCommand: createCmd("CreateMembersCommand"),
+  DescribeOrganizationConfigurationCommand: createCmd("DescribeOrganizationConfigurationCommand"),
+  UpdateOrganizationConfigurationCommand: createCmd("UpdateOrganizationConfigurationCommand"),
+  EnableOrganizationAdminAccountCommand: createCmd("EnableOrganizationAdminAccountCommand"),
+  DisableOrganizationAdminAccountCommand: createCmd("DisableOrganizationAdminAccountCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -42,6 +48,14 @@ async function post(path: string, body?: any) {
 async function patchReq(path: string, body?: any) {
   return router.request(path, {
     method: "PATCH",
+    body: body != null ? JSON.stringify(body) : undefined,
+    headers: body != null ? { "content-type": "application/json" } : undefined,
+  });
+}
+
+async function put(path: string, body?: any) {
+  return router.request(path, {
+    method: "PUT",
     body: body != null ? JSON.stringify(body) : undefined,
     headers: body != null ? { "content-type": "application/json" } : undefined,
   });
@@ -170,5 +184,113 @@ describe("GuardDuty routes", () => {
       __cmdName: "DeleteDetectorCommand",
       DetectorId: "det-1",
     });
+  });
+});
+
+// ── Members / organization ─────────────────────────────────
+
+describe("GuardDuty members and organization", () => {
+  beforeEach(() => mockSend.mockReset());
+
+  it("GET /detectors/:id/members — lists members", async () => {
+    mockSend.mockResolvedValueOnce({
+      Members: [{ AccountId: "111", Email: "a@b.c", MasterId: "m1", AdministratorId: "adm", RelationshipStatus: "Enabled", InvitedAt: "2025-01-01", DetectorId: "d2" }],
+    });
+    const res = await get("/detectors/d1/members");
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.total).toBe(1);
+    expect(body.members[0].accountId).toBe("111");
+    expect(body.members[0].status).toBe("Enabled");
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("ListMembersCommand");
+  });
+
+  it("GET /detectors/:id/members — empty when Members missing", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const body = await (await get("/detectors/d1/members")).json();
+    expect(body.members).toEqual([]);
+    expect(body.total).toBe(0);
+  });
+
+  it("POST /detectors/:id/members — creates members", async () => {
+    mockSend.mockResolvedValueOnce({ UnprocessedAccounts: [] });
+    const res = await post("/detectors/d1/members", { accounts: [{ accountId: "111", email: "a@b.c" }] });
+    const body = await res.json();
+    expect(res.status).toBe(201);
+    expect(body.created).toBe(true);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("CreateMembersCommand");
+    expect(mockSend.mock.calls[0][0].AccountDetails).toEqual([{ AccountId: "111", Email: "a@b.c" }]);
+  });
+
+  it("POST /detectors/:id/members — defaults unprocessedAccounts to empty array", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/detectors/d1/members", { accounts: [{ accountId: "222" }] });
+    const body = await res.json();
+    expect(res.status).toBe(201);
+    expect(body.unprocessedAccounts).toEqual([]);
+  });
+
+  it("POST /detectors/:id/members — 400 when accounts missing or empty", async () => {
+    expect((await post("/detectors/d1/members", {})).status).toBe(400);
+    expect((await post("/detectors/d1/members", { accounts: [] })).status).toBe(400);
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  it("GET /detectors/:id/organization-config — returns config", async () => {
+    mockSend.mockResolvedValueOnce({ AutoEnable: true, MemberAccountLimitReached: true });
+    const res = await get("/detectors/d1/organization-config");
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.autoEnable).toBe(true);
+    expect(body.memberAccountLimitReached).toBe(true);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("DescribeOrganizationConfigurationCommand");
+  });
+
+  it("GET /detectors/:id/organization-config — defaults when fields missing", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const body = await (await get("/detectors/d1/organization-config")).json();
+    expect(body.autoEnable).toBe(false);
+    expect(body.memberAccountLimitReached).toBe(false);
+  });
+
+  it("PUT /detectors/:id/organization-config — updates config", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put("/detectors/d1/organization-config", { autoEnable: true });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.updated).toBe(true);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("UpdateOrganizationConfigurationCommand");
+    expect(mockSend.mock.calls[0][0].AutoEnable).toBe(true);
+  });
+
+  it("PUT /detectors/:id/organization-config — 400 when autoEnable not boolean", async () => {
+    expect((await put("/detectors/d1/organization-config", { autoEnable: "yes" })).status).toBe(400);
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  it("POST /admin/enable — enables admin account", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/admin/enable", { adminAccountId: "111" });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.enabled).toBe(true);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("EnableOrganizationAdminAccountCommand");
+  });
+
+  it("POST /admin/enable — 400 when adminAccountId missing", async () => {
+    expect((await post("/admin/enable", {})).status).toBe(400);
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  it("POST /admin/disable — disables admin account", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const body = await (await post("/admin/disable", { adminAccountId: "111" })).json();
+    expect(body.disabled).toBe(true);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("DisableOrganizationAdminAccountCommand");
+  });
+
+  it("POST /admin/disable — 400 when adminAccountId missing", async () => {
+    expect((await post("/admin/disable", {})).status).toBe(400);
+    expect(mockSend).not.toHaveBeenCalled();
   });
 });

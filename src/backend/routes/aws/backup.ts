@@ -28,6 +28,14 @@ import {
   ListTagsCommand,
   TagResourceCommand,
   UntagResourceCommand,
+  GetBackupVaultAccessPolicyCommand,
+  PutBackupVaultAccessPolicyCommand,
+  DeleteBackupVaultAccessPolicyCommand,
+  GetBackupVaultNotificationsCommand,
+  PutBackupVaultNotificationsCommand,
+  DeleteBackupVaultNotificationsCommand,
+  PutBackupVaultLockConfigurationCommand,
+  DeleteBackupVaultLockConfigurationCommand,
 } from "@aws-sdk/client-backup";
 
 const router = new Hono();
@@ -102,6 +110,116 @@ router.delete("/backup-vaults/:name", async (c: Context) => {
   const name = c.req.param("name");
   const client = getClient();
   await client.send(new DeleteBackupVaultCommand({ BackupVaultName: name }));
+  return c.json({ deleted: true });
+});
+
+// ── Vault Access Policies ─────────────────────────────────
+
+router.get("/backup-vaults/:name/access-policy", async (c: Context) => {
+  const name = c.req.param("name");
+  const client = getClient();
+  const result = await client.send(
+    new GetBackupVaultAccessPolicyCommand({ BackupVaultName: name })
+  );
+  return c.json({ policy: result.Policy || null });
+});
+
+router.put("/backup-vaults/:name/access-policy", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json();
+  if (!body.policy) {
+    return c.json({ error: "policy is required" }, 400);
+  }
+  const client = getClient();
+  await client.send(
+    new PutBackupVaultAccessPolicyCommand({
+      BackupVaultName: name,
+      Policy: body.policy,
+    })
+  );
+  return c.json({ updated: true });
+});
+
+router.delete("/backup-vaults/:name/access-policy", async (c: Context) => {
+  const name = c.req.param("name");
+  const client = getClient();
+  await client.send(
+    new DeleteBackupVaultAccessPolicyCommand({ BackupVaultName: name })
+  );
+  return c.json({ deleted: true });
+});
+
+// ── Vault Notifications ───────────────────────────────────
+
+router.get("/backup-vaults/:name/notifications", async (c: Context) => {
+  const name = c.req.param("name");
+  const client = getClient();
+  const result = await client.send(
+    new GetBackupVaultNotificationsCommand({ BackupVaultName: name })
+  );
+  return c.json({
+    notifications: {
+      snsTopicArn: result.SNSTopicArn || null,
+      backupVaultEvents: result.BackupVaultEvents || [],
+    },
+  });
+});
+
+router.put("/backup-vaults/:name/notifications", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json();
+  if (!body.snsTopicArn) {
+    return c.json({ error: "snsTopicArn is required" }, 400);
+  }
+  if (!Array.isArray(body.backupVaultEvents) || body.backupVaultEvents.length === 0) {
+    return c.json({ error: "backupVaultEvents array is required" }, 400);
+  }
+  const client = getClient();
+  await client.send(
+    new PutBackupVaultNotificationsCommand({
+      BackupVaultName: name,
+      SNSTopicArn: body.snsTopicArn,
+      BackupVaultEvents: body.backupVaultEvents,
+    })
+  );
+  return c.json({ updated: true });
+});
+
+router.delete("/backup-vaults/:name/notifications", async (c: Context) => {
+  const name = c.req.param("name");
+  const client = getClient();
+  await client.send(
+    new DeleteBackupVaultNotificationsCommand({ BackupVaultName: name })
+  );
+  return c.json({ deleted: true });
+});
+
+// ── Vault Lock ────────────────────────────────────────────
+
+router.put("/backup-vaults/:name/vault-lock", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json();
+  if (body.retentionDays == null || typeof body.retentionDays !== "number") {
+    return c.json({ error: "retentionDays number is required" }, 400);
+  }
+  const client = getClient();
+  const result = await client.send(
+    new PutBackupVaultLockConfigurationCommand({
+      BackupVaultName: name,
+      MinRetentionDays: body.retentionDays,
+      MaxRetentionDays: body.maxRetentionDays,
+      ChangeableForDays: body.changeableForDays,
+    } as any)
+  );
+  return c.json({ locked: true, backupVaultName: (result as any).BackupVaultName || name });
+});
+
+router.delete("/backup-vaults/:name/vault-lock", async (c: Context) => {
+  const name = c.req.param("name");
+  const client = getClient();
+  await client.send(
+    new DeleteBackupVaultLockConfigurationCommand({ BackupVaultName: name })
+  );
   return c.json({ deleted: true });
 });
 

@@ -19,6 +19,10 @@ import {
   DeleteCertificateCommand,
   GetCertificateCommand,
   ListTagsForCertificateCommand,
+  RenewCertificateCommand,
+  ResendValidationEmailCommand,
+  RevokeCertificateCommand,
+  UpdateCertificateOptionsCommand,
 } from "@aws-sdk/client-acm";
 
 const router = new Hono();
@@ -160,6 +164,63 @@ router.put("/account-configuration", async (c: Context) => {
     new PutAccountConfigurationCommand({
       ExpiryEvents: { DaysBeforeExpiry: body.daysBeforeExpiry },
       IdempotencyToken: `floci-dash-${Date.now()}`,
+    })
+  );
+  return c.json({ updated: true });
+});
+
+// ── Certificate lifecycle actions ─────────────────────────
+
+router.post("/certificates/:arn/renew", async (c: Context) => {
+  const arn = decodeURIComponent(c.req.param("arn")!);
+  const client = getClient();
+  await client.send(new RenewCertificateCommand({ CertificateArn: arn }));
+  return c.json({ renewed: true });
+});
+
+router.post("/certificates/:arn/resend-validation", async (c: Context) => {
+  const arn = decodeURIComponent(c.req.param("arn")!);
+  const body = await c.req.json<{ domain?: string; validationDomain?: string }>();
+  if (!body.domain) return c.json({ error: "domain is required" }, 400);
+  if (!body.validationDomain) return c.json({ error: "validationDomain is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new ResendValidationEmailCommand({
+      CertificateArn: arn,
+      Domain: body.domain,
+      ValidationDomain: body.validationDomain,
+    })
+  );
+  return c.json({ sent: true });
+});
+
+router.post("/certificates/:arn/revoke", async (c: Context) => {
+  const arn = decodeURIComponent(c.req.param("arn")!);
+  const body = await c.req.json<{ revocationReason?: string }>();
+  const client = getClient();
+  await client.send(
+    new RevokeCertificateCommand({
+      CertificateArn: arn,
+      RevocationReason: body.revocationReason as any,
+    })
+  );
+  return c.json({ revoked: true });
+});
+
+router.put("/certificates/:arn/options", async (c: Context) => {
+  const arn = decodeURIComponent(c.req.param("arn")!);
+  const body = await c.req.json<{ certificateTransparencyLoggingPreference?: string }>();
+  if (!body.certificateTransparencyLoggingPreference) {
+    return c.json({ error: "certificateTransparencyLoggingPreference is required" }, 400);
+  }
+  const client = getClient();
+  await client.send(
+    new UpdateCertificateOptionsCommand({
+      CertificateArn: arn,
+      Options: {
+        CertificateTransparencyLoggingPreference: body
+          .certificateTransparencyLoggingPreference as any,
+      },
     })
   );
   return c.json({ updated: true });

@@ -376,6 +376,14 @@ import {
   useDeleteBackupVault,
   useBackupRecoveryPoints,
   useDeleteBackupRecoveryPoint,
+  useBackupVaultAccessPolicy,
+  usePutBackupVaultAccessPolicy,
+  useDeleteBackupVaultAccessPolicy,
+  useBackupVaultNotifications,
+  usePutBackupVaultNotifications,
+  useDeleteBackupVaultNotifications,
+  usePutBackupVaultLockConfiguration,
+  useDeleteBackupVaultLockConfiguration,
   useBackupSelections,
   useCreateBackupSelection,
   useDeleteBackupSelection,
@@ -525,6 +533,63 @@ export function BackupDashboard() {
   const [showCreateVault, setShowCreateVault] = useState(false);
   const [planName, setPlanName] = useState("");
   const [vaultName, setVaultName] = useState("");
+  const [securityVault, setSecurityVault] = useState<string | null>(null);
+  const { data: policyData } = useBackupVaultAccessPolicy(securityVault);
+  const { data: notifData } = useBackupVaultNotifications(securityVault);
+  const putPolicy = usePutBackupVaultAccessPolicy();
+  const deletePolicy = useDeleteBackupVaultAccessPolicy();
+  const putNotifs = usePutBackupVaultNotifications();
+  const deleteNotifs = useDeleteBackupVaultNotifications();
+  const putLock = usePutBackupVaultLockConfiguration();
+  const deleteLock = useDeleteBackupVaultLockConfiguration();
+  const [policyDraft, setPolicyDraft] = useState("");
+  const [notifTopic, setNotifTopic] = useState("");
+  const [notifEvents, setNotifEvents] = useState("BACKUP_JOB_STARTED");
+  const [lockDays, setLockDays] = useState("");
+
+  useEffect(() => {
+    if (policyData !== undefined) setPolicyDraft(policyData.policy || "");
+  }, [policyData]);
+
+  useEffect(() => {
+    if (notifData?.notifications) {
+      setNotifTopic(notifData.notifications.snsTopicArn || "");
+      setNotifEvents((notifData.notifications.backupVaultEvents || []).join(","));
+    }
+  }, [notifData]);
+
+  const openVaultSecurity = (name: string) => {
+    setSecurityVault(name);
+    setPolicyDraft("");
+    setNotifTopic("");
+    setNotifEvents("BACKUP_JOB_STARTED");
+    setLockDays("");
+  };
+
+  const handleSavePolicy = async () => {
+    try {
+      await putPolicy.mutateAsync({ vaultName: securityVault!, policy: policyDraft });
+      setSecurityVault(null);
+    } catch {}
+  };
+
+  const handleSaveNotifs = async () => {
+    try {
+      await putNotifs.mutateAsync({
+        vaultName: securityVault!,
+        snsTopicArn: notifTopic,
+        backupVaultEvents: notifEvents.split(",").map((e) => e.trim()).filter(Boolean),
+      });
+      setSecurityVault(null);
+    } catch {}
+  };
+
+  const handlePutLock = async () => {
+    try {
+      await putLock.mutateAsync({ vaultName: securityVault!, retentionDays: Number(lockDays) });
+      setLockDays("");
+    } catch {}
+  };
 
   const plans = (plansData?.plans || []).map((p: any) => ({
     id: p.BackupPlanId,
@@ -627,6 +692,7 @@ export function BackupDashboard() {
                   <Button onClick={() => setRecoveryVault(i.name === recoveryVault ? null : i.name)}>
                     {i.name === recoveryVault ? "Hide points" : "Recovery points"}
                   </Button>
+                  <Button onClick={() => openVaultSecurity(i.name)}>Security</Button>
                   <DeleteButton
                     itemName={i.name}
                     resourceType="vault"
@@ -783,7 +849,78 @@ export function BackupDashboard() {
           </FormField>
         </Form>
       </Modal>
-    </SpaceBetween>
+    
+      {/* Vault security modal */}
+      <Modal
+        visible={!!securityVault}
+        onDismiss={() => setSecurityVault(null)}
+        header={`Vault Security — ${securityVault || ""}`}
+      >
+        <Form>
+          <SpaceBetween size="m">
+            <FormField label="Vault access policy (JSON)">
+              <Textarea
+                value={policyDraft}
+                onChange={(e) => setPolicyDraft(e.detail.value)}
+                rows={6}
+                placeholder="{}"
+              />
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button onClick={handleSavePolicy} disabled={!policyDraft || putPolicy.isPending}>
+                  Save policy
+                </Button>
+                <Button
+                  onClick={async () => {
+                    try { await deletePolicy.mutateAsync(securityVault!); setPolicyDraft(""); } catch {}
+                  }}
+                >
+                  Delete policy
+                </Button>
+              </SpaceBetween>
+            </FormField>
+            <FormField label="Vault notifications — SNS topic ARN">
+              <Input value={notifTopic} onChange={(e) => setNotifTopic(e.detail.value)} placeholder="arn:aws:sns:..." />
+              <FormField label="Vault events (comma separated)">
+                <Input value={notifEvents} onChange={(e) => setNotifEvents(e.detail.value)} />
+              </FormField>
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button onClick={handleSaveNotifs} disabled={!notifTopic || putNotifs.isPending}>
+                  Save notifications
+                </Button>
+                <Button
+                  onClick={async () => {
+                    try { await deleteNotifs.mutateAsync(securityVault!); setNotifTopic(""); setNotifEvents(""); } catch {}
+                  }}
+                >
+                  Delete notifications
+                </Button>
+              </SpaceBetween>
+            </FormField>
+            <FormField label="Vault lock — minimum retention days">
+              <Input
+                value={lockDays}
+                onChange={(e) => setLockDays(e.detail.value)}
+                inputMode="numeric"
+                placeholder="7"
+              />
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button onClick={handlePutLock} disabled={!lockDays || putLock.isPending}>
+                  Apply vault lock
+                </Button>
+                <Button
+                  onClick={async () => {
+                    try { await deleteLock.mutateAsync(securityVault!); setLockDays(""); } catch {}
+                  }}
+                >
+                  Delete vault lock
+                </Button>
+              </SpaceBetween>
+            </FormField>
+          </SpaceBetween>
+        </Form>
+      </Modal>
+
+</SpaceBetween>
   );
 }
 

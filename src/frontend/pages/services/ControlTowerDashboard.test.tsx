@@ -47,8 +47,22 @@ const mockEnableBaseline = vi.fn(() => Promise.resolve({}));
 const mockUpdateEB = vi.fn(() => Promise.resolve({}));
 const mockResetEB = vi.fn(() => Promise.resolve({}));
 const mockShowToast = vi.fn();
+const mockEnabledControls = vi.fn();
+const mockEnabledControlDetail2 = vi.fn();
+const mockControlOp = vi.fn();
+const ctOpState = vi.hoisted(() => ({ data: undefined as any }));
+const mockEnableControl = vi.fn(() => Promise.resolve({ operationIdentifier: "op-1" }));
+const mockUpdateEC = vi.fn(() => Promise.resolve({ operationIdentifier: "op-2" }));
+const mockResetEC = vi.fn(() => Promise.resolve({ operationIdentifier: "op-3" }));
 
 vi.mock("../../hooks/useControlTower", () => ({
+  useEnabledControls: (...args: any[]) => mockEnabledControls(...args),
+  useEnabledControlDetail: (...args: any[]) => mockEnabledControlDetail2(...args),
+  useControlOperation: (...args: any[]) => mockControlOp(...args),
+  // eslint-disable-next-line
+  useEnableControl: () => ({ mutateAsync: mockEnableControl, isPending: false }),
+  useUpdateEnabledControl: () => ({ mutateAsync: mockUpdateEC, isPending: false }),
+  useResetEnabledControl: () => ({ mutateAsync: mockResetEC, isPending: false }),
   useLandingZones: (...args: any[]) => mockLandingZones(...args),
   useCreateLandingZone: () => ({ mutateAsync: mockCreateLZ, isPending: false }),
   useUpdateLandingZone: () => ({ mutateAsync: mockUpdateLZ, isPending: false }),
@@ -121,6 +135,9 @@ const emptyEnabledBaseline = {};
 const emptyOperation = {};
 
 function setupAll() {
+  mockEnabledControls.mockReturnValue({ data: { enabledControls: [], total: 0 }, isLoading: false });
+  mockEnabledControlDetail2.mockReturnValue({ data: { enabledControl: { parameters: [] } } });
+  mockControlOp.mockReturnValue({ data: { controlOperation: { status: "SUCCEEDED" } } });
   mockLandingZones.mockReturnValue({
     data: { landingZones: [landingZone, bareZone, emptyZone], total: 3 },
     isLoading: false,
@@ -590,5 +607,319 @@ describe("ControlTowerDashboard — fallback rendering", () => {
     await waitFor(() => expect(screen.queryByText(LZ_ARN)).toBeNull());
     await user.click(screen.getByRole("tab", { name: "Enabled baselines" }));
     expect(screen.queryByText(enabledBaseline.arn)).toBeNull();
+  });
+
+  it("lists enabled controls in the Enabled controls tab", async () => {
+    mockEnabledControls.mockReturnValue({
+      data: {
+        enabledControls: [
+          { arn: "arn:ctl", controlIdentifier: "AWS::SeC::X", targetIdentifier: "arn:ou", status: "SUCCEEDED" },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ControlTowerDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: "Enabled controls" }));
+    expect(await screen.findByText("AWS::SeC::X")).toBeTruthy();
+  });
+
+  it("enables a control via modal and shows its operation", async () => {
+    mockEnabledControls.mockReturnValue({ data: { enabledControls: [], total: 0 }, isLoading: false });
+    mockControlOp.mockReturnValue({ data: { controlOperation: { status: "SUCCEEDED" } } });
+    const user = userEvent.setup();
+    render(<ControlTowerDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: "Enabled controls" }));
+    await user.click(await screen.findByRole("button", { name: "Create enabled control" }));
+    const dialog = openDialog();
+    const inputs = Array.from(dialog.querySelectorAll("input"));
+    await user.type(inputs[0] as any, "AWS::SeC::X");
+    await user.type(inputs[1] as any, "arn:ou");
+    await clickInDialog(user, "Enable");
+    expect(mockEnableControl).toHaveBeenCalledWith({
+      controlIdentifier: "AWS::SeC::X",
+      targetIdentifier: "arn:ou",
+      parameters: undefined,
+    });
+    await waitFor(() =>
+      expect(screen.getByText(/Control operation op-1: SUCCEEDED/)).toBeTruthy()
+    );
+  });
+
+  it("updates and resets an enabled control", async () => {
+    mockEnabledControls.mockReturnValue({
+      data: {
+        enabledControls: [{ arn: "arn:ctl", controlIdentifier: "AWS::SeC::X", status: "SUCCEEDED" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    mockEnabledControlDetail2.mockReturnValue({ data: { enabledControl: { parameters: [] } } });
+    const user = userEvent.setup();
+    render(<ControlTowerDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: "Enabled controls" }));
+    await user.click(await screen.findByRole("button", { name: "Update arn:ctl" }));
+    await clickInDialog(user, "Save");
+    expect(mockUpdateEC).toHaveBeenCalledWith({
+      enabledControlIdentifier: "arn:ctl",
+      parameters: undefined,
+    });
+    await user.click(await screen.findByRole("button", { name: "Reset arn:ctl" }));
+    expect(mockResetEC).toHaveBeenCalledWith("arn:ctl");
+  });
+
+});
+
+/** Assert the modal with the given header text is hidden (Cloudscape uses display:none). */
+function expectModalHidden(headerText: string) {
+  const header = screen.getAllByText(headerText).find((h) => h.closest('[role="dialog"]'));
+  const dialog = header!.closest('[role="dialog"]') as HTMLElement;
+  expect(dialog.className).toContain("hidden");
+}
+
+describe("ControlTowerDashboard — Enabled controls errors & dismissals", () => {
+  function setupOneControl() {
+    mockEnabledControls.mockReturnValue({
+      data: {
+        enabledControls: [{ arn: "arn:ctl", controlIdentifier: "AWS::SeC::X", targetIdentifier: "arn:ou", status: "SUCCEEDED" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    mockEnabledControlDetail2.mockReturnValue({
+      data: { enabledControl: { parameters: [{ key: "k", value: true }] } },
+    });
+  }
+
+  it("surfaces error toasts for enable, update and reset failures", async () => {
+    setupOneControl();
+    mockEnableControl.mockRejectedValueOnce(new Error("enable boom"));
+    mockUpdateEC.mockRejectedValueOnce(new Error("update boom"));
+    mockResetEC.mockRejectedValueOnce(new Error("reset boom"));
+    const user = userEvent.setup();
+    render(<ControlTowerDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: "Enabled controls" }));
+    // enable failure
+    await user.click(await screen.findByRole("button", { name: "Create enabled control" }));
+    const dlg = openDialog();
+    const inputs = Array.from(dlg.querySelectorAll("input"));
+    await user.type(inputs[0] as any, "AWS::SeC::X");
+    await user.type(inputs[1] as any, "arn:ou");
+    await clickInDialog(user, "Enable");
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "enable boom"));
+    // update failure
+    await user.click(await screen.findByRole("button", { name: "Update arn:ctl" }));
+    await clickInDialog(user, "Save");
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "update boom"));
+    // reset failure
+    await user.click(await screen.findByRole("button", { name: "Reset arn:ctl" }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "reset boom"));
+  });
+
+  it("dismisses the enable modal with Cancel and shows current parameters pre", async () => {
+    setupOneControl();
+    const user = userEvent.setup();
+    render(<ControlTowerDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: "Enabled controls" }));
+    await user.click(await screen.findByRole("button", { name: "Create enabled control" }));
+    await clickInDialog(user, "Cancel");
+    expectModalHidden("Enable control");
+    await user.click(await screen.findByRole("button", { name: "Update arn:ctl" }));
+    expect(openDialog().querySelector("pre")?.textContent).toContain("k");
+    await clickInDialog(user, "Cancel");
+    expectModalHidden("Update enabled control");
+  });
+
+});
+
+describe("ControlTowerDashboard — Enabled controls modal arms", () => {
+  function setupOneControl() {
+    mockEnabledControls.mockReturnValue({
+      data: {
+        enabledControls: [{ arn: "arn:ctl", controlIdentifier: "AWS::SeC::X", targetIdentifier: "arn:ou", status: "SUCCEEDED" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    mockEnabledControlDetail2.mockReturnValue({
+      data: { enabledControl: { parameters: [{ key: "k", value: true }] } },
+    });
+  }
+
+  function escapeAll() {
+    document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+      fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27, key: "Escape" });
+    });
+  }
+
+  it("types update parameters, saves, and dismisses the update modal with Escape", async () => {
+    setupOneControl();
+    const user = userEvent.setup();
+    render(<ControlTowerDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: "Enabled controls" }));
+    await user.click(await screen.findByRole("button", { name: "Update arn:ctl" }));
+    const dlg = openDialog();
+    const area = dlg.querySelector("textarea")!;
+    fireEvent.change(area, { target: { value: '[{"key":"k","value":false}]' } });
+    await clickInDialog(user, "Save");
+    expect(mockUpdateEC).toHaveBeenCalledWith({
+      enabledControlIdentifier: "arn:ctl",
+      parameters: '[{"key":"k","value":false}]',
+    });
+    escapeAll();
+    const header = screen.getAllByText("Update enabled control").find((h) => h.closest('[role="dialog"]'));
+    expect(header!.closest('[role="dialog"]')!.className).toContain("hidden");
+  });
+
+  it("dismisses the update modal with Escape while visible", async () => {
+    setupOneControl();
+    const user = userEvent.setup();
+    render(<ControlTowerDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: "Enabled controls" }));
+    await user.click(await screen.findByRole("button", { name: "Update arn:ctl" }));
+    const dlg = openDialog();
+    fireEvent.change(dlg.querySelector("textarea")!, { target: { value: '[{"key":"k","value":1}]' } });
+    expect(openDialog()).toBeTruthy();
+    escapeAll();
+    const header = screen.getAllByText("Update enabled control").find((h) => h.closest('[role="dialog"]'));
+    expect(header!.closest('[role="dialog"]')!.className).toContain("hidden");
+  });
+
+  it("renders sparse control rows with em-dash cells and null operation", async () => {
+    mockEnabledControls.mockReturnValue({
+      data: {
+        enabledControls: [{ arn: "arn:bare" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    mockControlOp.mockReturnValue({ data: undefined });
+    const user = userEvent.setup();
+    render(<ControlTowerDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: "Enabled controls" }));
+    expect(await screen.findByText("arn:bare")).toBeTruthy();
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(3);
+    // Enable returns an operation id, but the operation query has no data → Loading arm
+    mockEnableControl.mockImplementation(async () => ({ operationIdentifier: "op-9" }));
+    mockControlOp.mockReturnValue({ data: undefined });
+    await user.click(await screen.findByRole("button", { name: "Create enabled control" }));
+    const dlg = openDialog();
+    const inputs = Array.from(dlg.querySelectorAll("input"));
+    await user.type(inputs[0] as any, "AWS::SeC::Y");
+    await user.type(inputs[1] as any, "arn:ou");
+    await clickInDialog(user, "Enable");
+    const opBox = await screen.findByText(/Control operation op-9/);
+    await waitFor(() => expect(opBox.textContent).toContain("Loading"));
+    mockEnableControl.mockImplementation(() => Promise.resolve({ operationIdentifier: "op-1" }));
+  });
+
+  it("shows fallback toasts when control ops reject without messages", async () => {
+    mockEnabledControls.mockReturnValue({
+      data: {
+        enabledControls: [{ arn: "arn:ctl", controlIdentifier: "AWS::SeC::X", status: "SUCCEEDED" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    mockEnableControl.mockRejectedValueOnce("plain-1");
+    mockUpdateEC.mockRejectedValueOnce("plain-2");
+    mockResetEC.mockRejectedValueOnce("plain-3");
+    const user = userEvent.setup();
+    render(<ControlTowerDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: "Enabled controls" }));
+    await user.click(await screen.findByRole("button", { name: "Create enabled control" }));
+    const dlg = openDialog();
+    const inputs = Array.from(dlg.querySelectorAll("input"));
+    await user.type(inputs[0] as any, "AWS::SeC::X");
+    await user.type(inputs[1] as any, "arn:ou");
+    await clickInDialog(user, "Enable");
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "Failed to enable control"));
+    await user.click(await screen.findByRole("button", { name: "Update arn:ctl" }));
+    await clickInDialog(user, "Save");
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "Failed to update enabled control"));
+    await user.click(await screen.findByRole("button", { name: "Reset arn:ctl" }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "Failed to reset enabled control"));
+  });
+
+  it("shows the operation status once the control operation resolves", async () => {
+    mockEnabledControls.mockReturnValue({
+      data: {
+        enabledControls: [{ arn: "arn:ctl", controlIdentifier: "AWS::SeC::X", status: "SUCCEEDED" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    mockEnableControl.mockImplementation(() => Promise.resolve({ operationIdentifier: "op-42" }));
+    mockControlOp.mockReturnValue({ data: { controlOperation: { status: "SUCCEEDED" } } });
+    const user = userEvent.setup();
+    render(<ControlTowerDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: "Enabled controls" }));
+    await user.click(await screen.findByRole("button", { name: "Create enabled control" }));
+    const dlg = openDialog();
+    const inputs = Array.from(dlg.querySelectorAll("input"));
+    await user.type(inputs[0] as any, "AWS::SeC::X");
+    await user.type(inputs[1] as any, "arn:ou");
+    await clickInDialog(user, "Enable");
+    await waitFor(() => expect(screen.getByText(/Control operation op-42: SUCCEEDED/)).toBeTruthy());
+    mockEnableControl.mockImplementation(() => Promise.resolve({ operationIdentifier: "op-1" }));
+  });
+
+  it("dismisses the enable modal with Escape", async () => {
+    setupOneControl();
+    const user = userEvent.setup();
+    render(<ControlTowerDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: "Enabled controls" }));
+    await user.click(await screen.findByRole("button", { name: "Create enabled control" }));
+    escapeAll();
+    const header = screen.getAllByText("Enable control").find((h) => h.closest('[role="dialog"]'));
+    expect(header!.closest('[role="dialog"]')!.className).toContain("hidden");
+  });
+
+});
+
+describe("ControlTowerDashboard — enabled controls undefined-data arms", () => {
+  it("renders the empty table when enabled controls data is undefined", async () => {
+    mockEnabledControls.mockReturnValue({ data: undefined, isLoading: false });
+    const user = userEvent.setup();
+    render(<ControlTowerDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: "Enabled controls" }));
+    const empties = await screen.findAllByText(/No enabled control/);
+    expect(empties.length).toBeGreaterThan(0);
+  });
+
+  it("covers null operation ids and dash cells for sparse fields", async () => {
+    mockEnabledControls.mockReturnValue({
+      data: {
+        enabledControls: [
+          { arn: "arn:partial", controlIdentifier: "AWS::SeC::X" },
+          { controlIdentifier: "AWS::SeC::NoArn" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    mockEnableControl.mockImplementation(async () => ({}) as any);
+    mockUpdateEC.mockImplementation(async () => ({}) as any);
+    mockResetEC.mockImplementation(async () => ({}) as any);
+    const user = userEvent.setup();
+    render(<ControlTowerDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: "Enabled controls" }));
+    // sparse row: missing target/status cells render em-dashes
+    expect(await screen.findByText("arn:partial")).toBeTruthy();
+    // update + reset with {} responses → || null arm of operation id
+    await user.click(await screen.findByRole("button", { name: "Update arn:partial" }));
+    await clickInDialog(user, "Save");
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("success", "Enabled control updated"));
+    await user.click(await screen.findByRole("button", { name: "Reset arn:partial" }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("success", "Enabled control reset started"));
+    // enable with {} response → || null arm
+    await user.click(await screen.findByRole("button", { name: "Create enabled control" }));
+    const dlg = openDialog();
+    const inputs = Array.from(dlg.querySelectorAll("input"));
+    await user.type(inputs[0] as any, "AWS::SeC::Z");
+    await user.type(inputs[1] as any, "arn:ou");
+    await clickInDialog(user, "Enable");
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("success", "Control enabled"));
   });
 });

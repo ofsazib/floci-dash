@@ -43,6 +43,14 @@ vi.mock("@aws-sdk/client-cloudformation", () => ({
   ListStackInstancesCommand: createCmd("ListStackInstancesCommand"),
   DeleteStackInstancesCommand: createCmd("DeleteStackInstancesCommand"),
   ListStackSetOperationsCommand: createCmd("ListStackSetOperationsCommand"),
+  UpdateStackSetCommand: createCmd("UpdateStackSetCommand"),
+  DescribeStackSetOperationCommand: createCmd("DescribeStackSetOperationCommand"),
+  DescribeStackInstanceCommand: createCmd("DescribeStackInstanceCommand"),
+  UpdateTerminationProtectionCommand: createCmd("UpdateTerminationProtectionCommand"),
+  ListStackSetAutoDeploymentTargetsCommand: createCmd("ListStackSetAutoDeploymentTargetsCommand"),
+  ActivateOrganizationsAccessCommand: createCmd("ActivateOrganizationsAccessCommand"),
+  DescribeOrganizationsAccessCommand: createCmd("DescribeOrganizationsAccessCommand"),
+  GetTemplateSummaryCommand: createCmd("GetTemplateSummaryCommand"),
   GetStackPolicyCommand: createCmd("GetStackPolicyCommand"),
   SetStackPolicyCommand: createCmd("SetStackPolicyCommand"),
 }));
@@ -687,6 +695,256 @@ describe("CloudFormation Routes", () => {
       });
       expect(res.status).toBe(200);
       expect(mockSend.mock.calls[0][0].RetainStacks).toBe(false);
+    });
+
+    it("GET /stacksets/:name/operations/:operationId — returns operation detail", async () => {
+      mockSend.mockResolvedValueOnce({
+        StackSetOperation: {
+          OperationId: "op-1", Action: "CREATE", Status: "SUCCEEDED",
+          StatusReason: "ok", CreationTimestamp: new Date("2025-01-01"), EndTimestamp: new Date("2025-01-02"),
+          StackSetId: "ss-1",
+        },
+      });
+      const res = await get("/stacksets/my-ss/operations/op-1");
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body.operation.id).toBe("op-1");
+      expect(body.operation.status).toBe("SUCCEEDED");
+      expect(body.operation.endTime).toBeDefined();
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DescribeStackSetOperationCommand");
+      expect(mockSend.mock.calls[0][0].OperationId).toBe("op-1");
+    });
+
+    it("GET /stacksets/:name/operations/:operationId — null operation when missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/stacksets/my-ss/operations/op-x");
+      const body = await res.json();
+      expect(body.operation).toBeNull();
+    });
+
+    it("GET /stacksets/:name/operations/:operationId — 404 on OperationNotFound", async () => {
+      mockSend.mockRejectedValueOnce(Object.assign(new Error("nope"), { name: "OperationNotFoundException" }));
+      expect((await get("/stacksets/my-ss/operations/op-x")).status).toBe(404);
+    });
+
+    it("GET /stacksets/:name/operations/:operationId — rethrows unknown errors", async () => {
+      mockSend.mockRejectedValueOnce(Object.assign(new Error("boom"), { name: "ThrottlingException" }));
+      const res = await get("/stacksets/my-ss/operations/op-x");
+      expect(res.status).toBe(500);
+    });
+
+    it("GET /stacksets/:name/instances/:account/:region — returns instance detail", async () => {
+      mockSend.mockResolvedValueOnce({
+        StackInstance: {
+          Account: "123", Region: "us-east-1", StackId: "st-1", Status: "CURRENT",
+          StatusReason: "ok", StackSetStatus: "ACTIVE", DriftStatus: "IN_SYNC",
+        },
+      });
+      const res = await get("/stacksets/my-ss/instances/123/us-east-1");
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body.instance.account).toBe("123");
+      expect(body.instance.driftStatus).toBe("IN_SYNC");
+      expect(mockSend.mock.calls[0][0].AccountId).toBe("123");
+      expect(mockSend.mock.calls[0][0].Region).toBe("us-east-1");
+    });
+
+    it("GET /stacksets/:name/instances/:account/:region — null instance when missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const body = await (await get("/stacksets/my-ss/instances/1/r")).json();
+      expect(body.instance).toBeNull();
+    });
+
+    it("GET /stacksets/:name/instances/:account/:region — 404 on not found", async () => {
+      mockSend.mockRejectedValueOnce(Object.assign(new Error("nope"), { name: "StackInstanceNotFoundException" }));
+      expect((await get("/stacksets/my-ss/instances/1/r")).status).toBe(404);
+    });
+
+    it("GET /stacksets/:name/instances/:account/:region — rethrows unknown errors", async () => {
+      mockSend.mockRejectedValueOnce(Object.assign(new Error("boom"), { name: "ThrottlingException" }));
+      expect((await get("/stacksets/my-ss/instances/1/r")).status).toBe(500);
+    });
+
+    it("PUT /stacksets/:name — updates stack set and returns operationId", async () => {
+      mockSend.mockResolvedValueOnce({ OperationId: "op-9" });
+      const res = await put("/stacksets/my-ss", {
+        templateBody: "{}",
+        parameters: [{ key: "Env", value: "prod" }],
+        description: "Updated",
+        operationId: "op-9",
+      });
+      const body = await res.json();
+      expect(body.operationId).toBe("op-9");
+      expect(body.updated).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("UpdateStackSetCommand");
+      expect(mockSend.mock.calls[0][0].StackSetName).toBe("my-ss");
+      expect(mockSend.mock.calls[0][0].OperationId).toBe("op-9");
+    });
+
+    it("PUT /stacksets/:name — omits OperationId when not provided", async () => {
+      mockSend.mockResolvedValueOnce({ OperationId: "auto-op" });
+      await put("/stacksets/my-ss", { templateBody: "{}" });
+      expect(mockSend.mock.calls[0][0].OperationId).toBeUndefined();
+    });
+
+    it("PUT /stacksets/:name — updates without templateBody", async () => {
+      mockSend.mockResolvedValueOnce({ OperationId: "op-no-tb" });
+      const res = await put("/stacksets/my-ss", {
+        description: "No template",
+        parameters: [{ value: "only-value" }, { key: "only-key" }, { key: "k", value: "v" }],
+      });
+      expect(res.status).toBe(200);
+      const input = mockSend.mock.calls[0][0];
+      expect(input.TemplateBody).toBeUndefined();
+      expect(input.Parameters).toEqual([
+        { ParameterKey: "", ParameterValue: "only-value" },
+        { ParameterKey: "only-key", ParameterValue: "" },
+        { ParameterKey: "k", ParameterValue: "v" },
+      ]);
+    });
+
+    it("PUT /stacksets/:name — 400 when templateBody is invalid JSON", async () => {
+      const res = await put("/stacksets/my-ss", { templateBody: "not json" });
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("GET /stacksets/:name/auto-deployment-targets — returns targets", async () => {
+      mockSend.mockResolvedValueOnce({
+        Summaries: [{ AccountId: "123", Regions: ["us-east-1"], OrganizationalUnitId: "ou-1" }],
+      });
+      const res = await get("/stacksets/my-ss/auto-deployment-targets");
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body.total).toBe(1);
+      expect(body.targets[0].account).toBe("123");
+      expect(body.targets[0].organizationalUnitId).toBe("ou-1");
+    });
+
+    it("GET /stacksets/:name/auto-deployment-targets — Regions default to empty array", async () => {
+      mockSend.mockResolvedValueOnce({ Summaries: [{ AccountId: "456" }] });
+      const res = await get("/stacksets/my-ss/auto-deployment-targets");
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body.targets[0].regions).toEqual([]);
+    });
+
+    it("GET /stacksets/:name/auto-deployment-targets — empty when Summaries missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const body = await (await get("/stacksets/my-ss/auto-deployment-targets")).json();
+      expect(body.targets).toEqual([]);
+      expect(body.total).toBe(0);
+    });
+  });
+
+  describe("Termination Protection", () => {
+    it("PUT /stacks/:name/termination-protection — enables protection", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/stacks/my-stack/termination-protection", { enabled: true });
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body.enabled).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("UpdateTerminationProtectionCommand");
+      expect(mockSend.mock.calls[0][0].EnableTerminationProtection).toBe(true);
+    });
+
+    it("PUT /stacks/:name/termination-protection — disables protection", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const body = await (await put("/stacks/my-stack/termination-protection", { enabled: false })).json();
+      expect(body.enabled).toBe(false);
+    });
+
+    it("PUT /stacks/:name/termination-protection — 400 when enabled is not boolean", async () => {
+      const res = await put("/stacks/my-stack/termination-protection", { enabled: "yes" });
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("Organizations Access", () => {
+    it("GET /organizations-access — returns status", async () => {
+      mockSend.mockResolvedValueOnce({ Status: "ENABLED" });
+      const res = await get("/organizations-access");
+      const body = await res.json();
+      expect(body.status).toBe("ENABLED");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DescribeOrganizationsAccessCommand");
+    });
+
+    it("GET /organizations-access — defaults to DISABLED", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const body = await (await get("/organizations-access")).json();
+      expect(body.status).toBe("DISABLED");
+    });
+
+    it("POST /organizations-access/activate — activates access", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/organizations-access/activate");
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body.activated).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("ActivateOrganizationsAccessCommand");
+    });
+  });
+
+  describe("Template Summary", () => {
+    it("POST /template-summary — summarizes a template body", async () => {
+      mockSend.mockResolvedValueOnce({
+        Version: "2010-09-09",
+        Description: "Test",
+        Parameters: [{ ParameterKey: "Env", ParameterType: "String", DefaultValue: "dev", Description: "Env", NoEcho: false }],
+        ResourceTypes: ["AWS::S3::Bucket"],
+        ResourceIdentifierSummaries: [{ ResourceType: "AWS::S3::Bucket", LogicalResourceIds: ["MyBucket"] }],
+        Capabilities: ["CAPABILITY_IAM"],
+        CapabilitiesReason: "IAM resources",
+        Metadata: "{}",
+      });
+      const res = await post("/template-summary", { templateBody: "{}" });
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body.summary.version).toBe("2010-09-09");
+      expect(body.summary.parameters[0].key).toBe("Env");
+      expect(body.summary.resourceTypes).toEqual(["AWS::S3::Bucket"]);
+      expect(body.summary.resources[0].logicalResourceIds).toEqual(["MyBucket"]);
+      expect(body.summary.capabilities).toEqual(["CAPABILITY_IAM"]);
+      expect(body.summary.capabilitiesReason).toBe("IAM resources");
+      expect(body.summary.metadata).toBe("{}");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetTemplateSummaryCommand");
+    });
+
+    it("POST /template-summary — resource entries without LogicalResourceIds default to empty array", async () => {
+      mockSend.mockResolvedValueOnce({
+        ResourceIdentifierSummaries: [{ ResourceType: "AWS::S3::Bucket" }],
+      });
+      const res = await post("/template-summary", { templateBody: "{}" });
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body.summary.resources[0].logicalResourceIds).toEqual([]);
+    });
+
+    it("POST /template-summary — sparse response omits optional arrays", async () => {
+      mockSend.mockResolvedValueOnce({ Description: "Minimal" });
+      const body = await (await post("/template-summary", { templateBody: "{}" })).json();
+      expect(body.summary.parameters).toEqual([]);
+      expect(body.summary.resourceTypes).toEqual([]);
+      expect(body.summary.capabilities).toEqual([]);
+    });
+
+    it("POST /template-summary — uses StackName when no templateBody", async () => {
+      mockSend.mockResolvedValueOnce({ Description: "Stack summary" });
+      const res = await post("/template-summary", { stackName: "my-stack" });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].StackName).toBe("my-stack");
+    });
+
+    it("POST /template-summary — 400 when neither templateBody nor stackName", async () => {
+      expect((await post("/template-summary", {})).status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("POST /template-summary — 400 when templateBody is invalid JSON", async () => {
+      const res = await post("/template-summary", { templateBody: "not json" });
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
     });
   });
 

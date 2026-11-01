@@ -20,6 +20,10 @@ import {
   useExportACMCertificate,
   useACMAccountConfiguration,
   usePutACMAccountConfiguration,
+  useRenewACMCertificate,
+  useResendACMValidationEmail,
+  useRevokeACMCertificate,
+  useUpdateACMCertificateOptions,
 } from "./useACM";
 
 beforeEach(() => mockApi.mockReset());
@@ -119,6 +123,57 @@ describe("ACM account configuration hooks", () => {
     expect(mockApi).toHaveBeenCalledWith("/aws/acm/account-configuration", {
       method: "PUT",
       body: JSON.stringify({ daysBeforeExpiry: 30 }),
+    });
+  });
+});
+
+// ─── Certificate lifecycle actions ───────────────────────
+
+describe("useRenewACMCertificate", () => {
+  it("posts to renew endpoint", async () => {
+    mockApi.mockResolvedValueOnce({ renewed: true });
+    const { result } = renderHook(() => useRenewACMCertificate(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("arn:c1");
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/acm/certificates/arn%3Ac1/renew", { method: "POST" });
+  });
+});
+
+describe("useResendACMValidationEmail", () => {
+  it("posts domain and validationDomain", async () => {
+    mockApi.mockResolvedValueOnce({ sent: true });
+    const { result } = renderHook(() => useResendACMValidationEmail(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ arn: "arn:c1", domain: "example.com", validationDomain: "example.com" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/acm/certificates/arn%3Ac1/resend-validation", {
+      method: "POST",
+      body: JSON.stringify({ domain: "example.com", validationDomain: "example.com" }),
+    });
+  });
+});
+
+describe("useRevokeACMCertificate", () => {
+  it("posts revocation reason", async () => {
+    mockApi.mockResolvedValueOnce({ revoked: true });
+    const { result } = renderHook(() => useRevokeACMCertificate(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ arn: "arn:c1", revocationReason: "KEY_COMPROMISE" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/acm/certificates/arn%3Ac1/revoke", {
+      method: "POST",
+      body: JSON.stringify({ revocationReason: "KEY_COMPROMISE" }),
+    });
+  });
+});
+
+describe("useUpdateACMCertificateOptions", () => {
+  it("sends PUT with transparency preference", async () => {
+    mockApi.mockResolvedValueOnce({ updated: true });
+    const { result } = renderHook(() => useUpdateACMCertificateOptions(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ arn: "arn:c1", certificateTransparencyLoggingPreference: "ENABLED" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/acm/certificates/arn%3Ac1/options", {
+      method: "PUT",
+      body: JSON.stringify({ certificateTransparencyLoggingPreference: "ENABLED" }),
     });
   });
 });

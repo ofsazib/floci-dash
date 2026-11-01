@@ -42,6 +42,14 @@ vi.mock("@aws-sdk/client-backup", () => ({
   DescribeRecoveryPointCommand: createCmd("DescribeRecoveryPointCommand"),
   DeleteRecoveryPointCommand: createCmd("DeleteRecoveryPointCommand"),
   GetSupportedResourceTypesCommand: createCmd("GetSupportedResourceTypesCommand"),
+  GetBackupVaultAccessPolicyCommand: createCmd("GetBackupVaultAccessPolicyCommand"),
+  PutBackupVaultAccessPolicyCommand: createCmd("PutBackupVaultAccessPolicyCommand"),
+  DeleteBackupVaultAccessPolicyCommand: createCmd("DeleteBackupVaultAccessPolicyCommand"),
+  GetBackupVaultNotificationsCommand: createCmd("GetBackupVaultNotificationsCommand"),
+  PutBackupVaultNotificationsCommand: createCmd("PutBackupVaultNotificationsCommand"),
+  DeleteBackupVaultNotificationsCommand: createCmd("DeleteBackupVaultNotificationsCommand"),
+  PutBackupVaultLockConfigurationCommand: createCmd("PutBackupVaultLockConfigurationCommand"),
+  DeleteBackupVaultLockConfigurationCommand: createCmd("DeleteBackupVaultLockConfigurationCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -57,6 +65,14 @@ async function get(path: string) {
 async function post(path: string, body?: any) {
   return router.request(path, {
     method: "POST",
+    body: body != null ? JSON.stringify(body) : undefined,
+    headers: body != null ? { "content-type": "application/json" } : undefined,
+  });
+}
+
+async function put(path: string, body?: any) {
+  return router.request(path, {
+    method: "PUT",
     body: body != null ? JSON.stringify(body) : undefined,
     headers: body != null ? { "content-type": "application/json" } : undefined,
   });
@@ -453,5 +469,154 @@ describe("Backup P1 extras", () => {
     mockSend.mockResolvedValueOnce({ ResourceTypes: ["S3", "DynamoDB"] });
     const res = await router.request("/supported-resource-types");
     expect((await res.json()).resourceTypes).toEqual(["S3", "DynamoDB"]);
+  });
+});
+
+// ── Vault Access Policy / Notifications / Vault Lock ───────
+
+describe("Backup routes — supported resource types fallback", () => {
+  beforeEach(() => mockSend.mockReset());
+
+  it("GET /supported-resource-types — falls back to defaults when ResourceTypes missing", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/supported-resource-types");
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.resourceTypes).toEqual(["S3", "DynamoDB", "EBS", "EC2", "RDS"]);
+  });
+
+  it("GET /supported-resource-types — returns ResourceTypes when present", async () => {
+    mockSend.mockResolvedValueOnce({ ResourceTypes: ["S3", "RDS"] });
+    const body = await (await get("/supported-resource-types")).json();
+    expect(body.resourceTypes).toEqual(["S3", "RDS"]);
+  });
+});
+
+describe("Backup routes — Vault access policy", () => {
+  beforeEach(() => mockSend.mockReset());
+
+  it("GET /backup-vaults/:name/access-policy — returns policy", async () => {
+    mockSend.mockResolvedValueOnce({ Policy: '{"Version":"2012-10-17"}' });
+    const res = await get("/backup-vaults/my-vault/access-policy");
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.policy).toBe('{"Version":"2012-10-17"}');
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetBackupVaultAccessPolicyCommand");
+  });
+
+  it("GET /backup-vaults/:name/access-policy — null when no policy", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const body = await (await get("/backup-vaults/my-vault/access-policy")).json();
+    expect(body.policy).toBeNull();
+  });
+
+  it("PUT /backup-vaults/:name/access-policy — updates policy", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put("/backup-vaults/my-vault/access-policy", { policy: "{}" });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.updated).toBe(true);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("PutBackupVaultAccessPolicyCommand");
+    expect(mockSend.mock.calls[0][0].Policy).toBe("{}");
+  });
+
+  it("PUT /backup-vaults/:name/access-policy — 400 when policy missing", async () => {
+    expect((await put("/backup-vaults/my-vault/access-policy", {})).status).toBe(400);
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  it("DELETE /backup-vaults/:name/access-policy — deletes policy", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await del("/backup-vaults/my-vault/access-policy");
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.deleted).toBe(true);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteBackupVaultAccessPolicyCommand");
+  });
+});
+
+describe("Backup routes — Vault notifications", () => {
+  beforeEach(() => mockSend.mockReset());
+
+  it("GET /backup-vaults/:name/notifications — returns notifications", async () => {
+    mockSend.mockResolvedValueOnce({ SNSTopicArn: "arn:topic", BackupVaultEvents: ["BACKUP_JOB_STARTED"] });
+    const res = await get("/backup-vaults/my-vault/notifications");
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.notifications.snsTopicArn).toBe("arn:topic");
+    expect(body.notifications.backupVaultEvents).toEqual(["BACKUP_JOB_STARTED"]);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetBackupVaultNotificationsCommand");
+  });
+
+  it("GET /backup-vaults/:name/notifications — null topic and empty events", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const body = await (await get("/backup-vaults/my-vault/notifications")).json();
+    expect(body.notifications.snsTopicArn).toBeNull();
+    expect(body.notifications.backupVaultEvents).toEqual([]);
+  });
+
+  it("PUT /backup-vaults/:name/notifications — updates notifications", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put("/backup-vaults/my-vault/notifications", {
+      snsTopicArn: "arn:topic",
+      backupVaultEvents: ["BACKUP_JOB_COMPLETED"],
+    });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.updated).toBe(true);
+    expect(mockSend.mock.calls[0][0].BackupVaultEvents).toEqual(["BACKUP_JOB_COMPLETED"]);
+  });
+
+  it("PUT /backup-vaults/:name/notifications — 400 when snsTopicArn missing", async () => {
+    expect((await put("/backup-vaults/my-vault/notifications", { backupVaultEvents: ["X"] })).status).toBe(400);
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  it("PUT /backup-vaults/:name/notifications — 400 when events missing or empty", async () => {
+    expect((await put("/backup-vaults/my-vault/notifications", { snsTopicArn: "arn:topic" })).status).toBe(400);
+    expect((await put("/backup-vaults/my-vault/notifications", { snsTopicArn: "arn:topic", backupVaultEvents: [] })).status).toBe(400);
+  });
+
+  it("DELETE /backup-vaults/:name/notifications — deletes notifications", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const body = await (await del("/backup-vaults/my-vault/notifications")).json();
+    expect(body.deleted).toBe(true);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteBackupVaultNotificationsCommand");
+  });
+});
+
+describe("Backup routes — Vault lock", () => {
+  beforeEach(() => mockSend.mockReset());
+
+  it("PUT /backup-vaults/:name/vault-lock — sets lock configuration", async () => {
+    mockSend.mockResolvedValueOnce({ BackupVaultName: "my-vault" });
+    const res = await put("/backup-vaults/my-vault/vault-lock", {
+      retentionDays: 7, maxRetentionDays: 365, changeableForDays: 3,
+    });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.locked).toBe(true);
+    expect(body.backupVaultName).toBe("my-vault");
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("PutBackupVaultLockConfigurationCommand");
+    expect(mockSend.mock.calls[0][0].MinRetentionDays).toBe(7);
+  });
+
+  it("PUT /backup-vaults/:name/vault-lock — falls back to path name", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const body = await (await put("/backup-vaults/my-vault/vault-lock", { retentionDays: 1 })).json();
+    expect(body.backupVaultName).toBe("my-vault");
+  });
+
+  it("PUT /backup-vaults/:name/vault-lock — 400 when retentionDays not a number", async () => {
+    expect((await put("/backup-vaults/my-vault/vault-lock", {})).status).toBe(400);
+    expect((await put("/backup-vaults/my-vault/vault-lock", { retentionDays: "7" })).status).toBe(400);
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  it("DELETE /backup-vaults/:name/vault-lock — removes lock configuration", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const body = await (await del("/backup-vaults/my-vault/vault-lock")).json();
+    expect(body.deleted).toBe(true);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteBackupVaultLockConfigurationCommand");
   });
 });

@@ -24,6 +24,11 @@ const { mockSend, mocks } = vi.hoisted(() => {
       ListTagsForResourceCommand: createCmd("ListTagsForResourceCommand"),
       TagResourceCommand: createCmd("TagResourceCommand"),
       UntagResourceCommand: createCmd("UntagResourceCommand"),
+      CreateRuleGroupsNamespaceCommand: createCmd("CreateRuleGroupsNamespaceCommand"),
+      ListRuleGroupsNamespacesCommand: createCmd("ListRuleGroupsNamespacesCommand"),
+      DescribeRuleGroupsNamespaceCommand: createCmd("DescribeRuleGroupsNamespaceCommand"),
+      PutRuleGroupsNamespaceCommand: createCmd("PutRuleGroupsNamespaceCommand"),
+      DeleteRuleGroupsNamespaceCommand: createCmd("DeleteRuleGroupsNamespaceCommand"),
     },
   };
 });
@@ -219,5 +224,126 @@ describe("AMP — tags", () => {
     const res = await post("/tags/untag", { resourceArn: "arn" });
     expect(res.status).toBe(400);
     expect(mockSend).not.toHaveBeenCalled();
+  });
+});
+
+describe("AMP — rule groups namespaces", () => {
+  beforeEach(() => mockSend.mockReset());
+
+  it("GET /workspaces/:id/namespaces — lists namespaces", async () => {
+    mockSend.mockResolvedValueOnce({
+      ruleGroupsNamespaces: [
+        { name: "ns1", arn: "arn:ns1", status: { statusCode: "ACTIVE" }, createdAt: "t1", modifiedAt: "t2" },
+      ],
+    });
+    const res = await get("/workspaces/w1/namespaces");
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.total).toBe(1);
+    expect(body.namespaces[0].name).toBe("ns1");
+    expect(body.namespaces[0].status).toBe("ACTIVE");
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("ListRuleGroupsNamespacesCommand");
+  });
+
+  it("GET /workspaces/:id/namespaces — string status falls through ?? arm", async () => {
+    mockSend.mockResolvedValueOnce({
+      ruleGroupsNamespaces: [{ name: "ns2", arn: "arn:ns2", status: "ACTIVE" }],
+    });
+    const res = await get("/workspaces/w1/namespaces");
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.namespaces[0].status).toBe("ACTIVE");
+  });
+
+  it("GET /workspaces/:id/namespaces — empty list", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const body = await (await get("/workspaces/w1/namespaces")).json();
+    expect(body.namespaces).toEqual([]);
+    expect(body.total).toBe(0);
+  });
+
+  it("POST /workspaces/:id/namespaces — creates namespace", async () => {
+    mockSend.mockResolvedValueOnce({ name: "ns1", arn: "arn:ns1", status: { statusCode: "CREATING" } });
+    const res = await post("/workspaces/w1/namespaces", { name: "ns1", data: "groups: []" });
+    const body = await res.json();
+    expect(res.status).toBe(202);
+    expect(body.name).toBe("ns1");
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("CreateRuleGroupsNamespaceCommand");
+    expect(mockSend.mock.calls[0][0].data).toBe("groups: []");
+  });
+
+  it("POST /workspaces/:id/namespaces — 400 when name missing", async () => {
+    expect((await post("/workspaces/w1/namespaces", { data: "x" })).status).toBe(400);
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  it("POST /workspaces/:id/namespaces — 400 when data missing", async () => {
+    expect((await post("/workspaces/w1/namespaces", { name: "ns1" })).status).toBe(400);
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  it("GET /workspaces/:id/namespaces/:name — describes namespace", async () => {
+    mockSend.mockResolvedValueOnce({
+      ruleGroupsNamespace: {
+        name: "ns1", arn: "arn:ns1", status: { statusCode: "ACTIVE" },
+        createdAt: "t1", modifiedAt: "t2", data: "groups: []",
+      },
+    });
+    const res = await get("/workspaces/w1/namespaces/ns1");
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.namespace.name).toBe("ns1");
+    expect(body.namespace.status).toBe("ACTIVE");
+    expect(body.namespace.data).toBe("groups: []");
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("DescribeRuleGroupsNamespaceCommand");
+  });
+
+  it("GET /workspaces/:id/namespaces/:name — string status falls through ?? arm", async () => {
+    mockSend.mockResolvedValueOnce({
+      ruleGroupsNamespace: { name: "ns1", arn: "arn:ns1", status: "UPDATING" },
+    });
+    const res = await get("/workspaces/w1/namespaces/ns1");
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.namespace.status).toBe("UPDATING");
+  });
+
+  it("GET /workspaces/:id/namespaces/:name — null namespace when missing", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const body = await (await get("/workspaces/w1/namespaces/ns1")).json();
+    expect(body.namespace).toBeNull();
+  });
+
+  it("GET /workspaces/:id/namespaces/:name — 404 on ResourceNotFound", async () => {
+    mockSend.mockRejectedValueOnce(Object.assign(new Error("nf"), { name: "ResourceNotFoundException" }));
+    expect((await get("/workspaces/w1/namespaces/ns1")).status).toBe(404);
+  });
+
+  it("GET /workspaces/:id/namespaces/:name — rethrows unknown errors", async () => {
+    mockSend.mockRejectedValueOnce(Object.assign(new Error("boom"), { name: "ThrottlingException" }));
+    expect((await get("/workspaces/w1/namespaces/ns1")).status).toBe(500);
+  });
+
+  it("PUT /workspaces/:id/namespaces/:name — updates namespace", async () => {
+    mockSend.mockResolvedValueOnce({ name: "ns1", arn: "arn:ns1", status: { statusCode: "UPDATING" } });
+    const res = await put("/workspaces/w1/namespaces/ns1", { data: "groups: [1]" });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.updatedAt).toBe(true);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("PutRuleGroupsNamespaceCommand");
+  });
+
+  it("PUT /workspaces/:id/namespaces/:name — 400 when data missing", async () => {
+    expect((await put("/workspaces/w1/namespaces/ns1", {})).status).toBe(400);
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  it("DELETE /workspaces/:id/namespaces/:name — deletes namespace", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await router.request("/workspaces/w1/namespaces/ns1", { method: "DELETE" });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.deleted).toBe(true);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteRuleGroupsNamespaceCommand");
   });
 });

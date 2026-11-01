@@ -31,6 +31,14 @@ import {
   useDeleteStackInstances,
   useStackPolicy,
   useSetStackPolicy,
+  useStackSetOperation,
+  useStackInstance,
+  useUpdateStackSet,
+  useAutoDeploymentTargets,
+  useUpdateTerminationProtection,
+  useOrganizationsAccess,
+  useActivateOrganizationsAccess,
+  useTemplateSummary,
 } from "./useCloudFormation";
 
 function createWrapper() {
@@ -363,4 +371,116 @@ describe("useSetStackPolicy", () => {
   });
 });
 
+});
+
+// ─── Stack Set operations / instances / org access ─────
+
+describe("useStackSetOperation", () => {
+  it("calls api with correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ operation: { id: "op-1" } });
+    const { result } = renderHook(
+      () => useStackSetOperation("my-ss", "op-1"),
+      { wrapper: createWrapper() }
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/cloudformation/stacksets/my-ss/operations/op-1");
+  });
+
+  it("disabled when operationId is null", () => {
+    const { result } = renderHook(() => useStackSetOperation("my-ss", null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+});
+
+describe("useStackInstance", () => {
+  it("calls api with correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ instance: { account: "123" } });
+    const { result } = renderHook(
+      () => useStackInstance("my-ss", "123", "us-east-1"),
+      { wrapper: createWrapper() }
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/cloudformation/stacksets/my-ss/instances/123/us-east-1");
+  });
+
+  it("disabled when account is null", () => {
+    const { result } = renderHook(() => useStackInstance("my-ss", null, "us-east-1"), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+});
+
+describe("useUpdateStackSet", () => {
+  it("sends PUT with serialized body", async () => {
+    mockApi.mockResolvedValueOnce({ operationId: "op-9" });
+    const { result } = renderHook(() => useUpdateStackSet(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({
+      stackSetName: "my-ss", templateBody: "{}", description: "upd", parameters: [], operationId: "op-9",
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/cloudformation/stacksets/my-ss", {
+      method: "PUT",
+      body: JSON.stringify({ templateBody: "{}", description: "upd", parameters: [], operationId: "op-9" }),
+    });
+  });
+});
+
+describe("useAutoDeploymentTargets", () => {
+  it("calls api with correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ targets: [], total: 0 });
+    const { result } = renderHook(() => useAutoDeploymentTargets("my-ss"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/cloudformation/stacksets/my-ss/auto-deployment-targets");
+  });
+
+  it("disabled when stackSetName is null", () => {
+    const { result } = renderHook(() => useAutoDeploymentTargets(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+});
+
+describe("useUpdateTerminationProtection", () => {
+  it("sends PUT with enabled flag", async () => {
+    mockApi.mockResolvedValueOnce({ enabled: true });
+    const { result } = renderHook(() => useUpdateTerminationProtection(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ stackName: "my-stack", enabled: true });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/cloudformation/stacks/my-stack/termination-protection", {
+      method: "PUT",
+      body: JSON.stringify({ enabled: true }),
+    });
+  });
+});
+
+describe("useOrganizationsAccess", () => {
+  it("calls api with correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ status: "ENABLED" });
+    const { result } = renderHook(() => useOrganizationsAccess(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/cloudformation/organizations-access");
+  });
+});
+
+describe("useActivateOrganizationsAccess", () => {
+  it("posts to activate endpoint", async () => {
+    mockApi.mockResolvedValueOnce({ activated: true });
+    const { result } = renderHook(() => useActivateOrganizationsAccess(), { wrapper: createWrapper() });
+    await result.current.mutateAsync();
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/cloudformation/organizations-access/activate", { method: "POST" });
+  });
+});
+
+describe("useTemplateSummary", () => {
+  it("posts body and returns summary", async () => {
+    mockApi.mockResolvedValueOnce({ summary: { description: "d" } });
+    const { result } = renderHook(() => useTemplateSummary(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ templateBody: "{}" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/cloudformation/template-summary", {
+      method: "POST",
+      body: JSON.stringify({ templateBody: "{}" }),
+    });
+    expect(result.current.data?.summary.description).toBe("d");
+  });
 });

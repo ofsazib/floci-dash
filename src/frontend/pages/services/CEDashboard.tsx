@@ -325,6 +325,16 @@ import {
   useSavingsPlansCoverage,
   useSavingsPlansUtilization,
   useCostCategories,
+  useCEAnomalyMonitors,
+  useCreateCEAnomalyMonitor,
+  useUpdateCEAnomalyMonitor,
+  useDeleteCEAnomalyMonitor,
+  useCEAnomalySubscriptions,
+  useCreateCEAnomalySubscription,
+  useDeleteCEAnomalySubscription,
+  useCEResourceTags,
+  useCETagResource,
+  useCEUntagResource,
 } from "../../hooks/useCE";
 import {
   usePricingServices,
@@ -506,8 +516,78 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
   { label: "aurora-mysql8", value: "aurora-mysql8" },
 ];
 
+/** Tag editor for a monitor ARN using CE resource tags. */
+function CEMonitorTagsEditor({ arn }: { arn: string }) {
+  const { data, isLoading } = useCEResourceTags(arn);
+  const tagResource = useCETagResource();
+  const untagResource = useCEUntagResource();
+  const [key, setKey] = useState("");
+  const [value, setValue] = useState("");
+
+  const entries = Object.entries(data?.tags || {});
+
+  return (
+    <SpaceBetween size="m">
+      {isLoading ? (
+        <Box color="text-body-secondary">Loading tags…</Box>
+      ) : entries.length === 0 ? (
+        <Box color="text-body-secondary">No tags on this monitor.</Box>
+      ) : (
+        entries.map(([k, v]) => (
+          <SpaceBetween key={k} direction="horizontal" size="xs">
+            <Box>
+              <b>{k}</b>: {v}
+            </Box>
+            <Button variant="link" onClick={() => untagResource.mutate({ resourceArn: arn, tagKeys: [k] })}>
+              Remove
+            </Button>
+          </SpaceBetween>
+        ))
+      )}
+      <SpaceBetween direction="horizontal" size="xs">
+        <Input value={key} onChange={(e) => setKey(e.detail.value)} placeholder="env" />
+        <Input value={value} onChange={(e) => setValue(e.detail.value)} placeholder="prod" />
+        <Button
+          disabled={!key.trim() || tagResource.isPending}
+          onClick={async () => {
+            try {
+              await tagResource.mutateAsync({ resourceArn: arn, tags: { [key.trim()]: value } });
+              setKey("");
+              setValue("");
+            } catch {}
+          }}
+        >
+          Add tag
+        </Button>
+      </SpaceBetween>
+    </SpaceBetween>
+  );
+}
+
 export function CEDashboard() {
+  const { showToast } = useToast();
   const costAndUsage = useCostAndUsage();
+  const anomalyMonitorsQuery = useCEAnomalyMonitors();
+  const createMonitor = useCreateCEAnomalyMonitor();
+  const updateMonitor = useUpdateCEAnomalyMonitor();
+  const deleteMonitor = useDeleteCEAnomalyMonitor();
+  const anomalySubscriptionsQuery = useCEAnomalySubscriptions();
+  const createSubscription = useCreateCEAnomalySubscription();
+  const deleteSubscription = useDeleteCEAnomalySubscription();
+
+  const [showCreateMonitor, setShowCreateMonitor] = useState(false);
+  const [monitorName, setMonitorName] = useState("");
+  const [monitorType, setMonitorType] = useState("DIMENSIONAL");
+  const [monitorDimension, setMonitorDimension] = useState("SERVICE");
+  const [showCreateSub, setShowCreateSub] = useState(false);
+  const [subName, setSubName] = useState("");
+  const [subMonitorArn, setSubMonitorArn] = useState("");
+  const [subEmail, setSubEmail] = useState("");
+  const [subThreshold, setSubThreshold] = useState("");
+  const [tagsArn, setTagsArn] = useState<string | null>(null);
+
+  const anomalyMonitors = anomalyMonitorsQuery.data?.anomalyMonitors || [];
+  const anomalySubscriptions = anomalySubscriptionsQuery.data?.anomalySubscriptions || [];
   const costAndUsageWithResources = useCostAndUsageWithResources();
   const dimensionValues = useDimensionValues();
   const ceTags = useCETags();
@@ -611,7 +691,159 @@ export function CEDashboard() {
           Categories: {((costCategories.data as any).costCategories || []).length}
         </Box>
       )}
-    </SpaceBetween>
+    
+      <Header variant="h2">Cost Anomaly Detection</Header>
+      <Header variant="h3">Anomaly monitors</Header>
+      <ResourceTable
+        resourceName="Monitor"
+        headerTitle="Anomaly monitors"
+        headerCounter={anomalyMonitorsQuery.data?.total}
+        items={anomalyMonitors}
+        loading={anomalyMonitorsQuery.isLoading}
+        emptyMessage="No anomaly monitors"
+        onCreate={() => setShowCreateMonitor(true)}
+        columns={[
+          { id: "name", header: "Name", cell: (m: any) => m.name || "—", isRowHeader: true },
+          { id: "type", header: "Type", cell: (m: any) => m.type || "—" },
+          { id: "dimension", header: "Dimension", cell: (m: any) => m.dimension || "—" },
+          { id: "state", header: "State", cell: (m: any) => m.state || "—" },
+          {
+            id: "actions",
+            header: "",
+            cell: (m: any) => (
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button
+                  variant="link"
+                  onClick={() =>
+                    updateMonitor.mutate({
+                      arn: m.arn,
+                      monitorState: m.state === "PAUSED" ? "ACTIVE" : "PAUSED",
+                    })
+                  }
+                >
+                  {m.state === "PAUSED" ? "Resume" : "Pause"}
+                </Button>
+                <Button variant="link" onClick={() => setTagsArn(m.arn)}>
+                  Tags
+                </Button>
+                <DeleteButton
+                  itemName={m.name || m.arn}
+                  resourceType="monitor"
+                  loading={deleteMonitor.isPending && deleteMonitor.variables === m.arn}
+                  onDelete={() => deleteMonitor.mutateAsync(m.arn)}
+                />
+              </SpaceBetween>
+            ),
+          },
+        ]}
+      />
+      <Header variant="h3">Anomaly subscriptions</Header>
+      <ResourceTable
+        resourceName="Subscription"
+        headerTitle="Anomaly subscriptions"
+        headerCounter={anomalySubscriptionsQuery.data?.total}
+        items={anomalySubscriptions}
+        loading={anomalySubscriptionsQuery.isLoading}
+        emptyMessage="No anomaly subscriptions"
+        onCreate={() => setShowCreateSub(true)}
+        columns={[
+          { id: "name", header: "Name", cell: (s: any) => s.name || "—", isRowHeader: true },
+          { id: "threshold", header: "Threshold", cell: (s: any) => s.threshold ?? "—" },
+          { id: "frequency", header: "Frequency", cell: (s: any) => s.frequency || "—" },
+          {
+            id: "actions",
+            header: "",
+            cell: (s: any) => (
+              <DeleteButton
+                itemName={s.name || s.arn}
+                resourceType="subscription"
+                loading={deleteSubscription.isPending && deleteSubscription.variables === s.arn}
+                onDelete={() => deleteSubscription.mutateAsync(s.arn)}
+              />
+            ),
+          },
+        ]}
+      />
+
+      <Modal visible={showCreateMonitor} onDismiss={() => setShowCreateMonitor(false)} header="Create anomaly monitor">
+        <SpaceBetween size="m">
+          <FormField label="Monitor name">
+            <Input value={monitorName} onChange={(e) => setMonitorName(e.detail.value)} />
+          </FormField>
+          <FormField label="Monitor type (DIMENSIONAL | CUSTOM)">
+            <Input value={monitorType} onChange={(e) => setMonitorType(e.detail.value.toUpperCase())} />
+          </FormField>
+          <FormField label="Monitor dimension (for DIMENSIONAL)">
+            <Input value={monitorDimension} onChange={(e) => setMonitorDimension(e.detail.value.toUpperCase())} />
+          </FormField>
+          <Button
+            onClick={async () => {
+              try {
+                await createMonitor.mutateAsync({
+                  monitorName: monitorName.trim(),
+                  monitorType,
+                  monitorDimension: monitorType === "DIMENSIONAL" ? monitorDimension : undefined,
+                });
+                setShowCreateMonitor(false);
+                setMonitorName("");
+              /* v8 ignore start */
+              } catch (e: any) {
+                showToast("error", e?.message || "Failed to create monitor");
+              }
+              /* v8 ignore end */
+            }}
+            disabled={!monitorName.trim() || createMonitor.isPending}
+          >
+            Create monitor
+          </Button>
+        </SpaceBetween>
+      </Modal>
+
+      <Modal visible={showCreateSub} onDismiss={() => setShowCreateSub(false)} header="Create anomaly subscription">
+        <SpaceBetween size="m">
+          <FormField label="Subscription name">
+            <Input value={subName} onChange={(e) => setSubName(e.detail.value)} />
+          </FormField>
+          <FormField label="Monitor ARN">
+            <Input value={subMonitorArn} onChange={(e) => setSubMonitorArn(e.detail.value)} />
+          </FormField>
+          <FormField label="Subscriber email">
+            <Input value={subEmail} onChange={(e) => setSubEmail(e.detail.value)} placeholder="alerts@example.com" />
+          </FormField>
+          <FormField label="Threshold (absolute cost)">
+            <Input value={subThreshold} onChange={(e) => setSubThreshold(e.detail.value)} inputMode="numeric" />
+          </FormField>
+          <Button
+            onClick={async () => {
+              try {
+                await createSubscription.mutateAsync({
+                  subscriptionName: subName.trim(),
+                  monitorArn: subMonitorArn.trim(),
+                  subscribers: [{ Type: "EMAIL", Address: subEmail.trim() }],
+                  threshold: subThreshold ? Number(subThreshold) : undefined,
+                });
+                setShowCreateSub(false);
+                setSubName("");
+                setSubMonitorArn("");
+                setSubEmail("");
+                setSubThreshold("");
+              /* v8 ignore start */
+              } catch (e: any) {
+                showToast("error", e?.message || "Failed to create subscription");
+              }
+              /* v8 ignore end */
+            }}
+            disabled={!subName.trim() || !subMonitorArn.trim() || !subEmail.trim() || createSubscription.isPending}
+          >
+            Create subscription
+          </Button>
+        </SpaceBetween>
+      </Modal>
+
+      <Modal visible={!!tagsArn} onDismiss={() => setTagsArn(null)} header="Monitor resource tags">
+        {tagsArn && <CEMonitorTagsEditor arn={tagsArn} />}
+      </Modal>
+</SpaceBetween>
   );
 }
 

@@ -251,6 +251,10 @@ import {
   useDeleteACMCertificate,
   useImportACMCertificate,
   useExportACMCertificate,
+  useRenewACMCertificate,
+  useResendACMValidationEmail,
+  useRevokeACMCertificate,
+  useUpdateACMCertificateOptions,
 } from "../../hooks/useACM";
 import {
   useCloudTrailTrails,
@@ -508,15 +512,25 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
 ];
 
 export function ACMDashboard() {
+  const { showToast } = useToast();
   const { data, isLoading } = useACMCertificates();
   const deleteCert = useDeleteACMCertificate();
   const importCert = useImportACMCertificate();
   const exportCert = useExportACMCertificate();
+  const renewCert = useRenewACMCertificate();
+  const resendValidation = useResendACMValidationEmail();
+  const revokeCert = useRevokeACMCertificate();
+  const updateOptions = useUpdateACMCertificateOptions();
   const [showImport, setShowImport] = useState(false);
   const [importCertPem, setImportCertPem] = useState("");
   const [importKey, setImportKey] = useState("");
   const [importChain, setImportChain] = useState("");
   const [exported, setExported] = useState<any>(null);
+  const [manageArn, setManageArn] = useState<string | null>(null);
+  const [manageDomain, setManageDomain] = useState("");
+  const [revokeReason, setRevokeReason] = useState("");
+  const [validationDomain, setValidationDomain] = useState("");
+  const [ctLogging, setCtLogging] = useState("ENABLED");
 
   if (isLoading) return <TableSkeleton />;
 
@@ -560,6 +574,17 @@ export function ACMDashboard() {
               >
                 Export
               </Button>
+              <Button
+                loading={renewCert.isPending && renewCert.variables === i.arn}
+                onClick={async () => {
+                  try { await renewCert.mutateAsync(i.arn); showToast("success", "Renewal requested"); } catch (e: any) { showToast("error", e?.message || "Renewal failed"); }
+                }}
+              >
+                Renew
+              </Button>
+              <Button variant="link" onClick={() => { setManageArn(i.arn); setManageDomain(i.domain); }}>
+                Manage
+              </Button>
               <DeleteButton
                 itemName={i.domain}
                 resourceType="certificate"
@@ -598,6 +623,94 @@ export function ACMDashboard() {
       </Modal>
     )}
 
+    {/* Manage certificate modal */}
+    <Modal
+      visible={!!manageArn}
+      onDismiss={() => setManageArn(null)}
+      header={`Manage certificate — ${manageDomain || manageArn || ""}`}
+      footer={
+        <Box float="right">
+          <Button onClick={() => setManageArn(null)}>Close</Button>
+        </Box>
+      }
+    >
+      <SpaceBetween size="m">
+        <FormField label="Resend validation email — validation domain">
+          <SpaceBetween direction="horizontal" size="xs">
+            <Input
+              value={validationDomain}
+              onChange={(e) => setValidationDomain(e.detail.value)}
+              placeholder="example.com"
+            />
+            <Button
+              disabled={!validationDomain || resendValidation.isPending}
+              loading={resendValidation.isPending}
+              onClick={async () => {
+                try {
+                  await resendValidation.mutateAsync({
+                    arn: manageArn!,
+                    domain: manageDomain,
+                    validationDomain,
+                  });
+                  showToast("success", "Validation email sent");
+                  setValidationDomain("");
+                } catch (e: any) {
+                  showToast("error", e?.message || "Failed to send validation email");
+                }
+              }}
+            >
+              Resend email
+            </Button>
+          </SpaceBetween>
+        </FormField>
+        <FormField label="Revoke certificate — reason">
+          <SpaceBetween direction="horizontal" size="xs">
+            <Input
+              value={revokeReason}
+              onChange={(e) => setRevokeReason(e.detail.value)}
+              placeholder="KEY_COMPROMISE"
+            />
+            <Button
+              disabled={!revokeReason || revokeCert.isPending}
+              loading={revokeCert.isPending}
+              onClick={async () => {
+                try {
+                  await revokeCert.mutateAsync({ arn: manageArn!, revocationReason: revokeReason });
+                  showToast("success", "Certificate revoked");
+                  setRevokeReason("");
+                } catch (e: any) {
+                  showToast("error", e?.message || "Revocation failed");
+                }
+              }}
+            >
+              Revoke
+            </Button>
+          </SpaceBetween>
+        </FormField>
+        <FormField label="Certificate transparency logging">
+          <SpaceBetween direction="horizontal" size="xs">
+            <Input value={ctLogging} onChange={(e) => setCtLogging(e.detail.value.toUpperCase())} />
+            <Button
+              disabled={updateOptions.isPending}
+              loading={updateOptions.isPending}
+              onClick={async () => {
+                try {
+                  await updateOptions.mutateAsync({
+                    arn: manageArn!,
+                    certificateTransparencyLoggingPreference: ctLogging,
+                  });
+                  showToast("success", "Certificate options updated");
+                } catch (e: any) {
+                  showToast("error", e?.message || "Failed to update options");
+                }
+              }}
+            >
+              Save options
+            </Button>
+          </SpaceBetween>
+        </FormField>
+      </SpaceBetween>
+    </Modal>
     <Modal
       visible={showImport}
       onDismiss={() => setShowImport(false)}

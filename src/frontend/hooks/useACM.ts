@@ -125,3 +125,52 @@ export function usePutACMAccountConfiguration() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "acm", "account-configuration"] }),
   });
 }
+
+// ─── Certificate lifecycle actions ──────────────────────
+
+export function useRenewACMCertificate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (arn: string) =>
+      api(`/aws/acm/certificates/${encodeURIComponent(arn)}/renew`, { method: "POST" }),
+    onSuccess: (_d, arn) =>
+      qc.invalidateQueries({ queryKey: ["aws", "acm", "certificates", arn] }),
+  });
+}
+
+export function useResendACMValidationEmail() {
+  return useMutation({
+    mutationFn: (body: { arn: string; domain: string; validationDomain: string }) =>
+      api(`/aws/acm/certificates/${encodeURIComponent(body.arn)}/resend-validation`, {
+        method: "POST",
+        body: JSON.stringify({ domain: body.domain, validationDomain: body.validationDomain }),
+      }),
+  });
+}
+
+export function useRevokeACMCertificate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { arn: string; revocationReason?: string }) =>
+      api(`/aws/acm/certificates/${encodeURIComponent(body.arn)}/revoke`, {
+        method: "POST",
+        body: JSON.stringify({ revocationReason: body.revocationReason }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "acm"] }),
+  });
+}
+
+export function useUpdateACMCertificateOptions() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { arn: string; certificateTransparencyLoggingPreference: string }) =>
+      api(`/aws/acm/certificates/${encodeURIComponent(body.arn)}/options`, {
+        method: "PUT",
+        body: JSON.stringify({
+          certificateTransparencyLoggingPreference:
+            body.certificateTransparencyLoggingPreference,
+        }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "acm"] }),
+  });
+}

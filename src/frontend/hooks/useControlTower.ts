@@ -198,3 +198,83 @@ export function useBaselineOperation(identifier: string | null) {
     enabled: !!identifier,
   });
 }
+
+// ---------- Enabled controls ----------
+
+export interface EnabledControl {
+  arn: string;
+  controlIdentifier: string | null;
+  targetIdentifier: string | null;
+  status: string | null;
+  driftStatus: string | null;
+}
+
+export function useEnabledControls() {
+  return useQuery({
+    queryKey: ["controltower", "enabled-controls"],
+    queryFn: () => api<{ enabledControls: EnabledControl[]; total: number }>(
+      `${BASE}/enabled-controls`
+    ),
+  });
+}
+
+export function useEnabledControlDetail(identifier: string | null) {
+  return useQuery({
+    queryKey: ["controltower", "enabled-controls", identifier],
+    queryFn: () =>
+      api<{ enabledControl: EnabledControl & { parameters: any[] } }>(
+        `${BASE}/enabled-controls/detail${qs(identifier!)}`
+      ),
+    enabled: !!identifier,
+  });
+}
+
+export function useEnableControl() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      controlIdentifier: string;
+      targetIdentifier: string;
+      parameters?: any[] | string;
+    }) => api(`${BASE}/enabled-controls/enable`, { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["controltower"] }),
+  });
+}
+
+export function useUpdateEnabledControl() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { enabledControlIdentifier: string; parameters?: any[] | string }) =>
+      api(`${BASE}/enabled-controls/update`, { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["controltower"] }),
+  });
+}
+
+export function useResetEnabledControl() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (enabledControlIdentifier: string) =>
+      api(`${BASE}/enabled-controls/reset`, {
+        method: "POST",
+        body: JSON.stringify({ enabledControlIdentifier }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["controltower"] }),
+  });
+}
+
+export function useControlOperation(identifier: string | null) {
+  return useQuery({
+    queryKey: ["controltower", "control-operations", identifier],
+    queryFn: () =>
+      api<{
+        controlOperation: {
+          operationIdentifier: string;
+          operationType: string | null;
+          status: string | null;
+          startTime: string | null;
+          endTime: string | null;
+        };
+      }>(`${BASE}/control-operations/detail${qs(identifier!)}`),
+    enabled: !!identifier,
+  });
+}

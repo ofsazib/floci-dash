@@ -237,3 +237,111 @@ export function useDeleteStackInstances() {
     },
   });
 }
+
+// ─── STACK SET OPERATIONS / INSTANCES ─────────────────
+
+export function useStackSetOperation(
+  stackSetName: string | null,
+  operationId: string | null
+) {
+  return useQuery({
+    queryKey: ["aws", "cloudformation", "stacksets", stackSetName, "operations", operationId],
+    queryFn: () => api<{ operation: any }>(
+      `/aws/cloudformation/stacksets/${stackSetName}/operations/${operationId}`
+    ),
+    enabled: !!stackSetName && !!operationId,
+  });
+}
+
+export function useStackInstance(
+  stackSetName: string | null,
+  account: string | null,
+  region: string | null
+) {
+  return useQuery({
+    queryKey: ["aws", "cloudformation", "stacksets", stackSetName, "instances", account, region],
+    queryFn: () => api<{ instance: any }>(
+      `/aws/cloudformation/stacksets/${stackSetName}/instances/${account}/${region}`
+    ),
+    enabled: !!stackSetName && !!account && !!region,
+  });
+}
+
+export function useUpdateStackSet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { stackSetName: string; templateBody?: string; description?: string; parameters?: any[]; operationId?: string }) =>
+      api<{ operationId?: string }>(`/aws/cloudformation/stacksets/${body.stackSetName}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          templateBody: body.templateBody,
+          description: body.description,
+          parameters: body.parameters,
+          operationId: body.operationId,
+        }),
+      }),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: ["aws", "cloudformation", "stacksets", variables.stackSetName] });
+      qc.invalidateQueries({ queryKey: ["aws", "cloudformation", "stacksets"] });
+    },
+  });
+}
+
+export function useAutoDeploymentTargets(stackSetName: string | null) {
+  return useQuery({
+    queryKey: ["aws", "cloudformation", "stacksets", stackSetName, "autoDeploymentTargets"],
+    queryFn: () => api<{ targets: any[]; total: number }>(
+      `/aws/cloudformation/stacksets/${stackSetName}/auto-deployment-targets`
+    ),
+    enabled: !!stackSetName,
+  });
+}
+
+// ─── TERMINATION PROTECTION ───────────────────────────
+
+export function useUpdateTerminationProtection() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { stackName: string; enabled: boolean }) =>
+      api(`/aws/cloudformation/stacks/${body.stackName}/termination-protection`, {
+        method: "PUT",
+        body: JSON.stringify({ enabled: body.enabled }),
+      }),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: ["aws", "cloudformation", "stacks", variables.stackName] });
+      qc.invalidateQueries({ queryKey: ["aws", "cloudformation", "stacks"] });
+    },
+  });
+}
+
+// ─── ORGANIZATIONS ACCESS ─────────────────────────────
+
+export function useOrganizationsAccess() {
+  return useQuery({
+    queryKey: ["aws", "cloudformation", "organizationsAccess"],
+    queryFn: () => api<{ status: string }>("/aws/cloudformation/organizations-access"),
+  });
+}
+
+export function useActivateOrganizationsAccess() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      api("/aws/cloudformation/organizations-access/activate", { method: "POST" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["aws", "cloudformation", "organizationsAccess"] });
+    },
+  });
+}
+
+// ─── TEMPLATE SUMMARY ─────────────────────────────────
+
+export function useTemplateSummary() {
+  return useMutation({
+    mutationFn: (body: { templateBody?: string; stackName?: string }) =>
+      api<{ summary: any }>("/aws/cloudformation/template-summary", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+  });
+}

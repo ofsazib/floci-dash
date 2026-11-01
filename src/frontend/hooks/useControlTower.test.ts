@@ -24,6 +24,12 @@ import {
   useUpdateEnabledBaseline,
   useResetEnabledBaseline,
   useBaselineOperation,
+  useEnabledControls,
+  useEnabledControlDetail,
+  useEnableControl,
+  useUpdateEnabledControl,
+  useResetEnabledControl,
+  useControlOperation,
 } from "./useControlTower";
 
 function createWrapper() {
@@ -210,5 +216,83 @@ describe("useBaselineOperation", () => {
     const { result } = renderHook(() => useBaselineOperation(null), { wrapper: createWrapper() });
     expect(result.current.fetchStatus).toBe("idle");
     expect(mockApi).not.toHaveBeenCalled();
+  });
+});
+
+// ---------- Enabled controls ----------
+
+describe("useEnabledControls", () => {
+  it("calls api with correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ enabledControls: [], total: 0 });
+    const { result } = renderHook(() => useEnabledControls(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/controltower/enabled-controls");
+  });
+});
+
+describe("useEnabledControlDetail", () => {
+  it("calls api with encoded identifier", async () => {
+    mockApi.mockResolvedValueOnce({ enabledControl: { arn: "a" } });
+    const { result } = renderHook(() => useEnabledControlDetail("arn:ctl"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/controltower/enabled-controls/detail?identifier=arn%3Actl");
+  });
+
+  it("disabled when identifier is null", () => {
+    const { result } = renderHook(() => useEnabledControlDetail(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+});
+
+describe("useEnableControl", () => {
+  it("posts control enable body", async () => {
+    mockApi.mockResolvedValueOnce({ operationIdentifier: "op" });
+    const { result } = renderHook(() => useEnableControl(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ controlIdentifier: "c1", targetIdentifier: "t1", parameters: "[]" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/controltower/enabled-controls/enable", {
+      method: "POST",
+      body: JSON.stringify({ controlIdentifier: "c1", targetIdentifier: "t1", parameters: "[]" }),
+    });
+  });
+});
+
+describe("useUpdateEnabledControl", () => {
+  it("posts update body", async () => {
+    mockApi.mockResolvedValueOnce({ operationIdentifier: "op" });
+    const { result } = renderHook(() => useUpdateEnabledControl(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ enabledControlIdentifier: "a1", parameters: [] });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/controltower/enabled-controls/update", {
+      method: "POST",
+      body: JSON.stringify({ enabledControlIdentifier: "a1", parameters: [] }),
+    });
+  });
+});
+
+describe("useResetEnabledControl", () => {
+  it("posts reset body", async () => {
+    mockApi.mockResolvedValueOnce({ operationIdentifier: "op" });
+    const { result } = renderHook(() => useResetEnabledControl(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("a1");
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/controltower/enabled-controls/reset", {
+      method: "POST",
+      body: JSON.stringify({ enabledControlIdentifier: "a1" }),
+    });
+  });
+});
+
+describe("useControlOperation", () => {
+  it("calls api with encoded identifier", async () => {
+    mockApi.mockResolvedValueOnce({ controlOperation: { status: "SUCCEEDED" } });
+    const { result } = renderHook(() => useControlOperation("op 1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/controltower/control-operations/detail?identifier=op%201");
+  });
+
+  it("disabled when identifier is null", () => {
+    const { result } = renderHook(() => useControlOperation(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
   });
 });

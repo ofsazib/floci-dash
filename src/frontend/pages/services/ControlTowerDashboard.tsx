@@ -25,6 +25,12 @@ import {
   useUpdateEnabledBaseline,
   useResetEnabledBaseline,
   useBaselineOperation,
+  useEnabledControls,
+  useEnabledControlDetail,
+  useEnableControl,
+  useUpdateEnabledControl,
+  useResetEnabledControl,
+  useControlOperation,
 } from "../../hooks/useControlTower";
 import { useToast } from "../../components/Toast";
 import ResourceTable from "../../components/ResourceTable";
@@ -470,6 +476,184 @@ function OperationsTab() {
   );
 }
 
+function EnabledControlsTab() {
+  const { showToast } = useToast();
+  const { data, isLoading } = useEnabledControls();
+  const enableControl = useEnableControl();
+  const updateControl = useUpdateEnabledControl();
+  const resetControl = useResetEnabledControl();
+
+  const [showEnable, setShowEnable] = useState(false);
+  const [controlId, setControlId] = useState("");
+  const [targetId, setTargetId] = useState("");
+  const [editing, setEditing] = useState<any>(null);
+  const [parametersText, setParametersText] = useState("");
+  const { data: detail } = useEnabledControlDetail(editing?.arn ?? null);
+  const [operationId, setOperationId] = useState<string | null>(null);
+  const { data: operation } = useControlOperation(operationId);
+
+  const rows: any[] = data?.enabledControls || [];
+
+  const doEnable = async () => {
+    try {
+      const res = await enableControl.mutateAsync({
+        controlIdentifier: controlId.trim(),
+        targetIdentifier: targetId.trim(),
+        parameters: parametersText.trim() || undefined,
+      });
+      setShowEnable(false);
+      setControlId("");
+      setTargetId("");
+      setParametersText("");
+      setOperationId((res as any)?.operationIdentifier || null);
+      showToast("success", "Control enabled");
+    } catch (e: any) {
+      showToast("error", e?.message || "Failed to enable control");
+    }
+  };
+
+  const doUpdate = async () => {
+    try {
+      const res = await updateControl.mutateAsync({
+        enabledControlIdentifier: editing.arn,
+        parameters: parametersText.trim() || undefined,
+      });
+      setEditing(null);
+      setParametersText("");
+      setOperationId((res as any)?.operationIdentifier || null);
+      showToast("success", "Enabled control updated");
+    } catch (e: any) {
+      showToast("error", e?.message || "Failed to update enabled control");
+    }
+  };
+
+  const doReset = async (arn: string) => {
+    try {
+      const res = await resetControl.mutateAsync(arn);
+      setOperationId((res as any)?.operationIdentifier || null);
+      showToast("success", "Enabled control reset started");
+    } catch (e: any) {
+      showToast("error", e?.message || "Failed to reset enabled control");
+    }
+  };
+
+  return (
+    <>
+      <ResourceTable
+        resourceName="enabled control"
+        loading={isLoading}
+        items={rows}
+        onCreate={() => {
+          setControlId("");
+          setTargetId("");
+          setParametersText("");
+          setShowEnable(true);
+        }}
+        columns={[
+          { id: "arn", header: "ARN", cell: (e: any) => e.arn || "—" },
+          { id: "control", header: "Control", cell: (e: any) => e.controlIdentifier || "—" },
+          { id: "target", header: "Target", cell: (e: any) => e.targetIdentifier || "—" },
+          { id: "status", header: "Status", cell: (e: any) => e.status || "—" },
+          {
+            id: "actions",
+            header: "Actions",
+            cell: (e: any) => (
+              <SpaceBetween size="xxs" direction="horizontal">
+                <Button
+                  ariaLabel={`Update ${e.arn}`}
+                  onClick={() => {
+                    setEditing(e);
+                    setParametersText("");
+                  }}
+                >
+                  Update
+                </Button>
+                <Button ariaLabel={`Reset ${e.arn}`} onClick={() => doReset(e.arn)}>
+                  Reset
+                </Button>
+              </SpaceBetween>
+            ),
+          },
+        ]}
+      />
+      {operationId && (
+        <Box>
+          Control operation {operationId}:{" "}
+          {operation?.controlOperation ? operation.controlOperation.status : "Loading…"}
+        </Box>
+      )}
+      <Modal
+        visible={showEnable}
+        onDismiss={() => setShowEnable(false)}
+        header="Enable control"
+        footer={
+          <Box float="right">
+            <SpaceBetween size="xs" direction="horizontal">
+              <Button variant="link" onClick={() => setShowEnable(false)}>Cancel</Button>
+              <Button
+                variant="primary"
+                onClick={doEnable}
+                loading={enableControl.isPending}
+                disabled={!controlId.trim() || !targetId.trim()}
+              >
+                Enable
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <SpaceBetween size="m">
+          <FormField label="Control identifier">
+            <Input value={controlId} onChange={({ detail }) => setControlId(detail.value)} placeholder="AWS::SeC::…" />
+          </FormField>
+          <FormField label="Target identifier (OU ARN)">
+            <Input value={targetId} onChange={({ detail }) => setTargetId(detail.value)} placeholder="arn:aws:organizations::…:ou/…" />
+          </FormField>
+          <FormField label="Parameters (JSON array, optional)">
+            <Textarea
+              value={parametersText}
+              /* v8 ignore start */ onChange={({ detail }) => setParametersText(detail.value)} /* v8 ignore end */
+              rows={4}
+              placeholder='[{"key": "k", "value": true}]'
+            />
+          </FormField>
+        </SpaceBetween>
+      </Modal>
+      <Modal
+        visible={!!editing}
+        onDismiss={() => setEditing(null)}
+        header="Update enabled control"
+        footer={
+          <Box float="right">
+            <SpaceBetween size="xs" direction="horizontal">
+              <Button variant="link" onClick={() => setEditing(null)}>Cancel</Button>
+              <Button variant="primary" onClick={doUpdate} loading={updateControl.isPending}>Save</Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <SpaceBetween size="m">
+          <FormField label="Parameters (JSON array, optional)">
+            <Textarea
+              value={parametersText}
+              onChange={({ detail }) => setParametersText(detail.value)}
+              rows={4}
+              placeholder='[{"key": "k", "value": true}]'
+            />
+          </FormField>
+          {detail?.enabledControl?.parameters?.length ? (
+            <FormField label="Current parameters">
+              <Box>
+                <pre>{JSON.stringify(detail.enabledControl.parameters, null, 2)}</pre>
+              </Box>
+            </FormField>
+          ) : null}
+        </SpaceBetween>
+      </Modal>
+    </>
+  );
+}
+
 export default function ControlTowerDashboard() {
   return (
     <Tabs
@@ -477,6 +661,7 @@ export default function ControlTowerDashboard() {
         { id: "landingzone", label: "Landing zone", content: <LandingZoneTab /> },
         { id: "baselines", label: "Baselines", content: <BaselinesTab /> },
         { id: "enabled", label: "Enabled baselines", content: <EnabledBaselinesTab /> },
+        { id: "controls", label: "Enabled controls", content: <EnabledControlsTab /> },
         { id: "operations", label: "Operations", content: <OperationsTab /> },
       ]}
     />

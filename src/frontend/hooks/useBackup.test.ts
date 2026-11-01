@@ -28,6 +28,14 @@ import {
   useBackupTags,
   useBackupRecoveryPoints,
   useDeleteBackupRecoveryPoint,
+  useBackupVaultAccessPolicy,
+  usePutBackupVaultAccessPolicy,
+  useDeleteBackupVaultAccessPolicy,
+  useBackupVaultNotifications,
+  usePutBackupVaultNotifications,
+  useDeleteBackupVaultNotifications,
+  usePutBackupVaultLockConfiguration,
+  useDeleteBackupVaultLockConfiguration,
 } from "./useBackup";
 
 function createWrapper() {
@@ -272,5 +280,104 @@ describe("useDeleteBackupRecoveryPoint", () => {
       "/aws/backup/backup-vaults/v1/recovery-points/arn%3Aa%2Fb",
       { method: "DELETE" }
     );
+  });
+});
+
+// ─── Vault access policy / notifications / vault lock ─────
+
+describe("useBackupVaultAccessPolicy", () => {
+  it("calls api with correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ policy: "{}" });
+    const { result } = renderHook(() => useBackupVaultAccessPolicy("v1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/backup/backup-vaults/v1/access-policy");
+  });
+
+  it("disabled when name is null", () => {
+    const { result } = renderHook(() => useBackupVaultAccessPolicy(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+});
+
+describe("usePutBackupVaultAccessPolicy", () => {
+  it("sends PUT with policy body", async () => {
+    mockApi.mockResolvedValueOnce({ updated: true });
+    const { result } = renderHook(() => usePutBackupVaultAccessPolicy(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ vaultName: "v1", policy: "{}" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/backup/backup-vaults/v1/access-policy", {
+      method: "PUT",
+      body: JSON.stringify({ policy: "{}" }),
+    });
+  });
+});
+
+describe("useDeleteBackupVaultAccessPolicy", () => {
+  it("sends DELETE", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useDeleteBackupVaultAccessPolicy(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("v1");
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/backup/backup-vaults/v1/access-policy", { method: "DELETE" });
+  });
+});
+
+describe("useBackupVaultNotifications", () => {
+  it("calls api with correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ notifications: { snsTopicArn: "arn", backupVaultEvents: [] } });
+    const { result } = renderHook(() => useBackupVaultNotifications("v1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/backup/backup-vaults/v1/notifications");
+  });
+
+  it("disabled when name is null", () => {
+    const { result } = renderHook(() => useBackupVaultNotifications(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+});
+
+describe("usePutBackupVaultNotifications", () => {
+  it("sends PUT with notification body", async () => {
+    mockApi.mockResolvedValueOnce({ updated: true });
+    const { result } = renderHook(() => usePutBackupVaultNotifications(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ vaultName: "v1", snsTopicArn: "arn", backupVaultEvents: ["BACKUP_JOB_STARTED"] });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/backup/backup-vaults/v1/notifications", {
+      method: "PUT",
+      body: JSON.stringify({ snsTopicArn: "arn", backupVaultEvents: ["BACKUP_JOB_STARTED"] }),
+    });
+  });
+});
+
+describe("useDeleteBackupVaultNotifications", () => {
+  it("sends DELETE", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useDeleteBackupVaultNotifications(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("v1");
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/backup/backup-vaults/v1/notifications", { method: "DELETE" });
+  });
+});
+
+describe("usePutBackupVaultLockConfiguration", () => {
+  it("sends PUT with lock body", async () => {
+    mockApi.mockResolvedValueOnce({ locked: true });
+    const { result } = renderHook(() => usePutBackupVaultLockConfiguration(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ vaultName: "v1", retentionDays: 7 });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/backup/backup-vaults/v1/vault-lock", {
+      method: "PUT",
+      body: JSON.stringify({ retentionDays: 7, maxRetentionDays: undefined, changeableForDays: undefined }),
+    });
+  });
+});
+
+describe("useDeleteBackupVaultLockConfiguration", () => {
+  it("sends DELETE", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useDeleteBackupVaultLockConfiguration(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("v1");
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/backup/backup-vaults/v1/vault-lock", { method: "DELETE" });
   });
 });

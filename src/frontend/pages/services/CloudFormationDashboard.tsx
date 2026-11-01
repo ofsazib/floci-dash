@@ -11,6 +11,7 @@ import {
   Input,
   Textarea,
   Button,
+  Toggle,
 } from "@cloudscape-design/components";
 import {
   useStacks,
@@ -21,6 +22,13 @@ import {
   useExports,
   useChangeSets,
   useStackSets,
+  useStackSet,
+  useStackSetOperation,
+  useAutoDeploymentTargets,
+  useUpdateTerminationProtection,
+  useOrganizationsAccess,
+  useActivateOrganizationsAccess,
+  useTemplateSummary,
   useCreateChangeSet,
   useExecuteChangeSet,
   useDeleteChangeSet,
@@ -46,6 +54,10 @@ export function CloudFormationDashboard() {
   const createChangeSet = useCreateChangeSet();
   const executeChangeSet = useExecuteChangeSet();
   const deleteChangeSet = useDeleteChangeSet();
+  const updateTerminationProtection = useUpdateTerminationProtection();
+  const templateSummary = useTemplateSummary();
+  const orgAccess = useOrganizationsAccess();
+  const activateOrgAccess = useActivateOrganizationsAccess();
 
   const [selected, setSelected] = useState<string | null>(null);
   const { data: detailData } = useStack(selected);
@@ -57,6 +69,30 @@ export function CloudFormationDashboard() {
   const [showCsModal, setShowCsModal] = useState(false);
   const [csForm, setCsForm] = useState({ changeSetName: "", templateBody: "", paramsJson: "{}" });
   const [showTemplate, setShowTemplate] = useState(false);
+  const [showSummary, setShowSummary] = useState(false);
+  const [summary, setSummary] = useState<any>(null);
+
+  const [selectedStackSet, setSelectedStackSet] = useState<string | null>(null);
+  const { data: ssDetail } = useStackSet(selectedStackSet);
+  const [selectedOp, setSelectedOp] = useState<string | null>(null);
+  const { data: opDetail } = useStackSetOperation(selectedStackSet, selectedOp);
+  const [showTargets, setShowTargets] = useState(false);
+  const { data: targetsData } = useAutoDeploymentTargets(showTargets ? selectedStackSet : null);
+
+  const stackTerminationProtected = (detailData as any)?.stack?.enableTerminationProtection === true;
+
+  const handleTemplateSummary = async () => {
+    if (!selected) return;
+    try {
+      const res = await templateSummary.mutateAsync({ stackName: selected });
+      setSummary((res as any)?.summary || null);
+      setShowSummary(true);
+    } catch {}
+  };
+
+  const handleActivateOrgAccess = async () => {
+    try { await activateOrgAccess.mutateAsync(); } catch {}
+  };
 
   const stacks = (data as any)?.stacks || [];
   const exports = (expData as any)?.exports || [];
@@ -177,23 +213,151 @@ export function CloudFormationDashboard() {
             id: "stacksets",
             label: "Stack Sets",
             content: (
-              <ResourceTable
-                resourceName="Stack Set"
-                headerTitle="Stack Sets"
-                headerCounter={(ssData as any)?.total}
-                items={stackSets.map((ss: any) => ({
-                  name: ss.StackSetName || "",
-                  status: ss.Status || "—",
-                  description: ss.Description || "—",
-                }))}
-                loading={ssLoading}
-                emptyMessage="No stack sets"
-                columns={[
-                  { id: "name", header: "Name", cell: (item: any) => item.name },
-                  { id: "status", header: "Status", cell: (item: any) => item.status },
-                  { id: "description", header: "Description", cell: (item: any) => item.description },
-                ]}
-              />
+              <SpaceBetween size="m">
+                <SpaceBetween direction="horizontal" size="m">
+                  <Box>
+                    Organizations access:{" "}
+                    <StatusIndicator
+                      type={(orgAccess.data as any)?.status === "ENABLED" ? "success" : "pending"}
+                    >
+                      {(orgAccess.data as any)?.status || "DISABLED"}
+                    </StatusIndicator>
+                  </Box>
+                  <Button
+                    onClick={handleActivateOrgAccess}
+                    disabled={activateOrgAccess.isPending}
+                  >
+                    Activate Organizations Access
+                  </Button>
+                </SpaceBetween>
+                <ResourceTable
+                  resourceName="Stack Set"
+                  headerTitle="Stack Sets"
+                  headerCounter={(ssData as any)?.total}
+                  items={stackSets.map((ss: any) => ({
+                    name: ss.StackSetName || "",
+                    status: ss.Status || "—",
+                    description: ss.Description || "—",
+                  }))}
+                  loading={ssLoading}
+                  emptyMessage="No stack sets"
+                  columns={[
+                    {
+                      id: "name",
+                      header: "Name",
+                      cell: (item: any) => (
+                        <Button
+                          variant="link"
+                          onClick={() => {
+                            setSelectedOp(null);
+                            setShowTargets(false);
+                            setSelectedStackSet(item.name === selectedStackSet ? null : item.name);
+                          }}
+                        >
+                          {item.name}
+                        </Button>
+                      ),
+                    },
+                    { id: "status", header: "Status", cell: (item: any) => item.status },
+                    { id: "description", header: "Description", cell: (item: any) => item.description },
+                  ]}
+                />
+                {selectedStackSet && (
+                  <SpaceBetween size="m">
+                    <Header
+                      variant="h3"
+                      actions={
+                        <Button onClick={() => setShowTargets(!showTargets)}>
+                          {showTargets ? "Hide" : "Show"} Auto-Deployment Targets
+                        </Button>
+                      }
+                    >
+                      Stack Set — {selectedStackSet}
+                    </Header>
+                    {showTargets && (
+                      <ResourceTable
+                        resourceName="Target"
+                        headerTitle="Auto-Deployment Targets"
+                        headerCounter={(targetsData as any)?.total}
+                        items={((targetsData as any)?.targets || []).map((t: any) => ({
+                          account: t.account || t.organizationalUnitId || "",
+                          regions: (t.regions || []).join(", "),
+                        }))}
+                        emptyMessage="No auto-deployment targets"
+                        columns={[
+                          { id: "account", header: "Account / OU", cell: (item: any) => item.account },
+                          { id: "regions", header: "Regions", cell: (item: any) => item.regions || "—" },
+                        ]}
+                      />
+                    )}
+                    <ResourceTable
+                      resourceName="Instance"
+                      headerTitle="Stack Instances"
+                      items={((ssDetail as any)?.instances || []).map((i: any) => ({
+                        account: i.account || "",
+                        region: i.region || "",
+                        status: i.status || "—",
+                      }))}
+                      emptyMessage="No stack instances"
+                      columns={[
+                        { id: "account", header: "Account", cell: (item: any) => item.account },
+                        { id: "region", header: "Region", cell: (item: any) => item.region },
+                        { id: "status", header: "Status", cell: (item: any) => item.status },
+                      ]}
+                    />
+                    <ResourceTable
+                      resourceName="Operation"
+                      headerTitle="Stack Set Operations"
+                      items={((ssDetail as any)?.operations || []).map((o: any) => ({
+                        id: o.id || "",
+                        action: o.action || "—",
+                        status: o.status || "—",
+                      }))}
+                      emptyMessage="No stack set operations"
+                      columns={[
+                        { id: "id", header: "Operation ID", cell: (item: any) => item.id },
+                        { id: "action", header: "Action", cell: (item: any) => item.action },
+                        {
+                          id: "status",
+                          header: "Status",
+                          cell: (item: any) => (
+                            <StatusIndicator type={statusType(item.status)}>{item.status}</StatusIndicator>
+                          ),
+                        },
+                        {
+                          id: "actions",
+                          header: "",
+                          cell: (item: any) => (
+                            <Button
+                              variant="link"
+                              onClick={() => setSelectedOp(item.id === selectedOp ? null : item.id)}
+                            >
+                              View status
+                            </Button>
+                          ),
+                        },
+                      ]}
+                    />
+                    {selectedOp && (
+                      <Box>
+                        Operation {selectedOp}:{" "}
+                        {(opDetail as any)?.operation ? (
+                          <>
+                            <StatusIndicator type={statusType((opDetail as any).operation.status)}>
+                              {(opDetail as any).operation.status}
+                            </StatusIndicator>
+                            {(opDetail as any).operation.statusReason
+                              ? ` — ${(opDetail as any).operation.statusReason}`
+                              : ""}
+                          </>
+                        ) : (
+                          "Loading…"
+                        )}
+                      </Box>
+                    )}
+                  </SpaceBetween>
+                )}
+              </SpaceBetween>
             ),
           },
         ]}
@@ -207,6 +371,9 @@ export function CloudFormationDashboard() {
             actions={
               <SpaceBetween direction="horizontal" size="xs">
                 <Button onClick={() => setShowTemplate(true)}>View Template</Button>
+                <Button onClick={handleTemplateSummary} loading={templateSummary.isPending}>
+                  Template Summary
+                </Button>
                 <Button onClick={() => setShowCsModal(true)}>Create Change Set</Button>
               </SpaceBetween>
             }
@@ -214,6 +381,15 @@ export function CloudFormationDashboard() {
             Stack — {selected}
           </Header>
           <Box>Status: {(detailData as any)?.stack?.stackStatus || "—"}</Box>
+          <Toggle
+            checked={stackTerminationProtected}
+            onChange={(e) =>
+              updateTerminationProtection.mutate({ stackName: selected!, enabled: e.detail.checked })
+            }
+            disabled={updateTerminationProtection.isPending}
+          >
+            Termination protection
+          </Toggle>
           <Box>Outputs:</Box>
           {((detailData as any)?.stack?.outputs || []).length === 0 ? (
             <Box color="text-body-secondary">No outputs</Box>
@@ -323,6 +499,31 @@ export function CloudFormationDashboard() {
       {/* View Template modal */}
       <Modal visible={showTemplate} onDismiss={() => setShowTemplate(false)} header="Stack Template" footer="">
         <Textarea value={(templateData as any)?.template || ""} readOnly rows={20} />
+      </Modal>
+
+      {/* Template Summary modal */}
+      <Modal visible={showSummary} onDismiss={() => setShowSummary(false)} header="Template Summary" footer="">
+        <SpaceBetween size="m">
+          <Box>Description: {summary?.description || "—"}</Box>
+          <Box>Version: {summary?.version || "—"}</Box>
+          <Box>Resource types: {(summary?.resourceTypes || []).join(", ") || "—"}</Box>
+          {(summary?.parameters || []).length > 0 && (
+            <ResourceTable
+              resourceName="Parameter"
+              headerTitle="Parameters"
+              items={(summary.parameters || []).map((p: any) => ({
+                key: p.key || "",
+                type: p.type || "—",
+                defaultValue: p.defaultValue ?? "—",
+              }))}
+              columns={[
+                { id: "key", header: "Key", cell: (item: any) => item.key },
+                { id: "type", header: "Type", cell: (item: any) => item.type },
+                { id: "defaultValue", header: "Default", cell: (item: any) => item.defaultValue },
+              ]}
+            />
+          )}
+        </SpaceBetween>
       </Modal>
     </SpaceBetween>
   );

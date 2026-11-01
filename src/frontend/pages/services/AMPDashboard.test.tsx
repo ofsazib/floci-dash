@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -37,8 +37,29 @@ const mockAliasMutate = vi.fn(() => Promise.resolve({}));
 const mockTagMutate = vi.fn(() => Promise.resolve({}));
 const mockUntagMutate = vi.fn(() => Promise.resolve({}));
 const mockShowToast = vi.fn();
+const mockNamespaces = vi.fn();
+const mockNamespace = vi.fn();
+const mockCreateNsMutate = vi.fn(() => Promise.resolve({}));
+const nsUpdateState = vi.hoisted(() => ({ isPending: false, variables: null as any }));
+const nsDeleteState = vi.hoisted(() => ({ isPending: false, variables: null as any }));
+const mockUpdateNsMutate = vi.fn(() => Promise.resolve({}));
+const mockDeleteNsMutate = vi.fn(() => Promise.resolve({}));
+const mockCreateNsReject = vi.fn();
 
 vi.mock("../../hooks/useAMP", () => ({
+  useAMPNamespaces: (...args: any[]) => mockNamespaces(...args),
+  useAMPNamespace: (...args: any[]) => mockNamespace(...args),
+  useCreateAMPNamespace: () => ({ mutateAsync: mockCreateNsMutate, isPending: false }),
+    useUpdateAMPNamespace: () => ({
+    mutateAsync: mockUpdateNsMutate,
+    get isPending() { return nsUpdateState.isPending; },
+    get variables() { return nsUpdateState.variables; },
+  }),
+    useDeleteAMPNamespace: () => ({
+    mutateAsync: mockDeleteNsMutate,
+    get isPending() { return nsDeleteState.isPending; },
+    get variables() { return nsDeleteState.variables; },
+  }),
   useAMPWorkspaces: (...args: any[]) => mockWorkspaces(...args),
   useAMPTags: (...args: any[]) => mockTags(...args),
   useCreateAMPWorkspace: () => ({ mutateAsync: mockCreateMutate, isPending: false }),
@@ -83,6 +104,12 @@ beforeEach(() => {
   mockUntagMutate.mockImplementation(() => Promise.resolve({}));
   mockTags.mockReturnValue({ data: { tags: {} }, isLoading: false });
   mockWorkspaces.mockReturnValue({ data: { workspaces: [], total: 0 }, isLoading: false });
+  mockNamespaces.mockReturnValue({ data: { namespaces: [], total: 0 }, isLoading: false });
+  mockNamespace.mockReturnValue({ data: { namespace: null } });
+  nsUpdateState.isPending = false;
+  nsUpdateState.variables = null;
+  nsDeleteState.isPending = false;
+  nsDeleteState.variables = null;
 });
 
 describe("AMPDashboard", () => {
@@ -581,5 +608,263 @@ describe("AMPDashboard", () => {
     dismissModalWithEscape();
     expectModalHidden("Create AMP workspace");
     expect(mockCreateMutate).not.toHaveBeenCalled();
+  });
+
+  it("opens namespaces modal and lists namespaces", async () => {
+    mockWorkspaces.mockReturnValue({ data: { workspaces: [wsRow], total: 1 }, isLoading: false });
+    mockNamespaces.mockReturnValue({
+      data: { namespaces: [{ name: "ns1", status: { statusCode: "ACTIVE" }, modifiedAt: "t" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<AMPDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("lawful")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "Namespaces" }));
+    expect(await screen.findByText("ns1")).toBeTruthy();
+    expect(mockNamespaces).toHaveBeenCalledWith("ws-1");
+  });
+
+  it("creates a namespace from the modal form", async () => {
+    mockWorkspaces.mockReturnValue({ data: { workspaces: [wsRow], total: 1 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<AMPDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("lawful")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "Namespaces" }));
+    const nsDialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const areas = within(nsDialog).getAllByRole("textbox");
+    await user.type(areas[0], "ns2");
+    await user.type(areas[1], "groups: all");
+    await user.click(screen.getByRole("button", { name: "Create namespace" }));
+    expect(mockCreateNsMutate).toHaveBeenCalledWith({ workspaceId: "ws-1", name: "ns2", data: "groups: all" });
+  });
+
+  it("views and deletes a namespace", async () => {
+    mockWorkspaces.mockReturnValue({ data: { workspaces: [wsRow], total: 1 }, isLoading: false });
+    mockNamespaces.mockReturnValue({
+      data: { namespaces: [{ name: "ns1", status: { statusCode: "ACTIVE" } }], total: 1 },
+      isLoading: false,
+    });
+    mockNamespace.mockReturnValue({ data: { namespace: { name: "ns1", data: "groups: []" } } });
+    const user = userEvent.setup();
+    render(<AMPDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("lawful")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "Namespaces" }));
+    await user.click(await screen.findByRole("button", { name: "View" }));
+    expect(mockNamespace).toHaveBeenCalledWith("ws-1", "ns1");
+    await waitFor(() => expect(screen.getByDisplayValue("groups: []")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Delete ns1/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /^Delete$/i }));
+    expect(mockDeleteNsMutate).toHaveBeenCalledWith({ workspaceId: "ws-1", name: "ns1" });
+  });
+
+  it("updates namespace data successfully", async () => {
+    mockWorkspaces.mockReturnValue({ data: { workspaces: [wsRow], total: 1 }, isLoading: false });
+    mockNamespaces.mockReturnValue({
+      data: { namespaces: [{ name: "ns1", status: { statusCode: "ACTIVE" } }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<AMPDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("lawful")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "Namespaces" }));
+    const nsDialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    await user.type(within(nsDialog).getAllByRole("textbox")[1], "groups: ok");
+    await user.click(screen.getByRole("button", { name: "Update data" }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("success", "Namespace ns1 updated"));
+  });
+
+  it("updates namespace data and handles update/delete errors", async () => {
+    mockWorkspaces.mockReturnValue({ data: { workspaces: [wsRow], total: 1 }, isLoading: false });
+    mockNamespaces.mockReturnValue({
+      data: { namespaces: [{ name: "ns1", status: { statusCode: "ACTIVE" } }], total: 1 },
+      isLoading: false,
+    });
+    mockUpdateNsMutate.mockRejectedValueOnce(new Error("update boom"));
+    const user = userEvent.setup();
+    render(<AMPDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("lawful")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "Namespaces" }));
+    const nsDialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    await user.type(within(nsDialog).getAllByRole("textbox")[1], "groups: x");
+    await user.click(screen.getByRole("button", { name: "Update data" }));
+    await waitFor(() => expect(mockUpdateNsMutate).toHaveBeenCalledWith({ workspaceId: "ws-1", name: "ns1", data: "groups: x" }));
+    expect(mockShowToast).toHaveBeenCalledWith("error", "update boom");
+  });
+
+  it("deletes a namespace and shows error toast on failure", async () => {
+    mockWorkspaces.mockReturnValue({ data: { workspaces: [wsRow], total: 1 }, isLoading: false });
+    mockNamespaces.mockReturnValue({
+      data: { namespaces: [{ name: "ns1", status: { statusCode: "ACTIVE" } }], total: 1 },
+      isLoading: false,
+    });
+    mockDeleteNsMutate.mockRejectedValueOnce(new Error("delete boom"));
+    const user = userEvent.setup();
+    render(<AMPDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("lawful")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "Namespaces" }));
+    await user.click(await screen.findByRole("button", { name: /Delete ns1/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /^Delete$/i }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "delete boom"));
+  });
+
+  it("shows error toast when namespace creation fails", async () => {
+    mockWorkspaces.mockReturnValue({ data: { workspaces: [wsRow], total: 1 }, isLoading: false });
+    mockCreateNsMutate.mockRejectedValueOnce(new Error("create ns boom"));
+    const user = userEvent.setup();
+    render(<AMPDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("lawful")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "Namespaces" }));
+    const nsDialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const areas = within(nsDialog).getAllByRole("textbox");
+    await user.type(areas[0], "ns9");
+    await user.type(areas[1], "groups: y");
+    await user.click(screen.getByRole("button", { name: "Create namespace" }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "create ns boom"));
+  });
+
+  it("renders non-string namespace data as JSON", async () => {
+    mockWorkspaces.mockReturnValue({ data: { workspaces: [wsRow], total: 1 }, isLoading: false });
+    mockNamespaces.mockReturnValue({
+      data: { namespaces: [{ name: "ns1", status: "ACTIVE" }], total: 1 },
+      isLoading: false,
+    });
+    mockNamespace.mockReturnValue({ data: { namespace: { name: "ns1", data: { groups: [] } } } });
+    const user = userEvent.setup();
+    render(<AMPDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("lawful")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "Namespaces" }));
+    await user.click(await screen.findByRole("button", { name: "View" }));
+    const areas = screen.getAllByRole("textbox");
+    await waitFor(() =>
+      expect(areas.some((a) => (a as HTMLTextAreaElement).value.includes("groups"))).toBe(true)
+    );
+  });
+
+function visibleDeleteBtn() {
+  const dialogs = screen.getAllByRole("dialog").filter((d) => !d.className.includes("hidden"));
+  const dlg = dialogs[dialogs.length - 1];
+  return Array.from(dlg.querySelectorAll("button")).find((b) => b.textContent?.trim() === "Delete")!;
+}
+
+  it("renders namespaces panel with undefined data and toggles view off", async () => {
+    mockWorkspaces.mockReturnValue({ data: { workspaces: [wsRow], total: 1 }, isLoading: false });
+    mockNamespaces.mockReturnValue({
+      data: { namespaces: [{ name: "ns1", status: { statusCode: "ACTIVE" } }], total: 1 },
+      isLoading: false,
+    });
+    mockNamespace.mockReturnValue({ data: undefined });
+    const user = userEvent.setup();
+    render(<AMPDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("lawful")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "Namespaces" }));
+    await user.click(await screen.findByRole("button", { name: "View" }));
+    expect(mockNamespace).toHaveBeenCalledWith("ws-1", "ns1");
+    // toggle off (null arm) and JSON.stringify fallback arm for missing data
+    await user.click(screen.getByRole("button", { name: "View" }));
+    expect(mockNamespace).toHaveBeenCalledWith("ws-1", null);
+  });
+
+  it("shows update and delete loading states for the matching namespace", () => {
+    nsUpdateState.isPending = true;
+    nsUpdateState.variables = { name: "ns1" };
+    nsDeleteState.isPending = true;
+    nsDeleteState.variables = { name: "ns1" };
+    mockWorkspaces.mockReturnValue({ data: { workspaces: [wsRow], total: 1 }, isLoading: false });
+    mockNamespaces.mockReturnValue({
+      data: {
+        namespaces: [
+          { name: "ns1", status: { statusCode: "ACTIVE" } },
+          { name: "ns2", status: { statusCode: "ACTIVE" } },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    render(<AMPDashboard />, { wrapper: createWrapper() });
+    fireEvent.click(screen.getByRole("button", { name: "Namespaces" }));
+    const updateButtons = screen.getAllByRole("button", { name: "Update data" });
+    expect(updateButtons[0].className).toMatch(/loading|disabled/);
+    expect(updateButtons[1].className).not.toMatch(/awsui_loading/);
+    nsUpdateState.isPending = false;
+    nsUpdateState.variables = null;
+    nsDeleteState.isPending = false;
+    nsDeleteState.variables = null;
+  });
+
+  it("shows fallback toast messages when namespace ops reject without messages", async () => {
+    mockWorkspaces.mockReturnValue({ data: { workspaces: [wsRow], total: 1 }, isLoading: false });
+    mockNamespaces.mockReturnValue({
+      data: { namespaces: [{ name: "ns1", status: { statusCode: "ACTIVE" } }], total: 1 },
+      isLoading: false,
+    });
+    mockCreateNsMutate.mockRejectedValueOnce("plain-1");
+    mockUpdateNsMutate.mockRejectedValueOnce("plain-2");
+    mockDeleteNsMutate.mockRejectedValueOnce("plain-3");
+    const user = userEvent.setup();
+    render(<AMPDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("lawful")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "Namespaces" }));
+    // create failure fallback
+    const nsDialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
+    const areas = within(nsDialog).getAllByRole("textbox");
+    await user.type(areas[0], "nsX");
+    await user.type(areas[1], "groups: z");
+    await user.click(screen.getByRole("button", { name: "Create namespace" }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "Failed to create namespace"));
+    // update failure fallback
+    await user.click(screen.getByRole("button", { name: "Update data" }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "Failed to update namespace"));
+    // delete failure fallback
+    await user.click(screen.getByRole("button", { name: /Delete ns1/i }));
+    await waitFor(() => expect(screen.getAllByText(/Are you sure/).length).toBeGreaterThan(0));
+    await user.click(visibleDeleteBtn());
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "Failed to delete namespace"));
+  });
+
+  it("renders the namespaces panel empty when query data is undefined", async () => {
+    mockWorkspaces.mockReturnValue({ data: { workspaces: [wsRow], total: 1 }, isLoading: false });
+    mockNamespaces.mockReturnValue({ data: undefined, isLoading: false });
+    const user = userEvent.setup();
+    render(<AMPDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("lawful")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "Namespaces" }));
+    expect(await screen.findByText("No rule groups namespaces")).toBeTruthy();
+  });
+
+  it("clears the namespace view when deleting the viewed namespace", async () => {
+    mockWorkspaces.mockReturnValue({ data: { workspaces: [wsRow], total: 1 }, isLoading: false });
+    mockNamespaces.mockReturnValue({
+      data: { namespaces: [{ name: "ns1", status: { statusCode: "ACTIVE" } }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<AMPDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("lawful")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "Namespaces" }));
+    await user.click(await screen.findByRole("button", { name: "View" }));
+    expect(mockNamespace).toHaveBeenLastCalledWith("ws-1", "ns1");
+    await user.click(screen.getByRole("button", { name: /Delete ns1/i }));
+    await waitFor(() => expect(screen.getAllByText(/Are you sure/).length).toBeGreaterThan(0));
+    await user.click(visibleDeleteBtn());
+    await waitFor(() => expect(mockNamespace).toHaveBeenLastCalledWith("ws-1", null));
+  });
+
+  it("deletes a namespace that is not being viewed without clearing the view", async () => {
+    mockWorkspaces.mockReturnValue({ data: { workspaces: [wsRow], total: 1 }, isLoading: false });
+    mockNamespaces.mockReturnValue({
+      data: { namespaces: [{ name: "ns1", status: { statusCode: "ACTIVE" } }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<AMPDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("lawful")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: "Namespaces" }));
+    await user.click(await screen.findByRole("button", { name: /Delete ns1/i }));
+    await waitFor(() => expect(screen.getAllByText(/Are you sure/).length).toBeGreaterThan(0));
+    await user.click(visibleDeleteBtn());
+    await waitFor(() => expect(mockDeleteNsMutate).toHaveBeenCalledWith({ workspaceId: "ws-1", name: "ns1" }));
+    expect(mockShowToast).toHaveBeenCalledWith("success", "Namespace ns1 deleted");
   });
 });

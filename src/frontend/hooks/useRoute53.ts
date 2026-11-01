@@ -182,3 +182,112 @@ export function useRoute53AccountLimit(type: string) {
     queryFn: () => api(`/aws/route53/account-limit/${encodeURIComponent(type)}`),
   });
 }
+
+// ─── Hosted zone comment & VPC association ──────────────
+
+export function useUpdateRoute53HostedZoneComment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { id: string; comment: string }) =>
+      api(`/aws/route53/hosted-zones/${encodeURIComponent(body.id)}/comment`, {
+        method: "PUT",
+        body: JSON.stringify({ comment: body.comment }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["route53"] }),
+  });
+}
+
+export function useAssociateRoute53VPC() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { id: string; vpcId: string; vpcRegion: string }) =>
+      api(`/aws/route53/hosted-zones/${encodeURIComponent(body.id)}/associate-vpc`, {
+        method: "POST",
+        body: JSON.stringify({ vpcId: body.vpcId, vpcRegion: body.vpcRegion }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["route53"] }),
+  });
+}
+
+export function useDisassociateRoute53VPC() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { id: string; vpcId: string; vpcRegion: string }) =>
+      api(`/aws/route53/hosted-zones/${encodeURIComponent(body.id)}/disassociate-vpc`, {
+        method: "POST",
+        body: JSON.stringify({ vpcId: body.vpcId, vpcRegion: body.vpcRegion }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["route53"] }),
+  });
+}
+
+// ─── VPC association authorizations ─────────────────────
+
+export function useRoute53VPCAuthorizations(zoneId: string | null) {
+  return useQuery({
+    queryKey: ["route53", "hosted-zones", zoneId, "vpc-authorizations"],
+    queryFn: () => api<{ authorizations: any[]; total: number }>(
+      `/aws/route53/hosted-zones/${encodeURIComponent(zoneId!)}/vpc-authorizations`
+    ),
+    enabled: !!zoneId,
+  });
+}
+
+export function useCreateRoute53VPCAuthorization() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { id: string; vpcId: string; vpcRegion: string }) =>
+      api(`/aws/route53/hosted-zones/${encodeURIComponent(body.id)}/vpc-authorizations`, {
+        method: "POST",
+        body: JSON.stringify({ vpcId: body.vpcId, vpcRegion: body.vpcRegion }),
+      }),
+    onSuccess: (_d, v) =>
+      qc.invalidateQueries({ queryKey: ["route53", "hosted-zones", v.id, "vpc-authorizations"] }),
+  });
+}
+
+export function useDeleteRoute53VPCAuthorization() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { id: string; vpcId: string; vpcRegion: string }) =>
+      api(`/aws/route53/hosted-zones/${encodeURIComponent(body.id)}/vpc-authorizations`, {
+        method: "DELETE",
+        body: JSON.stringify({ vpcId: body.vpcId, vpcRegion: body.vpcRegion }),
+      }),
+    onSuccess: (_d, v) =>
+      qc.invalidateQueries({ queryKey: ["route53", "hosted-zones", v.id, "vpc-authorizations"] }),
+  });
+}
+
+export function useRoute53HostedZonesByVPC(vpcId: string | null) {
+  return useQuery({
+    queryKey: ["route53", "hosted-zones-by-vpc", vpcId],
+    queryFn: () =>
+      api<{ hostedZoneSummaries: any[]; total: number }>(
+        `/aws/route53/hosted-zones-by-vpc?vpcId=${encodeURIComponent(vpcId!)}`
+      ),
+    enabled: !!vpcId,
+  });
+}
+
+// ─── Health check status & hosted zone limit ────────────
+
+export function useRoute53HealthCheckStatus(healthCheckId: string | null) {
+  return useQuery({
+    queryKey: ["route53", "health-checks", healthCheckId, "status"],
+    queryFn: () => api<{ observations: any[]; total: number }>(
+      `/aws/route53/health-checks/${encodeURIComponent(healthCheckId!)}/status`
+    ),
+    enabled: !!healthCheckId,
+  });
+}
+
+export function useRoute53HostedZoneLimit(zoneId: string | null, type: string) {
+  return useQuery({
+    queryKey: ["route53", "hosted-zones", zoneId, "limit", type],
+    queryFn: () => api<{ limit: string; value: number | null; count: number | null }>(
+      `/aws/route53/hosted-zones/${encodeURIComponent(zoneId!)}/limit/${encodeURIComponent(type)}`
+    ),
+    enabled: !!zoneId,
+  });
+}

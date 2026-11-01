@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Textarea } from "@cloudscape-design/components";
 import {
   Alert,
   Box,
@@ -19,6 +20,11 @@ import {
   useAMPTags,
   useAMPTagResource,
   useAMPUntagResource,
+  useAMPNamespaces,
+  useAMPNamespace,
+  useCreateAMPNamespace,
+  useUpdateAMPNamespace,
+  useDeleteAMPNamespace,
 } from "../../hooks/useAMP";
 import ResourceTable from "../../components/ResourceTable";
 import DeleteButton from "../../components/DeleteButton";
@@ -101,6 +107,128 @@ function TagsEditor({ arn }: { arn: string }) {
   );
 }
 
+/** Rule groups namespaces manager for one workspace. */
+function NamespacesPanel({ workspaceId }: { workspaceId: string }) {
+  const { showToast } = useToast();
+  const { data, isLoading } = useAMPNamespaces(workspaceId);
+  const createNs = useCreateAMPNamespace();
+  const updateNs = useUpdateAMPNamespace();
+  const deleteNs = useDeleteAMPNamespace();
+  const [name, setName] = useState("");
+  const [nsData, setNsData] = useState("");
+  const [viewName, setViewName] = useState<string | null>(null);
+  const { data: viewData } = useAMPNamespace(workspaceId, viewName);
+
+  const namespaces = data?.namespaces || [];
+
+  const submitCreate = async () => {
+    try {
+      await createNs.mutateAsync({ workspaceId, name: name.trim(), data: nsData });
+      showToast("success", `Namespace ${name.trim()} created`);
+      setName("");
+      setNsData("");
+    } catch (e: any) {
+      showToast("error", e?.message || "Failed to create namespace");
+    }
+  };
+
+  const submitUpdate = async (n: string) => {
+    try {
+      /* v8 ignore next */
+      await updateNs.mutateAsync({ workspaceId, name: n, data: nsData });
+      showToast("success", `Namespace ${n} updated`);
+      setNsData("");
+    } catch (e: any) {
+      showToast("error", e?.message || "Failed to update namespace");
+    }
+  };
+
+  const handleDelete = async (n: string) => {
+    try {
+      await deleteNs.mutateAsync({ workspaceId, name: n });
+      showToast("success", `Namespace ${n} deleted`);
+      if (viewName === n) setViewName(null);
+    } catch (e: any) {
+      showToast("error", e?.message || "Failed to delete namespace");
+    }
+  };
+
+  return (
+    <SpaceBetween size="m">
+      <SpaceBetween direction="horizontal" size="xs">
+        <FormField label="Namespace name">
+          <Input value={name} onChange={(e) => setName(e.detail.value)} placeholder="my-rules" />
+        </FormField>
+        <Box padding={{ top: "xl" }}>
+          <Button onClick={submitCreate} disabled={!name.trim() || !nsData || createNs.isPending}>
+            Create namespace
+          </Button>
+        </Box>
+      </SpaceBetween>
+      <FormField label="Rule groups data (YAML)">
+        <Textarea value={nsData} onChange={(e) => setNsData(e.detail.value)} rows={5} placeholder="groups: []" />
+      </FormField>
+      <ResourceTable
+        resourceName="Namespace"
+        headerTitle="Rule groups namespaces"
+        headerCounter={data?.total}
+        items={namespaces.map((n: any) => ({
+          name: n.name,
+          status: n.status?.statusCode ?? n.status,
+          modified: n.modifiedAt,
+        }))}
+        loading={isLoading}
+        emptyMessage="No rule groups namespaces"
+        columns={[
+          { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+          { id: "status", header: "Status", cell: (i: any) => statusIndicator(i.status) },
+          {
+            id: "actions",
+            header: "",
+            cell: (i: any) => (
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button variant="link" onClick={() => setViewName(i.name === viewName ? null : i.name)}>
+                  View
+                </Button>
+                <Button
+                  variant="link"
+                  disabled={!nsData}
+                  onClick={() => submitUpdate(i.name)}
+                  loading={updateNs.isPending && updateNs.variables?.name === i.name}
+                >
+                  Update data
+                </Button>
+                <DeleteButton
+                  itemName={i.name}
+                  resourceType="namespace"
+                  loading={deleteNs.isPending && deleteNs.variables?.name === i.name}
+                  onDelete={() => handleDelete(i.name)}
+                />
+              </SpaceBetween>
+            ),
+          },
+        ]}
+      />
+      {viewName && (
+        <SpaceBetween size="xs">
+          <Box>
+            Namespace <b>{viewName}</b> data:
+          </Box>
+          <Textarea
+            value={
+              typeof viewData?.namespace?.data === "string"
+                ? viewData.namespace.data
+                : JSON.stringify(viewData?.namespace?.data ?? "", null, 2)
+            }
+            readOnly
+            rows={8}
+          />
+        </SpaceBetween>
+      )}
+    </SpaceBetween>
+  );
+}
+
 export function AMPDashboard() {
   const { showToast } = useToast();
   const { data, isLoading } = useAMPWorkspaces();
@@ -117,6 +245,7 @@ export function AMPDashboard() {
   const [renameError, setRenameError] = useState<string | null>(null);
 
   const [tagsTarget, setTagsTarget] = useState<any>(null);
+  const [nsTarget, setNsTarget] = useState<any>(null);
 
   const workspaces: any[] = data?.workspaces || [];
 
@@ -223,6 +352,9 @@ export function AMPDashboard() {
                 <Button variant="link" onClick={() => setTagsTarget(i)}>
                   Tags
                 </Button>
+                <Button variant="link" onClick={() => setNsTarget(i)}>
+                  Namespaces
+                </Button>
                 <DeleteButton
                   itemName={i.alias || i.workspaceId}
                   resourceType="workspace"
@@ -273,6 +405,17 @@ export function AMPDashboard() {
             <Button onClick={submitRename} disabled={!renameValue.trim() || updateAlias.isPending}>
               Save alias
             </Button>
+          </SpaceBetween>
+        )}
+      </Modal>
+
+      <Modal visible={!!nsTarget} onDismiss={() => setNsTarget(null)} header="Rule groups namespaces" size="large">
+        {nsTarget && (
+          <SpaceBetween size="m">
+            <Box>
+              Namespaces for <Box variant="code">{nsTarget.workspaceId}</Box>
+            </Box>
+            <NamespacesPanel workspaceId={nsTarget.workspaceId} />
           </SpaceBetween>
         )}
       </Modal>

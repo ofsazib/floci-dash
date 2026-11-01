@@ -31,7 +31,15 @@ const deleteRecordState = vi.hoisted(() => ({
 
 // ─── Mock hooks ─────────────────────────────────────────
 
+const mockUpdateComment = vi.fn(() => Promise.resolve({}));
+const mockAssociateVpc = vi.fn(() => Promise.resolve({}));
+const mockDisassociateVpc = vi.fn(() => Promise.resolve({}));
+const mockCreateVpcAuth = vi.fn(() => Promise.resolve({}));
 const mockZones = vi.fn();
+const mockGdVpcAuths = vi.fn((..._a: any[]) => ({ data: { authorizations: [], total: 0 } }));
+const mockGdVpcAuthDelete = vi.fn();
+const hcStatusHook = vi.fn((..._a: any[]) => ({ data: undefined }) as { data: any });
+const zoneLimitHook = vi.fn((..._a: any[]) => ({ data: { limit: "MAX_VPC_ASSOCIATIONS", value: 500, count: 1 } }) as { data: any });
 const mockCreateZone = vi.fn();
 const mockDeleteZone = vi.fn();
 const mockRecordSets = vi.fn();
@@ -44,6 +52,15 @@ const createHCState = vi.hoisted(() => ({ isPending: false }));
 const deleteHCState = vi.hoisted(() => ({ isPending: false }));
 
 vi.mock("../../hooks/useRoute53", () => ({
+  useUpdateRoute53HostedZoneComment: () => ({ mutateAsync: mockUpdateComment, isPending: false }),
+  useAssociateRoute53VPC: () => ({ mutateAsync: mockAssociateVpc, isPending: false }),
+  useDisassociateRoute53VPC: () => ({ mutateAsync: mockDisassociateVpc, isPending: false }),
+  useRoute53VPCAuthorizations: (...a: any[]) => mockGdVpcAuths(...a),
+  useCreateRoute53VPCAuthorization: () => ({ mutateAsync: mockCreateVpcAuth, isPending: false }),
+  useDeleteRoute53VPCAuthorization: () => ({ mutate: mockGdVpcAuthDelete, isPending: false }),
+  useRoute53HostedZonesByVPC: () => ({ data: { hostedZoneSummaries: [], total: 0 } }),
+  useRoute53HealthCheckStatus: (...args: any[]) => hcStatusHook(...args),
+  useRoute53HostedZoneLimit: (...a: any[]) => zoneLimitHook(...a),
   useRoute53HostedZones: (...args: any[]) => mockZones(...args),
   useCreateRoute53HostedZone: () => ({
     mutate: mockCreateZone,
@@ -132,6 +149,9 @@ beforeEach(() => {
   deleteRecordState.variables = null;
   mockZones.mockReturnValue({ data: { hostedZones: [], total: 0 }, isLoading: false, isError: false, error: null });
   mockRecordSets.mockReturnValue({ data: { recordSets: [], total: 0 }, isLoading: false, isError: false, error: null });
+    hcStatusHook.mockReturnValue({ data: { observations: [], total: 0 } });
+    mockGdVpcAuths.mockReturnValue({ data: { authorizations: [], total: 0 } });
+    mockGdVpcAuthDelete.mockClear();
   mockHealthChecks.mockReturnValue({ data: { healthChecks: [], total: 0 }, isLoading: false });
   createHCState.isPending = false;
   deleteHCState.isPending = false;
@@ -700,7 +720,7 @@ describe("Route53Dashboard — Health Checks tab", () => {
       },
       isLoading: false,
     });
-    render(<Route53Dashboard />);
+    render(<Route53Dashboard />, { wrapper: createWrapper() });
     await user.click(screen.getByRole("tab", { name: /health checks/i }));
     expect(screen.getByText("hc-abc")).toBeTruthy();
     // Scope to table cell to avoid duplicate match from Select trigger
@@ -710,7 +730,7 @@ describe("Route53Dashboard — Health Checks tab", () => {
   it("shows empty message when no health checks", async () => {
     const user = userEvent.setup();
     mockHealthChecks.mockReturnValue({ data: { healthChecks: [], total: 0 }, isLoading: false });
-    render(<Route53Dashboard />);
+    render(<Route53Dashboard />, { wrapper: createWrapper() });
     await user.click(screen.getByRole("tab", { name: /health checks/i }));
     expect(screen.getByText(/no health checks found/i)).toBeTruthy();
   });
@@ -730,7 +750,7 @@ describe("Route53Dashboard — Health Checks tab", () => {
       },
       isLoading: false,
     });
-    render(<Route53Dashboard />);
+    render(<Route53Dashboard />, { wrapper: createWrapper() });
     await user.click(screen.getByRole("tab", { name: /health checks/i }));
     expect(screen.getByText("hc-no-type")).toBeTruthy();
   });
@@ -738,7 +758,7 @@ describe("Route53Dashboard — Health Checks tab", () => {
   it("shows loading state", async () => {
     const user = userEvent.setup();
     mockHealthChecks.mockReturnValue({ data: undefined, isLoading: true });
-    render(<Route53Dashboard />);
+    render(<Route53Dashboard />, { wrapper: createWrapper() });
     await user.click(screen.getByRole("tab", { name: /health checks/i }));
     // ResourceTable loading sets aria-busy on the table
     expect(document.querySelector(".awsui_body-cell-content_c6tup_8om12_160") || true).toBeTruthy();
@@ -750,7 +770,7 @@ describe("Route53Dashboard — Health Checks tab", () => {
     mockCreateHealthCheck.mockImplementation((_data: any, opts: any) => {
       opts?.onSuccess?.();
     });
-    render(<Route53Dashboard />);
+    render(<Route53Dashboard />, { wrapper: createWrapper() });
     await user.click(screen.getByRole("tab", { name: /health checks/i }));
     await user.click(screen.getByRole("button", { name: /create health check/i }));
     expect(screen.getByText("Create health check")).toBeTruthy();
@@ -768,7 +788,7 @@ describe("Route53Dashboard — Health Checks tab", () => {
   it("cancels create health check modal", async () => {
     const user = userEvent.setup();
     mockHealthChecks.mockReturnValue({ data: { healthChecks: [], total: 0 }, isLoading: false });
-    render(<Route53Dashboard />);
+    render(<Route53Dashboard />, { wrapper: createWrapper() });
     await user.click(screen.getByRole("tab", { name: /health checks/i }));
     await user.click(screen.getByRole("button", { name: /create health check/i }));
     await user.click(screen.getByRole("button", { name: /cancel/i }));
@@ -779,7 +799,7 @@ describe("Route53Dashboard — Health Checks tab", () => {
     const user = userEvent.setup();
     createHCState.isPending = true;
     mockHealthChecks.mockReturnValue({ data: { healthChecks: [], total: 0 }, isLoading: false });
-    render(<Route53Dashboard />);
+    render(<Route53Dashboard />, { wrapper: createWrapper() });
     await user.click(screen.getByRole("tab", { name: /health checks/i }));
     await user.click(screen.getByRole("button", { name: /create health check/i }));
     // Button should be present; loading prop disables it
@@ -801,7 +821,7 @@ describe("Route53Dashboard — Health Checks tab", () => {
       },
       isLoading: false,
     });
-    render(<Route53Dashboard />);
+    render(<Route53Dashboard />, { wrapper: createWrapper() });
     await user.click(screen.getByRole("tab", { name: /health checks/i }));
     expect(screen.getByText("hc-no-target")).toBeTruthy();
     // Target column shows em dash when both FQDN and IPAddr are missing
@@ -823,7 +843,7 @@ describe("Route53Dashboard — Health Checks tab", () => {
       },
       isLoading: false,
     });
-    render(<Route53Dashboard />);
+    render(<Route53Dashboard />, { wrapper: createWrapper() });
     await user.click(screen.getByRole("tab", { name: /health checks/i }));
     // DeleteButton renders icon button with ariaLabel "Delete {itemName}"
     await user.click(screen.getByRole("button", { name: /delete hc-del/i }));
@@ -848,7 +868,7 @@ describe("Route53Dashboard — Health Checks tab", () => {
       },
       isLoading: false,
     });
-    render(<Route53Dashboard />);
+    render(<Route53Dashboard />, { wrapper: createWrapper() });
     await user.click(screen.getByRole("tab", { name: /health checks/i }));
     expect(screen.getByText("hc-ip")).toBeTruthy();
   });
@@ -859,7 +879,7 @@ describe("Route53Dashboard — Health Checks tab", () => {
     mockCreateHealthCheck.mockImplementation((_data: any, opts: any) => {
       opts?.onSuccess?.();
     });
-    render(<Route53Dashboard />);
+    render(<Route53Dashboard />, { wrapper: createWrapper() });
     await user.click(screen.getByRole("tab", { name: /health checks/i }));
     await user.click(screen.getByRole("button", { name: /create health check/i }));
 
@@ -885,7 +905,7 @@ describe("Route53Dashboard — Health Checks tab", () => {
   it("fires health check Type Select onChange via mock option click", async () => {
     const user = userEvent.setup();
     mockHealthChecks.mockReturnValue({ data: { healthChecks: [], total: 0 }, isLoading: false });
-    render(<Route53Dashboard />);
+    render(<Route53Dashboard />, { wrapper: createWrapper() });
     await user.click(screen.getByRole("tab", { name: /health checks/i }));
     await user.click(screen.getByRole("button", { name: /create health check/i }));
     // Click the mock Select option for HTTPS
@@ -897,11 +917,207 @@ describe("Route53Dashboard — Health Checks tab", () => {
   it("dismisses create health check modal via Escape", async () => {
     const user = userEvent.setup();
     mockHealthChecks.mockReturnValue({ data: { healthChecks: [], total: 0 }, isLoading: false });
-    render(<Route53Dashboard />);
+    render(<Route53Dashboard />, { wrapper: createWrapper() });
     await user.click(screen.getByRole("tab", { name: /health checks/i }));
     await user.click(screen.getByRole("button", { name: /create health check/i }));
     dismissModalWithEscape();
     await waitFor(() => expectModalHidden("Create health check"));
   });
 
+  it("shows health check status observations", async () => {
+    mockHealthChecks.mockReturnValue({
+      data: {
+        healthChecks: [{ Id: "hc-abc", HealthCheckConfig: { Type: "HTTP" }, Status: { Status: "Healthy" } }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    hcStatusHook.mockReturnValue({
+      data: {
+        observations: [
+          { region: "us-east-1", ipAddress: "1.2.3.4", statusReport: { status: "Success" } },
+          { region: "us-west-2", ipAddress: null, statusReport: null },
+        ],
+        total: 2,
+      },
+    });
+    const user = userEvent.setup();
+    render(<Route53Dashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /health checks/i }));
+    await user.click(await screen.findByRole("button", { name: /Status/i }));
+    expect(await screen.findByText(/Health check status/)).toBeTruthy();
+    expect(screen.getByText(/Success/)).toBeTruthy();
+  });
+
+
+});
+
+describe("Route53Dashboard — Zone settings", () => {
+it("associates a VPC and creates a VPC authorization", async () => {
+  mockZones.mockReturnValue({
+    data: { hostedZones: [{ Id: "/hostedzone/Z123", Name: "example.com.", Config: { PrivateZone: true } }], total: 1 },
+    isLoading: false,
+  });
+  mockRecordSets.mockReturnValue({ data: { recordSets: [], total: 0, isError: false, error: null }, isLoading: false });
+  const user = userEvent.setup();
+  render(<Route53Dashboard />, { wrapper: createWrapper() });
+  await user.click(await screen.findByRole("button", { name: "View" }));
+  const inputs = screen.getAllByRole("textbox");
+  await user.type(inputs[1], "vpc-9");
+  await user.click(screen.getByRole("button", { name: "Associate VPC" }));
+  expect(mockAssociateVpc).toHaveBeenCalledWith({ id: "Z123", vpcId: expect.stringContaining("vpc-9"), vpcRegion: "us-east-1" });
+  await user.type(inputs[3], "vpc-auth-1");
+  await user.click(screen.getByRole("button", { name: /Authorize VPC association/i }));
+  expect(mockCreateVpcAuth).toHaveBeenCalledWith({ id: "Z123", vpcId: "vpc-auth-1", vpcRegion: "us-east-1" });
+});
+
+it("shows zone settings with comment, VPC association and authorizations", async () => {
+  mockZones.mockReturnValue({
+    data: {
+      hostedZones: [{ Id: "/hostedzone/Z123", Name: "example.com.", Config: { PrivateZone: true } }],
+      total: 1,
+    },
+    isLoading: false,
+  });
+  mockRecordSets.mockReturnValue({
+    data: {
+      recordSets: [],
+      total: 0,
+      isLoading: false,
+      isError: false,
+      error: null,
+      vpcAssociations: [{ VPCId: "vpc-1", VPCRegion: "us-east-1" }],
+    },
+    isLoading: false,
+  });
+  const user = userEvent.setup();
+  render(<Route53Dashboard />, { wrapper: createWrapper() });
+  await user.click(await screen.findByRole("button", { name: "View" }));
+  expect(await screen.findByText(/Zone settings/)).toBeTruthy();
+  expect(screen.getByText(/vpc-1 \(us-east-1\)/)).toBeTruthy();
+  expect(screen.getByText(/1 \/ 500/)).toBeTruthy();
+  // Update comment
+  const inputs = screen.getAllByRole("textbox");
+  await user.type(inputs[0], "new comment");
+  await user.click(screen.getByRole("button", { name: /Update comment/i }));
+  expect(mockUpdateComment).toHaveBeenCalledWith({ id: "Z123", comment: expect.stringContaining("new comment") });
+});
+
+});
+
+describe("Route53Dashboard — zone settings errors & authorizations", () => {
+  function setupZoneDetail() {
+    mockZones.mockReturnValue({
+      data: { hostedZones: [{ Id: "/hostedzone/Z123", Name: "example.com.", Config: { PrivateZone: true } }], total: 1 },
+      isLoading: false,
+    });
+    mockRecordSets.mockReturnValue({ data: { recordSets: [], total: 0, isError: false, error: null }, isLoading: false });
+  }
+
+  it("associates and disassociates a VPC, tolerating failures", async () => {
+    setupZoneDetail();
+    mockAssociateVpc.mockRejectedValueOnce(new Error("assoc boom"));
+    mockDisassociateVpc.mockRejectedValueOnce(new Error("disassoc boom"));
+    const user = userEvent.setup();
+    render(<Route53Dashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "View" }));
+    const inputs = screen.getAllByRole("textbox");
+    await user.type(inputs[1], "vpc-err");
+    await user.clear(inputs[2]);
+    await user.type(inputs[2], "eu-west-1");
+    await user.click(screen.getByRole("button", { name: "Associate VPC" }));
+    expect(mockAssociateVpc).toHaveBeenCalledWith({ id: "Z123", vpcId: "vpc-err", vpcRegion: "eu-west-1" });
+    await user.click(screen.getByRole("button", { name: "Disassociate VPC" }));
+    expect(mockDisassociateVpc).toHaveBeenCalledWith({ id: "Z123", vpcId: "vpc-err", vpcRegion: "eu-west-1" });
+  });
+
+  it("renders VPC authorizations and deletes one", async () => {
+    setupZoneDetail();
+    mockGdVpcAuths.mockReturnValue({ data: { authorizations: [{ vpcId: "vpc-a", vpcRegion: "us-east-1" }], total: 1 } } as any);
+    const user = userEvent.setup();
+    render(<Route53Dashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "View" }));
+    expect(await screen.findByText("vpc-a")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: /Delete vpc-a/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await user.click(screen.getAllByRole("button", { name: /^Delete$/i }).slice(-1)[0]);
+    await waitFor(() => expect(mockGdVpcAuthDelete).toHaveBeenCalled());
+  });
+
+});
+
+describe("Route53Dashboard — zone status and limit arms", () => {
+  it("toggles health check Status button off and handles undefined observations", async () => {
+    mockZones.mockReturnValue({
+      data: { hostedZones: [{ Id: "/hostedzone/Z123", Name: "example.com.", Config: { PrivateZone: true } }], total: 1 },
+      isLoading: false,
+    });
+    mockRecordSets.mockReturnValue({ data: { recordSets: [], total: 0, isError: false, error: null }, isLoading: false });
+    mockHealthChecks.mockReturnValue({
+      data: { healthChecks: [{ Id: "hc-abc", HealthCheckConfig: { Type: "HTTP" }, Status: { Status: "Healthy" } }], total: 1 },
+      isLoading: false,
+    });
+    hcStatusHook.mockReturnValue({ data: undefined });
+    zoneLimitHook.mockReturnValue({ data: undefined });
+    const user = userEvent.setup();
+    render(<Route53Dashboard />, { wrapper: createWrapper() });
+    // health checks tab: observations section with missing observations key, then toggle on/off
+    await user.click(screen.getByRole("tab", { name: /health checks/i }));
+    await user.click(await screen.findByRole("button", { name: /Status/i }));
+    await screen.findByText("No observations");
+    await user.click(screen.getByRole("button", { name: /Status/i }));
+    await user.click(screen.getByRole("button", { name: /Status/i }));
+    await screen.findByText("No observations");
+    await user.click(screen.getByRole("button", { name: /Status/i }));
+    // health checks tab: toggle Status on then off (null arm of the ternary)
+    await user.click(screen.getByRole("tab", { name: /health checks/i }));
+    const statusBtn = await screen.findByRole("button", { name: /Status/i });
+    await user.click(statusBtn);
+    expect(hcStatusHook).toHaveBeenLastCalledWith("hc-abc");
+    await user.click(screen.getByRole("button", { name: /Status/i }));
+    expect(hcStatusHook).toHaveBeenLastCalledWith(null);
+    // back to hosted zones: zone limit undefined → ellipsis arm
+    await user.click(screen.getByRole("tab", { name: /hosted zones/i }));
+    await user.click(await screen.findByRole("button", { name: "View" }));
+    expect(await screen.findByText(/\u2026/)).toBeTruthy();
+  });
+
+  it("shows observations for a health check and the zone limit count", async () => {
+    mockZones.mockReturnValue({
+      data: { hostedZones: [{ Id: "/hostedzone/Z123", Name: "example.com.", Config: { PrivateZone: true } }], total: 1 },
+      isLoading: false,
+    });
+    mockRecordSets.mockReturnValue({ data: { recordSets: [], total: 0, isError: false, error: null }, isLoading: false });
+    mockHealthChecks.mockReturnValue({
+      data: { healthChecks: [{ Id: "hc-abc", HealthCheckConfig: { Type: "HTTP" }, Status: { Status: "Healthy" } }], total: 1 },
+      isLoading: false,
+    });
+    hcStatusHook.mockReturnValue({
+      data: { observations: [{ region: "us-east-1", ipAddress: "1.2.3.4", statusReport: { status: "Success" } }], total: 1 },
+    });
+    zoneLimitHook.mockReturnValue({ data: { limit: "MAX_VPC_ASSOCIATIONS", value: 500, count: 2 } });
+    const user = userEvent.setup();
+    render(<Route53Dashboard />, { wrapper: createWrapper() });
+    // status section over non-empty observations (map arm)
+    await user.click(screen.getByRole("tab", { name: /health checks/i }));
+    await user.click(await screen.findByRole("button", { name: /Status/i }));
+    expect(await screen.findByText(/Success/)).toBeTruthy();
+    // zone limit truthy template arm
+    await user.click(screen.getByRole("tab", { name: /hosted zones/i }));
+    await user.click(await screen.findByRole("button", { name: "View" }));
+    expect(await screen.findByText(/2 \/ 500/)).toBeTruthy();
+  });
+
+  it("renders dashes when the zone limit has null count and value", async () => {
+    mockZones.mockReturnValue({
+      data: { hostedZones: [{ Id: "/hostedzone/Z123", Name: "example.com.", Config: { PrivateZone: true } }], total: 1 },
+      isLoading: false,
+    });
+    mockRecordSets.mockReturnValue({ data: { recordSets: [], total: 0, isError: false, error: null }, isLoading: false });
+    zoneLimitHook.mockReturnValue({ data: { limit: "MAX_VPC_ASSOCIATIONS", value: null, count: null } });
+    const user = userEvent.setup();
+    render(<Route53Dashboard />, { wrapper: createWrapper() });
+    await user.click(await screen.findByRole("button", { name: "View" }));
+    expect(await screen.findByText(/— \/ —/)).toBeTruthy();
+  });
 });

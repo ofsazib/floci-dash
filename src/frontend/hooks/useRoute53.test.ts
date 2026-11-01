@@ -26,6 +26,15 @@ import {
   useRoute53Change,
   useRoute53Dnssec,
   useRoute53AccountLimit,
+  useUpdateRoute53HostedZoneComment,
+  useAssociateRoute53VPC,
+  useDisassociateRoute53VPC,
+  useRoute53VPCAuthorizations,
+  useCreateRoute53VPCAuthorization,
+  useDeleteRoute53VPCAuthorization,
+  useRoute53HostedZonesByVPC,
+  useRoute53HealthCheckStatus,
+  useRoute53HostedZoneLimit,
 } from "./useRoute53";
 
 function createWrapper() {
@@ -249,5 +258,128 @@ describe("Route53 tags/change/dnssec/limit hooks", () => {
     const { result } = renderHook(() => useRoute53AccountLimit("MAX_HOSTED_ZONES_BY_OWNER"), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith("/aws/route53/account-limit/MAX_HOSTED_ZONES_BY_OWNER");
+  });
+});
+
+// ─── Comment / VPC association ───────────────────────────
+
+describe("useUpdateRoute53HostedZoneComment", () => {
+  it("sends PUT with comment", async () => {
+    mockApi.mockResolvedValueOnce({ updated: true });
+    const { result } = renderHook(() => useUpdateRoute53HostedZoneComment(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ id: "Z1", comment: "hi" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/route53/hosted-zones/Z1/comment", {
+      method: "PUT",
+      body: JSON.stringify({ comment: "hi" }),
+    });
+  });
+});
+
+describe("useAssociateRoute53VPC", () => {
+  it("posts VPC details", async () => {
+    mockApi.mockResolvedValueOnce({ changeInfo: {} });
+    const { result } = renderHook(() => useAssociateRoute53VPC(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ id: "Z1", vpcId: "vpc-1", vpcRegion: "us-east-1" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/route53/hosted-zones/Z1/associate-vpc", {
+      method: "POST",
+      body: JSON.stringify({ vpcId: "vpc-1", vpcRegion: "us-east-1" }),
+    });
+  });
+});
+
+describe("useDisassociateRoute53VPC", () => {
+  it("posts VPC details", async () => {
+    mockApi.mockResolvedValueOnce({ changeInfo: {} });
+    const { result } = renderHook(() => useDisassociateRoute53VPC(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ id: "Z1", vpcId: "vpc-1", vpcRegion: "us-east-1" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/route53/hosted-zones/Z1/disassociate-vpc", {
+      method: "POST",
+      body: JSON.stringify({ vpcId: "vpc-1", vpcRegion: "us-east-1" }),
+    });
+  });
+});
+
+describe("useRoute53VPCAuthorizations", () => {
+  it("calls api with correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ authorizations: [], total: 0 });
+    const { result } = renderHook(() => useRoute53VPCAuthorizations("Z1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/route53/hosted-zones/Z1/vpc-authorizations");
+  });
+
+  it("disabled when zoneId is null", () => {
+    const { result } = renderHook(() => useRoute53VPCAuthorizations(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+});
+
+describe("useCreateRoute53VPCAuthorization", () => {
+  it("posts VPC details", async () => {
+    mockApi.mockResolvedValueOnce({ vpc: {} });
+    const { result } = renderHook(() => useCreateRoute53VPCAuthorization(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ id: "Z1", vpcId: "vpc-1", vpcRegion: "us-east-1" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/route53/hosted-zones/Z1/vpc-authorizations", {
+      method: "POST",
+      body: JSON.stringify({ vpcId: "vpc-1", vpcRegion: "us-east-1" }),
+    });
+  });
+});
+
+describe("useDeleteRoute53VPCAuthorization", () => {
+  it("sends DELETE with VPC details", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useDeleteRoute53VPCAuthorization(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ id: "Z1", vpcId: "vpc-1", vpcRegion: "us-east-1" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/route53/hosted-zones/Z1/vpc-authorizations", {
+      method: "DELETE",
+      body: JSON.stringify({ vpcId: "vpc-1", vpcRegion: "us-east-1" }),
+    });
+  });
+});
+
+describe("useRoute53HostedZonesByVPC", () => {
+  it("calls api with encoded vpcId", async () => {
+    mockApi.mockResolvedValueOnce({ hostedZoneSummaries: [], total: 0 });
+    const { result } = renderHook(() => useRoute53HostedZonesByVPC("vpc 1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/route53/hosted-zones-by-vpc?vpcId=vpc%201");
+  });
+
+  it("disabled when vpcId is null", () => {
+    const { result } = renderHook(() => useRoute53HostedZonesByVPC(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+});
+
+describe("useRoute53HealthCheckStatus", () => {
+  it("calls api with correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ observations: [], total: 0 });
+    const { result } = renderHook(() => useRoute53HealthCheckStatus("H1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/route53/health-checks/H1/status");
+  });
+
+  it("disabled when healthCheckId is null", () => {
+    const { result } = renderHook(() => useRoute53HealthCheckStatus(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+});
+
+describe("useRoute53HostedZoneLimit", () => {
+  it("calls api with encoded ids", async () => {
+    mockApi.mockResolvedValueOnce({ limit: "MAX_VPC_ASSOCIATIONS", value: 500, count: 1 });
+    const { result } = renderHook(() => useRoute53HostedZoneLimit("Z1", "MAX_VPC_ASSOCIATIONS"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/route53/hosted-zones/Z1/limit/MAX_VPC_ASSOCIATIONS");
+  });
+
+  it("disabled when zoneId is null", () => {
+    const { result } = renderHook(() => useRoute53HostedZoneLimit(null, "MAX_VPC_ASSOCIATIONS"), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
   });
 });

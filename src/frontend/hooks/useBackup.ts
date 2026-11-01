@@ -191,3 +191,100 @@ export function useDeleteBackupRecoveryPoint() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "backup", "vaults"] }),
   });
 }
+
+// ─── Vault Access Policy ────────────────────────────────
+
+export function useBackupVaultAccessPolicy(name: string | null) {
+  return useQuery({
+    queryKey: ["aws", "backup", "backup-vaults", name, "access-policy"],
+    queryFn: () => api<{ policy: string | null }>(
+      `/aws/backup/backup-vaults/${encodeURIComponent(name!)}/access-policy`
+    ),
+    enabled: !!name,
+  });
+}
+
+export function usePutBackupVaultAccessPolicy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { vaultName: string; policy: string }) =>
+      api(`/aws/backup/backup-vaults/${encodeURIComponent(body.vaultName)}/access-policy`, {
+        method: "PUT",
+        body: JSON.stringify({ policy: body.policy }),
+      }),
+    onSuccess: (_d, v) =>
+      qc.invalidateQueries({ queryKey: ["aws", "backup", "backup-vaults", v.vaultName, "access-policy"] }),
+  });
+}
+
+export function useDeleteBackupVaultAccessPolicy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vaultName: string) =>
+      api(`/aws/backup/backup-vaults/${encodeURIComponent(vaultName)}/access-policy`, { method: "DELETE" }),
+    onSuccess: (_d, vaultName) =>
+      qc.invalidateQueries({ queryKey: ["aws", "backup", "backup-vaults", vaultName, "access-policy"] }),
+  });
+}
+
+// ─── Vault Notifications ────────────────────────────────
+
+export function useBackupVaultNotifications(name: string | null) {
+  return useQuery({
+    queryKey: ["aws", "backup", "backup-vaults", name, "notifications"],
+    queryFn: () => api<{ notifications: { snsTopicArn: string | null; backupVaultEvents: string[] } }>(
+      `/aws/backup/backup-vaults/${encodeURIComponent(name!)}/notifications`
+    ),
+    enabled: !!name,
+  });
+}
+
+export function usePutBackupVaultNotifications() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { vaultName: string; snsTopicArn: string; backupVaultEvents: string[] }) =>
+      api(`/aws/backup/backup-vaults/${encodeURIComponent(body.vaultName)}/notifications`, {
+        method: "PUT",
+        body: JSON.stringify({ snsTopicArn: body.snsTopicArn, backupVaultEvents: body.backupVaultEvents }),
+      }),
+    onSuccess: (_d, v) =>
+      qc.invalidateQueries({ queryKey: ["aws", "backup", "backup-vaults", v.vaultName, "notifications"] }),
+  });
+}
+
+export function useDeleteBackupVaultNotifications() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vaultName: string) =>
+      api(`/aws/backup/backup-vaults/${encodeURIComponent(vaultName)}/notifications`, { method: "DELETE" }),
+    onSuccess: (_d, vaultName) =>
+      qc.invalidateQueries({ queryKey: ["aws", "backup", "backup-vaults", vaultName, "notifications"] }),
+  });
+}
+
+// ─── Vault Lock ─────────────────────────────────────────
+
+export function usePutBackupVaultLockConfiguration() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { vaultName: string; retentionDays: number; maxRetentionDays?: number; changeableForDays?: number }) =>
+      api(`/aws/backup/backup-vaults/${encodeURIComponent(body.vaultName)}/vault-lock`, {
+        method: "PUT",
+        body: JSON.stringify({
+          retentionDays: body.retentionDays,
+          maxRetentionDays: body.maxRetentionDays,
+          changeableForDays: body.changeableForDays,
+        }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "backup", "backup-vaults"] }),
+  });
+}
+
+export function useDeleteBackupVaultLockConfiguration() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vaultName: string) =>
+      api(`/aws/backup/backup-vaults/${encodeURIComponent(vaultName)}/vault-lock`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "backup", "backup-vaults"] }),
+  });
+}
