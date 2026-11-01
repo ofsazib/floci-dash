@@ -31,6 +31,9 @@ vi.mock("@aws-sdk/client-batch", () => ({
   DescribeJobsCommand: createCmd("DescribeJobsCommand"),
   ListJobsCommand: createCmd("ListJobsCommand"),
   TerminateJobCommand: createCmd("TerminateJobCommand"),
+  UpdateComputeEnvironmentCommand: createCmd("UpdateComputeEnvironmentCommand"),
+  UpdateJobQueueCommand: createCmd("UpdateJobQueueCommand"),
+  CancelJobCommand: createCmd("CancelJobCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -48,6 +51,14 @@ async function post(path: string, body?: any) {
     method: "POST",
     body: body != null ? JSON.stringify(body) : undefined,
     headers: body != null ? { "content-type": "application/json" } : undefined,
+  });
+}
+
+async function put(p: string, b?: any) {
+  return router.request(p, {
+    method: "PUT",
+    body: b != null ? JSON.stringify(b) : undefined,
+    headers: b != null ? { "content-type": "application/json" } : undefined,
   });
 }
 
@@ -312,5 +323,33 @@ describe("Batch — Jobs", () => {
     const res = await post("/jobs/j1/terminate", {});
     expect(res.status).toBe(200);
     expect(mockSend.mock.calls[0][0].reason).toBe("Terminated by user");
+  });
+});
+
+describe("E.9 batch 2 — updates and cancel", () => {
+  it("updates a compute environment and 400s with no fields", async () => {
+    mockSend.mockResolvedValueOnce({ computeEnvironmentName: "ce-1", computeEnvironmentArn: "arn:ce-1" });
+    const res = await put("/compute-environments/ce-1", { state: "DISABLED" });
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].state).toBe("DISABLED");
+    expect((await res.json()).computeEnvironmentName).toBe("ce-1");
+    expect((await put("/compute-environments/ce-1", {})).status).toBe(400);
+  });
+
+  it("updates a job queue and 400s with no fields", async () => {
+    mockSend.mockResolvedValueOnce({ jobQueueName: "jq-1", jobQueueArn: "arn:jq-1" });
+    const res = await put("/job-queues/jq-1", { priority: 5 });
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].priority).toBe(5);
+    expect((await res.json()).jobQueueName).toBe("jq-1");
+    expect((await put("/job-queues/jq-1", {})).status).toBe(400);
+  });
+
+  it("cancels a job", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/jobs/job-1/cancel", { reason: "no longer needed" });
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].reason).toBe("no longer needed");
+    expect((await res.json()).cancelled).toBe(true);
   });
 });

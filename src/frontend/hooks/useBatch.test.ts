@@ -23,6 +23,9 @@ import {
   useSubmitBatchJob,
   useBatchJob,
   useTerminateBatchJob,
+  useUpdateBatchComputeEnvironment,
+  useUpdateBatchJobQueue,
+  useCancelBatchJob,
 } from "./useBatch";
 
 function createWrapper() {
@@ -179,5 +182,33 @@ describe("useTerminateBatchJob", () => {
       "/aws/batch/jobs/j1/terminate",
       expect.objectContaining({ method: "POST" }),
     );
+  });
+});
+
+describe("E.9 batch 2 hooks", () => {
+  it("update CE/JQ PUT and cancel POST hit the right URLs", async () => {
+    mockApi.mockResolvedValueOnce({ computeEnvironmentName: "ce-1" });
+    const { result } = renderHook(() => useUpdateBatchComputeEnvironment(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ name: "ce-1", state: "DISABLED" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/batch/compute-environments/ce-1", {
+      method: "PUT",
+      body: JSON.stringify({ state: "DISABLED" }),
+    });
+
+    mockApi.mockResolvedValueOnce({ jobQueueName: "jq-1" });
+    const { result: jq } = renderHook(() => useUpdateBatchJobQueue(), { wrapper: createWrapper() });
+    await jq.current.mutateAsync({ name: "jq-1", priority: 5 });
+    expect(mockApi).toHaveBeenCalledWith("/aws/batch/job-queues/jq-1", {
+      method: "PUT",
+      body: JSON.stringify({ priority: 5 }),
+    });
+
+    mockApi.mockResolvedValueOnce({ cancelled: true });
+    const { result: cancel } = renderHook(() => useCancelBatchJob(), { wrapper: createWrapper() });
+    await cancel.current.mutateAsync({ jobId: "job-1", reason: "done" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/batch/jobs/job-1/cancel", {
+      method: "POST",
+      body: JSON.stringify({ reason: "done" }),
+    });
   });
 });

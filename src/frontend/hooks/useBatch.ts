@@ -108,3 +108,32 @@ export function useTerminateBatchJob() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "batch", "jobs"] }),
   });
 }
+
+// ─── E.9 batch 2: updates and cancel ─────────────────
+
+export function useUpdateBatchComputeEnvironment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, ...body }: { name: string; state?: string; serviceRole?: string }) =>
+      api(`/aws/batch/compute-environments/${encodeURIComponent(name)}`, { method: "PUT", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "batch", "compute-environments"] }),
+  });
+}
+
+export function useUpdateBatchJobQueue() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, ...body }: { name: string; state?: string; priority?: number }) =>
+      api(`/aws/batch/job-queues/${encodeURIComponent(name)}`, { method: "PUT", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "batch", "job-queues"] }),
+  });
+}
+
+export function useCancelBatchJob() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ jobId, reason }: { jobId: string; reason: string }) =>
+      api(`/aws/batch/jobs/${jobId}/cancel`, { method: "POST", body: JSON.stringify({ reason }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "batch"] }),
+  });
+}
