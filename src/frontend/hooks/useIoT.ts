@@ -343,3 +343,57 @@ export function useThingJobs(thingName: string | null) {
     enabled: !!thingName,
   });
 }
+
+// ─── E.7: Domain Configurations ──────────────────────
+
+export function useIoTDomainConfigurations() {
+  return useQuery({
+    queryKey: ["aws", "iot", "domain-configurations"],
+    queryFn: () =>
+      api<{ configurations: { name: string; arn: string; serviceType?: string }[]; nextMarker: string | null; total: number }>(
+        "/aws/iot/domain-configurations"
+      ),
+  });
+}
+
+export function useIoTDomainConfiguration(name: string | null) {
+  return useQuery({
+    queryKey: ["aws", "iot", "domain-configurations", name],
+    queryFn: () => api<Record<string, any>>(`/aws/iot/domain-configurations/${name}`),
+    enabled: !!name,
+  });
+}
+
+export function useCreateIoTDomainConfiguration() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { domainConfigurationName: string; domainName?: string; serviceType?: string }) =>
+      api("/aws/iot/domain-configurations", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iot", "domain-configurations"] }),
+  });
+}
+
+export function useUpdateIoTDomainConfiguration() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, ...body }: { name: string; domainConfigurationStatus?: string; removeAuthorizerConfig?: boolean }) =>
+      api(`/aws/iot/domain-configurations/${name}`, { method: "PUT", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iot", "domain-configurations"] }),
+  });
+}
+
+export function useDeleteIoTDomainConfiguration() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api(`/aws/iot/domain-configurations/${name}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iot", "domain-configurations"] }),
+  });
+}
+
+export function useIoTEndpoint(endpointType?: string) {
+  return useQuery({
+    queryKey: ["aws", "iot", "endpoint", endpointType ?? "default"],
+    queryFn: () => api<{ endpointAddress: string }>(`/aws/iot/endpoint${endpointType ? `?endpointType=${encodeURIComponent(endpointType)}` : ""}`),
+  });
+}

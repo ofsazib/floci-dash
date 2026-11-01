@@ -15,12 +15,17 @@ import {
   StatusIndicator,
   Checkbox,
   ColumnLayout,
+  Select,
 } from "@cloudscape-design/components";
 import ResourceTable from "../../components/ResourceTable";
 import DeleteButton from "../../components/DeleteButton";
 import { TableSkeleton } from "../../components/LoadingSkeleton";
 import {
   useEndpoint,
+  useIoTDomainConfigurations,
+  useCreateIoTDomainConfiguration,
+  useDeleteIoTDomainConfiguration,
+  useIoTDomainConfiguration,
   useThings,
   useCreateThing,
   useDeleteThing,
@@ -913,6 +918,14 @@ export function IoTDashboard() {
     ),
   };
 
+  const domainConfigTab = {
+    id: "domain-configurations",
+    label: "Domain configurations",
+    content: (
+      <DomainConfigurationsPanel endpointAddress={endpointQuery.data?.endpointAddress ?? null} />
+    ),
+  };
+
   return (
     <SpaceBetween size="l">
       {endpointQuery.data && (
@@ -921,8 +934,92 @@ export function IoTDashboard() {
         </Alert>
       )}
       <Tabs
-        tabs={[thingsTab, certsTab, policiesTab, rulesTab, thingTypesTab, mqttTab]}
+        tabs={[thingsTab, certsTab, policiesTab, rulesTab, thingTypesTab, mqttTab, domainConfigTab]}
       />
+    </SpaceBetween>
+  );
+}
+
+// ─── E.7: Domain configurations panel ─────────────────
+
+function DomainConfigurationsPanel({ endpointAddress }: { endpointAddress: string | null }) {
+  const { data, isLoading } = useIoTDomainConfigurations();
+  const create = useCreateIoTDomainConfiguration();
+  const remove = useDeleteIoTDomainConfiguration();
+  const [showCreate, setShowCreate] = useState(false);
+  const [form, setForm] = useState({ domainConfigurationName: "", domainName: "", serviceType: "DATA" });
+
+  return (
+    <SpaceBetween size="l">
+      {endpointAddress && (
+        <Container header={<Header variant="h2" description="Configurable DescribeEndpoint address (iot:Data by default).">Endpoint</Header>}>
+          <Box>Endpoint address: <strong>{endpointAddress}</strong></Box>
+        </Container>
+      )}
+      <ResourceTable
+        resourceName="Domain configuration"
+        headerTitle="Domain configurations"
+        headerCounter={data?.total}
+        items={data?.configurations || []}
+        loading={isLoading}
+        emptyMessage="No domain configurations"
+        onCreate={() => setShowCreate(true)}
+        columns={[
+          { id: "name", header: "Name", cell: (d: any) => d.name, isRowHeader: true },
+          { id: "arn", header: "ARN", cell: (d: any) => d.arn },
+          { id: "serviceType", header: "Service type", cell: (d: any) => d.serviceType || "-" },
+          {
+            id: "actions", header: "",
+            cell: (d: any) => (
+              <DeleteButton itemName={d.name} resourceType="domain configuration" loading={remove.isPending && remove.variables === d.name} onDelete={() => remove.mutateAsync(d.name)} />
+            ),
+          },
+        ]}
+      />
+
+      <Modal
+        visible={showCreate}
+        onDismiss={() => setShowCreate(false)}
+        header="Create domain configuration"
+        size="medium"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreate(false)}>Cancel</Button>
+              <Button
+                variant="primary"
+                disabled={!form.domainConfigurationName}
+                loading={create.isPending}
+                onClick={() => create.mutate({
+                  domainConfigurationName: form.domainConfigurationName,
+                  domainName: form.domainName || undefined,
+                  serviceType: form.serviceType,
+                }, { onSuccess: () => setShowCreate(false) })}
+              >
+                Create
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          <SpaceBetween size="m">
+            <FormField label="Name">
+              <Input value={form.domainConfigurationName} onChange={({ detail }) => setForm(p => ({ ...p, domainConfigurationName: detail.value }))} placeholder="my-domain" />
+            </FormField>
+            <FormField label="Domain name (optional)">
+              <Input value={form.domainName} onChange={({ detail }) => setForm(p => ({ ...p, domainName: detail.value }))} placeholder="example.com" />
+            </FormField>
+            <FormField label="Service type">
+              <Select
+                selectedOption={{ label: form.serviceType, value: form.serviceType }}
+                onChange={({ detail }) => setForm(p => ({ ...p, serviceType: detail.selectedOption.value! }))}
+                options={["DATA", "CREDENTIAL_PROVIDER", "JOBS"].map(t => ({ label: t, value: t }))}
+              />
+            </FormField>
+          </SpaceBetween>
+        </Form>
+      </Modal>
     </SpaceBetween>
   );
 }

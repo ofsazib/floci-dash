@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, within, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
+import { MemoryRouter } from "react-router-dom";
 import React from "react";
 
 // ─── Mock data ──────────────────────────────────────────
@@ -23,6 +24,10 @@ const mockCertificateResult = {
 // ─── Mock hooks ─────────────────────────────────────────
 
 const mockEndpoint = vi.fn();
+const mockDomainConfigs = vi.fn();
+const mockDomainConfigDetail = vi.fn();
+const mockCreateDomainConfig = vi.fn();
+const mockDeleteDomainConfig = vi.fn();
 const mockThings = vi.fn();
 const mockCertificates = vi.fn();
 const mockPolicies = vi.fn();
@@ -65,6 +70,13 @@ const publishState = vi.hoisted(() => ({ isError: false, error: null as Error | 
 
 vi.mock("../../hooks/useIoT", () => ({
   useEndpoint: (...args: any[]) => mockEndpoint(...args),
+  useIoTDomainConfigurations: (...args: any[]) => mockDomainConfigs(...args),
+  useIoTDomainConfiguration: (...args: any[]) => mockDomainConfigDetail(...args),
+  useCreateIoTDomainConfiguration: () => ({
+    mutate: (vars: any, opts?: any) => { mockCreateDomainConfig(vars, opts); opts?.onSuccess?.(); },
+    isPending: false,
+  }),
+  useDeleteIoTDomainConfiguration: () => ({ mutateAsync: mockDeleteDomainConfig, isPending: false, variables: null }),
   useThings: (...args: any[]) => mockThings(...args),
   useCreateThing: () => ({
     mutate: mockCreateThing,
@@ -191,6 +203,9 @@ beforeEach(() => {
   createThingState.isPending = false;
   createPolicyState.isError = false;
   createPolicyState.error = null;
+  mockDomainConfigs.mockReturnValue({ data: { configurations: [], nextMarker: null, total: 0 }, isLoading: false });
+  mockDomainConfigDetail.mockReturnValue({ data: undefined });
+  mockEndpoint.mockReturnValue({ data: { endpointAddress: "localhost:9878" } });
   createRuleState.isError = false;
   createRuleState.error = null;
   createThingTypeState.isError = false;
@@ -2761,5 +2776,104 @@ describe("IoTDashboard — 100% batch (modal completions)", () => {
     await user.click(within(pkRow).getAllByRole("button")[1]);
     await clickButton(user, /download private key/i);
     await waitFor(() => expect(screen.queryByText(/certificate-abc/)).toBeNull());
+  });
+});
+
+describe("E.7 — Domain configurations tab", () => {
+  function iotWrapper() {
+    const Wrapper = createWrapper();
+    return ({ children }: { children: React.ReactNode }) => (
+      <MemoryRouter><Wrapper>{children}</Wrapper></MemoryRouter>
+    );
+  }
+
+  it("lists domain configurations, creates one, and disables it", async () => {
+    const user = userEvent.setup();
+    mockDomainConfigs.mockReturnValue({
+      data: { configurations: [{ name: "dc-1", arn: "arn:dc-1", serviceType: "DATA" }], nextMarker: null, total: 1 },
+      isLoading: false,
+    });
+    mockCreateDomainConfig.mockResolvedValue({ arn: "arn:new" });
+    render(<IoTDashboard />, { wrapper: iotWrapper() });
+    await user.click(await screen.findByRole("tab", { name: "Domain configurations" }));
+    expect(await screen.findByText("dc-1")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: /Create domain configuration/i }) || screen.getByRole("button", { name: /create/i }));
+    await waitFor(() => expect(screen.getAllByText("Create domain configuration").length).toBeGreaterThan(0));
+    const dlg = screen.getAllByText("Create domain configuration").map(t => t.closest('[role="dialog"]')).find(Boolean) as HTMLElement;
+    const dlgBoxes = within(dlg).getAllByRole("textbox");
+    await user.type(dlgBoxes[0], "dc-new");
+    await user.type(dlgBoxes[1], "example.com");
+    await user.click(within(dlg).getByRole("button", { name: "Create" }));
+    await waitFor(() =>
+      expect(mockCreateDomainConfig).toHaveBeenCalledWith(
+        expect.objectContaining({ domainConfigurationName: "dc-new", domainName: "example.com", serviceType: "DATA" }),
+        expect.objectContaining({ onSuccess: expect.any(Function) })
+      )
+    );
+
+    // second create with empty domain name → "|| undefined" arm
+    await user.clear(within(dlg).getAllByRole("textbox")[1]);
+    await user.click(within(dlg).getByRole("button", { name: "Create" }));
+    await waitFor(() => expect(mockCreateDomainConfig).toHaveBeenCalledTimes(2));
+    expect(mockCreateDomainConfig.mock.calls[1][0].domainName).toBeUndefined();
+
+    // change service type via the Select (covers the Select onChange handler)
+    await user.click(within(dlg).getAllByRole("button").find(b => b.textContent === "DATA")!);
+    await user.click(await screen.findByRole("option", { name: "JOBS" }));
+
+    // cancel flow (modal dismiss via Cancel — Cloudscape keeps the modal mounted, hidden)
+    await user.click(screen.getByRole("button", { name: /Create domain configuration/i }) || screen.getByRole("button", { name: /create/i }));
+    const dlg2 = screen.getAllByText("Create domain configuration").map(t => t.closest('[role="dialog"]')).find(Boolean) as HTMLElement;
+    await user.click(within(dlg2).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(dlg2.className).toContain("hidden"));
+
+    // modal X dismiss (onDismiss arrow)
+    await user.click(screen.getByRole("button", { name: /Create domain configuration/i }) || screen.getByRole("button", { name: /create/i }));
+    const dlg3 = screen.getAllByText("Create domain configuration").map(t => t.closest('[role="dialog"]')).find(Boolean) as HTMLElement;
+    const closeBtn = dlg3.querySelector('[class*="dismiss-control"]') as HTMLElement;
+    await user.click(closeBtn);
+    await waitFor(() => expect(dlg3.className).toContain("hidden"));
+
+  });
+
+  it("renders sparse serviceType for a configuration", async () => {
+    mockDomainConfigs.mockReturnValue({
+      data: { configurations: [{ name: "dc-off", arn: "arn:dc-off" }], nextMarker: null, total: 1 },
+      isLoading: false,
+    });
+    render(<IoTDashboard />, { wrapper: iotWrapper() });
+    await userEvent.setup().click(await screen.findByRole("tab", { name: "Domain configurations" }));
+    expect(await screen.findByText("dc-off")).toBeTruthy();
+    expect(screen.getByText("-")).toBeTruthy();
+
+    // undefined data → empty items arm
+    mockDomainConfigs.mockReturnValue({ data: undefined, isLoading: false });
+    render(<IoTDashboard />, { wrapper: iotWrapper() });
+    const tabs = await screen.findAllByRole("tab", { name: "Domain configurations" });
+    await userEvent.setup().click(tabs[tabs.length - 1]);
+    expect(await screen.findByText("No domain configurations")).toBeTruthy();
+  });
+
+  it("shows empty state and endpoint card", async () => {
+    render(<IoTDashboard />, { wrapper: iotWrapper() });
+    await userEvent.setup().click(await screen.findByRole("tab", { name: "Domain configurations" }));
+    expect(await screen.findByText("No domain configurations")).toBeTruthy();
+    expect(screen.getAllByText(/test\.iot\.us-east-1\.amazonaws\.com/).length).toBeGreaterThan(0);
+  });
+
+  it("deletes a domain configuration after confirmation", async () => {
+    const user = userEvent.setup();
+    mockDomainConfigs.mockReturnValue({
+      data: { configurations: [{ name: "dc-2", arn: "arn:dc-2", serviceType: "DATA" }], nextMarker: null, total: 1 },
+      isLoading: false,
+    });
+    mockDeleteDomainConfig.mockResolvedValueOnce({ deleted: true });
+    render(<IoTDashboard />, { wrapper: iotWrapper() });
+    await user.click(await screen.findByRole("tab", { name: "Domain configurations" }));
+    await user.click(await screen.findByRole("button", { name: /Delete dc-2/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /^Delete$/i }));
+    await waitFor(() => expect(mockDeleteDomainConfig).toHaveBeenCalledWith("dc-2"));
   });
 });

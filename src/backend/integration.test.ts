@@ -6251,3 +6251,69 @@ describe("EC2 E.6 Integration", () => {
     expect(Array.isArray(credits.data.specifications)).toBe(true);
   });
 });
+
+// ═════════════════════════════════════════════════════════
+//  IoT E.7 Integration Tests (domain configurations)
+// ═════════════════════════════════════════════════════════
+
+describe("IoT E.7 Integration", () => {
+  const dcName = `it-e7-dc-${Date.now()}`;
+  let available = true;
+
+  beforeAll(async () => {
+    try {
+      const probe = await api("POST", "/api/aws/iot/domain-configurations", { domainConfigurationName: `it-e7-probe-${Date.now()}` });
+      available = probe.status === 201;
+      await api("PUT", `/api/aws/iot/domain-configurations/${probe.data.name}`, { domainConfigurationStatus: "DISABLED" }).catch(() => {});
+      await api("DELETE", `/api/aws/iot/domain-configurations/${probe.data.name}`).catch(() => {});
+    } catch {
+      available = false;
+    }
+  }, 30000);
+
+  it("creates a domain configuration", async () => {
+    if (!available) return console.warn("Skipping: domain configurations unavailable");
+    const res = await api("POST", "/api/aws/iot/domain-configurations", { domainConfigurationName: dcName, serviceType: "DATA" });
+    expect(res.status).toBe(201);
+    expect(res.data.name).toBe(dcName);
+    expect(res.data.arn).toBeTruthy();
+  });
+
+  it("lists and describes it", async () => {
+    if (!available) return;
+    const list = await api("GET", "/api/aws/iot/domain-configurations");
+    expect(list.status).toBe(200);
+    expect(list.data.configurations.map((d: any) => d.name)).toContain(dcName);
+    const desc = await api("GET", `/api/aws/iot/domain-configurations/${dcName}`);
+    expect(desc.status).toBe(200);
+    expect(desc.data.name).toBe(dcName);
+    expect(desc.data.status).toBeTruthy();
+    expect(desc.data.serviceType).toBe("DATA");
+  });
+
+  it("disables and re-enables it", async () => {
+    if (!available) return;
+    const off = await api("PUT", `/api/aws/iot/domain-configurations/${dcName}`, { domainConfigurationStatus: "DISABLED" });
+    expect(off.status).toBe(200);
+    const desc = await api("GET", `/api/aws/iot/domain-configurations/${dcName}`);
+    expect(desc.data.status).toBe("DISABLED");
+    const on = await api("PUT", `/api/aws/iot/domain-configurations/${dcName}`, { domainConfigurationStatus: "ENABLED" });
+    expect(on.status).toBe(200);
+  });
+
+  it("reports the DescribeEndpoint address", async () => {
+    if (!available) return;
+    const ep = await api("GET", "/api/aws/iot/endpoint");
+    expect(ep.status).toBe(200);
+    expect(ep.data.endpointAddress).toBeTruthy();
+  });
+
+  it("deletes the domain configuration", async () => {
+    if (!available) return;
+    // Floci enforces disable-before-delete
+    await api("PUT", `/api/aws/iot/domain-configurations/${dcName}`, { domainConfigurationStatus: "DISABLED" });
+    const del = await api("DELETE", `/api/aws/iot/domain-configurations/${dcName}`);
+    expect(del.status).toBe(200);
+    expect(del.data.deleted).toBe(true);
+  });
+});

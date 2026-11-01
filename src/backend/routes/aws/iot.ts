@@ -59,6 +59,12 @@ import {
   ListThingGroupsForThingCommand,
   AddThingToThingGroupCommand,
   RemoveThingFromThingGroupCommand,
+  // E.7 — domain configurations
+  CreateDomainConfigurationCommand,
+  DescribeDomainConfigurationCommand,
+  UpdateDomainConfigurationCommand,
+  DeleteDomainConfigurationCommand,
+  ListDomainConfigurationsCommand,
 } from "@aws-sdk/client-iot";
 import {
   GetThingShadowCommand,
@@ -770,6 +776,79 @@ router.get("/things/:thingName/jobs/:jobId", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new DescribeJobExecutionCommand({ thingName, jobId }));
   return c.json({ execution: result.execution || null });
+});
+
+// ─── E.7: Domain Configurations ──────────────────────
+
+router.get("/domain-configurations", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new ListDomainConfigurationsCommand({
+    serviceType: (c.req.query("serviceType") as any) || undefined,
+    marker: c.req.query("marker") || undefined,
+    pageSize: c.req.query("pageSize") ? parseInt(c.req.query("pageSize")!) : undefined,
+  }));
+  const configurations = (result.domainConfigurations || []).map((d: any) => ({
+    name: d.domainConfigurationName, arn: d.domainConfigurationArn, serviceType: d.serviceType,
+  }));
+  return c.json({ configurations, nextMarker: result.nextMarker ?? null, total: configurations.length });
+});
+
+router.post("/domain-configurations", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.domainConfigurationName) return c.json({ error: "domainConfigurationName is required" }, 400);
+  const client = getClient();
+  const result = await client.send(new CreateDomainConfigurationCommand({
+    domainConfigurationName: body.domainConfigurationName,
+    domainName: body.domainName,
+    serviceType: body.serviceType as any,
+    authorizerConfig: body.authorizerConfig,
+    tlsConfig: body.tlsConfig,
+    tags: body.tags,
+  }));
+  return c.json({ name: body.domainConfigurationName, arn: result.domainConfigurationArn ?? null }, 201);
+});
+
+router.get("/domain-configurations/:name", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new DescribeDomainConfigurationCommand({
+    domainConfigurationName: c.req.param("name")!,
+  }));
+  return c.json({
+    name: result.domainConfigurationName ?? null,
+    arn: result.domainConfigurationArn ?? null,
+    domainName: result.domainName ?? null,
+    status: result.domainConfigurationStatus ?? null,
+    serviceType: result.serviceType ?? null,
+    domainType: result.domainType ?? null,
+    serverCertificates: (result.serverCertificates || []).map((s: any) => ({
+      arn: s.serverCertificateArn, status: s.serverCertificateStatus, statusDetail: s.serverCertificateStatusDetail ?? null,
+    })),
+    authorizerConfig: result.authorizerConfig
+      ? { defaultAuthorizerName: result.authorizerConfig.defaultAuthorizerName ?? null, allowAuthorizerOverride: result.authorizerConfig.allowAuthorizerOverride ?? null }
+      : null,
+    tlsConfig: result.tlsConfig ? { securityPolicy: result.tlsConfig.securityPolicy ?? null } : null,
+    lastStatusChangeDate: result.lastStatusChangeDate ?? null,
+  });
+});
+
+router.put("/domain-configurations/:name", async (c: Context) => {
+  const body = await c.req.json<any>();
+  const client = getClient();
+  const result = await client.send(new UpdateDomainConfigurationCommand({
+    domainConfigurationName: c.req.param("name")!,
+    authorizerConfig: body.authorizerConfig,
+    domainConfigurationStatus: body.domainConfigurationStatus as any,
+    removeAuthorizerConfig: body.removeAuthorizerConfig,
+    tlsConfig: body.tlsConfig,
+  }));
+  return c.json({ name: c.req.param("name"), arn: result.domainConfigurationArn ?? null });
+});
+
+router.delete("/domain-configurations/:name", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const client = getClient();
+  await client.send(new DeleteDomainConfigurationCommand({ domainConfigurationName: name }));
+  return c.json({ name, deleted: true });
 });
 
 export default router;

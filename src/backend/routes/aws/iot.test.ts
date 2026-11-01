@@ -79,6 +79,12 @@ vi.mock("@aws-sdk/client-iot", () => ({
   ListThingGroupsForThingCommand: createCmd("ListThingGroupsForThingCommand"),
   AddThingToThingGroupCommand: createCmd("AddThingToThingGroupCommand"),
   RemoveThingFromThingGroupCommand: createCmd("RemoveThingFromThingGroupCommand"),
+  // E.7 — domain configurations
+  CreateDomainConfigurationCommand: createCmd("CreateDomainConfigurationCommand"),
+  DescribeDomainConfigurationCommand: createCmd("DescribeDomainConfigurationCommand"),
+  UpdateDomainConfigurationCommand: createCmd("UpdateDomainConfigurationCommand"),
+  DeleteDomainConfigurationCommand: createCmd("DeleteDomainConfigurationCommand"),
+  ListDomainConfigurationsCommand: createCmd("ListDomainConfigurationsCommand"),
 }));
 
 vi.mock("@aws-sdk/client-iot-data-plane", () => ({
@@ -1240,5 +1246,115 @@ describe("IoT Core Routes", () => {
       const res = await post("/thing-groups/remove-thing", { thingName: "t1" });
       expect(res.status).toBe(400);
     });
+  });
+});
+
+describe("E.7 — domain configurations", () => {
+  it("lists domain configurations (sparse + filtered)", async () => {
+    mockSend.mockResolvedValueOnce({
+      domainConfigurations: [
+        { domainConfigurationName: "dc-1", domainConfigurationArn: "arn:dc-1", serviceType: "DATA" },
+        { domainConfigurationName: "dc-2", domainConfigurationArn: "arn:dc-2", serviceType: "CREDENTIAL_PROVIDER" },
+      ],
+      nextMarker: "m1",
+    });
+    const res = await get("/domain-configurations?serviceType=DATA");
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].serviceType).toBe("DATA");
+    const body = await res.json();
+    expect(body.total).toBe(2);
+    expect(body.configurations[0].name).toBe("dc-1");
+    expect(body.nextMarker).toBe("m1");
+
+    mockSend.mockResolvedValueOnce({});
+    const empty = await (await get("/domain-configurations")).json();
+    expect(empty.total).toBe(0);
+    expect(empty.nextMarker).toBeNull();
+
+    mockSend.mockResolvedValueOnce({ domainConfigurations: [] });
+    await get("/domain-configurations?pageSize=5&marker=m0");
+    expect(mockSend.mock.calls[2][0].pageSize).toBe(5);
+    expect(mockSend.mock.calls[2][0].marker).toBe("m0");
+  });
+
+  it("creates a domain configuration and 400s without a name", async () => {
+    mockSend.mockResolvedValueOnce({ domainConfigurationArn: "arn:new" });
+    const res = await post("/domain-configurations", { domainConfigurationName: "new-dc", domainName: "example.com", serviceType: "DATA" });
+    expect(res.status).toBe(201);
+    expect(mockSend.mock.calls[0][0].domainConfigurationName).toBe("new-dc");
+    expect((await res.json()).arn).toBe("arn:new");
+    expect((await post("/domain-configurations", {})).status).toBe(400);
+
+    mockSend.mockResolvedValueOnce({});
+    const sparse = await (await post("/domain-configurations", { domainConfigurationName: "dc-s" })).json();
+    expect(sparse.arn).toBeNull();
+  });
+
+  it("describes a domain configuration (full + sparse)", async () => {
+    mockSend.mockResolvedValueOnce({
+      domainConfigurationName: "dc-1",
+      domainConfigurationArn: "arn:dc-1",
+      domainName: "example.com",
+      domainConfigurationStatus: "ENABLED",
+      serviceType: "DATA",
+      domainType: "AWS_MANAGED",
+      serverCertificates: [{ serverCertificateArn: "arn:cert", serverCertificateStatus: "VALID", serverCertificateStatusDetail: "ok" }],
+      authorizerConfig: { defaultAuthorizerName: "auth1", allowAuthorizerOverride: true },
+      tlsConfig: { securityPolicy: "TLS1_2" },
+      lastStatusChangeDate: 1761900000.5,
+    });
+    const body = await (await get("/domain-configurations/dc-1")).json();
+    expect(body.name).toBe("dc-1");
+    expect(body.status).toBe("ENABLED");
+    expect(body.serverCertificates[0].arn).toBe("arn:cert");
+    expect(body.authorizerConfig.defaultAuthorizerName).toBe("auth1");
+    expect(body.tlsConfig.securityPolicy).toBe("TLS1_2");
+    expect(body.lastStatusChangeDate).toBe(1761900000.5);
+
+    mockSend.mockResolvedValueOnce({
+      domainConfigurationName: "dc-2",
+      serverCertificates: [{ serverCertificateArn: "arn:c2", serverCertificateStatus: "INVALID" }],
+      authorizerConfig: { defaultAuthorizerName: "a2" },
+    });
+    const sparse = await (await get("/domain-configurations/dc-2")).json();
+    void sparse;
+    expect(sparse.status).toBeNull();
+    expect(sparse.domainName).toBeNull();
+    expect(sparse.serverCertificates).toHaveLength(1);
+    expect(sparse.authorizerConfig.defaultAuthorizerName).toBe("a2");
+    expect(sparse.tlsConfig).toBeNull();
+    expect(sparse.lastStatusChangeDate).toBeNull();
+    expect(sparse.serverCertificates[0].statusDetail).toBeNull();
+    expect(sparse.authorizerConfig.allowAuthorizerOverride).toBeNull();
+
+    mockSend.mockResolvedValueOnce({});
+    const bare = await (await get("/domain-configurations/dc-3")).json();
+    expect(bare.name).toBeNull();
+    expect(bare.serverCertificates).toEqual([]);
+    expect(bare.authorizerConfig).toBeNull();
+
+    mockSend.mockResolvedValueOnce({ tlsConfig: {} });
+    const tlsOnly = await (await get("/domain-configurations/dc-4")).json();
+    expect(tlsOnly.tlsConfig.securityPolicy).toBeNull();
+  });
+
+  it("updates a domain configuration", async () => {
+    mockSend.mockResolvedValueOnce({ domainConfigurationArn: "arn:dc-1" });
+    const res = await put("/domain-configurations/dc-1", { domainConfigurationStatus: "DISABLED" });
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].domainConfigurationStatus).toBe("DISABLED");
+    expect((await res.json()).arn).toBe("arn:dc-1");
+
+    mockSend.mockResolvedValueOnce({});
+    const sparse = await (await put("/domain-configurations/dc-2", {})).json();
+    expect(sparse.arn).toBeNull();
+  });
+
+  it("deletes a domain configuration", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await del("/domain-configurations/dc-1");
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].domainConfigurationName).toBe("dc-1");
+    expect((await res.json()).deleted).toBe(true);
   });
 });

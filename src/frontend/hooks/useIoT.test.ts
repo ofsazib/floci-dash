@@ -40,6 +40,12 @@ import {
   useIoTTags,
   useTagIoTResource,
   useThingJobs,
+  useIoTDomainConfigurations,
+  useIoTDomainConfiguration,
+  useCreateIoTDomainConfiguration,
+  useUpdateIoTDomainConfiguration,
+  useDeleteIoTDomainConfiguration,
+  useIoTEndpoint,
   useNamedShadows,
   useConnection,
   useConnectionSubscriptions,
@@ -709,5 +715,59 @@ describe("useRetainedMessages", () => {
     const { result } = renderHook(() => useRetainedMessages(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith("/aws/iot/retained-messages");
+  });
+});
+
+describe("E.7 domain configurations hooks", () => {
+  it("useIoTDomainConfigurations GETs the list", async () => {
+    mockApi.mockResolvedValueOnce({ configurations: [], nextMarker: null, total: 0 });
+    const { result } = renderHook(() => useIoTDomainConfigurations(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/iot/domain-configurations");
+  });
+
+  it("useIoTDomainConfiguration gates on name", async () => {
+    const disabled = renderHook(() => useIoTDomainConfiguration(null), { wrapper: createWrapper() });
+    expect(disabled.result.current.fetchStatus).toBe("idle");
+
+    mockApi.mockResolvedValueOnce({ name: "dc-1" });
+    const { result } = renderHook(() => useIoTDomainConfiguration("dc-1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/iot/domain-configurations/dc-1");
+  });
+
+  it("useCreateIoTDomainConfiguration POSTs and useDeleteIoTDomainConfiguration DELETEs", async () => {
+    mockApi.mockResolvedValueOnce({ arn: "arn:dc" });
+    const { result } = renderHook(() => useCreateIoTDomainConfiguration(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ domainConfigurationName: "dc-1", serviceType: "DATA" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/iot/domain-configurations", {
+      method: "POST",
+      body: JSON.stringify({ domainConfigurationName: "dc-1", serviceType: "DATA" }),
+    });
+
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result: del } = renderHook(() => useDeleteIoTDomainConfiguration(), { wrapper: createWrapper() });
+    await del.current.mutateAsync("dc-1");
+    expect(mockApi).toHaveBeenCalledWith("/aws/iot/domain-configurations/dc-1", { method: "DELETE" });
+  });
+
+  it("useUpdateIoTDomainConfiguration PUTs status and useIoTEndpoint GETs with type", async () => {
+    mockApi.mockResolvedValueOnce({ arn: "arn:dc" });
+    const { result } = renderHook(() => useUpdateIoTDomainConfiguration(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ name: "dc-1", domainConfigurationStatus: "DISABLED" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/iot/domain-configurations/dc-1", {
+      method: "PUT",
+      body: JSON.stringify({ domainConfigurationStatus: "DISABLED" }),
+    });
+
+    mockApi.mockResolvedValueOnce({ endpointAddress: "localhost" });
+    const { result: ep } = renderHook(() => useIoTEndpoint("iot:Jobs"), { wrapper: createWrapper() });
+    await waitFor(() => expect(ep.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/iot/endpoint?endpointType=iot%3AJobs");
+
+    mockApi.mockResolvedValueOnce({ endpointAddress: "default" });
+    const { result: bare } = renderHook(() => useIoTEndpoint(), { wrapper: createWrapper() });
+    await waitFor(() => expect(bare.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/iot/endpoint");
   });
 });
