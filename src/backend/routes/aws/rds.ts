@@ -43,6 +43,22 @@ import {
   DescribeOptionGroupsCommand,
   ModifyOptionGroupCommand,
   DeleteOptionGroupCommand,
+  CreateDBSnapshotCommand,
+  DescribeDBSnapshotsCommand,
+  DeleteDBSnapshotCommand,
+  CreateDBClusterSnapshotCommand,
+  DescribeDBClusterSnapshotsCommand,
+  DeleteDBClusterSnapshotCommand,
+  StopDBInstanceCommand,
+  StartDBInstanceCommand,
+  CreateDBInstanceReadReplicaCommand,
+  CreateGlobalClusterCommand,
+  DescribeGlobalClustersCommand,
+  DeleteGlobalClusterCommand,
+  FailoverGlobalClusterCommand,
+  CreateEventSubscriptionCommand,
+  DescribeEventSubscriptionsCommand,
+  DeleteEventSubscriptionCommand,
 } from "@aws-sdk/client-rds";
 import { getAwsConfig } from "../../clients/aws";
 
@@ -857,6 +873,182 @@ router.delete("/option-groups/:name", async (c: Context) => {
   const name = c.req.param("name")!;
   await rds().send(new DeleteOptionGroupCommand({ OptionGroupName: name }));
   return c.json({ deleted: true });
+});
+
+// ─── E.4: snapshots ──────────────────────────────────────
+
+router.post("/db-instances/:id/snapshots", async (c: Context) => {
+  const id = decodeURIComponent(c.req.param("id")!);
+  const body = await c.req.json<{ snapshotId: string; tags?: Record<string, string> }>();
+  if (!body?.snapshotId) return c.json({ error: "snapshotId is required" }, 400);
+  const result = await new RDSClient(getAwsConfig()).send(
+    new CreateDBSnapshotCommand({
+      DBInstanceIdentifier: id,
+      DBSnapshotIdentifier: body.snapshotId,
+      Tags: body.tags
+        ? Object.entries(body.tags).map(([Key, Value]) => ({ Key, Value }))
+        : undefined,
+    })
+  );
+  return c.json({ snapshot: result.DBSnapshot ?? null }, 201);
+});
+
+router.get("/db-snapshots", async (c: Context) => {
+  const instanceId = c.req.query("dbInstanceIdentifier");
+  const result = await new RDSClient(getAwsConfig()).send(
+    new DescribeDBSnapshotsCommand({
+      DBInstanceIdentifier: instanceId || undefined,
+    })
+  );
+  return c.json({ snapshots: result.DBSnapshots || [] });
+});
+
+router.delete("/db-snapshots/:id", async (c: Context) => {
+  const id = decodeURIComponent(c.req.param("id")!);
+  await new RDSClient(getAwsConfig()).send(new DeleteDBSnapshotCommand({ DBSnapshotIdentifier: id }));
+  return c.json({ deleted: true });
+});
+
+router.post("/db-cluster-snapshots", async (c: Context) => {
+  const body = await c.req.json<{ clusterId: string; snapshotId: string }>();
+  if (!body?.clusterId) return c.json({ error: "clusterId is required" }, 400);
+  if (!body?.snapshotId) return c.json({ error: "snapshotId is required" }, 400);
+  const result = await new RDSClient(getAwsConfig()).send(
+    new CreateDBClusterSnapshotCommand({
+      DBClusterIdentifier: body.clusterId,
+      DBClusterSnapshotIdentifier: body.snapshotId,
+    })
+  );
+  return c.json({ snapshot: result.DBClusterSnapshot ?? null }, 201);
+});
+
+router.get("/db-cluster-snapshots", async (c: Context) => {
+  const clusterId = c.req.query("dbClusterIdentifier");
+  const result = await new RDSClient(getAwsConfig()).send(
+    new DescribeDBClusterSnapshotsCommand({
+      DBClusterIdentifier: clusterId || undefined,
+    })
+  );
+  return c.json({ snapshots: result.DBClusterSnapshots || [] });
+});
+
+router.delete("/db-cluster-snapshots/:id", async (c: Context) => {
+  const id = decodeURIComponent(c.req.param("id")!);
+  await new RDSClient(getAwsConfig()).send(
+    new DeleteDBClusterSnapshotCommand({ DBClusterSnapshotIdentifier: id })
+  );
+  return c.json({ deleted: true });
+});
+
+// ─── E.4: stop / start ───────────────────────────────────
+
+router.post("/db-instances/:id/stop", async (c: Context) => {
+  const id = decodeURIComponent(c.req.param("id")!);
+  const result = await new RDSClient(getAwsConfig()).send(
+    new StopDBInstanceCommand({ DBInstanceIdentifier: id })
+  );
+  return c.json({ instance: result.DBInstance ?? null });
+});
+
+router.post("/db-instances/:id/start", async (c: Context) => {
+  const id = decodeURIComponent(c.req.param("id")!);
+  const result = await new RDSClient(getAwsConfig()).send(
+    new StartDBInstanceCommand({ DBInstanceIdentifier: id })
+  );
+  return c.json({ instance: result.DBInstance ?? null });
+});
+
+// ─── E.4: read replicas ──────────────────────────────────
+
+router.post("/db-instances/:id/read-replica", async (c: Context) => {
+  const id = decodeURIComponent(c.req.param("id")!);
+  const body = await c.req.json<{ replicaId: string }>();
+  if (!body?.replicaId) return c.json({ error: "replicaId is required" }, 400);
+  const result = await new RDSClient(getAwsConfig()).send(
+    new CreateDBInstanceReadReplicaCommand({
+      DBInstanceIdentifier: body.replicaId,
+      SourceDBInstanceIdentifier: id,
+    })
+  );
+  return c.json({ instance: result.DBInstance ?? null }, 201);
+});
+
+// ─── E.4: global clusters ────────────────────────────────
+
+router.post("/global-clusters", async (c: Context) => {
+  const body = await c.req.json<{ globalClusterId: string; engine?: string }>();
+  if (!body?.globalClusterId)
+    return c.json({ error: "globalClusterId is required" }, 400);
+  const result = await new RDSClient(getAwsConfig()).send(
+    new CreateGlobalClusterCommand({
+      GlobalClusterIdentifier: body.globalClusterId,
+      Engine: body.engine,
+    } as any)
+  );
+  return c.json({ globalCluster: result.GlobalCluster ?? null }, 201);
+});
+
+router.get("/global-clusters", async (c: Context) => {
+  const result = await new RDSClient(getAwsConfig()).send(
+    new DescribeGlobalClustersCommand({})
+  );
+  return c.json({ globalClusters: result.GlobalClusters || [] });
+});
+
+router.delete("/global-clusters/:id", async (c: Context) => {
+  const id = decodeURIComponent(c.req.param("id")!);
+  await new RDSClient(getAwsConfig()).send(
+    new DeleteGlobalClusterCommand({ GlobalClusterIdentifier: id } as any)
+  );
+  return c.json({ deleted: true });
+});
+
+router.post("/global-clusters/:id/failover", async (c: Context) => {
+  const id = decodeURIComponent(c.req.param("id")!);
+  const body = await c.req.json<{ dbClusterId?: string }>();
+  const result = await new RDSClient(getAwsConfig()).send(
+    new FailoverGlobalClusterCommand({
+      GlobalClusterIdentifier: id,
+      DbClusterIdentifier: body?.dbClusterId,
+    } as any)
+  );
+  return c.json({ globalCluster: result.GlobalCluster ?? null });
+});
+
+// ─── E.4: event subscriptions ────────────────────────────
+
+router.post("/event-subscriptions", async (c: Context) => {
+  const body = await c.req.json<{
+    subscriptionName: string;
+    snsTopicArn: string;
+    sourceType?: string;
+  }>();
+  if (!body?.subscriptionName)
+    return c.json({ error: "subscriptionName is required" }, 400);
+  if (!body?.snsTopicArn) return c.json({ error: "snsTopicArn is required" }, 400);
+  const result = await new RDSClient(getAwsConfig()).send(
+    new CreateEventSubscriptionCommand({
+      SubscriptionName: body.subscriptionName,
+      SnsTopicArn: body.snsTopicArn,
+      SourceType: body.sourceType,
+    })
+  );
+  return c.json({ subscription: result.EventSubscription ?? null }, 201);
+});
+
+router.get("/event-subscriptions", async (c: Context) => {
+  const result = await new RDSClient(getAwsConfig()).send(
+    new DescribeEventSubscriptionsCommand({})
+  );
+  return c.json({ subscriptions: result.EventSubscriptionsList || [] });
+});
+
+router.delete("/event-subscriptions/:name", async (c: Context) => {
+  const name = decodeURIComponent(c.req.param("name")!);
+  const result = await new RDSClient(getAwsConfig()).send(
+    new DeleteEventSubscriptionCommand({ SubscriptionName: name })
+  );
+  return c.json({ subscription: result.EventSubscription ?? null });
 });
 
 export default router;

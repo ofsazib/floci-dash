@@ -49,6 +49,10 @@ vi.mock("../hooks/useLogs", () => ({
 }));
 
 vi.mock("../hooks/useRDS", () => ({
+  useRDSCreateSnapshot: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useRDSStopInstance: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useRDSStartInstance: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useRDSCreateReadReplica: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useRDSDBInstances: (...args: any[]) => mockRDSInstances(...args),
   useRDSCreateDBInstance: () => ({ mutate: mockCreateRDSInstance, isPending: false, isError: false, error: null }),
   useRDSDeleteDBInstance: () => ({ mutateAsync: vi.fn(), isPending: false, variables: null }),

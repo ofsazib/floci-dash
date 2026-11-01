@@ -476,6 +476,8 @@ These services have full CRUD operations in both backend and frontend:
 | **BCM Pricing Calculator** | Workload estimates (create, open by ID, delete), batch usage creation with per-entry error reporting |
 | **SSO OIDC** | Device-flow console: register a public client, start device authorization (user code + verification link), poll for the token (shows authorization pending until approved in Floci's SSO portal) |
 
+**RDS extras (E.4 — full support needs a Floci build newer than 2.1.0):** the RDS page's DB Instances tab gained lifecycle actions per instance — create snapshot (modal with tags), stop/start (hidden for Aurora), and create read replica (modal) — each surfacing success/error toasts; the newer image also validates subnet groups against real EC2 subnets.
+
 **EKS extras (E.3 — addons/access entries/pod identity need a Floci build newer than 2.1.0):** the EKS cluster detail gained Access entries, Addons (create/list/delete), and Pod identity associations (create/list/delete) panels; cluster creation accepts control-plane logging (API/Audit checkboxes → CloudWatch Logs).
 
 **ECS extras (E.2 — ExecuteCommand/enableExecuteCommand need a Floci build newer than 2.1.0):** the ECS cluster detail gained an execute-command console — per-task "Run command" action (container + command inputs) that returns the SSM session id/stream URL/token; the services table shows an Exec column with an Enable/Disable exec toggle (UpdateService `enableExecuteCommand`, passed through on service create too); task definitions surface FireLens (`awsfirelens`) log configurations on registration.

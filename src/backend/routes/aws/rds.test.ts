@@ -12,6 +12,22 @@ const createCmd = vi.hoisted(() =>
 
 vi.mock("@aws-sdk/client-rds", () => ({
   RDSClient: vi.fn(function() { return { send: mockSend }; }),
+  CreateDBSnapshotCommand: createCmd("CreateDBSnapshotCommand"),
+  DescribeDBSnapshotsCommand: createCmd("DescribeDBSnapshotsCommand"),
+  DeleteDBSnapshotCommand: createCmd("DeleteDBSnapshotCommand"),
+  CreateDBClusterSnapshotCommand: createCmd("CreateDBClusterSnapshotCommand"),
+  DescribeDBClusterSnapshotsCommand: createCmd("DescribeDBClusterSnapshotsCommand"),
+  DeleteDBClusterSnapshotCommand: createCmd("DeleteDBClusterSnapshotCommand"),
+  StopDBInstanceCommand: createCmd("StopDBInstanceCommand"),
+  StartDBInstanceCommand: createCmd("StartDBInstanceCommand"),
+  CreateDBInstanceReadReplicaCommand: createCmd("CreateDBInstanceReadReplicaCommand"),
+  CreateGlobalClusterCommand: createCmd("CreateGlobalClusterCommand"),
+  DescribeGlobalClustersCommand: createCmd("DescribeGlobalClustersCommand"),
+  DeleteGlobalClusterCommand: createCmd("DeleteGlobalClusterCommand"),
+  FailoverGlobalClusterCommand: createCmd("FailoverGlobalClusterCommand"),
+  CreateEventSubscriptionCommand: createCmd("CreateEventSubscriptionCommand"),
+  DescribeEventSubscriptionsCommand: createCmd("DescribeEventSubscriptionsCommand"),
+  DeleteEventSubscriptionCommand: createCmd("DeleteEventSubscriptionCommand"),
   CreateDBInstanceCommand: createCmd("CreateDBInstanceCommand"),
   DescribeDBInstancesCommand: createCmd("DescribeDBInstancesCommand"),
   DeleteDBInstanceCommand: createCmd("DeleteDBInstanceCommand"),
@@ -941,3 +957,261 @@ describe("RDS Routes", () => {
       expect(body.deleted).toBe(true);
     });
   });
+
+// ─── E.4: snapshots / stop-start / replicas / globals / events ──
+
+describe("E.4 RDS surface", () => {
+  it("400 instance snapshot without snapshotId", async () => {
+    expect(
+      (await post("/db-instances/it-db/snapshots", {})).status
+    ).toBe(400);
+  });
+
+  it("creates an instance snapshot with tags", async () => {
+    mockSend.mockResolvedValueOnce({ DBSnapshot: { DBSnapshotIdentifier: "snap-t" } });
+    const res = await post("/db-instances/it-db/snapshots", {
+      snapshotId: "snap-t",
+      tags: { team: "mkt" },
+    });
+    expect(res.status).toBe(201);
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({ Tags: [{ Key: "team", Value: "mkt" }] })
+    );
+  });
+
+  it("creates an instance snapshot", async () => {
+    mockSend.mockResolvedValueOnce({ DBSnapshot: { DBSnapshotIdentifier: "snap-1" } });
+    const res = await post("/db-instances/it-db/snapshots", { snapshotId: "snap-1" });
+    expect(res.status).toBe(201);
+    const json = await res.json();
+    expect(json.snapshot.DBSnapshotIdentifier).toBe("snap-1");
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        DBInstanceIdentifier: "it-db",
+        DBSnapshotIdentifier: "snap-1",
+      })
+    );
+  });
+
+  it("lists instance snapshots with an optional filter", async () => {
+    mockSend.mockResolvedValueOnce({ DBSnapshots: [{ DBSnapshotIdentifier: "snap-1" }] });
+    const res = await get("/db-snapshots?dbInstanceIdentifier=it-db");
+    const json = await res.json();
+    expect(json.snapshots).toHaveLength(1);
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({ DBInstanceIdentifier: "it-db" })
+    );
+  });
+
+  it("lists instance snapshots without a filter", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/db-snapshots");
+    const json = await res.json();
+    expect(json.snapshots).toEqual([]);
+  });
+
+  it("returns a null snapshot when create omits it", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/db-instances/it-db/snapshots", { snapshotId: "snap-null" });
+    const json = await res.json();
+    expect(json.snapshot).toBeNull();
+  });
+
+  it("returns a null cluster snapshot when create omits it", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/db-cluster-snapshots", { clusterId: "c1", snapshotId: "cs-null" });
+    const json = await res.json();
+    expect(json.snapshot).toBeNull();
+  });
+
+  it("stops an instance with a null instance when omitted", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/db-instances/it-db/stop");
+    const json = await res.json();
+    expect(json.instance).toBeNull();
+  });
+
+  it("starts an instance with a null instance when omitted", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/db-instances/it-db/start");
+    const json = await res.json();
+    expect(json.instance).toBeNull();
+  });
+
+  it("returns an empty cluster snapshot list when absent", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/db-cluster-snapshots");
+    const json = await res.json();
+    expect(json.snapshots).toEqual([]);
+  });
+
+  it("returns an empty global cluster list when absent", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/global-clusters");
+    const json = await res.json();
+    expect(json.globalClusters).toEqual([]);
+  });
+
+  it("deletes an instance snapshot", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await del("/db-snapshots/snap-1");
+    const json = await res.json();
+    expect(json.deleted).toBe(true);
+  });
+
+  it("400 cluster snapshot without ids", async () => {
+    expect((await post("/db-cluster-snapshots", {})).status).toBe(400);
+    expect(
+      (await post("/db-cluster-snapshots", { clusterId: "c1" })).status
+    ).toBe(400);
+  });
+
+  it("creates and lists cluster snapshots", async () => {
+    mockSend.mockResolvedValueOnce({ DBClusterSnapshot: { DBClusterSnapshotIdentifier: "cs-1" } });
+    const created = await post("/db-cluster-snapshots", {
+      clusterId: "c1",
+      snapshotId: "cs-1",
+    });
+    expect(created.status).toBe(201);
+    mockSend.mockResolvedValueOnce({ DBClusterSnapshots: [{ DBClusterSnapshotIdentifier: "cs-1" }] });
+    const list = await get("/db-cluster-snapshots?dbClusterIdentifier=c1");
+    const json = await list.json();
+    expect(json.snapshots).toHaveLength(1);
+  });
+
+  it("deletes a cluster snapshot", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await del("/db-cluster-snapshots/cs-1");
+    expect(res.status).toBe(200);
+  });
+
+  it("stops and starts an instance", async () => {
+    mockSend.mockResolvedValueOnce({ DBInstance: { DBInstanceStatus: "stopping" } });
+    const stop = await post("/db-instances/it-db/stop");
+    const stopJson = await stop.json();
+    expect(stopJson.instance.DBInstanceStatus).toBe("stopping");
+    mockSend.mockResolvedValueOnce({ DBInstance: { DBInstanceStatus: "starting" } });
+    const start = await post("/db-instances/it-db/start");
+    const startJson = await start.json();
+    expect(startJson.instance.DBInstanceStatus).toBe("starting");
+  });
+
+  it("400 read replica without replicaId", async () => {
+    expect((await post("/db-instances/it-db/read-replica", {})).status).toBe(400);
+  });
+
+  it("returns a null instance when replica create omits it", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/db-instances/it-db/read-replica", { replicaId: "rr-2" });
+    const json = await res.json();
+    expect(json.instance).toBeNull();
+  });
+
+  it("creates a read replica", async () => {
+    mockSend.mockResolvedValueOnce({ DBInstance: { DBInstanceIdentifier: "rr-1" } });
+    const res = await post("/db-instances/it-db/read-replica", { replicaId: "rr-1" });
+    expect(res.status).toBe(201);
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        DBInstanceIdentifier: "rr-1",
+        SourceDBInstanceIdentifier: "it-db",
+      })
+    );
+  });
+
+  it("400 global cluster without id", async () => {
+    expect((await post("/global-clusters", {})).status).toBe(400);
+  });
+
+  it("creates, lists, and deletes a global cluster", async () => {
+    mockSend.mockResolvedValueOnce({ GlobalCluster: { GlobalClusterId: "g-1" } });
+    const created = await post("/global-clusters", { globalClusterId: "g-1" });
+    expect(created.status).toBe(201);
+    mockSend.mockResolvedValueOnce({ GlobalClusters: [{ GlobalClusterId: "g-1" }] });
+    const list = await get("/global-clusters");
+    expect((await list.json()).globalClusters).toHaveLength(1);
+    mockSend.mockResolvedValueOnce({});
+    const delRes = await del("/global-clusters/g-1");
+    expect((await delRes.json()).deleted).toBe(true);
+  });
+
+  it("returns a null global cluster when create omits it", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/global-clusters", { globalClusterId: "g-null" });
+    const json = await res.json();
+    expect(json.globalCluster).toBeNull();
+  });
+
+  it("returns a null global cluster on failover when omitted", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/global-clusters/g-1/failover", { dbClusterId: "c1" });
+    const json = await res.json();
+    expect(json.globalCluster).toBeNull();
+  });
+
+  it("fails over a global cluster", async () => {
+    mockSend.mockResolvedValueOnce({ GlobalCluster: { GlobalClusterId: "g-1" } });
+    const res = await post("/global-clusters/g-1/failover", { dbClusterId: "c1" });
+    const json = await res.json();
+    expect(json.globalCluster.GlobalClusterId).toBe("g-1");
+  });
+
+  it("covers empty arms of db-proxy target lists and option groups", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const tg = await get("/db-proxies/p1/target-groups");
+    expect((await tg.json()).targetGroups).toEqual([]);
+    mockSend.mockResolvedValueOnce({});
+    const targets = await get("/db-proxies/p1/targets");
+    expect((await targets.json()).targets).toEqual([]);
+    mockSend.mockResolvedValueOnce({});
+    const og = await get("/option-groups");
+    expect((await og.json()).optionGroups).toEqual([]);
+  });
+
+  it("400 event subscription without name or topic", async () => {
+    expect((await post("/event-subscriptions", {})).status).toBe(400);
+    expect(
+      (await post("/event-subscriptions", { subscriptionName: "s1" })).status
+    ).toBe(400);
+  });
+
+  it("returns a null subscription when create omits it", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/event-subscriptions", {
+      subscriptionName: "s-null",
+      snsTopicArn: "arn:topic",
+    });
+    const json = await res.json();
+    expect(json.subscription).toBeNull();
+  });
+
+  it("returns an empty subscription list when absent", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/event-subscriptions");
+    const json = await res.json();
+    expect(json.subscriptions).toEqual([]);
+  });
+
+  it("returns a null subscription on delete when omitted", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await del("/event-subscriptions/s-null");
+    const json = await res.json();
+    expect(json.subscription).toBeNull();
+  });
+
+  it("creates, lists, and deletes an event subscription", async () => {
+    mockSend.mockResolvedValueOnce({ EventSubscription: { SubscriptionName: "s1" } });
+    const created = await post("/event-subscriptions", {
+      subscriptionName: "s1",
+      snsTopicArn: "arn:topic",
+      sourceType: "db-instance",
+    });
+    expect(created.status).toBe(201);
+    mockSend.mockResolvedValueOnce({ EventSubscriptionsList: [{ SubscriptionName: "s1" }] });
+    const list = await get("/event-subscriptions");
+    expect((await list.json()).subscriptions).toHaveLength(1);
+    mockSend.mockResolvedValueOnce({ EventSubscription: { SubscriptionName: "s1" } });
+    const delRes = await del("/event-subscriptions/s1");
+    expect((await delRes.json()).subscription.SubscriptionName).toBe("s1");
+  });
+});

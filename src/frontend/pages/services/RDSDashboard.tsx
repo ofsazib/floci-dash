@@ -61,6 +61,10 @@ import {
   useRDSCreateDBInstance,
   useRDSDeleteDBInstance,
   useRDSRebootDBInstance,
+  useRDSCreateSnapshot,
+  useRDSStopInstance,
+  useRDSStartInstance,
+  useRDSCreateReadReplica,
   useRDSDBInstance,
   useRDSDBClusters,
   useRDSCreateDBCluster,
@@ -580,6 +584,26 @@ function RDSDBInstanceList({ onSelect }: { onSelect: (id: string) => void }) {
   const deleteInstance = useRDSDeleteDBInstance();
   const rebootInstance = useRDSRebootDBInstance();
   const createInstance = useRDSCreateDBInstance();
+  const createSnapshot = useRDSCreateSnapshot();
+  const stopInstance = useRDSStopInstance();
+  const startInstance = useRDSStartInstance();
+  const createReplica = useRDSCreateReadReplica();
+
+  const [execStatus, setExecStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [snapshotTarget, setSnapshotTarget] = useState<string | null>(null);
+  const [snapshotId, setSnapshotId] = useState("");
+  const [replicaTarget, setReplicaTarget] = useState<string | null>(null);
+  const [replicaId, setReplicaId] = useState("");
+
+  async function lifecycle(action: () => Promise<unknown>, success: string) {
+    setExecStatus(null);
+    try {
+      await action();
+      setExecStatus({ type: "success", message: success });
+    } catch (err) {
+      setExecStatus({ type: "error", message: (err as Error)?.message || "Request failed" });
+    }
+  }
 
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({
@@ -694,6 +718,47 @@ function RDSDBInstanceList({ onSelect }: { onSelect: (id: string) => void }) {
             header: "",
             cell: (item: any) => (
               <SpaceBetween direction="horizontal" size="xs">
+                <Button
+                  variant="icon"
+                  iconName="download"
+                  ariaLabel={`Snapshot ${item.id}`}
+                  loading={createSnapshot.isPending}
+                  onClick={() => {
+                    setSnapshotTarget(item.id);
+                    setSnapshotId(`${item.id}-snap-${Date.now() % 10000}`);
+                  }}
+                />
+                {item.engine?.toLowerCase().includes("aurora") ? null : (
+                  <Button
+                    variant="icon"
+                    iconName={item.status === "stopped" ? "play" : "pause"}
+                    ariaLabel={
+                      item.status === "stopped" ? `Start ${item.id}` : `Stop ${item.id}`
+                    }
+                    loading={stopInstance.isPending || startInstance.isPending}
+                    onClick={() =>
+                      lifecycle(
+                        () =>
+                          item.status === "stopped"
+                            ? startInstance.mutateAsync(item.id)
+                            : stopInstance.mutateAsync(item.id),
+                        item.status === "stopped"
+                          ? `Instance ${item.id} started.`
+                          : `Instance ${item.id} stopped.`
+                      )
+                    }
+                  />
+                )}
+                <Button
+                  variant="icon"
+                  iconName="copy"
+                  ariaLabel={`Replica ${item.id}`}
+                  loading={createReplica.isPending}
+                  onClick={() => {
+                    setReplicaTarget(item.id);
+                    setReplicaId(`${item.id}-replica-${Date.now() % 10000}`);
+                  }}
+                />
                 <Button
                   variant="icon"
                   iconName="refresh"
@@ -857,6 +922,71 @@ function RDSDBInstanceList({ onSelect }: { onSelect: (id: string) => void }) {
                 placeholder="16.4"
               />
             </FormField>
+          </SpaceBetween>
+        </Form>
+      </Modal>
+      {execStatus && (
+        <Alert type={execStatus.type} dismissible onDismiss={() => setExecStatus(null)}>
+          {execStatus.message}
+        </Alert>
+      )}
+      <Modal
+        visible={snapshotTarget !== null}
+        onDismiss={() => setSnapshotTarget(null)}
+        header={`Create snapshot — ${snapshotTarget ?? ""}`}
+      >
+        <Form>
+          <SpaceBetween size="m">
+            <FormField label="Snapshot ID">
+              <Input value={snapshotId} onChange={({ detail }) => setSnapshotId(detail.value)} />
+            </FormField>
+            <Button
+              variant="primary"
+              disabled={!snapshotId}
+              loading={createSnapshot.isPending}
+              onClick={() =>
+                lifecycle(
+                  () =>
+                    createSnapshot.mutateAsync({
+                      instanceId: snapshotTarget!,
+                      snapshotId,
+                    }),
+                  `Snapshot ${snapshotId} created.`
+                ).then(() => setSnapshotTarget(null))
+              }
+            >
+              Create snapshot
+            </Button>
+          </SpaceBetween>
+        </Form>
+      </Modal>
+      <Modal
+        visible={replicaTarget !== null}
+        onDismiss={() => setReplicaTarget(null)}
+        header={`Create read replica — ${replicaTarget ?? ""}`}
+      >
+        <Form>
+          <SpaceBetween size="m">
+            <FormField label="Replica ID">
+              <Input value={replicaId} onChange={({ detail }) => setReplicaId(detail.value)} />
+            </FormField>
+            <Button
+              variant="primary"
+              disabled={!replicaId}
+              loading={createReplica.isPending}
+              onClick={() =>
+                lifecycle(
+                  () =>
+                    createReplica.mutateAsync({
+                      instanceId: replicaTarget!,
+                      replicaId,
+                    }),
+                  `Read replica ${replicaId} created.`
+                ).then(() => setReplicaTarget(null))
+              }
+            >
+              Create replica
+            </Button>
           </SpaceBetween>
         </Form>
       </Modal>

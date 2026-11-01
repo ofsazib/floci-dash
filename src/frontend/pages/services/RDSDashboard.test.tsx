@@ -101,6 +101,10 @@ const mockInstances = vi.fn();
 const mockCreateInstance = vi.fn();
 const mockDeleteInstance = vi.fn();
 const mockRebootInstance = vi.fn();
+const mockSnapshot = vi.fn();
+const mockStopRds = vi.fn();
+const mockStartRds = vi.fn();
+const mockReplica = vi.fn();
 const mockInstanceDetail = vi.fn();
 const mockClusters = vi.fn();
 const mockCreateCluster = vi.fn();
@@ -135,6 +139,26 @@ vi.mock("../../hooks/useRDS", () => ({
     mutateAsync: mockDeleteInstance,
     get isPending() { return deleteInstanceState.isPending; },
     get variables() { return deleteInstanceState.variables; },
+  }),
+  useRDSCreateSnapshot: () => ({
+    mutateAsync: mockSnapshot,
+    isPending: false,
+    variables: null,
+  }),
+  useRDSStopInstance: () => ({
+    mutateAsync: mockStopRds,
+    isPending: false,
+    variables: null,
+  }),
+  useRDSStartInstance: () => ({
+    mutateAsync: mockStartRds,
+    isPending: false,
+    variables: null,
+  }),
+  useRDSCreateReadReplica: () => ({
+    mutateAsync: mockReplica,
+    isPending: false,
+    variables: null,
   }),
   useRDSRebootDBInstance: () => ({
     mutate: mockRebootInstance,
@@ -2311,5 +2335,192 @@ describe("RDSDashboard — tags editor", () => {
     await user.click(screen.getByRole("button", { name: "my-cluster" }));
     expect(await screen.findByText("k")).toBeTruthy();
     expect(mockTags).toHaveBeenCalledWith("arn:cluster");
+  });
+});
+
+describe("RDSDashboard — E.4 lifecycle", () => {
+  function seedRunningInstance(extra: Record<string, unknown> = {}) {
+    mockInstances.mockReturnValue({
+      data: {
+        instances: [
+          {
+            id: "it-db",
+            engine: "mysql",
+            dbInstanceClass: "db.t3.micro",
+            dbInstanceStatus: "available",
+            endpoint: "it-db.local",
+            ...extra,
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+  }
+
+  it("shows stopped instance with a Start action and calls start", async () => {
+    seedRunningInstance({ status: "stopped" });
+    mockStartRds.mockResolvedValueOnce({ instance: {} });
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Start it-db/i })).toBeTruthy()
+    );
+    await user.click(screen.getByRole("button", { name: /Start it-db/i }));
+    await waitFor(() => expect(mockStartRds).toHaveBeenCalledWith("it-db"));
+    await waitFor(() => expect(screen.getByText("Instance it-db started.")).toBeTruthy());
+  });
+
+  it("stops an available instance", async () => {
+    seedRunningInstance();
+    mockStopRds.mockResolvedValueOnce({ instance: {} });
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Stop it-db/i })).toBeTruthy()
+    );
+    await user.click(screen.getByRole("button", { name: /Stop it-db/i }));
+    await waitFor(() => expect(mockStopRds).toHaveBeenCalledWith("it-db"));
+  });
+
+  it("creates a snapshot from the icon modal", async () => {
+    seedRunningInstance();
+    mockSnapshot.mockResolvedValueOnce({ snapshot: {} });
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Snapshot it-db/i })).toBeTruthy()
+    );
+    await user.click(screen.getByRole("button", { name: /Snapshot it-db/i }));
+    // Dismiss (covers the modal onDismiss arm) then reopen.
+    document.querySelectorAll('[class*="awsui_dialog"]').forEach((d) => {
+      fireEvent.keyDown(d as HTMLElement, { keyCode: 27, key: "Escape" });
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Snapshot it-db/i })).toBeTruthy()
+    );
+    await user.click(screen.getByRole("button", { name: /Snapshot it-db/i }));
+    const dlg = screen
+      .getAllByText(/Create snapshot — it-db/)
+      .map((t) => t.closest('[role="dialog"]'))
+      .find((d) => d) as HTMLElement;
+    const input = dlg.querySelector("input") as HTMLElement;
+    await user.clear(input);
+    await user.type(input, "my-snap");
+    await user.click(
+      Array.from(dlg.querySelectorAll("button")).find((b) => b.textContent === "Create snapshot")!
+    );
+    await waitFor(() =>
+      expect(mockSnapshot).toHaveBeenCalledWith({
+        instanceId: "it-db",
+        snapshotId: "my-snap",
+      })
+    );
+    await waitFor(() => expect(screen.getByText("Snapshot my-snap created.")).toBeTruthy());
+  });
+
+  it("creates a read replica from the icon modal", async () => {
+    seedRunningInstance();
+    mockReplica.mockResolvedValueOnce({ instance: {} });
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Replica it-db/i })).toBeTruthy()
+    );
+    await user.click(screen.getByRole("button", { name: /Replica it-db/i }));
+    // Dismiss (covers the modal onDismiss arm) then reopen.
+    document.querySelectorAll('[class*="awsui_dialog"]').forEach((d) => {
+      fireEvent.keyDown(d as HTMLElement, { keyCode: 27, key: "Escape" });
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Replica it-db/i })).toBeTruthy()
+    );
+    await user.click(screen.getByRole("button", { name: /Replica it-db/i }));
+    const dlg = screen
+      .getAllByText(/Create read replica — it-db/)
+      .map((t) => t.closest('[role="dialog"]'))
+      .find((d) => d) as HTMLElement;
+    const input = dlg.querySelector("input") as HTMLElement;
+    await user.clear(input);
+    await user.type(input, "my-replica");
+    await user.click(
+      Array.from(dlg.querySelectorAll("button")).find((b) => b.textContent === "Create replica")!
+    );
+    await waitFor(() =>
+      expect(mockReplica).toHaveBeenCalledWith({ instanceId: "it-db", replicaId: "my-replica" })
+    );
+    await waitFor(() =>
+      expect(screen.getByText("Read replica my-replica created.")).toBeTruthy()
+    );
+  });
+
+  it("dismisses the lifecycle alert", async () => {
+    const user = userEvent.setup();
+    seedRunningInstance();
+    mockStopRds.mockResolvedValueOnce({ instance: {} });
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Stop it-db/i })).toBeTruthy()
+    );
+    await user.click(screen.getByRole("button", { name: /Stop it-db/i }));
+    await waitFor(() => expect(screen.getByText("Instance it-db stopped.")).toBeTruthy());
+    fireEvent.click(document.querySelector('[class*="awsui_dismiss-button"]') as HTMLElement);
+    await waitFor(() =>
+      expect(screen.queryByText("Instance it-db stopped.")).toBeNull()
+    );
+  });
+
+  it("shows loading on the snapshot icon for the targeted row", async () => {
+    seedRunningInstance();
+    // Never resolves — keeps isPending true for the assertion.
+    mockSnapshot.mockImplementation(() => new Promise(() => {}));
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /Snapshot it-db/i }));
+    const dlg = screen
+      .getAllByText(/Create snapshot — it-db/)
+      .map((t) => t.closest('[role="dialog"]'))
+      .find((d) => d) as HTMLElement;
+    await user.click(
+      Array.from(dlg.querySelectorAll("button")).find(
+        (b) => b.textContent === "Create snapshot"
+      )!
+    );
+    await waitFor(() =>
+      expect(mockSnapshot).toHaveBeenCalledWith({
+        instanceId: "it-db",
+        snapshotId: expect.stringContaining("it-db-snap-"),
+      })
+    );
+  });
+
+  it("hides stop/start for aurora clusters", async () => {
+    seedRunningInstance({ engine: "aurora-mysql" });
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: /Stop it-db/i })).toBeNull()
+    );
+    expect(screen.queryByRole("button", { name: /Start it-db/i })).toBeNull();
+  });
+
+  it("shows an error toast when snapshot creation fails", async () => {
+    seedRunningInstance();
+    mockSnapshot.mockRejectedValueOnce({});
+    const user = userEvent.setup();
+    render(<RDSDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /Snapshot it-db/i }));
+    const dlg = screen
+      .getAllByText(/Create snapshot — it-db/)
+      .map((t) => t.closest('[role="dialog"]'))
+      .find((d) => d) as HTMLElement;
+    const input = dlg.querySelector("input") as HTMLElement;
+    await user.clear(input);
+    await user.type(input, "bad");
+    await user.click(
+      Array.from(dlg.querySelectorAll("button")).find((b) => b.textContent === "Create snapshot")!
+    );
+    await waitFor(() => expect(screen.getByText("Request failed")).toBeTruthy());
   });
 });

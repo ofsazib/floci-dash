@@ -37,6 +37,12 @@ import {
   useRDSTags,
   useRDSAddTags,
   useRDSRemoveTags,
+  useRDSCreateSnapshot,
+  useRDSStopInstance,
+  useRDSStartInstance,
+  useRDSCreateReadReplica,
+  useRDSCreateGlobalCluster,
+  useRDSDeleteGlobalCluster,
 } from "./useRDS";
 
 function createWrapper() {
@@ -453,6 +459,64 @@ describe("useRDSRemoveTags", () => {
     expect(mockApi).toHaveBeenCalledWith("/aws/rds/tags", {
       method: "DELETE",
       body: JSON.stringify({ arn: "arn:x", tagKeys: ["env"] }),
+    });
+  });
+});
+
+describe("E.4 RDS hooks", () => {
+  it("useRDSCreateSnapshot POSTs snapshot params", async () => {
+    mockApi.mockResolvedValueOnce({ snapshot: {} });
+    const { result } = renderHook(() => useRDSCreateSnapshot(), { wrapper: createWrapper() });
+    const input = { instanceId: "db", snapshotId: "snap", tags: { a: "b" } };
+    await result.current.mutateAsync(input);
+    expect(mockApi).toHaveBeenCalledWith("/aws/rds/db-instances/db/snapshots", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  });
+
+  it("useRDSStopInstance POSTs stop", async () => {
+    mockApi.mockResolvedValueOnce({ instance: {} });
+    const { result } = renderHook(() => useRDSStopInstance(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("db");
+    expect(mockApi).toHaveBeenCalledWith("/aws/rds/db-instances/db/stop", { method: "POST" });
+  });
+
+  it("useRDSStartInstance POSTs start", async () => {
+    mockApi.mockResolvedValueOnce({ instance: {} });
+    const { result } = renderHook(() => useRDSStartInstance(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("db");
+    expect(mockApi).toHaveBeenCalledWith("/aws/rds/db-instances/db/start", { method: "POST" });
+  });
+
+  it("useRDSCreateReadReplica POSTs replica params", async () => {
+    mockApi.mockResolvedValueOnce({ instance: {} });
+    const { result } = renderHook(() => useRDSCreateReadReplica(), { wrapper: createWrapper() });
+    const input = { instanceId: "db", replicaId: "rr" };
+    await result.current.mutateAsync(input);
+    expect(mockApi).toHaveBeenCalledWith("/aws/rds/db-instances/db/read-replica", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  });
+
+  it("useRDSCreateGlobalCluster POSTs global cluster", async () => {
+    mockApi.mockResolvedValueOnce({ globalCluster: {} });
+    const { result } = renderHook(() => useRDSCreateGlobalCluster(), { wrapper: createWrapper() });
+    const input = { globalClusterId: "g1", engine: "aurora-postgresql" };
+    await result.current.mutateAsync(input);
+    expect(mockApi).toHaveBeenCalledWith("/aws/rds/global-clusters", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  });
+
+  it("useRDSDeleteGlobalCluster DELETEs global cluster", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useRDSDeleteGlobalCluster(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("g1");
+    expect(mockApi).toHaveBeenCalledWith("/aws/rds/global-clusters/g1", {
+      method: "DELETE",
     });
   });
 });

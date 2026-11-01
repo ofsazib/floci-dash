@@ -321,4 +321,149 @@ describe("memberships", () => {
       })
     );
   });
+  it("users/groups routes map rejections through handleError", async () => {
+    const reject400 = () =>
+      mockSend.mockRejectedValueOnce(
+        Object.assign(new Error("Invalid"), { name: "ValidationException" })
+      );
+    reject400();
+    expect((await get(`/users?${Q}`)).status).toBe(400);
+    reject400();
+    expect((await get(`/users/u1?${Q}`)).status).toBe(400);
+    reject400();
+    expect(
+      (
+        await post(`/users?${Q}`, {
+          userName: "u",
+          name: { givenName: "A", familyName: "B" },
+          emails: [{ value: "a@b.c" }],
+        })
+      ).status
+    ).toBe(400);
+    reject400();
+    expect((await del(`/users/u1?${Q}`)).status).toBe(400);
+    reject400();
+    expect((await get(`/groups?${Q}`)).status).toBe(400);
+    reject400();
+    expect(
+      (
+        await post(`/groups?${Q}`, { displayName: "g", description: "d" })
+      ).status
+    ).toBe(400);
+    reject400();
+    expect((await del(`/groups/g1?${Q}`)).status).toBe(400);
+    reject400();
+    expect((await get(`/groups/g1?${Q}`)).status).toBe(400);
+  });
+
+  it("router-level error handler falls back when err.message is empty", async () => {
+    mockSend.mockRejectedValueOnce(new Error(""));
+    const res = await get(`/users?${Q}`);
+    expect(res.status).toBe(500);
+    expect((await res.json()).error).toBe("Internal server error");
+  });
+
+  it("router-level error handler 400s on the missing-store sentinel", async () => {
+    mockSend.mockRejectedValueOnce(new Error("identity store ID is required"));
+    const res = await get(`/users`);
+    expect(res.status).toBe(400);
+  });
+
+  it("router-level error handler returns 500 for unknown errors", async () => {
+    mockSend.mockRejectedValueOnce(Object.assign(new Error("kaboom"), {}));
+    const res = await get(`/users?${Q}`);
+    expect(res.status).toBe(500);
+    expect((await res.json()).error).toBe("kaboom");
+  });
+
+  it("handleError falls back to default messages when err.message is empty", async () => {
+    mockSend.mockRejectedValueOnce(
+      Object.assign(new Error(""), { name: "ResourceNotFoundException" })
+    );
+    const nf = await get(`/users/u1?${Q}`);
+    expect((await nf.json()).error).toBe("Not found");
+
+    mockSend.mockRejectedValueOnce(
+      Object.assign(new Error(""), { name: "ValidationException" })
+    );
+    const inv = await get(`/users/u1?${Q}`);
+    expect((await inv.json()).error).toBe("Validation error");
+
+    mockSend.mockRejectedValueOnce(
+      Object.assign(new Error(""), { name: "ConflictException" })
+    );
+    const conf = await get(`/users/u1?${Q}`);
+    expect((await conf.json()).error).toBe("Conflict");
+  });
+
+  it("update routes map rejections through handleError", async () => {
+    mockSend.mockRejectedValueOnce(
+      Object.assign(new Error("User update invalid"), { name: "ValidationException" })
+    );
+    const updUser = await router.request(`/users/u1?${Q}`, {
+      method: "PUT",
+      body: JSON.stringify({ displayName: "New Name" }),
+      headers: { "content-type": "application/json" },
+    });
+    expect(updUser.status).toBe(400);
+
+    mockSend.mockRejectedValueOnce(
+      Object.assign(new Error("Group update invalid"), { name: "ValidationException" })
+    );
+    const updGroup = await router.request(`/groups/g1?${Q}`, {
+      method: "PUT",
+      body: JSON.stringify({ description: "New description" }),
+      headers: { "content-type": "application/json" },
+    });
+    expect(updGroup.status).toBe(400);
+  });
+
+  it("membership error arms — 404 / 400 / 409 map through", async () => {
+    mockSend.mockRejectedValueOnce(
+      Object.assign(new Error("Group not found"), { name: "ResourceNotFoundException" })
+    );
+    const notFound = await get(`/groups/g1/memberships?${Q}`);
+    expect(notFound.status).toBe(404);
+
+    mockSend.mockRejectedValueOnce(
+      Object.assign(new Error("Invalid parameter"), { name: "ValidationException" })
+    );
+    const invalid = await get(`/groups/g1/memberships?${Q}`);
+    expect(invalid.status).toBe(400);
+
+    mockSend.mockRejectedValueOnce(
+      Object.assign(new Error("Already exists"), { name: "ConflictException" })
+    );
+    const conflict = await get(`/groups/g1/memberships?${Q}`);
+    expect(conflict.status).toBe(409);
+
+    mockSend.mockRejectedValueOnce(Object.assign(new Error("boom"), { name: "InternalError" }));
+    const boom = await get(`/groups/g1/memberships?${Q}`);
+    expect(boom.status).toBe(500);
+
+    mockSend.mockRejectedValueOnce(
+      Object.assign(new Error("Invalid membership"), { name: "ValidationException" })
+    );
+    const addInvalid = await post(`/groups/g1/memberships?${Q}`, { userId: "u1" });
+    expect(addInvalid.status).toBe(400);
+
+    mockSend.mockRejectedValueOnce(
+      Object.assign(new Error("Conflict"), { $metadata: { httpStatusCode: 409 } })
+    );
+    const addConflict = await post(`/groups/g1/memberships?${Q}`, { userId: "u1" });
+    expect(addConflict.status).toBe(409);
+
+    mockSend.mockRejectedValueOnce(
+      Object.assign(new Error("Missing"), { name: "ResourceNotFoundException" })
+    );
+    const delMissing = await del(`/memberships/m-1?${Q}`);
+    expect(delMissing.status).toBe(404);
+
+    mockSend.mockRejectedValueOnce(
+      Object.assign(new Error("Bad delete"), { name: "ValidationException" })
+    );
+    const delInvalid = await del(`/memberships/m-1?${Q}`);
+    expect(delInvalid.status).toBe(400);
+  });
+
 });

@@ -523,3 +523,65 @@ export function useRDSRemoveTags() {
     onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: ["aws", "rds", "tags", v.arn] }),
   });
 }
+
+// ─── E.4: snapshots / stop-start / replicas / globals / events ──
+
+export function useRDSCreateSnapshot() {
+  return useMutation({
+    mutationFn: (input: { instanceId: string; snapshotId: string; tags?: Record<string, string> }) =>
+      api<{ snapshot: any }>(
+        `/aws/rds/db-instances/${encodeURIComponent(input.instanceId)}/snapshots`,
+        { method: "POST", body: JSON.stringify(input) }
+      ),
+  });
+}
+
+export function useRDSStopInstance() {
+  return useMutation({
+    mutationFn: (instanceId: string) =>
+      api<{ instance: any }>(
+        `/aws/rds/db-instances/${encodeURIComponent(instanceId)}/stop`,
+        { method: "POST" }
+      ),
+  });
+}
+
+export function useRDSStartInstance() {
+  return useMutation({
+    mutationFn: (instanceId: string) =>
+      api<{ instance: any }>(
+        `/aws/rds/db-instances/${encodeURIComponent(instanceId)}/start`,
+        { method: "POST" }
+      ),
+  });
+}
+
+export function useRDSCreateReadReplica() {
+  return useMutation({
+    mutationFn: (input: { instanceId: string; replicaId: string }) =>
+      api<{ instance: any }>(
+        `/aws/rds/db-instances/${encodeURIComponent(input.instanceId)}/read-replica`,
+        { method: "POST", body: JSON.stringify(input) }
+      ),
+  });
+}
+
+export function useRDSCreateGlobalCluster() {
+  return useMutation({
+    mutationFn: (input: { globalClusterId: string; engine?: string }) =>
+      api<{ globalCluster: any }>("/aws/rds/global-clusters", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+  });
+}
+
+export function useRDSDeleteGlobalCluster() {
+  return useMutation({
+    mutationFn: (globalClusterId: string) =>
+      api<{ deleted: boolean }>(
+        `/aws/rds/global-clusters/${encodeURIComponent(globalClusterId)}`,
+        { method: "DELETE" }
+      ),
+  });
+}
