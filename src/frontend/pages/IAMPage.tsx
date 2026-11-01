@@ -23,6 +23,7 @@ import {
   Alert,
 } from "@cloudscape-design/components";
 import DeleteButton from "../components/DeleteButton";
+import ResourceTable from "../components/ResourceTable";
 import StatusBadge from "../components/StatusBadge";
 import { useToast } from "../components/Toast";
 import { useHealth } from "../hooks/useSystem";
@@ -67,6 +68,15 @@ import {
   useDeleteInstanceProfile,
   useAddRoleToInstanceProfile,
   useRemoveRoleFromInstanceProfile,
+  useIAMGenerateCredentialReport,
+  useIAMCredentialReport,
+  useIAMSimulateCustomPolicy,
+  useIAMGetContextKeys,
+  useIAMCreateLoginProfile,
+  useIAMDeleteLoginProfile,
+  useIAMCreateSAMLProvider,
+  useIAMDeleteSAMLProvider,
+  useIAMListSAMLProviders,
 } from "../hooks/useIAM";
 
 // ─── USERS TAB ───────────────────────────────────────────
@@ -1175,6 +1185,9 @@ export default function IAMPage() {
     { id: "policies", label: "Policies", content: <PoliciesTab /> },
     { id: "groups", label: "Groups", content: <GroupsTab /> },
     { id: "instance-profiles", label: "Instance profiles", content: <InstanceProfilesTab /> },
+    { id: "credential-report", label: "Credential report", content: <CredentialReportPanel /> },
+    { id: "policy-simulator", label: "Policy simulator", content: <PolicySimulatorPanel /> },
+    { id: "saml-providers", label: "SAML providers", content: <SAMLProvidersPanel /> },
   ];
 
   return (
@@ -1196,5 +1209,183 @@ export default function IAMPage() {
     >
       <Tabs tabs={tabs} activeTabId={activeTab} onChange={({ detail }) => setActiveTab(detail.activeTabId)} />
     </ContentLayout>
+  );
+}
+
+// ─── E.5: credential report panel ────────────────────────
+
+export function CredentialReportPanel() {
+  const generate = useIAMGenerateCredentialReport();
+  const report = useIAMCredentialReport();
+
+  return (
+    <SpaceBetween size="m">
+      <SpaceBetween direction="horizontal" size="s">
+        <Button loading={generate.isPending} onClick={() => generate.mutate()}>
+          Generate report
+        </Button>
+        <Button loading={report.isPending} onClick={() => report.mutate()}>
+          Fetch report
+        </Button>
+      </SpaceBetween>
+      {generate.isError && (
+        <Alert type="error">{(generate.error as Error)?.message || "Failed to generate"}</Alert>
+      )}
+      {report.data?.rows && report.data.rows.length > 0 && (
+        <ResourceTable
+          resourceName="credential"
+          headerTitle={`Report (${report.data.generatedTime ?? ""})`}
+          items={report.data.rows}
+          columns={Object.keys(report.data.rows[0]).slice(0, 5).map((k) => ({
+            id: k,
+            header: k,
+            cell: (row: Record<string, string>) => row[k],
+          }))}
+        />
+      )}
+      {report.data && report.data.rows.length === 0 && (
+        <Box>No report rows — generate one first.</Box>
+      )}
+    </SpaceBetween>
+  );
+}
+
+// ─── E.5: custom policy simulator panel ──────────────────
+
+export function PolicySimulatorPanel() {
+  const simulate = useIAMSimulateCustomPolicy();
+  const contextKeys = useIAMGetContextKeys();
+  const [policy, setPolicy] = useState(
+    '{\n  "Version": "2012-10-17",\n  "Statement": []\n}'
+  );
+  const [actions, setActions] = useState("s3:GetObject");
+  const [resources, setResources] = useState("*");
+
+  return (
+    <SpaceBetween size="m">
+      <FormField label="Policy document (JSON)">
+        <Textarea value={policy} onChange={({ detail }) => setPolicy(detail.value)} rows={8} />
+      </FormField>
+      <FormField label="Actions (comma-separated)">
+        <Input value={actions} onChange={({ detail }) => setActions(detail.value)} placeholder="s3:GetObject, ec2:DescribeInstances" />
+      </FormField>
+      <FormField label="Resource ARNs (comma-separated, optional)">
+        <Input value={resources} onChange={({ detail }) => setResources(detail.value)} />
+      </FormField>
+      <SpaceBetween direction="horizontal" size="s">
+        <Button
+          loading={simulate.isPending}
+          onClick={() =>
+            simulate.mutate({
+              policyDocument: policy,
+              actionNames: actions.split(",").map((a) => a.trim()).filter(Boolean),
+              resourceArns: resources.split(",").map((r) => r.trim()).filter(Boolean),
+            })
+          }
+        >
+          Simulate
+        </Button>
+        <Button loading={contextKeys.isPending} onClick={() => contextKeys.mutate(policy)}>
+          Get context keys
+        </Button>
+      </SpaceBetween>
+      {simulate.data && (
+        <ResourceTable
+          resourceName="evaluation"
+          headerTitle={`Evaluations (${simulate.data.total})`}
+          items={simulate.data.evaluations}
+          columns={[
+            { id: "action", header: "Action", cell: (e: any) => e.evalActionName, isRowHeader: true },
+            { id: "resource", header: "Resource", cell: (e: any) => e.evalResourceName },
+            { id: "decision", header: "Decision", cell: (e: any) => e.evalDecision },
+          ]}
+        />
+      )}
+      {contextKeys.data && (
+        <Box>Context keys: {contextKeys.data.contextKeyNames.join(", ") || "none"}</Box>
+      )}
+    </SpaceBetween>
+  );
+}
+
+// ─── E.5: SAML providers panel ───────────────────────────
+
+export function SAMLProvidersPanel() {
+  const { data, isLoading } = useIAMListSAMLProviders();
+  const createProvider = useIAMCreateSAMLProvider();
+  const deleteProvider = useIAMDeleteSAMLProvider();
+  const [name, setName] = useState("");
+  const [metadata, setMetadata] = useState("");
+  const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
+  async function runSafe(action: () => Promise<unknown>, success: string) {
+    try {
+      await action();
+      setToast({ type: "success", message: success });
+    } catch (err) {
+      setToast({ type: "error", message: (err as Error)?.message || "Request failed" });
+    }
+  }
+
+  return (
+    <SpaceBetween size="m">
+      {toast && (
+        <Alert
+          type={toast.type}
+          dismissible
+          i18nStrings={{ dismissAriaLabel: "Dismiss" }}
+          onDismiss={() => setToast(null)}
+        >
+          {toast.message}
+        </Alert>
+      )}
+      <SpaceBetween direction="horizontal" size="s">
+        <FormField label="Provider name">
+          <Input value={name} onChange={({ detail }) => setName(detail.value)} placeholder="idp" />
+        </FormField>
+        <Button
+          disabled={!name || !metadata}
+          loading={createProvider.isPending}
+          onClick={() =>
+            runSafe(
+              () => createProvider.mutateAsync({ name, samlMetadataDocument: metadata }),
+              `SAML provider ${name} created.`
+            )
+          }
+        >
+          Create
+        </Button>
+      </SpaceBetween>
+      <FormField label="SAML metadata document">
+        <Textarea value={metadata} onChange={({ detail }) => setMetadata(detail.value)} rows={4} />
+      </FormField>
+      <ResourceTable
+        resourceName="SAML provider"
+        headerTitle="SAML providers"
+        items={data?.samlProviders || []}
+        loading={isLoading}
+        emptyMessage="No SAML providers"
+        columns={[
+          { id: "arn", header: "ARN", cell: (p: any) => p.Arn, isRowHeader: true },
+          {
+            id: "actions",
+            header: "",
+            cell: (p: any) => (
+              <DeleteButton
+                itemName={p.Arn}
+                resourceType="SAML provider"
+                loading={deleteProvider.isPending}
+                onDelete={() =>
+                  runSafe(
+                    () => deleteProvider.mutateAsync(p.Arn),
+                    `SAML provider ${p.Arn} deleted.`
+                  )
+                }
+              />
+            ),
+          },
+        ]}
+      />
+    </SpaceBetween>
   );
 }

@@ -48,7 +48,56 @@ const mockDeleteInstanceProfile = vi.fn();
 const mockAddRoleToInstanceProfile = vi.fn();
 const mockRemoveRoleFromInstanceProfile = vi.fn();
 
+const mockGenerateReport = vi.fn();
+const mockFetchReport = vi.fn();
+const mockSimulate = vi.fn();
+const mockContextKeys = vi.fn();
+const mockCreateLoginProfile = vi.fn();
+const mockDeleteLoginProfile = vi.fn();
+const mockCreateSAML = vi.fn();
+const mockDeleteSAML = vi.fn();
+let credReportData: { rows: Record<string, string>[]; generatedTime?: string } | undefined = undefined;
+let generateError: Error | null = null;
+let simData: { evaluations: Record<string, unknown>[]; total: number } | undefined = undefined;
+let ctxData: { contextKeyNames: string[] } | undefined = undefined;
+let samlListData: { samlProviders: { Arn: string }[] } = { samlProviders: [] };
+let samlNoData = false;
+
 vi.mock("../hooks/useIAM", () => ({
+  useEKSAccessEntries: () => ({ data: { accessEntries: [] }, isLoading: false }),
+  useEKSAddons: () => ({ data: { addons: [] }, isLoading: false }),
+  useIAMGenerateCredentialReport: () => ({
+    mutate: mockGenerateReport,
+    isPending: false,
+    isError: !!generateError,
+    error: generateError,
+  }),
+  useIAMCredentialReport: () => ({
+    mutate: mockFetchReport,
+    isPending: false,
+    data: credReportData,
+  }),
+  useIAMSimulateCustomPolicy: () => ({
+    mutate: mockSimulate,
+    isPending: false,
+    data: simData,
+  }),
+  useIAMGetContextKeys: () => ({
+    mutate: mockContextKeys,
+    isPending: false,
+    data: ctxData,
+  }),
+  useIAMCreateLoginProfile: () => ({ mutate: mockCreateLoginProfile, isPending: false }),
+  useIAMDeleteLoginProfile: () => ({ mutate: mockDeleteLoginProfile, isPending: false }),
+  useIAMCreateSAMLProvider: () => ({
+    mutateAsync: mockCreateSAML,
+    isPending: false,
+  }),
+  useIAMDeleteSAMLProvider: () => ({
+    mutateAsync: mockDeleteSAML,
+    isPending: false,
+  }),
+  useIAMListSAMLProviders: () => ({ data: samlNoData ? undefined : samlListData, isLoading: false }),
   useIAMUsers: (...args: any[]) => mockIAMUsers(...args),
   useIAMUser: (...args: any[]) => mockIAMUser(...args),
   useCreateUser: () => ({ mutateAsync: mockCreateUserMutate, isPending: false }),
@@ -105,7 +154,8 @@ vi.mock("../hooks/useSystem", () => ({
   },
 }));
 
-import IAMPage from "./IAMPage";
+import IAMPage, { CredentialReportPanel, PolicySimulatorPanel, SAMLProvidersPanel } from "./IAMPage";
+import { SpaceBetween } from "@cloudscape-design/components";
 
 function pageWrapper() {
   const Wrapper = createWrapper();
@@ -2093,5 +2143,152 @@ describe("IAMPage — role inline policy error arms", () => {
     mockDeleteRoleInlinePolicy.mockImplementation((_b: any, opts: any) => opts?.onError?.(new Error("")));
     await user.click(screen.getAllByRole("button", { name: /Delete inline policy/i }).at(-1)!);
     await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "Failed to delete inline policy"));
+  });
+});
+
+describe("IAM E.5 panels", () => {
+  beforeEach(() => {
+    credReportData = undefined;
+    generateError = null;
+    simData = undefined;
+    ctxData = undefined;
+    samlListData = { samlProviders: [] };
+    samlNoData = false;
+  });
+
+  it("generates and fetches a credential report", async () => {
+    const user = userEvent.setup();
+    mockGenerateReport.mockResolvedValueOnce({ started: true });
+    credReportData = {
+      rows: [{ user: "alice", arn: "arn:user/alice" }],
+      generatedTime: "2026-10-07",
+    };
+    render(<CredentialReportPanel />);
+    await user.click(screen.getByRole("button", { name: /Generate report/i }));
+    await waitFor(() => expect(mockGenerateReport).toHaveBeenCalled());
+    await user.click(screen.getByRole("button", { name: /Fetch report/i }));
+    await waitFor(() => expect(screen.getByText("arn:user/alice")).toBeTruthy());
+  });
+
+  it("simulates a custom policy and shows evaluations", async () => {
+    const user = userEvent.setup();
+    simData = {
+      evaluations: [
+        { evalActionName: "s3:GetObject", evalResourceName: "*", evalDecision: "allowed" },
+      ],
+      total: 1,
+    };
+    render(<PolicySimulatorPanel />);
+    const textboxes = screen.getAllByRole("textbox");
+    await user.clear(textboxes[0]);
+    await user.type(textboxes[0], 'policy-doc');
+    await user.clear(textboxes[1]);
+    await user.type(textboxes[1], "s3:GetObject");
+    await user.clear(textboxes[2]);
+    await user.type(textboxes[2], "arn:aws:s3:::bucket/*");
+    await user.click(screen.getByRole("button", { name: /Simulate/i }));
+    await waitFor(() =>
+      expect(mockSimulate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          policyDocument: "policy-doc",
+          actionNames: ["s3:GetObject"],
+          resourceArns: ["arn:aws:s3:::bucket/*"],
+        })
+      )
+    );
+    await waitFor(() => expect(screen.getByText("s3:GetObject")).toBeTruthy());
+    expect(screen.getByText("allowed")).toBeTruthy();
+  });
+
+  it("fetches context keys", async () => {
+    const user = userEvent.setup();
+    ctxData = { contextKeyNames: ["aws:username"] };
+    render(<PolicySimulatorPanel />);
+    await user.click(screen.getByRole("button", { name: /Get context keys/i }));
+    await waitFor(() =>
+      expect(mockContextKeys).toHaveBeenCalledWith(expect.stringContaining("2012-10-17"))
+    );
+    await waitFor(() => expect(screen.getByText(/aws:username/)).toBeTruthy());
+  });
+
+  it("shows a generate error alert and an empty report hint", async () => {
+    const user = userEvent.setup();
+    generateError = new Error("denied");
+    credReportData = { rows: [], generatedTime: "2026-10-07" };
+    render(<CredentialReportPanel />);
+    await waitFor(() =>
+      expect(screen.getByText("denied")).toBeTruthy()
+    );
+    await user.click(screen.getByRole("button", { name: /Fetch report/i }));
+    await waitFor(() =>
+      expect(screen.getByText(/No report rows/)).toBeTruthy()
+    );
+  });
+
+  it("shows 'none' for empty context keys", async () => {
+    const user = userEvent.setup();
+    ctxData = { contextKeyNames: [] };
+    render(<PolicySimulatorPanel />);
+    await user.click(screen.getByRole("button", { name: /Get context keys/i }));
+    await waitFor(() => expect(screen.getByText(/Context keys: none/)).toBeTruthy());
+  });
+
+  it("creates and deletes a SAML provider", async () => {
+    const user = userEvent.setup();
+    samlListData = { samlProviders: [{ Arn: "arn:aws:iam::0:saml-provider/idp" }] };
+    mockCreateSAML.mockResolvedValueOnce({ samlProviderArn: "arn:new" });
+    mockDeleteSAML.mockResolvedValueOnce({ deleted: true });
+    render(<SAMLProvidersPanel />);
+    await waitFor(() =>
+      expect(screen.getByText("arn:aws:iam::0:saml-provider/idp")).toBeTruthy()
+    );
+    const textboxes = screen.getAllByRole("textbox");
+    await user.type(textboxes[0], "new-idp");
+    await user.type(textboxes[textboxes.length - 1], "<md>metadata</md>");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() => expect(mockCreateSAML).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(screen.getByText("SAML provider new-idp created.")).toBeTruthy()
+    );
+    await user.click(
+      screen.getByRole("button", { name: /Delete arn:aws:iam::0:saml-provider\/idp/i })
+    );
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /^Delete$/i }));
+    await waitFor(() =>
+      expect(mockDeleteSAML).toHaveBeenCalledWith("arn:aws:iam::0:saml-provider/idp")
+    );
+  });
+
+  it("shows an error toast when creating a SAML provider fails and dismisses it", async () => {
+    const user = userEvent.setup();
+    mockCreateSAML.mockRejectedValueOnce(new Error("LimitExceeded"));
+    render(<SAMLProvidersPanel />);
+    const textboxes = screen.getAllByRole("textbox");
+    await user.type(textboxes[0], "bad-idp");
+    await user.type(textboxes[textboxes.length - 1], "<md/>");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() => expect(screen.getByText("LimitExceeded")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Dismiss/i }));
+    await waitFor(() => expect(screen.queryByText("LimitExceeded")).toBeNull());
+    mockCreateSAML.mockRejectedValueOnce("nope");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() => expect(screen.getByText("Request failed")).toBeTruthy());
+  });
+
+  it("renders a report without generatedTime and empty SAML list", () => {
+    credReportData = { rows: [{ user: "bob" }] };
+    generateError = new Error();
+    samlNoData = true;
+    render(
+      <SpaceBetween size="m">
+        <CredentialReportPanel />
+        <SAMLProvidersPanel />
+      </SpaceBetween>
+    );
+    expect(screen.getByText("bob")).toBeTruthy();
+    expect(screen.getByText(/Report \(\)/)).toBeTruthy();
+    expect(screen.getByText("Failed to generate")).toBeTruthy();
+    expect(screen.getByText("No SAML providers")).toBeTruthy();
   });
 });

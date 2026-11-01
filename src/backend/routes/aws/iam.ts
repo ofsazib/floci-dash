@@ -112,7 +112,25 @@ import {
   RemoveClientIDFromOpenIDConnectProviderCommand,
   // P1 — login profile (read-only; Floci implements Get only)
   GetLoginProfileCommand,
+  GenerateCredentialReportCommand,
+  GetCredentialReportCommand,
+  GetAccountAuthorizationDetailsCommand,
+  SimulateCustomPolicyCommand,
+  GetContextKeysForCustomPolicyCommand,
+  CreateLoginProfileCommand,
+  UpdateLoginProfileCommand,
+  DeleteLoginProfileCommand,
+  CreateSAMLProviderCommand,
+  GetSAMLProviderCommand,
+  UpdateSAMLProviderCommand,
+  DeleteSAMLProviderCommand,
+  GenerateServiceLastAccessedDetailsCommand,
+  GetServiceLastAccessedDetailsCommand,
+  ListInstanceProfileTagsCommand,
+  TagInstanceProfileCommand,
+  UntagInstanceProfileCommand,
 } from "@aws-sdk/client-iam";
+import { readJson } from "../../clients/read-json";
 import { getAwsConfig } from "../../clients/aws";
 import { sanitizeName, validateJson } from "../../clients/sanitize";
 
@@ -1072,7 +1090,6 @@ router.get("/users/:name/login-profile", async (c: Context) => {
   }
 });
 
-export default router;
 // ── MFA Devices ──────────────────────────────────────────
 
 router.get("/users/:name/mfa-devices", async (c: Context) => {
@@ -1094,3 +1111,231 @@ router.get("/server-certificates", async (c: Context) => {
   const result = await iam().send(new ListServerCertificatesCommand({}));
   return c.json({ serverCertificates: result.ServerCertificateMetadataList || [] });
 });
+
+// ─── E.5: credential report ──────────────────────────────
+
+router.post("/credential-report/generate", async (c: Context) => {
+  await iam().send(new GenerateCredentialReportCommand({}));
+  return c.json({ started: true });
+});
+
+router.get("/credential-report", async (c: Context) => {
+  const result: any = await iam().send(new GetCredentialReportCommand({}));
+  let rows: Record<string, string>[] = [];
+  const content = result.Content
+    ? new TextDecoder().decode(Buffer.from(result.Content, "base64"))
+    : "";
+  if (content) {
+    const lines = content.split("\n").filter(Boolean);
+    const headers = lines[0]?.split(",");
+    rows = lines.slice(1).map((line) => {
+      const values = line.split(",");
+      const row: Record<string, string> = {};
+      headers.forEach((h, i) => (row[h] = values[i] ?? ""));
+      return row;
+    });
+  }
+  return c.json({
+    format: result.ReportFormat ?? null,
+    generatedTime: result.GeneratedTime ?? null,
+    rows,
+  });
+});
+
+// ─── E.5: account authorization details ──────────────────
+
+router.get("/account-authorization-details", async (c: Context) => {
+  const result: any = await iam().send(new GetAccountAuthorizationDetailsCommand({}));
+  return c.json({
+    userDetailList: result.UserDetailList || [],
+    groupDetailList: result.GroupDetailList || [],
+    roleDetailList: result.RoleDetailList || [],
+    policies: result.Policies || [],
+  });
+});
+
+// ─── E.5: custom policy simulator ────────────────────────
+
+router.post("/simulate-custom-policy", async (c: Context) => {
+  const body: any = await readJson(c);
+  if (!body?.policyDocument)
+    return c.json({ error: "policyDocument is required" }, 400);
+  if (!Array.isArray(body?.actionNames) || body.actionNames.length === 0)
+    return c.json({ error: "actionNames array is required" }, 400);
+  const result: any = await iam().send(
+    new SimulateCustomPolicyCommand({
+      PolicyInputList: [body.policyDocument],
+      ActionNames: body.actionNames,
+      ResourceArns: body.resourceArns,
+    })
+  );
+  const evaluations = (result.EvaluationResults || []).map((e: any) => ({
+    evalActionName: e.EvalActionName,
+    evalResourceName: e.EvalResourceName,
+    evalDecision: e.EvalDecision,
+  }));
+  return c.json({ evaluations, total: evaluations.length });
+});
+
+router.post("/context-keys", async (c: Context) => {
+  const body: any = await readJson(c);
+  if (!body?.policyDocument)
+    return c.json({ error: "policyDocument is required" }, 400);
+  const result: any = await iam().send(
+    new GetContextKeysForCustomPolicyCommand({
+      PolicyInputList: [body.policyDocument],
+    })
+  );
+  return c.json({ contextKeyNames: result.ContextKeyNames || [] });
+});
+
+// ─── E.5: login profiles ─────────────────────────────────
+
+router.post("/users/:name/login-profile", async (c: Context) => {
+  const name = decodeURIComponent(c.req.param("name")!);
+  const body: any = await readJson(c);
+  if (!body?.password) return c.json({ error: "password is required" }, 400);
+  const result: any = await iam().send(
+    new CreateLoginProfileCommand({
+      UserName: name,
+      Password: body.password,
+      PasswordResetRequired: body.passwordResetRequired,
+    })
+  );
+  return c.json({ loginProfile: result.LoginProfile ?? null }, 201);
+});
+
+router.put("/users/:name/login-profile", async (c: Context) => {
+  const name = decodeURIComponent(c.req.param("name")!);
+  const body: any = await readJson(c);
+  if (!body?.password) return c.json({ error: "password is required" }, 400);
+  const result: any = await iam().send(
+    new UpdateLoginProfileCommand({
+      UserName: name,
+      Password: body.password,
+      PasswordResetRequired: body.passwordResetRequired,
+    })
+  );
+  return c.json({ updated: true });
+});
+
+router.delete("/users/:name/login-profile", async (c: Context) => {
+  const name = decodeURIComponent(c.req.param("name")!);
+  await iam().send(new DeleteLoginProfileCommand({ UserName: name }));
+  return c.json({ deleted: true });
+});
+
+// ─── E.5: SAML providers ─────────────────────────────────
+
+router.post("/saml-providers", async (c: Context) => {
+  const body: any = await readJson(c);
+  if (!body?.name) return c.json({ error: "name is required" }, 400);
+  if (!body?.samlMetadataDocument)
+    return c.json({ error: "samlMetadataDocument is required" }, 400);
+  const result: any = await iam().send(
+    new CreateSAMLProviderCommand({
+      Name: body.name,
+      SAMLMetadataDocument: body.samlMetadataDocument,
+    })
+  );
+  return c.json({ samlProviderArn: result.SAMLProviderArn }, 201);
+});
+
+router.get("/saml-providers/:arn", async (c: Context) => {
+  const arn = decodeURIComponent(c.req.param("arn")!);
+  const result: any = await iam().send(new GetSAMLProviderCommand({ SAMLProviderArn: arn }));
+  return c.json({
+    samlMetadataDocument: result.SAMLMetadataDocument ?? null,
+    createDate: result.CreateDate ?? null,
+    validUntil: result.ValidUntil ?? null,
+  });
+});
+
+router.put("/saml-providers/:arn", async (c: Context) => {
+  const arn = decodeURIComponent(c.req.param("arn")!);
+  const body: any = await readJson(c);
+  if (!body?.samlMetadataDocument)
+    return c.json({ error: "samlMetadataDocument is required" }, 400);
+  await iam().send(
+    new UpdateSAMLProviderCommand({
+      SAMLProviderArn: arn,
+      SAMLMetadataDocument: body.samlMetadataDocument,
+    })
+  );
+  return c.json({ updated: true });
+});
+
+router.delete("/saml-providers/:arn", async (c: Context) => {
+  const arn = decodeURIComponent(c.req.param("arn")!);
+  await iam().send(new DeleteSAMLProviderCommand({ SAMLProviderArn: arn }));
+  return c.json({ deleted: true });
+});
+
+// ─── E.5: last-accessed reporting ────────────────────────
+
+router.post("/users/:name/last-accessed", async (c: Context) => {
+  const name = decodeURIComponent(c.req.param("name")!);
+  const result: any = await iam().send(
+    new GenerateServiceLastAccessedDetailsCommand({
+      Arn: `arn:aws:iam::000000000000:user/${name}`,
+    })
+  );
+  return c.json({ jobId: result.JobId });
+});
+
+router.get("/users/:name/last-accessed", async (c: Context) => {
+  const name = decodeURIComponent(c.req.param("name")!);
+  const jobId = c.req.query("jobId");
+  const result: any = await iam().send(
+    new GetServiceLastAccessedDetailsCommand({
+      Arn: `arn:aws:iam::000000000000:user/${name}`,
+      JobId: jobId!,
+    } as any)
+  );
+  return c.json({
+    jobStatus: result.JobStatus,
+    servicesLastAccessed: result.ServicesLastAccessed || [],
+    jobCompletionDate: result.JobCompletionDate ?? null,
+  });
+});
+
+// ─── E.5: instance profile tags ──────────────────────────
+
+router.get("/instance-profiles/:name/tags", async (c: Context) => {
+  const name = decodeURIComponent(c.req.param("name")!);
+  const result: any = await iam().send(
+    new ListInstanceProfileTagsCommand({ InstanceProfileName: name })
+  );
+  return c.json({ tags: result.Tags || [] });
+});
+
+router.post("/instance-profiles/:name/tags", async (c: Context) => {
+  const name = decodeURIComponent(c.req.param("name")!);
+  const body: any = await readJson(c);
+  if (!Array.isArray(body?.tags) || body.tags.length === 0)
+    return c.json({ error: "tags array is required" }, 400);
+  await iam().send(
+    new TagInstanceProfileCommand({
+      InstanceProfileName: name,
+      Tags: body.tags,
+    })
+  );
+  return c.json({ ok: true });
+});
+
+router.post("/instance-profiles/:name/tags/untag", async (c: Context) => {
+  const name = decodeURIComponent(c.req.param("name")!);
+  const body: any = await readJson(c);
+  if (!Array.isArray(body?.tagKeys) || body.tagKeys.length === 0)
+    return c.json({ error: "tagKeys array is required" }, 400);
+  await iam().send(
+    new UntagInstanceProfileCommand({
+      InstanceProfileName: name,
+      TagKeys: body.tagKeys,
+    })
+  );
+  return c.json({ ok: true });
+});
+
+
+export default router;

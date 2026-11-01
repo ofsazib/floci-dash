@@ -716,3 +716,134 @@ export function useLoginProfile(userName: string | null) {
     enabled: !!userName,
   });
 }
+
+// ─── E.5: credential report / auth details / custom simulator / login profiles / SAML / last-accessed ──
+
+export function useIAMGenerateCredentialReport() {
+  return useMutation({
+    mutationFn: () =>
+      api<{ started: boolean }>("/aws/iam/credential-report/generate", { method: "POST" }),
+  });
+}
+
+export function useIAMCredentialReport() {
+  return useMutation({
+    mutationFn: () =>
+      api<{
+        format: string | null;
+        generatedTime: string | null;
+        rows: Record<string, string>[];
+      }>("/aws/iam/credential-report"),
+  });
+}
+
+export function useIAMAccountAuthorizationDetails() {
+  return useMutation({
+    mutationFn: () =>
+      api<{
+        userDetailList: unknown[];
+        groupDetailList: unknown[];
+        roleDetailList: unknown[];
+        policies: unknown[];
+      }>("/aws/iam/account-authorization-details"),
+  });
+}
+
+export function useIAMSimulateCustomPolicy() {
+  return useMutation({
+    mutationFn: (input: { policyDocument: string; actionNames: string[]; resourceArns?: string[] }) =>
+      api<{ evaluations: Record<string, unknown>[]; total: number }>(
+        "/aws/iam/simulate-custom-policy",
+        { method: "POST", body: JSON.stringify(input) }
+      ),
+  });
+}
+
+export function useIAMGetContextKeys() {
+  return useMutation({
+    mutationFn: (policyDocument: string) =>
+      api<{ contextKeyNames: string[] }>("/aws/iam/context-keys", {
+        method: "POST",
+        body: JSON.stringify({ policyDocument }),
+      }),
+  });
+}
+
+export function useIAMCreateLoginProfile(userName: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { password: string; passwordResetRequired?: boolean }) =>
+      api<{ loginProfile: unknown }>(
+        `/aws/iam/users/${encodeURIComponent(userName)}/login-profile`,
+        { method: "POST", body: JSON.stringify(input) }
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam", "users"] }),
+  });
+}
+
+export function useIAMDeleteLoginProfile(userName: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      api<{ deleted: boolean }>(
+        `/aws/iam/users/${encodeURIComponent(userName)}/login-profile`,
+        { method: "DELETE" }
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam", "users"] }),
+  });
+}
+
+export function useIAMCreateSAMLProvider() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { name: string; samlMetadataDocument: string }) =>
+      api<{ samlProviderArn: string }>("/aws/iam/saml-providers", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam", "saml-providers"] }),
+  });
+}
+
+export function useIAMDeleteSAMLProvider() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (arn: string) =>
+      api<{ deleted: boolean }>(`/aws/iam/saml-providers/${encodeURIComponent(arn)}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "iam", "saml-providers"] }),
+  });
+}
+
+export function useIAMGenerateLastAccessed(userName: string) {
+  return useMutation({
+    mutationFn: () =>
+      api<{ jobId: string }>(
+        `/aws/iam/users/${encodeURIComponent(userName)}/last-accessed`,
+        { method: "POST" }
+      ),
+  });
+}
+
+export function useIAMGetLastAccessed(userName: string, jobId: string | null) {
+  return useQuery({
+    queryKey: ["aws", "iam", "last-accessed", userName, jobId],
+    queryFn: () =>
+      api<{
+        jobStatus: string;
+        servicesLastAccessed: Record<string, unknown>[];
+      }>(`/aws/iam/users/${encodeURIComponent(userName)}/last-accessed?jobId=${encodeURIComponent(jobId!)}`),
+    enabled: !!jobId,
+  });
+}
+
+export function useIAMListSAMLProviders() {
+  return useQuery({
+    queryKey: ["aws", "iam", "saml-providers"],
+    queryFn: () =>
+      api<{ samlProviders: { Arn: string; SAMLProviderUUID?: string }[] }>(
+        "/aws/iam/saml-providers"
+      ),
+  });
+}

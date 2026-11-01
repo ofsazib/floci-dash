@@ -18,6 +18,23 @@ const createCmd = vi.hoisted(() => {
 
 vi.mock("@aws-sdk/client-iam", () => ({
   IAMClient: mockIAMClient,
+  GenerateCredentialReportCommand: createCmd("GenerateCredentialReportCommand"),
+  GetCredentialReportCommand: createCmd("GetCredentialReportCommand"),
+  GetAccountAuthorizationDetailsCommand: createCmd("GetAccountAuthorizationDetailsCommand"),
+  SimulateCustomPolicyCommand: createCmd("SimulateCustomPolicyCommand"),
+  GetContextKeysForCustomPolicyCommand: createCmd("GetContextKeysForCustomPolicyCommand"),
+  CreateLoginProfileCommand: createCmd("CreateLoginProfileCommand"),
+  UpdateLoginProfileCommand: createCmd("UpdateLoginProfileCommand"),
+  DeleteLoginProfileCommand: createCmd("DeleteLoginProfileCommand"),
+  CreateSAMLProviderCommand: createCmd("CreateSAMLProviderCommand"),
+  GetSAMLProviderCommand: createCmd("GetSAMLProviderCommand"),
+  UpdateSAMLProviderCommand: createCmd("UpdateSAMLProviderCommand"),
+  DeleteSAMLProviderCommand: createCmd("DeleteSAMLProviderCommand"),
+  GenerateServiceLastAccessedDetailsCommand: createCmd("GenerateServiceLastAccessedDetailsCommand"),
+  GetServiceLastAccessedDetailsCommand: createCmd("GetServiceLastAccessedDetailsCommand"),
+  ListInstanceProfileTagsCommand: createCmd("ListInstanceProfileTagsCommand"),
+  TagInstanceProfileCommand: createCmd("TagInstanceProfileCommand"),
+  UntagInstanceProfileCommand: createCmd("UntagInstanceProfileCommand"),
   ListUsersCommand: createCmd("ListUsersCommand"),
   CreateUserCommand: createCmd("CreateUserCommand"),
   GetUserCommand: createCmd("GetUserCommand"),
@@ -1567,5 +1584,374 @@ describe("IAM Routes", () => {
       const res = await get("/server-certificates");
       expect((await res.json()).serverCertificates).toEqual([]);
     });
+  });
+});
+
+// ─── E.5: credential report / auth details / simulator / login profiles / SAML / last-accessed / instance profile tags ──
+
+describe("E.5 credential report", () => {
+  it("generate starts a report", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/credential-report/generate");
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.started).toBe(true);
+  });
+
+  it("parses the base64 CSV content into rows", async () => {
+    const csv = "user,arn\nalice,arn:user/alice";
+    const b64 = Buffer.from(csv).toString("base64");
+    mockSend.mockResolvedValueOnce({
+      Content: b64,
+      ReportFormat: "text/csv",
+      GeneratedTime: "2026-10-07T00:00:00Z",
+    });
+    const res = await get("/credential-report");
+    const json = await res.json();
+    expect(json.format).toBe("text/csv");
+    expect(json.rows).toHaveLength(1);
+    expect(json.rows[0].user).toBe("alice");
+  });
+
+  it("pads missing CSV values with empty strings", async () => {
+    const b64 = Buffer.from("user,arn\nbob").toString("base64");
+    mockSend.mockResolvedValueOnce({ Content: b64 });
+    const res = await get("/credential-report");
+    const json = await res.json();
+    expect(json.rows[0].arn).toBe("");
+  });
+
+  it("parses whitespace-only CSV content", async () => {
+    const b64 = Buffer.from("\n").toString("base64");
+    mockSend.mockResolvedValueOnce({ Content: b64 });
+    const res = await get("/credential-report");
+    const json = await res.json();
+    expect(json.rows).toEqual([]);
+  });
+
+
+
+  it("parses CSV without a header row", async () => {
+    const b64 = Buffer.from("alice,arn:user/alice").toString("base64");
+    mockSend.mockResolvedValueOnce({ Content: b64 });
+    const res = await get("/credential-report");
+    const json = await res.json();
+    expect(json.rows).toEqual([]);
+  });
+
+  it("returns empty rows when no report exists", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/credential-report");
+    const json = await res.json();
+    expect(json.rows).toEqual([]);
+    expect(json.format).toBeNull();
+  });
+});
+
+describe("E.5 account authorization details", () => {
+  it("returns the detail lists", async () => {
+    mockSend.mockResolvedValueOnce({
+      UserDetailList: [{ UserName: "u" }],
+      GroupDetailList: [],
+      RoleDetailList: [{ RoleName: "r" }],
+      Policies: [{ PolicyName: "p" }],
+    });
+    const res = await get("/account-authorization-details");
+    const json = await res.json();
+    expect(json.userDetailList).toHaveLength(1);
+    expect(json.roleDetailList).toHaveLength(1);
+    expect(json.policies).toHaveLength(1);
+  });
+
+  it("returns empty lists when absent", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/account-authorization-details");
+    const json = await res.json();
+    expect(json.userDetailList).toEqual([]);
+    expect(json.groupDetailList).toEqual([]);
+    expect(json.roleDetailList).toEqual([]);
+    expect(json.policies).toEqual([]);
+  });
+});
+
+describe("E.5 custom policy simulator", () => {
+  it("400 without policyDocument", async () => {
+    expect(
+      (await post("/simulate-custom-policy", { actionNames: ["s3:GetObject"] })).status
+    ).toBe(400);
+  });
+
+  it("400 without actionNames", async () => {
+    expect(
+      (await post("/simulate-custom-policy", { policyDocument: "{}" })).status
+    ).toBe(400);
+    expect(
+      (await post("/simulate-custom-policy", { policyDocument: "{}", actionNames: [] })).status
+    ).toBe(400);
+  });
+
+  it("simulates a custom policy", async () => {
+    mockSend.mockResolvedValueOnce({
+      EvaluationResults: [
+        { EvalActionName: "s3:GetObject", EvalResourceName: "*", EvalDecision: "allowed" },
+      ],
+    });
+    const res = await post("/simulate-custom-policy", {
+      policyDocument: "{\"Version\":\"2012-10-17\"}",
+      actionNames: ["s3:GetObject"],
+      resourceArns: ["arn:aws:s3:::b"],
+    });
+    const json = await res.json();
+    expect(json.evaluations).toHaveLength(1);
+    expect(json.evaluations[0].evalDecision).toBe("allowed");
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        PolicyInputList: ["{\"Version\":\"2012-10-17\"}"],
+        ActionNames: ["s3:GetObject"],
+      })
+    );
+  });
+
+  it("returns an empty evaluation list when absent", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/simulate-custom-policy", {
+      policyDocument: "{}",
+      actionNames: ["s3:Get"],
+    });
+    const json = await res.json();
+    expect(json.evaluations).toEqual([]);
+  });
+
+  it("400 context keys without policyDocument", async () => {
+    expect((await post("/context-keys", {})).status).toBe(400);
+  });
+
+  it("returns context key names", async () => {
+    mockSend.mockResolvedValueOnce({ ContextKeyNames: ["aws:username"] });
+    const res = await post("/context-keys", { policyDocument: "{}" });
+    const json = await res.json();
+    expect(json.contextKeyNames).toEqual(["aws:username"]);
+  });
+});
+
+describe("E.5 login profiles", () => {
+  it("400 create without password", async () => {
+    expect(
+      (await post("/users/alice/login-profile", {})).status
+    ).toBe(400);
+  });
+
+  it("get login profile tolerates a sparse SDK result", async () => {
+    mockSend.mockResolvedValueOnce({ LoginProfile: {} });
+    const res = await get("/users/bob/login-profile");
+    const json = await res.json();
+    expect(json.userName).toBe("bob");
+    expect(json.createdAt).toBeNull();
+  });
+
+  it("creates a login profile", async () => {
+    mockSend.mockResolvedValueOnce({ LoginProfile: { UserName: "alice" } });
+    const res = await post("/users/alice/login-profile", {
+      password: "pw",
+      passwordResetRequired: true,
+    });
+    expect(res.status).toBe(201);
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({ UserName: "alice", Password: "pw", PasswordResetRequired: true })
+    );
+  });
+
+  it("creates a login profile with a sparse SDK result", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/users/bob/login-profile", { password: "pw" });
+    const json = await res.json();
+    expect(json.loginProfile).toBeNull();
+  });
+
+  it("400s a null JSON body on update", async () => {
+    const res = await router.request("/users/alice/login-profile", {
+      method: "PUT",
+      body: "null",
+      headers: { "content-type": "application/json" },
+    });
+    expect(res.status).toBe(400);
+  });
+
+
+
+  it("updates a login profile with passwordResetRequired false", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put("/users/alice/login-profile", {
+      password: "new",
+      passwordResetRequired: false,
+    });
+    expect(res.status).toBe(200);
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({ PasswordResetRequired: false })
+    );
+  });
+
+  it("updates a login profile", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put("/users/alice/login-profile", { password: "new" });
+    expect(res.status).toBe(200);
+  });
+
+  it("deletes a login profile", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await del("/users/alice/login-profile");
+    const json = await res.json();
+    expect(json.deleted).toBe(true);
+  });
+});
+
+describe("E.5 SAML providers", () => {
+  it("400 create without name or metadata", async () => {
+    expect((await post("/saml-providers", {})).status).toBe(400);
+    expect(
+      (await post("/saml-providers", { name: "sp" })).status
+    ).toBe(400);
+  });
+
+  it("creates a SAML provider", async () => {
+    mockSend.mockResolvedValueOnce({ SAMLProviderArn: "arn:saml" });
+    const res = await post("/saml-providers", {
+      name: "sp",
+      samlMetadataDocument: "<xml/>",
+    });
+    expect(res.status).toBe(201);
+    const json = await res.json();
+    expect(json.samlProviderArn).toBe("arn:saml");
+  });
+
+  it("gets a SAML provider", async () => {
+    mockSend.mockResolvedValueOnce({ SAMLMetadataDocument: "<xml/>", CreateDate: "t" });
+    const res = await get(`/saml-providers/${encodeURIComponent("arn:saml")}`);
+    const json = await res.json();
+    expect(json.samlMetadataDocument).toBe("<xml/>");
+  });
+
+  it("gets a sparse SAML provider", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get(`/saml-providers/${encodeURIComponent("arn:x")}`);
+    const json = await res.json();
+    expect(json.samlMetadataDocument).toBeNull();
+    expect(json.createDate).toBeNull();
+    expect(json.validUntil).toBeNull();
+  });
+
+  it("lists sparse SAML providers", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/saml-providers");
+    const json = await res.json();
+    expect(json.samlProviders).toEqual([]);
+  });
+
+  it("returns empty context keys when absent", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/context-keys", { policyDocument: "{}" });
+    const json = await res.json();
+    expect(json.contextKeyNames).toEqual([]);
+  });
+
+  it("updates a SAML provider", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put(`/saml-providers/${encodeURIComponent("arn:saml")}`, {
+      samlMetadataDocument: "<xml2/>",
+    });
+    const json = await res.json();
+    expect(json.updated).toBe(true);
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        SAMLProviderArn: "arn:saml",
+        SAMLMetadataDocument: "<xml2/>",
+      })
+    );
+  });
+
+  it("400 update without metadata document", async () => {
+    expect(
+      (await put(`/saml-providers/${encodeURIComponent("arn:saml")}`, {})).status
+    ).toBe(400);
+  });
+
+  it("deletes a SAML provider", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await del(`/saml-providers/${encodeURIComponent("arn:saml")}`);
+    const json = await res.json();
+    expect(json.deleted).toBe(true);
+  });
+});
+
+describe("E.5 last-accessed reporting", () => {
+  it("generates a details job", async () => {
+    mockSend.mockResolvedValueOnce({ JobId: "job-1" });
+    const res = await post("/users/alice/last-accessed");
+    const json = await res.json();
+    expect(json.jobId).toBe("job-1");
+  });
+
+  it("returns sparse last-accessed details when absent", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/users/alice/last-accessed?jobId=j1");
+    const json = await res.json();
+    expect(json.jobStatus).toBeUndefined();
+    expect(json.servicesLastAccessed).toEqual([]);
+  });
+
+  it("returns job status and services", async () => {
+    mockSend.mockResolvedValueOnce({
+      JobStatus: "COMPLETED",
+      ServicesLastAccessed: [{ ServiceName: "s3" }],
+      JobCompletionDate: "t",
+    });
+    const res = await get("/users/alice/last-accessed?jobId=job-1");
+    const json = await res.json();
+    expect(json.jobStatus).toBe("COMPLETED");
+    expect(json.servicesLastAccessed).toHaveLength(1);
+  });
+});
+
+describe("E.5 instance profile tags", () => {
+  it("lists instance profile tags", async () => {
+    mockSend.mockResolvedValueOnce({ Tags: [{ Key: "env", Value: "dev" }] });
+    const res = await get("/instance-profiles/ip1/tags");
+    const json = await res.json();
+    expect(json.tags).toHaveLength(1);
+  });
+
+  it("returns an empty tag list when absent", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/instance-profiles/ip1/tags");
+    const json = await res.json();
+    expect(json.tags).toEqual([]);
+  });
+
+  it("400 tag without tags array", async () => {
+    expect(
+      (await post("/instance-profiles/ip1/tags", {})).status
+    ).toBe(400);
+  });
+
+  it("tags an instance profile", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/instance-profiles/ip1/tags", {
+      tags: [{ Key: "env", Value: "dev" }],
+    });
+    const json = await res.json();
+    expect(json.ok).toBe(true);
+  });
+
+  it("400 untag without tagKeys", async () => {
+    expect(
+      (await post("/instance-profiles/ip1/tags/untag", {})).status
+    ).toBe(400);
+  });
+
+  it("untags an instance profile", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/instance-profiles/ip1/tags/untag", { tagKeys: ["env"] });
+    const json = await res.json();
+    expect(json.ok).toBe(true);
   });
 });

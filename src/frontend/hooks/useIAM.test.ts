@@ -87,6 +87,18 @@ import {
   useRemoveOIDCClientId,
   useUpdateOIDCThumbprint,
   useLoginProfile,
+  useIAMGenerateCredentialReport,
+  useIAMCredentialReport,
+  useIAMAccountAuthorizationDetails,
+  useIAMSimulateCustomPolicy,
+  useIAMGetContextKeys,
+  useIAMCreateLoginProfile,
+  useIAMDeleteLoginProfile,
+  useIAMCreateSAMLProvider,
+  useIAMDeleteSAMLProvider,
+  useIAMListSAMLProviders,
+  useIAMGenerateLastAccessed,
+  useIAMGetLastAccessed,
 } from "./useIAM";
 
 function createWrapper() {
@@ -892,3 +904,113 @@ describe("useIAM — P1 gap hooks", () => {
   });
 });
 
+describe("E.5 IAM hooks", () => {
+  function createWrapper() {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return ({ children }: { children: React.ReactNode }) =>
+      React.createElement(QueryClientProvider, { client: qc }, children);
+  }
+
+  it("useIAMGenerateCredentialReport POSTs", async () => {
+    mockApi.mockResolvedValueOnce({ started: true });
+    const { result } = renderHook(() => useIAMGenerateCredentialReport(), { wrapper: createWrapper() });
+    await result.current.mutateAsync();
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/credential-report/generate", { method: "POST" });
+  });
+
+  it("useIAMCredentialReport fetches", async () => {
+    mockApi.mockResolvedValueOnce({ rows: [] });
+    const { result } = renderHook(() => useIAMCredentialReport(), { wrapper: createWrapper() });
+    await result.current.mutateAsync();
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/credential-report");
+  });
+
+  it("useIAMAccountAuthorizationDetails fetches", async () => {
+    mockApi.mockResolvedValueOnce({ userDetailList: [] });
+    const { result } = renderHook(() => useIAMAccountAuthorizationDetails(), { wrapper: createWrapper() });
+    await result.current.mutateAsync();
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/account-authorization-details");
+  });
+
+  it("useIAMSimulateCustomPolicy POSTs policy + actions", async () => {
+    mockApi.mockResolvedValueOnce({ evaluations: [], total: 0 });
+    const { result } = renderHook(() => useIAMSimulateCustomPolicy(), { wrapper: createWrapper() });
+    const input = { policyDocument: "{}", actionNames: ["s3:Get"], resourceArns: ["*"] };
+    await result.current.mutateAsync(input);
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/simulate-custom-policy", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  });
+
+  it("useIAMGetContextKeys POSTs policy", async () => {
+    mockApi.mockResolvedValueOnce({ contextKeyNames: [] });
+    const { result } = renderHook(() => useIAMGetContextKeys(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("{}");
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/context-keys", {
+      method: "POST",
+      body: JSON.stringify({ policyDocument: "{}" }),
+    });
+  });
+
+  it("useIAMCreateLoginProfile POSTs password", async () => {
+    mockApi.mockResolvedValueOnce({ loginProfile: {} });
+    const { result } = renderHook(() => useIAMCreateLoginProfile("alice"), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ password: "pw" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/users/alice/login-profile", {
+      method: "POST",
+      body: JSON.stringify({ password: "pw" }),
+    });
+  });
+
+  it("useIAMDeleteLoginProfile DELETEs", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useIAMDeleteLoginProfile("alice"), { wrapper: createWrapper() });
+    await result.current.mutateAsync();
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/users/alice/login-profile", { method: "DELETE" });
+  });
+
+  it("useIAMListSAMLProviders GETs providers", async () => {
+    mockApi.mockResolvedValueOnce({ samlProviders: [] });
+    const { result } = renderHook(() => useIAMListSAMLProviders(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/saml-providers");
+  });
+
+  it("useIAMCreateSAMLProvider POSTs provider", async () => {
+    mockApi.mockResolvedValueOnce({ samlProviderArn: "arn" });
+    const { result } = renderHook(() => useIAMCreateSAMLProvider(), { wrapper: createWrapper() });
+    const input = { name: "sp", samlMetadataDocument: "<xml/>" };
+    await result.current.mutateAsync(input);
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/saml-providers", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  });
+
+  it("useIAMDeleteSAMLProvider DELETEs", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useIAMDeleteSAMLProvider(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("arn");
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/saml-providers/arn", { method: "DELETE" });
+  });
+
+  it("useIAMGenerateLastAccessed POSTs", async () => {
+    mockApi.mockResolvedValueOnce({ jobId: "j1" });
+    const { result } = renderHook(() => useIAMGenerateLastAccessed("alice"), { wrapper: createWrapper() });
+    await result.current.mutateAsync();
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/users/alice/last-accessed", { method: "POST" });
+  });
+
+  it("useIAMGetLastAccessed GETs with job", async () => {
+    mockApi.mockResolvedValueOnce({ jobStatus: "COMPLETED", servicesLastAccessed: [] });
+    const { result } = renderHook(() => useIAMGetLastAccessed("alice", "j1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/iam/users/alice/last-accessed?jobId=j1");
+  });
+
+  it("useIAMGetLastAccessed disabled without job", () => {
+    renderHook(() => useIAMGetLastAccessed("alice", null), { wrapper: createWrapper() });
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+});
