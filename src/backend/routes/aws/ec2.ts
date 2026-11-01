@@ -121,6 +121,20 @@ import {
   DescribeAddressesAttributeCommand,
   DescribeInstanceTypeOfferingsCommand,
   DescribeIamInstanceProfileAssociationsCommand,
+  // E.6 — volume modification, spot history, images, monitoring, snapshot access, credit specs
+  ModifyVolumeCommand,
+  DescribeVolumesModificationsCommand,
+  DescribeSpotPriceHistoryCommand,
+  DeregisterImageCommand,
+  CopyImageCommand,
+  MonitorInstancesCommand,
+  UnmonitorInstancesCommand,
+  DescribeSnapshotsCommand,
+  EnableSnapshotBlockPublicAccessCommand,
+  DisableSnapshotBlockPublicAccessCommand,
+  GetSnapshotBlockPublicAccessStateCommand,
+  DescribeInstanceCreditSpecificationsCommand,
+  DescribeEgressOnlyInternetGatewaysCommand,
 } from "@aws-sdk/client-ec2";
 import { getAwsConfig } from "../../clients/aws";
 import { sanitizeName, sanitizeText } from "../../clients/sanitize";
@@ -1571,6 +1585,190 @@ router.put("/route-tables/:routeTableId/replace-route", async (c: Context) => {
     InstanceId: body.instanceId,
   }));
   return c.json({ replaced: true });
+});
+
+// ──────────────────────────────────────────────
+//  E.6 — VOLUME MODIFICATION
+// ──────────────────────────────────────────────
+
+router.post("/volumes/:id/modify", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.size && !body.volumeType && !body.iops && !body.throughput) {
+    return c.json({ error: "size, volumeType, iops or throughput is required" }, 400);
+  }
+  const client = ec2();
+  const result = await client.send(new ModifyVolumeCommand({
+    VolumeId: c.req.param("id")!,
+    Size: body.size,
+    VolumeType: body.volumeType,
+    Iops: body.iops,
+    Throughput: body.throughput,
+    MultiAttachEnabled: body.multiAttachEnabled,
+  }));
+  const mod: any = result.VolumeModification ?? {};
+  return c.json({
+    volumeId: mod.VolumeId ?? null,
+    modificationState: mod.ModificationState ?? null,
+    targetSize: mod.TargetSize ?? null,
+    targetIops: mod.TargetIops ?? null,
+    targetVolumeType: mod.TargetVolumeType ?? null,
+    targetThroughput: mod.TargetThroughput ?? null,
+    originalSize: mod.OriginalSize ?? null,
+    originalIops: mod.OriginalIops ?? null,
+    originalVolumeType: mod.OriginalVolumeType ?? null,
+    progress: mod.Progress ?? null,
+  });
+});
+
+router.get("/volumes/modifications", async (c: Context) => {
+  const ids = (c.req.query("volumeIds") || "").split(",").filter(Boolean);
+  const client = ec2();
+  const result = await client.send(new DescribeVolumesModificationsCommand({
+    VolumeIds: ids.length ? ids : undefined,
+  }));
+  const modifications = (result.VolumesModifications || []).map((m: any) => ({
+    volumeId: m.VolumeId,
+    modificationState: m.ModificationState,
+    targetSize: m.TargetSize ?? null,
+    targetIops: m.TargetIops ?? null,
+    targetVolumeType: m.TargetVolumeType ?? null,
+    targetThroughput: m.TargetThroughput ?? null,
+    originalSize: m.OriginalSize ?? null,
+    originalIops: m.OriginalIops ?? null,
+    originalVolumeType: m.OriginalVolumeType ?? null,
+    progress: m.Progress ?? null,
+    startTime: m.StartTime?.toISOString?.() ?? null,
+  }));
+  return c.json({ modifications, total: modifications.length });
+});
+
+// ──────────────────────────────────────────────
+//  E.6 — SPOT PRICE HISTORY (read-only; Floci returns an empty set)
+// ──────────────────────────────────────────────
+
+router.get("/spot-price-history", async (c: Context) => {
+  const result = await ec2().send(new DescribeSpotPriceHistoryCommand({}));
+  const history = (result.SpotPriceHistory || []).map((h: any) => ({
+    instanceType: h.InstanceType, productDescription: h.ProductDescription,
+    spotPrice: h.SpotPrice, availabilityZone: h.AvailabilityZone,
+    timestamp: h.Timestamp?.toISOString?.() ?? null,
+  }));
+  return c.json({ history, total: history.length });
+});
+
+// ──────────────────────────────────────────────
+//  E.6 — IMAGES: DEREGISTER + COPY
+// ──────────────────────────────────────────────
+
+router.delete("/images/:id", async (c: Context) => {
+  const client = ec2();
+  const result = await client.send(new DeregisterImageCommand({
+    ImageId: c.req.param("id")!,
+    DeleteAssociatedSnapshots: c.req.query("deleteSnapshots") === "true",
+  }));
+  const deletions = ((result as any).DeleteSnapshotResults || []).map((d: any) => ({
+    snapshotId: d.SnapshotId, returnCode: d.ReturnCode,
+  }));
+  return c.json({ id: c.req.param("id"), deregistered: true, snapshotDeletions: deletions });
+});
+
+router.post("/images/copy", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.sourceRegion || !body.sourceImageId || !body.name) {
+    return c.json({ error: "sourceRegion, sourceImageId and name are required" }, 400);
+  }
+  const client = ec2();
+  const result = await client.send(new CopyImageCommand({
+    SourceRegion: body.sourceRegion,
+    SourceImageId: body.sourceImageId,
+    Name: body.name,
+    Description: body.description,
+  }));
+  return c.json({ imageId: result.ImageId ?? null }, 201);
+});
+
+// ──────────────────────────────────────────────
+//  E.6 — INSTANCE MONITORING
+// ──────────────────────────────────────────────
+
+router.post("/instances/monitor", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!Array.isArray(body.instanceIds) || body.instanceIds.length === 0) {
+    return c.json({ error: "instanceIds (non-empty array) is required" }, 400);
+  }
+  const client = ec2();
+  const result = body.enabled === false
+    ? await client.send(new UnmonitorInstancesCommand({ InstanceIds: body.instanceIds }))
+    : await client.send(new MonitorInstancesCommand({ InstanceIds: body.instanceIds }));
+  const instances = ((result as any).InstanceMonitorings || result.InstanceMonitorings || []).map((m: any) => ({
+    instanceId: m.InstanceId, monitoringState: m.Monitoring?.State ?? null,
+  }));
+  return c.json({ instances });
+});
+
+// ──────────────────────────────────────────────
+//  E.6 — SNAPSHOTS (read-only) + SNAPSHOT BLOCK PUBLIC ACCESS
+// ──────────────────────────────────────────────
+
+router.get("/snapshots", async (c: Context) => {
+  const ids = (c.req.query("snapshotIds") || "").split(",").filter(Boolean);
+  const client = ec2();
+  const result = await client.send(new DescribeSnapshotsCommand({
+    SnapshotIds: ids.length ? ids : undefined,
+  }));
+  const snapshots = (result.Snapshots || []).map((s: any) => ({
+    id: s.SnapshotId, volumeId: s.VolumeId, state: s.State, progress: s.Progress,
+    description: s.Description, ownerId: s.OwnerId, volumeSize: s.VolumeSize,
+    startTime: s.StartTime?.toISOString?.() ?? null,
+    tags: (s.Tags || []).map((t: any) => ({ key: t.Key, value: t.Value })),
+  }));
+  return c.json({ snapshots, total: snapshots.length });
+});
+
+router.get("/snapshot-block-public-access", async (c: Context) => {
+  const result = await ec2().send(new GetSnapshotBlockPublicAccessStateCommand({}));
+  return c.json({ state: result.State ?? "unblocked", managedBy: result.ManagedBy ?? null });
+});
+
+router.put("/snapshot-block-public-access", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.state || body.state === "unblocked") {
+    await ec2().send(new DisableSnapshotBlockPublicAccessCommand({}));
+    return c.json({ state: "unblocked" });
+  }
+  const result = await ec2().send(new EnableSnapshotBlockPublicAccessCommand({
+    State: body.state as any,
+  }));
+  return c.json({ state: result.State ?? body.state });
+});
+
+// ──────────────────────────────────────────────
+//  E.6 — INSTANCE CREDIT SPECIFICATIONS
+// ──────────────────────────────────────────────
+
+router.get("/instance-credit-specifications", async (c: Context) => {
+  const ids = (c.req.query("instanceIds") || "").split(",").filter(Boolean);
+  const client = ec2();
+  const result = await client.send(new DescribeInstanceCreditSpecificationsCommand({
+    InstanceIds: ids.length ? ids : undefined,
+  }));
+  const specifications = (result.InstanceCreditSpecifications || []).map((s: any) => ({
+    instanceId: s.InstanceId, cpuCredits: s.CpuCredits,
+  }));
+  return c.json({ specifications, total: specifications.length });
+});
+
+// ──────────────────────────────────────────────
+//  E.6 — EGRESS-ONLY INTERNET GATEWAYS (read-only; Floci models no gateway objects)
+// ──────────────────────────────────────────────
+
+router.get("/egress-only-internet-gateways", async (c: Context) => {
+  const result = await ec2().send(new DescribeEgressOnlyInternetGatewaysCommand({}));
+  const gateways = (result.EgressOnlyInternetGateways || []).map((g: any) => ({
+    id: g.EgressOnlyInternetGatewayId,
+    attachments: (g.Attachments || []).map((a: any) => ({ vpcId: a.VpcId, state: a.State })),
+  }));
+  return c.json({ gateways, total: gateways.length });
 });
 
 export default router;

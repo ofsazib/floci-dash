@@ -64,6 +64,17 @@ import {
   useEC2Volumes,
   useEC2CreateVolume,
   useEC2DeleteVolume,
+  useEC2ModifyVolume,
+  useEC2VolumeModifications,
+  useEC2CopyImage,
+  useEC2DeregisterImage,
+  useEC2SetMonitoring,
+  useEC2Snapshots,
+  useEC2SnapshotBlockPublicAccess,
+  useEC2SetSnapshotBlockPublicAccess,
+  useEC2InstanceCreditSpecifications,
+  useEC2EgressOnlyInternetGateways,
+  useEC2SpotPriceHistory,
   useEC2NetworkInterfaces,
   useEC2Amis,
   useEC2PrefixLists,
@@ -163,6 +174,11 @@ export default function EC2Page() {
       id: "amis",
       label: "AMIs",
       content: <EC2AmiList />,
+    },
+    {
+      id: "snapshots",
+      label: "Snapshots",
+      content: <EC2SnapshotsPanel />,
     },
     {
       id: "network-interfaces",
@@ -1174,7 +1190,11 @@ function EC2VolumeList() {
   const { data, isLoading, isError, error } = useEC2Volumes();
   const create = useEC2CreateVolume();
   const deleteVol = useEC2DeleteVolume();
+  const modify = useEC2ModifyVolume();
+  const { data: modifications } = useEC2VolumeModifications([]);
   const [showCreate, setShowCreate] = useState(false);
+  const [modifyTarget, setModifyTarget] = useState<string | null>(null);
+  const [modifyForm, setModifyForm] = useState({ size: "", volumeType: "gp3", iops: "", throughput: "" });
   const [form, setForm] = useState({ availabilityZone: "", size: "8", volumeType: "gp2" });
 
   const items = (data?.volumes || []).map((v) => ({
@@ -1193,10 +1213,27 @@ function EC2VolumeList() {
           { id: "state", header: "State", cell: (item: any) => <StatusIndicator type={item.state === "available" ? "success" : item.state === "in-use" ? "in-progress" : "warning"}>{item.state}</StatusIndicator> },
           { id: "az", header: "AZ", cell: (item: any) => item.az },
           { id: "attachments", header: "Attachments", cell: (item: any) => item.attachments },
-          { id: "actions", header: "", cell: (item: any) => item.state === "available" && <DeleteButton itemName={item.id} resourceType="volume" loading={deleteVol.isPending && deleteVol.variables === item.id} onDelete={() => deleteVol.mutateAsync(item.id)} /> },
+          { id: "actions", header: "", cell: (item: any) => (
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="icon" iconName="edit" ariaLabel={`Modify ${item.id}`} onClick={() => { setModifyTarget(item.id); setModifyForm({ size: String(item.size), volumeType: item.type, iops: item.iops ? String(item.iops) : "", throughput: "" }); }} />
+              {item.state === "available" && <DeleteButton itemName={item.id} resourceType="volume" loading={deleteVol.isPending && deleteVol.variables === item.id} onDelete={() => deleteVol.mutateAsync(item.id)} />}
+            </SpaceBetween>
+          ) },
         ]}
         loading={isLoading} emptyMessage="No volumes" filterEnabled onCreate={() => setShowCreate(true)}
       />
+
+      {modifications && modifications.modifications.length > 0 && (
+        <ResourceTable resourceName="Modification" headerTitle="Volume modifications" items={modifications.modifications}
+          columns={[
+            { id: "volumeId", header: "Volume ID", cell: (m: any) => m.volumeId, isRowHeader: true },
+            { id: "state", header: "State", cell: (m: any) => m.modificationState },
+            { id: "target", header: "Target", cell: (m: any) => `${m.targetSize ?? "?"} GiB ${m.targetVolumeType ?? ""}${m.progress != null ? ` (${m.progress}%)` : ""}` },
+            { id: "original", header: "Original", cell: (m: any) => `${m.originalSize ?? "?"} GiB ${m.originalVolumeType ?? ""}` },
+          ]}
+          emptyMessage="No volume modifications"
+        />
+      )}
 
       <Modal visible={showCreate} onDismiss={() => setShowCreate(false)} header="Create Volume" size="medium"
         footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
@@ -1212,6 +1249,30 @@ function EC2VolumeList() {
               onChange={({ detail }) => setForm(p => ({ ...p, volumeType: detail.selectedOption.value! }))}
               options={["gp2", "gp3", "io1", "io2", "sc1", "st1", "standard"].map(t => ({ label: t.toUpperCase(), value: t }))} />
           </FormField>
+        </SpaceBetween></Form>
+      </Modal>
+
+      <Modal visible={modifyTarget !== null} onDismiss={() => setModifyTarget(null)} header={`Modify Volume ${modifyTarget ?? ""}`} size="medium"
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setModifyTarget(null)}>Cancel</Button>
+          <Button variant="primary" loading={modify.isPending} onClick={() => modify.mutate({
+            volumeId: modifyTarget!,
+            size: modifyForm.size ? parseInt(modifyForm.size) : undefined,
+            volumeType: modifyForm.volumeType,
+            iops: modifyForm.iops ? parseInt(modifyForm.iops) : undefined,
+            throughput: modifyForm.throughput ? parseInt(modifyForm.throughput) : undefined,
+          }, { onSuccess: () => setModifyTarget(null) })}>Modify</Button>
+        </SpaceBetween></Box>}
+      >
+        <Form><SpaceBetween size="m">
+          <FormField label="Size (GiB)"><Input type="number" value={modifyForm.size} onChange={({ detail }) => setModifyForm(p => ({ ...p, size: detail.value }))} /></FormField>
+          <FormField label="Volume type">
+            <Select selectedOption={{ label: modifyForm.volumeType.toUpperCase(), value: modifyForm.volumeType }}
+              onChange={({ detail }) => setModifyForm(p => ({ ...p, volumeType: detail.selectedOption.value! }))}
+              options={["gp2", "gp3", "io1", "io2", "sc1", "st1", "standard"].map(t => ({ label: t.toUpperCase(), value: t }))} />
+          </FormField>
+          <FormField label="IOPS"><Input type="number" value={modifyForm.iops} onChange={({ detail }) => setModifyForm(p => ({ ...p, iops: detail.value }))} /></FormField>
+          <FormField label="Throughput (MiB/s)"><Input type="number" value={modifyForm.throughput} onChange={({ detail }) => setModifyForm(p => ({ ...p, throughput: detail.value }))} /></FormField>
         </SpaceBetween></Form>
       </Modal>
     </>
@@ -1296,6 +1357,10 @@ export function EC2LaunchTemplateList() {
 
 function EC2AmiList() {
   const { data, isLoading, isError, error } = useEC2Amis();
+  const copyImage = useEC2CopyImage();
+  const deregister = useEC2DeregisterImage();
+  const [copyTarget, setCopyTarget] = useState<string | null>(null);
+  const [copyForm, setCopyForm] = useState({ sourceRegion: "us-east-1", name: "", description: "" });
   const items = (data?.images || []).map((img) => ({
     id: img.id, name: img.name, description: img.description, architecture: img.architecture, state: img.state, platform: img.platform || "Linux",
   }));
@@ -1310,11 +1375,121 @@ function EC2AmiList() {
           { id: "architecture", header: "Architecture", cell: (item: any) => item.architecture || "-" },
           { id: "platform", header: "Platform", cell: (item: any) => item.platform },
           { id: "state", header: "State", cell: (item: any) => <StatusIndicator type={item.state === "available" ? "success" : "warning"}>{item.state}</StatusIndicator> },
+          { id: "actions", header: "", cell: (item: any) => (
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="icon" iconName="copy" ariaLabel={`Copy ${item.id}`} onClick={() => { setCopyTarget(item.id); setCopyForm({ sourceRegion: "us-east-1", name: `${item.name || item.id}-copy`, description: "" }); }} />
+              <DeleteButton itemName={item.id} resourceType="AMI" loading={deregister.isPending && deregister.variables?.imageId === item.id} onDelete={() => deregister.mutateAsync({ imageId: item.id })} />
+            </SpaceBetween>
+          ) },
         ]}
         loading={isLoading} emptyMessage="No AMIs found" filterEnabled
         filterPlaceholder="Find AMIs by ID or name" filterFunction={(item: any, t: string) => item.id.toLowerCase().includes(t.toLowerCase()) || (item.name || "").toLowerCase().includes(t.toLowerCase())}
       />
+
+      <Modal visible={copyTarget !== null} onDismiss={() => setCopyTarget(null)} header={`Copy AMI ${copyTarget ?? ""}`} size="medium"
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setCopyTarget(null)}>Cancel</Button>
+          <Button variant="primary" loading={copyImage.isPending} disabled={!copyForm.name || !copyForm.sourceRegion} onClick={() => copyImage.mutate({
+            sourceRegion: copyForm.sourceRegion,
+            sourceImageId: copyTarget!,
+            name: copyForm.name,
+            description: copyForm.description || undefined,
+          }, { onSuccess: () => setCopyTarget(null) })}>Copy</Button>
+        </SpaceBetween></Box>}
+      >
+        <Form><SpaceBetween size="m">
+          <FormField label="Source region"><Input value={copyForm.sourceRegion} onChange={({ detail }) => setCopyForm(p => ({ ...p, sourceRegion: detail.value }))} placeholder="us-east-1" /></FormField>
+          <FormField label="New AMI name"><Input value={copyForm.name} onChange={({ detail }) => setCopyForm(p => ({ ...p, name: detail.value }))} placeholder="my-ami-copy" /></FormField>
+          <FormField label="Description (optional)"><Input value={copyForm.description} onChange={({ detail }) => setCopyForm(p => ({ ...p, description: detail.value }))} /></FormField>
+        </SpaceBetween></Form>
+      </Modal>
     </>
+  );
+}
+
+// ─── E.6: SNAPSHOTS + ACCOUNT SETTINGS ────────────────
+
+export function EC2SnapshotsPanel() {
+  const { data, isLoading } = useEC2Snapshots([]);
+  const { data: access } = useEC2SnapshotBlockPublicAccess();
+  const setAccess = useEC2SetSnapshotBlockPublicAccess();
+  const { data: creditSpecs } = useEC2InstanceCreditSpecifications([]);
+  const { data: eigws } = useEC2EgressOnlyInternetGateways();
+  const { data: spot } = useEC2SpotPriceHistory();
+  const [state, setState] = useState<string | null>(null);
+
+  const effectiveState = state ?? access?.state ?? null;
+
+  return (
+    <SpaceBetween size="l">
+      <ResourceTable resourceName="Snapshot" headerTitle="Snapshots" headerCounter={data?.total} items={data?.snapshots || []}
+        columns={[
+          { id: "id", header: "Snapshot ID", cell: (item: any) => item.id, isRowHeader: true },
+          { id: "volume", header: "Volume", cell: (item: any) => item.volumeId },
+          { id: "state", header: "State", cell: (item: any) => <StatusIndicator type={item.state === "completed" ? "success" : "in-progress"}>{item.state}</StatusIndicator> },
+          { id: "progress", header: "Progress", cell: (item: any) => item.progress ?? "-" },
+          { id: "size", header: "Size", cell: (item: any) => item.volumeSize ? `${item.volumeSize} GiB` : "-" },
+          { id: "description", header: "Description", cell: (item: any) => item.description || "-" },
+        ]}
+        loading={isLoading} emptyMessage="No snapshots"
+      />
+
+      <Container header={<Header variant="h2">Snapshot block public access</Header>}>
+        <SpaceBetween size="s">
+          <SpaceBetween direction="horizontal" size="s">
+            <StatusIndicator type={effectiveState === "unblocked" ? "stopped" : "success"}>
+              {effectiveState ?? "loading"}
+            </StatusIndicator>
+            <Select
+              disabled={setAccess.isPending}
+              selectedOption={effectiveState ? { label: effectiveState, value: effectiveState } : null}
+              onChange={({ detail }) => setState(detail.selectedOption.value!)}
+              options={["unblocked", "block-new-sharing", "block-all-sharing"].map(s => ({ label: s, value: s }))}
+            />
+            <Button
+              variant="primary"
+              loading={setAccess.isPending}
+              disabled={!effectiveState || effectiveState === (access?.state ?? null)}
+              onClick={() => setAccess.mutate(effectiveState!)}
+            >
+              Apply
+            </Button>
+          </SpaceBetween>
+        </SpaceBetween>
+      </Container>
+
+      <Container header={<Header variant="h2">Instance credit specifications</Header>}>
+        <ResourceTable resourceName="specification" headerTitle="Credit specifications" items={creditSpecs?.specifications || []}
+          columns={[
+            { id: "instanceId", header: "Instance ID", cell: (s: any) => s.instanceId, isRowHeader: true },
+            { id: "cpuCredits", header: "CPU credits", cell: (s: any) => s.cpuCredits },
+          ]}
+          emptyMessage="No credit specifications"
+        />
+      </Container>
+
+      <Container header={<Header variant="h2">Egress-only internet gateways</Header>}>
+        <ResourceTable resourceName="gateway" headerTitle="Egress-only internet gateways" items={eigws?.gateways || []}
+          columns={[
+            { id: "id", header: "Gateway ID", cell: (g: any) => g.id, isRowHeader: true },
+            { id: "attachments", header: "VPC attachments", cell: (g: any) => (g.attachments || []).map((a: any) => `${a.vpcId} (${a.state})`).join(", ") || "-" },
+          ]}
+          emptyMessage="No egress-only internet gateways"
+        />
+      </Container>
+
+      <Container header={<Header variant="h2">Spot price history</Header>}>
+        <ResourceTable resourceName="price" headerTitle="Spot price history" items={spot?.history || []}
+          columns={[
+            { id: "type", header: "Instance type", cell: (h: any) => h.instanceType, isRowHeader: true },
+            { id: "product", header: "Product", cell: (h: any) => h.productDescription },
+            { id: "price", header: "Price", cell: (h: any) => `$${h.spotPrice}` },
+            { id: "az", header: "AZ", cell: (h: any) => h.availabilityZone },
+          ]}
+          emptyMessage="No spot price history"
+        />
+      </Container>
+    </SpaceBetween>
   );
 }
 

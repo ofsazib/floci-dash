@@ -96,6 +96,17 @@ import {
   useEC2IAMInstanceProfileAssociations,
   useCreateEC2Image,
   useEC2ReplaceRoute,
+  useEC2ModifyVolume,
+  useEC2VolumeModifications,
+  useEC2SpotPriceHistory,
+  useEC2DeregisterImage,
+  useEC2CopyImage,
+  useEC2SetMonitoring,
+  useEC2Snapshots,
+  useEC2SnapshotBlockPublicAccess,
+  useEC2SetSnapshotBlockPublicAccess,
+  useEC2InstanceCreditSpecifications,
+  useEC2EgressOnlyInternetGateways,
 } from "./useEC2";
 
 function createWrapper() {
@@ -890,5 +901,115 @@ describe("useEC2 — P1 misc hooks", () => {
       method: "PUT",
       body: JSON.stringify({ destinationCidrBlock: "0.0.0.0/0", gatewayId: "igw-1" }),
     });
+  });
+  it("E.6 useEC2ModifyVolume POSTs and invalidates", async () => {
+    mockApi.mockResolvedValueOnce({ modificationState: "modifying" });
+    const { result } = renderHook(() => useEC2ModifyVolume(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ volumeId: "vol-1", size: 100, volumeType: "gp3" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/volumes/vol-1/modify", {
+      method: "POST",
+      body: JSON.stringify({ size: 100, volumeType: "gp3" }),
+    });
+  });
+
+  it("E.6 useEC2VolumeModifications gates and fetches", async () => {
+    mockApi.mockResolvedValueOnce({ modifications: [], total: 0 });
+    const { result } = renderHook(() => useEC2VolumeModifications(["vol-1"]), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/volumes/modifications?volumeIds=vol-1");
+
+    mockApi.mockResolvedValueOnce({ modifications: [], total: 0 });
+    const unfiltered = renderHook(() => useEC2VolumeModifications([]), { wrapper: createWrapper() });
+    await waitFor(() => expect(unfiltered.result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/volumes/modifications");
+
+    const disabled = renderHook(() => useEC2VolumeModifications(null), { wrapper: createWrapper() });
+    expect(disabled.result.current.fetchStatus).toBe("idle");
+  });
+
+  it("E.6 useEC2SpotPriceHistory fetches", async () => {
+    mockApi.mockResolvedValueOnce({ history: [], total: 0 });
+    const { result } = renderHook(() => useEC2SpotPriceHistory(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/spot-price-history");
+  });
+
+  it("E.6 useEC2DeregisterImage DELETEs with snapshot flag", async () => {
+    mockApi.mockResolvedValueOnce({ deregistered: true });
+    const { result } = renderHook(() => useEC2DeregisterImage(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ imageId: "ami-1", deleteSnapshots: true });
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/images/ami-1?deleteSnapshots=true", { method: "DELETE" });
+    await result.current.mutateAsync({ imageId: "ami-2" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/images/ami-2?deleteSnapshots=false", { method: "DELETE" });
+  });
+
+  it("E.6 useEC2CopyImage POSTs", async () => {
+    mockApi.mockResolvedValueOnce({ imageId: "ami-2" });
+    const { result } = renderHook(() => useEC2CopyImage(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ sourceRegion: "us-east-1", sourceImageId: "ami-1", name: "copy" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/images/copy", {
+      method: "POST",
+      body: JSON.stringify({ sourceRegion: "us-east-1", sourceImageId: "ami-1", name: "copy" }),
+    });
+  });
+
+  it("E.6 useEC2SetMonitoring POSTs", async () => {
+    mockApi.mockResolvedValueOnce({ instances: [] });
+    const { result } = renderHook(() => useEC2SetMonitoring(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ instanceIds: ["i-1"], enabled: true });
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/instances/monitor", {
+      method: "POST",
+      body: JSON.stringify({ instanceIds: ["i-1"], enabled: true }),
+    });
+  });
+
+  it("E.6 useEC2Snapshots gates and fetches", async () => {
+    mockApi.mockResolvedValueOnce({ snapshots: [], total: 0 });
+    const { result } = renderHook(() => useEC2Snapshots(["snap-1"]), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/snapshots?snapshotIds=snap-1");
+
+    mockApi.mockResolvedValueOnce({ snapshots: [], total: 0 });
+    const unfiltered = renderHook(() => useEC2Snapshots([]), { wrapper: createWrapper() });
+    await waitFor(() => expect(unfiltered.result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/snapshots");
+
+    const disabled = renderHook(() => useEC2Snapshots(null), { wrapper: createWrapper() });
+    expect(disabled.result.current.fetchStatus).toBe("idle");
+  });
+
+  it("E.6 snapshot block public access query + mutation", async () => {
+    mockApi.mockResolvedValueOnce({ state: "unblocked", managedBy: null });
+    const { result } = renderHook(() => useEC2SnapshotBlockPublicAccess(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/snapshot-block-public-access");
+
+    mockApi.mockResolvedValueOnce({ state: "block-all-sharing" });
+    const { result: mut } = renderHook(() => useEC2SetSnapshotBlockPublicAccess(), { wrapper: createWrapper() });
+    await mut.current.mutateAsync("block-all-sharing");
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/snapshot-block-public-access", {
+      method: "PUT",
+      body: JSON.stringify({ state: "block-all-sharing" }),
+    });
+  });
+
+  it("E.6 credit specifications + egress-only IGW queries", async () => {
+    const disabled = renderHook(() => useEC2InstanceCreditSpecifications(null), { wrapper: createWrapper() });
+    expect(disabled.result.current.fetchStatus).toBe("idle");
+
+    mockApi.mockResolvedValueOnce({ specifications: [], total: 0 });
+    const { result } = renderHook(() => useEC2InstanceCreditSpecifications([]), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/instance-credit-specifications");
+
+    mockApi.mockResolvedValueOnce({ specifications: [], total: 0 });
+    const filtered = renderHook(() => useEC2InstanceCreditSpecifications(["i-1"]), { wrapper: createWrapper() });
+    await waitFor(() => expect(filtered.result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/instance-credit-specifications?instanceIds=i-1");
+
+    mockApi.mockResolvedValueOnce({ gateways: [], total: 0 });
+    const { result: g } = renderHook(() => useEC2EgressOnlyInternetGateways(), { wrapper: createWrapper() });
+    await waitFor(() => expect(g.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ec2/egress-only-internet-gateways");
   });
 });

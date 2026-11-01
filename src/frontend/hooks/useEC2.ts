@@ -984,3 +984,109 @@ export function useEC2ReplaceRoute() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ec2", "route-tables"] }),
   });
 }
+
+// ── E.6 — volume modification, spot history, images, monitoring, snapshots ──
+
+export function useEC2ModifyVolume() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ volumeId, ...body }: { volumeId: string; size?: number; volumeType?: string; iops?: number; throughput?: number; multiAttachEnabled?: boolean }) =>
+      api(`/aws/ec2/volumes/${volumeId}/modify`, { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["aws", "ec2", "volumes"] });
+      qc.invalidateQueries({ queryKey: ["aws", "ec2", "volume-modifications"] });
+    },
+  });
+}
+
+export function useEC2VolumeModifications(volumeIds: string[] | null) {
+  return useQuery({
+    queryKey: ["aws", "ec2", "volume-modifications", volumeIds],
+    queryFn: () =>
+      api<{ modifications: Record<string, unknown>[]; total: number }>(
+        `/aws/ec2/volumes/modifications${volumeIds?.length ? `?volumeIds=${encodeURIComponent(volumeIds.join(","))}` : ""}`
+      ),
+    enabled: volumeIds !== null,
+  });
+}
+
+export function useEC2SpotPriceHistory() {
+  return useQuery({
+    queryKey: ["aws", "ec2", "spot-price-history"],
+    queryFn: () =>
+      api<{ history: Record<string, unknown>[]; total: number }>("/aws/ec2/spot-price-history"),
+  });
+}
+
+export function useEC2DeregisterImage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ imageId, deleteSnapshots }: { imageId: string; deleteSnapshots?: boolean }) =>
+      api(`/aws/ec2/images/${imageId}?deleteSnapshots=${deleteSnapshots ? "true" : "false"}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ec2", "images"] }),
+  });
+}
+
+export function useEC2CopyImage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { sourceRegion: string; sourceImageId: string; name: string; description?: string }) =>
+      api("/aws/ec2/images/copy", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ec2", "images"] }),
+  });
+}
+
+export function useEC2SetMonitoring() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { instanceIds: string[]; enabled: boolean }) =>
+      api("/aws/ec2/instances/monitor", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ec2", "instances"] }),
+  });
+}
+
+export function useEC2Snapshots(snapshotIds: string[] | null) {
+  return useQuery({
+    queryKey: ["aws", "ec2", "snapshots", snapshotIds],
+    queryFn: () =>
+      api<{ snapshots: Record<string, unknown>[]; total: number }>(
+        `/aws/ec2/snapshots${snapshotIds?.length ? `?snapshotIds=${encodeURIComponent(snapshotIds.join(","))}` : ""}`
+      ),
+    enabled: snapshotIds !== null,
+  });
+}
+
+export function useEC2SnapshotBlockPublicAccess() {
+  return useQuery({
+    queryKey: ["aws", "ec2", "snapshot-block-public-access"],
+    queryFn: () => api<{ state: string; managedBy: string | null }>("/aws/ec2/snapshot-block-public-access"),
+  });
+}
+
+export function useEC2SetSnapshotBlockPublicAccess() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (state: string) =>
+      api("/aws/ec2/snapshot-block-public-access", { method: "PUT", body: JSON.stringify({ state }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ec2", "snapshot-block-public-access"] }),
+  });
+}
+
+export function useEC2InstanceCreditSpecifications(instanceIds: string[] | null) {
+  return useQuery({
+    queryKey: ["aws", "ec2", "instance-credit-specifications", instanceIds],
+    queryFn: () =>
+      api<{ specifications: Record<string, unknown>[]; total: number }>(
+        `/aws/ec2/instance-credit-specifications${instanceIds?.length ? `?instanceIds=${encodeURIComponent(instanceIds.join(","))}` : ""}`
+      ),
+    enabled: instanceIds !== null,
+  });
+}
+
+export function useEC2EgressOnlyInternetGateways() {
+  return useQuery({
+    queryKey: ["aws", "ec2", "egress-only-internet-gateways"],
+    queryFn: () =>
+      api<{ gateways: Record<string, unknown>[]; total: number }>("/aws/ec2/egress-only-internet-gateways"),
+  });
+}

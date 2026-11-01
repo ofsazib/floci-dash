@@ -139,6 +139,20 @@ vi.mock("@aws-sdk/client-ec2", () => ({
   DescribeAddressesAttributeCommand: createCmd("DescribeAddressesAttributeCommand"),
   DescribeInstanceTypeOfferingsCommand: createCmd("DescribeInstanceTypeOfferingsCommand"),
   DescribeIamInstanceProfileAssociationsCommand: createCmd("DescribeIamInstanceProfileAssociationsCommand"),
+  // E.6
+  ModifyVolumeCommand: createCmd("ModifyVolumeCommand"),
+  DescribeVolumesModificationsCommand: createCmd("DescribeVolumesModificationsCommand"),
+  DescribeSpotPriceHistoryCommand: createCmd("DescribeSpotPriceHistoryCommand"),
+  DeregisterImageCommand: createCmd("DeregisterImageCommand"),
+  CopyImageCommand: createCmd("CopyImageCommand"),
+  MonitorInstancesCommand: createCmd("MonitorInstancesCommand"),
+  UnmonitorInstancesCommand: createCmd("UnmonitorInstancesCommand"),
+  DescribeSnapshotsCommand: createCmd("DescribeSnapshotsCommand"),
+  EnableSnapshotBlockPublicAccessCommand: createCmd("EnableSnapshotBlockPublicAccessCommand"),
+  DisableSnapshotBlockPublicAccessCommand: createCmd("DisableSnapshotBlockPublicAccessCommand"),
+  GetSnapshotBlockPublicAccessStateCommand: createCmd("GetSnapshotBlockPublicAccessStateCommand"),
+  DescribeInstanceCreditSpecificationsCommand: createCmd("DescribeInstanceCreditSpecificationsCommand"),
+  DescribeEgressOnlyInternetGatewaysCommand: createCmd("DescribeEgressOnlyInternetGatewaysCommand"),
 }));
 
 // Now import the router after the mock is set up
@@ -2519,5 +2533,333 @@ describe("EC2 misc ops", () => {
     expect(res.status).toBe(200);
     expect(mockSend.mock.calls[0][0].GatewayId).toBe("igw-1");
     expect((await putReq("/route-tables/rtb-1/replace-route", { destinationCidrBlock: "0.0.0.0/0" })).status).toBe(400);
+  });
+});
+
+describe("E.6 — volume modification", () => {
+  it("modifies a volume", async () => {
+    mockSend.mockResolvedValueOnce({
+      VolumeModification: {
+        VolumeId: "vol-1", ModificationState: "modifying", TargetSize: 100,
+        TargetVolumeType: "gp3", OriginalSize: 8, OriginalVolumeType: "gp2", Progress: 0,
+      },
+    });
+    const res = await post("/volumes/vol-1/modify", { size: 100, volumeType: "gp3" });
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].VolumeId).toBe("vol-1");
+    const body = await res.json();
+    expect(body.modificationState).toBe("modifying");
+    expect(body.targetSize).toBe(100);
+    expect(body.originalVolumeType).toBe("gp2");
+  });
+
+  it("400s a modify with no target fields", async () => {
+    expect((await post("/volumes/vol-1/modify", {})).status).toBe(400);
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  it("sparse modify response — null fields", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const body = await (await post("/volumes/vol-1/modify", { iops: 3000 })).json();
+    expect(body.volumeId).toBeNull();
+    expect(body.modificationState).toBeNull();
+  });
+
+  it("lists volume modifications (filtered and unfiltered)", async () => {
+    mockSend.mockResolvedValueOnce({
+      VolumesModifications: [{
+        VolumeId: "vol-1", ModificationState: "completed", TargetSize: 100,
+        OriginalSize: 8, StartTime: new Date("2026-01-01T00:00:00Z"),
+      }],
+    });
+    const body = await (await get("/volumes/modifications?volumeIds=vol-1,vol-2")).json();
+    expect(mockSend.mock.calls[0][0].VolumeIds).toEqual(["vol-1", "vol-2"]);
+    expect(body.total).toBe(1);
+    expect(body.modifications[0].startTime).toBe("2026-01-01T00:00:00.000Z");
+    expect(body.modifications[0].targetIops).toBeNull();
+
+    mockSend.mockResolvedValueOnce({ VolumesModifications: [] });
+    const empty = await (await get("/volumes/modifications")).json();
+    expect(mockSend.mock.calls[1][0].VolumeIds).toBeUndefined();
+    expect(empty.total).toBe(0);
+  });
+});
+
+describe("E.6 — spot price history", () => {
+  it("lists history entries and empty set", async () => {
+    mockSend.mockResolvedValueOnce({
+      SpotPriceHistory: [{
+        InstanceType: "t3.micro", ProductDescription: "Linux/UNIX", SpotPrice: "0.004",
+        AvailabilityZone: "us-east-1a", Timestamp: new Date("2026-01-01T00:00:00Z"),
+      }],
+    });
+    const body = await (await get("/spot-price-history")).json();
+    expect(body.total).toBe(1);
+    expect(body.history[0].spotPrice).toBe("0.004");
+
+    mockSend.mockResolvedValueOnce({});
+    expect((await (await get("/spot-price-history")).json()).total).toBe(0);
+  });
+});
+
+describe("E.6 — image deregister + copy", () => {
+  it("deregisters an image without snapshot deletion", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await del("/images/ami-1");
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].ImageId).toBe("ami-1");
+    expect(mockSend.mock.calls[0][0].DeleteAssociatedSnapshots).toBeFalsy();
+    expect((await res.json()).deregistered).toBe(true);
+  });
+
+  it("deregisters with snapshot deletions reported", async () => {
+    mockSend.mockResolvedValueOnce({
+      DeleteSnapshotResults: [{ SnapshotId: "snap-1", ReturnCode: "succeeded" }],
+    });
+    const body = await (await del("/images/ami-2?deleteSnapshots=true")).json();
+    expect(mockSend.mock.calls[0][0].DeleteAssociatedSnapshots).toBe(true);
+    expect(body.snapshotDeletions[0].snapshotId).toBe("snap-1");
+  });
+
+  it("copies an image and 400s missing fields", async () => {
+    mockSend.mockResolvedValueOnce({ ImageId: "ami-copy" });
+    const res = await post("/images/copy", { sourceRegion: "us-east-1", sourceImageId: "ami-1", name: "copy" });
+    expect(res.status).toBe(201);
+    expect(mockSend.mock.calls[0][0].SourceRegion).toBe("us-east-1");
+    expect((await res.json()).imageId).toBe("ami-copy");
+    expect((await post("/images/copy", { sourceRegion: "us-east-1" })).status).toBe(400);
+  });
+});
+
+describe("E.6 — instance monitoring", () => {
+  it("enables monitoring", async () => {
+    mockSend.mockResolvedValueOnce({
+      InstanceMonitorings: [{ InstanceId: "i-1", Monitoring: { State: "enabled" } }],
+    });
+    const res = await post("/instances/monitor", { instanceIds: ["i-1"], enabled: true });
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].InstanceIds).toEqual(["i-1"]);
+    expect((await res.json()).instances[0].monitoringState).toBe("enabled");
+  });
+
+  it("disables monitoring", async () => {
+    mockSend.mockResolvedValueOnce({
+      InstanceMonitorings: [{ InstanceId: "i-1", Monitoring: { State: "disabled" } }],
+    });
+    const body = await (await post("/instances/monitor", { instanceIds: ["i-1"], enabled: false })).json();
+    expect(mockSend.mock.calls[0][0].InstanceIds).toEqual(["i-1"]);
+    expect(body.instances[0].monitoringState).toBe("disabled");
+  });
+
+  it("sparse monitoring response", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const body = await (await post("/instances/monitor", { instanceIds: ["i-1"] })).json();
+    expect(body.instances).toEqual([]);
+  });
+
+  it("400s missing or empty instanceIds", async () => {
+    expect((await post("/instances/monitor", {})).status).toBe(400);
+    expect((await post("/instances/monitor", { instanceIds: [] })).status).toBe(400);
+  });
+});
+
+describe("E.6 — snapshots + block public access", () => {
+  it("lists snapshots (all and by id)", async () => {
+    mockSend.mockResolvedValueOnce({
+      Snapshots: [{
+        SnapshotId: "snap-1", VolumeId: "vol-1", State: "completed", Progress: "100%",
+        Description: "d", OwnerId: "000000000000", VolumeSize: 8,
+        StartTime: new Date("2026-01-01T00:00:00Z"), Tags: [{ Key: "k", Value: "v" }],
+      }],
+    });
+    const body = await (await get("/snapshots")).json();
+    expect(mockSend.mock.calls[0][0].SnapshotIds).toBeUndefined();
+    expect(body.total).toBe(1);
+    expect(body.snapshots[0].tags[0].key).toBe("k");
+
+    mockSend.mockResolvedValueOnce({ Snapshots: [] });
+    await get("/snapshots?snapshotIds=snap-1");
+    expect(mockSend.mock.calls[1][0].SnapshotIds).toEqual(["snap-1"]);
+  });
+
+  it("gets block public access state (default unblocked)", async () => {
+    mockSend.mockResolvedValueOnce({ State: "block-all-sharing", ManagedBy: "account" });
+    const body = await (await get("/snapshot-block-public-access")).json();
+    expect(body.state).toBe("block-all-sharing");
+    expect(body.managedBy).toBe("account");
+
+    mockSend.mockResolvedValueOnce({});
+    expect((await (await get("/snapshot-block-public-access")).json()).state).toBe("unblocked");
+  });
+
+  it("enables and disables block public access", async () => {
+    mockSend.mockResolvedValueOnce({ State: "block-new-sharing" });
+    const res = await putReq("/snapshot-block-public-access", { state: "block-new-sharing" });
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].State).toBe("block-new-sharing");
+    expect((await res.json()).state).toBe("block-new-sharing");
+
+    mockSend.mockResolvedValueOnce({});
+    const body = await (await putReq("/snapshot-block-public-access", { state: "unblocked" })).json();
+    expect(mockSend.mock.calls[1][0].__cmdName).toBe("DisableSnapshotBlockPublicAccessCommand");
+    expect(body.state).toBe("unblocked");
+  });
+});
+
+describe("E.6 — credit specifications + egress-only IGWs", () => {
+  it("lists credit specifications", async () => {
+    mockSend.mockResolvedValueOnce({
+      InstanceCreditSpecifications: [{ InstanceId: "i-1", CpuCredits: "unlimited" }],
+    });
+    const body = await (await get("/instance-credit-specifications")).json();
+    expect(body.total).toBe(1);
+    expect(body.specifications[0].cpuCredits).toBe("unlimited");
+
+    mockSend.mockResolvedValueOnce({ InstanceCreditSpecifications: [] });
+    await get("/instance-credit-specifications?instanceIds=i-1,i-2");
+    expect(mockSend.mock.calls[1][0].InstanceIds).toEqual(["i-1", "i-2"]);
+  });
+
+  it("lists egress-only internet gateways", async () => {
+    mockSend.mockResolvedValueOnce({
+      EgressOnlyInternetGateways: [{
+        EgressOnlyInternetGatewayId: "eigw-1",
+        Attachments: [{ VpcId: "vpc-1", State: "attached" }],
+      }],
+    });
+    const body = await (await get("/egress-only-internet-gateways")).json();
+    expect(body.total).toBe(1);
+    expect(body.gateways[0].attachments[0].vpcId).toBe("vpc-1");
+
+    mockSend.mockResolvedValueOnce({});
+    expect((await (await get("/egress-only-internet-gateways")).json()).total).toBe(0);
+  });
+});
+
+describe("E.6 — branch closure for misc routes", () => {
+  it("attribute defaults when query param absent", async () => {
+    mockSend.mockResolvedValueOnce({ InstanceId: "i-1" });
+    await get("/instances/i-1/attributes");
+    expect(mockSend.mock.calls[0][0].Attribute).toBe("instanceType");
+    mockSend.mockResolvedValueOnce({ VpcId: "vpc-1" });
+    await get("/vpcs/vpc-1/attributes");
+    expect(mockSend.mock.calls[1][0].Attribute).toBe("enableDnsHostnames");
+  });
+
+  it("vpc endpoint services sparse response", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const body = await (await get("/vpc-endpoint-services")).json();
+    expect(body.serviceNames).toEqual([]);
+    expect(body.serviceDetails).toEqual([]);
+    expect(body.total).toBe(0);
+  });
+
+  it("default vpc null Vpc fallback", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const body = await (await post("/default-vpc", {})).json();
+    expect(body.vpc).toBeNull();
+  });
+
+  it("security groups for vpc sparse response", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const body = await (await get("/security-groups-for-vpc")).json();
+    expect(body.securityGroups).toEqual([]);
+    expect(body.total).toBe(0);
+  });
+
+  it("egress descriptions 400 without ipPermissions", async () => {
+    expect((await putReq("/security-groups/sg-1/egress-descriptions", {})).status).toBe(400);
+  });
+
+  it("instance type offerings defaults and sparse entries", async () => {
+    mockSend.mockResolvedValueOnce({ InstanceTypeOfferings: [{ InstanceType: "t3.small" }] });
+    const body = await (await get("/instance-type-offerings")).json();
+    expect(mockSend.mock.calls[0][0].LocationType).toBe("region");
+    expect(mockSend.mock.calls[0][0].MaxResults).toBeUndefined();
+    expect(body.offerings[0].zone).toBeNull();
+
+    mockSend.mockResolvedValueOnce({ InstanceTypeOfferings: [] });
+    const empty = await (await get("/instance-type-offerings?locationType=availability-zone&maxResults=5")).json();
+    expect(mockSend.mock.calls[1][0].LocationType).toBe("availability-zone");
+    expect(mockSend.mock.calls[1][0].MaxResults).toBe(5);
+    expect(empty.total).toBe(0);
+  });
+
+  it("iam profile association sparse profile arm", async () => {
+    mockSend.mockResolvedValueOnce({ IamInstanceProfileAssociations: [{ AssociationId: "a-1", InstanceId: "i-1", State: "disassociated" }] });
+    const body = await (await get("/iam-instance-profile-associations")).json();
+    expect(body.associations[0].profile).toBeNull();
+  });
+
+  it("addresses attributes null attribute + sparse response", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const body = await (await get("/addresses-attributes")).json();
+    expect(body.addresses).toEqual([]);
+    expect(body.total).toBe(0);
+  });
+
+  it("create-image and register-image null imageId fallbacks", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const body = await (await post("/instances/i-1/create-image", { name: "x" })).json();
+    expect(body.imageId).toBeNull();
+    mockSend.mockResolvedValueOnce({});
+    const reg = await (await post("/images/register", { name: "y" })).json();
+    expect(reg.imageId).toBeNull();
+  });
+
+  it("replace-route 400 when no target given", async () => {
+    expect((await putReq("/route-tables/rtb-1/replace-route", { destinationCidrBlock: "10.0.0.0/8" })).status).toBe(400);
+  });
+
+  it("volume modification sparse list entries", async () => {
+    mockSend.mockResolvedValueOnce({ VolumesModifications: [{ VolumeId: "vol-2", ModificationState: "failed" }] });
+    const body = await (await get("/volumes/modifications")).json();
+    expect(body.modifications[0].targetSize).toBeNull();
+    expect(body.modifications[0].targetIops).toBeNull();
+    expect(body.modifications[0].targetVolumeType).toBeNull();
+    expect(body.modifications[0].targetThroughput).toBeNull();
+    expect(body.modifications[0].originalSize).toBeNull();
+    expect(body.modifications[0].originalIops).toBeNull();
+    expect(body.modifications[0].originalVolumeType).toBeNull();
+    expect(body.modifications[0].progress).toBeNull();
+    expect(body.modifications[0].startTime).toBeNull();
+
+    mockSend.mockResolvedValueOnce({});
+    expect((await (await get("/volumes/modifications")).json()).total).toBe(0);
+  });
+
+  it("spot history entry without timestamp", async () => {
+    mockSend.mockResolvedValueOnce({ SpotPriceHistory: [{ InstanceType: "m5.large" }] });
+    const body = await (await get("/spot-price-history")).json();
+    expect(body.history[0].timestamp).toBeNull();
+  });
+
+  it("monitoring entry without Monitoring object", async () => {
+    mockSend.mockResolvedValueOnce({ InstanceMonitorings: [{ InstanceId: "i-2" }] });
+    const body = await (await post("/instances/monitor", { instanceIds: ["i-2"] })).json();
+    expect(body.instances[0].monitoringState).toBeNull();
+  });
+
+  it("snapshot entry missing optional fields", async () => {
+    mockSend.mockResolvedValueOnce({ Snapshots: [{ SnapshotId: "snap-2", State: "pending" }] });
+    const body = await (await get("/snapshots")).json();
+    expect(body.snapshots[0].progress).toBeUndefined();
+    expect(body.snapshots[0].volumeSize).toBeUndefined();
+    expect(body.snapshots[0].description).toBeUndefined();
+    expect(body.snapshots[0].tags).toEqual([]);
+  });
+
+  it("enable block public access echoes state when SDK omits it", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const body = await (await putReq("/snapshot-block-public-access", { state: "block-all-sharing" })).json();
+    expect(body.state).toBe("block-all-sharing");
+  });
+
+  it("credit specifications and egress-only gateways sparse responses", async () => {
+    mockSend.mockResolvedValueOnce({});
+    expect((await (await get("/instance-credit-specifications")).json()).total).toBe(0);
+    mockSend.mockResolvedValueOnce({ EgressOnlyInternetGateways: [{ EgressOnlyInternetGatewayId: "eigw-2" }] });
+    const body = await (await get("/egress-only-internet-gateways")).json();
+    expect(body.gateways[0].attachments).toEqual([]);
   });
 });

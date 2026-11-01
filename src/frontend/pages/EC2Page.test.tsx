@@ -151,6 +151,36 @@ vi.mock("../hooks/useEC2", () => ({
   useEC2ReleaseElasticIp: () => ({ mutateAsync: mockReleaseElasticIp, ...releaseEipState }),
   useEC2ModifyVpc: () => ({ mutate: vi.fn(), isPending: false }),
   useEC2ModifyInstance: () => ({ mutate: vi.fn(), isPending: false }),
+  useEC2ModifyVolume: () => ({ mutate: mockModifyVolume, isPending: false }),
+  useEC2VolumeModifications: (...args: any[]) => mockVolumeModifications(...args),
+  useEC2CopyImage: () => ({ mutate: mockCopyImage, isPending: false }),
+  useEC2DeregisterImage: () => ({ mutateAsync: mockDeregisterImage, ...deregisterState }),
+  useEC2SetMonitoring: () => ({ mutateAsync: mockSetMonitoring, isPending: false }),
+  useEC2Snapshots: (...args: any[]) => mockSnapshots(...args),
+  useEC2SnapshotBlockPublicAccess: (...args: any[]) => mockSnapAccess(...args),
+  useEC2SetSnapshotBlockPublicAccess: () => ({ mutate: mockSetSnapAccess, isPending: false }),
+  useEC2InstanceCreditSpecifications: (...args: any[]) => mockCreditSpecs(...args),
+  useEC2EgressOnlyInternetGateways: (...args: any[]) => mockEigws(...args),
+  useEC2SpotPriceHistory: (...args: any[]) => mockSpotHistory(...args),
+}));
+
+// ─── E.6 mocks ─────────────────────────────────────────
+
+const mockModifyVolume = vi.fn();
+const mockVolumeModifications = vi.fn();
+const mockCopyImage = vi.fn();
+const mockDeregisterImage = vi.fn();
+const mockSetMonitoring = vi.fn();
+const mockSnapshots = vi.fn();
+const mockSnapAccess = vi.fn();
+const mockSetSnapAccess = vi.fn();
+const mockCreditSpecs = vi.fn();
+const mockEigws = vi.fn();
+const mockSpotHistory = vi.fn();
+
+const deregisterState = vi.hoisted(() => ({
+  isPending: false,
+  variables: null as { imageId: string } | null,
 }));
 
 // ─── Flow Logs & Network ACLs mock ─────────────────────
@@ -201,7 +231,7 @@ vi.mock("../components/EC2Terminal", () => ({
 
 // ─── Static imports (after mock) ───────────────────────
 
-import EC2Page, { EC2InstanceList, EC2LaunchTemplateList } from "./EC2Page";
+import EC2Page, { EC2InstanceList, EC2LaunchTemplateList, EC2SnapshotsPanel } from "./EC2Page";
 
 // Global reset for all hoisted states
 beforeEach(() => {
@@ -216,6 +246,13 @@ beforeEach(() => {
   mockSubnets.mockReturnValue({ data: { subnets: [] } });
   mockSecurityGroups.mockReturnValue({ data: { securityGroups: [] } });
   mockAmis.mockReturnValue({ data: { images: [] } });
+  mockVolumeModifications.mockReturnValue({ data: { modifications: [], total: 0 } });
+  mockSnapshots.mockReturnValue({ data: { snapshots: [], total: 0 }, isLoading: false });
+  mockSnapAccess.mockReturnValue({ data: { state: "unblocked", managedBy: null } });
+  mockCreditSpecs.mockReturnValue({ data: { specifications: [], total: 0 } });
+  mockEigws.mockReturnValue({ data: { gateways: [], total: 0 } });
+  mockSpotHistory.mockReturnValue({ data: { history: [], total: 0 } });
+  deregisterState.isPending = false; deregisterState.variables = null;
   deleteVpcState.isPending = false; deleteVpcState.variables = null;
   deleteSubnetState.isPending = false; deleteSubnetState.variables = null;
   deleteSgState.isPending = false; deleteSgState.variables = null;
@@ -4805,5 +4842,182 @@ describe("EC2Page — spot/prefix/sg-rules edge arms", () => {
     );
     // row cancels (first 2) disabled; modal cancel is separate
     expect(cancels.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("E.6 — volumes: modify + modifications", () => {
+  function volumeListWrapper() {
+    const Wrapper = createWrapper();
+    return ({ children }: { children: React.ReactNode }) => (
+      <MemoryRouter><Wrapper>{children}</Wrapper></MemoryRouter>
+    );
+  }
+
+  it("opens modify modal and submits volume modification", async () => {
+    const user = userEvent.setup();
+    mockVolumes.mockReturnValue({
+      data: { volumes: [{ id: "vol-1", size: 8, volumeType: "gp2", state: "available", availabilityZone: "us-east-1a", iops: 100, attachments: [] }], total: 1 },
+      isLoading: false,
+    });
+    mockVolumeModifications.mockReturnValue({
+      data: { modifications: [{ volumeId: "vol-1", modificationState: "completed", targetSize: 100, targetVolumeType: "gp3", originalSize: 8, originalVolumeType: "gp2", progress: 100 }], total: 1 },
+    });
+    mockModifyVolume.mockResolvedValueOnce({ modificationState: "modifying" });
+    render(<EC2Page />, { wrapper: volumeListWrapper() });
+    await user.click(await screen.findByRole("tab", { name: "Volumes" }));
+    await user.click(await screen.findByRole("button", { name: /Modify vol-1/i }));
+    let dlg = screen.getAllByText("Modify Volume vol-1").map(t => t.closest('[role="dialog"]')).find(Boolean) as HTMLElement;
+    const spins = within(dlg).getAllByRole("spinbutton");
+    await user.clear(spins[spins.length - 2]);
+    await user.type(spins[spins.length - 2], "200");
+    await user.type(spins[spins.length - 1], "125");
+    await user.click(within(dlg).getByRole("button", { name: "Modify" }));
+    await waitFor(() =>
+      expect(mockModifyVolume).toHaveBeenCalledWith(
+        expect.objectContaining({ volumeId: "vol-1", size: 8, volumeType: "gp2", iops: 200, throughput: 125 }),
+        expect.objectContaining({ onSuccess: expect.any(Function) })
+      )
+    );
+    await waitFor(() => expect(screen.getByText(/Volume modifications/)).toBeTruthy());
+    expect(screen.getByText("completed")).toBeTruthy();
+  });
+});
+
+describe("E.6 — AMIs: copy + deregister", () => {
+  function amiWrapper() {
+    const Wrapper = createWrapper();
+    return ({ children }: { children: React.ReactNode }) => (
+      <MemoryRouter><Wrapper>{children}</Wrapper></MemoryRouter>
+    );
+  }
+
+  it("copies an AMI via the copy modal", async () => {
+    const user = userEvent.setup();
+    mockAmis.mockReturnValue({
+      data: { images: [{ id: "ami-1", name: "base", description: "", architecture: "x86_64", state: "available", platform: "Linux" }] },
+    });
+    mockCopyImage.mockResolvedValueOnce({ imageId: "ami-copy" });
+    render(<EC2Page />, { wrapper: amiWrapper() });
+    await user.click(await screen.findByRole("tab", { name: "AMIs" }));
+    await user.click(await screen.findByRole("button", { name: /Copy ami-1/i }));
+    const dlg = screen.getAllByText("Copy AMI ami-1").map(t => t.closest('[role="dialog"]')).find(Boolean) as HTMLElement;
+    const boxes = within(dlg).getAllByRole("textbox");
+    await user.clear(boxes[0]);
+    await user.type(boxes[0], "eu-west-1");
+    await user.clear(boxes[1]);
+    await user.type(boxes[1], "base-copy");
+    await user.type(boxes[2], "a copy");
+    await user.click(within(dlg).getByRole("button", { name: "Copy" }));
+    await waitFor(() =>
+      expect(mockCopyImage).toHaveBeenCalledWith(
+        expect.objectContaining({ sourceImageId: "ami-1", sourceRegion: "eu-west-1", name: "base-copy", description: "a copy" }),
+        expect.objectContaining({ onSuccess: expect.any(Function) })
+      )
+    );
+  });
+
+  it("deregisters an AMI after confirmation", async () => {
+    const user = userEvent.setup();
+    mockAmis.mockReturnValue({
+      data: { images: [{ id: "ami-2", name: "old", description: "", architecture: "x86_64", state: "available", platform: "Linux" }] },
+    });
+    mockDeregisterImage.mockResolvedValueOnce({ deregistered: true });
+    render(<EC2Page />, { wrapper: amiWrapper() });
+    await user.click(await screen.findByRole("tab", { name: "AMIs" }));
+    await user.click(await screen.findByRole("button", { name: /Delete ami-2/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /^Delete$/i }));
+    await waitFor(() =>
+      expect(mockDeregisterImage).toHaveBeenCalledWith(expect.objectContaining({ imageId: "ami-2" }))
+    );
+  });
+});
+
+describe("E.6 — snapshots panel", () => {
+  function panelWrapper() {
+    const Wrapper = createWrapper();
+    return ({ children }: { children: React.ReactNode }) => (
+      <MemoryRouter><Wrapper>{children}</Wrapper></MemoryRouter>
+    );
+  }
+
+  it("renders snapshots, access state, credit specs, eigws and spot history", async () => {
+    const user = userEvent.setup();
+    mockSnapshots.mockReturnValue({
+      data: { snapshots: [{ id: "snap-1", volumeId: "vol-1", state: "completed", progress: "100%", volumeSize: 8, description: "d" }], total: 1 },
+      isLoading: false,
+    });
+    mockSnapAccess.mockReturnValue({ data: { state: "block-all-sharing", managedBy: null } });
+    mockCreditSpecs.mockReturnValue({ data: { specifications: [{ instanceId: "i-1", cpuCredits: "unlimited" }], total: 1 } });
+    mockEigws.mockReturnValue({ data: { gateways: [{ id: "eigw-1", attachments: [{ vpcId: "vpc-1", state: "attached" }] }], total: 1 } });
+    mockSpotHistory.mockReturnValue({ data: { history: [{ instanceType: "t3.micro", productDescription: "Linux/UNIX", spotPrice: "0.004", availabilityZone: "us-east-1a" }], total: 1 } });
+    render(<EC2SnapshotsPanel />, { wrapper: panelWrapper() });
+    expect(await screen.findByText("snap-1")).toBeTruthy();
+    expect(screen.getAllByText("block-all-sharing").length).toBeGreaterThan(0);
+    expect(screen.getByText("unlimited")).toBeTruthy();
+    expect(screen.getByText("eigw-1")).toBeTruthy();
+    expect(screen.getByText("t3.micro")).toBeTruthy();
+
+    const trigger = screen.getAllByRole("button").find(b => b.textContent?.includes("block-all-sharing"));
+    await user.click(trigger!);
+    await user.click(await screen.findByRole("option", { name: "block-new-sharing" }));
+    await user.click(screen.getByRole("button", { name: "Apply" }));
+    await waitFor(() => expect(mockSetSnapAccess).toHaveBeenCalledWith("block-new-sharing"));
+  });
+
+  it("empty state and unblocked access", async () => {
+    render(<EC2SnapshotsPanel />, { wrapper: panelWrapper() });
+    expect(await screen.findByText("No snapshots")).toBeTruthy();
+    expect(screen.getAllByText("unblocked").length).toBeGreaterThan(0);
+    expect(screen.getByText("No credit specifications")).toBeTruthy();
+    expect(screen.getByText("No egress-only internet gateways")).toBeTruthy();
+    expect(screen.getByText("No spot price history")).toBeTruthy();
+  });
+});
+
+describe("E.6 — cancel flows + sparse panel arms", () => {
+  function panelWrapper() {
+    const Wrapper = createWrapper();
+    return ({ children }: { children: React.ReactNode }) => (
+      <MemoryRouter><Wrapper>{children}</Wrapper></MemoryRouter>
+    );
+  }
+
+  it("cancels modify and copy modals", async () => {
+    const user = userEvent.setup();
+    mockVolumes.mockReturnValue({
+      data: { volumes: [{ id: "vol-9", size: 8, volumeType: "gp2", state: "available", availabilityZone: "us-east-1a", attachments: [] }], total: 1 },
+      isLoading: false,
+    });
+    mockAmis.mockReturnValue({
+      data: { images: [{ id: "ami-9", name: "x", description: "", architecture: "x86_64", state: "available", platform: "Linux" }] },
+    });
+    render(<EC2Page />, { wrapper: panelWrapper() });
+    await user.click(await screen.findByRole("tab", { name: "Volumes" }));
+    await user.click(await screen.findByRole("button", { name: /Modify vol-9/i }));
+    let dlg = screen.getAllByText(/Modify Volume vol-9/).map(t => t.closest('[role="dialog"]')).find(Boolean) as HTMLElement;
+    await user.click(within(dlg).getByRole("button", { name: "Cancel" }));
+
+    await user.click(await screen.findByRole("tab", { name: "AMIs" }));
+    await user.click(await screen.findByRole("button", { name: /Copy ami-9/i }));
+    dlg = screen.getAllByText(/Copy AMI ami-9/).map(t => t.closest('[role="dialog"]')).find(Boolean) as HTMLElement;
+    await user.click(within(dlg).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByText(/Copy AMI ami-9/)).toBeNull());
+  });
+
+  it("renders sparse snapshot/access/price rows", async () => {
+    mockSnapshots.mockReturnValue({
+      data: { snapshots: [{ id: "snap-3", volumeId: "vol-3", state: "pending" }], total: 1 },
+      isLoading: false,
+    });
+    mockSnapAccess.mockReturnValue({ data: undefined });
+    mockCreditSpecs.mockReturnValue({ data: undefined });
+    mockEigws.mockReturnValue({ data: { gateways: [{ id: "eigw-9" }], total: 1 } });
+    mockSpotHistory.mockReturnValue({ data: { history: [{ instanceType: "m5.large", productDescription: "Linux/UNIX", spotPrice: "0.01" }], total: 1 } });
+    render(<EC2SnapshotsPanel />, { wrapper: panelWrapper() });
+    expect(await screen.findByText("snap-3")).toBeTruthy();
+    expect(screen.getByText("loading")).toBeTruthy();
+    expect(screen.getAllByText("-").length).toBeGreaterThan(0);
+    expect(screen.getByText("$0.01")).toBeTruthy();
   });
 });

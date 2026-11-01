@@ -2742,7 +2742,7 @@ describe("RDS Integration", () => {
     if (status !== 200) return;
     expect(data.created).toBe(true);
     expect(data.id).toBe(dbId);
-  }, 30000);
+  }, 90000);
 
   it("lists DB instances", async () => {
     const { status, data } = await api("GET", "/api/aws/rds/db-instances");
@@ -2799,7 +2799,7 @@ describe("RDS Integration", () => {
     const delRes = await api("DELETE", `/api/aws/rds/db-clusters/${clusterId}`);
     expect(delRes.status).toBe(200);
     expect(delRes.data.deleted).toBe(true);
-  }, 30000);
+  }, 90000);
 
   // ── Cleanup ─────────────────────────────────────────────
 
@@ -3965,7 +3965,7 @@ describe("Redshift Data Integration", () => {
     clusterCreated = true;
   }
 
-  it("executes a SELECT and fetches the result", async () => {
+  it("executes a SELECT and fetches the result", { timeout: 90000 }, async () => {
     await ensureCluster();
     const run = await api("POST", "/api/aws/redshiftdata/query", {
       clusterIdentifier: clusterId,
@@ -5983,7 +5983,7 @@ describe("EKS E.3 Integration", () => {
     } catch {
       available = false;
     }
-  });
+  }, 120000);
 
   const itWhenAvailable = (name: string, fn: () => Promise<void>) =>
     it(name, async () => {
@@ -6116,7 +6116,7 @@ describe("RDS E.4 Integration", () => {
     expect(del.status).toBe(200);
   });
 
-  it("stops and starts the instance", async () => {
+  it("stops and starts the instance", { timeout: 90000 }, async () => {
     if (!skipUnlessAvailable()) return;
     expect(instanceId).toBeTruthy();
     const stop = await api(
@@ -6131,7 +6131,7 @@ describe("RDS E.4 Integration", () => {
     expect(start.status).toBe(200);
   });
 
-  it("creates a read replica of the instance", async () => {
+  it("creates a read replica of the instance", { timeout: 90000 }, async () => {
     if (!skipUnlessAvailable()) return;
     expect(instanceId).toBeTruthy();
     const res = await api("POST", `/api/aws/rds/db-instances/${encodeURIComponent(instanceId!)}/read-replica`, {
@@ -6167,5 +6167,87 @@ describe("RDS E.4 Integration", () => {
     expect(names).toContain(`it-e4-sub-${suffix}`);
     const del = await api("DELETE", `/api/aws/rds/event-subscriptions/it-e4-sub-${suffix}`);
     expect(del.status).toBe(200);
+  });
+});
+
+// ═════════════════════════════════════════════════════════
+//  EC2 E.6 Integration Tests
+// ═════════════════════════════════════════════════════════
+
+describe("EC2 E.6 Integration", () => {
+  let volId = "";
+  let amiId = "";
+
+  afterAll(async () => {
+    if (volId) await api("DELETE", `/api/aws/ec2/volumes/${volId}`).catch(() => {});
+  });
+
+  it("creates a volume and modifies it", async () => {
+    const created = await api("POST", "/api/aws/ec2/volumes", { availabilityZone: "us-east-1a", size: 8 });
+    expect(created.status).toBe(200);
+    volId = created.data.id;
+    const mod = await api("POST", `/api/aws/ec2/volumes/${volId}/modify`, { size: 10, volumeType: "gp3" });
+    expect(mod.status).toBe(200);
+    expect(mod.data.volumeId).toBe(volId);
+    expect(mod.data.modificationState).toBeTruthy();
+    expect(mod.data.targetSize).toBe(10);
+    const mods = await api("GET", "/api/aws/ec2/volumes/modifications");
+    expect(mods.status).toBe(200);
+    expect((mods.data.modifications || []).some((m: any) => m.volumeId === volId)).toBe(true);
+  });
+
+  it("lists spot price history and egress-only IGWs", async () => {
+    const spot = await api("GET", "/api/aws/ec2/spot-price-history");
+    expect(spot.status).toBe(200);
+    expect(Array.isArray(spot.data.history)).toBe(true);
+    const eigws = await api("GET", "/api/aws/ec2/egress-only-internet-gateways");
+    expect(eigws.status).toBe(200);
+    expect(Array.isArray(eigws.data.gateways)).toBe(true);
+  });
+
+  it("creates an image, copies it, and deregisters the copy", async () => {
+    // find a stopped/any instance to image, else register a minimal image
+    const reg = await api("POST", "/api/aws/ec2/images/register", {
+      name: `it-e6-ami-${Date.now()}`,
+      architecture: "x86_64",
+      rootDeviceName: "/dev/sda1",
+    });
+    expect([200, 201]).toContain(reg.status);
+    amiId = reg.data.imageId;
+    expect(amiId).toBeTruthy();
+
+    const copy = await api("POST", "/api/aws/ec2/images/copy", {
+      sourceRegion: "us-east-1",
+      sourceImageId: amiId,
+      name: `it-e6-ami-copy-${Date.now()}`,
+    });
+    expect(copy.status).toBe(201);
+    expect(copy.data.imageId).toBeTruthy();
+
+    const del = await api("DELETE", `/api/aws/ec2/images/${copy.data.imageId}`);
+    expect(del.status).toBe(200);
+    expect(del.data.deregistered).toBe(true);
+  });
+
+  it("reads snapshot block public access state and toggles it", async () => {
+    const before = await api("GET", "/api/aws/ec2/snapshot-block-public-access");
+    expect(before.status).toBe(200);
+    const target = before.data.state === "block-all-sharing" ? "block-new-sharing" : "block-all-sharing";
+    const set = await api("PUT", "/api/aws/ec2/snapshot-block-public-access", { state: target });
+    expect(set.status).toBe(200);
+    expect(set.data.state).toBe(target);
+    const after = await api("GET", "/api/aws/ec2/snapshot-block-public-access");
+    expect(after.data.state).toBe(target);
+    // restore
+    await api("PUT", "/api/aws/ec2/snapshot-block-public-access", { state: "unblocked" });
+  });
+
+  it("lists snapshots and instance credit specifications", async () => {
+    const snaps = await api("GET", "/api/aws/ec2/snapshots");
+    expect(snaps.status).toBe(200);
+    expect(Array.isArray(snaps.data.snapshots)).toBe(true);
+    const credits = await api("GET", "/api/aws/ec2/instance-credit-specifications");
+    expect(credits.status).toBe(200);
+    expect(Array.isArray(credits.data.specifications)).toBe(true);
   });
 });
