@@ -18,6 +18,10 @@ vi.mock("@aws-sdk/client-firehose", () => ({
   ListTagsForDeliveryStreamCommand: createCmd("ListTagsForDeliveryStreamCommand"),
   TagDeliveryStreamCommand: createCmd("TagDeliveryStreamCommand"),
   UntagDeliveryStreamCommand: createCmd("UntagDeliveryStreamCommand"),
+  // E.9
+  StartDeliveryStreamEncryptionCommand: createCmd("StartDeliveryStreamEncryptionCommand"),
+  StopDeliveryStreamEncryptionCommand: createCmd("StopDeliveryStreamEncryptionCommand"),
+  UpdateDestinationCommand: createCmd("UpdateDestinationCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({ create: (Ctor: any, extra?: any) => new Ctor(extra) }));
@@ -29,6 +33,13 @@ async function post(p: string, b?: any) {
   return router.request(p, { method: "POST", body: b != null ? JSON.stringify(b) : undefined, headers: b != null ? { "content-type": "application/json" } : undefined });
 }
 async function del(p: string) { return router.request(p, { method: "DELETE" }); }
+async function put(p: string, b?: any) {
+  return router.request(p, {
+    method: "PUT",
+    body: b != null ? JSON.stringify(b) : undefined,
+    headers: b != null ? { "content-type": "application/json" } : undefined,
+  });
+}
 
 beforeEach(() => mockSend.mockReset());
 
@@ -183,5 +194,28 @@ describe("Firehose Routes", () => {
       headers: { "content-type": "application/json" },
     });
     expect(res.status).toBe(400);
+  });
+});
+
+describe("E.9 — encryption + destination update", () => {
+  it("enables and disables stream encryption", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const on = await put("/delivery-streams/stream-1/encryption", { keyType: "AWS_OWNED_CMK" });
+    expect(on.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].DeliveryStreamEncryptionConfigurationInput.KeyType).toBe("AWS_OWNED_CMK");
+    expect((await on.json()).encryption).toBe("enabled");
+
+    mockSend.mockResolvedValueOnce({});
+    const off = await put("/delivery-streams/stream-1/encryption", { enabled: false });
+    expect((await off.json()).encryption).toBe("disabled");
+  });
+
+  it("updates a destination and 400s without destinationId", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put("/delivery-streams/stream-1/destination", { destinationId: "d1", extendedS3DestinationUpdate: { Prefix: "p/" } });
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].CurrentDeliveryStreamVersionId).toBeUndefined();
+    expect((await res.json()).updated).toBe(true);
+    expect((await put("/delivery-streams/stream-1/destination", {})).status).toBe(400);
   });
 });

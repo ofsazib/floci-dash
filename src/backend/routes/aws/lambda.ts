@@ -48,6 +48,7 @@ import {
   CreateEventSourceMappingCommand,
   UpdateEventSourceMappingCommand,
   UpdateAliasCommand,
+  GetAccountSettingsCommand,
 } from "@aws-sdk/client-lambda";
 import { getAwsConfig } from "../../clients/aws";
 import { sanitizeName, sanitizeText } from "../../clients/sanitize";
@@ -763,6 +764,20 @@ router.delete("/code-signing-configs/:arn", async (c: Context) => {
     new DeleteCodeSigningConfigCommand({ CodeSigningConfigArn: arn })
   );
   return c.json({ arn, deleted: true });
+});
+
+// ─── E.9: account settings ───────────────────────────
+
+router.get("/account-settings", async (c: Context) => {
+  const result = await lambda().send(new GetAccountSettingsCommand({}));
+  return c.json({
+    totalCodeSize: result.AccountLimit?.TotalCodeSize ?? null,
+    codeSizeUtilized: result.AccountUsage?.TotalCodeSize ?? null,
+    concurrentExecutions: result.AccountLimit?.ConcurrentExecutions ?? null,
+    unreservedConcurrentExecutions: result.AccountLimit?.UnreservedConcurrentExecutions ?? null,
+    functionName: result.AccountUsage?.FunctionCount ?? null,
+    totalFunctionSize: result.AccountUsage?.TotalCodeSize ?? null,
+  });
 });
 
 export default router;

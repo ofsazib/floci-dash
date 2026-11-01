@@ -17,6 +17,7 @@ const createCmd = vi.hoisted(() => {
 });
 
 vi.mock("@aws-sdk/client-lambda", () => ({
+  GetAccountSettingsCommand: (function(name: string) { return function(this: any, args?: any) { return { __cmd: name, ...args }; }; })("GetAccountSettingsCommand"),
   LambdaClient: mockLambda,
   ListFunctionsCommand: createCmd("ListFunctionsCommand"),
   CreateFunctionCommand: createCmd("CreateFunctionCommand"),
@@ -1213,5 +1214,24 @@ describe("Code Signing Config", () => {
       const body = await res.json();
       expect(body.alias.Name).toBe("prod");
     });
+  });
+});
+
+describe("E.9 — account settings", () => {
+  it("returns account limits and usage", async () => {
+    mockSend.mockResolvedValueOnce({
+      AccountLimit: { TotalCodeSize: 80530636800, ConcurrentExecutions: 1000, UnreservedConcurrentExecutions: 900 },
+      AccountUsage: { FunctionCount: 4, TotalCodeSize: 1024 },
+    });
+    const res = await get("/account-settings");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.totalCodeSize).toBe(80530636800);
+    expect(body.codeSizeUtilized).toBe(1024);
+    expect(body.functionName).toBe(4);
+
+    mockSend.mockResolvedValueOnce({});
+    const sparse = await (await get("/account-settings")).json();
+    expect(sparse.totalCodeSize).toBeNull();
   });
 });

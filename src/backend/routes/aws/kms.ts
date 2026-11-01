@@ -41,6 +41,10 @@ import {
   GenerateMacCommand,
   VerifyMacCommand,
   RotateKeyOnDemandCommand,
+  GetParametersForImportCommand,
+  ImportKeyMaterialCommand,
+  DeleteImportedKeyMaterialCommand,
+  ReplicateKeyCommand,
 } from "@aws-sdk/client-kms";
 import { getAwsConfig } from "../../clients/aws";
 
@@ -515,6 +519,54 @@ router.put("/aliases/:aliasName", async (c: Context) => {
     TargetKeyId: body.targetKeyId,
   }));
   return c.json({ updated: true });
+});
+
+// ─── E.9: key material import + replication ──────────
+
+router.post("/keys/:keyId/import-parameters", async (c: Context) => {
+  const result = await kms().send(new GetParametersForImportCommand({
+    KeyId: c.req.param("keyId")!,
+    WrappingAlgorithm: (c.req.query("wrappingAlgorithm") as any) || "RSAES_OAEP_SHA_256",
+    WrappingKeySpec: (c.req.query("wrappingKeyType") as any) || "RSA_2048",
+  }));
+  return c.json({
+    keyId: result.KeyId ?? null,
+    importToken: result.ImportToken ? Buffer.from(result.ImportToken).toString("base64") : null,
+    publicKey: result.PublicKey ? Buffer.from(result.PublicKey).toString("base64") : null,
+    parametersValidTo: result.ParametersValidTo?.toISOString?.() ?? null,
+  });
+});
+
+router.post("/keys/:keyId/import-material", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.importToken || !body.encryptedKeyMaterial) {
+    return c.json({ error: "importToken and encryptedKeyMaterial are required" }, 400);
+  }
+  await kms().send(new ImportKeyMaterialCommand({
+    KeyId: c.req.param("keyId")!,
+    ImportToken: Buffer.from(body.importToken, "base64"),
+    EncryptedKeyMaterial: Buffer.from(body.encryptedKeyMaterial, "base64"),
+    ExpirationModel: body.expirationModel,
+    ValidTo: body.validTo,
+  }));
+  return c.json({ keyId: c.req.param("keyId"), imported: true });
+});
+
+router.delete("/keys/:keyId/import-material", async (c: Context) => {
+  await kms().send(new DeleteImportedKeyMaterialCommand({ KeyId: c.req.param("keyId")! }));
+  return c.json({ keyId: c.req.param("keyId"), deleted: true });
+});
+
+router.post("/keys/:keyId/replicate", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.replicaRegion) return c.json({ error: "replicaRegion is required" }, 400);
+  const result = await kms().send(new ReplicateKeyCommand({
+    KeyId: c.req.param("keyId")!,
+    ReplicaRegion: body.replicaRegion,
+    Description: body.description,
+    Tags: body.tags,
+  }));
+  return c.json({ replicaArn: result.ReplicaKeyMetadata?.Arn ?? null, replicaRegion: body.replicaRegion }, 201);
 });
 
 export default router;

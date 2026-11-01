@@ -3,10 +3,14 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../test/helpers";
+import { within } from "@testing-library/react";
 import React from "react";
 import { MemoryRouter } from "react-router-dom";
 
 const mockEventBuses = vi.fn();
+const mockConnections = vi.fn();
+const mockCreateConnection = vi.fn();
+const mockDeleteConnection = vi.fn();
 const mockEventRules = vi.fn();
 const mockEventTargets = vi.fn();
 const mockEventArchives = vi.fn();
@@ -48,6 +52,9 @@ vi.mock("../hooks/useSystem", () => ({
 }));
 
 vi.mock("../hooks/useEvents", () => ({
+  useConnections: (...args: any[]) => mockConnections(...args),
+  useCreateConnection: () => ({ mutateAsync: mockCreateConnection, isPending: false }),
+  useDeleteConnection: () => ({ mutateAsync: mockDeleteConnection, isPending: false }),
   useEventBuses: (...args: any[]) => mockEventBuses(...args),
   useEventRules: (...args: any[]) => mockEventRules(...args),
   useEventTargets: (...args: any[]) => mockEventTargets(...args),
@@ -112,6 +119,8 @@ describe("EventsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockShowToast = vi.fn();
+    mockConnections.mockReturnValue({ data: { connections: [], total: 0 }, isLoading: false });
+    mockConfirm.mockResolvedValue(true);
     mockConfirm.mockResolvedValue(true);
     healthState.data = undefined;
 
@@ -2280,5 +2289,117 @@ describe("EventsPage — bus tags", () => {
     await screen.findByText("Tags — custom");
     await user.click(screen.getByRole("button", { name: "Close" }));
     await waitFor(() => expect(screen.queryByText("Tags — custom")).toBeNull());
+  });
+});
+
+describe("E.9 — Connections tab", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockConnections.mockReturnValue({ data: { connections: [], total: 0 }, isLoading: false });
+    mockConfirm.mockResolvedValue(true);
+    mockEventBuses.mockReturnValue({ data: { eventBuses: [] }, isLoading: false });
+    mockEventRules.mockReturnValue({ data: { rules: [] }, isLoading: false, isError: false, error: null });
+    mockEventTargets.mockReturnValue({ data: { targets: [] }, isLoading: false });
+    mockEventArchives.mockReturnValue({ data: { archives: [] }, isLoading: false });
+    mockEventReplays.mockReturnValue({ data: { replays: [] }, isLoading: false });
+    mockDescribeArchive.mockReturnValue({ data: undefined, isLoading: false });
+    mockDescribeBus.mockReturnValue({ data: undefined, isLoading: false });
+  });
+
+  function eventsWrapper() {
+    const Wrapper = createWrapper();
+    return ({ children }: { children: React.ReactNode }) => (
+      <MemoryRouter><Wrapper>{children}</Wrapper></MemoryRouter>
+    );
+  }
+
+  it("lists, creates and deletes a connection", async () => {
+    const user = userEvent.setup();
+    mockConnections.mockReturnValue({
+      data: { connections: [{ name: "conn-1", arn: "arn:conn-1", state: "ACTIVE", authorizationType: "API_KEY" }], total: 1 },
+      isLoading: false,
+    });
+    mockCreateConnection.mockResolvedValueOnce({ arn: "arn:new" });
+    mockDeleteConnection.mockResolvedValueOnce({ deleted: true });
+    render(<EventsPage />, { wrapper: eventsWrapper() });
+    await user.click(await screen.findByRole("tab", { name: "Connections" }));
+    expect(await screen.findByText("conn-1")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: /Create connection/i }));
+    const dlg = screen.getAllByText("Create connection").map(t => t.closest('[role="dialog"]')).find(Boolean) as HTMLElement;
+    await user.type(within(dlg).getAllByRole("textbox")[0], "conn-new");
+    await user.click(within(dlg).getByRole("button", { name: "Create" }));
+    await waitFor(() =>
+      expect(mockCreateConnection).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "conn-new" })
+      )
+    );
+
+    await user.click(screen.getByRole("button", { name: /Delete conn-1/i }));
+    await waitFor(() => expect(mockConfirm).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(mockDeleteConnection).toHaveBeenCalledWith("conn-1")
+    );
+  });
+
+  it("handles declined confirm, delete error, create error and non-ACTIVE state", async () => {
+    const user = userEvent.setup();
+    mockConnections.mockReturnValue({
+      data: { connections: [{ name: "conn-2", arn: "arn:c2", state: "AUTHORIZED" }], total: 1 },
+      isLoading: false,
+    });
+    mockConfirm.mockResolvedValueOnce(false); // decline
+    mockCreateConnection.mockRejectedValueOnce(new Error("LimitExceeded"));
+    render(<EventsPage />, { wrapper: eventsWrapper() });
+    await user.click(await screen.findByRole("tab", { name: "Connections" }));
+    expect(await screen.findByText("conn-2")).toBeTruthy();
+
+    // declined confirm → no delete call
+    await user.click(screen.getByRole("button", { name: /Delete conn-2/i }));
+    await waitFor(() => expect(mockConfirm).toHaveBeenCalled());
+    expect(mockDeleteConnection).not.toHaveBeenCalled();
+
+    // create error toast
+    await user.click(screen.getByRole("button", { name: /Create connection/i }));
+    const dlg = screen.getAllByText("Create connection").map(t => t.closest('[role="dialog"]')).find(Boolean) as HTMLElement;
+    await user.type(within(dlg).getAllByRole("textbox")[0], "bad");
+    await user.click(within(dlg).getByRole("button", { name: "Create" }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "LimitExceeded"));
+
+    // delete success + create fallback + modal cancel
+    mockConnections.mockReturnValue({
+      data: { connections: [{ name: "conn-3", arn: "arn:c3", state: "DELETING" }], total: 1 },
+      isLoading: false,
+    });
+    mockCreateConnection.mockRejectedValueOnce("nope");
+    render(<EventsPage />, { wrapper: eventsWrapper() });
+    const tabs = await screen.findAllByRole("tab", { name: "Connections" });
+    await user.click(tabs[tabs.length - 1]);
+    await user.click(await screen.findByRole("button", { name: /Delete conn-3/i }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("success", "Connection conn-3 deleted."));
+
+    const dlg2 = screen.getAllByText("Create connection").map(t => t.closest('[role="dialog"]')).find(Boolean) as HTMLElement;
+    await user.click(within(dlg2).getAllByRole("textbox")[0]);
+    await user.click(within(dlg2).getByRole("button", { name: "Create" }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "Failed to create connection"));
+    // description input, then Cancel (link button)
+    await user.type(within(dlg2).getAllByRole("textbox")[1], "desc");
+    await user.click(within(dlg2).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(dlg2.className).toContain("hidden"));
+
+    // reopen and dismiss via the modal X (onDismiss)
+    const openBtns = screen.getAllByRole("button", { name: /Create connection/i });
+    await user.click(openBtns[openBtns.length - 1]);
+    const dlg3 = screen.getAllByText("Create connection").map(t => t.closest('[role="dialog"]')).find(Boolean) as HTMLElement;
+    const closeBtn = dlg3.querySelector('[class*="dismiss-control"]') as HTMLElement;
+    await user.click(closeBtn);
+    await waitFor(() => expect(dlg3.className).toContain("hidden"));
+  });
+
+  it("shows the empty state", async () => {
+    const user = userEvent.setup();
+    render(<EventsPage />, { wrapper: eventsWrapper() });
+    await user.click(await screen.findByRole("tab", { name: "Connections" }));
+    expect(await screen.findByText(/No connections/i)).toBeTruthy();
   });
 });

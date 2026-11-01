@@ -17,6 +17,10 @@ const createCmd = vi.hoisted(() => {
 });
 
 vi.mock("@aws-sdk/client-kms", () => ({
+  GetParametersForImportCommand: (function(name: string) { return function(this: any, args?: any) { return { __cmd: name, ...args }; }; })("GetParametersForImportCommand"),
+  ImportKeyMaterialCommand: (function(name: string) { return function(this: any, args?: any) { return { __cmd: name, ...args }; }; })("ImportKeyMaterialCommand"),
+  DeleteImportedKeyMaterialCommand: (function(name: string) { return function(this: any, args?: any) { return { __cmd: name, ...args }; }; })("DeleteImportedKeyMaterialCommand"),
+  ReplicateKeyCommand: (function(name: string) { return function(this: any, args?: any) { return { __cmd: name, ...args }; }; })("ReplicateKeyCommand"),
   KMSClient: mockKMS,
   ListKeysCommand: createCmd("ListKeysCommand"),
   DescribeKeyCommand: createCmd("DescribeKeyCommand"),
@@ -713,5 +717,62 @@ describe("KMS extras", () => {
     expect(res.status).toBe(200);
     expect(mockSend.mock.calls[0][0].AliasName).toBe("alias/prod-key");
     expect((await put("/aliases/prod-key", {})).status).toBe(400);
+  });
+});
+
+describe("E.9 — key import + replication", () => {
+  it("gets import parameters with defaults", async () => {
+    mockSend.mockResolvedValueOnce({
+      KeyId: "key-1",
+      ImportToken: new Uint8Array([1, 2]),
+      PublicKey: new Uint8Array([3]),
+      ParametersValidTo: new Date("2026-01-01T00:00:00Z"),
+    });
+    const res = await post("/keys/key-1/import-parameters", {});
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].WrappingAlgorithm).toBe("RSAES_OAEP_SHA_256");
+    const body = await res.json();
+    expect(body.importToken).toBeTruthy();
+    expect(body.parametersValidTo).toBe("2026-01-01T00:00:00.000Z");
+
+    mockSend.mockResolvedValueOnce({ KeyId: "k2", ImportToken: new Uint8Array([1]), PublicKey: new Uint8Array([2]) });
+    const sparse = await (await post("/keys/key-2/import-parameters?wrappingAlgorithm=RSAES_PKCS1_V1_5&wrappingKeyType=RSA_4096", {})).json();
+    expect(mockSend.mock.calls[1][0].WrappingAlgorithm).toBe("RSAES_PKCS1_V1_5");
+    expect(mockSend.mock.calls[1][0].WrappingKeySpec).toBe("RSA_4096");
+    expect(sparse.parametersValidTo).toBeNull();
+
+    mockSend.mockResolvedValueOnce({});
+    const bare = await (await post("/keys/key-3/import-parameters", {})).json();
+    expect(bare.keyId).toBeNull();
+    expect(bare.importToken).toBeNull();
+    expect(bare.publicKey).toBeNull();
+  });
+
+  it("imports key material and 400s without fields", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/keys/key-1/import-material", { importToken: "AQ==", encryptedKeyMaterial: "Aw==" });
+    expect(res.status).toBe(200);
+    expect((await res.json()).imported).toBe(true);
+    expect((await post("/keys/key-1/import-material", { importToken: "AQ==" })).status).toBe(400);
+  });
+
+  it("deletes imported key material", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await del("/keys/key-1/import-material");
+    expect(res.status).toBe(200);
+    expect((await res.json()).deleted).toBe(true);
+  });
+
+  it("replicates a key and 400s without replicaRegion", async () => {
+    mockSend.mockResolvedValueOnce({ ReplicaKeyMetadata: { Arn: "arn:replica" } });
+    const res = await post("/keys/key-1/replicate", { replicaRegion: "eu-west-1" });
+    expect(res.status).toBe(201);
+    expect((await res.json()).replicaArn).toBe("arn:replica");
+    expect((await post("/keys/key-1/replicate", {})).status).toBe(400);
+
+    mockSend.mockResolvedValueOnce({});
+    const sparse = await (await post("/keys/key-2/replicate", { replicaRegion: "us-west-2" })).json();
+    expect(sparse.replicaArn).toBeNull();
+    expect(sparse.replicaRegion).toBe("us-west-2");
   });
 });

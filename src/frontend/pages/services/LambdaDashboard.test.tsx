@@ -49,6 +49,7 @@ const updateAliasState = vi.hoisted(() => ({ isPending: false, isError: false, e
 // ─── Mock hooks ─────────────────────────────────────────
 
 const mockFunctions = vi.fn();
+const mockAccountSettings = vi.fn();
 const mockCreateFn = vi.fn();
 const mockDeleteFn = vi.fn();
 const mockFnDetail = vi.fn();
@@ -69,6 +70,7 @@ const mockUpdateAlias = vi.fn();
 
 vi.mock("../../hooks/useLambda", () => ({
   useLambdaFunctions: (...args: any[]) => mockFunctions(...args),
+  useLambdaAccountSettings: (...args: any[]) => mockAccountSettings(...args),
   useCreateFunction: () => ({
     mutate: mockCreateFn,
     get isPending() { return createFnState.isPending; },
@@ -182,6 +184,7 @@ function expectModalHidden(headerText: string | RegExp) {
 }
 
 beforeEach(() => {
+  mockAccountSettings.mockReturnValue({ data: undefined, isLoading: false });
   vi.clearAllMocks();
   createFnState.isPending = false;
   createFnState.isError = false;
@@ -1688,5 +1691,46 @@ describe("LambdaDashboard — G.63 remaining branches", () => {
         Array.from(dialogs).every((d) => (d as HTMLElement).className.includes("hidden"))
       ).toBe(true);
     });
+  });
+});
+
+describe("E.9 — Lambda account settings tab", () => {
+  it("renders account limits and usage", async () => {
+    const user = userEvent.setup();
+    const Wrapper = createWrapper();
+    mockFunctions.mockReturnValue({ data: { functions: [] }, isLoading: false });
+    mockAccountSettings.mockReturnValue({
+      data: {
+        totalCodeSize: 80530636800, codeSizeUtilized: 1024,
+        concurrentExecutions: 1000, unreservedConcurrentExecutions: 900,
+        functionName: 4, totalFunctionSize: 1024,
+      },
+      isLoading: false,
+    });
+    render(<LambdaDashboard />, { wrapper: ({ children }: { children: React.ReactNode }) => <Wrapper>{children}</Wrapper> });
+    await user.click(await screen.findByRole("tab", { name: "Account settings" }));
+    expect(await screen.findByText(/80530636800/)).toBeTruthy();
+    expect(screen.getByText("4")).toBeTruthy();
+  });
+
+  it("renders without data", async () => {
+    const user = userEvent.setup();
+    const Wrapper = createWrapper();
+    mockFunctions.mockReturnValue({ data: { functions: [] }, isLoading: false });
+    render(<LambdaDashboard />, { wrapper: ({ children }: { children: React.ReactNode }) => <Wrapper>{children}</Wrapper> });
+    await user.click(await screen.findByRole("tab", { name: "Account settings" }));
+    expect(await screen.findByText(/— \/ — bytes/)).toBeTruthy();
+  });
+})
+
+describe("E.9 — Lambda account settings loading", () => {
+  it("shows loading state", async () => {
+    const user = userEvent.setup();
+    const Wrapper = createWrapper();
+    mockFunctions.mockReturnValue({ data: { functions: [] }, isLoading: false });
+    mockAccountSettings.mockReturnValue({ data: undefined, isLoading: true });
+    render(<LambdaDashboard />, { wrapper: ({ children }: { children: React.ReactNode }) => <Wrapper>{children}</Wrapper> });
+    await user.click(await screen.findByRole("tab", { name: "Account settings" }));
+    expect(await screen.findByText(/Loading account settings/)).toBeTruthy();
   });
 });

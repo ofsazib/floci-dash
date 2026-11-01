@@ -441,3 +441,20 @@ export function useDeleteCodeSigningConfig() {
       qc.invalidateQueries({ queryKey: ["aws", "lambda", "code-signing-configs"] }),
   });
 }
+
+// ─── E.9: account settings ───────────────────────────
+
+export function useLambdaAccountSettings() {
+  return useQuery({
+    queryKey: ["aws", "lambda", "account-settings"],
+    queryFn: () =>
+      api<{
+        totalCodeSize: number | null;
+        codeSizeUtilized: number | null;
+        concurrentExecutions: number | null;
+        unreservedConcurrentExecutions: number | null;
+        functionName: number | null;
+        totalFunctionSize: number | null;
+      }>("/aws/lambda/account-settings"),
+  });
+}

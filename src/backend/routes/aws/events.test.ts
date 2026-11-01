@@ -48,6 +48,12 @@ vi.mock("@aws-sdk/client-eventbridge", () => ({
   UntagResourceCommand: createCmd("UntagResourceCommand"),
   ListTagsForResourceCommand: createCmd("ListTagsForResourceCommand"),
   TestEventPatternCommand: createCmd("TestEventPatternCommand"),
+  // E.9
+  CreateConnectionCommand: createCmd("CreateConnectionCommand"),
+  DescribeConnectionCommand: createCmd("DescribeConnectionCommand"),
+  UpdateConnectionCommand: createCmd("UpdateConnectionCommand"),
+  DeleteConnectionCommand: createCmd("DeleteConnectionCommand"),
+  ListConnectionsCommand: createCmd("ListConnectionsCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -63,6 +69,14 @@ async function get(path: string) {
 async function post(path: string, body?: any) {
   return router.request(path, {
     method: "POST",
+    body: body != null ? JSON.stringify(body) : undefined,
+    headers: body != null ? { "content-type": "application/json" } : undefined,
+  });
+}
+
+async function put(path: string, body?: any) {
+  return router.request(path, {
+    method: "PUT",
     body: body != null ? JSON.stringify(body) : undefined,
     headers: body != null ? { "content-type": "application/json" } : undefined,
   });
@@ -785,5 +799,64 @@ describe("Events (EventBridge) Routes", () => {
       });
       expect(res.status).toBe(400);
     });
+  });
+});
+
+describe("E.9 — connections", () => {
+  it("lists connections (sparse + filtered)", async () => {
+    mockSend.mockResolvedValueOnce({
+      Connections: [{ Name: "conn-1", ConnectionArn: "arn:conn-1", ConnectionState: "ACTIVE", AuthorizationType: "API_KEY" }],
+    });
+    const res = await get("/connections?namePrefix=conn");
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].NamePrefix).toBe("conn");
+    const body = await res.json();
+    expect(body.total).toBe(1);
+    expect(body.connections[0].state).toBe("ACTIVE");
+
+    mockSend.mockResolvedValueOnce({});
+    expect((await (await get("/connections")).json()).total).toBe(0);
+  });
+
+  it("creates a connection and 400s without name", async () => {
+    mockSend.mockResolvedValueOnce({ ConnectionArn: "arn:new", ConnectionState: "AUTHORIZED" });
+    const res = await post("/connections", { name: "new", description: "d" });
+    expect(res.status).toBe(201);
+    expect(mockSend.mock.calls[0][0].AuthorizationType).toBe("API_KEY");
+    expect((await res.json()).arn).toBe("arn:new");
+    expect((await post("/connections", {})).status).toBe(400);
+
+    mockSend.mockResolvedValueOnce({});
+    const sparseCreate = await (await post("/connections", { name: "bare" })).json();
+    expect(sparseCreate.arn).toBeNull();
+    expect(sparseCreate.state).toBeNull();
+  });
+
+  it("describes and updates a connection", async () => {
+    mockSend.mockResolvedValueOnce({ Name: "conn-1", ConnectionState: "AUTHORIZED", ConnectionArn: "arn:conn-1" });
+    const body = await (await get("/connections/conn-1")).json();
+    expect(body.connection.Name).toBe("conn-1");
+
+    mockSend.mockResolvedValueOnce({ ConnectionArn: "arn:conn-1", ConnectionState: "AUTHORIZED" });
+    const res = await put("/connections/conn-1", { authorizationType: "API_KEY" });
+    expect(res.status).toBe(200);
+    expect((await res.json()).state).toBe("AUTHORIZED");
+
+    mockSend.mockResolvedValueOnce(undefined);
+    const sparseDesc = await (await get("/connections/none")).json();
+    expect(sparseDesc.connection).toBeNull();
+
+    mockSend.mockResolvedValueOnce({});
+    const sparseUpd = await (await put("/connections/conn-1", {})).json();
+    expect(mockSend.mock.calls.at(-1)![0].AuthorizationType).toBe("API_KEY");
+    expect(sparseUpd.arn).toBeNull();
+  });
+
+  it("deletes a connection", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await del("/connections/conn-1");
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].Name).toBe("conn-1");
+    expect((await res.json()).deleted).toBe(true);
   });
 });

@@ -1,8 +1,13 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { create } from "../../clients/aws";
-import { EventBridgeClient } from "@aws-sdk/client-eventbridge";
 import {
+  EventBridgeClient,
+  CreateConnectionCommand,
+  DescribeConnectionCommand,
+  UpdateConnectionCommand,
+  DeleteConnectionCommand,
+  ListConnectionsCommand,
   ListEventBusesCommand,
   CreateEventBusCommand,
   UpdateEventBusCommand,
@@ -373,6 +378,50 @@ router.delete("/tags", async (c: Context) => {
   const client = getClient();
   await client.send(new UntagResourceCommand({ ResourceARN: body.arn, TagKeys: body.tagKeys }));
   return c.json({ untagged: true });
+});
+
+// ─── E.9: API destination connections ────────────────
+
+router.get("/connections", async (c: Context) => {
+  const result = await getClient().send(new ListConnectionsCommand({ NamePrefix: c.req.query("namePrefix") || undefined }));
+  const connections = (result.Connections || []).map((x: any) => ({
+    name: x.Name, arn: x.ConnectionArn, state: x.ConnectionState,
+    authorizationType: x.AuthorizationType, creationTime: x.CreationTime,
+  }));
+  return c.json({ connections, total: connections.length });
+});
+
+router.post("/connections", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.name) return c.json({ error: "name is required" }, 400);
+  const result = await getClient().send(new CreateConnectionCommand({
+    Name: body.name,
+    Description: body.description,
+    AuthorizationType: body.authorizationType || "API_KEY",
+    AuthParameters: body.authParameters,
+  }));
+  return c.json({ arn: result.ConnectionArn ?? null, state: result.ConnectionState ?? null }, 201);
+});
+
+router.get("/connections/:name", async (c: Context) => {
+  const result = await getClient().send(new DescribeConnectionCommand({ Name: c.req.param("name")! }));
+  return c.json({ connection: result ?? null });
+});
+
+router.put("/connections/:name", async (c: Context) => {
+  const body = await c.req.json<any>();
+  const result = await getClient().send(new UpdateConnectionCommand({
+    Name: c.req.param("name")!,
+    Description: body.description,
+    AuthorizationType: body.authorizationType || "API_KEY",
+    AuthParameters: body.authParameters,
+  }));
+  return c.json({ arn: result.ConnectionArn ?? null, state: result.ConnectionState ?? null });
+});
+
+router.delete("/connections/:name", async (c: Context) => {
+  await getClient().send(new DeleteConnectionCommand({ Name: c.req.param("name")! }));
+  return c.json({ name: c.req.param("name"), deleted: true });
 });
 
 export default router;

@@ -348,3 +348,32 @@ export function useRemoveEventTags() {
     onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: ["aws", "events", "tags", v.arn] }),
   });
 }
+
+// ─── E.9: API destination connections ────────────────
+
+export function useConnections() {
+  return useQuery({
+    queryKey: ["events", "connections"],
+    queryFn: () =>
+      api<{ connections: { name: string; arn: string; state: string; authorizationType?: string }[]; total: number }>(
+        "/aws/events/connections"
+      ),
+  });
+}
+
+export function useCreateConnection() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string; description?: string; authorizationType?: string; authParameters?: Record<string, unknown> }) =>
+      api("/aws/events/connections", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["events", "connections"] }),
+  });
+}
+
+export function useDeleteConnection() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) => api(`/aws/events/connections/${name}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["events", "connections"] }),
+  });
+}

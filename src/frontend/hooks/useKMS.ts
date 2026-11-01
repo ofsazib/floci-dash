@@ -195,3 +195,41 @@ export function useKMSUpdateAlias() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "kms", "aliases"] }),
   });
 }
+
+// ─── E.9: key material import + replication ──────────
+
+export function useKMSGetImportParameters() {
+  return useMutation({
+    mutationFn: ({ keyId, wrappingAlgorithm, wrappingKeyType }: { keyId: string; wrappingAlgorithm?: string; wrappingKeyType?: string }) =>
+      api<{ keyId: string | null; importToken: string | null; publicKey: string | null; parametersValidTo: string | null }>(
+        `/aws/kms/keys/${keyId}/import-parameters?wrappingAlgorithm=${wrappingAlgorithm ?? ""}&wrappingKeyType=${wrappingKeyType ?? ""}`,
+        { method: "POST" }
+      ),
+  });
+}
+
+export function useKMSImportKeyMaterial() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ keyId, ...body }: { keyId: string; importToken: string; encryptedKeyMaterial: string; expirationModel?: string; validTo?: string }) =>
+      api(`/aws/kms/keys/${keyId}/import-material`, { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "kms"] }),
+  });
+}
+
+export function useKMSDeleteImportedKeyMaterial() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (keyId: string) => api(`/aws/kms/keys/${keyId}/import-material`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "kms"] }),
+  });
+}
+
+export function useKMSReplicateKey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ keyId, ...body }: { keyId: string; replicaRegion: string; description?: string }) =>
+      api(`/aws/kms/keys/${keyId}/replicate`, { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "kms"] }),
+  });
+}

@@ -18,6 +18,8 @@ import {
   useFirehoseStreamTags,
   useTagFirehoseStream,
   useUntagFirehoseStream,
+  useFirehoseSetEncryption,
+  useFirehoseUpdateDestination,
 } from "./useFirehose";
 
 beforeEach(() => mockApi.mockReset());
@@ -94,6 +96,26 @@ describe("useUntagFirehoseStream", () => {
     expect(mockApi).toHaveBeenCalledWith("/aws/firehose/streams/s1/tags", {
       method: "DELETE",
       body: JSON.stringify({ tagKeys: ["env"] }),
+    });
+  });
+});
+
+describe("E.9 firehose encryption + destination hooks", () => {
+  it("setEncryption PUTs enabled flag and updateDestination PUTs body", async () => {
+    mockApi.mockResolvedValueOnce({ encryption: "enabled" });
+    const { result } = renderHook(() => useFirehoseSetEncryption(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ name: "s1", enabled: true, keyType: "AWS_OWNED_CMK" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/firehose/delivery-streams/s1/encryption", {
+      method: "PUT",
+      body: JSON.stringify({ enabled: true, keyType: "AWS_OWNED_CMK" }),
+    });
+
+    mockApi.mockResolvedValueOnce({ updated: true });
+    const { result: upd } = renderHook(() => useFirehoseUpdateDestination(), { wrapper: createWrapper() });
+    await upd.current.mutateAsync({ name: "s1", destinationId: "d1" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/firehose/delivery-streams/s1/destination", {
+      method: "PUT",
+      body: JSON.stringify({ destinationId: "d1" }),
     });
   });
 });

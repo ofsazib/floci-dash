@@ -95,3 +95,23 @@ export function useUntagFirehoseStream() {
       qc.invalidateQueries({ queryKey: ["aws", "firehose", "streams", v.name, "tags"] }),
   });
 }
+
+// ─── E.9: stream encryption + destination update ─────
+
+export function useFirehoseSetEncryption() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, enabled, keyType }: { name: string; enabled: boolean; keyType?: string }) =>
+      api(`/aws/firehose/delivery-streams/${name}/encryption`, { method: "PUT", body: JSON.stringify({ enabled, keyType }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["firehose"] }),
+  });
+}
+
+export function useFirehoseUpdateDestination() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, ...body }: { name: string; destinationId: string; currentVersionId?: string; extendedS3DestinationUpdate?: Record<string, unknown>; s3DestinationUpdate?: Record<string, unknown> }) =>
+      api(`/aws/firehose/delivery-streams/${name}/destination`, { method: "PUT", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["firehose"] }),
+  });
+}

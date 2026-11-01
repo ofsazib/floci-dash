@@ -22,6 +22,7 @@ import {
 } from "@cloudscape-design/components";
 import {
   useLambdaFunctions,
+  useLambdaAccountSettings,
   useCreateFunction,
   useDeleteFunction,
   useLambdaFunction,
@@ -78,6 +79,11 @@ export function LambdaDashboard() {
       id: "layers",
       label: "Layers",
       content: <LambdaLayerList />,
+    },
+    {
+      id: "account",
+      label: "Account settings",
+      content: <LambdaAccountSettings />,
     },
   ];
 
@@ -1057,5 +1063,36 @@ function LambdaLayerList() {
         </Form>
       </Modal>
     </>
+  );
+}
+
+// ─── E.9: account settings ───────────────────────────
+
+function LambdaAccountSettings() {
+  const { data, isLoading } = useLambdaAccountSettings();
+  if (isLoading) return <StatusIndicator type="loading">Loading account settings…</StatusIndicator>;
+  return (
+    <Container header={<Header variant="h2">Lambda account settings</Header>}>
+      <ColumnLayout columns={2} variant="text-grid" borders="horizontal">
+        <SpaceBetween size="xs">
+          <Box variant="awsui-key-label">Functions</Box>
+          <Box>{data?.functionName ?? "—"}</Box>
+        </SpaceBetween>
+        <SpaceBetween size="xs">
+          <Box variant="awsui-key-label">Total code size (utilized / limit)</Box>
+          <Box>
+            {data?.codeSizeUtilized ?? "—"} / {data?.totalCodeSize ?? "—"} bytes
+          </Box>
+        </SpaceBetween>
+        <SpaceBetween size="xs">
+          <Box variant="awsui-key-label">Concurrent executions (limit)</Box>
+          <Box>{data?.concurrentExecutions ?? "—"}</Box>
+        </SpaceBetween>
+        <SpaceBetween size="xs">
+          <Box variant="awsui-key-label">Unreserved concurrent executions</Box>
+          <Box>{data?.unreservedConcurrentExecutions ?? "—"}</Box>
+        </SpaceBetween>
+      </ColumnLayout>
+    </Container>
   );
 }

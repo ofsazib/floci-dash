@@ -38,6 +38,9 @@ import {
   useEventTags,
   useAddEventTags,
   useRemoveEventTags,
+  useConnections,
+  useCreateConnection,
+  useDeleteConnection,
 } from "./useEvents";
 
 function createWrapper() {
@@ -637,5 +640,29 @@ describe("useRemoveEventTags", () => {
       method: "DELETE",
       body: JSON.stringify({ arn: "arn:x", tagKeys: ["env"] }),
     });
+  });
+});
+
+describe("E.9 connections hooks", () => {
+  it("useConnections GETs the list", async () => {
+    mockApi.mockResolvedValueOnce({ connections: [], total: 0 });
+    const { result } = renderHook(() => useConnections(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/events/connections");
+  });
+
+  it("useCreateConnection POSTs and useDeleteConnection DELETEs", async () => {
+    mockApi.mockResolvedValueOnce({ arn: "arn:c" });
+    const { result } = renderHook(() => useCreateConnection(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ name: "c1" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/events/connections", {
+      method: "POST",
+      body: JSON.stringify({ name: "c1" }),
+    });
+
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result: del } = renderHook(() => useDeleteConnection(), { wrapper: createWrapper() });
+    await del.current.mutateAsync("c1");
+    expect(mockApi).toHaveBeenCalledWith("/aws/events/connections/c1", { method: "DELETE" });
   });
 });

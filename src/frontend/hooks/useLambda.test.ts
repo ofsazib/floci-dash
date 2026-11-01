@@ -48,6 +48,7 @@ import {
   useCreateEventSourceMapping,
   useUpdateEventSourceMapping,
   useUpdateLambdaAlias,
+  useLambdaAccountSettings,
 } from "./useLambda";
 
 function createWrapper() {
@@ -757,5 +758,14 @@ describe("useDeleteCodeSigningConfig", () => {
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: ["aws", "lambda", "code-signing-configs"],
     });
+  });
+});
+
+describe("E.9 lambda account settings hook", () => {
+  it("GETs account settings", async () => {
+    mockApi.mockResolvedValueOnce({ totalCodeSize: 1 });
+    const { result } = renderHook(() => useLambdaAccountSettings(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/lambda/account-settings");
   });
 });

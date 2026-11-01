@@ -33,6 +33,10 @@ import {
   useKMSReEncrypt,
   useKMSGenerateDataKeyNoPlaintext,
   useKMSUpdateAlias,
+  useKMSGetImportParameters,
+  useKMSImportKeyMaterial,
+  useKMSDeleteImportedKeyMaterial,
+  useKMSReplicateKey,
 } from "./useKMS";
 
 function createWrapper() {
@@ -329,6 +333,43 @@ describe("useKMS extras", () => {
     expect(mockApi).toHaveBeenCalledWith("/aws/kms/aliases/prod-key", {
       method: "PUT",
       body: JSON.stringify({ targetKeyId: "k2" }),
+    });
+  });
+});
+
+describe("E.9 KMS import + replicate hooks", () => {
+  it("getImportParameters POSTs with defaults", async () => {
+    mockApi.mockResolvedValueOnce({ keyId: "k1", importToken: "t" });
+    const { result } = renderHook(() => useKMSGetImportParameters(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ keyId: "k1" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/kms/keys/k1/import-parameters?wrappingAlgorithm=&wrappingKeyType=",
+      { method: "POST" }
+    );
+  });
+
+  it("importMaterial + deleteImportedMaterial hit the right URLs", async () => {
+    mockApi.mockResolvedValueOnce({ imported: true });
+    const { result } = renderHook(() => useKMSImportKeyMaterial(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ keyId: "k1", importToken: "t", encryptedKeyMaterial: "m" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/kms/keys/k1/import-material", {
+      method: "POST",
+      body: JSON.stringify({ importToken: "t", encryptedKeyMaterial: "m" }),
+    });
+
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result: del } = renderHook(() => useKMSDeleteImportedKeyMaterial(), { wrapper: createWrapper() });
+    await del.current.mutateAsync("k1");
+    expect(mockApi).toHaveBeenCalledWith("/aws/kms/keys/k1/import-material", { method: "DELETE" });
+  });
+
+  it("replicateKey POSTs replicaRegion", async () => {
+    mockApi.mockResolvedValueOnce({ replicaArn: "arn:r" });
+    const { result } = renderHook(() => useKMSReplicateKey(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ keyId: "k1", replicaRegion: "eu-west-1" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/kms/keys/k1/replicate", {
+      method: "POST",
+      body: JSON.stringify({ replicaRegion: "eu-west-1" }),
     });
   });
 });

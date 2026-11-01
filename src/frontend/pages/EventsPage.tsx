@@ -60,6 +60,9 @@ import {
   type EventTarget,
   type EventArchive,
   type EventReplay,
+  useConnections,
+  useCreateConnection,
+  useDeleteConnection,
 } from "../hooks/useEvents";
 
 function formatEventPattern(pattern: string): string {
@@ -110,6 +113,11 @@ export default function EventsPage() {
               label: "Event Buses",
               id: "buses",
               content: <BusesTab showToast={showToast} confirm={confirm} />,
+            },
+            {
+              label: "Connections",
+              id: "connections",
+              content: <ConnectionsTab showToast={showToast} confirm={confirm} />,
             },
             {
               label: "Send Event",
@@ -1655,5 +1663,115 @@ function CreatePermissionModal({
         </SpaceBetween>
       </Form>
     </Modal>
+  );
+}
+
+// ─── E.9: API destination connections tab ─────────────
+
+function ConnectionsTab({
+  showToast,
+  confirm,
+}: {
+  showToast: (type: "success" | "error" | "info" | "warning", msg: string) => void;
+  confirm: (opts: { title: string; message: string; confirmText?: string; variant?: "primary" | "danger" }) => Promise<boolean>;
+}) {
+  const [showCreate, setShowCreate] = useState(false);
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const { data, isLoading } = useConnections();
+  const createConn = useCreateConnection();
+  const deleteConn = useDeleteConnection();
+  const connections = data?.connections || [];
+
+  return (
+    <SpaceBetween size="l">
+      <Container
+        header={
+          <Header
+            variant="h2"
+            counter={`(${connections.length})`}
+            actions={<Button variant="primary" onClick={() => setShowCreate(true)}>Create connection</Button>}
+          >
+            API destination connections
+          </Header>
+        }
+      >
+        <Table
+          items={connections}
+          loading={isLoading}
+          loadingText="Loading connections…"
+          empty={<Box>No connections</Box>}
+          columnDefinitions={[
+            { id: "name", header: "Name", cell: (c: any) => c.name },
+            { id: "arn", header: "ARN", cell: (c: any) => c.arn },
+            { id: "state", header: "State", cell: (c: any) => <StatusIndicator type={c.state === "ACTIVE" ? "success" : "in-progress"}>{c.state}</StatusIndicator> },
+            { id: "auth", header: "Auth type", cell: (c: any) => c.authorizationType || "-" },
+            {
+              id: "actions",
+              header: "",
+              cell: (c: any) => (
+                <Button
+                  variant="icon"
+                  iconName="remove"
+                  ariaLabel={`Delete ${c.name}`}
+                  onClick={async () => {
+                    if (!(await confirm({ title: `Delete connection`, message: `Delete connection ${c.name}? This cannot be undone.`, confirmText: "Delete", variant: "danger" }))) return;
+                    try {
+                      await deleteConn.mutateAsync(c.name);
+                      showToast("success", `Connection ${c.name} deleted.`);
+                    } catch (err: any) {
+                      showToast("error", err?.message || "Failed to delete connection");
+                    }
+                  }}
+                />
+              ),
+            },
+          ]}
+        />
+      </Container>
+
+      <Modal
+        visible={showCreate}
+        onDismiss={() => setShowCreate(false)}
+        header="Create connection"
+        size="medium"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreate(false)}>Cancel</Button>
+              <Button
+                variant="primary"
+                disabled={!name.trim()}
+                loading={createConn.isPending}
+                onClick={async () => {
+                  try {
+                    await createConn.mutateAsync({ name: name.trim(), description: description || undefined });
+                    showToast("success", `Connection ${name.trim()} created.`);
+                    setShowCreate(false);
+                    setName("");
+                    setDescription("");
+                  } catch (err: any) {
+                    showToast("error", err?.message || "Failed to create connection");
+                  }
+                }}
+              >
+                Create
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          <SpaceBetween size="m">
+            <FormField label="Name">
+              <Input value={name} onChange={({ detail }) => setName(detail.value)} placeholder="my-connection" />
+            </FormField>
+            <FormField label="Description (optional)">
+              <Input value={description} onChange={({ detail }) => setDescription(detail.value)} />
+            </FormField>
+          </SpaceBetween>
+        </Form>
+      </Modal>
+    </SpaceBetween>
   );
 }

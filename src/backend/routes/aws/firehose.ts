@@ -1,7 +1,12 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { create } from "../../clients/aws";
-import { FirehoseClient } from "@aws-sdk/client-firehose";
+import {
+  FirehoseClient,
+  StartDeliveryStreamEncryptionCommand,
+  StopDeliveryStreamEncryptionCommand,
+  UpdateDestinationCommand,
+} from "@aws-sdk/client-firehose";
 import {
   ListDeliveryStreamsCommand,
   DescribeDeliveryStreamCommand,
@@ -137,6 +142,36 @@ router.delete("/streams/:name/tags", async (c: Context) => {
     new UntagDeliveryStreamCommand({ DeliveryStreamName: name, TagKeys: body.tagKeys })
   );
   return c.json({ untagged: true });
+});
+
+// ─── E.9: stream encryption + destination update ─────
+
+router.put("/delivery-streams/:name/encryption", async (c: Context) => {
+  const body = await c.req.json<any>();
+  const client = getClient();
+  if (body.enabled === false) {
+    await client.send(new StopDeliveryStreamEncryptionCommand({ DeliveryStreamName: c.req.param("name")! }));
+    return c.json({ name: c.req.param("name"), encryption: "disabled" });
+  }
+  await client.send(new StartDeliveryStreamEncryptionCommand({
+    DeliveryStreamName: c.req.param("name")!,
+    DeliveryStreamEncryptionConfigurationInput: { KeyType: body.keyType || "AWS_OWNED_CMK" } as any,
+  }));
+  return c.json({ name: c.req.param("name"), encryption: "enabled" });
+});
+
+router.put("/delivery-streams/:name/destination", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (body.destinationId === undefined) return c.json({ error: "destinationId is required" }, 400);
+  const client = getClient();
+  await client.send(new UpdateDestinationCommand({
+    DeliveryStreamName: c.req.param("name")!,
+    DestinationId: body.destinationId,
+    CurrentDeliveryStreamVersionId: body.currentVersionId,
+    ExtendedS3DestinationUpdate: body.extendedS3DestinationUpdate as any,
+    S3DestinationUpdate: body.s3DestinationUpdate as any,
+  }));
+  return c.json({ name: c.req.param("name"), updated: true });
 });
 
 export default router;
