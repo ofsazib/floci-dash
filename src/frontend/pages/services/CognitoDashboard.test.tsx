@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
+import { MemoryRouter } from "react-router-dom";
 import type { UserEvent } from "@testing-library/user-event";
 import React from "react";
 
@@ -81,7 +82,16 @@ const mockRevokeToken = vi.fn();
 const mockSignUp = vi.fn();
 const mockRespondChallenge = vi.fn();
 
+const mockCreateDomain = vi.fn();
+const mockDomainQuery = vi.fn();
+const mockUpdateDomain = vi.fn();
+const mockDeleteDomain = vi.fn();
+
 vi.mock("../../hooks/useCognito", () => ({
+  useCreateCognitoUserPoolDomain: () => ({ mutate: mockCreateDomain, isPending: false }),
+  useCognitoUserPoolDomain: (...args: any[]) => mockDomainQuery(...args),
+  useUpdateCognitoUserPoolDomain: () => ({ mutate: mockUpdateDomain, isPending: false }),
+  useDeleteCognitoUserPoolDomain: () => ({ mutate: mockDeleteDomain, isPending: false }),
   useCognitoUserPools: (...args: any[]) => mockPools(...args),
   useDeleteCognitoUserPool: () => ({
     mutateAsync: mockDeletePool,
@@ -305,6 +315,7 @@ beforeEach(() => {
   clientSecretsState.isLoading = false;
 
   mockPools.mockReturnValue({ data: { userPools: [], total: 0 }, isLoading: false });
+  mockDomainQuery.mockReturnValue({ data: undefined, isLoading: false });
   mockUsers.mockReturnValue({ data: { users: [], total: 0 } });
   mockGroups.mockReturnValue({ data: { groups: [], total: 0 } });
   mockClients.mockReturnValue({ data: { clients: [], total: 0 } });
@@ -2316,5 +2327,95 @@ describe("CognitoDashboard — add-to-group modal edge arms", () => {
       fireEvent.keyDown(d as HTMLElement, { keyCode: 27 })
     );
     expect(mockAddToGroup).not.toHaveBeenCalled();
+  });
+});
+
+describe("E.8 — Pool Domain tab", () => {
+  function cognitoWrapper() {
+    const Wrapper = createWrapper();
+    return ({ children }: { children: React.ReactNode }) => (
+      <MemoryRouter><Wrapper>{children}</Wrapper></MemoryRouter>
+    );
+  }
+
+  function openDomainTab(user: ReturnType<typeof userEvent.setup>) {
+    return (async () => {
+      mockPools.mockReturnValue({
+        data: { userPools: [{ Id: "pool-1", Name: "pool-one", Status: "Available" }], total: 1 },
+        isLoading: false,
+      });
+      render(<CognitoDashboard />, { wrapper: cognitoWrapper() });
+      await user.click(await screen.findByText("pool-one"));
+      await user.click(await screen.findByRole("tab", { name: "Domain" }));
+    })();
+  }
+
+  it("provisions a domain and shows its description", async () => {
+    const user = userEvent.setup();
+    mockCreateDomain.mockImplementation((vars: any, opts?: any) => { opts?.onSuccess?.(); return Promise.resolve({ domain: "myapp" }); });
+    mockDomainQuery.mockReturnValue({
+      data: { domain: { Domain: "myapp", Status: "ACTIVE", CloudFrontDistribution: "d123" } },
+      isLoading: false,
+    });
+    await openDomainTab(user);
+    await user.type(screen.getByPlaceholderText("myapp"), "myapp");
+    await user.click(screen.getByRole("button", { name: "Provision domain" }));
+    await waitFor(() =>
+      expect(mockCreateDomain).toHaveBeenCalledWith(
+        expect.objectContaining({ poolId: "pool-1", domain: "myapp" }),
+        expect.objectContaining({ onSuccess: expect.any(Function) })
+      )
+    );
+    expect(await screen.findByText(/ACTIVE/)).toBeTruthy();
+    expect(screen.getByText(/d123/)).toBeTruthy();
+  });
+
+  it("updates and deletes the domain", async () => {
+    const user = userEvent.setup();
+    mockUpdateDomain.mockResolvedValueOnce({ domain: "myapp" });
+    mockDeleteDomain.mockImplementation((vars: any, opts?: any) => { opts?.onSuccess?.(); return Promise.resolve({ deleted: true }); });
+    mockDomainQuery.mockReturnValue({
+      data: { domain: { Domain: "myapp", Status: "ACTIVE" } },
+      isLoading: false,
+    });
+    await openDomainTab(user);
+    await user.type(screen.getByPlaceholderText("myapp"), "myapp");
+    await user.click(screen.getByRole("button", { name: "Update domain" }));
+    await waitFor(() =>
+      expect(mockUpdateDomain).toHaveBeenCalledWith(
+        expect.objectContaining({ poolId: "pool-1", domain: "myapp" })
+      )
+    );
+    // populate the lookup (as Describe would) so Delete is enabled
+    await user.click(screen.getByRole("button", { name: "Describe" }));
+    await user.click(screen.getByRole("button", { name: "Delete domain" }));
+    await waitFor(() =>
+      expect(mockDeleteDomain).toHaveBeenCalledWith(
+        expect.objectContaining({ poolId: "pool-1", domain: "myapp" }),
+        expect.objectContaining({ onSuccess: expect.any(Function) })
+      )
+    );
+  });
+
+  it("shows the not-found warning for an undescribed domain", async () => {
+    const user = userEvent.setup();
+    mockDomainQuery.mockReturnValue({ data: { domain: null }, isLoading: false });
+    await openDomainTab(user);
+    mockDomainQuery.mockReturnValue({ data: { domain: null }, isLoading: false });
+    await user.type(screen.getByPlaceholderText("myapp"), "missing");
+    await user.click(screen.getByRole("button", { name: "Describe" }));
+    expect(await screen.findByText(/No domain description found/)).toBeTruthy();
+
+    // Status "-" fallback (domain present without Status) + loading arm
+    mockDomainQuery.mockReturnValue({ data: { domain: { Domain: "other" } }, isLoading: false });
+    await user.clear(screen.getByPlaceholderText("myapp"));
+    await user.type(screen.getByPlaceholderText("myapp"), "other");
+    await user.click(screen.getByRole("button", { name: "Describe" }));
+    expect(await screen.findByText("other")).toBeTruthy();
+    mockDomainQuery.mockReturnValue({ data: { domain: { Domain: "other" } }, isLoading: true });
+    await user.clear(screen.getByPlaceholderText("myapp"));
+    await user.type(screen.getByPlaceholderText("myapp"), "third");
+    await user.click(screen.getByRole("button", { name: "Describe" }));
+    expect(await screen.findByText(/Loading/)).toBeTruthy();
   });
 });

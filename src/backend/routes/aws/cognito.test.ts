@@ -29,6 +29,13 @@ vi.mock("@aws-sdk/client-cognito-identity-provider", () => ({
   DeleteGroupCommand: createCmd("DeleteGroupCommand"),
   ListUserPoolClientsCommand: createCmd("ListUserPoolClientsCommand"),
   DescribeUserPoolClientCommand: createCmd("DescribeUserPoolClientCommand"),
+  // E.8
+  CreateUserPoolDomainCommand: createCmd("CreateUserPoolDomainCommand"),
+  DescribeUserPoolDomainCommand: createCmd("DescribeUserPoolDomainCommand"),
+  UpdateUserPoolDomainCommand: createCmd("UpdateUserPoolDomainCommand"),
+  DeleteUserPoolDomainCommand: createCmd("DeleteUserPoolDomainCommand"),
+  VerifyUserAttributeCommand: createCmd("VerifyUserAttributeCommand"),
+  GetUserAttributeVerificationCodeCommand: createCmd("GetUserAttributeVerificationCodeCommand"),
   CreateUserPoolClientCommand: createCmd("CreateUserPoolClientCommand"),
   DeleteUserPoolClientCommand: createCmd("DeleteUserPoolClientCommand"),
   ListResourceServersCommand: createCmd("ListResourceServersCommand"),
@@ -961,4 +968,88 @@ describe("Cognito Routes", () => {
     expect(await res400.json()).toEqual({ error: "clientId and token are required" });
   });
 
+});
+
+describe("E.8 — user pool domains", () => {
+  it("creates a domain and 400s without one", async () => {
+    mockSend.mockResolvedValueOnce({ CloudFrontDomain: "d123.cloudfront.net" });
+    const res = await post("/user-pools/pool-1/domain", { domain: "myapp" });
+    expect(res.status).toBe(201);
+    expect(mockSend.mock.calls[0][0].Domain).toBe("myapp");
+    expect(mockSend.mock.calls[0][0].UserPoolId).toBe("pool-1");
+    expect((await res.json()).cloudFrontDomain).toBe("d123.cloudfront.net");
+    expect((await post("/user-pools/pool-1/domain", {})).status).toBe(400);
+  });
+
+  it("describes a domain and 400s without the query param", async () => {
+    mockSend.mockResolvedValueOnce({
+      DomainDescription: { Domain: "myapp", Status: "ACTIVE", UserPoolId: "pool-1", CloudFrontDistribution: "d123" },
+    });
+    const body = await (await get("/user-pools/pool-1/domain?domain=myapp")).json();
+    expect(mockSend.mock.calls[0][0].Domain).toBe("myapp");
+    expect(body.domain.Domain).toBe("myapp");
+    expect(body.domain.Status).toBe("ACTIVE");
+
+    mockSend.mockResolvedValueOnce({});
+    expect((await (await get("/user-pools/pool-1/domain?domain=x")).json()).domain).toBeNull();
+    expect((await get("/user-pools/pool-1/domain")).status).toBe(400);
+  });
+
+  it("updates a domain (with and without custom config)", async () => {
+    mockSend.mockResolvedValueOnce({ CloudFrontDomain: "d456.cloudfront.net" });
+    const res = await put("/user-pools/pool-1/domain", { domain: "myapp", customDomainConfig: { certificateArn: "arn:cert" } });
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].CustomDomainConfig).toEqual({ certificateArn: "arn:cert" });
+    expect((await res.json()).cloudFrontDomain).toBe("d456.cloudfront.net");
+
+    mockSend.mockResolvedValueOnce({});
+    expect((await put("/user-pools/pool-1/domain", { domain: "myapp" })).status).toBe(200);
+
+    mockSend.mockResolvedValueOnce({});
+    const sparseUpdate = await (await put("/user-pools/pool-1/domain", { domain: "myapp" })).json();
+    expect(sparseUpdate.cloudFrontDomain).toBeNull();
+    expect((await put("/user-pools/pool-1/domain", {})).status).toBe(400);
+
+    mockSend.mockResolvedValueOnce({});
+    expect((await (await post("/user-pools/pool-1/domain", { domain: "bare" })).json()).cloudFrontDomain).toBeNull();
+  });
+
+  it("deletes a domain and 400s without the query param", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await del("/user-pools/pool-1/domain?domain=myapp");
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].Domain).toBe("myapp");
+    expect(mockSend.mock.calls[0][0].UserPoolId).toBe("pool-1");
+    expect((await res.json()).deleted).toBe(true);
+    expect((await del("/user-pools/pool-1/domain")).status).toBe(400);
+  });
+});
+
+describe("E.8 — attribute verification", () => {
+  it("verifies a user attribute and 400s on missing fields", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/user-pools/pool-1/auth/verify-user-attribute", { accessToken: "at", attributeName: "email", code: "123456" });
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].AttributeName).toBe("email");
+    expect((await res.json()).verified).toBe(true);
+    expect((await post("/user-pools/pool-1/auth/verify-user-attribute", { accessToken: "at" })).status).toBe(400);
+  });
+
+  it("gets an attribute verification code and 400s on missing fields", async () => {
+    mockSend.mockResolvedValueOnce({ CodeDeliveryDetails: { Destination: "a***@b.com" } });
+    const res = await post("/user-pools/pool-1/auth/get-attribute-verification-code", { accessToken: "at", attributeName: "email" });
+    expect(res.status).toBe(200);
+    expect((await res.json()).result.CodeDeliveryDetails.Destination).toBe("a***@b.com");
+    expect((await post("/user-pools/pool-1/auth/get-attribute-verification-code", { accessToken: "at" })).status).toBe(400);
+  });
+
+  it("passes explicitAuthFlows on client create and update", async () => {
+    mockSend.mockResolvedValueOnce({ UserPoolClient: { ClientId: "cid", ClientName: "n" } });
+    await post("/user-pools/pool-1/clients", { clientName: "n", explicitAuthFlows: ["ALLOW_USER_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"] });
+    expect(mockSend.mock.calls[0][0].ExplicitAuthFlows).toEqual(["ALLOW_USER_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"]);
+
+    mockSend.mockResolvedValueOnce({ UserPoolClient: { ClientId: "cid" } });
+    await put("/user-pools/pool-1/clients/cid", { explicitAuthFlows: ["ALLOW_USER_SRP_AUTH"] });
+    expect(mockSend.mock.calls[1][0].ExplicitAuthFlows).toEqual(["ALLOW_USER_SRP_AUTH"]);
+  });
 });

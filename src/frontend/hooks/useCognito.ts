@@ -680,3 +680,54 @@ export function useAdminAddUserToGroup(userPoolId: string) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cognito"] }),
   });
 }
+
+// ─── E.8: User pool domains + attribute verification ──
+
+export function useCreateCognitoUserPoolDomain() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ poolId, ...body }: { poolId: string; domain: string; customDomainConfig?: { certificateArn?: string } }) =>
+      api(`/aws/cognito/user-pools/${poolId}/domain`, { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cognito", "domain"] }),
+  });
+}
+
+export function useCognitoUserPoolDomain(poolId: string, domain: string | null) {
+  return useQuery({
+    queryKey: ["aws", "cognito", "domain", poolId, domain],
+    queryFn: () => api<{ domain: Record<string, any> | null }>(`/aws/cognito/user-pools/${poolId}/domain?domain=${encodeURIComponent(domain!)}`),
+    enabled: !!domain,
+  });
+}
+
+export function useUpdateCognitoUserPoolDomain() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ poolId, ...body }: { poolId: string; domain: string; customDomainConfig?: { certificateArn?: string } }) =>
+      api(`/aws/cognito/user-pools/${poolId}/domain`, { method: "PUT", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cognito", "domain"] }),
+  });
+}
+
+export function useDeleteCognitoUserPoolDomain() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ poolId, domain }: { poolId: string; domain: string }) =>
+      api(`/aws/cognito/user-pools/${poolId}/domain?domain=${encodeURIComponent(domain)}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cognito", "domain"] }),
+  });
+}
+
+export function useVerifyCognitoUserAttribute() {
+  return useMutation({
+    mutationFn: ({ poolId, ...body }: { poolId: string; accessToken: string; attributeName: string; code: string }) =>
+      api(`/aws/cognito/user-pools/${poolId}/auth/verify-user-attribute`, { method: "POST", body: JSON.stringify(body) }),
+  });
+}
+
+export function useGetCognitoAttributeVerificationCode() {
+  return useMutation({
+    mutationFn: ({ poolId, ...body }: { poolId: string; accessToken: string; attributeName: string }) =>
+      api(`/aws/cognito/user-pools/${poolId}/auth/get-attribute-verification-code`, { method: "POST", body: JSON.stringify(body) }),
+  });
+}

@@ -62,6 +62,13 @@ import {
   ListTagsForResourceCommand,
   TagResourceCommand,
   UntagResourceCommand,
+  // E.8 — user pool domains + attribute verification
+  CreateUserPoolDomainCommand,
+  DescribeUserPoolDomainCommand,
+  UpdateUserPoolDomainCommand,
+  DeleteUserPoolDomainCommand,
+  VerifyUserAttributeCommand,
+  GetUserAttributeVerificationCodeCommand,
 } from "@aws-sdk/client-cognito-identity-provider";
 
 const router = new Hono();
@@ -245,6 +252,7 @@ router.post("/user-pools/:id/clients", async (c: Context) => {
     callbackURLs?: string[];
     logoutURLs?: string[];
     allowedOAuthFlowsUserPoolClient?: boolean;
+    explicitAuthFlows?: string[];
   }>();
   if (!body.clientName) return c.json({ error: "clientName is required" }, 400);
 
@@ -257,6 +265,7 @@ router.post("/user-pools/:id/clients", async (c: Context) => {
       CallbackURLs: body.callbackURLs,
       LogoutURLs: body.logoutURLs,
       AllowedOAuthFlowsUserPoolClient: body.allowedOAuthFlowsUserPoolClient,
+      ExplicitAuthFlows: body.explicitAuthFlows as any,
     })
   );
   return c.json({ client: result.UserPoolClient }, 201);
@@ -705,7 +714,7 @@ router.put("/user-pools/:id", async (c: Context) => {
 router.put("/user-pools/:id/clients/:clientId", async (c: Context) => {
   const id = c.req.param("id");
   const clientId = c.req.param("clientId");
-  const body = await c.req.json<{ name?: string; refreshTokenValidity?: number; logoutURLs?: string[]; callbackURLs?: string[] }>();
+  const body = await c.req.json<{ name?: string; refreshTokenValidity?: number; logoutURLs?: string[]; callbackURLs?: string[]; explicitAuthFlows?: string[] }>();
   if (body.name === "") return c.json({ error: "name cannot be empty" }, 400);
   const client = getClient();
   const result = await client.send(new UpdateUserPoolClientCommand({
@@ -715,6 +724,7 @@ router.put("/user-pools/:id/clients/:clientId", async (c: Context) => {
     RefreshTokenValidity: body.refreshTokenValidity,
     LogoutURLs: body.logoutURLs,
     CallbackURLs: body.callbackURLs,
+    ExplicitAuthFlows: body.explicitAuthFlows as any,
   }));
   return c.json({ result });
 });
@@ -817,6 +827,80 @@ router.post("/auth/respond-challenge", async (c: Context) => {
     ChallengeName: body.challengeName as any,
     ChallengeResponses: body.challengeResponses,
     Session: body.session,
+  }));
+  return c.json({ result });
+});
+
+// ─── E.8: User Pool Domains ──────────────────────────
+
+router.get("/user-pools/:id/domain", async (c: Context) => {
+  const id = c.req.param("id")!;
+  const domain = c.req.query("domain");
+  if (!domain) return c.json({ error: "domain query param is required" }, 400);
+  const client = getClient();
+  const result = await client.send(new DescribeUserPoolDomainCommand({ Domain: domain }));
+  return c.json({ domain: result.DomainDescription ?? null });
+});
+
+router.post("/user-pools/:id/domain", async (c: Context) => {
+  const id = c.req.param("id")!;
+  const body = await c.req.json<{ domain: string; customDomainConfig?: { certificateArn?: string } }>();
+  if (!body.domain) return c.json({ error: "domain is required" }, 400);
+  const client = getClient();
+  const result = await client.send(new CreateUserPoolDomainCommand({
+    Domain: body.domain,
+    UserPoolId: id,
+    CustomDomainConfig: body.customDomainConfig as any,
+  }));
+  return c.json({ domain: body.domain, cloudFrontDomain: result.CloudFrontDomain ?? null }, 201);
+});
+
+router.put("/user-pools/:id/domain", async (c: Context) => {
+  const id = c.req.param("id")!;
+  const body = await c.req.json<{ domain: string; customDomainConfig?: { certificateArn?: string } }>();
+  if (!body.domain) return c.json({ error: "domain is required" }, 400);
+  const client = getClient();
+  const result = await client.send(new UpdateUserPoolDomainCommand({
+    Domain: body.domain,
+    UserPoolId: id,
+    CustomDomainConfig: body.customDomainConfig as any,
+  }));
+  return c.json({ domain: body.domain, cloudFrontDomain: result.CloudFrontDomain ?? null });
+});
+
+router.delete("/user-pools/:id/domain", async (c: Context) => {
+  const domain = c.req.query("domain");
+  if (!domain) return c.json({ error: "domain query param is required" }, 400);
+  const client = getClient();
+  await client.send(new DeleteUserPoolDomainCommand({ Domain: domain, UserPoolId: c.req.param("id")! }));
+  return c.json({ domain, deleted: true });
+});
+
+// ─── E.8: Attribute verification ─────────────────────
+
+router.post("/user-pools/:id/auth/verify-user-attribute", async (c: Context) => {
+  const body = await c.req.json<{ accessToken: string; attributeName: string; code: string }>();
+  if (!body.accessToken || !body.attributeName || !body.code) {
+    return c.json({ error: "accessToken, attributeName and code are required" }, 400);
+  }
+  const client = getClient();
+  await client.send(new VerifyUserAttributeCommand({
+    AccessToken: body.accessToken,
+    AttributeName: body.attributeName,
+    Code: body.code,
+  }));
+  return c.json({ verified: true });
+});
+
+router.post("/user-pools/:id/auth/get-attribute-verification-code", async (c: Context) => {
+  const body = await c.req.json<{ accessToken: string; attributeName: string }>();
+  if (!body.accessToken || !body.attributeName) {
+    return c.json({ error: "accessToken and attributeName are required" }, 400);
+  }
+  const client = getClient();
+  const result = await client.send(new GetUserAttributeVerificationCodeCommand({
+    AccessToken: body.accessToken,
+    AttributeName: body.attributeName,
   }));
   return c.json({ result });
 });

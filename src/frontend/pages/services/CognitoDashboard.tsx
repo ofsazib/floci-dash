@@ -267,6 +267,10 @@ import {
   useRevokeToken,
   useSignUp,
   useRespondToAuthChallenge,
+  useCreateCognitoUserPoolDomain,
+  useCognitoUserPoolDomain,
+  useUpdateCognitoUserPoolDomain,
+  useDeleteCognitoUserPoolDomain,
 } from "../../hooks/useCognito";
 import {
   useApiGatewayV2Apis,
@@ -800,6 +804,11 @@ export function CognitoDashboard() {
                   filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
                 />
               ),
+            },
+            {
+              id: "domain",
+              label: "Domain",
+              content: <PoolDomainPanel poolId={selectedPool} />,
             },
             {
               id: "clients",
@@ -1790,3 +1799,63 @@ export function CognitoDashboard() {
 //  API Gateway V2
 // ────────────────────────────────────────────────────────
 
+
+
+// ─── E.8: Pool domain panel ──────────────────────────
+
+function PoolDomainPanel({ poolId }: { poolId: string }) {
+  const [domainName, setDomainName] = useState("");
+  const [lookup, setLookup] = useState<string | null>(null);
+  const create = useCreateCognitoUserPoolDomain();
+  const update = useUpdateCognitoUserPoolDomain();
+  const remove = useDeleteCognitoUserPoolDomain();
+  const { data, isLoading } = useCognitoUserPoolDomain(poolId, lookup);
+
+  return (
+    <SpaceBetween size="l">
+      <Container header={<Header variant="h2" description="Provision a hosted UI / managed login domain for this user pool.">User pool domain</Header>}>
+        <SpaceBetween size="m">
+          <SpaceBetween direction="horizontal" size="s">
+            <FormField label="Domain">
+              <Input value={domainName} onChange={({ detail }) => setDomainName(detail.value)} placeholder="myapp" />
+            </FormField>
+            <Button
+              variant="primary"
+              disabled={!domainName.trim()}
+              loading={create.isPending}
+              onClick={() => create.mutate({ poolId, domain: domainName.trim() }, { onSuccess: () => setLookup(domainName.trim()) })}
+            >
+              Provision domain
+            </Button>
+            <Button
+              disabled={!domainName.trim()}
+              loading={update.isPending}
+              onClick={() => update.mutate({ poolId, domain: domainName.trim() })}
+            >
+              Update domain
+            </Button>
+            <Button
+              disabled={!lookup}
+              loading={remove.isPending}
+              onClick={() => remove.mutate({ poolId, domain: lookup! }, { onSuccess: () => setLookup(null) })}
+            >
+              Delete domain
+            </Button>
+            <Button disabled={!domainName.trim()} onClick={() => setLookup(domainName.trim())}>Describe</Button>
+          </SpaceBetween>
+          {isLoading && <StatusIndicator type="loading">Loading…</StatusIndicator>}
+          {lookup && data?.domain && (
+            <Box>
+              <div>Domain: <strong>{data.domain.Domain}</strong></div>
+              <div>Status: {data.domain.Status ?? "-"}</div>
+              {data.domain.CloudFrontDistribution && <div>CloudFront: {data.domain.CloudFrontDistribution}</div>}
+            </Box>
+          )}
+          {lookup && !isLoading && !data?.domain && (
+            <StatusIndicator type="warning">No domain description found for "{lookup}"</StatusIndicator>
+          )}
+        </SpaceBetween>
+      </Container>
+    </SpaceBetween>
+  );
+}

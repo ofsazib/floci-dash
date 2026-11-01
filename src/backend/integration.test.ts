@@ -6317,3 +6317,43 @@ describe("IoT E.7 Integration", () => {
     expect(del.data.deleted).toBe(true);
   });
 });
+
+// ═════════════════════════════════════════════════════════
+//  Cognito E.8 Integration Tests (user pool domains)
+// ═════════════════════════════════════════════════════════
+
+describe("Cognito E.8 Integration", () => {
+  let poolId = "";
+  const domain = `it-e8-${Date.now()}`;
+
+  beforeAll(async () => {
+    const created = await api("POST", "/api/aws/cognito/user-pools", { poolName: `it-e8-pool-${Date.now()}` });
+    poolId = created.data.userPool?.Id || created.data.userPool?.id || created.data.id;
+  });
+
+  afterAll(async () => {
+    if (poolId) await api("DELETE", `/api/aws/cognito/user-pools/${poolId}`).catch(() => {});
+  });
+
+  it("provisions, describes, updates and deletes a user pool domain", async () => {
+    if (!poolId) return console.warn("Skipping: no user pool");
+    const created = await api("POST", `/api/aws/cognito/user-pools/${poolId}/domain`, { domain });
+    expect(created.status).toBe(201);
+
+    const desc = await api("GET", `/api/aws/cognito/user-pools/${poolId}/domain?domain=${domain}`);
+    expect(desc.status).toBe(200);
+    expect(desc.data.domain?.Domain).toBe(domain);
+
+    const updated = await api("PUT", `/api/aws/cognito/user-pools/${poolId}/domain`, { domain });
+    expect(updated.status).toBe(200);
+
+    const del = await api("DELETE", `/api/aws/cognito/user-pools/${poolId}/domain?domain=${domain}`);
+    expect(del.status).toBe(200);
+    expect(del.data.deleted).toBe(true);
+  });
+
+  it("rejects a domain without a name", async () => {
+    if (!poolId) return;
+    expect((await api("POST", `/api/aws/cognito/user-pools/${poolId}/domain`, {})).status).toBe(400);
+  });
+});

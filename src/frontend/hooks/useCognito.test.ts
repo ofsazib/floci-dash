@@ -71,6 +71,12 @@ import {
   useGlobalSignOut,
   useRevokeToken,
   useSignUp,
+  useCreateCognitoUserPoolDomain,
+  useCognitoUserPoolDomain,
+  useUpdateCognitoUserPoolDomain,
+  useDeleteCognitoUserPoolDomain,
+  useVerifyCognitoUserAttribute,
+  useGetCognitoAttributeVerificationCode,
   useRespondToAuthChallenge,
   useAdminAddUserToGroup,
 } from "./useCognito";
@@ -694,5 +700,58 @@ describe("useAdminAddUserToGroup", () => {
       "/aws/cognito/user-pools/p%201/users/b%201/groups/admins",
       { method: "POST" }
     );
+  });
+});
+
+describe("E.8 cognito domain + verification hooks", () => {
+  it("domain CRUD hooks hit the right URLs", async () => {
+    mockApi.mockResolvedValueOnce({ domain: "myapp" });
+    const { result } = renderHook(() => useCreateCognitoUserPoolDomain(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ poolId: "pool-1", domain: "myapp" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/cognito/user-pools/pool-1/domain", {
+      method: "POST",
+      body: JSON.stringify({ domain: "myapp" }),
+    });
+
+    mockApi.mockResolvedValueOnce({ domain: "myapp" });
+    const { result: upd } = renderHook(() => useUpdateCognitoUserPoolDomain(), { wrapper: createWrapper() });
+    await upd.current.mutateAsync({ poolId: "pool-1", domain: "myapp" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/cognito/user-pools/pool-1/domain", {
+      method: "PUT",
+      body: JSON.stringify({ domain: "myapp" }),
+    });
+
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result: del } = renderHook(() => useDeleteCognitoUserPoolDomain(), { wrapper: createWrapper() });
+    await del.current.mutateAsync({ poolId: "pool-1", domain: "myapp" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/cognito/user-pools/pool-1/domain?domain=myapp", { method: "DELETE" });
+  });
+
+  it("useCognitoUserPoolDomain gates on domain", async () => {
+    const disabled = renderHook(() => useCognitoUserPoolDomain("pool-1", null), { wrapper: createWrapper() });
+    expect(disabled.result.current.fetchStatus).toBe("idle");
+
+    mockApi.mockResolvedValueOnce({ domain: { Domain: "myapp" } });
+    const { result } = renderHook(() => useCognitoUserPoolDomain("pool-1", "myapp"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/cognito/user-pools/pool-1/domain?domain=myapp");
+  });
+
+  it("verify + verification-code hooks POST correctly", async () => {
+    mockApi.mockResolvedValueOnce({ verified: true });
+    const { result } = renderHook(() => useVerifyCognitoUserAttribute(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ poolId: "pool-1", accessToken: "at", attributeName: "email", code: "123" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/cognito/user-pools/pool-1/auth/verify-user-attribute", {
+      method: "POST",
+      body: JSON.stringify({ accessToken: "at", attributeName: "email", code: "123" }),
+    });
+
+    mockApi.mockResolvedValueOnce({ result: {} });
+    const { result: code } = renderHook(() => useGetCognitoAttributeVerificationCode(), { wrapper: createWrapper() });
+    await code.current.mutateAsync({ poolId: "pool-1", accessToken: "at", attributeName: "email" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/cognito/user-pools/pool-1/auth/get-attribute-verification-code", {
+      method: "POST",
+      body: JSON.stringify({ accessToken: "at", attributeName: "email" }),
+    });
   });
 });
