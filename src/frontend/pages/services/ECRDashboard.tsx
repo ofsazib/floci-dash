@@ -158,6 +158,11 @@ import {
   useECRImageManifest,
   useECRAuthToken,
   type ECRManifestParams,
+  useECRPullThroughCacheRules,
+  useECRCreatePullThroughCacheRule,
+  useECRUpdatePullThroughCacheRule,
+  useECRDeletePullThroughCacheRule,
+  useECRValidatePullThroughCacheRule,
 } from "../../hooks/useECR";
 import {
   useELBLoadBalancers,
@@ -628,6 +633,160 @@ export function ECRDashboard() {
           mutation={putMutability}
         />
       )}
+      <ECRPullThroughCacheRulesSection />
+    </>
+  );
+}
+
+// ────────────────────────────────────────────────────────
+//  ECR — Pull-through cache rules
+// ────────────────────────────────────────────────────────
+
+function ECRPullThroughCacheRuleModal({
+  onClose,
+  editPrefix,
+}: {
+  onClose: () => void;
+  editPrefix?: string | null;
+}) {
+  const createRule = useECRCreatePullThroughCacheRule();
+  const updateRule = useECRUpdatePullThroughCacheRule();
+  const [prefix, setPrefix] = useState(editPrefix || "");
+  const [upstreamRegistryUrl, setUpstreamRegistryUrl] = useState("");
+  const [upstreamRepositoryPrefix, setUpstreamRepositoryPrefix] = useState("");
+  const [credentialArn, setCredentialArn] = useState("");
+  const [customRoleArn, setCustomRoleArn] = useState("");
+
+  const canSubmit = editPrefix ? !!credentialArn.trim() || !!customRoleArn.trim() : !!prefix.trim() && !!upstreamRegistryUrl.trim();
+
+  const handleSubmit = async () => {
+    try {
+      if (editPrefix) {
+        await updateRule.mutateAsync({
+          prefix: editPrefix,
+          credentialArn: credentialArn.trim() || undefined,
+          customRoleArn: customRoleArn.trim() || undefined,
+        });
+      } else {
+        await createRule.mutateAsync({
+          ecrRepositoryPrefix: prefix.trim(),
+          upstreamRegistryUrl: upstreamRegistryUrl.trim(),
+          upstreamRepositoryPrefix: upstreamRepositoryPrefix.trim() || undefined,
+          credentialArn: credentialArn.trim() || undefined,
+          customRoleArn: customRoleArn.trim() || undefined,
+        });
+      }
+      onClose();
+    } catch {
+      // error surfaced via mutation state
+    }
+  };
+
+  return (
+    <Modal
+      visible
+      onDismiss={onClose}
+      header={editPrefix ? `Update pull-through cache rule — ${editPrefix}` : "Create pull-through cache rule"}
+      footer={
+        <Box float="right">
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button variant="link" onClick={onClose}>Cancel</Button>
+            <Button variant="primary" loading={createRule.isPending || updateRule.isPending} disabled={!canSubmit} onClick={handleSubmit}>
+              {editPrefix ? "Update" : "Create rule"}
+            </Button>
+          </SpaceBetween>
+        </Box>
+      }
+    >
+      <Form>
+        <SpaceBetween size="m">
+          {!editPrefix && (
+            <FormField label="Repository prefix">
+              <Input value={prefix} onChange={({ detail }) => setPrefix(detail.value)} placeholder="docker-hub" />
+            </FormField>
+          )}
+          {!editPrefix && (
+            <FormField label="Upstream registry URL">
+              <Input value={upstreamRegistryUrl} onChange={({ detail }) => setUpstreamRegistryUrl(detail.value)} placeholder="registry-1.docker.io" />
+            </FormField>
+          )}
+          {!editPrefix && (
+            <FormField label="Upstream repository prefix">
+              <Input value={upstreamRepositoryPrefix} onChange={({ detail }) => setUpstreamRepositoryPrefix(detail.value)} placeholder="namespace" />
+            </FormField>
+          )}
+          <FormField label="Credential ARN">
+            <Input value={credentialArn} onChange={({ detail }) => setCredentialArn(detail.value)} placeholder="arn:aws:secretsmanager:...:secret:..." />
+          </FormField>
+          <FormField label="Custom role ARN">
+            <Input value={customRoleArn} onChange={({ detail }) => setCustomRoleArn(detail.value)} placeholder="arn:aws:iam::...:role/..." />
+          </FormField>
+        </SpaceBetween>
+      </Form>
+    </Modal>
+  );
+}
+
+function ECRPullThroughCacheRulesSection() {
+  const { data, isLoading } = useECRPullThroughCacheRules();
+  const deleteRule = useECRDeletePullThroughCacheRule();
+  const validateRule = useECRValidatePullThroughCacheRule();
+  const [showCreate, setShowCreate] = useState(false);
+  const [editPrefix, setEditPrefix] = useState<string | null>(null);
+  const rules = data?.rules || [];
+
+  return (
+    <>
+      <ResourceTable
+        resourceName="Pull-through cache rule"
+        headerTitle="Pull-Through Cache Rules"
+        headerCounter={data?.total}
+        items={rules.map((r: any) => ({
+          prefix: r.ecrRepositoryPrefix,
+          registryId: r.registryId,
+          upstreamRegistryUrl: r.upstreamRegistryUrl,
+          upstreamRepositoryPrefix: r.upstreamRepositoryPrefix || "-",
+          credentialArn: r.credentialArn || "-",
+          updatedAt: r.updatedAt ? new Date(r.updatedAt * 1000).toLocaleString() : "-",
+        }))}
+        loading={isLoading}
+        onCreate={() => setShowCreate(true)}
+        emptyMessage="No pull-through cache rules"
+        columns={[
+          { id: "prefix", header: "Prefix", cell: (i: any) => i.prefix, isRowHeader: true },
+          { id: "upstreamRegistryUrl", header: "Upstream Registry", cell: (i: any) => i.upstreamRegistryUrl },
+          { id: "upstreamRepositoryPrefix", header: "Upstream Prefix", cell: (i: any) => i.upstreamRepositoryPrefix },
+          { id: "credentialArn", header: "Credential", cell: (i: any) => i.credentialArn },
+          { id: "updatedAt", header: "Updated", cell: (i: any) => i.updatedAt },
+          {
+            id: "actions",
+            header: "",
+            cell: (i: any) => (
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button variant="link" onClick={() => setEditPrefix(i.prefix)}>Update</Button>
+                <Button
+                  variant="link"
+                  loading={validateRule.isPending && validateRule.variables === i.prefix}
+                  onClick={() => validateRule.mutateAsync(i.prefix)}
+                >
+                  Validate
+                </Button>
+                <DeleteButton
+                  itemName={i.prefix}
+                  resourceType="pull-through cache rule"
+                  loading={deleteRule.isPending && deleteRule.variables === i.prefix}
+                  onDelete={() => deleteRule.mutateAsync(i.prefix)}
+                />
+              </SpaceBetween>
+            ),
+          },
+        ]}
+        filterEnabled
+        filterPlaceholder="Find rules by prefix"
+        filterFunction={(i: any, searchText: string) => i.prefix.toLowerCase().includes(searchText.toLowerCase())}
+      />
+      {showCreate && <ECRPullThroughCacheRuleModal onClose={() => setShowCreate(false)} />}
+      {editPrefix && <ECRPullThroughCacheRuleModal editPrefix={editPrefix} onClose={() => setEditPrefix(null)} />}
     </>
   );
 }

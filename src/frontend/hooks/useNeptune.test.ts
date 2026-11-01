@@ -27,6 +27,12 @@ import {
   useDeleteNeptuneInstance,
   useModifyNeptuneCluster,
   useModifyNeptuneInstance,
+  useAddNeptuneClusterRole,
+  useRemoveNeptuneClusterRole,
+  useNeptuneGlobalClusters,
+  useNeptuneResourceTags,
+  useAddNeptuneResourceTags,
+  useRemoveNeptuneResourceTags,
 } from "./useNeptune";
 
 beforeEach(() => mockApi.mockReset());
@@ -115,6 +121,67 @@ describe("useModifyNeptuneInstance", () => {
     expect(mockApi).toHaveBeenCalledWith("/aws/neptune/instances/i%201", {
       method: "PATCH",
       body: JSON.stringify({"instanceClass":"db.r5.large"}),
+    });
+  });
+});
+
+describe("useNeptune roles/global clusters/resource tags (E.9 batch 2)", () => {
+  it("useAddNeptuneClusterRole calls POST", async () => {
+    mockApi.mockResolvedValueOnce({ added: true });
+    const { result } = renderHook(() => useAddNeptuneClusterRole(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ id: "db1", roleArn: "arn:role" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/neptune/clusters/db1/roles", {
+      method: "POST",
+      body: JSON.stringify({ roleArn: "arn:role" }),
+    });
+  });
+
+  it("useRemoveNeptuneClusterRole calls DELETE", async () => {
+    mockApi.mockResolvedValueOnce({ removed: true });
+    const { result } = renderHook(() => useRemoveNeptuneClusterRole(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ id: "db1", roleArn: "arn:role" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/neptune/clusters/db1/roles", {
+      method: "DELETE",
+      body: JSON.stringify({ roleArn: "arn:role" }),
+    });
+  });
+
+  it("useNeptuneGlobalClusters calls correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ globalClusters: [], total: 0 });
+    const { result } = renderHook(() => useNeptuneGlobalClusters(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/neptune/global-clusters");
+  });
+
+  it("useNeptuneResourceTags calls correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ tags: [], total: 0 });
+    const { result } = renderHook(() => useNeptuneResourceTags("arn:x"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(`/aws/neptune/resource-tags?resourceName=${encodeURIComponent("arn:x")}`);
+  });
+
+  it("useNeptuneResourceTags disabled when null", () => {
+    const { result } = renderHook(() => useNeptuneResourceTags(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+
+  it("useAddNeptuneResourceTags calls POST", async () => {
+    mockApi.mockResolvedValueOnce({ tagged: true });
+    const { result } = renderHook(() => useAddNeptuneResourceTags(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ resourceName: "arn:x", tags: { a: "1" } });
+    expect(mockApi).toHaveBeenCalledWith("/aws/neptune/resource-tags", {
+      method: "POST",
+      body: JSON.stringify({ resourceName: "arn:x", tags: { a: "1" } }),
+    });
+  });
+
+  it("useRemoveNeptuneResourceTags calls DELETE", async () => {
+    mockApi.mockResolvedValueOnce({ untagged: true });
+    const { result } = renderHook(() => useRemoveNeptuneResourceTags(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ resourceName: "arn:x", tagKeys: ["a"] });
+    expect(mockApi).toHaveBeenCalledWith("/aws/neptune/resource-tags", {
+      method: "DELETE",
+      body: JSON.stringify({ resourceName: "arn:x", tagKeys: ["a"] }),
     });
   });
 });

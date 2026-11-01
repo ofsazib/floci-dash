@@ -167,3 +167,38 @@ export function usePutEventSelectors(trailName: string) {
       qc.invalidateQueries({ queryKey: ["aws", "cloudtrail", "event-selectors", trailName] }),
   });
 }
+
+// ── Trail Tags (E.9 batch 2, family 5) ───────────────────
+
+export interface CloudTrailTag {
+  Key: string;
+  Value?: string;
+}
+
+export function useTrailTags(resourceId: string | null) {
+  return useQuery<{ resourceId: string; tags: CloudTrailTag[]; total: number }>({
+    queryKey: ["aws", "cloudtrail", "trail-tags", resourceId],
+    queryFn: () => api(`/aws/cloudtrail/trail-tags?resourceId=${encodeURIComponent(resourceId!)}`),
+    enabled: !!resourceId,
+  });
+}
+
+export function useAddTrailTags() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { resourceId: string; tags: Record<string, string> }) =>
+      api("/aws/cloudtrail/trail-tags", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: (_d, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "cloudtrail", "trail-tags", variables.resourceId] }),
+  });
+}
+
+export function useRemoveTrailTags() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { resourceId: string; tagKeys: string[] }) =>
+      api("/aws/cloudtrail/trail-tags", { method: "DELETE", body: JSON.stringify(data) }),
+    onSuccess: (_d, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "cloudtrail", "trail-tags", variables.resourceId] }),
+  });
+}

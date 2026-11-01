@@ -13,6 +13,12 @@ import {
   DescribeDBInstancesCommand,
   CreateDBInstanceCommand,
   DeleteDBInstanceCommand,
+  AddRoleToDBClusterCommand,
+  RemoveRoleFromDBClusterCommand,
+  DescribeGlobalClustersCommand,
+  ListTagsForResourceCommand,
+  AddTagsToResourceCommand,
+  RemoveTagsFromResourceCommand,
 } from "@aws-sdk/client-neptune";
 
 const router = new Hono();
@@ -133,6 +139,77 @@ router.patch("/instances/:id", async (c: Context) => {
     })
   );
   return c.json({ instance: result.DBInstance || null });
+});
+
+// ── Cluster IAM Roles ────────────────────────────────────
+
+router.post("/clusters/:id/roles", async (c: Context) => {
+  const id = c.req.param("id");
+  const body = await c.req.json<{ roleArn: string }>();
+  if (!body.roleArn) return c.json({ error: "roleArn is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new AddRoleToDBClusterCommand({ DBClusterIdentifier: id, RoleArn: body.roleArn })
+  );
+  return c.json({ added: true });
+});
+
+router.delete("/clusters/:id/roles", async (c: Context) => {
+  const id = c.req.param("id");
+  const body = await c.req.json<{ roleArn: string }>();
+  if (!body.roleArn) return c.json({ error: "roleArn is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new RemoveRoleFromDBClusterCommand({ DBClusterIdentifier: id, RoleArn: body.roleArn })
+  );
+  return c.json({ removed: true });
+});
+
+// ── Global Clusters ──────────────────────────────────────
+
+router.get("/global-clusters", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new DescribeGlobalClustersCommand({}));
+  const globalClusters = result.GlobalClusters || [];
+  return c.json({ globalClusters, total: globalClusters.length });
+});
+
+// ── Resource Tags ────────────────────────────────────────
+
+router.get("/resource-tags", async (c: Context) => {
+  const resourceName = c.req.query("resourceName");
+  if (!resourceName) return c.json({ error: "resourceName is required" }, 400);
+  const client = getClient();
+  const result = await client.send(new ListTagsForResourceCommand({ ResourceName: resourceName }));
+  const tags = result.TagList || [];
+  return c.json({ resourceName, tags, total: tags.length });
+});
+
+router.post("/resource-tags", async (c: Context) => {
+  const body = await c.req.json<{ resourceName: string; tags: Record<string, string> }>();
+  if (!body.resourceName) return c.json({ error: "resourceName is required" }, 400);
+  if (!body.tags || Object.keys(body.tags).length === 0)
+    return c.json({ error: "tags are required" }, 400);
+  const client = getClient();
+  await client.send(
+    new AddTagsToResourceCommand({
+      ResourceName: body.resourceName,
+      Tags: Object.entries(body.tags).map(([Key, Value]) => ({ Key, Value })),
+    })
+  );
+  return c.json({ tagged: true });
+});
+
+router.delete("/resource-tags", async (c: Context) => {
+  const body = await c.req.json<{ resourceName: string; tagKeys: string[] }>();
+  if (!body.resourceName) return c.json({ error: "resourceName is required" }, 400);
+  if (!body.tagKeys || body.tagKeys.length === 0)
+    return c.json({ error: "tagKeys are required" }, 400);
+  const client = getClient();
+  await client.send(
+    new RemoveTagsFromResourceCommand({ ResourceName: body.resourceName, TagKeys: body.tagKeys })
+  );
+  return c.json({ untagged: true });
 });
 
 export default router;

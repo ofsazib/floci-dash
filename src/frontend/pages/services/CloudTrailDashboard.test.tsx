@@ -24,6 +24,8 @@ const mockDeleteTrail = vi.fn();
 const mockLookupEvents = vi.fn();
 const mockEventSelectors = vi.fn();
 const mockPutEventSelectors = vi.fn();
+const mockAddTrailTag = vi.fn();
+const mockRemoveTrailTag = vi.fn();
 
 const deleteTrailState = vi.hoisted(() => ({
   isPending: false,
@@ -31,6 +33,8 @@ const deleteTrailState = vi.hoisted(() => ({
 }));
 const lookupState = vi.hoisted(() => ({ isPending: false, isError: false, error: null as Error | null }));
 const putSelectorsState = vi.hoisted(() => ({ isError: false, error: null as Error | null }));
+const trailTagsState = vi.hoisted(() => ({ data: undefined as any }));
+const removeTagState = vi.hoisted(() => ({ isPending: false, variables: null as any }));
 
 vi.mock("../../hooks/useCloudTrail", () => ({
   useCloudTrailTrails: (...args: any[]) => mockTrails(...args),
@@ -49,6 +53,15 @@ vi.mock("../../hooks/useCloudTrail", () => ({
     get error() { return lookupState.error; },
   }),
   useEventSelectors: (...args: any[]) => mockEventSelectors(...args),
+  useTrailTags: () => ({
+    get data() { return trailTagsState.data; },
+  }),
+  useAddTrailTags: () => ({ mutateAsync: mockAddTrailTag, isPending: false }),
+  useRemoveTrailTags: () => ({
+    mutateAsync: mockRemoveTrailTag,
+    get isPending() { return removeTagState.isPending; },
+    get variables() { return removeTagState.variables; },
+  }),
   usePutEventSelectors: () => ({
     mutate: mockPutEventSelectors,
     isPending: false,
@@ -96,6 +109,9 @@ beforeEach(() => {
     isLoading: false,
   });
   mockEventSelectors.mockReturnValue({ data: undefined, isLoading: false });
+  trailTagsState.data = undefined;
+  removeTagState.isPending = false;
+  removeTagState.variables = null;
 });
 
 // ─── Tests ──────────────────────────────────────────────
@@ -1222,5 +1238,163 @@ describe("CloudTrailDashboard — branch coverage", () => {
     await clickButton(user, /event selectors/i);
     await waitFor(() => expect(screen.getByText("Event Selectors for my-trail")).toBeTruthy());
     expect(screen.getByText(/Advanced Event Selectors:/)).toBeTruthy();
+  });
+});
+
+// ── Trail tags (E.9 batch 2, family 5) ───────────────────
+
+describe("CloudTrailDashboard — trail tags", () => {
+  function trailWithArn() {
+    mockTrails.mockReturnValue({
+      data: {
+        trails: [{ Name: "mgmt-trail", TrailARN: "arn:aws:cloudtrail:us-east-1:123456789012:trail/mgmt-trail" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+  }
+
+  it("shows a Tags button per trail row", () => {
+    trailWithArn();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByRole("button", { name: "Tags" })).toBeTruthy();
+  });
+
+  it("opens the tags modal and lists existing tags", async () => {
+    trailWithArn();
+    trailTagsState.data = {
+      resourceId: "arn:aws:cloudtrail:us-east-1:123456789012:trail/mgmt-trail",
+      tags: [{ Key: "env", Value: "prod" }],
+      total: 1,
+    };
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, "Tags");
+    await waitFor(() => expect(screen.getByText("Tags — mgmt-trail")).toBeTruthy());
+    expect(screen.getByText("env")).toBeTruthy();
+    expect(screen.getByText("prod")).toBeTruthy();
+  });
+
+  it("shows the No tags placeholder when the trail has no tags", async () => {
+    trailWithArn();
+    trailTagsState.data = { resourceId: "arn:x", tags: [], total: 0 };
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, "Tags");
+    await waitFor(() => expect(screen.getByText("Tags — mgmt-trail")).toBeTruthy());
+    expect(screen.getByText("No tags")).toBeTruthy();
+  });
+
+  it("adds a tag with key and value", async () => {
+    trailWithArn();
+    trailTagsState.data = { resourceId: "arn:x", tags: [], total: 0 };
+    mockAddTrailTag.mockResolvedValueOnce({ tagged: true });
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, "Tags");
+    await waitFor(() => expect(screen.getByText("Tags — mgmt-trail")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("env"), "team");
+    await user.type(screen.getByPlaceholderText("prod"), "core");
+    await user.click(screen.getByRole("button", { name: /Add tag/i }));
+    await waitFor(() => {
+      expect(mockAddTrailTag).toHaveBeenCalledWith({
+        resourceId: "arn:aws:cloudtrail:us-east-1:123456789012:trail/mgmt-trail",
+        tags: { team: "core" },
+      });
+    });
+  });
+
+  it("disables Add tag when the key is empty", async () => {
+    trailWithArn();
+    trailTagsState.data = { resourceId: "arn:x", tags: [], total: 0 };
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, "Tags");
+    await waitFor(() => expect(screen.getByText("Tags — mgmt-trail")).toBeTruthy());
+    expect(screen.getByRole("button", { name: /Add tag/i })).toBeDisabled();
+  });
+
+  it("removes a tag via the delete action", async () => {
+    trailWithArn();
+    trailTagsState.data = {
+      resourceId: "arn:x",
+      tags: [{ Key: "old", Value: "x" }],
+      total: 1,
+    };
+    mockRemoveTrailTag.mockResolvedValueOnce({ untagged: true });
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, "Tags");
+    await waitFor(() => expect(screen.getByText("old")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Delete old/i }));
+    await waitFor(() => {
+      expect(mockRemoveTrailTag).toHaveBeenCalledWith({
+        resourceId: "arn:aws:cloudtrail:us-east-1:123456789012:trail/mgmt-trail",
+        tagKeys: ["old"],
+      });
+    });
+  });
+
+  it("closes the tags modal on Close", async () => {
+    trailWithArn();
+    trailTagsState.data = { resourceId: "arn:x", tags: [], total: 0 };
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, "Tags");
+    await waitFor(() => expect(screen.getByText("Tags — mgmt-trail")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /^Close$/i }));
+    await waitFor(() => expect(screen.queryByText("Tags — mgmt-trail")).toBeNull());
+  });
+});
+
+describe("CloudTrailDashboard — trail tag coverage completion", () => {
+  function trailWithArn() {
+    mockTrails.mockReturnValue({
+      data: {
+        trails: [{ Name: "mgmt-trail", TrailARN: "arn:aws:cloudtrail:us-east-1:123456789012:trail/mgmt-trail" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+  }
+
+  it("shows No tags when the tags query has no data yet", async () => {
+    trailWithArn();
+    trailTagsState.data = undefined;
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, "Tags");
+    await waitFor(() => expect(screen.getByText("Tags — mgmt-trail")).toBeTruthy());
+    expect(screen.getByText("No tags")).toBeTruthy();
+  });
+
+  it("renders a dash for tags without a value", async () => {
+    trailWithArn();
+    trailTagsState.data = {
+      resourceId: "arn:x",
+      tags: [{ Key: "novalue" }],
+      total: 1,
+    };
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, "Tags");
+    await waitFor(() => expect(screen.getByText("novalue")).toBeTruthy());
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("disables the tag remove button while the untag mutation is pending", async () => {
+    trailWithArn();
+    trailTagsState.data = {
+      resourceId: "arn:x",
+      tags: [{ Key: "env", Value: "dev" }],
+      total: 1,
+    };
+    removeTagState.isPending = true;
+    removeTagState.variables = { resourceId: "arn:x", tagKeys: ["env"] };
+    const user = userEvent.setup();
+    render(<CloudTrailDashboard />, { wrapper: createWrapper() });
+    await clickButton(user, "Tags");
+    await waitFor(() => expect(screen.getByText("env")).toBeTruthy());
+    expect(screen.getByRole("button", { name: /Delete env/i })).toBeDisabled();
   });
 });

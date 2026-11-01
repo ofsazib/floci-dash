@@ -152,3 +152,60 @@ export function useUpdateSecretVersionStage() {
       }),
   });
 }
+
+// ── Rotation cancel, replication, policy validation (E.9 batch 2) ──
+
+export function useCancelSecretRotation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api<{ arn: string; name: string; versionId: string | null; cancelled: boolean }>(
+        `/aws/secretsmanager/secrets/${encodeURIComponent(id)}/cancel-rotate`,
+        { method: "POST" }
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "secretsmanager", "secrets"] }),
+  });
+}
+
+export function useReplicateSecret() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { id: string; regions: Array<{ region: string; kmsKeyId?: string }>; force?: boolean }) =>
+      api(`/aws/secretsmanager/secrets/${encodeURIComponent(params.id)}/replicate`, {
+        method: "POST",
+        body: JSON.stringify({ regions: params.regions, force: params.force }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "secretsmanager", "secrets"] }),
+  });
+}
+
+export function useRemoveSecretReplicaRegions() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { id: string; regions: string[] }) =>
+      api(`/aws/secretsmanager/secrets/${encodeURIComponent(params.id)}/replication/remove`, {
+        method: "POST",
+        body: JSON.stringify({ regions: params.regions }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "secretsmanager", "secrets"] }),
+  });
+}
+
+export function useStopSecretReplication() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api(`/aws/secretsmanager/secrets/${encodeURIComponent(id)}/replication/stop`, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "secretsmanager", "secrets"] }),
+  });
+}
+
+export function useValidateSecretResourcePolicy() {
+  return useMutation({
+    mutationFn: (params: { id: string; resourcePolicy: string }) =>
+      api<{ policyValidationPassed: boolean }>(
+        `/aws/secretsmanager/secrets/${encodeURIComponent(params.id)}/validate-policy`,
+        { method: "POST", body: JSON.stringify({ resourcePolicy: params.resourcePolicy }) }
+      ),
+  });
+}

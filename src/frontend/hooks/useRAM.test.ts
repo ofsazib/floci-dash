@@ -22,6 +22,8 @@ import {
   useEnableRAMSharing,
   useRAMTagResource,
   useRAMUntagResource,
+  useAcceptRAMInvitation,
+  useRejectRAMInvitation,
 } from "./useRAM";
 
 function createWrapper() {
@@ -191,6 +193,30 @@ describe("useRAMUntagResource", () => {
     expect(mockApi).toHaveBeenCalledWith("/aws/ram/tags/untag", {
       method: "POST",
       body: JSON.stringify({ resourceShareArn: "arn:aws:ram:share/1", tagKeys: ["env"] }),
+    });
+  });
+});
+
+describe("useRAM invitation accept/reject (E.9 batch 2)", () => {
+  const arn = "arn:aws:ram:us-east-1:123456789012:invitation/inv-1";
+
+  it("useAcceptRAMInvitation calls POST accept", async () => {
+    mockApi.mockResolvedValueOnce({ resourceShareInvitation: { status: "ACCEPTED" } });
+    const { result } = renderHook(() => useAcceptRAMInvitation(), { wrapper: createWrapper() });
+    await result.current.mutateAsync(arn);
+    expect(mockApi).toHaveBeenCalledWith("/aws/ram/invitations/accept", {
+      method: "POST",
+      body: JSON.stringify({ resourceShareInvitationArn: arn }),
+    });
+  });
+
+  it("useRejectRAMInvitation calls POST reject", async () => {
+    mockApi.mockResolvedValueOnce({ resourceShareInvitation: { status: "REJECTED" } });
+    const { result } = renderHook(() => useRejectRAMInvitation(), { wrapper: createWrapper() });
+    await result.current.mutateAsync(arn);
+    expect(mockApi).toHaveBeenCalledWith("/aws/ram/invitations/reject", {
+      method: "POST",
+      body: JSON.stringify({ resourceShareInvitationArn: arn }),
     });
   });
 });

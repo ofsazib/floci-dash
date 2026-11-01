@@ -36,6 +36,11 @@ vi.mock("@aws-sdk/client-secrets-manager", () => ({
   DeleteResourcePolicyCommand: createCmd("DeleteResourcePolicyCommand"),
   BatchGetSecretValueCommand: createCmd("BatchGetSecretValueCommand"),
   UpdateSecretVersionStageCommand: createCmd("UpdateSecretVersionStageCommand"),
+  CancelRotateSecretCommand: createCmd("CancelRotateSecretCommand"),
+  ReplicateSecretToRegionsCommand: createCmd("ReplicateSecretToRegionsCommand"),
+  RemoveRegionsFromReplicationCommand: createCmd("RemoveRegionsFromReplicationCommand"),
+  StopReplicationToReplicaCommand: createCmd("StopReplicationToReplicaCommand"),
+  ValidateResourcePolicyCommand: createCmd("ValidateResourcePolicyCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -623,5 +628,120 @@ describe("Secrets Manager Routes", () => {
       const res = await post("/secrets/s1/version-stage", {});
       expect(res.status).toBe(400);
     });
+  });
+
+  describe("Rotation cancel, replication and policy validation (E.9 batch 2)", () => {
+    it("POST /secrets/:id/cancel-rotate — cancels rotation", async () => {
+      mockSend.mockResolvedValueOnce({ ARN: "arn:s1", Name: "s1", VersionId: "v-pending" });
+      const res = await post("/secrets/s1/cancel-rotate");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.cancelled).toBe(true);
+      expect(body.versionId).toBe("v-pending");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("CancelRotateSecretCommand");
+      expect(mockSend.mock.calls[0][0].SecretId).toBe("s1");
+    });
+
+    it("POST /secrets/:id/cancel-rotate — null versionId when none pending", async () => {
+      mockSend.mockResolvedValueOnce({ ARN: "arn:s1", Name: "s1" });
+      const res = await post("/secrets/s1/cancel-rotate");
+      const body = await res.json();
+      expect(body.versionId).toBeNull();
+    });
+
+    it("POST /secrets/:id/replicate — replicates to regions", async () => {
+      mockSend.mockResolvedValueOnce({
+        ARN: "arn:s1",
+        ReplicationStatus: [{ Region: "us-west-2", Status: "InProgress" }],
+      });
+      const res = await post("/secrets/s1/replicate", {
+        regions: [{ region: "us-west-2", kmsKeyId: "k1" }],
+        force: true,
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.replicationStatus).toHaveLength(1);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("ReplicateSecretToRegionsCommand");
+      expect(cmd.AddReplicaRegions).toEqual([{ Region: "us-west-2", KmsKeyId: "k1" }]);
+      expect(cmd.ForceOverwriteReplicaSecret).toBe(true);
+    });
+
+    it("POST /secrets/:id/replicate — defaults force to undefined", async () => {
+      mockSend.mockResolvedValueOnce({ ARN: "arn:s1", ReplicationStatus: [] });
+      const res = await post("/secrets/s1/replicate", { regions: [{ region: "eu-west-1" }] });
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.AddReplicaRegions).toEqual([{ Region: "eu-west-1", KmsKeyId: undefined }]);
+      expect(cmd.ForceOverwriteReplicaSecret).toBeUndefined();
+    });
+
+    it("POST /secrets/:id/replicate — 400 when regions missing", async () => {
+      const res = await post("/secrets/s1/replicate", {});
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("POST /secrets/:id/replication/remove — removes regions", async () => {
+      mockSend.mockResolvedValueOnce({ ARN: "arn:s1", ReplicationStatus: [] });
+      const res = await post("/secrets/s1/replication/remove", { regions: ["us-west-2"] });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.arn).toBe("arn:s1");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("RemoveRegionsFromReplicationCommand");
+      expect(cmd.RemoveReplicaRegions).toEqual(["us-west-2"]);
+    });
+
+    it("POST /secrets/:id/replication/remove — 400 when regions missing", async () => {
+      const res = await post("/secrets/s1/replication/remove", { regions: [] });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /secrets/:id/replication/stop — stops replication", async () => {
+      mockSend.mockResolvedValueOnce({ ARN: "arn:replica" });
+      const res = await post("/secrets/s1/replication/stop");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.stopped).toBe(true);
+      expect(body.arn).toBe("arn:replica");
+    });
+
+    it("POST /secrets/:id/validate-policy — validates a policy", async () => {
+      mockSend.mockResolvedValueOnce({ PolicyValidationPassed: true });
+      const res = await post("/secrets/s1/validate-policy", { resourcePolicy: '{"Version":"2012-10-17"}' });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.policyValidationPassed).toBe(true);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.__cmdName).toBe("ValidateResourcePolicyCommand");
+      expect(cmd.SecretId).toBe("s1");
+    });
+
+    it("POST /secrets/:id/validate-policy — 400 when policy missing", async () => {
+      const res = await post("/secrets/s1/validate-policy", {});
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("POST /secrets/:id/validate-policy — 400 when policy blank", async () => {
+      const res = await post("/secrets/s1/validate-policy", { resourcePolicy: "   " });
+      expect(res.status).toBe(400);
+    });
+  });
+});
+
+describe("secrets replication sparse responses (coverage)", () => {
+  it("POST /secrets/:id/replicate — empty replicationStatus when missing", async () => {
+    mockSend.mockResolvedValueOnce({ ARN: "arn:s1" });
+    const res = await post("/secrets/s1/replicate", { regions: [{ region: "us-west-2" }] });
+    const body = await res.json();
+    expect(body.replicationStatus).toEqual([]);
+  });
+
+  it("POST /secrets/:id/replication/remove — empty replicationStatus when missing", async () => {
+    mockSend.mockResolvedValueOnce({ ARN: "arn:s1" });
+    const res = await post("/secrets/s1/replication/remove", { regions: ["us-west-2"] });
+    const body = await res.json();
+    expect(body.replicationStatus).toEqual([]);
   });
 });

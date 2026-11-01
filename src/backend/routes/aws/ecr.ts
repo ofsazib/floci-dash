@@ -22,6 +22,11 @@ import {
   BatchGetRepositoryScanningConfigurationCommand,
   BatchGetImageCommand,
   GetAuthorizationTokenCommand,
+  CreatePullThroughCacheRuleCommand,
+  DescribePullThroughCacheRulesCommand,
+  UpdatePullThroughCacheRuleCommand,
+  DeletePullThroughCacheRuleCommand,
+  ValidatePullThroughCacheRuleCommand,
 } from "@aws-sdk/client-ecr";
 
 const router = new Hono();
@@ -312,6 +317,76 @@ router.put("/repositories/:name/tag-mutability", async (c: Context) => {
     repositoryName: result.repositoryName,
     imageTagMutability: result.imageTagMutability,
   });
+});
+
+// ── Pull-Through Cache Rules ─────────────────────────────
+
+router.get("/pull-through-cache-rules", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new DescribePullThroughCacheRulesCommand({}));
+  const rules = (result as any).pullThroughCacheRules || [];
+  return c.json({ rules, total: rules.length });
+});
+
+router.post("/pull-through-cache-rules", async (c: Context) => {
+  const body = await c.req.json<{
+    ecrRepositoryPrefix: string;
+    upstreamRegistryUrl: string;
+    upstreamRegistry?: string;
+    credentialArn?: string;
+    customRoleArn?: string;
+    upstreamRepositoryPrefix?: string;
+  }>();
+  if (!body.ecrRepositoryPrefix) return c.json({ error: "ecrRepositoryPrefix is required" }, 400);
+  if (!body.upstreamRegistryUrl) return c.json({ error: "upstreamRegistryUrl is required" }, 400);
+
+  const client = getClient();
+  const result = await client.send(
+    new CreatePullThroughCacheRuleCommand({
+      ecrRepositoryPrefix: body.ecrRepositoryPrefix,
+      upstreamRegistryUrl: body.upstreamRegistryUrl,
+      upstreamRegistry: body.upstreamRegistry,
+      credentialArn: body.credentialArn,
+      customRoleArn: body.customRoleArn,
+      upstreamRepositoryPrefix: body.upstreamRepositoryPrefix,
+    } as any)
+  );
+  return c.json({ rule: result }, 201);
+});
+
+router.put("/pull-through-cache-rules/:prefix", async (c: Context) => {
+  const prefix = c.req.param("prefix");
+  const body = await c.req.json<{ credentialArn?: string; customRoleArn?: string }>();
+  if (!body.credentialArn && !body.customRoleArn)
+    return c.json({ error: "credentialArn or customRoleArn is required" }, 400);
+
+  const client = getClient();
+  const result = await client.send(
+    new UpdatePullThroughCacheRuleCommand({
+      ecrRepositoryPrefix: prefix,
+      credentialArn: body.credentialArn,
+      customRoleArn: body.customRoleArn,
+    } as any)
+  );
+  return c.json({ rule: result, updated: true });
+});
+
+router.delete("/pull-through-cache-rules/:prefix", async (c: Context) => {
+  const prefix = c.req.param("prefix");
+  const client = getClient();
+  const result = await client.send(
+    new DeletePullThroughCacheRuleCommand({ ecrRepositoryPrefix: prefix })
+  );
+  return c.json({ deleted: true, rule: result });
+});
+
+router.post("/pull-through-cache-rules/:prefix/validate", async (c: Context) => {
+  const prefix = c.req.param("prefix");
+  const client = getClient();
+  const result = await client.send(
+    new ValidatePullThroughCacheRuleCommand({ ecrRepositoryPrefix: prefix })
+  );
+  return c.json({ rule: result, isValid: true });
 });
 
 export default router;

@@ -17,6 +17,12 @@ import {
   ListTableMetadataCommand,
   GetTableMetadataCommand,
   StartQueryExecutionCommand,
+  CreateDataCatalogCommand,
+  UpdateDataCatalogCommand,
+  DeleteDataCatalogCommand,
+  TagResourceCommand,
+  UntagResourceCommand,
+  ListTagsForResourceCommand,
 } from "@aws-sdk/client-athena";
 
 const router = new Hono();
@@ -125,6 +131,91 @@ router.get("/data-catalogs/:name", async (c: Context) => {
   const client = getClient();
   const result = await client.send(new GetDataCatalogCommand({ Name: name }));
   return c.json({ dataCatalog: result.DataCatalog });
+});
+
+router.post("/data-catalogs", async (c: Context) => {
+  const body = await c.req.json<{ name: string; type: string; description?: string; parameters?: Record<string, string>; tags?: Record<string, string> }>();
+  if (!body.name) return c.json({ error: "name is required" }, 400);
+  if (!body.type) return c.json({ error: "type is required" }, 400);
+
+  const client = getClient();
+  const result = await client.send(
+    new CreateDataCatalogCommand({
+      Name: body.name,
+      Type: body.type as any,
+      Description: body.description,
+      Parameters: body.parameters,
+      Tags: body.tags
+        ? Object.entries(body.tags).map(([Key, Value]) => ({ Key, Value }))
+        : undefined,
+    })
+  );
+  return c.json({ dataCatalog: result.DataCatalog }, 201);
+});
+
+router.put("/data-catalogs/:name", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<{ type: string; description?: string; parameters?: Record<string, string> }>();
+  if (!body.type) return c.json({ error: "type is required" }, 400);
+
+  const client = getClient();
+  await client.send(
+    new UpdateDataCatalogCommand({
+      Name: name,
+      Type: body.type as any,
+      Description: body.description,
+      Parameters: body.parameters,
+    })
+  );
+  return c.json({ updated: true });
+});
+
+router.delete("/data-catalogs/:name", async (c: Context) => {
+  const name = c.req.param("name");
+  const client = getClient();
+  const result = await client.send(new DeleteDataCatalogCommand({ Name: name }));
+  return c.json({ deleted: true, dataCatalog: result.DataCatalog });
+});
+
+// ── Resource Tags (TagResource / UntagResource / ListTagsForResource) ──
+
+router.get("/resource-tags", async (c: Context) => {
+  const resourceArn = c.req.query("resourceArn");
+  if (!resourceArn) return c.json({ error: "resourceArn is required" }, 400);
+
+  const client = getClient();
+  const result = await client.send(new ListTagsForResourceCommand({ ResourceARN: resourceArn }));
+  const tags = result.Tags || [];
+  return c.json({ resourceArn, tags, total: tags.length });
+});
+
+router.post("/resource-tags", async (c: Context) => {
+  const body = await c.req.json<{ resourceArn: string; tags: Record<string, string> }>();
+  if (!body.resourceArn) return c.json({ error: "resourceArn is required" }, 400);
+  if (!body.tags || Object.keys(body.tags).length === 0)
+    return c.json({ error: "tags are required" }, 400);
+
+  const client = getClient();
+  await client.send(
+    new TagResourceCommand({
+      ResourceARN: body.resourceArn,
+      Tags: Object.entries(body.tags).map(([Key, Value]) => ({ Key, Value })),
+    })
+  );
+  return c.json({ tagged: true });
+});
+
+router.delete("/resource-tags", async (c: Context) => {
+  const body = await c.req.json<{ resourceArn: string; tagKeys: string[] }>();
+  if (!body.resourceArn) return c.json({ error: "resourceArn is required" }, 400);
+  if (!body.tagKeys || body.tagKeys.length === 0)
+    return c.json({ error: "tagKeys are required" }, 400);
+
+  const client = getClient();
+  await client.send(
+    new UntagResourceCommand({ ResourceARN: body.resourceArn, TagKeys: body.tagKeys })
+  );
+  return c.json({ untagged: true });
 });
 
 // ── Databases ────────────────────────────────────────────

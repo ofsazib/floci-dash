@@ -19,6 +19,9 @@ vi.mock("@aws-sdk/client-cloudtrail", () => ({
   LookupEventsCommand: createCmd("LookupEventsCommand"),
   GetEventSelectorsCommand: createCmd("GetEventSelectorsCommand"),
   PutEventSelectorsCommand: createCmd("PutEventSelectorsCommand"),
+  AddTagsCommand: createCmd("AddTagsCommand"),
+  ListTagsCommand: createCmd("ListTagsCommand"),
+  RemoveTagsCommand: createCmd("RemoveTagsCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({ create: (Ctor: any, extra?: any) => new Ctor(extra) }));
@@ -32,7 +35,9 @@ async function post(p: string, b?: any) {
 async function put(p: string, b?: any) {
   return router.request(p, { method: "PUT", body: b != null ? JSON.stringify(b) : undefined, headers: b != null ? { "content-type": "application/json" } : undefined });
 }
-async function del(p: string) { return router.request(p, { method: "DELETE" }); }
+async function del(p: string, b?: any) {
+  return router.request(p, { method: "DELETE", body: b != null ? JSON.stringify(b) : undefined, headers: b != null ? { "content-type": "application/json" } : undefined });
+}
 
 beforeEach(() => mockSend.mockReset());
 
@@ -223,5 +228,73 @@ describe("CloudTrail Routes", () => {
   it("PUT /trails/:name/event-selectors — 400 when nothing provided", async () => {
     const res = await put("/trails/trail-1/event-selectors", {});
     expect(res.status).toBe(400);
+  });
+
+  describe("Trail tags", () => {
+    it("GET /trail-tags — lists tags for a trail", async () => {
+      mockSend.mockResolvedValueOnce({
+        ResourceTagList: [{ ResourceId: "arn:aws:cloudtrail:us-east-1:123:trail/t1", TagsList: [{ Key: "env", Value: "dev" }] }],
+      });
+      const res = await get("/trail-tags?resourceId=arn:aws:cloudtrail:us-east-1:123:trail/t1");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(body.tags[0].Key).toBe("env");
+      expect(mockSend.mock.calls[0][0].ResourceIdList).toEqual(["arn:aws:cloudtrail:us-east-1:123:trail/t1"]);
+    });
+
+    it("GET /trail-tags — empty tags when ResourceTagList missing", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/trail-tags?resourceId=arn:x");
+      const body = await res.json();
+      expect(body.tags).toEqual([]);
+      expect(body.total).toBe(0);
+    });
+
+    it("GET /trail-tags — 400 when resourceId missing", async () => {
+      const res = await get("/trail-tags");
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("POST /trail-tags — adds tags", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/trail-tags", { resourceId: "arn:x", tags: { a: "1" } });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.tagged).toBe(true);
+      expect(mockSend.mock.calls[0][0].TagsList).toEqual([{ Key: "a", Value: "1" }]);
+    });
+
+    it("POST /trail-tags — 400 when resourceId missing", async () => {
+      const res = await post("/trail-tags", { tags: { a: "1" } });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /trail-tags — 400 when tags empty", async () => {
+      const res = await post("/trail-tags", { resourceId: "arn:x", tags: {} });
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("DELETE /trail-tags — removes tags by key", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/trail-tags", { resourceId: "arn:x", tagKeys: ["a", "b"] });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.untagged).toBe(true);
+      expect(mockSend.mock.calls[0][0].TagsList).toEqual([{ Key: "a" }, { Key: "b" }]);
+    });
+
+    it("DELETE /trail-tags — 400 when resourceId missing", async () => {
+      const res = await del("/trail-tags", { tagKeys: ["a"] });
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE /trail-tags — 400 when tagKeys empty", async () => {
+      const res = await del("/trail-tags", { resourceId: "arn:x", tagKeys: [] });
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
   });
 });

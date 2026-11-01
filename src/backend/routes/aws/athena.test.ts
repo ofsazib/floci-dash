@@ -23,6 +23,12 @@ vi.mock("@aws-sdk/client-athena", () => ({
   GetDataCatalogCommand: createCmd("GetDataCatalogCommand"),
   ListDatabasesCommand: createCmd("ListDatabasesCommand"),
   ListTableMetadataCommand: createCmd("ListTableMetadataCommand"),
+  CreateDataCatalogCommand: createCmd("CreateDataCatalogCommand"),
+  UpdateDataCatalogCommand: createCmd("UpdateDataCatalogCommand"),
+  DeleteDataCatalogCommand: createCmd("DeleteDataCatalogCommand"),
+  TagResourceCommand: createCmd("TagResourceCommand"),
+  UntagResourceCommand: createCmd("UntagResourceCommand"),
+  ListTagsForResourceCommand: createCmd("ListTagsForResourceCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({ create: (Ctor: any, extra?: any) => new Ctor(extra) }));
@@ -33,7 +39,12 @@ async function get(p: string) { return router.request(p, { method: "GET" }); }
 async function post(p: string, b?: any) {
   return router.request(p, { method: "POST", body: b != null ? JSON.stringify(b) : undefined, headers: b != null ? { "content-type": "application/json" } : undefined });
 }
-async function del(p: string) { return router.request(p, { method: "DELETE" }); }
+async function del(p: string, b?: any) {
+  return router.request(p, { method: "DELETE", body: b != null ? JSON.stringify(b) : undefined, headers: b != null ? { "content-type": "application/json" } : undefined });
+}
+async function put(p: string, b?: any) {
+  return router.request(p, { method: "PUT", body: b != null ? JSON.stringify(b) : undefined, headers: b != null ? { "content-type": "application/json" } : undefined });
+}
 
 beforeEach(() => mockSend.mockReset());
 
@@ -247,6 +258,142 @@ describe("Athena Routes", () => {
       expect(res.status).toBe(201);
       const body = await res.json();
       expect(body.queryExecutionId).toBe("exec-456");
+    });
+  });
+
+  describe("Data Catalog management", () => {
+    it("POST /data-catalogs — creates catalog with tags (201)", async () => {
+      mockSend.mockResolvedValueOnce({ DataCatalog: { Name: "cat1", Type: "GLUE" } });
+      const res = await post("/data-catalogs", {
+        name: "cat1",
+        type: "GLUE",
+        description: "desc",
+        parameters: { catalog: "aws" },
+        tags: { env: "dev" },
+      });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.dataCatalog.Name).toBe("cat1");
+      const input = mockSend.mock.calls[0][0];
+      expect(input.Name).toBe("cat1");
+      expect(input.Tags).toEqual([{ Key: "env", Value: "dev" }]);
+      expect(input.Parameters).toEqual({ catalog: "aws" });
+    });
+
+    it("POST /data-catalogs — creates catalog without optional fields", async () => {
+      mockSend.mockResolvedValueOnce({ DataCatalog: { Name: "cat2", Type: "LAMBDA" } });
+      const res = await post("/data-catalogs", { name: "cat2", type: "LAMBDA" });
+      expect(res.status).toBe(201);
+      const input = mockSend.mock.calls[0][0];
+      expect(input.Tags).toBeUndefined();
+      expect(input.Description).toBeUndefined();
+    });
+
+    it("POST /data-catalogs — 400 when name missing", async () => {
+      const res = await post("/data-catalogs", { type: "GLUE" });
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("POST /data-catalogs — 400 when type missing", async () => {
+      const res = await post("/data-catalogs", { name: "cat1" });
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("PUT /data-catalogs/:name — updates catalog", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/data-catalogs/cat1", { type: "GLUE", description: "new", parameters: { a: "b" } });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+      const input = mockSend.mock.calls[0][0];
+      expect(input.Name).toBe("cat1");
+      expect(input.Type).toBe("GLUE");
+    });
+
+    it("PUT /data-catalogs/:name — 400 when type missing", async () => {
+      const res = await put("/data-catalogs/cat1", {});
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("DELETE /data-catalogs/:name — deletes catalog", async () => {
+      mockSend.mockResolvedValueOnce({ DataCatalog: { Name: "cat1" } });
+      const res = await del("/data-catalogs/cat1");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deleted).toBe(true);
+      expect(body.dataCatalog.Name).toBe("cat1");
+      expect(mockSend.mock.calls[0][0].Name).toBe("cat1");
+    });
+  });
+
+  describe("Resource tags", () => {
+    it("GET /resource-tags — lists tags for a resource ARN", async () => {
+      mockSend.mockResolvedValueOnce({ Tags: [{ Key: "env", Value: "dev" }] });
+      const res = await get("/resource-tags?resourceArn=arn:aws:athena:us-east-1:123:workgroup/primary");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(body.tags[0].Key).toBe("env");
+      expect(mockSend.mock.calls[0][0].ResourceARN).toContain("workgroup/primary");
+    });
+
+    it("GET /resource-tags — empty tags", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/resource-tags?resourceArn=arn:x");
+      const body = await res.json();
+      expect(body.tags).toEqual([]);
+      expect(body.total).toBe(0);
+    });
+
+    it("GET /resource-tags — 400 when resourceArn missing", async () => {
+      const res = await get("/resource-tags");
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("POST /resource-tags — tags a resource", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/resource-tags", { resourceArn: "arn:x", tags: { a: "1" } });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.tagged).toBe(true);
+      const input = mockSend.mock.calls[0][0];
+      expect(input.ResourceARN).toBe("arn:x");
+      expect(input.Tags).toEqual([{ Key: "a", Value: "1" }]);
+    });
+
+    it("POST /resource-tags — 400 when resourceArn missing", async () => {
+      const res = await post("/resource-tags", { tags: { a: "1" } });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /resource-tags — 400 when tags empty", async () => {
+      const res = await post("/resource-tags", { resourceArn: "arn:x", tags: {} });
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("DELETE /resource-tags — untags a resource", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/resource-tags", { resourceArn: "arn:x", tagKeys: ["a"] });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.untagged).toBe(true);
+      expect(mockSend.mock.calls[0][0].TagKeys).toEqual(["a"]);
+    });
+
+    it("DELETE /resource-tags — 400 when resourceArn missing", async () => {
+      const res = await del("/resource-tags", { tagKeys: ["a"] });
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE /resource-tags — 400 when tagKeys empty", async () => {
+      const res = await del("/resource-tags", { resourceArn: "arn:x", tagKeys: [] });
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
     });
   });
 });

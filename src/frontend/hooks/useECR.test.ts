@@ -24,6 +24,11 @@ import {
   useECRImageManifest,
   useECRAuthToken,
   usePutECRImageTagMutability,
+  useECRPullThroughCacheRules,
+  useECRCreatePullThroughCacheRule,
+  useECRUpdatePullThroughCacheRule,
+  useECRDeletePullThroughCacheRule,
+  useECRValidatePullThroughCacheRule,
 } from "./useECR";
 
 function createWrapper() {
@@ -273,5 +278,48 @@ describe("usePutECRImageTagMutability", () => {
       method: "PUT",
       body: JSON.stringify({ tagMutability: "IMMUTABLE" }),
     });
+  });
+});
+
+describe("useECR pull-through cache rules (E.9 batch 2)", () => {
+  it("useECRPullThroughCacheRules calls correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ rules: [], total: 0 });
+    const { result } = renderHook(() => useECRPullThroughCacheRules(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/ecr/pull-through-cache-rules");
+  });
+
+  it("useECRCreatePullThroughCacheRule calls POST", async () => {
+    mockApi.mockResolvedValueOnce({ rule: {} });
+    const { result } = renderHook(() => useECRCreatePullThroughCacheRule(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ ecrRepositoryPrefix: "k8s", upstreamRegistryUrl: "registry.k8s.io" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/ecr/pull-through-cache-rules", {
+      method: "POST",
+      body: JSON.stringify({ ecrRepositoryPrefix: "k8s", upstreamRegistryUrl: "registry.k8s.io" }),
+    });
+  });
+
+  it("useECRUpdatePullThroughCacheRule calls PUT", async () => {
+    mockApi.mockResolvedValueOnce({ updated: true });
+    const { result } = renderHook(() => useECRUpdatePullThroughCacheRule(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ prefix: "k8s", credentialArn: "arn:new" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/ecr/pull-through-cache-rules/k8s", {
+      method: "PUT",
+      body: JSON.stringify({ credentialArn: "arn:new", customRoleArn: undefined }),
+    });
+  });
+
+  it("useECRDeletePullThroughCacheRule calls DELETE", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useECRDeletePullThroughCacheRule(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("k8s");
+    expect(mockApi).toHaveBeenCalledWith("/aws/ecr/pull-through-cache-rules/k8s", { method: "DELETE" });
+  });
+
+  it("useECRValidatePullThroughCacheRule calls POST validate", async () => {
+    mockApi.mockResolvedValueOnce({ isValid: true });
+    const { result } = renderHook(() => useECRValidatePullThroughCacheRule(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("k8s");
+    expect(mockApi).toHaveBeenCalledWith("/aws/ecr/pull-through-cache-rules/k8s/validate", { method: "POST" });
   });
 });

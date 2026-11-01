@@ -22,6 +22,12 @@ vi.mock("@aws-sdk/client-neptune", () => ({
   DeleteDBInstanceCommand: createCmd("DeleteDBInstanceCommand"),
   ModifyDBClusterCommand: createCmd("ModifyDBClusterCommand"),
   ModifyDBInstanceCommand: createCmd("ModifyDBInstanceCommand"),
+  AddRoleToDBClusterCommand: createCmd("AddRoleToDBClusterCommand"),
+  RemoveRoleFromDBClusterCommand: createCmd("RemoveRoleFromDBClusterCommand"),
+  DescribeGlobalClustersCommand: createCmd("DescribeGlobalClustersCommand"),
+  ListTagsForResourceCommand: createCmd("ListTagsForResourceCommand"),
+  AddTagsToResourceCommand: createCmd("AddTagsToResourceCommand"),
+  RemoveTagsFromResourceCommand: createCmd("RemoveTagsFromResourceCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -42,8 +48,12 @@ async function post(path: string, body?: any) {
   });
 }
 
-async function del(path: string) {
-  return router.request(path, { method: "DELETE" });
+async function del(path: string, body?: any) {
+  return router.request(path, {
+    method: "DELETE",
+    body: body != null ? JSON.stringify(body) : undefined,
+    headers: body != null ? { "content-type": "application/json" } : undefined,
+  });
 }
 
 beforeEach(() => {
@@ -218,6 +228,113 @@ describe("Neptune Routes", () => {
       const cmd = mockSend.mock.calls[0][0];
       expect(cmd.__cmdName).toBe("ModifyDBInstanceCommand");
       expect(cmd.DBInstanceClass).toBe("db.r5.large");
+    });
+  });
+
+  describe("Cluster roles, global clusters and resource tags (E.9 batch 2)", () => {
+    it("POST /clusters/:id/roles — adds a role", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/clusters/db1/roles", { roleArn: "arn:aws:iam::123:role/r" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.added).toBe(true);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.DBClusterIdentifier).toBe("db1");
+      expect(cmd.RoleArn).toBe("arn:aws:iam::123:role/r");
+    });
+
+    it("POST /clusters/:id/roles — 400 when roleArn missing", async () => {
+      const res = await post("/clusters/db1/roles", {});
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("DELETE /clusters/:id/roles — removes a role", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/clusters/db1/roles", { roleArn: "arn:aws:iam::123:role/r" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.removed).toBe(true);
+    });
+
+    it("DELETE /clusters/:id/roles — 400 when roleArn missing", async () => {
+      const res = await del("/clusters/db1/roles", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("GET /global-clusters — lists global clusters", async () => {
+      mockSend.mockResolvedValueOnce({ GlobalClusters: [{ GlobalClusterIdentifier: "g1" }] });
+      const res = await get("/global-clusters");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(body.globalClusters[0].GlobalClusterIdentifier).toBe("g1");
+    });
+
+    it("GET /global-clusters — empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/global-clusters");
+      const body = await res.json();
+      expect(body.total).toBe(0);
+    });
+
+    it("GET /resource-tags — lists tags", async () => {
+      mockSend.mockResolvedValueOnce({ TagList: [{ Key: "env", Value: "dev" }] });
+      const res = await get("/resource-tags?resourceName=arn:aws:neptune:us-east-1:123:cluster/db1");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(1);
+    });
+
+    it("GET /resource-tags — empty tags", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/resource-tags?resourceName=arn:x");
+      const body = await res.json();
+      expect(body.tags).toEqual([]);
+      expect(body.total).toBe(0);
+    });
+
+    it("GET /resource-tags — 400 when resourceName missing", async () => {
+      const res = await get("/resource-tags");
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("POST /resource-tags — adds tags", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/resource-tags", { resourceName: "arn:x", tags: { a: "1" } });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.tagged).toBe(true);
+      expect(mockSend.mock.calls[0][0].Tags).toEqual([{ Key: "a", Value: "1" }]);
+    });
+
+    it("POST /resource-tags — 400 when resourceName missing", async () => {
+      const res = await post("/resource-tags", { tags: { a: "1" } });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /resource-tags — 400 when tags empty", async () => {
+      const res = await post("/resource-tags", { resourceName: "arn:x", tags: {} });
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE /resource-tags — removes tags", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/resource-tags", { resourceName: "arn:x", tagKeys: ["a"] });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.untagged).toBe(true);
+    });
+
+    it("DELETE /resource-tags — 400 when resourceName missing", async () => {
+      const res = await del("/resource-tags", { tagKeys: ["a"] });
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE /resource-tags — 400 when tagKeys empty", async () => {
+      const res = await del("/resource-tags", { resourceName: "arn:x", tagKeys: [] });
+      expect(res.status).toBe(400);
     });
   });
 });

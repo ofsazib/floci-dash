@@ -20,6 +20,11 @@ import {
   DeleteResourcePolicyCommand,
   BatchGetSecretValueCommand,
   UpdateSecretVersionStageCommand,
+  CancelRotateSecretCommand,
+  ReplicateSecretToRegionsCommand,
+  RemoveRegionsFromReplicationCommand,
+  StopReplicationToReplicaCommand,
+  ValidateResourcePolicyCommand,
 } from "@aws-sdk/client-secrets-manager";
 import { getAwsConfig } from "../../clients/aws";
 import { sanitizeName, sanitizeText } from "../../clients/sanitize";
@@ -185,6 +190,75 @@ router.post("/secrets/:id/rotate", async (c: Context) => {
     })
   );
   return c.json({ arn: result.ARN, name: result.Name, rotated: true });
+});
+
+// ─── CANCEL ROTATION ─────────────────────────────────────
+
+router.post("/secrets/:id/cancel-rotate", async (c: Context) => {
+  const id = c.req.param("id");
+  const result = await sm().send(new CancelRotateSecretCommand({ SecretId: id }));
+  return c.json({
+    arn: result.ARN,
+    name: result.Name,
+    versionId: result.VersionId || null,
+    cancelled: true,
+  });
+});
+
+// ─── REPLICATION ─────────────────────────────────────────
+
+router.post("/secrets/:id/replicate", async (c: Context) => {
+  const id = c.req.param("id");
+  const body = await c.req.json<{ regions: Array<{ region: string; kmsKeyId?: string }>; force?: boolean }>();
+  if (!body.regions || body.regions.length === 0)
+    return c.json({ error: "regions is required" }, 400);
+  const result = await sm().send(
+    new ReplicateSecretToRegionsCommand({
+      SecretId: id,
+      AddReplicaRegions: body.regions.map((r) => ({ Region: r.region, KmsKeyId: r.kmsKeyId })),
+      ForceOverwriteReplicaSecret: body.force,
+    })
+  );
+  return c.json({
+    arn: result.ARN,
+    replicationStatus: result.ReplicationStatus || [],
+  });
+});
+
+router.post("/secrets/:id/replication/remove", async (c: Context) => {
+  const id = c.req.param("id");
+  const body = await c.req.json<{ regions: string[] }>();
+  if (!body.regions || body.regions.length === 0)
+    return c.json({ error: "regions is required" }, 400);
+  const result = await sm().send(
+    new RemoveRegionsFromReplicationCommand({
+      SecretId: id,
+      RemoveReplicaRegions: body.regions,
+    })
+  );
+  return c.json({
+    arn: result.ARN,
+    replicationStatus: result.ReplicationStatus || [],
+  });
+});
+
+router.post("/secrets/:id/replication/stop", async (c: Context) => {
+  const id = c.req.param("id");
+  const result = await sm().send(new StopReplicationToReplicaCommand({ SecretId: id }));
+  return c.json({ arn: result.ARN, stopped: true });
+});
+
+// ─── VALIDATE RESOURCE POLICY ────────────────────────────
+
+router.post("/secrets/:id/validate-policy", async (c: Context) => {
+  const id = c.req.param("id");
+  const body = await c.req.json<{ resourcePolicy: string }>();
+  if (!body.resourcePolicy || !body.resourcePolicy.trim())
+    return c.json({ error: "resourcePolicy is required" }, 400);
+  const result = await sm().send(
+    new ValidateResourcePolicyCommand({ SecretId: id, ResourcePolicy: body.resourcePolicy })
+  );
+  return c.json({ policyValidationPassed: result.PolicyValidationPassed });
 });
 
 // ─── TAGS ────────────────────────────────────────────────

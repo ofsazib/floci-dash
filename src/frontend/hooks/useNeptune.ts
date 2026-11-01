@@ -127,3 +127,64 @@ export function useModifyNeptuneInstance() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "neptune"] }),
   });
 }
+
+// ── Cluster roles, global clusters, resource tags (E.9 batch 2) ──
+
+export function useAddNeptuneClusterRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { id: string; roleArn: string }) =>
+      api(`/aws/neptune/clusters/${encodeURIComponent(params.id)}/roles`, {
+        method: "POST",
+        body: JSON.stringify({ roleArn: params.roleArn }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "neptune", "clusters"] }),
+  });
+}
+
+export function useRemoveNeptuneClusterRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { id: string; roleArn: string }) =>
+      api(`/aws/neptune/clusters/${encodeURIComponent(params.id)}/roles`, {
+        method: "DELETE",
+        body: JSON.stringify({ roleArn: params.roleArn }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "neptune", "clusters"] }),
+  });
+}
+
+export function useNeptuneGlobalClusters() {
+  return useQuery<{ globalClusters: any[]; total: number }>({
+    queryKey: ["aws", "neptune", "global-clusters"],
+    queryFn: () => api("/aws/neptune/global-clusters"),
+  });
+}
+
+export function useNeptuneResourceTags(resourceName: string | null) {
+  return useQuery<{ resourceName: string; tags: Array<{ Key: string; Value: string }>; total: number }>({
+    queryKey: ["aws", "neptune", "resource-tags", resourceName],
+    queryFn: () => api(`/aws/neptune/resource-tags?resourceName=${encodeURIComponent(resourceName!)}`),
+    enabled: !!resourceName,
+  });
+}
+
+export function useAddNeptuneResourceTags() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { resourceName: string; tags: Record<string, string> }) =>
+      api("/aws/neptune/resource-tags", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: (_d, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "neptune", "resource-tags", variables.resourceName] }),
+  });
+}
+
+export function useRemoveNeptuneResourceTags() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { resourceName: string; tagKeys: string[] }) =>
+      api("/aws/neptune/resource-tags", { method: "DELETE", body: JSON.stringify(data) }),
+    onSuccess: (_d, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "neptune", "resource-tags", variables.resourceName] }),
+  });
+}

@@ -36,6 +36,11 @@ import {
   useRestoreSecret,
   usePutSecretValue,
   useRandomPassword,
+  useCancelSecretRotation,
+  useReplicateSecret,
+  useRemoveSecretReplicaRegions,
+  useStopSecretReplication,
+  useValidateSecretResourcePolicy,
 } from "../hooks/useSecrets";
 
 function SecretsPage() {
@@ -47,6 +52,8 @@ function SecretsPage() {
   const createSecret = useCreateSecret();
   const deleteSecret = useDeleteSecret();
   const restoreSecret = useRestoreSecret();
+  const cancelRotation = useCancelSecretRotation();
+  const [replicationSecret, setReplicationSecret] = useState<string | null>(null);
 
   const secrets = secretsQuery.data?.secrets || [];
 
@@ -96,6 +103,20 @@ function SecretsPage() {
             cell: (s: any) => (
               <SpaceBetween direction="horizontal" size="xs">
                 <Button onClick={() => setSelectedId(s.name)}>View</Button>
+                {s.rotationEnabled && (
+                  <Button
+                    loading={cancelRotation.isPending && cancelRotation.variables === s.name}
+                    onClick={async () => {
+                      try {
+                        await cancelRotation.mutateAsync(s.name);
+                        showToast("success", `Rotation cancelled for ${s.name}`);
+                      } catch (e: any) { showToast("error", e.message); }
+                    }}
+                  >
+                    Cancel rotation
+                  </Button>
+                )}
+                <Button onClick={() => setReplicationSecret(s.name)}>Replicate</Button>
                 {s.deletedDate ? (
                   <Button onClick={async () => {
                     try {
@@ -143,7 +164,103 @@ function SecretsPage() {
       {selectedId && (
         <SecretDetailModal secretId={selectedId} onClose={() => setSelectedId(null)} />
       )}
+
+      {replicationSecret && (
+        <ReplicationModal secretId={replicationSecret} onClose={() => setReplicationSecret(null)} />
+      )}
     </SpaceBetween>
+  );
+}
+
+function ReplicationModal({ secretId, onClose }: { secretId: string; onClose: () => void }) {
+  const { showToast } = useToast();
+  const replicate = useReplicateSecret();
+  const removeRegions = useRemoveSecretReplicaRegions();
+  const stopReplication = useStopSecretReplication();
+  const [region, setRegion] = useState("");
+  const [kmsKeyId, setKmsKeyId] = useState("");
+  const [force, setForce] = useState(false);
+  const [regionsToRemove, setRegionsToRemove] = useState("");
+
+  return (
+    <Modal visible={true} onDismiss={onClose} header={`Replication — ${secretId}`} footer={
+      <Button onClick={onClose}>Close</Button>
+    }>
+      <SpaceBetween size="m">
+        <Container header={<Header variant="h3">Replicate to regions</Header>}>
+          <SpaceBetween size="s">
+            <FormField label="Region">
+              <Input value={region} onChange={({ detail }) => setRegion(detail.value)} placeholder="us-west-2" />
+            </FormField>
+            <FormField label="KMS Key ID (optional)">
+              <Input value={kmsKeyId} onChange={({ detail }) => setKmsKeyId(detail.value)} placeholder="alias/aws/secretsmanager" />
+            </FormField>
+            <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} />
+              <Box>Overwrite existing replica</Box>
+            </label>
+            <Button
+              variant="primary"
+              loading={replicate.isPending}
+              disabled={!region.trim()}
+              onClick={async () => {
+                try {
+                  await replicate.mutateAsync({
+                    id: secretId,
+                    regions: [{ region: region.trim(), kmsKeyId: kmsKeyId.trim() || undefined }],
+                    force,
+                  });
+                  showToast("success", `Replication to ${region.trim()} started`);
+                  setRegion("");
+                  setKmsKeyId("");
+                  setForce(false);
+                } catch (e: any) { showToast("error", e.message); }
+              }}
+            >
+              Replicate
+            </Button>
+          </SpaceBetween>
+        </Container>
+
+        <Container header={<Header variant="h3">Remove replica regions</Header>}>
+          <SpaceBetween size="s">
+            <FormField label="Regions (comma-separated)">
+              <Input value={regionsToRemove} onChange={({ detail }) => setRegionsToRemove(detail.value)} placeholder="us-west-2, eu-west-1" />
+            </FormField>
+            <Button
+              loading={removeRegions.isPending}
+              disabled={!regionsToRemove.trim()}
+              onClick={async () => {
+                try {
+                  await removeRegions.mutateAsync({
+                    id: secretId,
+                    regions: regionsToRemove.split(",").map((r) => r.trim()).filter(Boolean),
+                  });
+                  showToast("success", "Replica regions removed");
+                  setRegionsToRemove("");
+                } catch (e: any) { showToast("error", e.message); }
+              }}
+            >
+              Remove regions
+            </Button>
+          </SpaceBetween>
+        </Container>
+
+        <Container header={<Header variant="h3">Stop replication</Header>}>
+          <Button
+            loading={stopReplication.isPending}
+            onClick={async () => {
+              try {
+                await stopReplication.mutateAsync(secretId);
+                showToast("success", "Replication stopped");
+              } catch (e: any) { showToast("error", e.message); }
+            }}
+          >
+            Stop replication
+          </Button>
+        </Container>
+      </SpaceBetween>
+    </Modal>
   );
 }
 
@@ -204,7 +321,9 @@ function SecretDetailModal({ secretId, onClose }: { secretId: string; onClose: (
   const policyQuery = useSecretResourcePolicy(secretId);
   const putPolicy = usePutSecretResourcePolicy();
   const updateStage = useUpdateSecretVersionStage();
+  const validatePolicy = useValidateSecretResourcePolicy();
   const [policyText, setPolicyText] = useState("");
+  const [validationPassed, setValidationPassed] = useState<boolean | null>(null);
 
   const s = secretQuery.data?.secret;
   const versions = secretQuery.data?.versions || [];
@@ -336,6 +455,28 @@ function SecretDetailModal({ secretId, onClose }: { secretId: string; onClose: (
           >
             Save resource policy
           </Button>
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button
+              loading={validatePolicy.isPending}
+              disabled={!policyText.trim()}
+              onClick={() =>
+                validatePolicy.mutateAsync({ id: secretId, resourcePolicy: policyText.trim() })
+                  .then((res) => {
+                    setValidationPassed(res.policyValidationPassed);
+                    showToast(res.policyValidationPassed ? "success" : "error",
+                      res.policyValidationPassed ? "Policy is valid" : "Policy failed validation");
+                  })
+                  .catch((e) => showToast("error", e.message || "Validation failed"))
+              }
+            >
+              Validate policy
+            </Button>
+            {validationPassed !== null && (
+              <Badge color={validationPassed ? "green" : "red"}>
+                {validationPassed ? "Valid" : "Invalid"}
+              </Badge>
+            )}
+          </SpaceBetween>
         </SpaceBetween>
       ),
     },

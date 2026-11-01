@@ -28,6 +28,8 @@ const { mockSend, mocks } = vi.hoisted(() => {
       GetResourceShareInvitationsCommand: createCmd("GetResourceShareInvitationsCommand"),
       TagResourceCommand: createCmd("TagResourceCommand"),
       UntagResourceCommand: createCmd("UntagResourceCommand"),
+      AcceptResourceShareInvitationCommand: createCmd("AcceptResourceShareInvitationCommand"),
+      RejectResourceShareInvitationCommand: createCmd("RejectResourceShareInvitationCommand"),
     },
   };
 });
@@ -311,5 +313,38 @@ describe("RAM — invitations and tags", () => {
     const res = await post("/tags/untag", { resourceShareArn: share.resourceShareArn });
     expect(res.status).toBe(400);
     expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  describe("Invitation accept/reject (E.9 batch 2)", () => {
+    const invitationArn = "arn:aws:ram:us-east-1:123456789012:invitation/inv-1";
+
+    it("POST /invitations/accept — accepts an invitation", async () => {
+      mockSend.mockResolvedValueOnce({ resourceShareInvitation: { resourceShareInvitationArn: invitationArn, status: "ACCEPTED" } });
+      const res = await post("/invitations/accept", { resourceShareInvitationArn: invitationArn });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.resourceShareInvitation.status).toBe("ACCEPTED");
+      expect(mockSend.mock.calls[0][0].ResourceShareInvitationArn).toBe(invitationArn);
+    });
+
+    it("POST /invitations/accept — 400 when arn missing", async () => {
+      const res = await post("/invitations/accept", {});
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("POST /invitations/reject — rejects an invitation", async () => {
+      mockSend.mockResolvedValueOnce({ resourceShareInvitation: { resourceShareInvitationArn: invitationArn, status: "REJECTED" } });
+      const res = await post("/invitations/reject", { resourceShareInvitationArn: invitationArn, clientToken: "tok" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.resourceShareInvitation.status).toBe("REJECTED");
+      expect(mockSend.mock.calls[0][0].ClientToken).toBe("tok");
+    });
+
+    it("POST /invitations/reject — 400 when arn missing", async () => {
+      const res = await post("/invitations/reject", {});
+      expect(res.status).toBe(400);
+    });
   });
 });

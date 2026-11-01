@@ -25,6 +25,11 @@ import {
   useDeleteSecretResourcePolicy,
   useBatchGetSecretValue,
   useUpdateSecretVersionStage,
+  useCancelSecretRotation,
+  useReplicateSecret,
+  useRemoveSecretReplicaRegions,
+  useStopSecretReplication,
+  useValidateSecretResourcePolicy,
 } from "./useSecrets";
 
 function createWrapper() {
@@ -274,6 +279,52 @@ describe("useUpdateSecretVersionStage", () => {
     expect(mockApi).toHaveBeenCalledWith("/aws/secretsmanager/secrets/s1/version-stage", {
       method: "POST",
       body: JSON.stringify({ versionStage: "AWSCURRENT", moveToVersionId: "v2", removeFromVersionId: undefined }),
+    });
+  });
+});
+
+describe("secrets rotation/replication/policy hooks (E.9 batch 2)", () => {
+  it("useCancelSecretRotation calls POST cancel-rotate", async () => {
+    mockApi.mockResolvedValueOnce({ cancelled: true });
+    const { result } = renderHook(() => useCancelSecretRotation(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("s1");
+    expect(mockApi).toHaveBeenCalledWith("/aws/secretsmanager/secrets/s1/cancel-rotate", { method: "POST" });
+  });
+
+  it("useReplicateSecret calls POST replicate with body", async () => {
+    mockApi.mockResolvedValueOnce({ arn: "arn:s1" });
+    const { result } = renderHook(() => useReplicateSecret(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ id: "s1", regions: [{ region: "us-west-2" }], force: true });
+    expect(mockApi).toHaveBeenCalledWith("/aws/secretsmanager/secrets/s1/replicate", {
+      method: "POST",
+      body: JSON.stringify({ regions: [{ region: "us-west-2" }], force: true }),
+    });
+  });
+
+  it("useRemoveSecretReplicaRegions calls POST replication/remove", async () => {
+    mockApi.mockResolvedValueOnce({ arn: "arn:s1" });
+    const { result } = renderHook(() => useRemoveSecretReplicaRegions(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ id: "s1", regions: ["us-west-2"] });
+    expect(mockApi).toHaveBeenCalledWith("/aws/secretsmanager/secrets/s1/replication/remove", {
+      method: "POST",
+      body: JSON.stringify({ regions: ["us-west-2"] }),
+    });
+  });
+
+  it("useStopSecretReplication calls POST replication/stop", async () => {
+    mockApi.mockResolvedValueOnce({ stopped: true });
+    const { result } = renderHook(() => useStopSecretReplication(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("s1");
+    expect(mockApi).toHaveBeenCalledWith("/aws/secretsmanager/secrets/s1/replication/stop", { method: "POST" });
+  });
+
+  it("useValidateSecretResourcePolicy calls POST validate-policy", async () => {
+    mockApi.mockResolvedValueOnce({ policyValidationPassed: true });
+    const { result } = renderHook(() => useValidateSecretResourcePolicy(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ id: "s1", resourcePolicy: "{}" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/secretsmanager/secrets/s1/validate-policy", {
+      method: "POST",
+      body: JSON.stringify({ resourcePolicy: "{}" }),
     });
   });
 });

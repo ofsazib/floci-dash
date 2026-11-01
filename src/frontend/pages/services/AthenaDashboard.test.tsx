@@ -13,6 +13,10 @@ const mockQueryExecutions = vi.fn();
 const mockCreateWg = vi.fn();
 const mockStopQuery = vi.fn();
 const mockStartQuery = vi.fn();
+const mockCreateCatalog = vi.fn();
+const mockDeleteCatalog = vi.fn();
+const mockAddTag = vi.fn();
+const mockRemoveTag = vi.fn();
 
 const deleteWgState = vi.hoisted(() => ({
   isPending: false,
@@ -61,6 +65,24 @@ const createWgState = vi.hoisted(() => ({
 const stopQueryState = vi.hoisted(() => ({
   isPending: false,
   variables: null as string | null,
+}));
+
+const deleteCatalogState = vi.hoisted(() => ({
+  isPending: false,
+  variables: null as string | null,
+}));
+
+const createCatalogState = vi.hoisted(() => ({ isPending: false }));
+
+const resourceTagsState = vi.hoisted(() => ({
+  data: undefined as any,
+}));
+
+const addTagState = vi.hoisted(() => ({ isPending: false }));
+
+const removeTagState = vi.hoisted(() => ({
+  isPending: false,
+  variables: null as any,
 }));
 
 const startQueryState = vi.hoisted(() => ({
@@ -121,6 +143,28 @@ vi.mock("../../hooks/useAthena", () => ({
     get data() { return tableMetaState.data; },
     get isLoading() { return tableMetaState.isLoading; },
   }),
+  useCreateAthenaDataCatalog: () => ({
+    mutateAsync: mockCreateCatalog,
+    get isPending() { return createCatalogState.isPending; },
+  }),
+  useUpdateAthenaDataCatalog: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useDeleteAthenaDataCatalog: () => ({
+    mutateAsync: mockDeleteCatalog,
+    get isPending() { return deleteCatalogState.isPending; },
+    get variables() { return deleteCatalogState.variables; },
+  }),
+  useAthenaResourceTags: () => ({
+    get data() { return resourceTagsState.data; },
+  }),
+  useTagAthenaResource: () => ({
+    mutateAsync: mockAddTag,
+    get isPending() { return addTagState.isPending; },
+  }),
+  useUntagAthenaResource: () => ({
+    mutateAsync: mockRemoveTag,
+    get isPending() { return removeTagState.isPending; },
+    get variables() { return removeTagState.variables; },
+  }),
   useAthenaStartQueryExecution: () => ({
     mutate: mockStartQuery,
     get isPending() { return startQueryState.isPending; },
@@ -150,6 +194,17 @@ function dismissModalWithEscape() {
 beforeEach(() => {
   vi.clearAllMocks();
   mockCreateWg.mockReset();
+  mockCreateCatalog.mockReset();
+  mockDeleteCatalog.mockReset();
+  mockAddTag.mockReset();
+  mockRemoveTag.mockReset();
+  deleteCatalogState.isPending = false;
+  deleteCatalogState.variables = null;
+  createCatalogState.isPending = false;
+  resourceTagsState.data = undefined;
+  addTagState.isPending = false;
+  removeTagState.isPending = false;
+  removeTagState.variables = null;
   deleteWgState.isPending = false;
   deleteWgState.variables = null;
   createWgState.isPending = false;
@@ -1221,5 +1276,245 @@ describe("RunQueryTab", () => {
     render(<AthenaDashboard />, { wrapper: createWrapper() });
     await user.click(screen.getByRole("tab", { name: /Run Query/i }));
     expect(screen.getByText(/Error: Failed to start query/)).toBeTruthy();
+  });
+});
+
+// ── Data Catalog management + tags (E.9 batch 2, family 4) ──
+
+describe("AthenaDashboard — data catalogs management", () => {
+  it("shows Create catalog button and opens the modal", async () => {
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Catalogs & Databases/i }));
+    await user.click(screen.getByRole("button", { name: /Create catalog/i }));
+    await waitFor(() => expect(screen.getByText("Create data catalog")).toBeTruthy());
+    expect(screen.getByPlaceholderText("my-catalog")).toBeTruthy();
+  });
+
+  it("disables Create catalog submit when name is empty", async () => {
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Catalogs & Databases/i }));
+    await user.click(screen.getByRole("button", { name: /Create catalog/i }));
+    const btns = screen.getAllByRole("button", { name: /^Create catalog$/i });
+    expect(btns[btns.length - 1]).toBeDisabled();
+  });
+
+  it("creates a catalog with name, type and description and closes the modal", async () => {
+    mockCreateCatalog.mockResolvedValueOnce({ dataCatalog: { Name: "new-cat" } });
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Catalogs & Databases/i }));
+    await user.click(screen.getByRole("button", { name: /Create catalog/i }));
+    await user.type(screen.getByPlaceholderText("my-catalog"), "new-cat");
+    await user.type(screen.getByPlaceholderText("Optional description"), "test desc");
+    const btns = screen.getAllByRole("button", { name: /^Create catalog$/i });
+    await user.click(btns[btns.length - 1]);
+    await waitFor(() => {
+      expect(mockCreateCatalog).toHaveBeenCalledWith({
+        name: "new-cat",
+        type: "GLUE",
+        description: "test desc",
+      });
+    });
+    await waitFor(() => expect(screen.queryByText("Create data catalog")).toBeNull());
+  });
+
+  it("closes the create catalog modal on Cancel", async () => {
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Catalogs & Databases/i }));
+    await user.click(screen.getByRole("button", { name: /Create catalog/i }));
+    await user.click(screen.getByRole("button", { name: /^Cancel$/i }));
+    await waitFor(() => expect(screen.queryByText("Create data catalog")).toBeNull());
+  });
+
+  it("renders Tags and delete actions for each catalog", async () => {
+    catalogsState.data = { dataCatalogs: [{ CatalogName: "my-cat" }], total: 1 };
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Catalogs & Databases/i }));
+    expect(screen.getByRole("button", { name: "Tags" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Delete my-cat/i })).toBeTruthy();
+  });
+
+  it("deletes a catalog after confirmation", async () => {
+    mockDeleteCatalog.mockResolvedValueOnce({ deleted: true });
+    catalogsState.data = { dataCatalogs: [{ CatalogName: "doomed-cat" }], total: 1 };
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Catalogs & Databases/i }));
+    await user.click(screen.getByRole("button", { name: /Delete doomed-cat/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/i)).toBeTruthy());
+    const confirmBtns = screen.getAllByRole("button", { name: /^Delete$/i });
+    await user.click(confirmBtns[confirmBtns.length - 1]);
+    await waitFor(() => expect(mockDeleteCatalog).toHaveBeenCalledWith("doomed-cat"));
+  });
+
+  it("opens the tags modal and lists existing tags", async () => {
+    resourceTagsState.data = {
+      resourceArn: "arn:aws:athena:us-east-1:000000000000:datacatalog/my-cat",
+      tags: [{ Key: "env", Value: "dev" }],
+      total: 1,
+    };
+    catalogsState.data = { dataCatalogs: [{ CatalogName: "my-cat" }], total: 1 };
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Catalogs & Databases/i }));
+    await user.click(screen.getByRole("button", { name: "Tags" }));
+    await waitFor(() => expect(screen.getByText("Tags — my-cat")).toBeTruthy());
+    expect(screen.getByText("env")).toBeTruthy();
+    expect(screen.getByText("dev")).toBeTruthy();
+  });
+
+  it("shows No tags placeholder when the catalog has no tags", async () => {
+    resourceTagsState.data = { resourceArn: "arn:x", tags: [], total: 0 };
+    catalogsState.data = { dataCatalogs: [{ CatalogName: "bare-cat" }], total: 1 };
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Catalogs & Databases/i }));
+    await user.click(screen.getByRole("button", { name: "Tags" }));
+    await waitFor(() => expect(screen.getByText("Tags — bare-cat")).toBeTruthy());
+    expect(screen.getByText("No tags")).toBeTruthy();
+  });
+
+  it("adds a tag from the tags modal and clears the inputs", async () => {
+    mockAddTag.mockResolvedValueOnce({ tagged: true });
+    resourceTagsState.data = { resourceArn: "arn:x", tags: [], total: 0 };
+    catalogsState.data = { dataCatalogs: [{ CatalogName: "tag-cat" }], total: 1 };
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Catalogs & Databases/i }));
+    await user.click(screen.getByRole("button", { name: "Tags" }));
+    await user.type(screen.getByPlaceholderText("env"), "team");
+    await user.type(screen.getByPlaceholderText("dev"), "core");
+    await user.click(screen.getByRole("button", { name: /Add tag/i }));
+    await waitFor(() => {
+      expect(mockAddTag).toHaveBeenCalledWith({
+        resourceArn: "arn:aws:athena:us-east-1:000000000000:datacatalog/tag-cat",
+        tags: { team: "core" },
+      });
+    });
+  });
+
+  it("disables Add tag when key is empty", async () => {
+    resourceTagsState.data = { resourceArn: "arn:x", tags: [], total: 0 };
+    catalogsState.data = { dataCatalogs: [{ CatalogName: "tag-cat" }], total: 1 };
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Catalogs & Databases/i }));
+    await user.click(screen.getByRole("button", { name: "Tags" }));
+    expect(screen.getByRole("button", { name: /Add tag/i })).toBeDisabled();
+  });
+
+  it("removes a tag from the tags modal", async () => {
+    mockRemoveTag.mockResolvedValueOnce({ untagged: true });
+    resourceTagsState.data = { resourceArn: "arn:x", tags: [{ Key: "old", Value: "x" }], total: 1 };
+    catalogsState.data = { dataCatalogs: [{ CatalogName: "tag-cat" }], total: 1 };
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Catalogs & Databases/i }));
+    await user.click(screen.getByRole("button", { name: "Tags" }));
+    await waitFor(() => expect(screen.getByText("old")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Delete old/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/i)).toBeTruthy());
+    const confirmBtns = screen.getAllByRole("button", { name: /^Delete$/i });
+    await user.click(confirmBtns[confirmBtns.length - 1]);
+    await waitFor(() => {
+      expect(mockRemoveTag).toHaveBeenCalledWith({
+        resourceArn: "arn:aws:athena:us-east-1:000000000000:datacatalog/tag-cat",
+        tagKeys: ["old"],
+      });
+    });
+  });
+
+  it("closes the tags modal on Close", async () => {
+    resourceTagsState.data = { resourceArn: "arn:x", tags: [], total: 0 };
+    catalogsState.data = { dataCatalogs: [{ CatalogName: "tag-cat" }], total: 1 };
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Catalogs & Databases/i }));
+    await user.click(screen.getByRole("button", { name: "Tags" }));
+    await waitFor(() => expect(screen.getByText("Tags — tag-cat")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /^Close$/i }));
+    await waitFor(() => expect(screen.queryByText("Tags — tag-cat")).toBeNull());
+  });
+});
+
+describe("AthenaDashboard — catalog/tag coverage completion", () => {
+  beforeEach(() => {
+    catalogsState.data = { dataCatalogs: [{ CatalogName: "my-cat" }], total: 1 };
+  });
+
+  it("shows error toast when create catalog fails", async () => {
+    mockCreateCatalog.mockRejectedValueOnce(new Error("boom"));
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Catalogs & Databases/i }));
+    await user.click(screen.getByRole("button", { name: /Create catalog/i }));
+    await user.type(screen.getByPlaceholderText("my-catalog"), "bad-cat");
+    const btns = screen.getAllByRole("button", { name: /^Create catalog$/i });
+    await user.click(btns[btns.length - 1]);
+    // On failure the catch arm shows an error toast and the modal stays open
+    await waitFor(() => expect(screen.getByText("Create data catalog").closest('[role="dialog"]')).toBeTruthy());
+    expect(screen.queryByText("Data catalog bad-cat created")).toBeNull();
+  });
+
+  it("shows delete loading state for catalog delete buttons", async () => {
+    deleteCatalogState.isPending = true;
+    deleteCatalogState.variables = "my-cat";
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Catalogs & Databases/i }));
+    expect(screen.getByRole("button", { name: /Delete my-cat/i })).toBeDisabled();
+  });
+
+  it("renders tags modal while untag loading with tags data undefined", async () => {
+    resourceTagsState.data = undefined;
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Catalogs & Databases/i }));
+    await user.click(screen.getByRole("button", { name: "Tags" }));
+    await waitFor(() => expect(screen.getByText("Tags — my-cat")).toBeTruthy());
+    expect(screen.getByText("No tags")).toBeTruthy();
+  });
+});
+
+describe("AthenaDashboard — remove-tag loading state", () => {
+  beforeEach(() => {
+    catalogsState.data = { dataCatalogs: [{ CatalogName: "my-cat" }], total: 1 };
+    resourceTagsState.data = { resourceArn: "arn:x", tags: [{ Key: "env", Value: "dev" }], total: 1 };
+    removeTagState.isPending = true;
+    removeTagState.variables = { resourceArn: "arn:x", tagKeys: ["env"] };
+  });
+
+  it("disables the tag remove button while the untag mutation is pending", async () => {
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Catalogs & Databases/i }));
+    await user.click(screen.getByRole("button", { name: "Tags" }));
+    await waitFor(() => expect(screen.getByText("env")).toBeTruthy());
+    expect(screen.getByRole("button", { name: /Delete env/i })).toBeDisabled();
+  });
+});
+
+describe("AthenaDashboard — catalog type select", () => {
+  it("opens the type dropdown and picks an option, submitting the chosen type", async () => {
+    mockCreateCatalog.mockResolvedValue({ dataCatalog: {} });
+    const user = userEvent.setup();
+    render(<AthenaDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Catalogs & Databases/i }));
+    await user.click(screen.getByRole("button", { name: /Create catalog/i }));
+    await user.type(screen.getByPlaceholderText("my-catalog"), "typed-cat");
+    await user.click(screen.getByText("GLUE"));
+    await waitFor(() => expect(screen.getByText("LAMBDA")).toBeTruthy());
+    await user.click(screen.getByText("LAMBDA"));
+    const btns = screen.getAllByRole("button", { name: /^Create catalog$/i });
+    await user.click(btns[btns.length - 1]);
+    await waitFor(() => {
+      expect(mockCreateCatalog).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "typed-cat", type: "LAMBDA" })
+      );
+    });
   });
 });

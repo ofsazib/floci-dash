@@ -27,6 +27,11 @@ const mockAssociateMutate = vi.fn(() => Promise.resolve({}));
 const mockDisassociateMutate = vi.fn(() => Promise.resolve({}));
 const mockEnableMutate = vi.fn(() => Promise.resolve({ returnValue: true }));
 const mockShowToast = vi.fn();
+const mockAcceptInvitation = vi.fn(() => Promise.resolve({}));
+const mockRejectInvitation = vi.fn(() => Promise.resolve({}));
+
+const acceptState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
+const rejectState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
 
 vi.mock("../../hooks/useRAM", () => ({
   useRAMShares: (...args: any[]) => mockShares(...args),
@@ -42,6 +47,16 @@ vi.mock("../../hooks/useRAM", () => ({
   useAssociateRAMShare: () => ({ mutateAsync: mockAssociateMutate, isPending: false }),
   useDisassociateRAMShare: () => ({ mutateAsync: mockDisassociateMutate, isPending: false }),
   useEnableRAMSharing: () => ({ mutateAsync: mockEnableMutate, isPending: false }),
+  useAcceptRAMInvitation: () => ({
+    mutateAsync: mockAcceptInvitation,
+    get isPending() { return acceptState.isPending; },
+    get variables() { return acceptState.variables; },
+  }),
+  useRejectRAMInvitation: () => ({
+    mutateAsync: mockRejectInvitation,
+    get isPending() { return rejectState.isPending; },
+    get variables() { return rejectState.variables; },
+  }),
   useRAMTagResource: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useRAMUntagResource: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
@@ -76,6 +91,10 @@ beforeEach(() => {
     isLoading: false,
   });
   mockShares.mockReturnValue({ data: { resourceShares: [], total: 0 }, isLoading: false });
+  acceptState.isPending = false;
+  acceptState.variables = null;
+  rejectState.isPending = false;
+  rejectState.variables = null;
 });
 
 describe("RAMDashboard", () => {
@@ -650,5 +669,99 @@ describe("RAMDashboard", () => {
     await waitFor(() =>
       expect(mockShowToast).toHaveBeenCalledWith("error", "Failed to enable organization sharing")
     );
+  });
+});
+
+describe("RAMDashboard — invitation accept/reject", () => {
+  const invitation = {
+    resourceShareInvitationArn: "arn:aws:ram:us-east-1:123456789012:invitation/inv-1",
+    resourceShareName: "shared-stuff",
+    senderAccountId: "111111111111",
+    status: "PENDING",
+  };
+
+  function withInvitation() {
+    mockInvitations.mockReturnValue({
+      data: { resourceShareInvitations: [invitation], total: 1 },
+      isLoading: false,
+    });
+  }
+
+  it("renders invitation rows with Accept and Reject buttons", () => {
+    withInvitation();
+    render(<RAMDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText(/invitation\/inv-1/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Accept" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Reject" })).toBeTruthy();
+  });
+
+  it("accepts an invitation and shows a success toast", async () => {
+    withInvitation();
+    const user = userEvent.setup();
+    render(<RAMDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Accept" }));
+    await waitFor(() => {
+      expect(mockAcceptInvitation).toHaveBeenCalledWith(invitation.resourceShareInvitationArn);
+      expect(mockShowToast).toHaveBeenCalledWith("success", "Invitation accepted");
+    });
+  });
+
+  it("shows error toast when accept fails", async () => {
+    withInvitation();
+    mockAcceptInvitation.mockRejectedValueOnce(new Error("already accepted"));
+    const user = userEvent.setup();
+    render(<RAMDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Accept" }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "already accepted"));
+  });
+
+  it("rejects an invitation and shows a success toast", async () => {
+    withInvitation();
+    const user = userEvent.setup();
+    render(<RAMDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Reject" }));
+    await waitFor(() => {
+      expect(mockRejectInvitation).toHaveBeenCalledWith(invitation.resourceShareInvitationArn);
+      expect(mockShowToast).toHaveBeenCalledWith("success", "Invitation rejected");
+    });
+  });
+
+  it("shows error toast when reject fails", async () => {
+    withInvitation();
+    mockRejectInvitation.mockRejectedValueOnce(new Error("not permitted"));
+    const user = userEvent.setup();
+    render(<RAMDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Reject" }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "not permitted"));
+  });
+});
+
+describe("RAMDashboard — invitation loading states", () => {
+  const invitation = {
+    resourceShareInvitationArn: "arn:aws:ram:us-east-1:123456789012:invitation/inv-9",
+    resourceShareName: "shared",
+    status: "PENDING",
+  };
+
+  it("disables the Accept button while accept is pending", () => {
+    mockInvitations.mockReturnValue({
+      data: { resourceShareInvitations: [invitation], total: 1 },
+      isLoading: false,
+    });
+    acceptState.isPending = true;
+    acceptState.variables = invitation.resourceShareInvitationArn;
+    render(<RAMDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByRole("button", { name: "Accept" }).getAttribute("aria-disabled")).toBe("true");
+  });
+
+  it("disables the Reject button while reject is pending", () => {
+    mockInvitations.mockReturnValue({
+      data: { resourceShareInvitations: [invitation], total: 1 },
+      isLoading: false,
+    });
+    rejectState.isPending = true;
+    rejectState.variables = invitation.resourceShareInvitationArn;
+    render(<RAMDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByRole("button", { name: "Reject" }).getAttribute("aria-disabled")).toBe("true");
   });
 });

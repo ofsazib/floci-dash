@@ -17,6 +17,13 @@ const mockRandomPassword = vi.fn();
 const mockPolicy = vi.fn();
 const mockShowToast = vi.hoisted(() => vi.fn());
 const mockPutPolicy = vi.fn();
+const mockCancelRotation = vi.fn();
+const mockReplicate = vi.fn();
+const mockRemoveReplicaRegions = vi.fn();
+const mockStopReplication = vi.fn();
+const mockValidatePolicy = vi.fn();
+
+const cancelRotationState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
 
 const mockUseHealth = vi.fn();
 vi.mock("../hooks/useSystem", () => ({
@@ -37,6 +44,15 @@ vi.mock("../hooks/useSecrets", () => ({
   useDeleteSecretResourcePolicy: () => ({ mutate: vi.fn(), isPending: false }),
   useBatchGetSecretValue: () => ({ mutate: vi.fn(), isPending: false }),
   useUpdateSecretVersionStage: () => ({ mutate: vi.fn(), isPending: false }),
+  useCancelSecretRotation: () => ({
+    mutateAsync: mockCancelRotation,
+    get isPending() { return cancelRotationState.isPending; },
+    get variables() { return cancelRotationState.variables; },
+  }),
+  useReplicateSecret: () => ({ mutateAsync: mockReplicate, isPending: false }),
+  useRemoveSecretReplicaRegions: () => ({ mutateAsync: mockRemoveReplicaRegions, isPending: false }),
+  useStopSecretReplication: () => ({ mutateAsync: mockStopReplication, isPending: false }),
+  useValidateSecretResourcePolicy: () => ({ mutateAsync: mockValidatePolicy, isPending: false }),
 }));
 
 vi.mock("../components/Toast", () => ({
@@ -97,6 +113,13 @@ describe("SecretsManagerPage", () => {
     mockPutSecretValue.mockResolvedValue({});
     mockRandomPassword.mockResolvedValue({ randomPassword: "R@nd0m!Pass" });
     mockUseHealth.mockReturnValue({ data: { services: { secretsmanager: "running" } }, isLoading: false });
+    mockCancelRotation.mockResolvedValue({ cancelled: true });
+    mockReplicate.mockResolvedValue({ arn: "arn:x" });
+    mockRemoveReplicaRegions.mockResolvedValue({ arn: "arn:x" });
+    mockStopReplication.mockResolvedValue({ stopped: true });
+    mockValidatePolicy.mockResolvedValue({ policyValidationPassed: true });
+    cancelRotationState.isPending = false;
+    cancelRotationState.variables = null;
   });
 
   it("renders secret list", () => {
@@ -674,5 +697,275 @@ describe("SecretsManagerPage — resource policy tab", () => {
     const user = userEvent.setup();
     await openPolicyTab(user);
     expect((await screen.findByRole("button", { name: /Save resource policy/i })).hasAttribute("disabled")).toBe(true);
+  });
+});
+
+describe("SecretsManagerPage — rotation cancel, replication, policy validation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPolicy.mockReturnValue({ data: undefined });
+    mockSecrets.mockReturnValue({
+      data: { secrets: [defaultSecret], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockSecret.mockReturnValue({
+      data: { secret: defaultSecret, versions: [], versionIdsToStages: {} },
+      isLoading: false, isError: false, error: null,
+    });
+    mockSecretValue.mockReturnValue({
+      data: { secretString: "v", versionId: "v1", versionStages: ["AWSCURRENT"] },
+      isLoading: false, isError: false, error: null,
+    });
+    mockUseHealth.mockReturnValue({ data: { services: { secretsmanager: "running" } }, isLoading: false });
+    mockCancelRotation.mockResolvedValue({ cancelled: true });
+    mockReplicate.mockResolvedValue({ arn: "arn:x" });
+    mockRemoveReplicaRegions.mockResolvedValue({ arn: "arn:x" });
+    mockStopReplication.mockResolvedValue({ stopped: true });
+    mockValidatePolicy.mockResolvedValue({ policyValidationPassed: true });
+    cancelRotationState.isPending = false;
+    cancelRotationState.variables = null;
+  });
+
+  it("shows Cancel rotation button when rotation is enabled and cancels", async () => {
+    const user = userEvent.setup();
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("button", { name: "Cancel rotation" }));
+    await waitFor(() => expect(mockCancelRotation).toHaveBeenCalledWith("my-secret"));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("success", "Rotation cancelled for my-secret"));
+  });
+
+  it("hides Cancel rotation button when rotation is off", () => {
+    mockSecrets.mockReturnValue({
+      data: { secrets: [{ ...defaultSecret, rotationEnabled: false }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    expect(screen.queryByRole("button", { name: "Cancel rotation" })).toBeNull();
+  });
+
+  it("shows error toast when cancel rotation fails", async () => {
+    mockCancelRotation.mockRejectedValueOnce(new Error("service-managed"));
+    const user = userEvent.setup();
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("button", { name: "Cancel rotation" }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "service-managed"));
+  });
+
+  it("opens the Replicate modal", async () => {
+    const user = userEvent.setup();
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("button", { name: "Replicate" }));
+    await waitFor(() => expect(screen.getByText("Replication — my-secret")).toBeTruthy());
+  });
+
+  it("replicates to a region with force overwrite", async () => {
+    const user = userEvent.setup();
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("button", { name: "Replicate" }));
+    await waitFor(() => expect(screen.getByText("Replication — my-secret")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("us-west-2"), "eu-west-1");
+    fireEvent.click(screen.getByText("Overwrite existing replica"));
+    const replicateBtns = screen.getAllByRole("button", { name: /^Replicate$/ });
+    await user.click(replicateBtns[replicateBtns.length - 1]);
+    await waitFor(() => {
+      expect(mockReplicate).toHaveBeenCalledWith({
+        id: "my-secret",
+        regions: [{ region: "eu-west-1", kmsKeyId: undefined }],
+        force: true,
+      });
+    });
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("success", "Replication to eu-west-1 started"));
+  });
+
+  it("disables Replicate when region is empty", async () => {
+    const user = userEvent.setup();
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("button", { name: "Replicate" }));
+    await waitFor(() => expect(screen.getByText("Replication — my-secret")).toBeTruthy());
+    const btns = screen.getAllByRole("button", { name: /^Replicate$/ });
+    expect(btns[btns.length - 1]).toBeDisabled();
+  });
+
+  it("removes replica regions", async () => {
+    const user = userEvent.setup();
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("button", { name: "Replicate" }));
+    await waitFor(() => expect(screen.getByText("Replication — my-secret")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("us-west-2, eu-west-1"), "us-west-2");
+    await user.click(screen.getByRole("button", { name: /Remove regions/i }));
+    await waitFor(() => {
+      expect(mockRemoveReplicaRegions).toHaveBeenCalledWith({ id: "my-secret", regions: ["us-west-2"] });
+    });
+  });
+
+  it("stops replication", async () => {
+    const user = userEvent.setup();
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("button", { name: "Replicate" }));
+    await waitFor(() => expect(screen.getByText("Replication — my-secret")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Stop replication/i }));
+    await waitFor(() => {
+      expect(mockStopReplication).toHaveBeenCalledWith("my-secret");
+      expect(mockShowToast).toHaveBeenCalledWith("success", "Replication stopped");
+    });
+  });
+
+  it("closes the Replicate modal on Close", async () => {
+    const user = userEvent.setup();
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("button", { name: "Replicate" }));
+    await waitFor(() => expect(screen.getByText("Replication — my-secret")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /^Close$/i }));
+    await waitFor(() => expect(screen.queryByText("Replication — my-secret")).toBeNull());
+  });
+
+  it("validates a resource policy from the policy tab", async () => {
+    const user = userEvent.setup();
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("button", { name: /^View$/ }));
+    await waitFor(() => expect(screen.getByText("Secret: my-secret")).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /Resource policy/i }));
+    fireEvent.change(screen.getByPlaceholderText('{"Version": "2012-10-17", "Statement": []}'), { target: { value: "{}" } });
+    await user.click(screen.getByRole("button", { name: /Validate policy/i }));
+    await waitFor(() => {
+      expect(mockValidatePolicy).toHaveBeenCalledWith({ id: "my-secret", resourcePolicy: "{}" });
+      expect(screen.getByText("Valid")).toBeTruthy();
+    });
+  });
+
+  it("shows Invalid badge when validation fails", async () => {
+    mockValidatePolicy.mockResolvedValueOnce({ policyValidationPassed: false });
+    const user = userEvent.setup();
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("button", { name: /^View$/ }));
+    await waitFor(() => expect(screen.getByText("Secret: my-secret")).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /Resource policy/i }));
+    fireEvent.change(screen.getByPlaceholderText('{"Version": "2012-10-17", "Statement": []}'), { target: { value: "{}" } });
+    await user.click(screen.getByRole("button", { name: /Validate policy/i }));
+    await waitFor(() => expect(screen.getByText("Invalid")).toBeTruthy());
+  });
+
+  it("shows error toast when validation request fails", async () => {
+    mockValidatePolicy.mockRejectedValueOnce(new Error("boom"));
+    const user = userEvent.setup();
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("button", { name: /^View$/ }));
+    await waitFor(() => expect(screen.getByText("Secret: my-secret")).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /Resource policy/i }));
+    fireEvent.change(screen.getByPlaceholderText('{"Version": "2012-10-17", "Statement": []}'), { target: { value: "{}" } });
+    await user.click(screen.getByRole("button", { name: /Validate policy/i }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "boom"));
+  });
+});
+
+describe("SecretsManagerPage — replication/validation coverage completion", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPolicy.mockReturnValue({ data: undefined });
+    mockSecrets.mockReturnValue({
+      data: { secrets: [{ ...defaultSecret, rotationEnabled: true }], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockSecret.mockReturnValue({
+      data: { secret: defaultSecret, versions: [], versionIdsToStages: {} },
+      isLoading: false, isError: false, error: null,
+    });
+    mockSecretValue.mockReturnValue({
+      data: { secretString: "v", versionId: "v1", versionStages: ["AWSCURRENT"] },
+      isLoading: false, isError: false, error: null,
+    });
+    mockUseHealth.mockReturnValue({ data: { services: { secretsmanager: "running" } }, isLoading: false });
+    mockCancelRotation.mockResolvedValue({ cancelled: true });
+    mockReplicate.mockResolvedValue({ arn: "arn:x" });
+    mockRemoveReplicaRegions.mockResolvedValue({ arn: "arn:x" });
+    mockStopReplication.mockResolvedValue({ stopped: true });
+    mockValidatePolicy.mockResolvedValue({ policyValidationPassed: true });
+    cancelRotationState.isPending = false;
+    cancelRotationState.variables = null;
+  });
+
+  it("disables the Cancel rotation button while its mutation is pending", () => {
+    cancelRotationState.isPending = true;
+    cancelRotationState.variables = "my-secret";
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    expect(screen.getByRole("button", { name: "Cancel rotation" }).getAttribute("aria-disabled")).toBe("true");
+  });
+
+  it("shows error toast when replication fails", async () => {
+    mockReplicate.mockRejectedValueOnce(new Error("replication failed"));
+    const user = userEvent.setup();
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("button", { name: "Replicate" }));
+    await waitFor(() => expect(screen.getByText("Replication — my-secret")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("us-west-2"), "eu-west-1");
+    const btns = screen.getAllByRole("button", { name: /^Replicate$/ });
+    await user.click(btns[btns.length - 1]);
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "replication failed"));
+  });
+
+  it("shows error toast when removing replica regions fails", async () => {
+    mockRemoveReplicaRegions.mockRejectedValueOnce(new Error("remove failed"));
+    const user = userEvent.setup();
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("button", { name: "Replicate" }));
+    await waitFor(() => expect(screen.getByText("Replication — my-secret")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("us-west-2, eu-west-1"), "us-west-2");
+    await user.click(screen.getByRole("button", { name: /Remove regions/i }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "remove failed"));
+  });
+
+  it("shows error toast when stopping replication fails", async () => {
+    mockStopReplication.mockRejectedValueOnce(new Error("stop failed"));
+    const user = userEvent.setup();
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("button", { name: "Replicate" }));
+    await waitFor(() => expect(screen.getByText("Replication — my-secret")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Stop replication/i }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "stop failed"));
+  });
+
+  it("uses the fallback message when validation rejects without an error message", async () => {
+    mockValidatePolicy.mockRejectedValueOnce({});
+    const user = userEvent.setup();
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("button", { name: /^View$/ }));
+    await waitFor(() => expect(screen.getByText("Secret: my-secret")).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /Resource policy/i }));
+    fireEvent.change(screen.getByPlaceholderText('{"Version": "2012-10-17", "Statement": []}'), { target: { value: "{}" } });
+    await user.click(screen.getByRole("button", { name: /Validate policy/i }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "Validation failed"));
+  });
+});
+
+describe("SecretsManagerPage — replication modal optional fields", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPolicy.mockReturnValue({ data: undefined });
+    mockSecrets.mockReturnValue({
+      data: { secrets: [defaultSecret], total: 1 },
+      isLoading: false, isError: false, error: null,
+    });
+    mockSecret.mockReturnValue({ data: { secret: defaultSecret, versions: [], versionIdsToStages: {} }, isLoading: false, isError: false, error: null });
+    mockSecretValue.mockReturnValue({ data: { secretString: "v", versionId: "v1", versionStages: [] }, isLoading: false, isError: false, error: null });
+    mockUseHealth.mockReturnValue({ data: { services: { secretsmanager: "running" } }, isLoading: false });
+    mockReplicate.mockResolvedValue({ arn: "arn:x" });
+  });
+
+  it("accepts a KMS key id and sends it with the replication request", async () => {
+    const user = userEvent.setup();
+    render(<SecretsManagerPage />, { wrapper: pageWrapper() });
+    await user.click(screen.getByRole("button", { name: "Replicate" }));
+    await waitFor(() => expect(screen.getByText("Replication — my-secret")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("us-west-2"), "eu-west-1");
+    await user.type(screen.getByPlaceholderText("alias/aws/secretsmanager"), "alias/my-key");
+    const btns = screen.getAllByRole("button", { name: /^Replicate$/ });
+    await user.click(btns[btns.length - 1]);
+    await waitFor(() => {
+      expect(mockReplicate).toHaveBeenCalledWith({
+        id: "my-secret",
+        regions: [{ region: "eu-west-1", kmsKeyId: "alias/my-key" }],
+        force: false,
+      });
+    });
   });
 });

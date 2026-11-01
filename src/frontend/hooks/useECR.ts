@@ -196,3 +196,61 @@ export function usePutECRImageTagMutability() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ecr", "repositories"] }),
   });
 }
+
+// ── Pull-Through Cache Rules (E.9 batch 2) ───────────────
+
+export function useECRPullThroughCacheRules() {
+  return useQuery<{ rules: any[]; total: number }>({
+    queryKey: ["aws", "ecr", "pull-through-cache-rules"],
+    queryFn: () => api("/aws/ecr/pull-through-cache-rules"),
+  });
+}
+
+export function useECRCreatePullThroughCacheRule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: {
+      ecrRepositoryPrefix: string;
+      upstreamRegistryUrl: string;
+      upstreamRegistry?: string;
+      credentialArn?: string;
+      customRoleArn?: string;
+      upstreamRepositoryPrefix?: string;
+    }) =>
+      api("/aws/ecr/pull-through-cache-rules", { method: "POST", body: JSON.stringify(params) }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "ecr", "pull-through-cache-rules"] }),
+  });
+}
+
+export function useECRUpdatePullThroughCacheRule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { prefix: string; credentialArn?: string; customRoleArn?: string }) =>
+      api(`/aws/ecr/pull-through-cache-rules/${encodeURIComponent(params.prefix)}`, {
+        method: "PUT",
+        body: JSON.stringify({ credentialArn: params.credentialArn, customRoleArn: params.customRoleArn }),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "ecr", "pull-through-cache-rules"] }),
+  });
+}
+
+export function useECRDeletePullThroughCacheRule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (prefix: string) =>
+      api(`/aws/ecr/pull-through-cache-rules/${encodeURIComponent(prefix)}`, { method: "DELETE" }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "ecr", "pull-through-cache-rules"] }),
+  });
+}
+
+export function useECRValidatePullThroughCacheRule() {
+  return useMutation({
+    mutationFn: (prefix: string) =>
+      api<{ isValid: boolean }>(`/aws/ecr/pull-through-cache-rules/${encodeURIComponent(prefix)}/validate`, {
+        method: "POST",
+      }),
+  });
+}

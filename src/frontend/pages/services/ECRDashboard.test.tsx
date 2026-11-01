@@ -16,6 +16,14 @@ const mockManifestMutate = vi.fn();
 const mockAuthTokenRefetch = vi.fn();
 const mockAuthToken = vi.fn();
 const mockPutMutability = vi.fn();
+const mockDeletePtcr = vi.fn();
+const mockValidatePtcr = vi.fn();
+const mockCreatePtcr = vi.fn();
+const mockUpdatePtcr = vi.fn();
+
+const ptcrRulesState: { data: any } = { data: undefined };
+const deletePtcrState: { isPending: boolean; variables: string | null } = { isPending: false, variables: null };
+const validatePtcrState: { isPending: boolean; variables: string | null } = { isPending: false, variables: null };
 
 const mockPutMutabilityState = vi.hoisted(() => ({
   isError: false,
@@ -54,6 +62,22 @@ vi.mock("../../hooks/useECR", () => ({
     isPending: false,
   }),
   useECRAuthToken: (...args: any[]) => mockAuthToken(...args),
+  useECRPullThroughCacheRules: () => ({
+    get data() { return ptcrRulesState.data; },
+    isLoading: false,
+  }),
+  useECRCreatePullThroughCacheRule: () => ({ mutateAsync: mockCreatePtcr, isPending: false }),
+  useECRUpdatePullThroughCacheRule: () => ({ mutateAsync: mockUpdatePtcr, isPending: false }),
+  useECRDeletePullThroughCacheRule: () => ({
+    mutateAsync: mockDeletePtcr,
+    get isPending() { return deletePtcrState.isPending; },
+    get variables() { return deletePtcrState.variables; },
+  }),
+  useECRValidatePullThroughCacheRule: () => ({
+    mutateAsync: mockValidatePtcr,
+    get isPending() { return validatePtcrState.isPending; },
+    get variables() { return validatePtcrState.variables; },
+  }),
   usePutECRImageTagMutability: () => ({
     mutate: mockPutMutability,
     isPending: false,
@@ -90,6 +114,11 @@ beforeEach(() => {
   authTokenState.isFetching = false;
   authTokenState.isError = false;
   authTokenState.error = null;
+  ptcrRulesState.data = undefined;
+  deletePtcrState.isPending = false;
+  deletePtcrState.variables = null;
+  validatePtcrState.isPending = false;
+  validatePtcrState.variables = null;
   mockAuthToken.mockReturnValue({
     refetch: mockAuthTokenRefetch,
     get data() { return authTokenState.data; },
@@ -892,5 +921,211 @@ describe("ECRDashboard — tag mutability", () => {
     const cancelBtn = screen.getAllByRole("button", { name: "Cancel" }).at(-1)!;
     await user.click(cancelBtn);
     expect(mockPutMutability).not.toHaveBeenCalled();
+  });
+});
+
+// ── Pull-through cache rules (E.9 batch 2, family 7) ──
+
+describe("ECRDashboard — pull-through cache rules", () => {
+  function rules() {
+    ptcrRulesState.data = {
+      rules: [
+        {
+          ecrRepositoryPrefix: "docker-hub",
+          upstreamRegistryUrl: "registry-1.docker.io",
+          upstreamRepositoryPrefix: "library",
+          credentialArn: "arn:aws:secretsmanager:secret/cred",
+          updatedAt: 1700000000,
+        },
+      ],
+      total: 1,
+    };
+  }
+
+  it("shows the rules section header and empty state", () => {
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("Pull-Through Cache Rules")).toBeTruthy();
+    expect(screen.getByText(/No pull-through cache rules/i)).toBeTruthy();
+  });
+
+  it("renders a rule with fields", () => {
+    rules();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("docker-hub")).toBeTruthy();
+    expect(screen.getByText("registry-1.docker.io")).toBeTruthy();
+    expect(screen.getByText("library")).toBeTruthy();
+  });
+
+  it("opens the create rule modal and disables submit when empty", async () => {
+    const user = userEvent.setup();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /Create pull-through cache rule/i }));
+    await waitFor(() => expect(screen.getByText("Create pull-through cache rule").closest('[role="dialog"]')).toBeTruthy());
+    const btns = screen.getAllByRole("button", { name: /^Create rule$/i });
+    expect(btns[btns.length - 1]).toBeDisabled();
+  });
+
+  it("creates a rule with prefix and upstream URL", async () => {
+    mockCreatePtcr.mockResolvedValueOnce({ rule: {} });
+    const user = userEvent.setup();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /Create pull-through cache rule/i }));
+    await user.type(screen.getByPlaceholderText("docker-hub"), "k8s");
+    await user.type(screen.getByPlaceholderText("registry-1.docker.io"), "registry.k8s.io");
+    const btns = screen.getAllByRole("button", { name: /^Create rule$/i });
+    await user.click(btns[btns.length - 1]);
+    await waitFor(() => {
+      expect(mockCreatePtcr).toHaveBeenCalledWith({
+        ecrRepositoryPrefix: "k8s",
+        upstreamRegistryUrl: "registry.k8s.io",
+        upstreamRepositoryPrefix: undefined,
+        credentialArn: undefined,
+        customRoleArn: undefined,
+      });
+    });
+  });
+
+  it("opens the update rule modal and updates the credential", async () => {
+    rules();
+    mockUpdatePtcr.mockResolvedValueOnce({ updated: true });
+    const user = userEvent.setup();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /^Update$/ }));
+    await waitFor(() => expect(screen.getByText("Update pull-through cache rule — docker-hub").closest('[role="dialog"]')).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("arn:aws:secretsmanager:...:secret:..."), "arn:new");
+    const btns = screen.getAllByRole("button", { name: /^Update$/i });
+    await user.click(btns[btns.length - 1]);
+    await waitFor(() => {
+      expect(mockUpdatePtcr).toHaveBeenCalledWith({
+        prefix: "docker-hub",
+        credentialArn: "arn:new",
+        customRoleArn: undefined,
+      });
+    });
+  });
+
+  it("validates a rule", async () => {
+    rules();
+    mockValidatePtcr.mockResolvedValueOnce({ isValid: true });
+    const user = userEvent.setup();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /^Validate$/ }));
+    await waitFor(() => expect(mockValidatePtcr).toHaveBeenCalledWith("docker-hub"));
+  });
+
+  it("deletes a rule after confirmation", async () => {
+    rules();
+    mockDeletePtcr.mockResolvedValueOnce({ deleted: true });
+    const user = userEvent.setup();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /Delete docker-hub/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/i)).toBeTruthy());
+    const confirmBtns = screen.getAllByRole("button", { name: /^Delete$/i });
+    await user.click(confirmBtns[confirmBtns.length - 1]);
+    await waitFor(() => expect(mockDeletePtcr).toHaveBeenCalledWith("docker-hub"));
+  });
+});
+
+describe("ECRDashboard — pull-through cache rule coverage completion", () => {
+  function rules() {
+    ptcrRulesState.data = {
+      rules: [
+        {
+          ecrRepositoryPrefix: "docker-hub",
+          upstreamRegistryUrl: "registry-1.docker.io",
+          updatedAt: 1700000000,
+        },
+        {
+          ecrRepositoryPrefix: "bare",
+          upstreamRegistryUrl: "quay.io",
+        },
+      ],
+      total: 2,
+    };
+  }
+
+  it("renders dash fallbacks for rules without optional fields", () => {
+    rules();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByText("bare")).toBeTruthy();
+    // rules without optional fields render "-" fallbacks
+    expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("types optional fields in the create rule modal", async () => {
+    mockCreatePtcr.mockResolvedValueOnce({ rule: {} });
+    const user = userEvent.setup();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: /Create pull-through cache rule/i }));
+    await user.type(screen.getByPlaceholderText("docker-hub"), "k8s");
+    await user.type(screen.getByPlaceholderText("registry-1.docker.io"), "registry.k8s.io");
+    await user.type(screen.getByPlaceholderText("namespace"), "lib");
+    await user.type(screen.getByPlaceholderText("arn:aws:secretsmanager:...:secret:..."), "arn:cred");
+    await user.type(screen.getByPlaceholderText("arn:aws:iam::...:role/..."), "arn:role");
+    const btns = screen.getAllByRole("button", { name: /^Create rule$/i });
+    await user.click(btns[btns.length - 1]);
+    await waitFor(() => {
+      expect(mockCreatePtcr).toHaveBeenCalledWith({
+        ecrRepositoryPrefix: "k8s",
+        upstreamRegistryUrl: "registry.k8s.io",
+        upstreamRepositoryPrefix: "lib",
+        credentialArn: "arn:cred",
+        customRoleArn: "arn:role",
+      });
+    });
+  });
+
+  it("updates a rule with only the custom role ARN", async () => {
+    rules();
+    mockUpdatePtcr.mockResolvedValueOnce({ updated: true });
+    const user = userEvent.setup();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    const rowUpdates = screen.getAllByRole("button", { name: /^Update$/ });
+    await user.click(rowUpdates[0]);
+    await waitFor(() => expect(screen.getByText("Update pull-through cache rule — docker-hub").closest('[role="dialog"]')).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("arn:aws:iam::...:role/..."), "arn:only-role");
+    const btns = screen.getAllByRole("button", { name: /^Update$/i });
+    await user.click(btns[btns.length - 1]);
+    await waitFor(() => {
+      expect(mockUpdatePtcr).toHaveBeenCalledWith({
+        prefix: "docker-hub",
+        credentialArn: undefined,
+        customRoleArn: "arn:only-role",
+      });
+    });
+  });
+
+  it("shows the validate button in a loading state", () => {
+    rules();
+    validatePtcrState.isPending = true;
+    validatePtcrState.variables = "docker-hub";
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    const validateBtns = screen.getAllByRole("button", { name: /^Validate$/ });
+    expect(validateBtns[0].getAttribute("aria-disabled")).toBe("true");
+  });
+
+  it("shows the rule delete button in a loading state", () => {
+    rules();
+    deletePtcrState.isPending = true;
+    deletePtcrState.variables = "docker-hub";
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByRole("button", { name: /Delete docker-hub/i })).toBeDisabled();
+  });
+});
+
+describe("ECRDashboard — pull-through cache rule filtering", () => {
+  it("filters rules by prefix", async () => {
+    ptcrRulesState.data = {
+      rules: [
+        { ecrRepositoryPrefix: "alpha", upstreamRegistryUrl: "a.io" },
+        { ecrRepositoryPrefix: "beta", upstreamRegistryUrl: "b.io" },
+      ],
+      total: 2,
+    };
+    const user = userEvent.setup();
+    render(<ECRDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("alpha")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("Find rules by prefix"), "alp");
+    await waitFor(() => expect(screen.queryByText("beta")).toBeNull());
   });
 });

@@ -33,6 +33,13 @@ import StatusBadge from "../../components/StatusBadge";
 import { TableSkeleton } from "../../components/LoadingSkeleton";
 import EmptyState from "../../components/EmptyState";
 import {
+  useCreateAthenaDataCatalog,
+  useDeleteAthenaDataCatalog,
+  useAthenaResourceTags,
+  useTagAthenaResource,
+  useUntagAthenaResource,
+} from "../../hooks/useAthena";
+import {
   useDynamoDBTables,
   useDynamoDBCreateTable,
   useDynamoDBDeleteTable,
@@ -859,23 +866,176 @@ function RunQueryTab() {
 
 // ── Catalogs & Databases Browser ─────────────────────────
 
+function AthenaCatalogTagsModal({ name, onClose }: { name: string; onClose: () => void }) {
+  const arn = `arn:aws:athena:us-east-1:000000000000:datacatalog/${name}`;
+  const { data } = useAthenaResourceTags(arn);
+  const addTags = useTagAthenaResource();
+  const removeTags = useUntagAthenaResource();
+  const [newKey, setNewKey] = useState("");
+  const [newValue, setNewValue] = useState("");
+  const tags = data?.tags || [];
+
+  return (
+    <Modal
+      visible
+      onDismiss={onClose}
+      header={`Tags — ${name}`}
+      footer={
+        <Box float="right">
+          <Button variant="link" onClick={onClose}>Close</Button>
+        </Box>
+      }
+    >
+      <SpaceBetween size="m">
+        {tags.length > 0 ? (
+          <Table
+            header={<Header variant="h3" counter={`(${tags.length})`}>Tags</Header>}
+            columnDefinitions={[
+              { id: "key", header: "Key", cell: (t: any) => t.Key, isRowHeader: true },
+              { id: "value", header: "Value", cell: (t: any) => t.Value },
+              {
+                id: "actions",
+                header: "",
+                cell: (t: any) => (
+                  <DeleteButton
+                    itemName={t.Key}
+                    resourceType="tag"
+                    loading={removeTags.isPending && removeTags.variables?.tagKeys?.[0] === t.Key}
+                    onDelete={() => removeTags.mutateAsync({ resourceArn: arn, tagKeys: [t.Key] })}
+                  />
+                ),
+              },
+            ]}
+            items={tags}
+            empty="No tags"
+          />
+        ) : (
+          <Box color="text-body-secondary">No tags</Box>
+        )}
+        <SpaceBetween direction="horizontal" size="xs">
+          <FormField label="Key">
+            <Input value={newKey} onChange={({ detail }) => setNewKey(detail.value)} placeholder="env" />
+          </FormField>
+          <FormField label="Value">
+            <Input value={newValue} onChange={({ detail }) => setNewValue(detail.value)} placeholder="dev" />
+          </FormField>
+          <Button
+            variant="primary"
+            loading={addTags.isPending}
+            disabled={!newKey.trim()}
+            onClick={() =>
+              addTags
+                .mutateAsync({ resourceArn: arn, tags: { [newKey.trim()]: newValue.trim() } })
+                .then(() => {
+                  setNewKey("");
+                  setNewValue("");
+                })
+            }
+          >
+            Add tag
+          </Button>
+        </SpaceBetween>
+      </SpaceBetween>
+    </Modal>
+  );
+}
+
+const ATHENA_CATALOG_TYPE_OPTIONS: SelectProps.Option[] = [
+  { label: "GLUE", value: "GLUE" },
+  { label: "LAMBDA", value: "LAMBDA" },
+  { label: "HIVE", value: "HIVE" },
+  { label: "FEDERATED", value: "FEDERATED" },
+];
+
+function CreateCatalogModal({ onClose }: { onClose: () => void }) {
+  const { showToast } = useToast();
+  const createCatalog = useCreateAthenaDataCatalog();
+  const [name, setName] = useState("");
+  const [type, setType] = useState<SelectProps.Option | null>(ATHENA_CATALOG_TYPE_OPTIONS[0]);
+  const [description, setDescription] = useState("");
+
+  const handleSubmit = () => {
+    createCatalog
+      .mutateAsync({ name: name.trim(), type: type!.value!, description: description || undefined })
+      .then(() => {
+        showToast("success", `Data catalog ${name.trim()} created`);
+        onClose();
+      })
+      .catch(() => showToast("error", "Failed to create data catalog"));
+  };
+
+  return (
+    <Modal visible onDismiss={onClose} header="Create data catalog">
+      <Form
+        actions={
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button variant="link" onClick={onClose}>Cancel</Button>
+            <Button variant="primary" loading={createCatalog.isPending} disabled={!name.trim()} onClick={handleSubmit}>
+              Create catalog
+            </Button>
+          </SpaceBetween>
+        }
+      >
+        <SpaceBetween size="m">
+          <FormField label="Name">
+            <Input value={name} onChange={({ detail }) => setName(detail.value)} placeholder="my-catalog" />
+          </FormField>
+          <FormField label="Type">
+            <Select
+              selectedOption={type}
+              onChange={({ detail }) => setType(detail.selectedOption)}
+              options={ATHENA_CATALOG_TYPE_OPTIONS}
+              selectedAriaLabel="Selected"
+            />
+          </FormField>
+          <FormField label="Description">
+            <Input value={description} onChange={({ detail }) => setDescription(detail.value)} placeholder="Optional description" />
+          </FormField>
+        </SpaceBetween>
+      </Form>
+    </Modal>
+  );
+}
+
 function CatalogsTab() {
   const [selectedCatalog, setSelectedCatalog] = useState<string | null>(null);
   const [selectedDb, setSelectedDb] = useState<string | null>(null);
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [tagsCatalog, setTagsCatalog] = useState<string | null>(null);
   const { data: catalogs } = useAthenaDataCatalogs();
   const { data: databases } = useAthenaDatabases();
   const { data: tables } = useAthenaTables(selectedDb);
   const { data: tableMeta } = useAthenaTableMetadata(selectedDb, selectedTable);
+  const deleteCatalog = useDeleteAthenaDataCatalog();
 
   return (
     <SpaceBetween size="l">
       <ColumnLayout columns={3} variant="text-grid">
-        <Container header={<Header variant="h3" counter={catalogs ? `(${catalogs.total})` : undefined}>Data Catalogs</Header>}>
+        <Container
+          header={
+            <Header
+              variant="h3"
+              counter={catalogs ? `(${catalogs.total})` : undefined}
+              actions={<Button onClick={() => setShowCreate(true)}>Create catalog</Button>}
+            >
+              Data Catalogs
+            </Header>
+          }
+        >
           {(catalogs?.dataCatalogs || []).map((c: any) => (
             <Box key={c.CatalogName} padding={{ bottom: "xxs" }}>
-              <Button variant={selectedCatalog === c.CatalogName ? "primary" : "link"}
-                onClick={() => setSelectedCatalog(c.CatalogName)}>{c.CatalogName}</Button>
+              <SpaceBetween direction="horizontal" size="xxs">
+                <Button variant={selectedCatalog === c.CatalogName ? "primary" : "link"}
+                  onClick={() => setSelectedCatalog(c.CatalogName)}>{c.CatalogName}</Button>
+                <Button onClick={() => setTagsCatalog(c.CatalogName)}>Tags</Button>
+                <DeleteButton
+                  itemName={c.CatalogName}
+                  resourceType="data catalog"
+                  loading={deleteCatalog.isPending && deleteCatalog.variables === c.CatalogName}
+                  onDelete={() => deleteCatalog.mutateAsync(c.CatalogName)}
+                />
+              </SpaceBetween>
             </Box>
           ))}
         </Container>
@@ -923,6 +1083,8 @@ function CatalogsTab() {
           </SpaceBetween>
         </Container>
       )}
+      {showCreate && <CreateCatalogModal onClose={() => setShowCreate(false)} />}
+      {tagsCatalog && <AthenaCatalogTagsModal name={tagsCatalog} onClose={() => setTagsCatalog(null)} />}
     </SpaceBetween>
   );
 }

@@ -23,6 +23,8 @@ import {
   useRAMResources,
   useRAMInvitations,
   useEnableRAMSharing,
+  useAcceptRAMInvitation,
+  useRejectRAMInvitation,
 } from "../../hooks/useRAM";
 import ResourceTable from "../../components/ResourceTable";
 import DeleteButton from "../../components/DeleteButton";
@@ -118,6 +120,8 @@ export function RAMDashboard() {
   const deleteShare = useDeleteRAMShare();
   const enableSharing = useEnableRAMSharing();
   const invitations = useRAMInvitations();
+  const acceptInvitation = useAcceptRAMInvitation();
+  const rejectInvitation = useRejectRAMInvitation();
 
   const [showCreate, setShowCreate] = useState(false);
   const [name, setName] = useState("");
@@ -301,6 +305,36 @@ export function RAMDashboard() {
                     cell: (i: any) => i.senderAccountId || "—",
                   },
                   { id: "status", header: "Status", cell: (i: any) => i.status || "—" },
+                  {
+                    id: "actions",
+                    header: "",
+                    cell: (i: any) => (
+                      <SpaceBetween direction="horizontal" size="xs">
+                        <Button
+                          loading={acceptInvitation.isPending && acceptInvitation.variables === i.resourceShareInvitationArn}
+                          onClick={async () => {
+                            try {
+                              await acceptInvitation.mutateAsync(i.resourceShareInvitationArn);
+                              showToast?.("success", "Invitation accepted");
+                            } catch (e: any) { showToast?.("error", e.message); }
+                          }}
+                        >
+                          Accept
+                        </Button>
+                        <Button
+                          loading={rejectInvitation.isPending && rejectInvitation.variables === i.resourceShareInvitationArn}
+                          onClick={async () => {
+                            try {
+                              await rejectInvitation.mutateAsync(i.resourceShareInvitationArn);
+                              showToast?.("success", "Invitation rejected");
+                            } catch (e: any) { showToast?.("error", e.message); }
+                          }}
+                        >
+                          Reject
+                        </Button>
+                      </SpaceBetween>
+                    ),
+                  },
                 ]}
               />
             ),

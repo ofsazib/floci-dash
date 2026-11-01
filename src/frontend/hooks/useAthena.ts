@@ -107,6 +107,80 @@ export function useAthenaDataCatalogs() {
   });
 }
 
+export function useCreateAthenaDataCatalog() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: {
+      name: string;
+      type: string;
+      description?: string;
+      parameters?: Record<string, string>;
+      tags?: Record<string, string>;
+    }) =>
+      api("/aws/athena/data-catalogs", { method: "POST", body: JSON.stringify(params) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "athena", "data-catalogs"] }),
+  });
+}
+
+export function useUpdateAthenaDataCatalog() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: {
+      name: string;
+      type: string;
+      description?: string;
+      parameters?: Record<string, string>;
+    }) =>
+      api(`/aws/athena/data-catalogs/${encodeURIComponent(params.name)}`, {
+        method: "PUT",
+        body: JSON.stringify({ type: params.type, description: params.description, parameters: params.parameters }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["aws", "athena", "data-catalogs"] });
+      qc.invalidateQueries({ queryKey: ["aws", "athena", "data-catalog"] });
+    },
+  });
+}
+
+export function useDeleteAthenaDataCatalog() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api(`/aws/athena/data-catalogs/${encodeURIComponent(name)}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "athena", "data-catalogs"] }),
+  });
+}
+
+// ── Resource Tags ────────────────────────────────────────
+
+export function useAthenaResourceTags(resourceArn: string | null) {
+  return useQuery<{ resourceArn: string; tags: Array<{ Key: string; Value: string }>; total: number }>({
+    queryKey: ["aws", "athena", "resource-tags", resourceArn],
+    queryFn: () => api(`/aws/athena/resource-tags?resourceArn=${encodeURIComponent(resourceArn!)}`),
+    enabled: !!resourceArn,
+  });
+}
+
+export function useTagAthenaResource() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { resourceArn: string; tags: Record<string, string> }) =>
+      api("/aws/athena/resource-tags", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: (_d, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "athena", "resource-tags", variables.resourceArn] }),
+  });
+}
+
+export function useUntagAthenaResource() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { resourceArn: string; tagKeys: string[] }) =>
+      api("/aws/athena/resource-tags", { method: "DELETE", body: JSON.stringify(data) }),
+    onSuccess: (_d, variables) =>
+      qc.invalidateQueries({ queryKey: ["aws", "athena", "resource-tags", variables.resourceArn] }),
+  });
+}
+
 // ── Databases ────────────────────────────────────────────
 
 export function useAthenaDatabases() {

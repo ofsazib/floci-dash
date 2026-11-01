@@ -18,6 +18,7 @@ import {
   Button,
   Alert,
   Tabs,
+  Table,
   Textarea,
   ColumnLayout,
   Container,
@@ -212,6 +213,12 @@ import {
   useCreateNeptuneCluster,
   useDeleteNeptuneCluster,
   useNeptuneInstances,
+  useAddNeptuneClusterRole,
+  useRemoveNeptuneClusterRole,
+  useNeptuneGlobalClusters,
+  useNeptuneResourceTags,
+  useAddNeptuneResourceTags,
+  useRemoveNeptuneResourceTags,
   useCreateNeptuneInstance,
   useDeleteNeptuneInstance,
 } from "../../hooks/useNeptune";
@@ -506,14 +513,128 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
   { label: "aurora-mysql8", value: "aurora-mysql8" },
 ];
 
+function NeptuneClusterRolesModal({ id, onClose }: { id: string; onClose: () => void }) {
+  const addRole = useAddNeptuneClusterRole();
+  const removeRole = useRemoveNeptuneClusterRole();
+  const [roleArn, setRoleArn] = useState("");
+
+  return (
+    <Modal
+      visible
+      onDismiss={onClose}
+      header={`IAM roles — ${id}`}
+      footer={<Box float="right"><Button variant="link" onClick={onClose}>Close</Button></Box>}
+    >
+      <SpaceBetween size="m">
+        <FormField label="Role ARN">
+          <Input value={roleArn} onChange={({ detail }) => setRoleArn(detail.value)} placeholder="arn:aws:iam::123456789012:role/neptune-role" />
+        </FormField>
+        <SpaceBetween direction="horizontal" size="xs">
+          <Button
+            variant="primary"
+            loading={addRole.isPending}
+            disabled={!roleArn.trim()}
+            onClick={() =>
+              addRole.mutateAsync({ id, roleArn: roleArn.trim() }).then(() => setRoleArn(""))
+            }
+          >
+            Add role
+          </Button>
+          <Button
+            loading={removeRole.isPending}
+            disabled={!roleArn.trim()}
+            onClick={() =>
+              removeRole.mutateAsync({ id, roleArn: roleArn.trim() }).then(() => setRoleArn(""))
+            }
+          >
+            Remove role
+          </Button>
+        </SpaceBetween>
+      </SpaceBetween>
+    </Modal>
+  );
+}
+
+function NeptuneClusterTagsModal({ cluster, onClose }: { cluster: { id: string; arn: string }; onClose: () => void }) {
+  const { data } = useNeptuneResourceTags(cluster.arn);
+  const addTags = useAddNeptuneResourceTags();
+  const removeTags = useRemoveNeptuneResourceTags();
+  const [newKey, setNewKey] = useState("");
+  const [newValue, setNewValue] = useState("");
+  const tags = data?.tags || [];
+
+  return (
+    <Modal
+      visible
+      onDismiss={onClose}
+      header={`Tags — ${cluster.id}`}
+      footer={<Box float="right"><Button variant="link" onClick={onClose}>Close</Button></Box>}
+    >
+      <SpaceBetween size="m">
+        {tags.length > 0 ? (
+          <Table
+            header={<Header variant="h3" counter={`(${tags.length})`}>Tags</Header>}
+            columnDefinitions={[
+              { id: "key", header: "Key", cell: (t: any) => t.Key, isRowHeader: true },
+              { id: "value", header: "Value", cell: (t: any) => t.Value },
+              {
+                id: "actions",
+                header: "",
+                cell: (t: any) => (
+                  <DeleteButton
+                    itemName={t.Key}
+                    resourceType="tag"
+                    loading={removeTags.isPending && removeTags.variables?.tagKeys?.[0] === t.Key}
+                    onDelete={() => removeTags.mutateAsync({ resourceName: cluster.arn, tagKeys: [t.Key] })}
+                  />
+                ),
+              },
+            ]}
+            items={tags}
+            empty="No tags"
+          />
+        ) : (
+          <Box color="text-body-secondary">No tags</Box>
+        )}
+        <SpaceBetween direction="horizontal" size="xs">
+          <FormField label="Key">
+            <Input value={newKey} onChange={({ detail }) => setNewKey(detail.value)} placeholder="env" />
+          </FormField>
+          <FormField label="Value">
+            <Input value={newValue} onChange={({ detail }) => setNewValue(detail.value)} placeholder="dev" />
+          </FormField>
+          <Button
+            variant="primary"
+            loading={addTags.isPending}
+            disabled={!newKey.trim()}
+            onClick={() =>
+              addTags
+                .mutateAsync({ resourceName: cluster.arn, tags: { [newKey.trim()]: newValue.trim() } })
+                .then(() => {
+                  setNewKey("");
+                  setNewValue("");
+                })
+            }
+          >
+            Add tag
+          </Button>
+        </SpaceBetween>
+      </SpaceBetween>
+    </Modal>
+  );
+}
+
 export function NeptuneDashboard() {
   const { data: clustersData, isLoading: clustersLoading } = useNeptuneClusters();
   const deleteCluster = useDeleteNeptuneCluster();
   const modifyCluster = useModifyNeptuneCluster();
   const [editCluster, setEditCluster] = useState<string | null>(null);
   const [editVersion, setEditVersion] = useState("");
+  const [rolesCluster, setRolesCluster] = useState<string | null>(null);
+  const [tagsCluster, setTagsCluster] = useState<{ id: string; arn: string } | null>(null);
   const { data: instancesData, isLoading: instancesLoading } = useNeptuneInstances();
   const deleteInstance = useDeleteNeptuneInstance();
+  const { data: globalClustersData, isLoading: globalClustersLoading } = useNeptuneGlobalClusters();
 
   return (
     <>
@@ -534,6 +655,7 @@ export function NeptuneDashboard() {
                 version: c.EngineVersion || "-",
                 endpoint: c.Endpoint || "-",
                 members: c.DBClusterMembers?.length || 0,
+                arn: c.DBClusterArn || `arn:aws:neptune:us-east-1:000000000000:cluster:${c.DBClusterIdentifier}`,
               }))}
               loading={clustersLoading}
               emptyMessage="No Neptune clusters"
@@ -557,6 +679,8 @@ export function NeptuneDashboard() {
                       >
                         Modify
                       </Button>
+                      <Button onClick={() => setRolesCluster(i.id)}>Roles</Button>
+                      <Button onClick={() => setTagsCluster({ id: i.id, arn: i.arn })}>Tags</Button>
                       <DeleteButton
                         itemName={i.id}
                         resourceType="cluster"
@@ -615,8 +739,45 @@ export function NeptuneDashboard() {
             />
           ),
         },
+        {
+          id: "global-clusters",
+          label: `Global Clusters (${globalClustersData?.total ?? 0})`,
+          content: (
+            <ResourceTable
+              resourceName="Global cluster"
+              headerTitle="Neptune Global Clusters"
+              headerCounter={globalClustersData?.total}
+              items={(globalClustersData?.globalClusters || []).map((g: any) => ({
+                id: g.GlobalClusterIdentifier,
+                arn: g.GlobalClusterArn || "-",
+                engine: g.Engine || "-",
+                version: g.EngineVersion || "-",
+                status: g.Status || "-",
+                members: g.GlobalClusterMembers?.length || 0,
+              }))}
+              loading={globalClustersLoading}
+              emptyMessage="No Neptune global clusters"
+              columns={[
+                { id: "id", header: "Global Cluster ID", cell: (i: any) => i.id, isRowHeader: true },
+                { id: "engine", header: "Engine", cell: (i: any) => i.engine },
+                { id: "version", header: "Version", cell: (i: any) => i.version },
+                { id: "status", header: "Status", cell: (i: any) => i.status },
+                { id: "members", header: "Members", cell: (i: any) => i.members },
+              ]}
+              filterEnabled
+              filterPlaceholder="Find global clusters"
+              filterFunction={(i: any, s: string) => i.id.toLowerCase().includes(s.toLowerCase())}
+            />
+          ),
+        },
       ]}
     />
+    {rolesCluster && (
+      <NeptuneClusterRolesModal id={rolesCluster} onClose={() => setRolesCluster(null)} />
+    )}
+    {tagsCluster && (
+      <NeptuneClusterTagsModal cluster={tagsCluster} onClose={() => setTagsCluster(null)} />
+    )}
     {editCluster && (
         <Modal
           visible

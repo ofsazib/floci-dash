@@ -15,6 +15,8 @@ import {
   GetResourceShareInvitationsCommand,
   TagResourceCommand,
   UntagResourceCommand,
+  AcceptResourceShareInvitationCommand,
+  RejectResourceShareInvitationCommand,
 } from "@aws-sdk/client-ram";
 
 const router = new Hono();
@@ -133,6 +135,24 @@ router.get("/invitations", async (c: Context) => {
     resourceShareInvitations: result.resourceShareInvitations || [],
     total: result.resourceShareInvitations?.length || 0,
   });
+});
+
+async function resolveInvitation(c: Context, command: any) {
+  const body = await c.req.json<{ resourceShareInvitationArn?: string; clientToken?: string }>();
+  if (!body.resourceShareInvitationArn)
+    return c.json({ error: "resourceShareInvitationArn is required" }, 400);
+  const result: any = await getClient().send(
+    new command({ ResourceShareInvitationArn: body.resourceShareInvitationArn, ClientToken: body.clientToken })
+  );
+  return c.json({ resourceShareInvitation: result.resourceShareInvitation });
+}
+
+router.post("/invitations/accept", async (c: Context) => {
+  return resolveInvitation(c, AcceptResourceShareInvitationCommand);
+});
+
+router.post("/invitations/reject", async (c: Context) => {
+  return resolveInvitation(c, RejectResourceShareInvitationCommand);
 });
 
 router.post("/tags", async (c: Context) => {

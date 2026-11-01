@@ -13,6 +13,9 @@ import {
   LookupEventsCommand,
   GetEventSelectorsCommand,
   PutEventSelectorsCommand,
+  AddTagsCommand,
+  ListTagsCommand,
+  RemoveTagsCommand,
 } from "@aws-sdk/client-cloudtrail";
 
 const router = new Hono();
@@ -185,6 +188,51 @@ router.put("/trails/:name/event-selectors", async (c: Context) => {
     advancedEventSelectors: result.AdvancedEventSelectors || [],
     updated: true,
   });
+});
+
+// ── Trail Tags (AddTags / ListTags / RemoveTags) ─────────
+
+router.get("/trail-tags", async (c: Context) => {
+  const resourceId = c.req.query("resourceId");
+  if (!resourceId) return c.json({ error: "resourceId is required" }, 400);
+
+  const client = getClient();
+  const result = await client.send(new ListTagsCommand({ ResourceIdList: [resourceId] }));
+  const entry = (result.ResourceTagList || [])[0];
+  const tags = entry?.TagsList || [];
+  return c.json({ resourceId, tags, total: tags.length });
+});
+
+router.post("/trail-tags", async (c: Context) => {
+  const body = await c.req.json<{ resourceId: string; tags: Record<string, string> }>();
+  if (!body.resourceId) return c.json({ error: "resourceId is required" }, 400);
+  if (!body.tags || Object.keys(body.tags).length === 0)
+    return c.json({ error: "tags are required" }, 400);
+
+  const client = getClient();
+  await client.send(
+    new AddTagsCommand({
+      ResourceId: body.resourceId,
+      TagsList: Object.entries(body.tags).map(([Key, Value]) => ({ Key, Value })),
+    })
+  );
+  return c.json({ tagged: true });
+});
+
+router.delete("/trail-tags", async (c: Context) => {
+  const body = await c.req.json<{ resourceId: string; tagKeys: string[] }>();
+  if (!body.resourceId) return c.json({ error: "resourceId is required" }, 400);
+  if (!body.tagKeys || body.tagKeys.length === 0)
+    return c.json({ error: "tagKeys are required" }, 400);
+
+  const client = getClient();
+  await client.send(
+    new RemoveTagsCommand({
+      ResourceId: body.resourceId,
+      TagsList: body.tagKeys.map((Key) => ({ Key })),
+    })
+  );
+  return c.json({ untagged: true });
 });
 
 export default router;

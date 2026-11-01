@@ -20,6 +20,9 @@ import {
   useLookupEvents,
   useEventSelectors,
   usePutEventSelectors,
+  useTrailTags,
+  useAddTrailTags,
+  useRemoveTrailTags,
 } from "./useCloudTrail";
 
 beforeEach(() => mockApi.mockReset());
@@ -127,6 +130,42 @@ describe("useCloudTrail hooks", () => {
       body: JSON.stringify({
         eventSelectors: [{ ReadWriteType: "ReadOnly", IncludeManagementEvents: false }],
       }),
+    });
+  });
+});
+
+// ── Trail tags (E.9 batch 2, family 5) ───────────────────
+
+describe("useCloudTrail trail tags", () => {
+  it("useTrailTags calls correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ resourceId: "arn:x", tags: [], total: 0 });
+    const { result } = renderHook(() => useTrailTags("arn:x"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(`/aws/cloudtrail/trail-tags?resourceId=${encodeURIComponent("arn:x")}`);
+  });
+
+  it("useTrailTags disabled when resourceId null", () => {
+    const { result } = renderHook(() => useTrailTags(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+
+  it("useAddTrailTags calls POST", async () => {
+    mockApi.mockResolvedValueOnce({ tagged: true });
+    const { result } = renderHook(() => useAddTrailTags(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ resourceId: "arn:x", tags: { env: "dev" } });
+    expect(mockApi).toHaveBeenCalledWith("/aws/cloudtrail/trail-tags", {
+      method: "POST",
+      body: JSON.stringify({ resourceId: "arn:x", tags: { env: "dev" } }),
+    });
+  });
+
+  it("useRemoveTrailTags calls DELETE", async () => {
+    mockApi.mockResolvedValueOnce({ untagged: true });
+    const { result } = renderHook(() => useRemoveTrailTags(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ resourceId: "arn:x", tagKeys: ["env"] });
+    expect(mockApi).toHaveBeenCalledWith("/aws/cloudtrail/trail-tags", {
+      method: "DELETE",
+      body: JSON.stringify({ resourceId: "arn:x", tagKeys: ["env"] }),
     });
   });
 });

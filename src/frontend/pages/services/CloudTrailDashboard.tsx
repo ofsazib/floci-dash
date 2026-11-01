@@ -260,6 +260,9 @@ import {
   useLookupEvents,
   useEventSelectors,
   usePutEventSelectors,
+  useTrailTags,
+  useAddTrailTags,
+  useRemoveTrailTags,
 } from "../../hooks/useCloudTrail";
 import {
   useConfigRules,
@@ -509,8 +512,82 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
   { label: "aurora-mysql8", value: "aurora-mysql8" },
 ];
 
+function TrailTagsModal({ trail, onClose }: { trail: { name: string; arn: string }; onClose: () => void }) {
+  const { data } = useTrailTags(trail.arn);
+  const addTags = useAddTrailTags();
+  const removeTags = useRemoveTrailTags();
+  const [newKey, setNewKey] = useState("");
+  const [newValue, setNewValue] = useState("");
+  const tags = data?.tags || [];
+
+  return (
+    <Modal
+      visible
+      onDismiss={onClose}
+      header={`Tags — ${trail.name}`}
+      footer={
+        <Box float="right">
+          <Button variant="link" onClick={onClose}>Close</Button>
+        </Box>
+      }
+    >
+      <SpaceBetween size="m">
+        {tags.length > 0 ? (
+          <Table
+            header={<Header variant="h3" counter={`(${tags.length})`}>Tags</Header>}
+            columnDefinitions={[
+              { id: "key", header: "Key", cell: (t: any) => t.Key, isRowHeader: true },
+              { id: "value", header: "Value", cell: (t: any) => t.Value || "—" },
+              {
+                id: "actions",
+                header: "",
+                cell: (t: any) => (
+                  <DeleteButton
+                    itemName={t.Key}
+                    resourceType="tag"
+                    loading={removeTags.isPending && removeTags.variables?.tagKeys?.[0] === t.Key}
+                    onDelete={() => removeTags.mutateAsync({ resourceId: trail.arn, tagKeys: [t.Key] })}
+                  />
+                ),
+              },
+            ]}
+            items={tags}
+            empty="No tags"
+          />
+        ) : (
+          <Box color="text-body-secondary">No tags</Box>
+        )}
+        <SpaceBetween direction="horizontal" size="xs">
+          <FormField label="Key">
+            <Input value={newKey} onChange={({ detail }) => setNewKey(detail.value)} placeholder="env" />
+          </FormField>
+          <FormField label="Value">
+            <Input value={newValue} onChange={({ detail }) => setNewValue(detail.value)} placeholder="prod" />
+          </FormField>
+          <Button
+            variant="primary"
+            loading={addTags.isPending}
+            disabled={!newKey.trim()}
+            onClick={() =>
+              addTags
+                .mutateAsync({ resourceId: trail.arn, tags: { [newKey.trim()]: newValue.trim() } })
+                .then(() => {
+                  setNewKey("");
+                  setNewValue("");
+                })
+            }
+          >
+            Add tag
+          </Button>
+        </SpaceBetween>
+      </SpaceBetween>
+    </Modal>
+  );
+}
+
 export function CloudTrailDashboard() {
   const { data, isLoading } = useCloudTrailTrails();
+  const [tagsTrail, setTagsTrail] = useState<{ name: string; arn: string } | null>(null);
   const deleteTrail = useDeleteCloudTrailTrail();
   const startLogging = useStartCloudTrailLogging();
   const stopLogging = useStopCloudTrailLogging();
@@ -555,6 +632,7 @@ export function CloudTrailDashboard() {
                   >
                     Event Selectors
                   </Button>
+                  <Button onClick={() => setTagsTrail({ name: i.name, arn: i.arn })}>Tags</Button>
                   <DeleteButton
                     itemName={i.name}
                     resourceType="trail"
@@ -593,14 +671,17 @@ export function CloudTrailDashboard() {
   ];
 
   return (
-    <Tabs
-      activeTabId={activeTab}
-      onChange={({ detail }) => {
-        setActiveTab(detail.activeTabId);
-        setSelectedTrail(null);
-      }}
-      tabs={tabs}
-    />
+    <>
+      <Tabs
+        activeTabId={activeTab}
+        onChange={({ detail }) => {
+          setActiveTab(detail.activeTabId);
+          setSelectedTrail(null);
+        }}
+        tabs={tabs}
+      />
+      {tagsTrail && <TrailTagsModal trail={tagsTrail} onClose={() => setTagsTrail(null)} />}
+    </>
   );
 }
 

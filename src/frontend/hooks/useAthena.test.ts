@@ -24,6 +24,12 @@ import {
   useAthenaTables,
   useAthenaTableMetadata,
   useAthenaStartQueryExecution,
+  useCreateAthenaDataCatalog,
+  useUpdateAthenaDataCatalog,
+  useDeleteAthenaDataCatalog,
+  useAthenaResourceTags,
+  useTagAthenaResource,
+  useUntagAthenaResource,
 } from "./useAthena";
 
 beforeEach(() => mockApi.mockReset());
@@ -157,5 +163,70 @@ describe("useAthenaStartQueryExecution", () => {
         body: JSON.stringify({ query: "SELECT 1", database: "mydb" }),
       }),
     );
+  });
+});
+
+// ─── Data Catalog management + Resource Tags (E.9 batch 2, family 4) ───
+
+describe("useAthena data catalog management", () => {
+  it("useCreateAthenaDataCatalog calls POST with body", async () => {
+    mockApi.mockResolvedValueOnce({ dataCatalog: { Name: "c1" } });
+    const { result } = renderHook(() => useCreateAthenaDataCatalog(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ name: "c1", type: "GLUE", tags: { env: "dev" } });
+    expect(mockApi).toHaveBeenCalledWith("/aws/athena/data-catalogs", {
+      method: "POST",
+      body: JSON.stringify({ name: "c1", type: "GLUE", tags: { env: "dev" } }),
+    });
+  });
+
+  it("useUpdateAthenaDataCatalog calls PUT with encoded name", async () => {
+    mockApi.mockResolvedValueOnce({ updated: true });
+    const { result } = renderHook(() => useUpdateAthenaDataCatalog(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ name: "my cat", type: "GLUE", description: "d" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/athena/data-catalogs/my%20cat", {
+      method: "PUT",
+      body: JSON.stringify({ type: "GLUE", description: "d", parameters: undefined }),
+    });
+  });
+
+  it("useDeleteAthenaDataCatalog calls DELETE", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useDeleteAthenaDataCatalog(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("c1");
+    expect(mockApi).toHaveBeenCalledWith("/aws/athena/data-catalogs/c1", { method: "DELETE" });
+  });
+});
+
+describe("useAthena resource tags", () => {
+  it("useAthenaResourceTags calls correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ resourceArn: "arn:x", tags: [], total: 0 });
+    const { result } = renderHook(() => useAthenaResourceTags("arn:x"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(`/aws/athena/resource-tags?resourceArn=${encodeURIComponent("arn:x")}`);
+  });
+
+  it("useAthenaResourceTags disabled when arn null", () => {
+    const { result } = renderHook(() => useAthenaResourceTags(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+
+  it("useTagAthenaResource calls POST", async () => {
+    mockApi.mockResolvedValueOnce({ tagged: true });
+    const { result } = renderHook(() => useTagAthenaResource(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ resourceArn: "arn:x", tags: { a: "1" } });
+    expect(mockApi).toHaveBeenCalledWith("/aws/athena/resource-tags", {
+      method: "POST",
+      body: JSON.stringify({ resourceArn: "arn:x", tags: { a: "1" } }),
+    });
+  });
+
+  it("useUntagAthenaResource calls DELETE", async () => {
+    mockApi.mockResolvedValueOnce({ untagged: true });
+    const { result } = renderHook(() => useUntagAthenaResource(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ resourceArn: "arn:x", tagKeys: ["a"] });
+    expect(mockApi).toHaveBeenCalledWith("/aws/athena/resource-tags", {
+      method: "DELETE",
+      body: JSON.stringify({ resourceArn: "arn:x", tagKeys: ["a"] }),
+    });
   });
 });

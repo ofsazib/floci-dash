@@ -33,6 +33,11 @@ vi.mock("@aws-sdk/client-ecr", () => ({
   BatchGetImageCommand: createCmd("BatchGetImageCommand"),
   GetAuthorizationTokenCommand: createCmd("GetAuthorizationTokenCommand"),
   PutImageTagMutabilityCommand: createCmd("PutImageTagMutabilityCommand"),
+  CreatePullThroughCacheRuleCommand: createCmd("CreatePullThroughCacheRuleCommand"),
+  DescribePullThroughCacheRulesCommand: createCmd("DescribePullThroughCacheRulesCommand"),
+  UpdatePullThroughCacheRuleCommand: createCmd("UpdatePullThroughCacheRuleCommand"),
+  DeletePullThroughCacheRuleCommand: createCmd("DeletePullThroughCacheRuleCommand"),
+  ValidatePullThroughCacheRuleCommand: createCmd("ValidatePullThroughCacheRuleCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -699,6 +704,89 @@ describe("ECR Routes", () => {
     it("PUT /repositories/:name/tag-mutability — 400 without tagMutability", async () => {
       const res = await put("/repositories/repo-1/tag-mutability", {});
       expect(res.status).toBe(400);
+    });
+  });
+
+  describe("Pull-through cache rules (E.9 batch 2)", () => {
+    it("GET /pull-through-cache-rules — lists rules", async () => {
+      mockSend.mockResolvedValueOnce({
+        pullThroughCacheRules: [{ ecrRepositoryPrefix: "docker-hub", upstreamRegistryUrl: "registry-1.docker.io" }],
+      });
+      const res = await get("/pull-through-cache-rules");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(body.rules[0].ecrRepositoryPrefix).toBe("docker-hub");
+    });
+
+    it("GET /pull-through-cache-rules — empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/pull-through-cache-rules");
+      const body = await res.json();
+      expect(body.rules).toEqual([]);
+      expect(body.total).toBe(0);
+    });
+
+    it("POST /pull-through-cache-rules — creates a rule (201)", async () => {
+      mockSend.mockResolvedValueOnce({ rule: { ecrRepositoryPrefix: "k8s" } });
+      const res = await post("/pull-through-cache-rules", {
+        ecrRepositoryPrefix: "k8s",
+        upstreamRegistryUrl: "registry.k8s.io",
+        credentialArn: "arn:aws:secretsmanager:secret/cred",
+        upstreamRepositoryPrefix: "up",
+      });
+      expect(res.status).toBe(201);
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.ecrRepositoryPrefix).toBe("k8s");
+      expect(cmd.upstreamRegistryUrl).toBe("registry.k8s.io");
+      expect(cmd.credentialArn).toBe("arn:aws:secretsmanager:secret/cred");
+    });
+
+    it("POST /pull-through-cache-rules — 400 when prefix missing", async () => {
+      const res = await post("/pull-through-cache-rules", { upstreamRegistryUrl: "x" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /pull-through-cache-rules — 400 when upstreamRegistryUrl missing", async () => {
+      const res = await post("/pull-through-cache-rules", { ecrRepositoryPrefix: "p" });
+      expect(res.status).toBe(400);
+    });
+
+    it("PUT /pull-through-cache-rules/:prefix — updates credential", async () => {
+      mockSend.mockResolvedValueOnce({ rule: { ecrRepositoryPrefix: "p" } });
+      const res = await put("/pull-through-cache-rules/p", { credentialArn: "arn:new" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+      expect(mockSend.mock.calls[0][0].ecrRepositoryPrefix).toBe("p");
+    });
+
+    it("PUT /pull-through-cache-rules/:prefix — accepts customRoleArn", async () => {
+      mockSend.mockResolvedValueOnce({ rule: {} });
+      const res = await put("/pull-through-cache-rules/p", { customRoleArn: "arn:role" });
+      expect(res.status).toBe(200);
+    });
+
+    it("PUT /pull-through-cache-rules/:prefix — 400 when nothing provided", async () => {
+      const res = await put("/pull-through-cache-rules/p", {});
+      expect(res.status).toBe(400);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("DELETE /pull-through-cache-rules/:prefix — deletes a rule", async () => {
+      mockSend.mockResolvedValueOnce({ rule: { ecrRepositoryPrefix: "p" } });
+      const res = await del("/pull-through-cache-rules/p");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deleted).toBe(true);
+    });
+
+    it("POST /pull-through-cache-rules/:prefix/validate — validates a rule", async () => {
+      mockSend.mockResolvedValueOnce({ rule: { ecrRepositoryPrefix: "p" } });
+      const res = await post("/pull-through-cache-rules/p/validate");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.isValid).toBe(true);
     });
   });
 });

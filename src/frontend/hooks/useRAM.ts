@@ -120,3 +120,29 @@ export function useRAMUntagResource() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ram", "shares"] }),
   });
 }
+
+// ── Invitation accept/reject (E.9 batch 2) ──────────────
+
+export function useAcceptRAMInvitation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (resourceShareInvitationArn: string) =>
+      api("/aws/ram/invitations/accept", {
+        method: "POST",
+        body: JSON.stringify({ resourceShareInvitationArn }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ram", "invitations"] }),
+  });
+}
+
+export function useRejectRAMInvitation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (resourceShareInvitationArn: string) =>
+      api("/aws/ram/invitations/reject", {
+        method: "POST",
+        body: JSON.stringify({ resourceShareInvitationArn }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "ram", "invitations"] }),
+  });
+}

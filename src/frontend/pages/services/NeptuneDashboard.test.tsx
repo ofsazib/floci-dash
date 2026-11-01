@@ -28,6 +28,21 @@ vi.mock("../../hooks/useNeptune", () => ({
     get isPending() { return deleteInstanceState.isPending; },
     get variables() { return deleteInstanceState.variables; },
   }),
+  useAddNeptuneClusterRole: () => ({ mutateAsync: mockAddRole, isPending: false }),
+  useRemoveNeptuneClusterRole: () => ({ mutateAsync: mockRemoveRole, isPending: false }),
+  useNeptuneGlobalClusters: () => ({
+    get data() { return globalClustersState.data; },
+    isLoading: false,
+  }),
+  useNeptuneResourceTags: () => ({
+    get data() { return resourceTagsState.data; },
+  }),
+  useAddNeptuneResourceTags: () => ({ mutateAsync: mockAddTag, isPending: false }),
+  useRemoveNeptuneResourceTags: () => ({
+    mutateAsync: mockRemoveTag,
+    get isPending() { return removeTagState.isPending; },
+    get variables() { return removeTagState.variables; },
+  }),
   useModifyNeptuneCluster: () => ({
     mutate: mockModifyCluster,
     isPending: false,
@@ -35,6 +50,15 @@ vi.mock("../../hooks/useNeptune", () => ({
     get error() { return modifyClusterState.error; },
   }),
 }));
+
+const mockAddRole = vi.fn();
+const mockRemoveRole = vi.fn();
+const mockAddTag = vi.fn();
+const mockRemoveTag = vi.fn();
+
+const globalClustersState: { data: any } = { data: undefined };
+const resourceTagsState: { data: any } = { data: undefined };
+const removeTagState: { isPending: boolean; variables: any } = { isPending: false, variables: null };
 
 import { NeptuneDashboard } from "./NeptuneDashboard";
 
@@ -48,6 +72,14 @@ beforeEach(() => {
   deleteInstanceState.variables = null;
   mockClusters.mockReturnValue({ data: { clusters: [], total: 0 }, isLoading: false });
   mockInstances.mockReturnValue({ data: { instances: [], total: 0 }, isLoading: false });
+  globalClustersState.data = undefined;
+  resourceTagsState.data = undefined;
+  removeTagState.isPending = false;
+  removeTagState.variables = null;
+  mockAddRole.mockReset();
+  mockRemoveRole.mockReset();
+  mockAddTag.mockReset();
+  mockRemoveTag.mockReset();
 });
 
 describe("NeptuneDashboard", () => {
@@ -57,10 +89,11 @@ describe("NeptuneDashboard", () => {
     expect(container.querySelectorAll("div").length).toBeGreaterThan(0);
   });
 
-  it("renders both tabs", () => {
+  it("renders all tabs", () => {
     render(<NeptuneDashboard />, { wrapper: createWrapper() });
-    expect(screen.getByRole("tab", { name: /clusters/i })).toBeTruthy();
-    expect(screen.getByRole("tab", { name: /instances/i })).toBeTruthy();
+    expect(screen.getAllByRole("tab", { name: /clusters/i }).length).toBeGreaterThan(0);
+    expect(screen.getByRole("tab", { name: /^Instances$/i })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /Global Clusters/i })).toBeTruthy();
   });
 
   it("shows empty message for clusters", () => {
@@ -579,5 +612,258 @@ describe("NeptuneDashboard — modify error arms", () => {
     render(<NeptuneDashboard />, { wrapper: createWrapper() });
     await user.click(await screen.findByRole("button", { name: "Modify" }));
     expect(await screen.findByText("Failed to modify cluster")).toBeTruthy();
+  });
+});
+
+describe("NeptuneDashboard — cluster roles, tags, global clusters (E.9 batch 2)", () => {
+  function clusterRow() {
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [
+          {
+            DBClusterIdentifier: "nept-db",
+            Status: "available",
+            Engine: "neptune",
+            DBClusterArn: "arn:aws:neptune:us-east-1:123456789012:cluster:nept-db",
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+  }
+
+  it("renders global clusters rows", () => {
+    globalClustersState.data = {
+      globalClusters: [
+        {
+          GlobalClusterIdentifier: "g-nept",
+          GlobalClusterArn: "arn:aws:neptune:::global-cluster:g",
+          Engine: "neptune",
+          Status: "available",
+          GlobalClusterMembers: [{}],
+        },
+      ],
+      total: 1,
+    };
+    render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    fireEvent.click(screen.getByRole("tab", { name: /Global Clusters/i }));
+    expect(screen.getByText("g-nept")).toBeTruthy();
+    expect(screen.getByText("neptune")).toBeTruthy();
+  });
+
+  it("shows empty message for global clusters", async () => {
+    const user = userEvent.setup();
+    render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Global Clusters/i }));
+    expect(screen.getByText(/No Neptune global clusters/i)).toBeTruthy();
+  });
+
+  it("shows Roles and Tags buttons on cluster rows", () => {
+    clusterRow();
+    render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    expect(screen.getByRole("button", { name: "Roles" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Tags" })).toBeTruthy();
+  });
+
+  it("opens the roles modal and adds a role", async () => {
+    clusterRow();
+    mockAddRole.mockResolvedValueOnce({ added: true });
+    const user = userEvent.setup();
+    render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Roles" }));
+    await waitFor(() => expect(screen.getByText("IAM roles — nept-db")).toBeTruthy());
+    await user.type(
+      screen.getByPlaceholderText("arn:aws:iam::123456789012:role/neptune-role"),
+      "arn:aws:iam::123456789012:role/r1"
+    );
+    await user.click(screen.getByRole("button", { name: /Add role/i }));
+    await waitFor(() => {
+      expect(mockAddRole).toHaveBeenCalledWith({
+        id: "nept-db",
+        roleArn: "arn:aws:iam::123456789012:role/r1",
+      });
+    });
+  });
+
+  it("removes a role from the roles modal", async () => {
+    clusterRow();
+    mockRemoveRole.mockResolvedValueOnce({ removed: true });
+    const user = userEvent.setup();
+    render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Roles" }));
+    await waitFor(() => expect(screen.getByText("IAM roles — nept-db")).toBeTruthy());
+    await user.type(
+      screen.getByPlaceholderText("arn:aws:iam::123456789012:role/neptune-role"),
+      "arn:aws:iam::123456789012:role/r1"
+    );
+    await user.click(screen.getByRole("button", { name: /Remove role/i }));
+    await waitFor(() => {
+      expect(mockRemoveRole).toHaveBeenCalledWith({
+        id: "nept-db",
+        roleArn: "arn:aws:iam::123456789012:role/r1",
+      });
+    });
+  });
+
+  it("disables Add role when the ARN is empty", async () => {
+    clusterRow();
+    const user = userEvent.setup();
+    render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Roles" }));
+    await waitFor(() => expect(screen.getByText("IAM roles — nept-db")).toBeTruthy());
+    expect(screen.getByRole("button", { name: /Add role/i })).toBeDisabled();
+  });
+
+  it("closes the roles modal on Close", async () => {
+    clusterRow();
+    const user = userEvent.setup();
+    render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Roles" }));
+    await waitFor(() => expect(screen.getByText("IAM roles — nept-db")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /^Close$/i }));
+    await waitFor(() => expect(screen.queryByText("IAM roles — nept-db")).toBeNull());
+  });
+
+  it("opens the tags modal, lists tags and adds a tag", async () => {
+    clusterRow();
+    resourceTagsState.data = {
+      resourceName: "arn:aws:neptune:us-east-1:123456789012:cluster:nept-db",
+      tags: [{ Key: "env", Value: "dev" }],
+      total: 1,
+    };
+    mockAddTag.mockResolvedValueOnce({ tagged: true });
+    const user = userEvent.setup();
+    render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Tags" }));
+    await waitFor(() => expect(screen.getByText("Tags — nept-db")).toBeTruthy());
+    expect(screen.getByText("env")).toBeTruthy();
+    await user.type(screen.getByPlaceholderText("env"), "team");
+    await user.type(screen.getByPlaceholderText("dev"), "core");
+    await user.click(screen.getByRole("button", { name: /Add tag/i }));
+    await waitFor(() => {
+      expect(mockAddTag).toHaveBeenCalledWith({
+        resourceName: "arn:aws:neptune:us-east-1:123456789012:cluster:nept-db",
+        tags: { team: "core" },
+      });
+    });
+  });
+
+  it("shows No tags placeholder when cluster has no tags", async () => {
+    clusterRow();
+    resourceTagsState.data = { resourceName: "arn:x", tags: [], total: 0 };
+    const user = userEvent.setup();
+    render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Tags" }));
+    await waitFor(() => expect(screen.getByText("Tags — nept-db")).toBeTruthy());
+    expect(screen.getByText("No tags")).toBeTruthy();
+  });
+
+  it("removes a tag from the tags modal", async () => {
+    clusterRow();
+    resourceTagsState.data = {
+      resourceName: "arn:x",
+      tags: [{ Key: "old", Value: "x" }],
+      total: 1,
+    };
+    mockRemoveTag.mockResolvedValueOnce({ untagged: true });
+    const user = userEvent.setup();
+    render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Tags" }));
+    await waitFor(() => expect(screen.getByText("old")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Delete old/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/i)).toBeTruthy());
+    const confirmBtns = screen.getAllByRole("button", { name: /^Delete$/i });
+    await user.click(confirmBtns[confirmBtns.length - 1]);
+    await waitFor(() => {
+      expect(mockRemoveTag).toHaveBeenCalledWith({
+        resourceName: "arn:aws:neptune:us-east-1:123456789012:cluster:nept-db",
+        tagKeys: ["old"],
+      });
+    });
+  });
+
+  it("closes the tags modal on Close", async () => {
+    clusterRow();
+    resourceTagsState.data = { resourceName: "arn:x", tags: [], total: 0 };
+    const user = userEvent.setup();
+    render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Tags" }));
+    await waitFor(() => expect(screen.getByText("Tags — nept-db")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /^Close$/i }));
+    await waitFor(() => expect(screen.queryByText("Tags — nept-db")).toBeNull());
+  });
+});
+
+describe("NeptuneDashboard — coverage completion", () => {
+  function clusterRow() {
+    mockClusters.mockReturnValue({
+      data: {
+        clusters: [
+          {
+            DBClusterIdentifier: "nept-db",
+            Status: "available",
+            Engine: "neptune",
+            DBClusterArn: "arn:aws:neptune:us-east-1:123456789012:cluster:nept-db",
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+  }
+
+  it("renders global cluster dash fallbacks for missing fields", async () => {
+    const user = userEvent.setup();
+    globalClustersState.data = {
+      globalClusters: [{ GlobalClusterIdentifier: "minimal" }],
+      total: 1,
+    };
+    render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Global Clusters/i }));
+    await waitFor(() => expect(screen.getByText("minimal")).toBeTruthy());
+    expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("filters global clusters by id", async () => {
+    const user = userEvent.setup();
+    globalClustersState.data = {
+      globalClusters: [
+        { GlobalClusterIdentifier: "alpha" },
+        { GlobalClusterIdentifier: "beta" },
+      ],
+      total: 2,
+    };
+    render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Global Clusters/i }));
+    await waitFor(() => expect(screen.getByText("alpha")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("Find global clusters"), "alp");
+    await waitFor(() => expect(screen.queryByText("beta")).toBeNull());
+  });
+
+  it("renders tags modal when tags data is undefined", async () => {
+    clusterRow();
+    resourceTagsState.data = undefined;
+    const user = userEvent.setup();
+    render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Tags" }));
+    await waitFor(() => expect(screen.getByText("Tags — nept-db")).toBeTruthy());
+    expect(screen.getByText("No tags")).toBeTruthy();
+  });
+
+  it("disables the tag remove button while untag is pending", async () => {
+    clusterRow();
+    resourceTagsState.data = {
+      resourceName: "arn:x",
+      tags: [{ Key: "env", Value: "dev" }],
+      total: 1,
+    };
+    removeTagState.isPending = true;
+    removeTagState.variables = { resourceName: "arn:x", tagKeys: ["env"] };
+    const user = userEvent.setup();
+    render(<NeptuneDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Tags" }));
+    await waitFor(() => expect(screen.getByText("env")).toBeTruthy());
+    expect(screen.getByRole("button", { name: /Delete env/i })).toBeDisabled();
   });
 });
