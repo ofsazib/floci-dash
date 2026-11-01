@@ -23,6 +23,12 @@ import {
   useDynamoDBContinuousBackups,
   useDynamoDBUpdateContinuousBackups,
   useDynamoDBPartiQL,
+  useDynamoDBResourcePolicy,
+  useDynamoDBPutResourcePolicy,
+  useDynamoDBDeleteResourcePolicy,
+  useDynamoDBImports,
+  useDynamoDBDescribeImport,
+  useDynamoDBImportTable,
 } from "./useDynamoDBAdvanced";
 
 function createWrapper() {
@@ -402,5 +408,89 @@ describe("useDynamoDBPartiQL", () => {
         }),
       })
     );
+  });
+});
+
+describe("E.9 — DDB resource policies and imports hooks", () => {
+  beforeEach(() => mockApi.mockReset());
+
+  it("useDynamoDBResourcePolicy fetches when table set", async () => {
+    mockApi.mockResolvedValueOnce({ policy: "{}", revisionId: "r1" });
+    const { result } = renderHook(() => useDynamoDBResourcePolicy("t1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/dynamodb/tables/t1/policy");
+  });
+
+  it("useDynamoDBResourcePolicy skips when null", () => {
+    const { result } = renderHook(() => useDynamoDBResourcePolicy(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+
+  it("useDynamoDBPutResourcePolicy PUTs the policy", async () => {
+    mockApi.mockResolvedValueOnce({ revisionId: "r2" });
+    const { result } = renderHook(() => useDynamoDBPutResourcePolicy("t1"), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ policy: "{}", expectedRevisionId: "r1" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/dynamodb/tables/t1/policy", {
+      method: "PUT",
+      body: JSON.stringify({ policy: "{}", expectedRevisionId: "r1" }),
+    });
+  });
+
+  it("useDynamoDBDeleteResourcePolicy DELETEs with revision", async () => {
+    mockApi.mockResolvedValueOnce({ revisionId: "r3" });
+    const { result } = renderHook(() => useDynamoDBDeleteResourcePolicy("t1"), { wrapper: createWrapper() });
+    await result.current.mutateAsync("r2");
+    expect(mockApi).toHaveBeenCalledWith("/aws/dynamodb/tables/t1/policy", {
+      method: "DELETE",
+      body: JSON.stringify({ expectedRevisionId: "r2" }),
+    });
+  });
+
+  it("useDynamoDBImports fetches when tableArn set", async () => {
+    mockApi.mockResolvedValueOnce({ imports: [], total: 0, nextToken: null });
+    const { result } = renderHook(() => useDynamoDBImports("arn:t"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(`/aws/dynamodb/imports?tableArn=${encodeURIComponent("arn:t")}`);
+  });
+
+  it("useDynamoDBImports skips when null", () => {
+    const { result } = renderHook(() => useDynamoDBImports(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+
+  it("useDynamoDBDescribeImport fetches when arn set", async () => {
+    mockApi.mockResolvedValueOnce({ importArn: "arn:i" });
+    const { result } = renderHook(() => useDynamoDBDescribeImport("arn:i"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(`/aws/dynamodb/imports/${encodeURIComponent("arn:i")}`);
+  });
+
+  it("useDynamoDBDescribeImport skips when null", () => {
+    const { result } = renderHook(() => useDynamoDBDescribeImport(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+
+  it("useDynamoDBImportTable POSTs and invalidates", async () => {
+    mockApi.mockResolvedValueOnce({ importArn: "arn:i2" });
+    const { result } = renderHook(() => useDynamoDBImportTable(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({
+      tableName: "t",
+      s3Bucket: "b",
+      s3Prefix: "p",
+      inputFormat: "DYNAMODB_JSON",
+      attributeDefinitions: [{ AttributeName: "id", AttributeType: "S" }],
+      keySchema: [{ AttributeName: "id", KeyType: "HASH" }],
+    });
+    expect(mockApi).toHaveBeenCalledWith("/aws/dynamodb/imports", {
+      method: "POST",
+      body: JSON.stringify({
+        tableName: "t",
+        s3Bucket: "b",
+        s3Prefix: "p",
+        inputFormat: "DYNAMODB_JSON",
+        attributeDefinitions: [{ AttributeName: "id", AttributeType: "S" }],
+        keySchema: [{ AttributeName: "id", KeyType: "HASH" }],
+      }),
+    });
   });
 });

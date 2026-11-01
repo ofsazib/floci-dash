@@ -36,6 +36,12 @@ import {
   useStateMachineTags,
   useTagStateMachine,
   useUntagStateMachine,
+  useStateMachineAliases,
+  useStateMachineAlias,
+  useCreateStateMachineAlias,
+  useUpdateStateMachineAlias,
+  useDeleteStateMachineAlias,
+  useDescribeMapRun,
 } from "./useStepFunctions";
 
 beforeEach(() => mockApi.mockReset());
@@ -298,5 +304,78 @@ describe("G.84 — activities, sync executions, validation, tags", () => {
       method: "DELETE",
       body: JSON.stringify({ tagKeys: ["env"] }),
     });
+  });
+});
+
+describe("E.9 — aliases and map runs", () => {
+  const ALIAS = "arn:aws:states:us-east-1:123:stateMachine:my-sm:alias:live";
+  const ROUTING = [{ stateMachineVersionArn: ARN + ":1", weight: 100 }];
+
+  it("useStateMachineAliases calls correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ aliases: [], total: 0 });
+    const { result } = renderHook(() => useStateMachineAliases(ARN), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(`/aws/stepfunctions/state-machines/${encodeURIComponent(ARN)}/aliases`);
+  });
+
+  it("useStateMachineAliases disabled when null", () => {
+    const { result } = renderHook(() => useStateMachineAliases(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+
+  it("useCreateStateMachineAlias POSTs and invalidates", async () => {
+    mockApi.mockResolvedValueOnce({ stateMachineAliasArn: ALIAS });
+    const { result } = renderHook(() => useCreateStateMachineAlias(ARN), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ name: "live", description: "d", routingConfiguration: ROUTING });
+    expect(mockApi).toHaveBeenCalledWith(`/aws/stepfunctions/state-machines/${encodeURIComponent(ARN)}/aliases`, {
+      method: "POST",
+      body: JSON.stringify({ name: "live", description: "d", routingConfiguration: ROUTING }),
+    });
+  });
+
+  it("useUpdateStateMachineAlias PUTs the alias", async () => {
+    mockApi.mockResolvedValueOnce({ updateDate: 1 });
+    const { result } = renderHook(() => useUpdateStateMachineAlias(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ aliasArn: ALIAS, routingConfiguration: ROUTING });
+    expect(mockApi).toHaveBeenCalledWith(`/aws/stepfunctions/aliases/${encodeURIComponent(ALIAS)}`, {
+      method: "PUT",
+      body: JSON.stringify({ description: undefined, routingConfiguration: ROUTING }),
+    });
+  });
+
+  it("useDeleteStateMachineAlias DELETEs the alias", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useDeleteStateMachineAlias(), { wrapper: createWrapper() });
+    await result.current.mutateAsync(ALIAS);
+    expect(mockApi).toHaveBeenCalledWith(`/aws/stepfunctions/aliases/${encodeURIComponent(ALIAS)}`, { method: "DELETE" });
+  });
+
+  it("useDescribeMapRun fetches when arn set", async () => {
+    const mapRunArn = "arn:aws:states:us-east-1:123:mapRun:sm/run:1";
+    mockApi.mockResolvedValueOnce({ mapRun: { status: "SUCCEEDED" } });
+    const { result } = renderHook(() => useDescribeMapRun(mapRunArn), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(`/aws/stepfunctions/map-runs/${encodeURIComponent(mapRunArn)}`);
+  });
+
+  it("useDescribeMapRun disabled when null", () => {
+    const { result } = renderHook(() => useDescribeMapRun(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+  });
+});
+
+describe("E.9 — useStateMachineAlias describe hook", () => {
+  const ALIAS = "arn:aws:states:us-east-1:123:stateMachine:my-sm:alias:live";
+
+  it("fetches when alias arn set", async () => {
+    mockApi.mockResolvedValueOnce({ alias: { name: "live" } });
+    const { result } = renderHook(() => useStateMachineAlias(ALIAS), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(`/aws/stepfunctions/aliases/${encodeURIComponent(ALIAS)}`);
+  });
+
+  it("disabled when null", () => {
+    const { result } = renderHook(() => useStateMachineAlias(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
   });
 });

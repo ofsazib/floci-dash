@@ -273,3 +273,64 @@ export function useUntagStateMachine(arn: string) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "stepfunctions", "tags", arn] }),
   });
 }
+
+// ── Aliases + Map runs (E.9) ─────────────────────────────
+
+export function useStateMachineAliases(arn: string | null) {
+  return useQuery<{ aliases: any[]; total: number }>({
+    queryKey: ["aws", "stepfunctions", "aliases", arn],
+    queryFn: () => api(`/aws/stepfunctions/state-machines/${encodeURIComponent(arn!)}/aliases`),
+    enabled: !!arn,
+  });
+}
+
+export function useStateMachineAlias(aliasArn: string | null) {
+  return useQuery<{ alias: any }>({
+    queryKey: ["aws", "stepfunctions", "alias", aliasArn],
+    queryFn: () => api(`/aws/stepfunctions/aliases/${encodeURIComponent(aliasArn!)}`),
+    enabled: !!aliasArn,
+  });
+}
+
+export function useCreateStateMachineAlias(arn: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { name: string; description?: string; routingConfiguration: any }) =>
+      api(`/aws/stepfunctions/state-machines/${encodeURIComponent(arn)}/aliases`, {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "stepfunctions", "aliases", arn] }),
+  });
+}
+
+export function useUpdateStateMachineAlias() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ aliasArn, description, routingConfiguration }: { aliasArn: string; description?: string; routingConfiguration?: any }) =>
+      api(`/aws/stepfunctions/aliases/${encodeURIComponent(aliasArn)}`, {
+        method: "PUT",
+        body: JSON.stringify({ description, routingConfiguration }),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "stepfunctions", "aliases"] }),
+  });
+}
+
+export function useDeleteStateMachineAlias() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (aliasArn: string) =>
+      api(`/aws/stepfunctions/aliases/${encodeURIComponent(aliasArn)}`, { method: "DELETE" }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "stepfunctions", "aliases"] }),
+  });
+}
+
+export function useDescribeMapRun(mapRunArn: string | null) {
+  return useQuery<{ mapRun: any }>({
+    queryKey: ["aws", "stepfunctions", "map-run", mapRunArn],
+    queryFn: () => api(`/aws/stepfunctions/map-runs/${encodeURIComponent(mapRunArn!)}`),
+    enabled: !!mapRunArn,
+  });
+}

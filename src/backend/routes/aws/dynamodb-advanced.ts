@@ -21,6 +21,12 @@ import {
   ExportTableToPointInTimeCommand,
   ListExportsCommand,
   DescribeExportCommand,
+  GetResourcePolicyCommand,
+  PutResourcePolicyCommand,
+  DeleteResourcePolicyCommand,
+  ImportTableCommand,
+  DescribeImportCommand,
+  ListImportsCommand,
 } from "@aws-sdk/client-dynamodb";
 import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
 import { getAwsConfig } from "../../clients/aws";
@@ -543,6 +549,118 @@ router.get("/exports", async (c: Context) => {
     failureCode: desc?.FailureCode,
     failureMessage: desc?.FailureMessage,
   });
+});
+
+// ─── Resource policies ─────────────────────────────────────────────
+
+router.get("/tables/:name/policy", async (c: Context) => {
+  const name = c.req.param("name");
+  const arn = `arn:aws:dynamodb:${getAwsConfig().region}:${getAwsConfig().credentials.accessKeyId}:table/${name}`;
+  const result = await ddb().send(new GetResourcePolicyCommand({ ResourceArn: arn }));
+  return c.json({ policy: result.Policy ?? null, revisionId: result.RevisionId ?? null });
+});
+
+router.put("/tables/:name/policy", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<{ policy?: string; expectedRevisionId?: string }>();
+  if (!body.policy) return c.json({ error: "policy is required" }, 400);
+  const arn = `arn:aws:dynamodb:${getAwsConfig().region}:${getAwsConfig().credentials.accessKeyId}:table/${name}`;
+  const result = await ddb().send(
+    new PutResourcePolicyCommand({
+      ResourceArn: arn,
+      Policy: body.policy,
+      ExpectedRevisionId: body.expectedRevisionId || undefined,
+    } as any)
+  );
+  return c.json({ revisionId: result.RevisionId ?? null });
+});
+
+router.delete("/tables/:name/policy", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<{ expectedRevisionId?: string }>().catch(() => ({}) as any);
+  const arn = `arn:aws:dynamodb:${getAwsConfig().region}:${getAwsConfig().credentials.accessKeyId}:table/${name}`;
+  const result = await ddb().send(
+    new DeleteResourcePolicyCommand({
+      ResourceArn: arn,
+      ExpectedRevisionId: body.expectedRevisionId || undefined,
+    } as any)
+  );
+  return c.json({ revisionId: result.RevisionId ?? null });
+});
+
+// ─── S3 imports ────────────────────────────────────────────────────
+
+router.get("/imports", async (c: Context) => {
+  const tableArn = c.req.query("tableArn") || undefined;
+  const pageSize = parseInt(c.req.query("pageSize") || "20", 10);
+  const nextToken = c.req.query("nextToken") || undefined;
+  const result = await ddb().send(
+    new ListImportsCommand({ TableArn: tableArn, PageSize: pageSize, NextToken: nextToken } as any)
+  );
+  const imports = (result.ImportSummaryList || []).map((i: any) => ({
+    importArn: i.ImportArn,
+    importStatus: i.ImportStatus,
+    tableArn: i.TableArn,
+    startTime: i.StartTime?.toISOString() || null,
+    endTime: i.EndTime?.toISOString() || null,
+  }));
+  return c.json({ imports, total: imports.length, nextToken: result.NextToken || null });
+});
+
+router.get("/imports/:arn", async (c: Context) => {
+  const importArn = decodeURIComponent(c.req.param("arn")!);
+  const result = await ddb().send(new DescribeImportCommand({ ImportArn: importArn }));
+  const desc: any = result.ImportTableDescription;
+  return c.json({
+    importArn: desc?.ImportArn,
+    importStatus: desc?.ImportStatus,
+    tableArn: desc?.TableArn,
+    startTime: desc?.StartTime?.toISOString() || null,
+    endTime: desc?.EndTime?.toISOString() || null,
+    itemCount: desc?.ItemCount,
+    importedItemCount: desc?.ImportedItemCount,
+    failureCode: desc?.FailureCode,
+    failureMessage: desc?.FailureMessage,
+    s3Bucket: desc?.S3BucketSource?.S3Bucket,
+    s3Prefix: desc?.S3BucketSource?.S3Prefix,
+  });
+});
+
+router.post("/imports", async (c: Context) => {
+  const body = await c.req.json<{
+    tableName?: string;
+    s3Bucket?: string;
+    s3Prefix?: string;
+    inputFormat?: string;
+    attributeDefinitions?: Array<{ AttributeName: string; AttributeType: string }>;
+    keySchema?: Array<{ AttributeName: string; KeyType: string }>;
+  }>();
+  if (!body.tableName) return c.json({ error: "tableName is required" }, 400);
+  if (!body.s3Bucket) return c.json({ error: "s3Bucket is required" }, 400);
+  if (!body.attributeDefinitions || !body.keySchema) {
+    return c.json({ error: "attributeDefinitions and keySchema are required" }, 400);
+  }
+  const result = await ddb().send(
+    new ImportTableCommand({
+      S3BucketSource: { S3Bucket: body.s3Bucket, S3Prefix: body.s3Prefix || "" },
+      InputFormat: body.inputFormat || "DYNAMODB_JSON",
+      TableCreationParameters: {
+        TableName: body.tableName,
+        AttributeDefinitions: body.attributeDefinitions,
+        KeySchema: body.keySchema,
+        BillingMode: "PAY_PER_REQUEST",
+      },
+    } as any)
+  );
+  const desc: any = result.ImportTableDescription;
+  return c.json(
+    {
+      importArn: desc?.ImportArn,
+      importStatus: desc?.ImportStatus || "IN_PROGRESS",
+      tableArn: desc?.TableArn,
+    },
+    201
+  );
 });
 
 export default router;

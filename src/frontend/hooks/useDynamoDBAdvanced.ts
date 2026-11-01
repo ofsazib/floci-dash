@@ -387,3 +387,71 @@ export function useDynamoDBDescribeExport(exportArn: string | null) {
     enabled: !!exportArn,
   });
 }
+
+// ─── Resource policies (E.9) ──────────────────────────────────────
+
+export function useDynamoDBResourcePolicy(table: string | null) {
+  return useQuery<{ policy: string | null; revisionId: string | null }>({
+    queryKey: ["aws", "dynamodb", "policy", table],
+    queryFn: () => api(`/aws/dynamodb/tables/${table}/policy`),
+    enabled: !!table,
+  });
+}
+
+export function useDynamoDBPutResourcePolicy(table: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { policy: string; expectedRevisionId?: string }) =>
+      api(`/aws/dynamodb/tables/${table}/policy`, { method: "PUT", body: JSON.stringify(params) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "dynamodb", "policy", table] }),
+  });
+}
+
+export function useDynamoDBDeleteResourcePolicy(table: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (expectedRevisionId?: string) =>
+      api(`/aws/dynamodb/tables/${table}/policy`, {
+        method: "DELETE",
+        body: JSON.stringify({ expectedRevisionId }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "dynamodb", "policy", table] }),
+  });
+}
+
+// ─── S3 imports (E.9) ─────────────────────────────────────────────
+
+export function useDynamoDBImports(tableArn: string | null) {
+  return useQuery<{ imports: any[]; total: number; nextToken: string | null }>({
+    queryKey: ["aws", "dynamodb", "imports", tableArn],
+    queryFn: () =>
+      api(`/aws/dynamodb/imports?tableArn=${encodeURIComponent(tableArn!)}`),
+    enabled: !!tableArn,
+  });
+}
+
+export function useDynamoDBDescribeImport(importArn: string | null) {
+  return useQuery<any>({
+    queryKey: ["aws", "dynamodb", "import", importArn],
+    queryFn: () => api(`/aws/dynamodb/imports/${encodeURIComponent(importArn!)}`),
+    enabled: !!importArn,
+  });
+}
+
+export function useDynamoDBImportTable() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: {
+      tableName: string;
+      s3Bucket: string;
+      s3Prefix?: string;
+      inputFormat?: string;
+      attributeDefinitions: Array<{ AttributeName: string; AttributeType: string }>;
+      keySchema: Array<{ AttributeName: string; KeyType: string }>;
+    }) => api("/aws/dynamodb/imports", { method: "POST", body: JSON.stringify(params) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["aws", "dynamodb", "imports"] });
+      qc.invalidateQueries({ queryKey: ["aws", "dynamodb", "tables"] });
+    },
+  });
+}

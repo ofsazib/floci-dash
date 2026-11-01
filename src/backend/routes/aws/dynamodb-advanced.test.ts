@@ -30,6 +30,12 @@ vi.mock("@aws-sdk/client-dynamodb", () => ({
   ExportTableToPointInTimeCommand: vi.fn(function(args) { return args; }),
   ListExportsCommand: vi.fn(function(args) { return args; }),
   DescribeExportCommand: vi.fn(function(args) { return args; }),
+  GetResourcePolicyCommand: vi.fn(function(args) { return args; }),
+  PutResourcePolicyCommand: vi.fn(function(args) { return args; }),
+  DeleteResourcePolicyCommand: vi.fn(function(args) { return args; }),
+  ImportTableCommand: vi.fn(function(args) { return args; }),
+  DescribeImportCommand: vi.fn(function(args) { return args; }),
+  ListImportsCommand: vi.fn(function(args) { return args; }),
 }));
 
 vi.mock("@aws-sdk/util-dynamodb", () => ({
@@ -1060,5 +1066,169 @@ describe("DynamoDB Advanced", () => {
       expect(body.startTime).toBeNull();
       expect(body.endTime).toBeNull();
     });
+  });
+});
+
+describe("E.9 — resource policies and S3 imports", () => {
+  it("GET /tables/:name/policy — returns policy and revision", async () => {
+    mockSend.mockResolvedValueOnce({ Policy: '{"v":1}', RevisionId: "rev-1" });
+    const res = await get("/tables/my-table/policy");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.policy).toBe('{"v":1}');
+    expect(body.revisionId).toBe("rev-1");
+    expect(mockSend.mock.calls[0][0].ResourceArn).toContain("table/my-table");
+  });
+
+  it("GET /tables/:name/policy — nulls when sparse", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/tables/my-table/policy");
+    const body = await res.json();
+    expect(body.policy).toBeNull();
+    expect(body.revisionId).toBeNull();
+  });
+
+  it("PUT /tables/:name/policy — puts policy with revision", async () => {
+    mockSend.mockResolvedValueOnce({ RevisionId: "rev-2" });
+    const res = await put("/tables/my-table/policy", { policy: '{"v":2}', expectedRevisionId: "rev-1" });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.revisionId).toBe("rev-2");
+    expect(mockSend.mock.calls[0][0].Policy).toBe('{"v":2}');
+    expect(mockSend.mock.calls[0][0].ExpectedRevisionId).toBe("rev-1");
+  });
+
+  it("PUT /tables/:name/policy — omits revision when not provided", async () => {
+    mockSend.mockResolvedValueOnce({});
+    await put("/tables/my-table/policy", { policy: "{}" });
+    expect(mockSend.mock.calls[0][0].ExpectedRevisionId).toBeUndefined();
+  });
+
+  it("PUT /tables/:name/policy — 400 without policy", async () => {
+    const res = await put("/tables/my-table/policy", {});
+    expect(res.status).toBe(400);
+  });
+
+  it("DELETE /tables/:name/policy — deletes with expected revision", async () => {
+    mockSend.mockResolvedValueOnce({ RevisionId: "rev-3" });
+    const res = await router.request("/tables/my-table/policy", { method: "DELETE", body: JSON.stringify({ expectedRevisionId: "rev-2" }), headers: { "content-type": "application/json" } });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.revisionId).toBe("rev-3");
+    expect(mockSend.mock.calls[0][0].ExpectedRevisionId).toBe("rev-2");
+  });
+
+  it("DELETE /tables/:name/policy — works without body", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await router.request("/tables/my-table/policy", { method: "DELETE" });
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].ExpectedRevisionId).toBeUndefined();
+  });
+
+  it("GET /imports — lists import summaries", async () => {
+    mockSend.mockResolvedValueOnce({
+      ImportSummaryList: [{ ImportArn: "arn:aws:dynamodb:us-east-1:1:table/t/import/0x1", ImportStatus: "COMPLETED" }],
+    });
+    const res = await get("/imports?tableArn=arn:t");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.total).toBe(1);
+    expect(body.imports[0].importStatus).toBe("COMPLETED");
+    expect(mockSend.mock.calls[0][0].TableArn).toBe("arn:t");
+  });
+
+  it("GET /imports — empty and null token when sparse", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/imports");
+    const body = await res.json();
+    expect(body.imports).toEqual([]);
+    expect(body.nextToken).toBeNull();
+  });
+
+  it("GET /imports/:arn — describes an import", async () => {
+    mockSend.mockResolvedValueOnce({
+      ImportTableDescription: {
+        ImportArn: "arn:import:1",
+        ImportStatus: "COMPLETED",
+        ItemCount: 5,
+        ImportedItemCount: 5,
+        S3BucketSource: { S3Bucket: "b", S3Prefix: "p" },
+      },
+    });
+    const res = await get(`/imports/${encodeURIComponent("arn:import:1")}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.importStatus).toBe("COMPLETED");
+    expect(body.s3Bucket).toBe("b");
+    expect(body.s3Prefix).toBe("p");
+  });
+
+  it("GET /imports/:arn — nulls when sparse", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get(`/imports/${encodeURIComponent("arn:import:1")}`);
+    const body = await res.json();
+    expect(body.importStatus).toBeUndefined();
+    expect(body.startTime).toBeNull();
+  });
+
+  it("POST /imports — starts an import (201)", async () => {
+    mockSend.mockResolvedValueOnce({ ImportTableDescription: { ImportArn: "arn:import:2", ImportStatus: "IN_PROGRESS", TableArn: "arn:table" } });
+    const res = await post("/imports", {
+      tableName: "imported",
+      s3Bucket: "b",
+      s3Prefix: "p",
+      attributeDefinitions: [{ AttributeName: "id", AttributeType: "S" }],
+      keySchema: [{ AttributeName: "id", KeyType: "HASH" }],
+    });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.importArn).toBe("arn:import:2");
+    expect(mockSend.mock.calls[0][0].S3BucketSource.S3Bucket).toBe("b");
+    expect(mockSend.mock.calls[0][0].InputFormat).toBe("DYNAMODB_JSON");
+    expect(mockSend.mock.calls[0][0].TableCreationParameters.BillingMode).toBe("PAY_PER_REQUEST");
+  });
+
+  it("POST /imports — 400 without tableName", async () => {
+    const res = await post("/imports", { s3Bucket: "b", attributeDefinitions: [], keySchema: [] });
+    expect(res.status).toBe(400);
+  });
+
+  it("POST /imports — 400 without s3Bucket", async () => {
+    const res = await post("/imports", { tableName: "t", attributeDefinitions: [], keySchema: [] });
+    expect(res.status).toBe(400);
+  });
+
+  it("POST /imports — sparse description defaults and omits prefix/format", async () => {
+    mockSend.mockResolvedValueOnce({ ImportTableDescription: {} });
+    const res = await post("/imports", {
+      tableName: "t2",
+      s3Bucket: "b2",
+      attributeDefinitions: [{ AttributeName: "id", AttributeType: "S" }],
+      keySchema: [{ AttributeName: "id", KeyType: "HASH" }],
+    });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.importStatus).toBe("IN_PROGRESS");
+    expect(mockSend.mock.calls[0][0].S3BucketSource.S3Prefix).toBe("");
+    expect(mockSend.mock.calls[0][0].InputFormat).toBe("DYNAMODB_JSON");
+  });
+
+  it("POST /imports — explicit format is passed through", async () => {
+    mockSend.mockResolvedValueOnce({ ImportTableDescription: { ImportStatus: "COMPLETED" } });
+    await post("/imports", {
+      tableName: "t3",
+      s3Bucket: "b3",
+      s3Prefix: "pp",
+      inputFormat: "CSV",
+      attributeDefinitions: [{ AttributeName: "id", AttributeType: "S" }],
+      keySchema: [{ AttributeName: "id", KeyType: "HASH" }],
+    });
+    expect(mockSend.mock.calls[0][0].InputFormat).toBe("CSV");
+    expect(mockSend.mock.calls[0][0].S3BucketSource.S3Prefix).toBe("pp");
+  });
+
+  it("POST /imports — 400 without key schema", async () => {
+    const res = await post("/imports", { tableName: "t", s3Bucket: "b" });
+    expect(res.status).toBe(400);
   });
 });

@@ -29,6 +29,13 @@ const mockSendTaskHeartbeat = vi.fn().mockResolvedValue({});
 const mockStartSyncExecution = vi.fn().mockResolvedValue({ execution: null });
 const mockValidateDefinition = vi.fn().mockResolvedValue({ valid: true, errors: [] });
 const mockStateMachineTags = vi.fn();
+const mockAliases = vi.fn();
+const mockAliasDetail = vi.fn();
+const mockCreateAlias = vi.fn().mockResolvedValue({});
+const mockUpdateAlias = vi.fn().mockResolvedValue({});
+const mockDeleteAliasState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
+const mockDeleteAlias = vi.fn().mockResolvedValue({});
+const mockMapRun = vi.fn();
 const mockTagStateMachine = vi.fn().mockResolvedValue({});
 const mockUntagStateMachine = vi.fn().mockResolvedValue({});
 
@@ -73,6 +80,20 @@ vi.mock("../../hooks/useStepFunctions", () => ({
   useStateMachineTags: (...args: any[]) => mockStateMachineTags(...args),
   useTagStateMachine: () => ({ mutate: vi.fn(), mutateAsync: mockTagStateMachine, isPending: false, variables: null, isError: false, error: null, reset: vi.fn() }),
   useUntagStateMachine: () => ({ mutate: vi.fn(), mutateAsync: mockUntagStateMachine, isPending: false, variables: null, isError: false, error: null, reset: vi.fn() }),
+  useStateMachineAliases: (...args: any[]) => mockAliases(...args),
+  useStateMachineAlias: (...args: any[]) => mockAliasDetail(...args),
+  useCreateStateMachineAlias: () => ({ mutate: vi.fn(), mutateAsync: mockCreateAlias, isPending: false, variables: null, isError: false, error: null, reset: vi.fn() }),
+  useUpdateStateMachineAlias: () => ({ mutate: vi.fn(), mutateAsync: mockUpdateAlias, isPending: false, variables: null, isError: false, error: null, reset: vi.fn() }),
+  useDeleteStateMachineAlias: () => ({
+    mutate: vi.fn(),
+    mutateAsync: mockDeleteAlias,
+    get isPending() { return mockDeleteAliasState.isPending; },
+    get variables() { return mockDeleteAliasState.variables; },
+    isError: false,
+    error: null,
+    reset: vi.fn(),
+  }),
+  useDescribeMapRun: (...args: any[]) => mockMapRun(...args),
   useStopExecution: () => ({
     mutate: vi.fn(),
     mutateAsync: mockStopExecution,
@@ -96,6 +117,8 @@ beforeEach(() => {
   deleteVersionState.variables = null;
   deleteActState.isPending = false;
   deleteActState.variables = null;
+  mockDeleteAliasState.isPending = false;
+  mockDeleteAliasState.variables = null;
   mockStateMachines.mockReturnValue({ data: { stateMachines: [], total: 0 }, isLoading: false });
   mockExecutions.mockReturnValue({ data: { executions: [], total: 0 } });
   mockActivities.mockReturnValue({ data: { activities: [], total: 0 } });
@@ -103,6 +126,9 @@ beforeEach(() => {
   mockPublishVersion.mockResolvedValue({});
   mockDeleteVersion.mockResolvedValue({});
   mockStateMachineTags.mockReturnValue({ data: [] });
+  mockAliases.mockReturnValue({ data: { aliases: [], total: 0 } });
+  mockAliasDetail.mockReturnValue({ data: undefined });
+  mockMapRun.mockReturnValue({ data: undefined });
 });
 
 // ── Helper: select state machine from Cloudscape Select dropdown ──
@@ -1055,7 +1081,7 @@ describe("StepFunctionsDashboard — G.84 activities, task callbacks, sync runs,
     // poll succeeds with a sparse task
     mockGetActivityTask.mockResolvedValue({ task: {} });
     await clickButton(user, /Poll for task/i);
-    await waitFor(() => expect(screen.getByText("—")).toBeTruthy());
+    await waitFor(() => expect(screen.getAllByText("—").length).toBeGreaterThan(0));
     // send success failure
     await clickButton(user, /Send success/i);
     await waitFor(() => expect(screen.getByText("Failed to send task success")).toBeTruthy());
@@ -1218,3 +1244,301 @@ function dismissWithEscape() {
     fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27 });
   });
 }
+
+describe("StepFunctionsDashboard — E.9 aliases tab", () => {
+  const SM_ARN = "arn:aws:states:us-east-1:123:stateMachine:my-sm";
+  const ALIAS = SM_ARN + ":alias:live";
+  const ALIAS_NAME = "live";
+
+  function setupSM() {
+    mockStateMachines.mockReturnValue({
+      data: { stateMachines: [{ stateMachineArn: SM_ARN, name: "my-sm", type: "STANDARD", creationDate: "2024-01-15T00:00:00Z" }], total: 1 },
+      isLoading: false,
+    });
+  }
+
+  async function openAliases(user: ReturnType<typeof userEvent.setup>) {
+    setupSM();
+    render(<StepFunctionsDashboard />, { wrapper: createWrapper() });
+    await waitFor(() => expect(screen.getByText("my-sm")).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /Aliases/i }));
+  }
+
+  it("shows the select-a-state-machine empty state", async () => {
+    const user = userEvent.setup();
+    render(<StepFunctionsDashboard />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("tab", { name: /Aliases/i }));
+    await waitFor(() => expect(screen.getByText(/Select a state machine to view aliases/i)).toBeTruthy());
+  });
+
+  it("lists aliases and shows dashes for missing dates", async () => {
+    mockAliases.mockReturnValue({ data: { aliases: [{ stateMachineAliasArn: ALIAS }], total: 1 } });
+    const user = userEvent.setup();
+    await openAliases(user);
+    await selectVersionSM(user, "my-sm");
+    await waitFor(() => expect(screen.getByText(ALIAS)).toBeTruthy());
+    expect(screen.getByText(ALIAS_NAME)).toBeTruthy();
+    expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("shows empty message when no aliases for the selected SM", async () => {
+    const user = userEvent.setup();
+    await openAliases(user);
+    await selectVersionSM(user, "my-sm");
+    await waitFor(() => expect(screen.getByText(/No aliases created yet/i)).toBeTruthy());
+  });
+
+  it("creates an alias via the modal with description and routing", async () => {
+    const user = userEvent.setup();
+    await openAliases(user);
+    await selectVersionSM(user, "my-sm");
+    await clickButton(user, /Create Alias/i);
+    await waitFor(() => expect(screen.getByText("Create alias").closest('[role="dialog"]')).toBeTruthy());
+    // Create disabled until name and version arn are entered
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden")) as HTMLElement;
+    expect(within(dialog).getByRole("button", { name: /Save alias/i }).hasAttribute("disabled")).toBe(true);
+    await user.type(within(dialog).getByPlaceholderText("live"), "live");
+    await user.type(within(dialog).getByPlaceholderText("Production alias"), "prod alias");
+    await user.type(within(dialog).getByPlaceholderText(SM_ARN + ":1"), SM_ARN + ":1");
+    await user.clear(within(dialog).getByPlaceholderText("100"));
+    await user.type(within(dialog).getByPlaceholderText("100"), "50");
+    await user.click(within(dialog).getByRole("button", { name: /Save alias/i }));
+    await waitFor(() =>
+      expect(mockCreateAlias).toHaveBeenCalledWith({
+        name: "live",
+        description: "prod alias",
+        routingConfiguration: [{ stateMachineVersionArn: SM_ARN + ":1", weight: 50 }],
+      })
+    );
+  });
+
+  it("shows create alias error and cancels", async () => {
+    mockCreateAlias.mockRejectedValueOnce(new Error("alias boom"));
+    const user = userEvent.setup();
+    await openAliases(user);
+    await selectVersionSM(user, "my-sm");
+    await clickButton(user, /Create Alias/i);
+    await waitFor(() => expect(screen.getByText("Create alias").closest('[role="dialog"]')).toBeTruthy());
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden")) as HTMLElement;
+    await user.type(within(dialog).getByPlaceholderText("live"), "live");
+    await user.type(within(dialog).getByPlaceholderText(SM_ARN + ":1"), SM_ARN + ":1");
+    await user.click(within(dialog).getByRole("button", { name: /Save alias/i }));
+    await waitFor(() => expect(screen.getByText("alias boom")).toBeTruthy());
+    await user.click(within(dialog).getByRole("button", { name: /Cancel/i }));
+    await waitFor(() => expect(modalHidden("Create alias")).toBe(true));
+  });
+
+  it("filters aliases by ARN", async () => {
+    mockAliases.mockReturnValue({
+      data: {
+        aliases: [
+          { stateMachineAliasArn: SM_ARN + ":alias:alpha", creationDate: 1 },
+          { stateMachineAliasArn: SM_ARN + ":alias:beta", creationDate: 2 },
+        ],
+        total: 2,
+      },
+    });
+    const user = userEvent.setup();
+    await openAliases(user);
+    await selectVersionSM(user, "my-sm");
+    await waitFor(() => expect(screen.getByText(SM_ARN + ":alias:alpha")).toBeTruthy());
+    const filterInput = screen.getByPlaceholderText("Find aliases");
+    await user.type(filterInput, "beta");
+    await waitFor(() => expect(screen.queryByText(SM_ARN + ":alias:alpha")).toBeNull());
+  });
+
+  it("describes an alias and closes", async () => {
+    mockAliases.mockReturnValue({ data: { aliases: [{ stateMachineAliasArn: ALIAS, creationDate: 1 }], total: 1 } });
+    mockAliasDetail.mockReturnValue({
+      data: {
+        alias: {
+          name: "live",
+          description: "prod",
+          routingConfiguration: [{ stateMachineVersionArn: SM_ARN + ":1", weight: 100 }],
+        },
+      },
+    });
+    const user = userEvent.setup();
+    await openAliases(user);
+    await selectVersionSM(user, "my-sm");
+    await waitFor(() => expect(screen.getByText(ALIAS)).toBeTruthy());
+    await clickButton(user, /Describe/i);
+    await waitFor(() => expect(screen.getByText(/Alias: /)).toBeTruthy());
+    const dlg = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden")) as HTMLElement;
+    expect(dlg.textContent).toContain("Name: live");
+    expect(dlg.textContent).toContain("prod");
+    expect(dlg.textContent).toContain("100%");
+    await clickDialogButton(user, /Alias: /, /Close/i);
+  });
+
+  it("edits an alias — description only, version routing, error, cancel", async () => {
+    mockAliases.mockReturnValue({ data: { aliases: [{ stateMachineAliasArn: ALIAS, creationDate: 1 }], total: 1 } });
+    mockUpdateAlias.mockRejectedValueOnce(new Error("update boom"));
+    const user = userEvent.setup();
+    await openAliases(user);
+    await selectVersionSM(user, "my-sm");
+    await waitFor(() => expect(screen.getByText(ALIAS)).toBeTruthy());
+    await clickButton(user, /Edit/i);
+    await waitFor(() => expect(screen.getByText(/Edit alias/)).toBeTruthy());
+    const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden")) as HTMLElement;
+    // save disabled until a field is filled
+    expect(within(dialog).getByRole("button", { name: /Save changes/i }).hasAttribute("disabled")).toBe(true);
+    await user.type(within(dialog).getByPlaceholderText("New description"), "new desc");
+    await user.click(within(dialog).getByRole("button", { name: /Save changes/i }));
+    await waitFor(() =>
+      expect(mockUpdateAlias).toHaveBeenCalledWith({
+        aliasArn: ALIAS,
+        description: "new desc",
+        routingConfiguration: undefined,
+      })
+    );
+    await waitFor(() => expect(screen.getByText("update boom")).toBeTruthy());
+    // now with a version arn → routing sent
+    mockUpdateAlias.mockResolvedValueOnce({});
+    await user.type(within(dialog).getByPlaceholderText("state-machine-arn:2"), SM_ARN + ":2");
+    await user.click(within(dialog).getByRole("button", { name: /Save changes/i }));
+    await waitFor(() =>
+      expect(mockUpdateAlias).toHaveBeenCalledWith({
+        aliasArn: ALIAS,
+        description: "new desc",
+        routingConfiguration: [{ stateMachineVersionArn: SM_ARN + ":2", weight: 100 }],
+      })
+    );
+    // success closes the modal; reopen and cancel without saving
+    await waitFor(() => expect(modalHidden("Edit alias")).toBe(true));
+    await clickButton(user, /Edit/i);
+    await waitFor(() => expect(screen.getByText(/Edit alias/)).toBeTruthy());
+    const dlg2 = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden")) as HTMLElement;
+    await user.click(within(dlg2).getByRole("button", { name: /Cancel/i }));
+    await waitFor(() => expect(modalHidden("Edit alias")).toBe(true));
+  });
+
+  it("deletes an alias", async () => {
+    mockAliases.mockReturnValue({ data: { aliases: [{ stateMachineAliasArn: ALIAS, creationDate: 1 }], total: 1 } });
+    const user = userEvent.setup();
+    await openAliases(user);
+    await selectVersionSM(user, "my-sm");
+    await waitFor(() => expect(screen.getByText(ALIAS)).toBeTruthy());
+    const deleteBtn = screen.getByRole("button", { name: new RegExp(`Delete ${ALIAS_NAME}`) });
+    await user.click(deleteBtn);
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() => expect(mockDeleteAlias).toHaveBeenCalledWith(ALIAS));
+  });
+
+  it("shows map run details from the lookup input", async () => {
+    const MAP_RUN_ARN = SM_ARN + "/mapRun:1";
+    mockMapRun.mockReturnValue({
+      data: { mapRun: { status: "RUNNING", itemCountSucceeded: 5, itemCountFailed: 1 } },
+    });
+    const user = userEvent.setup();
+    await openAliases(user);
+    await user.type(screen.getByPlaceholderText("Describe map run ARN"), MAP_RUN_ARN);
+    await waitFor(() => expect(mockMapRun).toHaveBeenCalledWith(MAP_RUN_ARN));
+    await waitFor(() => expect(screen.getByText(/Map run/)).toBeTruthy());
+    expect(screen.getByText(/Status: RUNNING/)).toBeTruthy();
+    expect(screen.getByText(/5 succeeded/)).toBeTruthy();
+  });
+
+  it("shows dashes for an alias missing arn and date", async () => {
+    mockAliases.mockReturnValue({ data: { aliases: [{ creationDate: 1 }], total: 1 } });
+    const user = userEvent.setup();
+    await openAliases(user);
+    await selectVersionSM(user, "my-sm");
+    await waitFor(() => expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(1));
+  });
+
+  it("shows the empty state when aliases data is undefined", async () => {
+    mockAliases.mockReturnValue({ data: undefined });
+    const user = userEvent.setup();
+    await openAliases(user);
+    await selectVersionSM(user, "my-sm");
+    await waitFor(() => expect(screen.getByText(/No aliases created yet/i)).toBeTruthy());
+  });
+
+  it("creates an alias without description and zero weight falls back to 100", async () => {
+    const user = userEvent.setup();
+    await openAliases(user);
+    await selectVersionSM(user, "my-sm");
+    await clickButton(user, /Create Alias/i);
+    await waitFor(() => expect(screen.getByText("Create alias").closest('[role="dialog"]')).toBeTruthy());
+    const dlg = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden")) as HTMLElement;
+    await user.type(within(dlg).getByPlaceholderText("live"), "nodesc");
+    await user.type(within(dlg).getByPlaceholderText(SM_ARN + ":1"), SM_ARN + ":1");
+    await user.clear(within(dlg).getByPlaceholderText("100"));
+    await user.type(within(dlg).getByPlaceholderText("100"), "0");
+    await user.click(within(dlg).getByRole("button", { name: /Save alias/i }));
+    await waitFor(() =>
+      expect(mockCreateAlias).toHaveBeenCalledWith({
+        name: "nodesc",
+        description: undefined,
+        routingConfiguration: [{ stateMachineVersionArn: SM_ARN + ":1", weight: 100 }],
+      })
+    );
+  });
+
+  it("shows the generic create alias error on non-Error rejections", async () => {
+    mockCreateAlias.mockRejectedValueOnce({});
+    const user = userEvent.setup();
+    await openAliases(user);
+    await selectVersionSM(user, "my-sm");
+    await clickButton(user, /Create Alias/i);
+    await waitFor(() => expect(screen.getByText("Create alias").closest('[role="dialog"]')).toBeTruthy());
+    const dlg = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden")) as HTMLElement;
+    await user.type(within(dlg).getByPlaceholderText("live"), "n");
+    await user.type(within(dlg).getByPlaceholderText(SM_ARN + ":1"), SM_ARN + ":1");
+    await user.click(within(dlg).getByRole("button", { name: /Save alias/i }));
+    await waitFor(() => expect(screen.getByText("Failed to create alias")).toBeTruthy());
+  });
+
+  it("saves an alias edit with routing only and shows the generic error", async () => {
+    mockAliases.mockReturnValue({ data: { aliases: [{ stateMachineAliasArn: ALIAS }], total: 1 } });
+    mockUpdateAlias.mockRejectedValueOnce({});
+    const user = userEvent.setup();
+    await openAliases(user);
+    await selectVersionSM(user, "my-sm");
+    await waitFor(() => expect(screen.getByText(ALIAS)).toBeTruthy());
+    await clickButton(user, /Edit/i);
+    await waitFor(() => expect(screen.getByText(/Edit alias/)).toBeTruthy());
+    const dlg = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden")) as HTMLElement;
+    await user.type(within(dlg).getByPlaceholderText("state-machine-arn:2"), SM_ARN + ":3");
+    await user.click(within(dlg).getByRole("button", { name: /Save changes/i }));
+    await waitFor(() =>
+      expect(mockUpdateAlias).toHaveBeenCalledWith({
+        aliasArn: ALIAS,
+        description: undefined,
+        routingConfiguration: [{ stateMachineVersionArn: SM_ARN + ":3", weight: 100 }],
+      })
+    );
+    await waitFor(() => expect(screen.getByText("Failed to update alias")).toBeTruthy());
+  });
+
+  it("shows the alias delete loading state", async () => {
+    mockDeleteAliasState.isPending = true;
+    mockDeleteAliasState.variables = ALIAS;
+    mockAliases.mockReturnValue({ data: { aliases: [{ stateMachineAliasArn: ALIAS }], total: 1 } });
+    const user = userEvent.setup();
+    await openAliases(user);
+    await selectVersionSM(user, "my-sm");
+    await waitFor(() => expect(screen.getByText(ALIAS)).toBeTruthy());
+    mockDeleteAliasState.isPending = false;
+  });
+
+  it("clears the map run lookup back to null", async () => {
+    const user = userEvent.setup();
+    await openAliases(user);
+    const input = screen.getByPlaceholderText("Describe map run ARN");
+    await user.type(input, "arn:x");
+    await waitFor(() => expect(mockMapRun).toHaveBeenCalledWith("arn:x"));
+    await user.clear(input);
+    await waitFor(() => expect(mockMapRun).toHaveBeenCalledWith(null));
+  });
+
+  it("shows sparse map run values as dashes", async () => {
+    mockMapRun.mockReturnValue({ data: { mapRun: {} } });
+    const user = userEvent.setup();
+    await openAliases(user);
+    await user.type(screen.getByPlaceholderText("Describe map run ARN"), SM_ARN + "/x");
+    await waitFor(() => expect(screen.getByText(/Status: —/)).toBeTruthy());
+  });
+});

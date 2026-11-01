@@ -18,6 +18,20 @@ vi.mock("../../hooks/useDynamoDB", () => ({
   useDynamoDBDeleteTable: () => ({ mutateAsync: mockDeleteTableMutateAsync, ...deleteTableState }),
 }));
 
+const mockPolicy = vi.fn();
+const mockPutPolicy = vi.fn().mockResolvedValue({});
+const mockDeletePolicy = vi.fn().mockResolvedValue({});
+const mockImports = vi.fn();
+const mockDescribeImport = vi.fn();
+
+vi.mock("../../hooks/useDynamoDBAdvanced", () => ({
+  useDynamoDBResourcePolicy: (...args: any[]) => mockPolicy(...args),
+  useDynamoDBPutResourcePolicy: () => ({ mutateAsync: mockPutPolicy, isPending: false }),
+  useDynamoDBDeleteResourcePolicy: () => ({ mutateAsync: mockDeletePolicy, isPending: false }),
+  useDynamoDBImports: (...args: any[]) => mockImports(...args),
+  useDynamoDBDescribeImport: (...args: any[]) => mockDescribeImport(...args),
+}));
+
 vi.mock("../../components/DeleteButton", () => ({
   default: ({ onDelete, itemName }: any) =>
     React.createElement(
@@ -401,5 +415,100 @@ describe("DynamoDBTables — key type selects", () => {
         expect.any(Object),
       );
     });
+  });
+});
+
+describe("DynamoDBTables — E.9 resource policy and imports", () => {
+  beforeEach(() => {
+    mockPolicy.mockReturnValue({ data: undefined });
+    mockImports.mockReturnValue({ data: undefined });
+    mockDescribeImport.mockReturnValue({ data: undefined });
+    mockPutPolicy.mockResolvedValue({});
+    mockDeletePolicy.mockResolvedValue({});
+  });
+
+  it("shows the policy and imports section with no table typed", () => {
+    render(<DynamoDBTables />, { wrapper: createWrapper() });
+    expect(screen.getByText(/Resource policy & S3 imports/)).toBeTruthy();
+    expect(mockPolicy).toHaveBeenCalledWith(null);
+  });
+
+  it("shows the current policy for a typed table and saves a new policy", async () => {
+    const user = userEvent.setup();
+    render(<DynamoDBTables />, { wrapper: createWrapper() });
+    await user.type(screen.getByPlaceholderText("Table name for policy"), "my-table");
+    mockPolicy.mockReturnValue({ data: { policy: '{"v":9}', revisionId: "rev-1" } });
+    await user.type(screen.getByPlaceholderText("Table name for policy"), "my-table");
+    await waitFor(() => expect(document.body.textContent).toContain("revision rev-1"));
+    await waitFor(() => expect(mockPolicy).toHaveBeenCalledWith("my-table"));
+    fireEvent.change(screen.getByPlaceholderText("New policy JSON"), { target: { value: '{"v":10}' } });
+    await user.click(screen.getByRole("button", { name: /Save policy/i }));
+    await waitFor(() => expect(mockPutPolicy).toHaveBeenCalledWith({ policy: '{"v":10}' }));
+    await waitFor(() => expect(screen.getByText("Policy saved.")).toBeTruthy());
+  });
+
+  it("deletes a policy and shows the confirmation", async () => {
+    const user = userEvent.setup();
+    render(<DynamoDBTables />, { wrapper: createWrapper() });
+    await user.type(screen.getByPlaceholderText("Table name for policy"), "my-table");
+    await user.click(screen.getByRole("button", { name: /Delete policy/i }));
+    await waitFor(() => expect(mockDeletePolicy).toHaveBeenCalledWith(undefined));
+    await waitFor(() => expect(screen.getByText("Policy deleted.")).toBeTruthy());
+  });
+
+  it("shows save and delete failures", async () => {
+    mockPutPolicy.mockRejectedValueOnce({});
+    mockDeletePolicy.mockRejectedValueOnce({});
+    const user = userEvent.setup();
+    render(<DynamoDBTables />, { wrapper: createWrapper() });
+    await user.type(screen.getByPlaceholderText("Table name for policy"), "my-table");
+    await user.click(screen.getByRole("button", { name: /Save policy/i }));
+    await waitFor(() => expect(screen.getByText("Failed to save policy.")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Delete policy/i }));
+    await waitFor(() => expect(screen.getByText("Failed to delete policy.")).toBeTruthy());
+  });
+
+  it("shows import fallbacks for sparse data", async () => {
+    mockImports.mockReturnValue({ data: undefined });
+    mockDescribeImport.mockReturnValue({ data: {} });
+    const user = userEvent.setup();
+    render(<DynamoDBTables />, { wrapper: createWrapper() });
+    await user.type(screen.getByPlaceholderText("Table ARN to list imports"), "arn:t");
+    await waitFor(() => expect(mockImports).toHaveBeenCalledWith("arn:t"));
+    await waitFor(() => expect(screen.getByText(/0 found/)).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("Import ARN to describe"), "arn:i");
+    await waitFor(() => expect(mockDescribeImport).toHaveBeenCalledWith("arn:i"));
+    await waitFor(() => expect(document.body.textContent).toContain("Import —: — — — items"));
+  });
+
+  it("renders an import row with missing status", async () => {
+    mockImports.mockReturnValue({ data: { imports: [{ importArn: "arn:x" }], total: 1 } });
+    const user = userEvent.setup();
+    render(<DynamoDBTables />, { wrapper: createWrapper() });
+    await user.type(screen.getByPlaceholderText("Table ARN to list imports"), "arn:t");
+    await waitFor(() => expect(document.body.textContent).toContain("arn:x — —"));
+  });
+
+  it("lists imports for a table ARN", async () => {
+    mockImports.mockReturnValue({
+      data: { imports: [{ importArn: "arn:import:1", importStatus: "COMPLETED" }], total: 1 },
+    });
+    const user = userEvent.setup();
+    render(<DynamoDBTables />, { wrapper: createWrapper() });
+    await user.type(screen.getByPlaceholderText("Table ARN to list imports"), "arn:t");
+    await waitFor(() => expect(mockImports).toHaveBeenCalledWith("arn:t"));
+    await waitFor(() => expect(screen.getByText(/1 found/)).toBeTruthy());
+    expect(screen.getByText(/arn:import:1 — COMPLETED/)).toBeTruthy();
+  });
+
+  it("describes an import by ARN", async () => {
+    mockDescribeImport.mockReturnValue({
+      data: { importArn: "arn:import:2", importStatus: "FAILED", importedItemCount: 3 },
+    });
+    const user = userEvent.setup();
+    render(<DynamoDBTables />, { wrapper: createWrapper() });
+    await user.type(screen.getByPlaceholderText("Import ARN to describe"), "arn:import:2");
+    await waitFor(() => expect(mockDescribeImport).toHaveBeenCalledWith("arn:import:2"));
+    await waitFor(() => expect(screen.getByText(/Import arn:import:2: FAILED — 3 items/)).toBeTruthy());
   });
 });

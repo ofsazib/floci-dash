@@ -35,6 +35,12 @@ vi.mock("@aws-sdk/client-sfn", () => ({
   ListTagsForResourceCommand: createCmd("ListTagsForResourceCommand"),
   TagResourceCommand: createCmd("TagResourceCommand"),
   UntagResourceCommand: createCmd("UntagResourceCommand"),
+  CreateStateMachineAliasCommand: createCmd("CreateStateMachineAliasCommand"),
+  DescribeStateMachineAliasCommand: createCmd("DescribeStateMachineAliasCommand"),
+  ListStateMachineAliasesCommand: createCmd("ListStateMachineAliasesCommand"),
+  UpdateStateMachineAliasCommand: createCmd("UpdateStateMachineAliasCommand"),
+  DeleteStateMachineAliasCommand: createCmd("DeleteStateMachineAliasCommand"),
+  DescribeMapRunCommand: createCmd("DescribeMapRunCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({ create: (Ctor: any, extra?: any) => new Ctor(extra) }));
@@ -462,5 +468,103 @@ describe("G.84 — activities, task callbacks, sync executions, validation, tags
   it("DELETE /state-machines/:arn/tags — 400 without tagKeys", async () => {
     const res = await delWithBody(`/state-machines/${ARN_ENC}/tags`, {});
     expect(res.status).toBe(400);
+  });
+});
+
+describe("E.9 — aliases and map runs", () => {
+  const ALIAS = "arn:aws:states:us-east-1:123:stateMachine:my-sm:alias:live";
+  const ALIAS_ENC = encodeURIComponent(ALIAS);
+  const ROUTING = [{ stateMachineVersionArn: ARN + ":1", weight: 100 }];
+
+  it("GET /state-machines/:arn/aliases — lists aliases", async () => {
+    mockSend.mockResolvedValueOnce({ stateMachineAliases: [{ stateMachineAliasArn: ALIAS, creationDate: 1 }] });
+    const res = await get(`/state-machines/${ARN_ENC}/aliases`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.total).toBe(1);
+    expect(mockSend.mock.calls[0][0].stateMachineArn).toBe(ARN);
+  });
+
+  it("GET /state-machines/:arn/aliases — empty when sparse", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get(`/state-machines/${ARN_ENC}/aliases`);
+    const body = await res.json();
+    expect(body.aliases).toEqual([]);
+    expect(body.total).toBe(0);
+  });
+
+  it("POST /state-machines/:arn/aliases — creates an alias (201)", async () => {
+    mockSend.mockResolvedValueOnce({ stateMachineAliasArn: ALIAS, creationDate: 2 });
+    const res = await post(`/state-machines/${ARN_ENC}/aliases`, { name: "live", description: "prod", routingConfiguration: ROUTING });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.stateMachineAliasArn).toBe(ALIAS);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("CreateStateMachineAliasCommand");
+    expect(mockSend.mock.calls[0][0].name).toBe("live");
+    expect(mockSend.mock.calls[0][0].routingConfiguration).toEqual(ROUTING);
+  });
+
+  it("POST /state-machines/:arn/aliases — omits empty description", async () => {
+    mockSend.mockResolvedValueOnce({ stateMachineAliasArn: ALIAS });
+    await post(`/state-machines/${ARN_ENC}/aliases`, { name: "live", routingConfiguration: ROUTING });
+    expect(mockSend.mock.calls[0][0].description).toBeUndefined();
+  });
+
+  it("POST /state-machines/:arn/aliases — 400 without name", async () => {
+    const res = await post(`/state-machines/${ARN_ENC}/aliases`, { routingConfiguration: ROUTING });
+    expect(res.status).toBe(400);
+  });
+
+  it("POST /state-machines/:arn/aliases — 400 without routingConfiguration", async () => {
+    const res = await post(`/state-machines/${ARN_ENC}/aliases`, { name: "live" });
+    expect(res.status).toBe(400);
+  });
+
+  it("GET /aliases/:arn — describes an alias", async () => {
+    mockSend.mockResolvedValueOnce({ stateMachineAliasArn: ALIAS, name: "live", routingConfiguration: ROUTING });
+    const res = await get(`/aliases/${ALIAS_ENC}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.alias.name).toBe("live");
+    expect(mockSend.mock.calls[0][0].stateMachineAliasArn).toBe(ALIAS);
+  });
+
+  it("PUT /aliases/:arn — updates routing and description", async () => {
+    mockSend.mockResolvedValueOnce({ updateDate: 3 });
+    const res = await put(`/aliases/${ALIAS_ENC}`, { description: "new", routingConfiguration: ROUTING });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.updateDate).toBe(3);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("UpdateStateMachineAliasCommand");
+  });
+
+  it("PUT /aliases/:arn — omits empty description", async () => {
+    mockSend.mockResolvedValueOnce({ updateDate: 4 });
+    await put(`/aliases/${ALIAS_ENC}`, { routingConfiguration: ROUTING });
+    expect(mockSend.mock.calls[0][0].description).toBeUndefined();
+  });
+
+  it("PUT /aliases/:arn — 400 when neither description nor routingConfiguration", async () => {
+    const res = await put(`/aliases/${ALIAS_ENC}`, {});
+    expect(res.status).toBe(400);
+  });
+
+  it("DELETE /aliases/:arn — deletes an alias", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await del(`/aliases/${ALIAS_ENC}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.deleted).toBe(true);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteStateMachineAliasCommand");
+  });
+
+  it("GET /map-runs/:arn — describes a map run", async () => {
+    const mapRunArn = "arn:aws:states:us-east-1:123:mapRun:my-sm/run:123";
+    mockSend.mockResolvedValueOnce({ mapRunArn, status: "RUNNING", itemCountSucceeded: 5 });
+    const res = await get(`/map-runs/${encodeURIComponent(mapRunArn)}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.mapRun.status).toBe("RUNNING");
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("DescribeMapRunCommand");
   });
 });

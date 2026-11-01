@@ -416,7 +416,7 @@ These services have full CRUD operations in both backend and frontend:
 | Service | Operations |
 |---------|------------|
 | **S3** | List buckets, create/delete bucket, list objects, upload (multipart), download, delete objects, **multi-select batch delete**, **recursive folder delete**, bucket configuration |
-| **DynamoDB** | List tables, create/delete table, scan items, query, filter, put item, delete item |
+| **DynamoDB** | Table resource policies (get/put/delete), S3 imports (start/describe/list),  List tables, create/delete table, scan items, query, filter, put item, delete item |
 | **RDS** | List/create/delete/modify/reboot DB instances, list/create/delete DB clusters, list/create/delete parameter groups & cluster parameter groups, view/modify parameters, manage DB subnet groups, resource tags (list/add/remove) |
 | **EC2** | 16 resource types: Instances (run/start/stop/reboot/terminate, **web terminal** via Docker Engine API with PTY), VPCs (CIDR association, endpoints), Subnets, Security Groups (ingress/egress rules), Key Pairs (import), AMIs (create/copy/deregister), Tags, Internet Gateways (attach/detach), Route Tables (routes, subnet association), NAT Gateways, Elastic IPs (associate/disassociate), Launch Templates (versions), Volumes (create/delete/**modify** with modification tracking), Regions/AZs, Instance Types, Network Interfaces, **Transit Gateways** (create/list/modify/delete), **Managed Prefix Lists** (create/list/entries/modify/delete), **TGW route tables/VPC attachments/static routes**, **Snapshots tab** (snapshot list, snapshot block public access toggle, instance credit specifications, egress-only internet gateways, spot price history), instance monitor/unmonitor |
 | **SQS** | List queues, create (standard/FIFO, attributes, tags), delete, view messages (via inspection API), send message (single/batch, FIFO group/dedup), delete message, purge queue, get/set attributes, tags CRUD, dead letter source queues, **native DLQ redrive** (start message move task with destination/rate controls, live task list with status/progress/failure reasons, cancel running tasks) |
@@ -490,7 +490,7 @@ These services have full CRUD operations in both backend and frontend:
 | **Athena** | Work groups (list, create, delete), query executions (list, get, stop), data catalogs (list, get), databases (list), table metadata (list per database) |
 | **Glue** | Databases (list, get, create, delete), tables (list, get, create, delete per database) with drill-down navigation |
 | **Firehose** | Delivery streams (list with describe, get, create, delete), put record/batch, tags (list per stream) |
-| **Step Functions** | State machines (list, describe, create, update definition/role, delete), executions (list, describe, start, stop, history), activities (list) with drill-down per state machine |
+| **Step Functions** | State machine aliases (create/list/describe/update/delete), Map run details,  State machines (list, describe, create, update definition/role, delete), executions (list, describe, start, stop, history), activities (list) with drill-down per state machine |
 | **OpenSearch** | Domains (list, describe, create, delete, update config, upgrade check), versions (list), tags (list, add) |
 | **MSK** | Clusters (list, describe, create, delete V2 API), bootstrap brokers (get per cluster) |
 | **Bedrock Runtime** | Converse (messages → response), invoke model (prompt → response) with configurable model IDs |

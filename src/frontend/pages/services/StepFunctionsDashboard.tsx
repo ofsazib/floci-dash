@@ -320,6 +320,12 @@ import {
   useStateMachineTags,
   useTagStateMachine,
   useUntagStateMachine,
+  useStateMachineAliases,
+  useStateMachineAlias,
+  useCreateStateMachineAlias,
+  useUpdateStateMachineAlias,
+  useDeleteStateMachineAlias,
+  useDescribeMapRun,
 } from "../../hooks/useStepFunctions";
 import {
   useOpenSearchDomains,
@@ -578,6 +584,57 @@ export function StepFunctionsDashboard() {
   const [validateDef, setValidateDef] = useState("");
   const [validateResult, setValidateResult] = useState<any>(null);
   const [validateError, setValidateError] = useState<string | null>(null);
+  // E.9 — aliases and map runs
+  const [aliasSm, setAliasSm] = useState<string | null>(null);
+  const { data: aliasesData } = useStateMachineAliases(aliasSm);
+  const createAlias = useCreateStateMachineAlias(aliasSm || "");
+  const updateAlias = useUpdateStateMachineAlias();
+  const deleteAlias = useDeleteStateMachineAlias();
+  const [createAliasOpen, setCreateAliasOpen] = useState(false);
+  const [aliasName, setAliasName] = useState("");
+  const [aliasDesc, setAliasDesc] = useState("");
+  const [aliasVersionArn, setAliasVersionArn] = useState("");
+  const [aliasWeight, setAliasWeight] = useState("100");
+  const [aliasError, setAliasError] = useState<string | null>(null);
+  const [describeAliasArn, setDescribeAliasArn] = useState<string | null>(null);
+  const { data: describeAliasData } = useStateMachineAlias(describeAliasArn);
+  const [editAliasArn, setEditAliasArn] = useState<string | null>(null);
+  const [editAliasDesc, setEditAliasDesc] = useState("");
+  const [editAliasVersionArn, setEditAliasVersionArn] = useState("");
+  const [editAliasError, setEditAliasError] = useState<string | null>(null);
+  const [mapRunLookup, setMapRunLookup] = useState<string | null>(null);
+  const { data: mapRunData } = useDescribeMapRun(mapRunLookup);
+
+  const submitCreateAlias = async () => {
+    setAliasError(null);
+    try {
+      await createAlias.mutateAsync({
+        name: aliasName.trim(),
+        description: aliasDesc.trim() || undefined,
+        routingConfiguration: [
+          { stateMachineVersionArn: aliasVersionArn.trim(), weight: Number(aliasWeight) || 100 },
+        ],
+      });
+      setCreateAliasOpen(false);
+    } catch (e: any) {
+      setAliasError(e?.message || "Failed to create alias");
+    }
+  };
+  const submitEditAlias = async () => {
+    setEditAliasError(null);
+    try {
+      await updateAlias.mutateAsync({
+        aliasArn: editAliasArn!,
+        description: editAliasDesc.trim() || undefined,
+        routingConfiguration: editAliasVersionArn.trim()
+          ? [{ stateMachineVersionArn: editAliasVersionArn.trim(), weight: 100 }]
+          : undefined,
+      });
+      setEditAliasArn(null);
+    } catch (e: any) {
+      setEditAliasError(e?.message || "Failed to update alias");
+    }
+  };
 
   if (isLoading) return <TableSkeleton />;
 
@@ -880,6 +937,105 @@ export function StepFunctionsDashboard() {
                 ]}
                 filterEnabled
                 filterPlaceholder="Find versions"
+                filterFunction={(i: any, s: string) => i.arn?.toLowerCase().includes(s.toLowerCase())}
+              />
+            </>
+          ),
+        },
+        {
+          id: "aliases",
+          label: "Aliases",
+          content: (
+            <>
+              <Box margin={{ bottom: "s" }}>
+                <SpaceBetween direction="horizontal" size="s">
+                  <Select
+                    selectedOption={aliasSm ? { value: aliasSm } : null}
+                    onChange={({ detail }) => setAliasSm(detail.selectedOption!.value!)}
+                    options={(smData?.stateMachines || []).map((sm: any) => ({
+                      value: sm.stateMachineArn,
+                      label: sm.name,
+                    }))}
+                    placeholder="Choose a state machine"
+                    selectedAriaLabel="Selected"
+                  />
+                  <Button
+                    iconName="add-plus"
+                    variant="primary"
+                    disabled={!aliasSm}
+                    onClick={() => {
+                      setCreateAliasOpen(true);
+                      setAliasName("");
+                      setAliasDesc("");
+                      setAliasVersionArn("");
+                      setAliasWeight("100");
+                      setAliasError(null);
+                    }}
+                  >
+                    Create Alias
+                  </Button>
+                  <Input
+                    value={mapRunLookup || ""}
+                    onChange={(e) => setMapRunLookup(e.detail.value || null)}
+                    placeholder="Describe map run ARN"
+                  />
+                </SpaceBetween>
+              </Box>
+              {mapRunData?.mapRun && (
+                <Container header={<Header variant="h3">Map run</Header>}>
+                  <Box>
+                    Status: {mapRunData.mapRun.status || "—"} — Progress:{" "}
+                    {mapRunData.mapRun.itemCountSucceeded ?? "—"} succeeded /{" "}
+                    {mapRunData.mapRun.itemCountFailed ?? "—"} failed
+                  </Box>
+                </Container>
+              )}
+              <ResourceTable
+                resourceName="Alias"
+                headerTitle="State Machine Aliases"
+                headerCounter={aliasesData?.total}
+                items={(aliasesData?.aliases || []).map((a: any) => ({
+                  arn: a.stateMachineAliasArn,
+                  name: a.stateMachineAliasArn?.split(":").pop() || "-",
+                  created: a.creationDate ? new Date(a.creationDate).toLocaleString() : "-",
+                }))}
+                loading={false}
+                emptyMessage={aliasSm ? "No aliases created yet" : "Select a state machine to view aliases"}
+                columns={[
+                  { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+                  { id: "arn", header: "Alias ARN", cell: (i: any) => i.arn },
+                  { id: "created", header: "Created", cell: (i: any) => i.created },
+                  {
+                    id: "actions",
+                    header: "",
+                    cell: (i: any) => (
+                      <SpaceBetween direction="horizontal" size="xs">
+                        <Button variant="link" onClick={() => setDescribeAliasArn(i.arn)}>
+                          Describe
+                        </Button>
+                        <Button
+                          variant="link"
+                          onClick={() => {
+                            setEditAliasArn(i.arn);
+                            setEditAliasDesc("");
+                            setEditAliasVersionArn("");
+                            setEditAliasError(null);
+                          }}
+                        >
+                          Edit
+                        </Button>
+                        <DeleteButton
+                          itemName={i.name}
+                          resourceType="alias"
+                          loading={deleteAlias.isPending && deleteAlias.variables === i.arn}
+                          onDelete={() => deleteAlias.mutateAsync(i.arn)}
+                        />
+                      </SpaceBetween>
+                    ),
+                  },
+                ]}
+                filterEnabled
+                filterPlaceholder="Find aliases"
                 filterFunction={(i: any, s: string) => i.arn?.toLowerCase().includes(s.toLowerCase())}
               />
             </>
@@ -1250,6 +1406,122 @@ export function StepFunctionsDashboard() {
           )}
           <FormField label="Definition" description="Amazon States Language JSON definition.">
             <Textarea value={validateDef} onChange={(e) => setValidateDef(e.detail.value)} rows={10} />
+          </FormField>
+        </SpaceBetween>
+      </Form>
+    </Modal>
+
+    {/* E.9 — Create alias modal */}
+    <Modal
+      visible={createAliasOpen}
+      onDismiss={() => setCreateAliasOpen(false)}
+      header="Create alias"
+      footer={
+        <Box float="right">
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button variant="link" onClick={() => setCreateAliasOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              disabled={!aliasName.trim() || !aliasVersionArn.trim()}
+              loading={createAlias.isPending}
+              onClick={submitCreateAlias}
+            >
+              Save alias
+            </Button>
+          </SpaceBetween>
+        </Box>
+      }
+    >
+      <Form>
+        <SpaceBetween size="m">
+          {aliasError && <Alert type="error">{aliasError}</Alert>}
+          <FormField label="Alias name">
+            <Input value={aliasName} onChange={(e) => setAliasName(e.detail.value)} placeholder="live" />
+          </FormField>
+          <FormField label="Description">
+            <Input value={aliasDesc} onChange={(e) => setAliasDesc(e.detail.value)} placeholder="Production alias" />
+          </FormField>
+          <FormField label="Version ARN">
+            <Input
+              value={aliasVersionArn}
+              onChange={(e) => setAliasVersionArn(e.detail.value)}
+              placeholder={`${aliasSm || "state-machine-arn"}:1`}
+            />
+          </FormField>
+          <FormField label="Weight">
+            <Input value={aliasWeight} onChange={(e) => setAliasWeight(e.detail.value)} placeholder="100" />
+          </FormField>
+        </SpaceBetween>
+      </Form>
+    </Modal>
+
+    {/* E.9 — Describe alias modal */}
+    <Modal
+      visible={!!describeAliasArn}
+      onDismiss={() => setDescribeAliasArn(null)}
+      header={`Alias: ${describeAliasArn || ""}`}
+      size="large"
+      footer={
+        <Box float="right">
+          <Button variant="link" onClick={() => setDescribeAliasArn(null)}>
+            Close
+          </Button>
+        </Box>
+      }
+    >
+      <SpaceBetween size="m">
+        <div>
+          <b>Name:</b> {describeAliasData?.alias?.name || "—"}
+        </div>
+        <div>
+          <b>Description:</b> {describeAliasData?.alias?.description || "—"}
+        </div>
+        <div>
+          <b>Routing:</b>{" "}
+          {(describeAliasData?.alias?.routingConfiguration || [])
+            .map((r: any) => `${r.stateMachineVersionArn} (${r.weight}%)`)
+            .join(", ") || "—"}
+        </div>
+      </SpaceBetween>
+    </Modal>
+
+    {/* E.9 — Edit alias modal */}
+    <Modal
+      visible={!!editAliasArn}
+      onDismiss={() => setEditAliasArn(null)}
+      header={`Edit alias — ${editAliasArn?.split(":").pop() ?? ""}`}
+      footer={
+        <Box float="right">
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button variant="link" onClick={() => setEditAliasArn(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              disabled={!editAliasDesc.trim() && !editAliasVersionArn.trim()}
+              loading={updateAlias.isPending}
+              onClick={submitEditAlias}
+            >
+              Save changes
+            </Button>
+          </SpaceBetween>
+        </Box>
+      }
+    >
+      <Form>
+        <SpaceBetween size="m">
+          {editAliasError && <Alert type="error">{editAliasError}</Alert>}
+          <FormField label="Description">
+            <Input value={editAliasDesc} onChange={(e) => setEditAliasDesc(e.detail.value)} placeholder="New description" />
+          </FormField>
+          <FormField label="Version ARN">
+            <Input
+              value={editAliasVersionArn}
+              onChange={(e) => setEditAliasVersionArn(e.detail.value)}
+              placeholder="state-machine-arn:2"
+            />
           </FormField>
         </SpaceBetween>
       </Form>

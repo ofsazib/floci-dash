@@ -29,6 +29,12 @@ import {
   ListTagsForResourceCommand,
   TagResourceCommand,
   UntagResourceCommand,
+  CreateStateMachineAliasCommand,
+  DescribeStateMachineAliasCommand,
+  ListStateMachineAliasesCommand,
+  UpdateStateMachineAliasCommand,
+  DeleteStateMachineAliasCommand,
+  DescribeMapRunCommand,
 } from "@aws-sdk/client-sfn";
 
 const router = new Hono();
@@ -315,6 +321,90 @@ router.delete("/state-machines/:arn/tags", async (c: Context) => {
     new UntagResourceCommand({ resourceArn: decodeURIComponent(c.req.param("arn")!), tagKeys: body.tagKeys })
   );
   return c.json({ success: true });
+});
+
+// ── Aliases (E.9) ────────────────────────────────────────
+
+router.get("/state-machines/:arn/aliases", async (c: Context) => {
+  const arn = decodeURIComponent(c.req.param("arn")!);
+  const client = getClient();
+  const result = await client.send(
+    new ListStateMachineAliasesCommand({ stateMachineArn: arn } as any)
+  );
+  const aliases = result.stateMachineAliases || [];
+  return c.json({ aliases, total: aliases.length });
+});
+
+router.post("/state-machines/:arn/aliases", async (c: Context) => {
+  const body = await c.req.json<{
+    name?: string;
+    description?: string;
+    routingConfiguration?: any;
+  }>();
+  if (!body.name) return c.json({ error: "name is required" }, 400);
+  if (!body.routingConfiguration) return c.json({ error: "routingConfiguration is required" }, 400);
+  const arn = decodeURIComponent(c.req.param("arn")!);
+  const client = getClient();
+  const result = await client.send(
+    new CreateStateMachineAliasCommand({
+      name: body.name,
+      description: body.description || undefined,
+      routingConfiguration: body.routingConfiguration,
+    } as any)
+  );
+  return c.json(
+    { stateMachineAliasArn: result.stateMachineAliasArn, creationDate: result.creationDate },
+    201
+  );
+});
+
+router.get("/aliases/:arn", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(
+    new DescribeStateMachineAliasCommand({
+      stateMachineAliasArn: decodeURIComponent(c.req.param("arn")!),
+    })
+  );
+  return c.json({ alias: result });
+});
+
+router.put("/aliases/:arn", async (c: Context) => {
+  const body = await c.req.json<{
+    description?: string;
+    routingConfiguration?: any;
+  }>();
+  if (!body.description && !body.routingConfiguration) {
+    return c.json({ error: "description or routingConfiguration is required" }, 400);
+  }
+  const client = getClient();
+  const result = await client.send(
+    new UpdateStateMachineAliasCommand({
+      stateMachineAliasArn: decodeURIComponent(c.req.param("arn")!),
+      description: body.description || undefined,
+      routingConfiguration: body.routingConfiguration,
+    } as any)
+  );
+  return c.json({ updateDate: result.updateDate });
+});
+
+router.delete("/aliases/:arn", async (c: Context) => {
+  const client = getClient();
+  await client.send(
+    new DeleteStateMachineAliasCommand({
+      stateMachineAliasArn: decodeURIComponent(c.req.param("arn")!),
+    })
+  );
+  return c.json({ deleted: true });
+});
+
+// ── Map runs (E.9) ───────────────────────────────────────
+
+router.get("/map-runs/:arn", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(
+    new DescribeMapRunCommand({ mapRunArn: decodeURIComponent(c.req.param("arn")!) })
+  );
+  return c.json({ mapRun: result });
 });
 
 export default router;

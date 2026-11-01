@@ -37,6 +37,13 @@ import {
   useDynamoDBDeleteTable,
 } from "../../hooks/useDynamoDB";
 import {
+  useDynamoDBResourcePolicy,
+  useDynamoDBPutResourcePolicy,
+  useDynamoDBDeleteResourcePolicy,
+  useDynamoDBImports,
+  useDynamoDBDescribeImport,
+} from "../../hooks/useDynamoDBAdvanced";
+import {
   useLogGroups,
   useCreateLogGroup,
   useDeleteLogGroup,
@@ -546,6 +553,19 @@ export function DynamoDBTables() {
     );
   }
 
+  // E.9 — resource policy and S3 imports
+  const [policyTable, setPolicyTable] = useState("");
+  const policyTableTrimmed = policyTable.trim();
+  const policyData = useDynamoDBResourcePolicy(policyTableTrimmed || null);
+  const putPolicy = useDynamoDBPutResourcePolicy(policyTableTrimmed || "x");
+  const deletePolicy = useDynamoDBDeleteResourcePolicy(policyTableTrimmed || "x");
+  const [newPolicy, setNewPolicy] = useState("{}");
+  const [policyMsg, setPolicyMsg] = useState<string | null>(null);
+  const [importsArn, setImportsArn] = useState("");
+  const importsData = useDynamoDBImports(importsArn.trim() || null);
+  const [describeArn, setDescribeArn] = useState("");
+  const importDetail = useDynamoDBDescribeImport(describeArn.trim() || null);
+
   if (selectedTable) {
     return (
       <DynamoDBTableDetail
@@ -606,6 +626,90 @@ export function DynamoDBTables() {
         }
         onCreate={() => setShowCreate(true)}
       />
+
+      <Container
+        header={<Header variant="h3">Resource policy &amp; S3 imports</Header>}
+      >
+        <SpaceBetween size="m">
+          <SpaceBetween direction="horizontal" size="xs">
+            <Input
+              value={policyTable}
+              onChange={(e) => setPolicyTable(e.detail.value)}
+              placeholder="Table name for policy"
+            />
+            <Button
+              onClick={async () => {
+                setPolicyMsg(null);
+                try {
+                  await putPolicy.mutateAsync({ policy: newPolicy });
+                  setPolicyMsg("Policy saved.");
+                } catch {
+                  setPolicyMsg("Failed to save policy.");
+                }
+              }}
+              disabled={!policyTableTrimmed}
+              loading={putPolicy.isPending}
+            >
+              Save policy
+            </Button>
+            <Button
+              onClick={async () => {
+                setPolicyMsg(null);
+                try {
+                  await deletePolicy.mutateAsync(undefined);
+                  setPolicyMsg("Policy deleted.");
+                } catch {
+                  setPolicyMsg("Failed to delete policy.");
+                }
+              }}
+              disabled={!policyTableTrimmed}
+              loading={deletePolicy.isPending}
+            >
+              Delete policy
+            </Button>
+          </SpaceBetween>
+          {policyMsg && <Alert type={policyMsg.includes("Failed") ? "error" : "success"}>{policyMsg}</Alert>}
+          {policyTableTrimmed && (
+            <Box>
+              Current policy: {policyData.data?.policy || "—"} (revision {policyData.data?.revisionId || "—"})
+            </Box>
+          )}
+          <Textarea
+            value={newPolicy}
+            onChange={(e) => setNewPolicy(e.detail.value)}
+            rows={4}
+            placeholder="New policy JSON"
+          />
+          <SpaceBetween direction="horizontal" size="xs">
+            <Input
+              value={importsArn}
+              onChange={(e) => setImportsArn(e.detail.value)}
+              placeholder="Table ARN to list imports"
+            />
+            <Input
+              value={describeArn}
+              onChange={(e) => setDescribeArn(e.detail.value)}
+              placeholder="Import ARN to describe"
+            />
+          </SpaceBetween>
+          {importsArn.trim() && (
+            <Box>
+              Imports: {(importsData.data?.imports || []).length} found
+              {(importsData.data?.imports || []).map((i: any) => (
+                <Box key={i.importArn}>
+                  {i.importArn} — {i.importStatus || "—"}
+                </Box>
+              ))}
+            </Box>
+          )}
+          {describeArn.trim() && importDetail.data && (
+            <Box>
+              Import {importDetail.data.importArn || "—"}: {importDetail.data.importStatus || "—"} —{" "}
+              {importDetail.data.importedItemCount ?? "—"} items
+            </Box>
+          )}
+        </SpaceBetween>
+      </Container>
 
       <Modal
         visible={showCreate}

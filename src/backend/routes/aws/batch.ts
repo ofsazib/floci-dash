@@ -16,6 +16,9 @@ import {
   DescribeJobsCommand,
   ListJobsCommand,
   TerminateJobCommand,
+  UpdateComputeEnvironmentCommand,
+  UpdateJobQueueCommand,
+  CancelJobCommand,
 } from "@aws-sdk/client-batch";
 
 const router = new Hono();
@@ -178,6 +181,58 @@ router.post("/jobs/:id/terminate", async (c: Context) => {
   const client = getClient();
   await client.send(new TerminateJobCommand({ jobId: id, reason }));
   return c.json({ terminated: true });
+});
+
+// ── E.9 — updates and cancel ─────────────────────────────
+
+router.put("/compute-environments/:name", async (c: Context) => {
+  const body = await c.req.json<{ state?: string; serviceRole?: string; computeResources?: any }>();
+  if (!body.state && !body.serviceRole && !body.computeResources) {
+    return c.json({ error: "state, serviceRole, or computeResources is required" }, 400);
+  }
+  const client = getClient();
+  const result = await client.send(
+    new UpdateComputeEnvironmentCommand({
+      computeEnvironment: decodeURIComponent(c.req.param("name")!),
+      state: body.state as any,
+      serviceRole: body.serviceRole,
+      computeResources: body.computeResources,
+    } as any)
+  );
+  return c.json({
+    computeEnvironmentName: result.computeEnvironmentName,
+    computeEnvironmentArn: result.computeEnvironmentArn,
+  });
+});
+
+router.put("/job-queues/:name", async (c: Context) => {
+  const body = await c.req.json<{ state?: string; priority?: number; computeEnvironmentOrder?: any }>();
+  if (!body.state && !body.priority && !body.computeEnvironmentOrder) {
+    return c.json({ error: "state, priority, or computeEnvironmentOrder is required" }, 400);
+  }
+  const client = getClient();
+  const result = await client.send(
+    new UpdateJobQueueCommand({
+      jobQueue: decodeURIComponent(c.req.param("name")!),
+      state: body.state as any,
+      priority: body.priority,
+      computeEnvironmentOrder: body.computeEnvironmentOrder,
+    } as any)
+  );
+  return c.json({ jobQueueName: result.jobQueueName, jobQueueArn: result.jobQueueArn });
+});
+
+router.post("/jobs/:id/cancel", async (c: Context) => {
+  const body = await c.req.json<{ reason?: string }>();
+  if (!body.reason) return c.json({ error: "reason is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new CancelJobCommand({
+      jobId: decodeURIComponent(c.req.param("id")!),
+      reason: body.reason,
+    })
+  );
+  return c.json({ cancelled: true });
 });
 
 export default router;
