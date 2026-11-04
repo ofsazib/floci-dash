@@ -29,6 +29,16 @@ vi.mock("@aws-sdk/client-cloudwatch", () => ({
   ListTagsForResourceCommand: createCmd("ListTagsForResourceCommand"),
   TagResourceCommand: createCmd("TagResourceCommand"),
   UntagResourceCommand: createCmd("UntagResourceCommand"),
+  PutDashboardCommand: createCmd("PutDashboardCommand"),
+  GetDashboardCommand: createCmd("GetDashboardCommand"),
+  ListDashboardsCommand: createCmd("ListDashboardsCommand"),
+  DeleteDashboardsCommand: createCmd("DeleteDashboardsCommand"),
+  PutMetricStreamCommand: createCmd("PutMetricStreamCommand"),
+  GetMetricStreamCommand: createCmd("GetMetricStreamCommand"),
+  ListMetricStreamsCommand: createCmd("ListMetricStreamsCommand"),
+  DeleteMetricStreamCommand: createCmd("DeleteMetricStreamCommand"),
+  StartMetricStreamsCommand: createCmd("StartMetricStreamsCommand"),
+  StopMetricStreamsCommand: createCmd("StopMetricStreamsCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -605,6 +615,266 @@ describe("CloudWatch Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.results).toEqual([]);
+    });
+  });
+
+  describe("Dashboards", () => {
+    it("GET /dashboards — lists dashboards", async () => {
+      mockSend.mockResolvedValueOnce({
+        DashboardEntries: [
+          { DashboardName: "ops", DashboardArn: "arn:aws:cloudwatch::dashboard/ops", LastModified: 1000, Size: 42 },
+        ],
+      });
+      const res = await get("/dashboards");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(body.dashboards[0].dashboardName).toBe("ops");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("ListDashboardsCommand");
+    });
+
+    it("GET /dashboards — forwards prefix and handles sparse response", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/dashboards?prefix=op");
+      const body = await res.json();
+      expect(body.dashboards).toEqual([]);
+      expect(body.total).toBe(0);
+      expect(mockSend.mock.calls[0][0].DashboardNamePrefix).toBe("op");
+    });
+
+    it("GET /dashboards/:name — returns dashboard body", async () => {
+      mockSend.mockResolvedValueOnce({
+        DashboardName: "ops",
+        DashboardArn: "arn:aws:cloudwatch::dashboard/ops",
+        DashboardBody: '{"widgets":[]}',
+      });
+      const res = await get("/dashboards/ops");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.dashboardName).toBe("ops");
+      expect(body.dashboardBody).toBe('{"widgets":[]}');
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetDashboardCommand");
+    });
+
+    it("PUT /dashboards/:name — puts a dashboard body", async () => {
+      mockSend.mockResolvedValueOnce({ DashboardValidationMessages: [] });
+      const res = await put("/dashboards/ops", { dashboardBody: '{"widgets":[]}' });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.created).toBe(true);
+      expect(body.validationMessages).toEqual([]);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("PutDashboardCommand");
+      expect(mockSend.mock.calls[0][0].DashboardName).toBe("ops");
+      expect(mockSend.mock.calls[0][0].DashboardBody).toBe('{"widgets":[]}');
+    });
+
+    it("PUT /dashboards/:name — forwards tags and defaults validation messages", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/dashboards/ops", {
+        dashboardBody: "{}",
+        tags: [{ key: "env", value: "test" }],
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.validationMessages).toEqual([]);
+      expect(mockSend.mock.calls[0][0].Tags).toEqual([{ Key: "env", Value: "test" }]);
+    });
+
+    it("PUT /dashboards/:name — 400 when dashboardBody missing", async () => {
+      const res = await put("/dashboards/ops", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE /dashboards/:name — deletes via DeleteDashboards", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/dashboards/ops");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deleted).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteDashboardsCommand");
+      expect(mockSend.mock.calls[0][0].DashboardNames).toEqual(["ops"]);
+    });
+  });
+
+  describe("Metric Streams", () => {
+    it("GET /metric-streams — lists streams", async () => {
+      mockSend.mockResolvedValueOnce({
+        Entries: [
+          {
+            Arn: "arn:aws:cloudwatch::metric-stream/main",
+            Name: "main",
+            FirehoseArn: "arn:aws:firehose::deliverable/main",
+            State: "running",
+            OutputFormat: "json",
+            CreationDate: 1000,
+            LastUpdateDate: 2000,
+          },
+        ],
+        NextToken: "t2",
+      });
+      const res = await get("/metric-streams");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(body.metricStreams[0].name).toBe("main");
+      expect(body.metricStreams[0].state).toBe("running");
+      expect(body.nextToken).toBe("t2");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("ListMetricStreamsCommand");
+    });
+
+    it("GET /metric-streams — sparse response defaults and forwards nextToken", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/metric-streams?nextToken=t1");
+      const body = await res.json();
+      expect(body.metricStreams).toEqual([]);
+      expect(body.nextToken).toBeUndefined();
+      expect(mockSend.mock.calls[0][0].NextToken).toBe("t1");
+    });
+
+    it("GET /metric-streams/:name — returns stream detail with filters", async () => {
+      mockSend.mockResolvedValueOnce({
+        Arn: "arn:aws:cloudwatch::metric-stream/main",
+        Name: "main",
+        FirehoseArn: "arn:aws:firehose::deliverable/main",
+        RoleArn: "arn:aws:iam::role/stream",
+        State: "running",
+        OutputFormat: "json",
+        CreationDate: 1000,
+        LastUpdateDate: 2000,
+        IncludeLinkedAccountsMetrics: false,
+        IncludeFilters: [{ Namespace: "AWS/EC2", MetricNames: ["CPUUtilization"] }],
+        ExcludeFilters: [{ Namespace: "AWS/S3" }],
+      });
+      const res = await get("/metric-streams/main");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.name).toBe("main");
+      expect(body.includeFilters).toEqual([{ namespace: "AWS/EC2", metricNames: ["CPUUtilization"] }]);
+      expect(body.excludeFilters).toEqual([{ namespace: "AWS/S3", metricNames: [] }]);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetMetricStreamCommand");
+    });
+
+    it("GET /metric-streams/:name — defaults filters when absent", async () => {
+      mockSend.mockResolvedValueOnce({ Name: "main", State: "stopped" });
+      const res = await get("/metric-streams/main");
+      const body = await res.json();
+      expect(body.includeFilters).toEqual([]);
+      expect(body.excludeFilters).toEqual([]);
+    });
+
+    it("GET /metric-streams/:name — filters without MetricNames default to empty lists", async () => {
+      mockSend.mockResolvedValueOnce({
+        Name: "main",
+        State: "stopped",
+        IncludeFilters: [{ Namespace: "AWS/EC2" }],
+      });
+      const res = await get("/metric-streams/main");
+      const body = await res.json();
+      expect(body.includeFilters).toEqual([{ namespace: "AWS/EC2", metricNames: [] }]);
+    });
+
+    it("PUT /metric-streams/:name — creates a stream", async () => {
+      mockSend.mockResolvedValueOnce({ Arn: "arn:aws:cloudwatch::metric-stream/main" });
+      const res = await put("/metric-streams/main", {
+        firehoseArn: "arn:aws:firehose::deliverable/main",
+        roleArn: "arn:aws:iam::role/stream",
+        outputFormat: "json",
+        includeFilters: [{ namespace: "AWS/EC2", metricNames: ["CPUUtilization"] }],
+        tags: [{ key: "env", value: "test" }],
+      });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.arn).toBe("arn:aws:cloudwatch::metric-stream/main");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("PutMetricStreamCommand");
+      expect(mockSend.mock.calls[0][0].Name).toBe("main");
+      expect(mockSend.mock.calls[0][0].IncludeFilters).toEqual([
+        { Namespace: "AWS/EC2", MetricNames: ["CPUUtilization"] },
+      ]);
+      expect(mockSend.mock.calls[0][0].Tags).toEqual([{ Key: "env", Value: "test" }]);
+    });
+
+    it("PUT /metric-streams/:name — omits optional filters and configurations", async () => {
+      mockSend.mockResolvedValueOnce({ Arn: "arn:x" });
+      const res = await put("/metric-streams/main", {
+        firehoseArn: "arn:f",
+        roleArn: "arn:r",
+        outputFormat: "opentelemetry1.0",
+      });
+      expect(res.status).toBe(201);
+      expect(mockSend.mock.calls[0][0].IncludeFilters).toEqual([]);
+      expect(mockSend.mock.calls[0][0].ExcludeFilters).toEqual([]);
+      expect(mockSend.mock.calls[0][0].StatisticsConfigurations).toEqual([]);
+      expect(mockSend.mock.calls[0][0].Tags).toEqual([]);
+    });
+
+    it("PUT /metric-streams/:name — forwards statistics configurations and exclude filters", async () => {
+      mockSend.mockResolvedValueOnce({ Arn: "arn:x" });
+      const res = await put("/metric-streams/main", {
+        firehoseArn: "arn:f",
+        roleArn: "arn:r",
+        outputFormat: "json",
+        excludeFilters: [{ namespace: "AWS/S3" }],
+        statisticsConfigurations: [
+          {
+            includeMetrics: [{ namespace: "AWS/EC2", metricName: "CPUUtilization" }],
+            additionalStatistics: ["p99"],
+          },
+        ],
+      });
+      expect(res.status).toBe(201);
+      expect(mockSend.mock.calls[0][0].ExcludeFilters).toEqual([
+        { Namespace: "AWS/S3", MetricNames: undefined },
+      ]);
+      expect(mockSend.mock.calls[0][0].StatisticsConfigurations).toEqual([
+        {
+          IncludeMetrics: [{ Namespace: "AWS/EC2", MetricName: "CPUUtilization" }],
+          AdditionalStatistics: ["p99"],
+        },
+      ]);
+    });
+
+    it("PUT /metric-streams/:name — 400 when required fields missing", async () => {
+      const res = await put("/metric-streams/main", { firehoseArn: "arn:f" });
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE /metric-streams/:name — deletes a stream", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/metric-streams/main");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deleted).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteMetricStreamCommand");
+      expect(mockSend.mock.calls[0][0].Name).toBe("main");
+    });
+
+    it("POST /metric-streams/start — starts streams by name", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/metric-streams/start", { names: ["a", "b"] });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.started).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("StartMetricStreamsCommand");
+      expect(mockSend.mock.calls[0][0].Names).toEqual(["a", "b"]);
+    });
+
+    it("POST /metric-streams/start — 400 when names missing", async () => {
+      const res = await post("/metric-streams/start", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /metric-streams/stop — stops streams by name", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/metric-streams/stop", { names: ["a"] });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.stopped).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("StopMetricStreamsCommand");
+    });
+
+    it("POST /metric-streams/stop — 400 when names missing", async () => {
+      const res = await post("/metric-streams/stop", { names: [] });
+      expect(res.status).toBe(400);
     });
   });
 });

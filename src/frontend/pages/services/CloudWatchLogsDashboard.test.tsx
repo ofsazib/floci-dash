@@ -58,6 +58,59 @@ const untagGroupState = vi.hoisted(() => ({
   isPending: false,
 }));
 
+const putAccountPolicyState = vi.hoisted(() => ({
+  isPending: false,
+  isError: false,
+  error: null as Error | null,
+}));
+
+const putMetricFilterState = vi.hoisted(() => ({
+  isPending: false,
+  isError: false,
+  error: null as Error | null,
+}));
+
+const deleteMetricFilterState = vi.hoisted(() => ({
+  isPending: false,
+  variables: { filterName: "" },
+}));
+
+const testMetricFilterState = vi.hoisted(() => ({
+  isPending: false,
+}));
+
+const putDestinationState = vi.hoisted(() => ({
+  isPending: false,
+  isError: false,
+  error: null as Error | null,
+}));
+
+const putDestinationPolicyState = vi.hoisted(() => ({
+  isPending: false,
+  isError: false,
+  error: null as Error | null,
+}));
+
+const putResourcePolicyState = vi.hoisted(() => ({
+  isPending: false,
+  isError: false,
+  error: null as Error | null,
+}));
+
+const putProtectionState = vi.hoisted(() => ({
+  isPending: false,
+  isError: false,
+  error: null as Error | null,
+}));
+
+const startQueryState = vi.hoisted(() => ({
+  isPending: false,
+}));
+
+const stopQueryState = vi.hoisted(() => ({
+  isPending: false,
+}));
+
 // ─── Mock hooks ─────────────────────────────────────────
 
 const mockLogGroups = vi.fn();
@@ -77,6 +130,21 @@ const mockTags = vi.fn();
 const mockTagGroup = vi.fn();
 const mockUntagGroup = vi.fn();
 const mockDataProtection = vi.fn();
+const mockAccountPolicies = vi.fn();
+const mockPutAccountPolicy = vi.fn();
+const mockMetricFilters = vi.fn();
+const mockPutMetricFilter = vi.fn();
+const mockDeleteMetricFilter = vi.fn();
+const mockTestMetricFilter = vi.fn();
+const mockPutDestination = vi.fn();
+const mockPutDestinationPolicy = vi.fn();
+const mockResourcePolicies = vi.fn();
+const mockPutResourcePolicy = vi.fn();
+const mockPutProtection = vi.fn();
+const mockStartQuery = vi.fn();
+const mockStopQuery = vi.fn();
+const mockQueryResults = vi.fn();
+const mockInsightsRefetch = vi.fn();
 
 vi.mock("../../hooks/useLogs", () => ({
   LOGS_PAGE_SIZE: 10,
@@ -138,6 +206,63 @@ vi.mock("../../hooks/useLogs", () => ({
     get isPending() { return untagGroupState.isPending; },
   }),
   useDataProtectionPolicy: (...args: any[]) => mockDataProtection(...args),
+  useAccountPolicies: (...args: any[]) => mockAccountPolicies(...args),
+  usePutAccountPolicy: () => ({
+    mutate: mockPutAccountPolicy,
+    get isPending() { return putAccountPolicyState.isPending; },
+    get isError() { return putAccountPolicyState.isError; },
+    get error() { return putAccountPolicyState.error; },
+  }),
+  useMetricFilters: (...args: any[]) => mockMetricFilters(...args),
+  usePutMetricFilter: () => ({
+    mutate: mockPutMetricFilter,
+    get isPending() { return putMetricFilterState.isPending; },
+    get isError() { return putMetricFilterState.isError; },
+    get error() { return putMetricFilterState.error; },
+  }),
+  useDeleteMetricFilter: () => ({
+    mutateAsync: mockDeleteMetricFilter,
+    get isPending() { return deleteMetricFilterState.isPending; },
+    get variables() { return deleteMetricFilterState.variables; },
+  }),
+  useTestMetricFilter: () => ({
+    mutateAsync: mockTestMetricFilter,
+    get isPending() { return testMetricFilterState.isPending; },
+  }),
+  usePutDestination: () => ({
+    mutate: mockPutDestination,
+    get isPending() { return putDestinationState.isPending; },
+    get isError() { return putDestinationState.isError; },
+    get error() { return putDestinationState.error; },
+  }),
+  usePutDestinationPolicy: () => ({
+    mutate: mockPutDestinationPolicy,
+    get isPending() { return putDestinationPolicyState.isPending; },
+    get isError() { return putDestinationPolicyState.isError; },
+    get error() { return putDestinationPolicyState.error; },
+  }),
+  useResourcePolicies: (...args: any[]) => mockResourcePolicies(...args),
+  usePutResourcePolicy: () => ({
+    mutate: mockPutResourcePolicy,
+    get isPending() { return putResourcePolicyState.isPending; },
+    get isError() { return putResourcePolicyState.isError; },
+    get error() { return putResourcePolicyState.error; },
+  }),
+  usePutLogGroupDeletionProtection: () => ({
+    mutate: mockPutProtection,
+    get isPending() { return putProtectionState.isPending; },
+    get isError() { return putProtectionState.isError; },
+    get error() { return putProtectionState.error; },
+  }),
+  useStartQuery: () => ({
+    mutateAsync: mockStartQuery,
+    get isPending() { return startQueryState.isPending; },
+  }),
+  useStopQuery: () => ({
+    mutateAsync: mockStopQuery,
+    get isPending() { return stopQueryState.isPending; },
+  }),
+  useQueryResults: (...args: any[]) => mockQueryResults(...args),
 }));
 
 import { CloudWatchLogsDashboard } from "./CloudWatchLogsDashboard";
@@ -185,6 +310,30 @@ beforeEach(() => {
   deleteFilterState.variables = { filterName: "" };
   tagGroupState.isPending = false;
   untagGroupState.isPending = false;
+  putAccountPolicyState.isPending = false;
+  putAccountPolicyState.isError = false;
+  putAccountPolicyState.error = null;
+  putMetricFilterState.isPending = false;
+  putMetricFilterState.isError = false;
+  putMetricFilterState.error = null;
+  deleteMetricFilterState.isPending = false;
+  deleteMetricFilterState.variables = { filterName: "" };
+  testMetricFilterState.isPending = false;
+  putDestinationState.isPending = false;
+  putDestinationState.isError = false;
+  putDestinationState.error = null;
+  putDestinationPolicyState.isPending = false;
+  putDestinationPolicyState.isError = false;
+  putDestinationPolicyState.error = null;
+  putResourcePolicyState.isPending = false;
+  putResourcePolicyState.isError = false;
+  putResourcePolicyState.error = null;
+  putProtectionState.isPending = false;
+  putProtectionState.isError = false;
+  putProtectionState.error = null;
+  startQueryState.isPending = false;
+  stopQueryState.isPending = false;
+  mockInsightsRefetch.mockReset();
   mockDataProtection.mockReturnValue({ data: { logGroupIdentifier: "", policyDocument: "" }, isLoading: false });
 
   mockLogGroups.mockReturnValue({ data: { logGroups: [], total: 0 }, isLoading: false, isError: false, error: null });
@@ -193,6 +342,10 @@ beforeEach(() => {
   mockFilteredLogEvents.mockReturnValue({ data: { events: [] }, isLoading: false, isError: false, error: null, refetch: vi.fn() });
   mockSubFilters.mockReturnValue({ data: { subscriptionFilters: [], total: 0 }, isLoading: false, isError: false, error: null });
   mockTags.mockReturnValue({ data: { tags: {} }, isLoading: false, isError: false, error: null });
+  mockAccountPolicies.mockReturnValue({ data: { accountPolicies: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockMetricFilters.mockReturnValue({ data: { metricFilters: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockResourcePolicies.mockReturnValue({ data: { resourcePolicies: [], total: 0 }, isLoading: false, isError: false, error: null });
+  mockQueryResults.mockReturnValue({ data: undefined, isLoading: false, isError: false, error: null, refetch: vi.fn() });
 });
 
 describe("CloudWatchLogsDashboard", () => {
@@ -1878,5 +2031,782 @@ describe("CloudWatchLogsDashboard — Data Protection tab", () => {
     const dpTab = screen.getByRole("tab", { name: /Data Protection/i });
     await user.click(dpTab);
     await waitFor(() => expect(screen.getByText(/No data protection policy configured/i)).toBeTruthy());
+  });
+});
+
+
+// ─── Log Management tab (E.9 batch 4) ────────────────────
+
+describe("CloudWatchLogsDashboard — Log Management", () => {
+  async function openLogManagement(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole("tab", { name: /Log Management/i }));
+    await waitFor(() =>
+      expect(screen.getAllByText("Account Policies").length).toBeGreaterThan(0)
+    );
+  }
+
+  /** Last input with a placeholder: viewed-tab panels render after earlier ones. */
+  function lastByPlaceholder(placeholder: string): HTMLElement {
+    const matches = screen.getAllByPlaceholderText(placeholder);
+    return matches[matches.length - 1];
+  }
+
+  it("renders the Log Management tab with the Account Policies panel by default", async () => {
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    expect(screen.getByText(/No account policies/i)).toBeTruthy();
+  });
+
+  it("renders account policies including a policy without lastUpdatedTime", async () => {
+    mockAccountPolicies.mockReturnValue({
+      data: {
+        accountPolicies: [
+          { policyName: "dp", policyType: "DATA_PROTECTION", scope: "ACCOUNT", policyDocument: "{}", lastUpdatedTime: 1705000000000 },
+          { policyName: "fi", policyType: "FIELD_INDEX", policyDocument: "{}" },
+        ],
+        total: 2,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    expect(screen.getByText("dp")).toBeTruthy();
+    expect(screen.getByText("fi")).toBeTruthy();
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+  });
+
+  it("shows account policies load error and the fallback message arm", async () => {
+    mockAccountPolicies.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: new Error("") });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    expect(screen.getByText("Failed to load account policies")).toBeTruthy();
+  });
+
+  it("shows account policies load error with the error message", async () => {
+    mockAccountPolicies.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: new Error("Policies down") });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    expect(screen.getByText("Policies down")).toBeTruthy();
+  });
+
+  it("submits the Put Account Policy modal", async () => {
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await clickButton(user, /Create Account Policy/i);
+    const dialog = dialogOf("Put Account Policy");
+    await user.type(within(dialog).getByPlaceholderText("my-data-protection-policy"), "my-policy");
+    await user.type(within(dialog).getByPlaceholderText('{"Rules":[]}'), "doc");
+    await user.click(within(dialog).getByText(/Save policy/i));
+    await waitFor(() =>
+      expect(mockPutAccountPolicy).toHaveBeenCalledWith(
+        { policyName: "my-policy", policyDocument: "doc", policyType: "DATA_PROTECTION", scope: "ACCOUNT" },
+        expect.any(Object)
+      )
+    );
+  });
+
+  it("shows the account policy mutation error fallback when error has no message", async () => {
+    putAccountPolicyState.isError = true;
+    putAccountPolicyState.error = null;
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await clickButton(user, /Create Account Policy/i);
+    await waitFor(() => expect(screen.getByText("Failed to save account policy")).toBeTruthy());
+  });
+
+  it("loads metric filters for a log group", async () => {
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await user.click(screen.getByRole("tab", { name: /Metric Filters/i }));
+    await waitFor(() => expect(screen.getByText("Load filters")).toBeTruthy());
+    await user.type(lastByPlaceholder("/aws/lambda/my-function"), "/aws/test");
+    await clickButton(user, /Load filters/i);
+    await waitFor(() => expect(mockMetricFilters).toHaveBeenLastCalledWith("/aws/test"));
+  });
+
+  it("renders metric filter rows including the all-events and no-transformations arms", async () => {
+    mockMetricFilters.mockReturnValue({
+      data: {
+        metricFilters: [
+          { filterName: "mf-1", logGroupName: "/aws/test", creationTime: 1705000000000, metricTransformations: [{ metricNamespace: "App", metricName: "Errors" }] },
+          { filterName: "mf-2", logGroupName: "/aws/test", metricTransformations: [] },
+        ],
+        total: 2,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await user.click(screen.getByRole("tab", { name: /Metric Filters/i }));
+    await user.type(lastByPlaceholder("/aws/lambda/my-function"), "/aws/test");
+    await clickButton(user, /Load filters/i);
+    await waitFor(() => expect(screen.getByText("mf-1")).toBeTruthy());
+    expect(screen.getAllByText("(all events)").length).toBeGreaterThan(0);
+    expect(screen.getByText("App/Errors")).toBeTruthy();
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+  });
+
+  it("shows the metric filters empty prompt when no group is loaded", async () => {
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await user.click(screen.getByRole("tab", { name: /Metric Filters/i }));
+    await waitFor(() =>
+      expect(screen.getByText("Enter a log group name to list its metric filters.")).toBeTruthy()
+    );
+  });
+
+  it("creates a metric filter for the loaded group", async () => {
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await user.click(screen.getByRole("tab", { name: /Metric Filters/i }));
+    await user.type(lastByPlaceholder("/aws/lambda/my-function"), "/aws/test");
+    await clickButton(user, /Load filters/i);
+    await clickButton(user, /Create metric filter/i);
+    const dialog = dialogOf("Create Metric Filter for /aws/test");
+    await user.type(within(dialog).getByPlaceholderText("error-count"), "mf-1");
+    await user.type(within(dialog).getByPlaceholderText("ERROR"), "ERROR");
+    await user.type(within(dialog).getByPlaceholderText("Errors"), "Errors");
+    await user.type(within(dialog).getByPlaceholderText("MyApp"), "App");
+    await user.click(within(dialog).getByText(/Create filter/i));
+    await waitFor(() =>
+      expect(mockPutMetricFilter).toHaveBeenCalledWith(
+        {
+          logGroupName: "/aws/test",
+          filterName: "mf-1",
+          filterPattern: "ERROR",
+          metricTransformations: [{ metricName: "Errors", metricNamespace: "App", metricValue: "1" }],
+        },
+        expect.any(Object)
+      )
+    );
+  });
+
+  it("shows the metric filter mutation error fallback", async () => {
+    putMetricFilterState.isError = true;
+    putMetricFilterState.error = null;
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await user.click(screen.getByRole("tab", { name: /Metric Filters/i }));
+    await user.type(lastByPlaceholder("/aws/lambda/my-function"), "/aws/test");
+    await clickButton(user, /Load filters/i);
+    await clickButton(user, /Create metric filter/i);
+    await waitFor(() => expect(screen.getByText("Failed to create metric filter")).toBeTruthy());
+  });
+
+  it("deletes a metric filter after confirmation", async () => {
+    mockMetricFilters.mockReturnValue({
+      data: {
+        metricFilters: [{ filterName: "mf-1", logGroupName: "/aws/test", metricTransformations: [] }],
+        total: 1,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    mockDeleteMetricFilter.mockResolvedValueOnce({});
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await user.click(screen.getByRole("tab", { name: /Metric Filters/i }));
+    await user.type(lastByPlaceholder("/aws/lambda/my-function"), "/aws/test");
+    await clickButton(user, /Load filters/i);
+    await waitFor(() => expect(screen.getByText("mf-1")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Delete mf-1/i }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() =>
+      expect(mockDeleteMetricFilter).toHaveBeenCalledWith({ logGroupName: "/aws/test", filterName: "mf-1" })
+    );
+  });
+
+  it("tests a metric filter pattern and renders matches", async () => {
+    mockTestMetricFilter.mockResolvedValueOnce({
+      matches: [{ eventNumber: 1, eventMessage: "ERROR: boom", extractedValues: { msg: "boom" } }],
+      total: 1,
+    });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await user.click(screen.getByRole("tab", { name: /Metric Filters/i }));
+    await clickButton(user, /Test a filter pattern/i);
+    const dialog = dialogOf("Test Metric Filter Pattern");
+    await user.type(within(dialog).getByPlaceholderText("ERROR"), "ERROR");
+    await user.type(within(dialog).getByLabelText("Test log event messages"), "ERROR: boom\n\nINFO: ok");
+    await user.click(within(dialog).getByText(/Test pattern/i));
+    await waitFor(() =>
+      expect(mockTestMetricFilter).toHaveBeenCalledWith({
+        filterPattern: "ERROR",
+        logEventMessages: ["ERROR: boom", "INFO: ok"],
+      })
+    );
+    await waitFor(() => expect(screen.getByText("1 matches")).toBeTruthy());
+    expect(screen.getByText("ERROR: boom").className).toBeDefined();
+    expect(screen.getByText('{"msg":"boom"}')).toBeTruthy();
+  });
+
+  it("shows the no-matches message when the pattern matches nothing", async () => {
+    mockTestMetricFilter.mockResolvedValueOnce({ matches: [], total: 0 });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await user.click(screen.getByRole("tab", { name: /Metric Filters/i }));
+    await clickButton(user, /Test a filter pattern/i);
+    const dialog = dialogOf("Test Metric Filter Pattern");
+    await user.type(within(dialog).getByPlaceholderText("ERROR"), "ERROR");
+    await user.type(within(dialog).getByLabelText("Test log event messages"), "INFO: ok");
+    await user.click(within(dialog).getByText(/Test pattern/i));
+    await waitFor(() => expect(screen.getByText(/No events matched this pattern/i)).toBeTruthy());
+  });
+
+  it("shows the test-failure toast path when the test mutation rejects", async () => {
+    mockTestMetricFilter.mockRejectedValueOnce(new Error("bad pattern"));
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await user.click(screen.getByRole("tab", { name: /Metric Filters/i }));
+    await clickButton(user, /Test a filter pattern/i);
+    const dialog = dialogOf("Test Metric Filter Pattern");
+    await user.type(within(dialog).getByPlaceholderText("ERROR"), "ERROR");
+    await user.type(within(dialog).getByLabelText("Test log event messages"), "x");
+    await user.click(within(dialog).getByText(/Test pattern/i));
+    await waitFor(() => expect(mockTestMetricFilter).toHaveBeenCalled());
+  });
+
+  it("saves a destination with an optional roleArn and shows the saved destination", async () => {
+    mockPutDestination.mockImplementation((_data: any, opts: any) => {
+      opts.onSuccess({ destination: { destinationName: "dest-1", arn: "arn:aws:logs:...:dest-1" } });
+    });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await user.click(screen.getByRole("tab", { name: /Destinations/i }));
+    await waitFor(() => expect(screen.getAllByText("Destinations").length).toBeGreaterThan(0));
+    await user.type(screen.getAllByPlaceholderText("my-destination")[0], "dest-1");
+    await user.type(screen.getByPlaceholderText("arn:aws:kinesis:us-east-1:..."), "arn:aws:kinesis:x");
+    await clickButton(user, /Save destination/i);
+    await waitFor(() =>
+      expect(mockPutDestination).toHaveBeenCalledWith(
+        { destinationName: "dest-1", targetArn: "arn:aws:kinesis:x", roleArn: undefined },
+        expect.any(Object)
+      )
+    );
+    await waitFor(() => expect(screen.getAllByText(/arn:aws:logs:\.\.\.:dest-1/).length).toBeGreaterThan(0));
+  });
+
+  it("falls back to targetArn when the saved destination has no arn", async () => {
+    mockPutDestination.mockImplementation((_data: any, opts: any) => {
+      opts.onSuccess({ destination: { destinationName: "dest-2", targetArn: "arn:aws:kinesis:y" } });
+    });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await user.click(screen.getByRole("tab", { name: /Destinations/i }));
+    await waitFor(() => expect(screen.getAllByText("Destinations").length).toBeGreaterThan(0));
+    await user.type(screen.getAllByPlaceholderText("my-destination")[0], "dest-2");
+    await user.type(screen.getByPlaceholderText("arn:aws:kinesis:us-east-1:..."), "arn:aws:kinesis:y");
+    await clickButton(user, /Save destination/i);
+    await waitFor(() => expect(screen.getAllByText(/arn:aws:kinesis:y/).length).toBeGreaterThan(0));
+  });
+
+  it("shows the destination mutation error fallback", async () => {
+    putDestinationState.isError = true;
+    putDestinationState.error = null;
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await user.click(screen.getByRole("tab", { name: /Destinations/i }));
+    await waitFor(() => expect(screen.getByText("Failed to save destination")).toBeTruthy());
+  });
+
+  it("attaches a destination access policy", async () => {
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await user.click(screen.getByRole("tab", { name: /Destinations/i }));
+    await waitFor(() => expect(screen.getByText(/Destination access policy/)).toBeTruthy());
+    await user.type(lastByPlaceholder("my-destination"), "dest-1");
+    await user.type(screen.getByPlaceholderText('{"Version":"2012-10-17","Statement":[]}'), "policy-doc");
+    await clickButton(user, /Attach access policy/i);
+    await waitFor(() =>
+      expect(mockPutDestinationPolicy).toHaveBeenCalledWith(
+        { destinationName: "dest-1", accessPolicy: "policy-doc" },
+        expect.any(Object)
+      )
+    );
+  });
+
+  it("shows the destination policy mutation error fallback", async () => {
+    putDestinationPolicyState.isError = true;
+    putDestinationPolicyState.error = null;
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await user.click(screen.getByRole("tab", { name: /Destinations/i }));
+    await waitFor(() => expect(screen.getByText("Failed to attach access policy")).toBeTruthy());
+  });
+
+  it("renders resource policies and both lastUpdatedTime arms", async () => {
+    mockResourcePolicies.mockReturnValue({
+      data: {
+        resourcePolicies: [
+          { policyName: "rp-1", policyDocument: "{}", lastUpdatedTime: 1705000000000 },
+          { policyName: "rp-2", policyDocument: "{}" },
+        ],
+        total: 2,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await user.click(screen.getByRole("tab", { name: /Resource Policies/i }));
+    await waitFor(() => expect(screen.getByText("rp-1")).toBeTruthy());
+    expect(screen.getByText("rp-2")).toBeTruthy();
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+  });
+
+  it("shows resource policies load error and creates a resource policy", async () => {
+    mockResourcePolicies.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: new Error("RP down") });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await user.click(screen.getByRole("tab", { name: /Resource Policies/i }));
+    await waitFor(() => expect(screen.getByText("RP down")).toBeTruthy());
+    await clickButton(user, /Create Resource Policy/i);
+    const dialog = dialogOf("Put Resource Policy");
+    await user.type(within(dialog).getByPlaceholderText("cross-account-subscription"), "rp-1");
+    await user.type(within(dialog).getByPlaceholderText('{"Version":"2012-10-17","Statement":[]}'), "doc");
+    await user.click(within(dialog).getByText(/Save policy/i));
+    await waitFor(() =>
+      expect(mockPutResourcePolicy).toHaveBeenCalledWith(
+        { policyName: "rp-1", policyDocument: "doc" },
+        expect.any(Object)
+      )
+    );
+  });
+
+  it("shows the resource policy mutation error fallback", async () => {
+    putResourcePolicyState.isError = true;
+    putResourcePolicyState.error = null;
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await user.click(screen.getByRole("tab", { name: /Resource Policies/i }));
+    await clickButton(user, /Create Resource Policy/i);
+    await waitFor(() => expect(screen.getByText("Failed to save resource policy")).toBeTruthy());
+  });
+
+  it("shows the resource policies load error fallback when error has no message", async () => {
+    mockResourcePolicies.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: new Error("") });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await user.click(screen.getByRole("tab", { name: /Resource Policies/i }));
+    await waitFor(() => expect(screen.getByText("Failed to load resource policies")).toBeTruthy());
+  });
+
+  it("applies deletion protection enabled", async () => {
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await user.click(screen.getByRole("tab", { name: /Deletion Protection/i }));
+    await waitFor(() => expect(screen.getByText(/Log group deletion protection/)).toBeTruthy());
+    await user.type(lastByPlaceholder("/aws/lambda/my-function"), "/aws/test");
+    await clickButton(user, /^Apply$/i);
+    await waitFor(() =>
+      expect(mockPutProtection).toHaveBeenCalledWith(
+        { logGroupIdentifier: "/aws/test", deletionProtectionEnabled: true },
+        expect.any(Object)
+      )
+    );
+  });
+
+  it("applies deletion protection disabled after unchecking", async () => {
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await user.click(screen.getByRole("tab", { name: /Deletion Protection/i }));
+    await waitFor(() => expect(screen.getByRole("checkbox")).toBeTruthy());
+    await user.click(screen.getByRole("checkbox"));
+    await user.type(lastByPlaceholder("/aws/lambda/my-function"), "/aws/test");
+    await clickButton(user, /^Apply$/i);
+    await waitFor(() =>
+      expect(mockPutProtection).toHaveBeenCalledWith(
+        { logGroupIdentifier: "/aws/test", deletionProtectionEnabled: false },
+        expect.any(Object)
+      )
+    );
+  });
+
+  it("shows the deletion protection error fallback", async () => {
+    putProtectionState.isError = true;
+    putProtectionState.error = null;
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await user.click(screen.getByRole("tab", { name: /Deletion Protection/i }));
+    await waitFor(() => expect(screen.getByText("Failed to update deletion protection")).toBeTruthy());
+  });
+
+  it("runs an Insights query and renders results with the missing-field arm", async () => {
+    mockStartQuery.mockResolvedValueOnce({ queryId: "q-1" });
+    mockQueryResults.mockReturnValue({
+      data: {
+        queryId: "q-1",
+        status: "Complete",
+        results: [
+          [
+            { field: "@timestamp", value: "2026-01-01" },
+            { field: "@message", value: "hello" },
+          ],
+          [{ field: "@message", value: "second" }],
+        ],
+        statistics: { recordsMatched: 2, recordsScanned: 100, bytesScanned: 0 },
+      },
+      isLoading: false, isError: false, error: null, refetch: mockInsightsRefetch,
+    });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await user.click(screen.getByRole("tab", { name: /Logs Insights/i }));
+    await user.type(lastByPlaceholder("/aws/lambda/my-function"), "/aws/test");
+    await clickButton(user, /Run query/i);
+    await waitFor(() =>
+      expect(mockStartQuery).toHaveBeenCalledWith({
+        logGroupName: "/aws/test",
+        startTime: expect.any(Number),
+        endTime: expect.any(Number),
+        queryString: "fields @timestamp, @message | limit 20",
+      })
+    );
+    await waitFor(() => expect(screen.getByText("hello")).toBeTruthy());
+    expect(screen.getByText("2026-01-01")).toBeTruthy();
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+    expect(screen.getByText(/Scanned 100 records — matched 2/)).toBeTruthy();
+    expect(screen.getByText("Complete")).toBeTruthy();
+    await clickButton(user, /Refresh/i);
+    expect(mockInsightsRefetch).toHaveBeenCalled();
+  });
+
+  it("shows the running state with a Stop button and stops the query", async () => {
+    mockStartQuery.mockResolvedValueOnce({ queryId: "q-2" });
+    mockStopQuery.mockResolvedValueOnce({ success: true });
+    mockQueryResults.mockReturnValue({
+      data: { queryId: "q-2", status: "Running", results: [], statistics: { recordsMatched: 0, recordsScanned: 0, bytesScanned: 0 } },
+      isLoading: false, isError: false, error: null, refetch: vi.fn(),
+    });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await user.click(screen.getByRole("tab", { name: /Logs Insights/i }));
+    await user.type(lastByPlaceholder("/aws/lambda/my-function"), "/aws/test");
+    await clickButton(user, /Run query/i);
+    await waitFor(() => expect(screen.getByText("Running")).toBeTruthy());
+    expect(screen.getByText(/Query is running/i)).toBeTruthy();
+    await clickButton(user, /Stop query/i);
+    await waitFor(() => expect(mockStopQuery).toHaveBeenCalledWith("q-2"));
+  });
+
+  it("shows the completed-empty results message after a cancelled query", async () => {
+    mockStartQuery.mockResolvedValueOnce({ queryId: "q-3" });
+    mockQueryResults.mockReturnValue({
+      data: { queryId: "q-3", status: "Cancelled", results: [], statistics: { recordsMatched: 0, recordsScanned: 0, bytesScanned: 0 } },
+      isLoading: false, isError: false, error: null, refetch: vi.fn(),
+    });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await user.click(screen.getByRole("tab", { name: /Logs Insights/i }));
+    await user.type(lastByPlaceholder("/aws/lambda/my-function"), "/aws/test");
+    await clickButton(user, /Run query/i);
+    await waitFor(() => expect(screen.getByText(/No results yet/i)).toBeTruthy());
+    expect(screen.queryByText(/Stop query/i)).toBeNull();
+  });
+
+  it("keeps the Run button disabled until a log group is entered", async () => {
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await user.click(screen.getByRole("tab", { name: /Logs Insights/i }));
+    await waitFor(() => expect(screen.getAllByText("Logs Insights").length).toBeGreaterThan(0));
+    const runButtons = screen.getAllByRole("button", { name: /Run query/i });
+    expect((runButtons[0] as HTMLButtonElement).disabled).toBe(true);
+    await user.type(lastByPlaceholder("/aws/lambda/my-function"), "/aws/test");
+    await waitFor(() => expect((runButtons[0] as HTMLButtonElement).disabled).toBe(false));
+  });
+
+  it("shows an error toast path when starting the query rejects", async () => {
+    mockStartQuery.mockRejectedValueOnce(new Error("query failed"));
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await user.click(screen.getByRole("tab", { name: /Logs Insights/i }));
+    await user.type(lastByPlaceholder("/aws/lambda/my-function"), "/aws/test");
+    await clickButton(user, /Run query/i);
+    await waitFor(() => expect(mockStartQuery).toHaveBeenCalled());
+  });
+
+  it("changes the Insights query textarea and time range", async () => {
+    mockStartQuery.mockResolvedValueOnce({ queryId: "q-4" });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await user.click(screen.getByRole("tab", { name: /Logs Insights/i }));
+    await waitFor(() => expect(screen.getAllByText("Logs Insights").length).toBeGreaterThan(0));
+    await user.type(screen.getByPlaceholderText("fields @timestamp, @message | filter @message like /ERROR/ | limit 20"), "x");
+    await user.click(screen.getByRole("button", { name: /Last hour/i }));
+    await user.click(screen.getAllByRole("option", { name: /Last 24 hours/i })[0]);
+    await user.type(lastByPlaceholder("/aws/lambda/my-function"), "/aws/test");
+    await clickButton(user, /Run query/i);
+    await waitFor(() =>
+      expect(mockStartQuery).toHaveBeenCalledWith(
+        expect.objectContaining({ queryString: "fields @timestamp, @message | limit 20x" })
+      )
+    );
+  });
+
+  it("invokes onSuccess after saving an account policy, then closes the modal", async () => {
+    mockPutAccountPolicy.mockImplementation((_d: any, opts: any) => opts.onSuccess({ accountPolicy: {} }));
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await clickButton(user, /Create Account Policy/i);
+    const dialog = dialogOf("Put Account Policy");
+    await user.type(within(dialog).getByPlaceholderText("my-data-protection-policy"), "my-policy");
+    await user.type(within(dialog).getByPlaceholderText('{"Rules":[]}'), "doc");
+    await user.click(within(dialog).getByRole("button", { name: /DATA_PROTECTION/i }));
+    await user.click(screen.getAllByRole("option", { name: /SUBSCRIPTION_FILTER/i })[0]);
+    await waitFor(() => expect(screen.queryByRole("option", { name: /SUBSCRIPTION_FILTER/i })).toBeNull());
+    await user.click(screen.getByRole("button", { name: /Scope ACCOUNT/i }));
+    await waitFor(() => expect(screen.getAllByRole("option", { name: /ACCOUNT/i }).length).toBeGreaterThan(0));
+    await user.click(screen.getAllByRole("option", { name: /ACCOUNT/i })[0]);
+    await user.click(within(dialog).getByText(/Save policy/i));
+    await waitFor(() =>
+      expect(mockPutAccountPolicy).toHaveBeenCalledWith(
+        { policyName: "my-policy", policyDocument: "doc", policyType: "SUBSCRIPTION_FILTER", scope: "ACCOUNT" },
+        expect.any(Object)
+      )
+    );
+    await waitFor(() => expectModalHidden("Put Account Policy"));
+  });
+
+  it("closes the account policy modal with the Cancel button and Escape", async () => {
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await clickButton(user, /Create Account Policy/i);
+    await user.click(within(dialogOf("Put Account Policy")).getByText(/Cancel/i));
+    await waitFor(() => expectModalHidden("Put Account Policy"));
+    await clickButton(user, /Create Account Policy/i);
+    await waitFor(() => expect(dialogOf("Put Account Policy").className).not.toContain("hidden"));
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Put Account Policy"));
+  });
+
+  it("invokes onSuccess after saving a metric filter and closes with Cancel and Escape", async () => {
+    mockPutMetricFilter.mockImplementation((_d: any, opts: any) => opts.onSuccess({}));
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await user.click(screen.getByRole("tab", { name: /Metric Filters/i }));
+    await user.type(lastByPlaceholder("/aws/lambda/my-function"), "/aws/test");
+    await clickButton(user, /Load filters/i);
+    await clickButton(user, /Create metric filter/i);
+    const dialog = dialogOf("Create Metric Filter for /aws/test");
+    await user.type(within(dialog).getByPlaceholderText("error-count"), "mf-1");
+    await user.type(within(dialog).getByPlaceholderText("Errors"), "Errors");
+    await user.type(within(dialog).getByPlaceholderText("MyApp"), "App");
+    await user.type(within(dialog).getByDisplayValue("1"), "5");
+    await user.click(within(dialog).getByText(/Create filter/i));
+    await waitFor(() =>
+      expect(mockPutMetricFilter).toHaveBeenCalledWith(
+        {
+          logGroupName: "/aws/test",
+          filterName: "mf-1",
+          filterPattern: undefined,
+          metricTransformations: [{ metricName: "Errors", metricNamespace: "App", metricValue: "15" }],
+        },
+        expect.any(Object)
+      )
+    );
+    await waitFor(() => expectModalHidden("Create Metric Filter for /aws/test"));
+    await clickButton(user, /Create metric filter/i);
+    await user.click(within(dialogOf("Create Metric Filter for /aws/test")).getByText(/Cancel/i));
+    await waitFor(() => expectModalHidden("Create Metric Filter for /aws/test"));
+    await clickButton(user, /Create metric filter/i);
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Create Metric Filter for /aws/test"));
+  });
+
+  it("loads metric filters with an empty group input", async () => {
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await user.click(screen.getByRole("tab", { name: /Metric Filters/i }));
+    await waitFor(() => expect(screen.getByText("Load filters")).toBeTruthy());
+    await clickButton(user, /Load filters/i);
+    await waitFor(() => expect(mockMetricFilters).toHaveBeenLastCalledWith(null));
+  });
+
+  it("shows metric filters load error with and without a message", async () => {
+    mockMetricFilters.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: new Error("MF down") });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await user.click(screen.getByRole("tab", { name: /Metric Filters/i }));
+    await user.type(lastByPlaceholder("/aws/lambda/my-function"), "/aws/test");
+    await clickButton(user, /Load filters/i);
+    await waitFor(() => expect(screen.getByText("MF down")).toBeTruthy());
+  });
+
+  it("shows the metric filters load error fallback when error has no message", async () => {
+    mockMetricFilters.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: new Error("") });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await user.click(screen.getByRole("tab", { name: /Metric Filters/i }));
+    await user.type(lastByPlaceholder("/aws/lambda/my-function"), "/aws/test");
+    await clickButton(user, /Load filters/i);
+    await waitFor(() => expect(screen.getByText("Failed to load metric filters")).toBeTruthy());
+  });
+
+  it("closes the test metric filter modal with Close and Escape", async () => {
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await user.click(screen.getByRole("tab", { name: /Metric Filters/i }));
+    await clickButton(user, /Test a filter pattern/i);
+    await user.click(within(dialogOf("Test Metric Filter Pattern")).getByText(/Close/i));
+    await waitFor(() => expectModalHidden("Test Metric Filter Pattern"));
+    await clickButton(user, /Test a filter pattern/i);
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Test Metric Filter Pattern"));
+  });
+
+  it("invokes onSuccess after attaching a destination policy and resets the form", async () => {
+    mockPutDestinationPolicy.mockImplementation((_d: any, opts: any) => opts.onSuccess({}));
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await user.click(screen.getByRole("tab", { name: /Destinations/i }));
+    await waitFor(() => expect(screen.getAllByText("Destinations").length).toBeGreaterThan(0));
+    await user.type(lastByPlaceholder("my-destination"), "dest-1");
+    const policyBox = screen.getByPlaceholderText('{"Version":"2012-10-17","Statement":[]}');
+    await user.type(policyBox, "policy-doc");
+    await clickButton(user, /Attach access policy/i);
+    await waitFor(() =>
+      expect(mockPutDestinationPolicy).toHaveBeenCalledWith(
+        { destinationName: "dest-1", accessPolicy: "policy-doc" },
+        expect.any(Object)
+      )
+    );
+    await waitFor(() => expect((screen.getByPlaceholderText('{"Version":"2012-10-17","Statement":[]}') as HTMLInputElement).value).toBe(""));
+  });
+
+  it("types an optional roleArn when saving a destination", async () => {
+    mockPutDestination.mockImplementation((_d: any, opts: any) => opts.onSuccess({ destination: {} }));
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await user.click(screen.getByRole("tab", { name: /Destinations/i }));
+    await waitFor(() => expect(screen.getAllByText("Destinations").length).toBeGreaterThan(0));
+    await user.type(screen.getAllByPlaceholderText("my-destination")[0], "dest-3");
+    await user.type(screen.getByPlaceholderText("arn:aws:kinesis:us-east-1:..."), "arn:x");
+    await user.type(screen.getByPlaceholderText("arn:aws:iam::...:role/..."), "arn:aws:iam::r");
+    await clickButton(user, /Save destination/i);
+    await waitFor(() =>
+      expect(mockPutDestination).toHaveBeenCalledWith(
+        { destinationName: "dest-3", targetArn: "arn:x", roleArn: "arn:aws:iam::r" },
+        expect.any(Object)
+      )
+    );
+  });
+
+  it("invokes onSuccess after saving a resource policy and closes with Cancel and Escape", async () => {
+    mockPutResourcePolicy.mockImplementation((_d: any, opts: any) => opts.onSuccess({ resourcePolicy: {} }));
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await user.click(screen.getByRole("tab", { name: /Resource Policies/i }));
+    await clickButton(user, /Create Resource Policy/i);
+    const dialog = dialogOf("Put Resource Policy");
+    await user.type(within(dialog).getByPlaceholderText("cross-account-subscription"), "rp-1");
+    await user.type(within(dialog).getByPlaceholderText('{"Version":"2012-10-17","Statement":[]}'), "doc");
+    await user.click(within(dialog).getByText(/Save policy/i));
+    await waitFor(() =>
+      expect(mockPutResourcePolicy).toHaveBeenCalledWith(
+        { policyName: "rp-1", policyDocument: "doc" },
+        expect.any(Object)
+      )
+    );
+    await waitFor(() => expectModalHidden("Put Resource Policy"));
+    await clickButton(user, /Create Resource Policy/i);
+    await user.click(within(dialogOf("Put Resource Policy")).getByText(/Cancel/i));
+    await waitFor(() => expectModalHidden("Put Resource Policy"));
+    await clickButton(user, /Create Resource Policy/i);
+    dismissModalWithEscape();
+    await waitFor(() => expectModalHidden("Put Resource Policy"));
+  });
+
+  it("fires the deletion-protection success toast for both enabled and disabled", async () => {
+    mockPutProtection.mockImplementation((_d: any, opts: any) => opts.onSuccess({}));
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await user.click(screen.getByRole("tab", { name: /Deletion Protection/i }));
+    await waitFor(() => expect(screen.getByText(/Log group deletion protection/)).toBeTruthy());
+    await user.type(lastByPlaceholder("/aws/lambda/my-function"), "/aws/on");
+    await clickButton(user, /^Apply$/i);
+    await waitFor(() =>
+      expect(mockPutProtection).toHaveBeenNthCalledWith(
+        1,
+        { logGroupIdentifier: "/aws/on", deletionProtectionEnabled: true },
+        expect.any(Object)
+      )
+    );
+    await user.click(screen.getByRole("checkbox"));
+    await user.clear(lastByPlaceholder("/aws/lambda/my-function") as HTMLInputElement);
+    await user.type(lastByPlaceholder("/aws/lambda/my-function"), "/aws/off");
+    await clickButton(user, /^Apply$/i);
+    await waitFor(() =>
+      expect(mockPutProtection).toHaveBeenNthCalledWith(
+        2,
+        { logGroupIdentifier: "/aws/off", deletionProtectionEnabled: false },
+        expect.any(Object)
+      )
+    );
+  });
+
+  it("shows the deletion-protection loading state on the matching row action", async () => {
+    deleteMetricFilterState.isPending = true;
+    deleteMetricFilterState.variables = { filterName: "mf-1" };
+    mockMetricFilters.mockReturnValue({
+      data: {
+        metricFilters: [
+          { filterName: "mf-1", logGroupName: "/aws/test", metricTransformations: [] },
+          { filterName: "mf-2", logGroupName: "/aws/test", metricTransformations: [] },
+        ],
+        total: 2,
+      },
+      isLoading: false, isError: false, error: null,
+    });
+    const user = userEvent.setup();
+    render(<CloudWatchLogsDashboard />, { wrapper: createWrapper() });
+    await openLogManagement(user);
+    await user.click(screen.getByRole("tab", { name: /Metric Filters/i }));
+    await user.type(lastByPlaceholder("/aws/lambda/my-function"), "/aws/test");
+    await clickButton(user, /Load filters/i);
+    await waitFor(() => expect(screen.getByText("mf-1")).toBeTruthy());
+    expect((screen.getByRole("button", { name: /Delete mf-1/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: /Delete mf-2/i }) as HTMLButtonElement).disabled).toBe(false);
   });
 });

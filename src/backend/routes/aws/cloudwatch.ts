@@ -13,6 +13,16 @@ import {
   ListTagsForResourceCommand,
   TagResourceCommand,
   UntagResourceCommand,
+  PutDashboardCommand,
+  GetDashboardCommand,
+  ListDashboardsCommand,
+  DeleteDashboardsCommand,
+  PutMetricStreamCommand,
+  GetMetricStreamCommand,
+  ListMetricStreamsCommand,
+  DeleteMetricStreamCommand,
+  StartMetricStreamsCommand,
+  StopMetricStreamsCommand,
 } from "@aws-sdk/client-cloudwatch";
 import { getAwsConfig } from "../../clients/aws";
 
@@ -274,6 +284,169 @@ router.delete("/tags/:arn", async (c: Context) => {
   const keys = c.req.query("keys")?.split(",") || [];
   await cw().send(new UntagResourceCommand({ ResourceARN: arn, TagKeys: keys }));
   return c.json({ untagged: true });
+});
+
+// ─── DASHBOARDS ──────────────────────────────────────────
+
+router.get("/dashboards", async (c: Context) => {
+  const prefix = c.req.query("prefix");
+  const result = await cw().send(
+    new ListDashboardsCommand({ DashboardNamePrefix: prefix || undefined })
+  );
+  const dashboards = (result.DashboardEntries || []).map((d: any) => ({
+    dashboardName: d.DashboardName,
+    dashboardArn: d.DashboardArn,
+    lastModified: d.LastModified,
+    size: d.Size,
+  }));
+  return c.json({ dashboards, total: dashboards.length });
+});
+
+router.get("/dashboards/:name", async (c: Context) => {
+  const name = c.req.param("name");
+  const result = await cw().send(new GetDashboardCommand({ DashboardName: name }));
+  return c.json({
+    dashboardName: result.DashboardName,
+    dashboardArn: result.DashboardArn,
+    dashboardBody: result.DashboardBody,
+  });
+});
+
+router.put("/dashboards/:name", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<{ dashboardBody?: string; tags?: Array<{ key: string; value: string }> }>();
+  if (!body.dashboardBody) {
+    return c.json({ error: "dashboardBody is required" }, 400);
+  }
+  const result = await cw().send(
+    new PutDashboardCommand({
+      DashboardName: name,
+      DashboardBody: body.dashboardBody,
+      Tags: (body.tags || []).map((t) => ({ Key: t.key, Value: t.value })),
+    })
+  );
+  return c.json({
+    dashboardName: name,
+    validationMessages: result.DashboardValidationMessages || [],
+    created: true,
+  });
+});
+
+router.delete("/dashboards/:name", async (c: Context) => {
+  const name = c.req.param("name");
+  await cw().send(new DeleteDashboardsCommand({ DashboardNames: [name!] }));
+  return c.json({ dashboardName: name, deleted: true });
+});
+
+// ─── METRIC STREAMS ──────────────────────────────────────
+
+router.get("/metric-streams", async (c: Context) => {
+  const nextToken = c.req.query("nextToken") || undefined;
+  const result = await cw().send(new ListMetricStreamsCommand({ NextToken: nextToken }));
+  const streams = (result.Entries || []).map((s: any) => ({
+    arn: s.Arn,
+    name: s.Name,
+    firehoseArn: s.FirehoseArn,
+    state: s.State,
+    outputFormat: s.OutputFormat,
+    creationDate: s.CreationDate,
+    lastUpdateDate: s.LastUpdateDate,
+  }));
+  return c.json({ metricStreams: streams, total: streams.length, nextToken: result.NextToken });
+});
+
+router.get("/metric-streams/:name", async (c: Context) => {
+  const name = c.req.param("name");
+  const result = await cw().send(new GetMetricStreamCommand({ Name: name }));
+  return c.json({
+    arn: result.Arn,
+    name: result.Name,
+    firehoseArn: result.FirehoseArn,
+    roleArn: result.RoleArn,
+    state: result.State,
+    outputFormat: result.OutputFormat,
+    creationDate: result.CreationDate,
+    lastUpdateDate: result.LastUpdateDate,
+    includeLinkedAccountsMetrics: result.IncludeLinkedAccountsMetrics,
+    includeFilters: (result.IncludeFilters || []).map((f: any) => ({
+      namespace: f.Namespace,
+      metricNames: f.MetricNames || [],
+    })),
+    excludeFilters: (result.ExcludeFilters || []).map((f: any) => ({
+      namespace: f.Namespace,
+      metricNames: f.MetricNames || [],
+    })),
+  });
+});
+
+router.put("/metric-streams/:name", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<{
+    firehoseArn?: string;
+    roleArn?: string;
+    outputFormat?: string;
+    includeLinkedAccountsMetrics?: boolean;
+    includeFilters?: Array<{ namespace: string; metricNames?: string[] }>;
+    excludeFilters?: Array<{ namespace: string; metricNames?: string[] }>;
+    statisticsConfigurations?: Array<{
+      includeMetrics: Array<{ namespace: string; metricName: string }>;
+      additionalStatistics: string[];
+    }>;
+    tags?: Array<{ key: string; value: string }>;
+  }>();
+  if (!body.firehoseArn || !body.roleArn || !body.outputFormat) {
+    return c.json({ error: "firehoseArn, roleArn and outputFormat are required" }, 400);
+  }
+  const result = await cw().send(
+    new PutMetricStreamCommand({
+      Name: name,
+      FirehoseArn: body.firehoseArn,
+      RoleArn: body.roleArn,
+      OutputFormat: body.outputFormat as any,
+      IncludeLinkedAccountsMetrics: body.includeLinkedAccountsMetrics,
+      IncludeFilters: (body.includeFilters || []).map((f) => ({
+        Namespace: f.namespace,
+        MetricNames: f.metricNames,
+      })),
+      ExcludeFilters: (body.excludeFilters || []).map((f) => ({
+        Namespace: f.namespace,
+        MetricNames: f.metricNames,
+      })),
+      StatisticsConfigurations: (body.statisticsConfigurations || []).map((sc) => ({
+        IncludeMetrics: sc.includeMetrics.map((m) => ({
+          Namespace: m.namespace,
+          MetricName: m.metricName,
+        })),
+        AdditionalStatistics: sc.additionalStatistics,
+      })),
+      Tags: (body.tags || []).map((t) => ({ Key: t.key, Value: t.value })),
+    })
+  );
+  return c.json({ name, arn: result.Arn, created: true }, 201);
+});
+
+router.delete("/metric-streams/:name", async (c: Context) => {
+  const name = c.req.param("name");
+  await cw().send(new DeleteMetricStreamCommand({ Name: name }));
+  return c.json({ name, deleted: true });
+});
+
+router.post("/metric-streams/start", async (c: Context) => {
+  const body = await c.req.json<{ names?: string[] }>();
+  if (!body.names?.length) {
+    return c.json({ error: "names array is required" }, 400);
+  }
+  await cw().send(new StartMetricStreamsCommand({ Names: body.names }));
+  return c.json({ names: body.names, started: true });
+});
+
+router.post("/metric-streams/stop", async (c: Context) => {
+  const body = await c.req.json<{ names?: string[] }>();
+  if (!body.names?.length) {
+    return c.json({ error: "names array is required" }, 400);
+  }
+  await cw().send(new StopMetricStreamsCommand({ Names: body.names }));
+  return c.json({ names: body.names, stopped: true });
 });
 
 export default router;

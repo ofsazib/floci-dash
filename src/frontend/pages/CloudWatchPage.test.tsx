@@ -1,10 +1,32 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../test/helpers";
 import React from "react";
 import { MemoryRouter } from "react-router-dom";
+
+const putStreamState = vi.hoisted(() => ({
+  isPending: false,
+  isError: false,
+  error: null as Error | null,
+}));
+
+const startStreamState = vi.hoisted(() => ({
+  isPending: false,
+  variables: [] as string[],
+}));
+
+const stopStreamState = vi.hoisted(() => ({
+  isPending: false,
+  variables: [] as string[],
+}));
+
+const putDashboardState = vi.hoisted(() => ({
+  isPending: false,
+  isError: false,
+  error: null as Error | null,
+}));
 
 const mockCloudWatchMetrics = vi.fn();
 const mockPutMetricData = vi.fn();
@@ -13,6 +35,15 @@ const mockCloudWatchAlarms = vi.fn();
 const mockCreateAlarmMutate = vi.fn();
 const mockDeleteAlarm = vi.fn();
 const mockSetAlarmState = vi.fn();
+const mockDashboards = vi.fn();
+const mockDashboard = vi.fn();
+const mockPutDashboard = vi.fn();
+const mockDeleteDashboard = vi.fn();
+const mockMetricStreams = vi.fn();
+const mockPutStream = vi.fn();
+const mockDeleteStream = vi.fn();
+const mockStartStreams = vi.fn();
+const mockStopStreams = vi.fn();
 
 vi.mock("../hooks/useCloudWatch", () => ({
   useCloudWatchMetrics: (...args: any[]) => mockCloudWatchMetrics(...args),
@@ -22,6 +53,34 @@ vi.mock("../hooks/useCloudWatch", () => ({
   useCreateAlarm: () => ({ mutateAsync: mockCreateAlarmMutate, isPending: false }),
   useDeleteAlarm: () => ({ mutateAsync: mockDeleteAlarm, isPending: false }),
   useSetAlarmState: () => ({ mutateAsync: mockSetAlarmState, isPending: false }),
+  useCloudWatchDashboards: (...args: any[]) => mockDashboards(...args),
+  useCloudWatchDashboard: (...args: any[]) => mockDashboard(...args),
+  usePutDashboard: () => ({
+    mutate: mockPutDashboard,
+    get isPending() { return putDashboardState.isPending; },
+    get isError() { return putDashboardState.isError; },
+    get error() { return putDashboardState.error; },
+  }),
+  useDeleteDashboard: () => ({ mutateAsync: mockDeleteDashboard, isPending: false }),
+  useMetricStreams: (...args: any[]) => mockMetricStreams(...args),
+  useMetricStream: vi.fn(),
+  usePutMetricStream: () => ({
+    mutate: mockPutStream,
+    get isPending() { return putStreamState.isPending; },
+    get isError() { return putStreamState.isError; },
+    get error() { return putStreamState.error; },
+  }),
+  useDeleteMetricStream: () => ({ mutateAsync: mockDeleteStream, isPending: false }),
+  useStartMetricStreams: () => ({
+    mutateAsync: mockStartStreams,
+    get isPending() { return startStreamState.isPending; },
+    get variables() { return startStreamState.variables; },
+  }),
+  useStopMetricStreams: () => ({
+    mutateAsync: mockStopStreams,
+    get isPending() { return stopStreamState.isPending; },
+    get variables() { return stopStreamState.variables; },
+  }),
 }));
 
 const mockShowToast = vi.fn();
@@ -48,6 +107,12 @@ function pageWrapper() {
   );
 }
 
+/** Locate a modal dialog by its header text (Cloudscape keeps dialogs mounted). */
+function dialogOf(headerText: string): HTMLElement {
+  const header = screen.getAllByText(headerText).find((h) => h.closest('[role="dialog"]'));
+  return header!.closest('[role="dialog"]') as HTMLElement;
+}
+
 describe("CloudWatchPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -55,6 +120,19 @@ describe("CloudWatchPage", () => {
     mockCloudWatchMetrics.mockReturnValue({ data: { namespaces: ["AWS/Lambda"], metrics: [{ namespace: "AWS/Lambda", metricName: "Invocations", dimensions: [] }] }, isLoading: false, refetch: vi.fn() });
     mockMetricStatistics.mockReturnValue({ data: { datapoints: [] }, isLoading: false });
     mockCloudWatchAlarms.mockReturnValue({ data: { alarms: [{ name: "high-cpu", state: "ALARM", namespace: "AWS/EC2", metricName: "CPUUtilization", threshold: 80, comparisonOperator: "GreaterThanThreshold", period: 300, statistic: "Average" }] }, isLoading: false });
+    mockDashboards.mockReturnValue({ data: { dashboards: [], total: 0 }, isLoading: false });
+    mockDashboard.mockReturnValue({ data: undefined, isLoading: false });
+    mockMetricStreams.mockReturnValue({ data: { metricStreams: [], total: 0 }, isLoading: false });
+    putStreamState.isPending = false;
+    putStreamState.isError = false;
+    putStreamState.error = null;
+    startStreamState.isPending = false;
+    startStreamState.variables = [];
+    stopStreamState.isPending = false;
+    stopStreamState.variables = [];
+    putDashboardState.isPending = false;
+    putDashboardState.isError = false;
+    putDashboardState.error = null;
   });
 
   // ─── Render State Tests ─────────────────────────────────
@@ -1233,5 +1311,435 @@ describe("CloudWatchPage — branch completion", () => {
     await waitFor(() => {
       expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(6);
     });
+  });
+});
+
+
+// ─── Dashboards tab ──────────────────────────────────────
+
+describe("CloudWatchPage — Dashboards tab", () => {
+  async function openDashboards(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole("tab", { name: /Dashboards/i }));
+    await waitFor(() => expect(screen.getAllByText("Dashboards").length).toBeGreaterThan(0));
+  }
+
+  it("shows the empty dashboards state", async () => {
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    await openDashboards(user);
+    expect(screen.getByText("No dashboards")).toBeTruthy();
+  });
+
+  it("renders dashboards including the missing lastModified and size arms", async () => {
+    mockDashboards.mockReturnValue({
+      data: {
+        dashboards: [
+          { dashboardName: "ops", dashboardArn: "arn:aws:cloudwatch::dashboard/ops", lastModified: 1705000000000, size: 42 },
+          { dashboardName: "dev", dashboardArn: "arn:aws:cloudwatch::dashboard/dev" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    await openDashboards(user);
+    expect(screen.getByText("ops")).toBeTruthy();
+    expect(screen.getByText("dev")).toBeTruthy();
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+  });
+
+  it("views a dashboard body and closes it", async () => {
+    mockDashboards.mockReturnValue({
+      data: { dashboards: [{ dashboardName: "ops", dashboardArn: "arn:x" }], total: 1 },
+      isLoading: false,
+    });
+    mockDashboard.mockReturnValue({ data: { dashboardName: "ops", dashboardBody: '{\n  "widgets": []\n}' }, isLoading: false });
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    await openDashboards(user);
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText(/widgets/)).toBeTruthy());
+    expect(mockDashboard).toHaveBeenLastCalledWith("ops");
+    await clickButton(user, /Close/i);
+    await waitFor(() => expect(screen.queryByText(/widgets/)).toBeNull());
+  });
+
+  it("renders the dashboards table when the query returns no data", async () => {
+    mockDashboards.mockReturnValue({ data: undefined, isLoading: false });
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    await openDashboards(user);
+    expect(screen.getByText("No dashboards")).toBeTruthy();
+  });
+
+  it("renders an empty dashboard body when the detail query returns no data", async () => {
+    mockDashboards.mockReturnValue({
+      data: { dashboards: [{ dashboardName: "ops", dashboardArn: "arn:x" }], total: 1 },
+      isLoading: false,
+    });
+    mockDashboard.mockReturnValue({ data: undefined, isLoading: false });
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    await openDashboards(user);
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getAllByText("ops").length).toBeGreaterThan(0));
+  });
+
+  it("closes the Put dashboard modal with Cancel", async () => {
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    await openDashboards(user);
+    await clickButton(user, /Create dashboard/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("ops-dashboard")).toBeTruthy());
+    await user.click(within(dialogOf("Put dashboard")).getByText(/Cancel/i));
+    await waitFor(() => expect(screen.queryByPlaceholderText("ops-dashboard")).toBeNull());
+    await clickButton(user, /Create dashboard/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("ops-dashboard")).toBeTruthy());
+    document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+      fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27 });
+    });
+    await waitFor(() => expect(screen.queryByPlaceholderText("ops-dashboard")).toBeNull());
+  });
+
+  it("shows the dashboard body loading state", async () => {
+    mockDashboards.mockReturnValue({
+      data: { dashboards: [{ dashboardName: "ops", dashboardArn: "arn:x" }], total: 1 },
+      isLoading: false,
+    });
+    mockDashboard.mockReturnValue({ data: undefined, isLoading: true });
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    await openDashboards(user);
+    await clickButton(user, /View/i);
+    await waitFor(() => expect(screen.getByText("Loading dashboard body...")).toBeTruthy());
+  });
+
+  it("creates a dashboard and fires the success toast", async () => {
+    mockPutDashboard.mockImplementation((_d: any, opts: any) => opts.onSuccess({}));
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    await openDashboards(user);
+    await clickButton(user, /Create dashboard/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("ops-dashboard")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("ops-dashboard"), "ops");
+    await user.type(screen.getByPlaceholderText('{"widgets":[]}'), "widgets-body");
+    await clickButton(user, /Save dashboard/i);
+    await waitFor(() =>
+      expect(mockPutDashboard).toHaveBeenCalledWith(
+        { dashboardName: "ops", dashboardBody: "widgets-body" },
+        expect.any(Object)
+      )
+    );
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("success", "Dashboard ops saved"));
+    await waitFor(() => expect(screen.queryByPlaceholderText("ops-dashboard")).toBeNull());
+  });
+
+  it("shows the dashboard mutation error fallback", async () => {
+    putDashboardState.isError = true;
+    putDashboardState.error = null;
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    await openDashboards(user);
+    await clickButton(user, /Create dashboard/i);
+    await waitFor(() => expect(screen.getByText("Failed to save dashboard")).toBeTruthy());
+  });
+
+  it("shows the dashboard mutation error message", async () => {
+    putDashboardState.isError = true;
+    putDashboardState.error = new Error("Validation failed");
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    await openDashboards(user);
+    await clickButton(user, /Create dashboard/i);
+    await waitFor(() => expect(screen.getByText("Validation failed")).toBeTruthy());
+  });
+
+  it("deletes a dashboard after confirmation", async () => {
+    mockDashboards.mockReturnValue({
+      data: { dashboards: [{ dashboardName: "ops", dashboardArn: "arn:x" }], total: 1 },
+      isLoading: false,
+    });
+    mockDeleteDashboard.mockResolvedValueOnce({});
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    await openDashboards(user);
+    await user.click(screen.getByRole("button", { name: /Delete ops/i }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /^Delete$/ })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /^Delete$/ }));
+    await waitFor(() => {
+      expect(mockDeleteDashboard).toHaveBeenCalledWith("ops");
+      expect(mockShowToast).toHaveBeenCalledWith("success", "Dashboard ops deleted");
+    });
+  });
+
+  it("shows an error toast when deleting a dashboard fails", async () => {
+    mockDashboards.mockReturnValue({
+      data: { dashboards: [{ dashboardName: "ops", dashboardArn: "arn:x" }], total: 1 },
+      isLoading: false,
+    });
+    mockDeleteDashboard.mockRejectedValueOnce(new Error("Delete failed"));
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    await openDashboards(user);
+    await user.click(screen.getByRole("button", { name: /Delete ops/i }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /^Delete$/ })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /^Delete$/ }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "Delete failed"));
+  });
+});
+
+// ─── Metric Streams tab ──────────────────────────────────
+
+describe("CloudWatchPage — Metric Streams tab", () => {
+  async function openStreams(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole("tab", { name: /Metric Streams/i }));
+    await waitFor(() => expect(screen.getAllByText("Metric Streams").length).toBeGreaterThan(0));
+  }
+
+  it("shows the empty metric streams state", async () => {
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    await openStreams(user);
+    expect(screen.getByText("No metric streams")).toBeTruthy();
+  });
+
+  it("renders streams with running and stopped states and matching actions", async () => {
+    mockMetricStreams.mockReturnValue({
+      data: {
+        metricStreams: [
+          { arn: "arn:1", name: "running-stream", firehoseArn: "arn:f1", state: "running", outputFormat: "json" },
+          { arn: "arn:2", name: "stopped-stream", firehoseArn: "arn:f2", state: "stopped", outputFormat: "opentelemetry1.0" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    await openStreams(user);
+    expect(screen.getByText("running-stream")).toBeTruthy();
+    expect(screen.getByText("stopped-stream")).toBeTruthy();
+    expect(screen.getByText("running")).toBeTruthy();
+    expect(screen.getByText("stopped")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Stop/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Start/ })).toBeTruthy();
+  });
+
+  it("starts and stops streams", async () => {
+    mockMetricStreams.mockReturnValue({
+      data: {
+        metricStreams: [
+          { arn: "arn:1", name: "running-stream", firehoseArn: "arn:f1", state: "running", outputFormat: "json" },
+          { arn: "arn:2", name: "stopped-stream", firehoseArn: "arn:f2", state: "stopped", outputFormat: "json" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    mockStartStreams.mockResolvedValueOnce({});
+    mockStopStreams.mockResolvedValueOnce({});
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    await openStreams(user);
+    await clickButton(user, /Start/);
+    await waitFor(() => {
+      expect(mockStartStreams).toHaveBeenCalledWith(["stopped-stream"]);
+      expect(mockShowToast).toHaveBeenCalledWith("success", "Metric stream stopped-stream started");
+    });
+    await clickButton(user, /Stop/);
+    await waitFor(() => {
+      expect(mockStopStreams).toHaveBeenCalledWith(["running-stream"]);
+      expect(mockShowToast).toHaveBeenCalledWith("success", "Metric stream running-stream stopped");
+    });
+  });
+
+  it("shows error toasts when start and stop fail", async () => {
+    mockMetricStreams.mockReturnValue({
+      data: {
+        metricStreams: [
+          { arn: "arn:1", name: "running-stream", firehoseArn: "arn:f1", state: "running", outputFormat: "json" },
+          { arn: "arn:2", name: "stopped-stream", firehoseArn: "arn:f2", state: "stopped", outputFormat: "json" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    mockStartStreams.mockRejectedValueOnce(new Error("start failed"));
+    mockStopStreams.mockRejectedValueOnce(new Error("stop failed"));
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    await openStreams(user);
+    await clickButton(user, /Start/);
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "start failed"));
+    await clickButton(user, /Stop/);
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "stop failed"));
+  });
+
+  it("marks the matching stream action as loading", async () => {
+    startStreamState.isPending = true;
+    startStreamState.variables = ["stopped-stream"];
+    mockMetricStreams.mockReturnValue({
+      data: {
+        metricStreams: [
+          { arn: "arn:1", name: "running-stream", firehoseArn: "arn:f1", state: "running", outputFormat: "json" },
+          { arn: "arn:2", name: "stopped-stream", firehoseArn: "arn:f2", state: "stopped", outputFormat: "json" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    await openStreams(user);
+    await waitFor(() => expect(screen.getByText("stopped-stream")).toBeTruthy());
+    expect(screen.getByRole("button", { name: /Start/ }).getAttribute("aria-disabled")).toBe("true");
+  });
+
+  it("renders the metric streams table when the query returns no data", async () => {
+    mockMetricStreams.mockReturnValue({ data: undefined, isLoading: false });
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    await openStreams(user);
+    expect(screen.getByText("No metric streams")).toBeTruthy();
+  });
+
+  it("marks only the matching running stream's Stop action as loading", async () => {
+    stopStreamState.isPending = true;
+    stopStreamState.variables = ["running-a"];
+    mockMetricStreams.mockReturnValue({
+      data: {
+        metricStreams: [
+          { arn: "arn:1", name: "running-a", firehoseArn: "arn:f1", state: "running", outputFormat: "json" },
+          { arn: "arn:2", name: "running-b", firehoseArn: "arn:f2", state: "running", outputFormat: "json" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    await openStreams(user);
+    await waitFor(() => expect(screen.getByText("running-a")).toBeTruthy());
+    const stopButtons = screen.getAllByRole("button", { name: /^Stop$/ });
+    expect(stopButtons.length).toBe(2);
+    expect(stopButtons[0].getAttribute("aria-disabled")).toBe("true");
+    expect(stopButtons[1].getAttribute("aria-disabled")).toBeNull();
+  });
+
+  it("closes the Create metric stream modal with Cancel", async () => {
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    await openStreams(user);
+    await clickButton(user, /Create metric stream/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("main-stream")).toBeTruthy());
+    await user.click(within(dialogOf("Create metric stream")).getByText(/Cancel/i));
+    await waitFor(() => expect(screen.queryByPlaceholderText("main-stream")).toBeNull());
+    await clickButton(user, /Create metric stream/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("main-stream")).toBeTruthy());
+    document.querySelectorAll('[class*="awsui_dialog"]').forEach((dialog) => {
+      fireEvent.keyDown(dialog as HTMLElement, { keyCode: 27 });
+    });
+    await waitFor(() => expect(screen.queryByPlaceholderText("main-stream")).toBeNull());
+  });
+
+  it("changes the output format when creating a metric stream", async () => {
+    mockPutStream.mockImplementation((_d: any, opts: any) => opts.onSuccess({ arn: "arn:x" }));
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    await openStreams(user);
+    await clickButton(user, /Create metric stream/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("main-stream")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /json/i }));
+    await user.click(screen.getAllByRole("option", { name: /opentelemetry1.0/i })[0]);
+    await user.type(screen.getByPlaceholderText("main-stream"), "otel");
+    await user.type(screen.getByPlaceholderText("arn:aws:firehose:us-east-1:...:deliverystream/..."), "arn:f");
+    await user.type(screen.getByPlaceholderText("arn:aws:iam::...:role/..."), "arn:r");
+    await clickButton(user, /Create stream/i);
+    await waitFor(() =>
+      expect(mockPutStream).toHaveBeenCalledWith(
+        expect.objectContaining({ outputFormat: "opentelemetry1.0" }),
+        expect.any(Object)
+      )
+    );
+  });
+
+  it("creates a metric stream and fires the success toast", async () => {
+    mockPutStream.mockImplementation((_d: any, opts: any) => opts.onSuccess({ arn: "arn:x" }));
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    await openStreams(user);
+    await clickButton(user, /Create metric stream/i);
+    await waitFor(() => expect(screen.getByPlaceholderText("main-stream")).toBeTruthy());
+    await user.type(screen.getByPlaceholderText("main-stream"), "main");
+    await user.type(screen.getByPlaceholderText("arn:aws:firehose:us-east-1:...:deliverystream/..."), "arn:f");
+    await user.type(screen.getByPlaceholderText("arn:aws:iam::...:role/..."), "arn:r");
+    await clickButton(user, /Create stream/i);
+    await waitFor(() =>
+      expect(mockPutStream).toHaveBeenCalledWith(
+        { name: "main", firehoseArn: "arn:f", roleArn: "arn:r", outputFormat: "json" },
+        expect.any(Object)
+      )
+    );
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("success", "Metric stream main saved"));
+  });
+
+  it("shows the metric stream mutation error fallback and message arms", async () => {
+    putStreamState.isError = true;
+    putStreamState.error = null;
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    await openStreams(user);
+    await clickButton(user, /Create metric stream/i);
+    await waitFor(() => expect(screen.getByText("Failed to create metric stream")).toBeTruthy());
+  });
+
+  it("shows the metric stream mutation error message", async () => {
+    putStreamState.isError = true;
+    putStreamState.error = new Error("Invalid output format");
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    await openStreams(user);
+    await clickButton(user, /Create metric stream/i);
+    await waitFor(() => expect(screen.getByText("Invalid output format")).toBeTruthy());
+  });
+
+  it("deletes a metric stream after confirmation", async () => {
+    mockMetricStreams.mockReturnValue({
+      data: {
+        metricStreams: [{ arn: "arn:1", name: "main", firehoseArn: "arn:f", state: "running", outputFormat: "json" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    mockDeleteStream.mockResolvedValueOnce({});
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    await openStreams(user);
+    await user.click(screen.getByRole("button", { name: /Delete main/i }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /^Delete$/ })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /^Delete$/ }));
+    await waitFor(() => {
+      expect(mockDeleteStream).toHaveBeenCalledWith("main");
+      expect(mockShowToast).toHaveBeenCalledWith("success", "Metric stream main deleted");
+    });
+  });
+
+  it("shows an error toast when deleting a metric stream fails", async () => {
+    mockMetricStreams.mockReturnValue({
+      data: {
+        metricStreams: [{ arn: "arn:1", name: "main", firehoseArn: "arn:f", state: "running", outputFormat: "json" }],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    mockDeleteStream.mockRejectedValueOnce(new Error("delete failed"));
+    const user = userEvent.setup();
+    render(<CloudWatchPage />, { wrapper: pageWrapper() });
+    await openStreams(user);
+    await user.click(screen.getByRole("button", { name: /Delete main/i }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /^Delete$/ })).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /^Delete$/ }));
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("error", "delete failed"));
   });
 });

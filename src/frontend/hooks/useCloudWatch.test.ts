@@ -18,6 +18,16 @@ import {
   useDeleteAlarm,
   useSetAlarmState,
   useCloudWatchTags,
+  useCloudWatchDashboards,
+  useCloudWatchDashboard,
+  usePutDashboard,
+  useDeleteDashboard,
+  useMetricStreams,
+  useMetricStream,
+  usePutMetricStream,
+  useDeleteMetricStream,
+  useStartMetricStreams,
+  useStopMetricStreams,
 } from "./useCloudWatch";
 
 function createWrapper() {
@@ -213,6 +223,148 @@ describe("useCloudWatchTags", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockApi).toHaveBeenCalledWith(
       "/aws/cloudwatch/tags/arn:aws:cloudwatch:us-east-1:1:alarm:a"
+    );
+  });
+});
+
+
+// ─── DASHBOARDS ──────────────────────────────────────────
+
+describe("useCloudWatchDashboards", () => {
+  it("calls api and returns dashboards", async () => {
+    mockApi.mockResolvedValueOnce({ dashboards: [{ dashboardName: "ops", dashboardArn: "arn" }], total: 1 });
+    const { result } = renderHook(() => useCloudWatchDashboards(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/cloudwatch/dashboards");
+  });
+});
+
+describe("useCloudWatchDashboard", () => {
+  it("calls api with encoded name when provided", async () => {
+    mockApi.mockResolvedValueOnce({ dashboardName: "ops", dashboardBody: "{}" });
+    const { result } = renderHook(() => useCloudWatchDashboard("ops"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/cloudwatch/dashboards/ops");
+  });
+
+  it("is disabled when name is null", () => {
+    const { result } = renderHook(() => useCloudWatchDashboard(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+});
+
+describe("usePutDashboard", () => {
+  it("calls api with PUT method and encoded name", async () => {
+    mockApi.mockResolvedValueOnce({ created: true });
+    const { result } = renderHook(() => usePutDashboard(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ dashboardName: "ops", dashboardBody: "{}" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/cloudwatch/dashboards/ops",
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({ dashboardBody: "{}" }),
+      })
+    );
+  });
+});
+
+describe("useDeleteDashboard", () => {
+  it("calls api with DELETE method and encoded name", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useDeleteDashboard(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("ops");
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/cloudwatch/dashboards/ops",
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
+});
+
+// ─── METRIC STREAMS ──────────────────────────────────────
+
+describe("useMetricStreams", () => {
+  it("calls api and returns streams", async () => {
+    mockApi.mockResolvedValueOnce({ metricStreams: [], total: 0 });
+    const { result } = renderHook(() => useMetricStreams(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/cloudwatch/metric-streams");
+  });
+});
+
+describe("useMetricStream", () => {
+  it("calls api with encoded name when provided", async () => {
+    mockApi.mockResolvedValueOnce({ name: "main", state: "running", includeFilters: [], excludeFilters: [] });
+    const { result } = renderHook(() => useMetricStream("main"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/cloudwatch/metric-streams/main");
+  });
+
+  it("is disabled when name is null", () => {
+    const { result } = renderHook(() => useMetricStream(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+});
+
+describe("usePutMetricStream", () => {
+  it("calls api with PUT method and stream body", async () => {
+    mockApi.mockResolvedValueOnce({ arn: "arn:x" });
+    const { result } = renderHook(() => usePutMetricStream(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({
+      name: "main",
+      firehoseArn: "arn:f",
+      roleArn: "arn:r",
+      outputFormat: "json",
+    });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/cloudwatch/metric-streams/main",
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({ firehoseArn: "arn:f", roleArn: "arn:r", outputFormat: "json" }),
+      })
+    );
+  });
+});
+
+describe("useDeleteMetricStream", () => {
+  it("calls api with DELETE method and encoded name", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useDeleteMetricStream(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("main");
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/cloudwatch/metric-streams/main",
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
+});
+
+describe("useStartMetricStreams", () => {
+  it("calls api with POST method and names array", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useStartMetricStreams(), { wrapper: createWrapper() });
+    await result.current.mutateAsync(["a", "b"]);
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/cloudwatch/metric-streams/start",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ names: ["a", "b"] }),
+      })
+    );
+  });
+});
+
+describe("useStopMetricStreams", () => {
+  it("calls api with POST method and names array", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useStopMetricStreams(), { wrapper: createWrapper() });
+    await result.current.mutateAsync(["a"]);
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/cloudwatch/metric-streams/stop",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ names: ["a"] }),
+      })
     );
   });
 });

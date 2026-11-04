@@ -24,6 +24,7 @@ import {
   Spinner,
   Checkbox,
   Pagination,
+  Table,
   type SelectProps,
   type TabsProps,
 } from "@cloudscape-design/components";
@@ -57,6 +58,22 @@ import {
   useTagLogGroup,
   useDataProtectionPolicy,
   useUntagLogGroup,
+  useAccountPolicies,
+  usePutAccountPolicy,
+  useMetricFilters,
+  usePutMetricFilter,
+  useDeleteMetricFilter,
+  useTestMetricFilter,
+  usePutDestination,
+  usePutDestinationPolicy,
+  useResourcePolicies,
+  usePutResourcePolicy,
+  usePutLogGroupDeletionProtection,
+  useStartQuery,
+  useStopQuery,
+  useQueryResults,
+  type LogDestination,
+  type MetricFilterMatch,
 } from "../../hooks/useLogs";
 import {
   useRDSDBInstances,
@@ -527,9 +544,974 @@ export function CloudWatchLogsDashboard() {
       label: "Log Groups",
       content: <CloudWatchLogGroupList onSelect={(name) => setSelectedGroup(name)} />,
     },
+    {
+      id: "log-management",
+      label: "Log Management",
+      content: <CloudWatchLogManagement />,
+    },
   ];
 
   return <Tabs tabs={tabs} />;
+}
+
+// ─── Log Management (account policies, metric filters, ──
+//     destinations, resource policies, Insights) ─────────
+
+const ACCOUNT_POLICY_TYPE_OPTIONS: SelectProps.Option[] = [
+  { label: "DATA_PROTECTION", value: "DATA_PROTECTION" },
+  { label: "SUBSCRIPTION_FILTER", value: "SUBSCRIPTION_FILTER" },
+  { label: "FIELD_INDEX", value: "FIELD_INDEX" },
+];
+
+const ACCOUNT_POLICY_SCOPE_OPTIONS: SelectProps.Option[] = [
+  { label: "ACCOUNT", value: "ACCOUNT" },
+];
+
+function formatPolicyTime(ts?: number): string {
+  if (!ts) return "—";
+  return new Date(ts).toLocaleString();
+}
+
+function CloudWatchLogManagement() {
+  const [activeTab, setActiveTab] = useState("account-policies");
+
+  const tabs: TabsProps.Tab[] = [
+    { id: "account-policies", label: "Account Policies", content: <CloudWatchAccountPoliciesPanel /> },
+    { id: "metric-filters", label: "Metric Filters", content: <CloudWatchMetricFiltersPanel /> },
+    { id: "destinations", label: "Destinations", content: <CloudWatchDestinationsPanel /> },
+    { id: "resource-policies", label: "Resource Policies", content: <CloudWatchResourcePoliciesPanel /> },
+    { id: "deletion-protection", label: "Deletion Protection", content: <CloudWatchDeletionProtectionPanel /> },
+    { id: "insights", label: "Logs Insights", content: <CloudWatchInsightsConsole /> },
+  ];
+
+  return (
+    <Tabs
+      activeTabId={activeTab}
+      onChange={({ detail }) => setActiveTab(detail.activeTabId)}
+      tabs={tabs}
+    />
+  );
+}
+
+function CloudWatchAccountPoliciesPanel() {
+  const { showToast } = useToast();
+  const { data, isLoading, isError, error } = useAccountPolicies();
+  const putPolicy = usePutAccountPolicy();
+  const [showCreate, setShowCreate] = useState(false);
+  const [policyType, setPolicyType] = useState<SelectProps.Option>(ACCOUNT_POLICY_TYPE_OPTIONS[0]);
+  const [scope, setScope] = useState<SelectProps.Option>(ACCOUNT_POLICY_SCOPE_OPTIONS[0]);
+  const [form, setForm] = useState({ policyName: "", policyDocument: "" });
+
+  const items = (data?.accountPolicies || []).map((p) => ({
+    policyName: p.policyName,
+    policyType: p.policyType,
+    scope: p.scope,
+    policyDocument: p.policyDocument,
+    lastUpdatedTime: p.lastUpdatedTime,
+  }));
+
+  function handleCreate() {
+    putPolicy.mutate(
+      {
+        policyName: form.policyName,
+        policyDocument: form.policyDocument,
+        policyType: policyType.value!,
+        scope: scope.value,
+      },
+      {
+        onSuccess: () => {
+          setShowCreate(false);
+          setForm({ policyName: "", policyDocument: "" });
+          showToast("success", `Account policy ${form.policyName} saved`);
+        },
+      }
+    );
+  }
+
+  return (
+    <>
+      {isError && (
+        <StatusIndicator type="error">
+          {(error as Error)?.message || "Failed to load account policies"}
+        </StatusIndicator>
+      )}
+
+      <ResourceTable
+        resourceName="Account Policy"
+        headerTitle="Account Policies"
+        headerCounter={data?.total}
+        items={items}
+        columns={[
+          {
+            id: "name",
+            header: "Policy name",
+            cell: (item: any) => item.policyName,
+            isRowHeader: true,
+          },
+          { id: "type", header: "Type", cell: (item: any) => item.policyType },
+          { id: "scope", header: "Scope", cell: (item: any) => item.scope || "—" },
+          {
+            id: "updated",
+            header: "Last updated",
+            cell: (item: any) => formatPolicyTime(item.lastUpdatedTime),
+          },
+          {
+            id: "document",
+            header: "Document",
+            cell: (item: any) => (
+              <span style={{ fontFamily: "monospace", fontSize: "12px" }}>
+                {item.policyDocument}
+              </span>
+            ),
+          },
+        ]}
+        loading={isLoading}
+        emptyMessage="No account policies. Create one to get started."
+        onCreate={() => setShowCreate(true)}
+      />
+
+      <Modal
+        visible={showCreate}
+        onDismiss={() => setShowCreate(false)}
+        header="Put Account Policy"
+        size="medium"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreate(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                loading={putPolicy.isPending}
+                disabled={!form.policyName || !form.policyDocument}
+                onClick={handleCreate}
+              >
+                Save policy
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          {putPolicy.isError && (
+            <Alert type="error" dismissible>
+              {(putPolicy.error as Error)?.message || "Failed to save account policy"}
+            </Alert>
+          )}
+          <SpaceBetween size="m">
+            <FormField label="Policy name">
+              <Input
+                value={form.policyName}
+                onChange={({ detail }) => setForm((p) => ({ ...p, policyName: detail.value }))}
+                placeholder="my-data-protection-policy"
+              />
+            </FormField>
+            <FormField label="Policy type">
+              <Select
+                selectedOption={policyType}
+                onChange={({ detail }) => setPolicyType(detail.selectedOption)}
+                options={ACCOUNT_POLICY_TYPE_OPTIONS}
+              />
+            </FormField>
+            <FormField label="Scope">
+              <Select
+                selectedOption={scope}
+                onChange={({ detail }) => setScope(detail.selectedOption)}
+                options={ACCOUNT_POLICY_SCOPE_OPTIONS}
+              />
+            </FormField>
+            <FormField
+              label="Policy document"
+              description="JSON policy document."
+            >
+              <Textarea
+                value={form.policyDocument}
+                onChange={({ detail }) => setForm((p) => ({ ...p, policyDocument: detail.value }))}
+                rows={5}
+                placeholder='{"Rules":[]}'
+              />
+            </FormField>
+          </SpaceBetween>
+        </Form>
+      </Modal>
+    </>
+  );
+}
+
+function CloudWatchMetricFiltersPanel() {
+  const { showToast } = useToast();
+  const [groupInput, setGroupInput] = useState("");
+  const [group, setGroup] = useState<string | null>(null);
+  const { data, isLoading, isError, error } = useMetricFilters(group);
+  const putFilter = usePutMetricFilter();
+  const deleteFilter = useDeleteMetricFilter();
+  const testFilter = useTestMetricFilter();
+
+  const [showCreate, setShowCreate] = useState(false);
+  const [form, setForm] = useState({
+    filterName: "",
+    filterPattern: "",
+    metricName: "",
+    metricNamespace: "",
+    metricValue: "1",
+  });
+  const [showTest, setShowTest] = useState(false);
+  const [testPattern, setTestPattern] = useState("");
+  const [testMessages, setTestMessages] = useState("");
+  const [testResult, setTestResult] = useState<{
+    matches: MetricFilterMatch[];
+    total: number;
+  } | null>(null);
+
+  const items = (data?.metricFilters || []).map((f) => ({
+    filterName: f.filterName,
+    filterPattern: f.filterPattern,
+    logGroupName: f.logGroupName,
+    creationTime: f.creationTime,
+    transformations: f.metricTransformations
+      .map((t) => `${t.metricNamespace}/${t.metricName}`)
+      .join(", "),
+  }));
+
+  function handleLoad() {
+    setGroup(groupInput.trim() || null);
+  }
+
+  function handleCreate() {
+    putFilter.mutate(
+      {
+        logGroupName: group!,
+        filterName: form.filterName,
+        filterPattern: form.filterPattern || undefined,
+        metricTransformations: [
+          {
+            metricName: form.metricName,
+            metricNamespace: form.metricNamespace,
+            metricValue: form.metricValue,
+          },
+        ],
+      },
+      {
+        onSuccess: () => {
+          setShowCreate(false);
+          setForm({ filterName: "", filterPattern: "", metricName: "", metricNamespace: "", metricValue: "1" });
+          showToast("success", `Metric filter ${form.filterName} saved`);
+        },
+      }
+    );
+  }
+
+  function handleDelete(filterName: string) {
+    deleteFilter.mutateAsync({ logGroupName: group!, filterName }).then(() => {
+      showToast("success", `Metric filter ${filterName} deleted`);
+    });
+  }
+
+  async function handleTest() {
+    try {
+      const result = await testFilter.mutateAsync({
+        filterPattern: testPattern,
+        logEventMessages: testMessages.split("\n").map((m) => m.trim()).filter(Boolean),
+      });
+      setTestResult(result);
+    } catch {
+      showToast("error", "Metric filter test failed");
+    }
+  }
+
+  return (
+    <>
+      {isError && (
+        <StatusIndicator type="error">
+          {(error as Error)?.message || "Failed to load metric filters"}
+        </StatusIndicator>
+      )}
+
+      <SpaceBetween size="m">
+        <SpaceBetween direction="horizontal" size="xs">
+          <Input
+            value={groupInput}
+            onChange={({ detail }) => setGroupInput(detail.value)}
+            placeholder="/aws/lambda/my-function"
+            ariaLabel="Log group name for metric filters"
+          />
+          <Button variant="primary" onClick={handleLoad}>
+            Load filters
+          </Button>
+          <Button onClick={() => setShowCreate(true)} disabled={!group}>
+            Create metric filter
+          </Button>
+          <Button onClick={() => setShowTest(true)}>Test a filter pattern</Button>
+        </SpaceBetween>
+
+        <ResourceTable
+          resourceName="Metric Filter"
+          headerTitle={group ? `Metric Filters for ${group}` : "Metric Filters"}
+          headerCounter={group ? data?.total : undefined}
+          items={group ? items : []}
+          columns={[
+            {
+              id: "name",
+              header: "Filter name",
+              cell: (item: any) => item.filterName,
+              isRowHeader: true,
+            },
+            {
+              id: "pattern",
+              header: "Pattern",
+              cell: (item: any) => item.filterPattern || "(all events)",
+            },
+            {
+              id: "transformations",
+              header: "Metric transformations",
+              cell: (item: any) => item.transformations || "—",
+            },
+            {
+              id: "created",
+              header: "Created",
+              cell: (item: any) => formatPolicyTime(item.creationTime),
+            },
+            {
+              id: "actions",
+              header: "",
+              cell: (item: any) => (
+                <DeleteButton
+                  itemName={item.filterName}
+                  resourceType="metric filter"
+                  loading={
+                    deleteFilter.isPending &&
+                    deleteFilter.variables.filterName === item.filterName
+                  }
+                  onDelete={() => handleDelete(item.filterName)}
+                />
+              ),
+            },
+          ]}
+          loading={isLoading}
+          emptyMessage={group ? "No metric filters for this log group." : "Enter a log group name to list its metric filters."}
+        />
+      </SpaceBetween>
+
+      <Modal
+        visible={showCreate}
+        onDismiss={() => setShowCreate(false)}
+        header={`Create Metric Filter for ${group}`}
+        size="medium"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreate(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                loading={putFilter.isPending}
+                disabled={!form.filterName || !form.metricName || !form.metricNamespace}
+                onClick={handleCreate}
+              >
+                Create filter
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          {putFilter.isError && (
+            <Alert type="error" dismissible>
+              {(putFilter.error as Error)?.message || "Failed to create metric filter"}
+            </Alert>
+          )}
+          <SpaceBetween size="m">
+            <FormField label="Filter name">
+              <Input
+                value={form.filterName}
+                onChange={({ detail }) => setForm((p) => ({ ...p, filterName: detail.value }))}
+                placeholder="error-count"
+              />
+            </FormField>
+            <FormField label="Filter pattern (optional)">
+              <Input
+                value={form.filterPattern}
+                onChange={({ detail }) => setForm((p) => ({ ...p, filterPattern: detail.value }))}
+                placeholder="ERROR"
+              />
+            </FormField>
+            <ColumnLayout columns={3}>
+              <FormField label="Metric name">
+                <Input
+                  value={form.metricName}
+                  onChange={({ detail }) => setForm((p) => ({ ...p, metricName: detail.value }))}
+                  placeholder="Errors"
+                />
+              </FormField>
+              <FormField label="Metric namespace">
+                <Input
+                  value={form.metricNamespace}
+                  onChange={({ detail }) => setForm((p) => ({ ...p, metricNamespace: detail.value }))}
+                  placeholder="MyApp"
+                />
+              </FormField>
+              <FormField label="Metric value">
+                <Input
+                  value={form.metricValue}
+                  onChange={({ detail }) => setForm((p) => ({ ...p, metricValue: detail.value }))}
+                />
+              </FormField>
+            </ColumnLayout>
+          </SpaceBetween>
+        </Form>
+      </Modal>
+
+      <Modal
+        visible={showTest}
+        onDismiss={() => {
+          setShowTest(false);
+          setTestResult(null);
+        }}
+        header="Test Metric Filter Pattern"
+        size="medium"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button
+                variant="link"
+                onClick={() => {
+                  setShowTest(false);
+                  setTestResult(null);
+                }}
+              >
+                Close
+              </Button>
+              <Button
+                variant="primary"
+                loading={testFilter.isPending}
+                disabled={!testPattern}
+                onClick={handleTest}
+              >
+                Test pattern
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          <SpaceBetween size="m">
+            <FormField label="Filter pattern">
+              <Input
+                value={testPattern}
+                onChange={({ detail }) => setTestPattern(detail.value)}
+                placeholder="ERROR"
+              />
+            </FormField>
+            <FormField
+              label="Log event messages"
+              description="One message per line. Blank lines are ignored."
+            >
+              <Textarea
+                value={testMessages}
+                onChange={({ detail }) => setTestMessages(detail.value)}
+                rows={5}
+                ariaLabel="Test log event messages"
+                placeholder={"ERROR: boom\nINFO: ok"}
+              />
+            </FormField>
+            {testResult && (
+              <Container header={<Header variant="h3">{testResult.total} matches</Header>}>
+                {testResult.matches.length === 0 ? (
+                  <Box color="text-body-secondary">No events matched this pattern.</Box>
+                ) : (
+                  <Table
+                    columnDefinitions={[
+                      { id: "eventNumber", header: "#", cell: (m: any) => m.eventNumber },
+                      { id: "eventMessage", header: "Message", cell: (m: any) => m.eventMessage },
+                      {
+                        id: "extractedValues",
+                        header: "Extracted values",
+                        cell: (m: any) => JSON.stringify(m.extractedValues),
+                      },
+                    ]}
+                    items={testResult.matches}
+                    trackBy={(m: any) => m.eventNumber}
+                  />
+                )}
+              </Container>
+            )}
+          </SpaceBetween>
+        </Form>
+      </Modal>
+    </>
+  );
+}
+
+function CloudWatchDestinationsPanel() {
+  const { showToast } = useToast();
+  const putDestination = usePutDestination();
+  const putPolicy = usePutDestinationPolicy();
+  const [form, setForm] = useState({ destinationName: "", targetArn: "", roleArn: "" });
+  const [policyForm, setPolicyForm] = useState({ destinationName: "", accessPolicy: "" });
+  const [lastDestination, setLastDestination] = useState<LogDestination | null>(null);
+
+  function handleCreate() {
+    putDestination.mutate(
+      {
+        destinationName: form.destinationName,
+        targetArn: form.targetArn,
+        roleArn: form.roleArn || undefined,
+      },
+      {
+        onSuccess: (res) => {
+          setLastDestination(res.destination);
+          showToast("success", `Destination ${form.destinationName} saved`);
+        },
+      }
+    );
+  }
+
+  function handleApplyPolicy() {
+    putPolicy.mutate(
+      { destinationName: policyForm.destinationName, accessPolicy: policyForm.accessPolicy },
+      {
+        onSuccess: () => {
+          showToast("success", `Access policy attached to ${policyForm.destinationName}`);
+          setPolicyForm({ destinationName: "", accessPolicy: "" });
+        },
+      }
+    );
+  }
+
+  return (
+    <SpaceBetween size="l">
+      <Container
+        header={
+          <Header
+            variant="h2"
+            description="Create or update a cross-account subscription destination."
+          >
+            Destinations
+          </Header>
+        }
+      >
+        <SpaceBetween size="m">
+          {putDestination.isError && (
+            <Alert type="error" dismissible>
+              {(putDestination.error as Error)?.message || "Failed to save destination"}
+            </Alert>
+          )}
+          {lastDestination && (
+            <Box>
+              Saved destination <strong>{lastDestination.destinationName}</strong> —{" "}
+              {lastDestination.arn || lastDestination.targetArn}
+            </Box>
+          )}
+          <ColumnLayout columns={3}>
+            <FormField label="Destination name">
+              <Input
+                value={form.destinationName}
+                onChange={({ detail }) => setForm((p) => ({ ...p, destinationName: detail.value }))}
+                placeholder="my-destination"
+              />
+            </FormField>
+            <FormField label="Target ARN">
+              <Input
+                value={form.targetArn}
+                onChange={({ detail }) => setForm((p) => ({ ...p, targetArn: detail.value }))}
+                placeholder="arn:aws:kinesis:us-east-1:..."
+              />
+            </FormField>
+            <FormField label="Role ARN (optional)">
+              <Input
+                value={form.roleArn}
+                onChange={({ detail }) => setForm((p) => ({ ...p, roleArn: detail.value }))}
+                placeholder="arn:aws:iam::...:role/..."
+              />
+            </FormField>
+          </ColumnLayout>
+          <Button
+            variant="primary"
+            loading={putDestination.isPending}
+            disabled={!form.destinationName || !form.targetArn}
+            onClick={handleCreate}
+          >
+            Save destination
+          </Button>
+        </SpaceBetween>
+      </Container>
+
+      <Container
+        header={
+          <Header
+            variant="h2"
+            description="Attach an access policy so other accounts can subscribe to this destination."
+          >
+            Destination access policy
+          </Header>
+        }
+      >
+        <SpaceBetween size="m">
+          {putPolicy.isError && (
+            <Alert type="error" dismissible>
+              {(putPolicy.error as Error)?.message || "Failed to attach access policy"}
+            </Alert>
+          )}
+          <ColumnLayout columns={2}>
+            <FormField label="Destination name">
+              <Input
+                value={policyForm.destinationName}
+                onChange={({ detail }) =>
+                  setPolicyForm((p) => ({ ...p, destinationName: detail.value }))
+                }
+                placeholder="my-destination"
+              />
+            </FormField>
+          </ColumnLayout>
+          <FormField label="Access policy document">
+            <Textarea
+              value={policyForm.accessPolicy}
+              onChange={({ detail }) =>
+                setPolicyForm((p) => ({ ...p, accessPolicy: detail.value }))
+              }
+              rows={5}
+              placeholder='{"Version":"2012-10-17","Statement":[]}'
+            />
+          </FormField>
+          <Button
+            variant="primary"
+            loading={putPolicy.isPending}
+            disabled={!policyForm.destinationName || !policyForm.accessPolicy}
+            onClick={handleApplyPolicy}
+          >
+            Attach access policy
+          </Button>
+        </SpaceBetween>
+      </Container>
+    </SpaceBetween>
+  );
+}
+
+function CloudWatchResourcePoliciesPanel() {
+  const { showToast } = useToast();
+  const { data, isLoading, isError, error } = useResourcePolicies();
+  const putPolicy = usePutResourcePolicy();
+  const [showCreate, setShowCreate] = useState(false);
+  const [form, setForm] = useState({ policyName: "", policyDocument: "" });
+
+  const items = (data?.resourcePolicies || []).map((p) => ({
+    policyName: p.policyName,
+    policyDocument: p.policyDocument,
+    lastUpdatedTime: p.lastUpdatedTime,
+  }));
+
+  function handleCreate() {
+    putPolicy.mutate(
+      { policyName: form.policyName, policyDocument: form.policyDocument },
+      {
+        onSuccess: () => {
+          setShowCreate(false);
+          setForm({ policyName: "", policyDocument: "" });
+          showToast("success", `Resource policy ${form.policyName} saved`);
+        },
+      }
+    );
+  }
+
+  return (
+    <>
+      {isError && (
+        <StatusIndicator type="error">
+          {(error as Error)?.message || "Failed to load resource policies"}
+        </StatusIndicator>
+      )}
+
+      <ResourceTable
+        resourceName="Resource Policy"
+        headerTitle="Resource Policies"
+        headerCounter={data?.total}
+        items={items}
+        columns={[
+          {
+            id: "name",
+            header: "Policy name",
+            cell: (item: any) => item.policyName,
+            isRowHeader: true,
+          },
+          {
+            id: "updated",
+            header: "Last updated",
+            cell: (item: any) => formatPolicyTime(item.lastUpdatedTime),
+          },
+          {
+            id: "document",
+            header: "Document",
+            cell: (item: any) => (
+              <span style={{ fontFamily: "monospace", fontSize: "12px" }}>
+                {item.policyDocument}
+              </span>
+            ),
+          },
+        ]}
+        loading={isLoading}
+        emptyMessage="No resource policies. Create one to get started."
+        onCreate={() => setShowCreate(true)}
+      />
+
+      <Modal
+        visible={showCreate}
+        onDismiss={() => setShowCreate(false)}
+        header="Put Resource Policy"
+        size="medium"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowCreate(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                loading={putPolicy.isPending}
+                disabled={!form.policyName || !form.policyDocument}
+                onClick={handleCreate}
+              >
+                Save policy
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          {putPolicy.isError && (
+            <Alert type="error" dismissible>
+              {(putPolicy.error as Error)?.message || "Failed to save resource policy"}
+            </Alert>
+          )}
+          <SpaceBetween size="m">
+            <FormField
+              label="Policy name"
+              description="Name that lets a source account put subscription filters against this account."
+            >
+              <Input
+                value={form.policyName}
+                onChange={({ detail }) => setForm((p) => ({ ...p, policyName: detail.value }))}
+                placeholder="cross-account-subscription"
+              />
+            </FormField>
+            <FormField label="Policy document">
+              <Textarea
+                value={form.policyDocument}
+                onChange={({ detail }) => setForm((p) => ({ ...p, policyDocument: detail.value }))}
+                rows={5}
+                placeholder='{"Version":"2012-10-17","Statement":[]}'
+              />
+            </FormField>
+          </SpaceBetween>
+        </Form>
+      </Modal>
+    </>
+  );
+}
+
+function CloudWatchDeletionProtectionPanel() {
+  const { showToast } = useToast();
+  const putProtection = usePutLogGroupDeletionProtection();
+  const [identifier, setIdentifier] = useState("");
+  const [enabled, setEnabled] = useState(true);
+
+  function handleApply() {
+    putProtection.mutate(
+      { logGroupIdentifier: identifier.trim(), deletionProtectionEnabled: enabled },
+      {
+        onSuccess: () => {
+          showToast(
+            "success",
+            `Deletion protection ${enabled ? "enabled" : "disabled"} for ${identifier.trim()}`
+          );
+        },
+      }
+    );
+  }
+
+  return (
+    <Container
+      header={
+        <Header
+          variant="h2"
+          description="Prevent a log group from being accidentally deleted. Accepts a log group name or ARN."
+        >
+          Log group deletion protection
+        </Header>
+      }
+    >
+      <SpaceBetween size="m">
+        {putProtection.isError && (
+          <Alert type="error" dismissible>
+            {(putProtection.error as Error)?.message || "Failed to update deletion protection"}
+          </Alert>
+        )}
+        <FormField label="Log group identifier">
+          <Input
+            value={identifier}
+            onChange={({ detail }) => setIdentifier(detail.value)}
+            placeholder="/aws/lambda/my-function"
+          />
+        </FormField>
+        <Checkbox
+          checked={enabled}
+          onChange={({ detail }) => setEnabled(detail.checked)}
+          description="When enabled, the log group cannot be deleted until protection is turned off."
+        >
+          Enable deletion protection
+        </Checkbox>
+        <Button
+          variant="primary"
+          loading={putProtection.isPending}
+          disabled={!identifier.trim()}
+          onClick={handleApply}
+        >
+          Apply
+        </Button>
+      </SpaceBetween>
+    </Container>
+  );
+}
+
+const INSIGHTS_TIME_OPTIONS: SelectProps.Option[] = [
+  { label: "Last hour", value: "1" },
+  { label: "Last 3 hours", value: "3" },
+  { label: "Last 24 hours", value: "24" },
+];
+
+function CloudWatchInsightsConsole() {
+  const { showToast } = useToast();
+  const startQuery = useStartQuery();
+  const stopQuery = useStopQuery();
+  const [logGroupName, setLogGroupName] = useState("");
+  const [queryString, setQueryString] = useState("fields @timestamp, @message | limit 20");
+  const [timeRange, setTimeRange] = useState<SelectProps.Option>(INSIGHTS_TIME_OPTIONS[0]);
+  const [queryId, setQueryId] = useState<string | null>(null);
+  const results = useQueryResults(queryId);
+
+  function handleRun() {
+    startQuery.mutateAsync({
+      logGroupName: logGroupName.trim(),
+      startTime: Date.now() - parseInt(timeRange.value as string) * 3_600_000,
+      endTime: Date.now(),
+      queryString,
+    })
+      .then((res) => setQueryId(res.queryId))
+      .catch((e: Error) => showToast("error", e.message));
+  }
+
+  function handleStop() {
+    stopQuery.mutateAsync(queryId!).then(() => {
+      showToast("success", "Query stopped");
+    });
+  }
+
+  const rows = results.data?.results || [];
+  const fields = rows[0]?.map((f) => f.field) || [];
+  const status = results.data?.status;
+  const isRunning = status === "Running";
+
+  return (
+    <SpaceBetween size="l">
+      <Container
+        header={
+          <Header
+            variant="h2"
+            description="Run CloudWatch Logs Insights queries against a log group."
+          >
+            Logs Insights
+          </Header>
+        }
+      >
+        <SpaceBetween size="m">
+          <ColumnLayout columns={2}>
+            <FormField label="Log group">
+              <Input
+                value={logGroupName}
+                onChange={({ detail }) => setLogGroupName(detail.value)}
+                placeholder="/aws/lambda/my-function"
+              />
+            </FormField>
+            <FormField label="Time range">
+              <Select
+                selectedOption={timeRange}
+                onChange={({ detail }) => setTimeRange(detail.selectedOption)}
+                options={INSIGHTS_TIME_OPTIONS}
+              />
+            </FormField>
+          </ColumnLayout>
+          <FormField label="Query">
+            <Textarea
+              value={queryString}
+              onChange={({ detail }) => setQueryString(detail.value)}
+              rows={3}
+              placeholder="fields @timestamp, @message | filter @message like /ERROR/ | limit 20"
+            />
+          </FormField>
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button
+              variant="primary"
+              loading={startQuery.isPending}
+              disabled={!logGroupName.trim() || !queryString}
+              onClick={handleRun}
+            >
+              Run query
+            </Button>
+            {queryId && isRunning && (
+              <Button loading={stopQuery.isPending} onClick={handleStop}>
+                Stop query
+              </Button>
+            )}
+          </SpaceBetween>
+        </SpaceBetween>
+      </Container>
+
+      {queryId && (
+        <Container
+          header={
+            <Header
+              variant="h2"
+              actions={
+                <SpaceBetween direction="horizontal" size="xs">
+                  {status && <StatusIndicator type={isRunning ? "loading" : "success"}>{status}</StatusIndicator>}
+                  <Button iconName="refresh" onClick={() => results.refetch()} loading={results.isLoading}>
+                    Refresh
+                  </Button>
+                </SpaceBetween>
+              }
+            >
+              Results
+            </Header>
+          }
+        >
+          <SpaceBetween size="m">
+            {results.data && (
+              <Box fontSize="body-s" color="text-body-secondary">
+                Scanned {results.data.statistics.recordsScanned} records — matched{" "}
+                {results.data.statistics.recordsMatched}
+              </Box>
+            )}
+            {rows.length === 0 ? (
+              <Box textAlign="center" color="text-body-secondary">
+                {isRunning ? "Query is running..." : "No results yet. Run a query to see rows."}
+              </Box>
+            ) : (
+              <Table
+                columnDefinitions={fields.map((f) => ({
+                  id: f,
+                  header: f,
+                  cell: (row: any[]) => row.find((c) => c.field === f)?.value ?? "—",
+                }))}
+                items={rows}
+                trackBy={(row: any[]) => JSON.stringify(row)}
+              />
+            )}
+          </SpaceBetween>
+        </Container>
+      )}
+    </SpaceBetween>
+  );
 }
 
 // ─── Log Group List ────────────────────────────────────

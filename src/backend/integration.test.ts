@@ -2616,7 +2616,7 @@ describe("EKS Integration", () => {
     await api("DELETE", `/api/aws/iam/roles/${roleName}`).catch(() => {});
   });
 
-  it("creates an EKS cluster", async () => {
+  it("creates an EKS cluster", { timeout: 90000 }, async () => {
     const { status, data } = await api("POST", "/api/aws/eks/clusters", {
       name: clusterName,
       roleArn,

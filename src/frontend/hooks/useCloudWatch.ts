@@ -96,3 +96,139 @@ export function useCloudWatchTags(arn: string | null) {
     enabled: !!arn,
   });
 }
+
+// ─── DASHBOARDS ──────────────────────────────────────────
+
+export interface CloudWatchDashboardEntry {
+  dashboardName: string;
+  dashboardArn: string;
+  lastModified?: number;
+  size?: number;
+}
+
+export function useCloudWatchDashboards() {
+  return useQuery<{ dashboards: CloudWatchDashboardEntry[]; total: number }>({
+    queryKey: ["aws", "cloudwatch", "dashboards"],
+    queryFn: () => api("/aws/cloudwatch/dashboards"),
+  });
+}
+
+export function useCloudWatchDashboard(name: string | null) {
+  return useQuery<{
+    dashboardName: string;
+    dashboardArn: string;
+    dashboardBody: string;
+  }>({
+    queryKey: ["aws", "cloudwatch", "dashboards", name],
+    queryFn: () => api(`/aws/cloudwatch/dashboards/${encodeURIComponent(name!)}`),
+    enabled: !!name,
+  });
+}
+
+export function usePutDashboard() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { dashboardName: string; dashboardBody: string }) =>
+      api("/aws/cloudwatch/dashboards/" + encodeURIComponent(data.dashboardName), {
+        method: "PUT",
+        body: JSON.stringify({ dashboardBody: data.dashboardBody }),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "cloudwatch", "dashboards"] }),
+  });
+}
+
+export function useDeleteDashboard() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api(`/aws/cloudwatch/dashboards/${encodeURIComponent(name)}`, { method: "DELETE" }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "cloudwatch", "dashboards"] }),
+  });
+}
+
+// ─── METRIC STREAMS ──────────────────────────────────────
+
+export interface MetricStream {
+  arn: string;
+  name: string;
+  firehoseArn: string;
+  state: string;
+  outputFormat: string;
+  creationDate?: number;
+  lastUpdateDate?: number;
+}
+
+export function useMetricStreams() {
+  return useQuery<{ metricStreams: MetricStream[]; total: number; nextToken?: string }>({
+    queryKey: ["aws", "cloudwatch", "metric-streams"],
+    queryFn: () => api("/aws/cloudwatch/metric-streams"),
+  });
+}
+
+export function useMetricStream(name: string | null) {
+  return useQuery<MetricStream & { roleArn?: string; includeFilters: Array<{ namespace: string; metricNames: string[] }>; excludeFilters: Array<{ namespace: string; metricNames: string[] }> }>({
+    queryKey: ["aws", "cloudwatch", "metric-streams", name],
+    queryFn: () => api(`/aws/cloudwatch/metric-streams/${encodeURIComponent(name!)}`),
+    enabled: !!name,
+  });
+}
+
+export function usePutMetricStream() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: {
+      name: string;
+      firehoseArn: string;
+      roleArn: string;
+      outputFormat: string;
+    }) =>
+      api(`/aws/cloudwatch/metric-streams/${encodeURIComponent(data.name)}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          firehoseArn: data.firehoseArn,
+          roleArn: data.roleArn,
+          outputFormat: data.outputFormat,
+        }),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "cloudwatch", "metric-streams"] }),
+  });
+}
+
+export function useDeleteMetricStream() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api(`/aws/cloudwatch/metric-streams/${encodeURIComponent(name)}`, { method: "DELETE" }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "cloudwatch", "metric-streams"] }),
+  });
+}
+
+export function useStartMetricStreams() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (names: string[]) =>
+      api("/aws/cloudwatch/metric-streams/start", {
+        method: "POST",
+        body: JSON.stringify({ names }),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "cloudwatch", "metric-streams"] }),
+  });
+}
+
+export function useStopMetricStreams() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (names: string[]) =>
+      api("/aws/cloudwatch/metric-streams/stop", {
+        method: "POST",
+        body: JSON.stringify({ names }),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "cloudwatch", "metric-streams"] }),
+  });
+}

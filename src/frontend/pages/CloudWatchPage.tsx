@@ -17,9 +17,11 @@ import {
   Tabs,
   type TabsProps,
   Badge,
+  Alert,
   ColumnLayout,
   Container,
   Textarea,
+  StatusIndicator,
 } from "@cloudscape-design/components";
 import DeleteButton from "../components/DeleteButton";
 import StatusBadge from "../components/StatusBadge";
@@ -33,6 +35,16 @@ import {
   useCreateAlarm,
   useDeleteAlarm,
   useSetAlarmState,
+  useCloudWatchDashboards,
+  useCloudWatchDashboard,
+  usePutDashboard,
+  useDeleteDashboard,
+  useMetricStreams,
+  usePutMetricStream,
+  useDeleteMetricStream,
+  useStartMetricStreams,
+  useStopMetricStreams,
+  type MetricStream,
 } from "../hooks/useCloudWatch";
 
 const COMPARISON_OPERATORS = [
@@ -411,6 +423,337 @@ function CreateAlarmModal({ onClose, onSubmit }: {
   );
 }
 
+const METRIC_STREAM_FORMATS = [
+  { label: "json", value: "json" },
+  { label: "opentelemetry0.7", value: "opentelemetry0.7" },
+  { label: "opentelemetry1.0", value: "opentelemetry1.0" },
+];
+
+function DashboardsTab() {
+  const { showToast } = useToast();
+  const { data, isLoading } = useCloudWatchDashboards();
+  const putDashboard = usePutDashboard();
+  const deleteDashboard = useDeleteDashboard();
+  const [selected, setSelected] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [form, setForm] = useState({ dashboardName: "", dashboardBody: "" });
+
+  const dashboardQuery = useCloudWatchDashboard(selected);
+
+  const dashboards = data?.dashboards || [];
+
+  function handleCreate() {
+    putDashboard.mutate(
+      { dashboardName: form.dashboardName, dashboardBody: form.dashboardBody },
+      {
+        onSuccess: () => {
+          setShowCreate(false);
+          setForm({ dashboardName: "", dashboardBody: "" });
+          showToast("success", `Dashboard ${form.dashboardName} saved`);
+        },
+      }
+    );
+  }
+
+  return (
+    <SpaceBetween size="l">
+      <Table
+        header={
+          <Header
+            variant="h2"
+            counter={`(${dashboards.length})`}
+            actions={<Button onClick={() => setShowCreate(true)}>Create dashboard</Button>}
+          >
+            Dashboards
+          </Header>
+        }
+        columnDefinitions={[
+          {
+            id: "name",
+            header: "Dashboard name",
+            cell: (d: any) => d.dashboardName,
+            isRowHeader: true,
+          },
+          { id: "arn", header: "ARN", cell: (d: any) => d.dashboardArn },
+          {
+            id: "modified",
+            header: "Last modified",
+            cell: (d: any) => (d.lastModified ? new Date(d.lastModified).toLocaleString() : "—"),
+          },
+          { id: "size", header: "Size", cell: (d: any) => d.size ?? "—" },
+          {
+            id: "actions",
+            header: "",
+            cell: (d: any) => (
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button onClick={() => setSelected(d.dashboardName)}>View</Button>
+                <DeleteButton
+                  itemName={d.dashboardName}
+                  resourceType="dashboard"
+                  onDelete={async () => {
+                    try {
+                      await deleteDashboard.mutateAsync(d.dashboardName);
+                      showToast("success", `Dashboard ${d.dashboardName} deleted`);
+                    } catch (e: any) {
+                      showToast("error", e.message);
+                    }
+                  }}
+                />
+              </SpaceBetween>
+            ),
+          },
+        ]}
+        items={dashboards}
+        loading={isLoading}
+        trackBy={(d: any) => d.dashboardName}
+        empty={<Box textAlign="center" color="inherit"><b>No dashboards</b><Box variant="p" color="text-body-secondary">Create a dashboard to get started.</Box></Box>}
+      />
+
+      {selected && (
+        <Container
+          header={
+            <Header
+              variant="h2"
+              actions={
+                <Button variant="normal" onClick={() => setSelected(null)}>Close</Button>
+              }
+            >
+              {selected}
+            </Header>
+          }
+        >
+          {dashboardQuery.isLoading ? (
+            <Box color="text-body-secondary">Loading dashboard body...</Box>
+          ) : (
+            <pre style={{ whiteSpace: "pre-wrap", margin: 0, fontSize: 13 }}>
+              {dashboardQuery.data?.dashboardBody ?? ""}
+            </pre>
+          )}
+        </Container>
+      )}
+
+      {showCreate && (
+        <Modal visible={true} onDismiss={() => setShowCreate(false)} header="Put dashboard" footer={
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button onClick={() => setShowCreate(false)}>Cancel</Button>
+            <Button
+              variant="primary"
+              loading={putDashboard.isPending}
+              disabled={!form.dashboardName || !form.dashboardBody}
+              onClick={handleCreate}
+            >
+              Save dashboard
+            </Button>
+          </SpaceBetween>
+        }>
+          <Form>
+            {putDashboard.isError && (
+              <Alert type="error" dismissible>
+                {(putDashboard.error as Error)?.message || "Failed to save dashboard"}
+              </Alert>
+            )}
+            <SpaceBetween size="m">
+              <FormField label="Dashboard name">
+                <Input
+                  value={form.dashboardName}
+                  onChange={({ detail }) => setForm((p) => ({ ...p, dashboardName: detail.value }))}
+                  placeholder="ops-dashboard"
+                />
+              </FormField>
+              <FormField label="Dashboard body (JSON)" description="The CloudWatch dashboard body JSON — stored opaquely by Floci.">
+                <Textarea
+                  value={form.dashboardBody}
+                  onChange={({ detail }) => setForm((p) => ({ ...p, dashboardBody: detail.value }))}
+                  rows={6}
+                  placeholder='{"widgets":[]}'
+                />
+              </FormField>
+            </SpaceBetween>
+          </Form>
+        </Modal>
+      )}
+    </SpaceBetween>
+  );
+}
+
+function MetricStreamsTab() {
+  const { showToast } = useToast();
+  const { data, isLoading } = useMetricStreams();
+  const putStream = usePutMetricStream();
+  const deleteStream = useDeleteMetricStream();
+  const startStreams = useStartMetricStreams();
+  const stopStreams = useStopMetricStreams();
+  const [showCreate, setShowCreate] = useState(false);
+  const [outputFormat, setOutputFormat] = useState<SelectProps.Option>(METRIC_STREAM_FORMATS[0]);
+  const [form, setForm] = useState({ name: "", firehoseArn: "", roleArn: "" });
+
+  const streams: MetricStream[] = data?.metricStreams || [];
+
+  function handleCreate() {
+    putStream.mutate(
+      {
+        name: form.name,
+        firehoseArn: form.firehoseArn,
+        roleArn: form.roleArn,
+        outputFormat: outputFormat.value!,
+      },
+      {
+        onSuccess: () => {
+          setShowCreate(false);
+          setForm({ name: "", firehoseArn: "", roleArn: "" });
+          showToast("success", `Metric stream ${form.name} saved`);
+        },
+      }
+    );
+  }
+
+  async function handleStart(name: string) {
+    try {
+      await startStreams.mutateAsync([name]);
+      showToast("success", `Metric stream ${name} started`);
+    } catch (e: any) {
+      showToast("error", e.message);
+    }
+  }
+
+  async function handleStop(name: string) {
+    try {
+      await stopStreams.mutateAsync([name]);
+      showToast("success", `Metric stream ${name} stopped`);
+    } catch (e: any) {
+      showToast("error", e.message);
+    }
+  }
+
+  return (
+    <SpaceBetween size="l">
+      <Table
+        header={
+          <Header
+            variant="h2"
+            counter={`(${streams.length})`}
+            actions={<Button onClick={() => setShowCreate(true)}>Create metric stream</Button>}
+          >
+            Metric Streams
+          </Header>
+        }
+        columnDefinitions={[
+          { id: "name", header: "Stream name", cell: (s: MetricStream) => s.name, isRowHeader: true },
+          {
+            id: "state",
+            header: "State",
+            cell: (s: MetricStream) => (
+              <StatusIndicator type={s.state === "running" ? "success" : "error"}>{s.state}</StatusIndicator>
+            ),
+          },
+          { id: "format", header: "Output format", cell: (s: MetricStream) => s.outputFormat },
+          {
+            id: "firehose",
+            header: "Firehose ARN",
+            cell: (s: MetricStream) => (
+              <span style={{ fontFamily: "monospace", fontSize: "12px" }}>{s.firehoseArn}</span>
+            ),
+          },
+          {
+            id: "actions",
+            header: "",
+            cell: (s: MetricStream) => (
+              <SpaceBetween direction="horizontal" size="xs">
+                {s.state !== "running" && (
+                  <Button
+                    onClick={() => handleStart(s.name)}
+                    loading={startStreams.isPending && startStreams.variables?.[0] === s.name}
+                  >
+                    Start
+                  </Button>
+                )}
+                {s.state === "running" && (
+                  <Button
+                    onClick={() => handleStop(s.name)}
+                    loading={stopStreams.isPending && stopStreams.variables?.[0] === s.name}
+                  >
+                    Stop
+                  </Button>
+                )}
+                <DeleteButton
+                  itemName={s.name}
+                  resourceType="metric stream"
+                  onDelete={async () => {
+                    try {
+                      await deleteStream.mutateAsync(s.name);
+                      showToast("success", `Metric stream ${s.name} deleted`);
+                    } catch (e: any) {
+                      showToast("error", e.message);
+                    }
+                  }}
+                />
+              </SpaceBetween>
+            ),
+          },
+        ]}
+        items={streams}
+        loading={isLoading}
+        trackBy={(s: MetricStream) => s.name}
+        empty={<Box textAlign="center" color="inherit"><b>No metric streams</b><Box variant="p" color="text-body-secondary">Create a metric stream to continuously deliver metrics to Firehose.</Box></Box>}
+      />
+
+      {showCreate && (
+        <Modal visible={true} onDismiss={() => setShowCreate(false)} header="Create metric stream" footer={
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button onClick={() => setShowCreate(false)}>Cancel</Button>
+            <Button
+              variant="primary"
+              loading={putStream.isPending}
+              disabled={!form.name || !form.firehoseArn || !form.roleArn}
+              onClick={handleCreate}
+            >
+              Create stream
+            </Button>
+          </SpaceBetween>
+        }>
+          <Form>
+            {putStream.isError && (
+              <Alert type="error" dismissible>
+                {(putStream.error as Error)?.message || "Failed to create metric stream"}
+              </Alert>
+            )}
+            <SpaceBetween size="m">
+              <FormField label="Stream name">
+                <Input
+                  value={form.name}
+                  onChange={({ detail }) => setForm((p) => ({ ...p, name: detail.value }))}
+                  placeholder="main-stream"
+                />
+              </FormField>
+              <FormField label="Firehose delivery stream ARN">
+                <Input
+                  value={form.firehoseArn}
+                  onChange={({ detail }) => setForm((p) => ({ ...p, firehoseArn: detail.value }))}
+                  placeholder="arn:aws:firehose:us-east-1:...:deliverystream/..."
+                />
+              </FormField>
+              <FormField label="IAM role ARN">
+                <Input
+                  value={form.roleArn}
+                  onChange={({ detail }) => setForm((p) => ({ ...p, roleArn: detail.value }))}
+                  placeholder="arn:aws:iam::...:role/..."
+                />
+              </FormField>
+              <FormField label="Output format">
+                <Select
+                  selectedOption={outputFormat}
+                  onChange={({ detail }) => setOutputFormat(detail.selectedOption)}
+                  options={METRIC_STREAM_FORMATS}
+                />
+              </FormField>
+            </SpaceBetween>
+          </Form>
+        </Modal>
+      )}
+    </SpaceBetween>
+  );
+}
+
 export default function CloudWatchPage() {
   const navigate = useNavigate();
   const { data: health } = useHealth();
@@ -422,6 +765,8 @@ export default function CloudWatchPage() {
   const tabs: TabsProps.Tab[] = [
     { id: "alarms", label: "Alarms", content: <AlarmsTab /> },
     { id: "metrics", label: "Metrics", content: <MetricsTab /> },
+    { id: "dashboards", label: "Dashboards", content: <DashboardsTab /> },
+    { id: "metric-streams", label: "Metric Streams", content: <MetricStreamsTab /> },
   ];
 
   return (

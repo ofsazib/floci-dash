@@ -36,6 +36,22 @@ vi.mock("@aws-sdk/client-cloudwatch-logs", () => ({
   UntagLogGroupCommand: createCmd("UntagLogGroupCommand"),
   ListTagsLogGroupCommand: createCmd("ListTagsLogGroupCommand"),
   GetDataProtectionPolicyCommand: createCmd("GetDataProtectionPolicyCommand"),
+  AssociateKmsKeyCommand: createCmd("AssociateKmsKeyCommand"),
+  DisassociateKmsKeyCommand: createCmd("DisassociateKmsKeyCommand"),
+  PutLogGroupDeletionProtectionCommand: createCmd("PutLogGroupDeletionProtectionCommand"),
+  PutAccountPolicyCommand: createCmd("PutAccountPolicyCommand"),
+  DescribeAccountPoliciesCommand: createCmd("DescribeAccountPoliciesCommand"),
+  PutResourcePolicyCommand: createCmd("PutResourcePolicyCommand"),
+  DescribeResourcePoliciesCommand: createCmd("DescribeResourcePoliciesCommand"),
+  PutDestinationCommand: createCmd("PutDestinationCommand"),
+  PutDestinationPolicyCommand: createCmd("PutDestinationPolicyCommand"),
+  PutMetricFilterCommand: createCmd("PutMetricFilterCommand"),
+  DescribeMetricFiltersCommand: createCmd("DescribeMetricFiltersCommand"),
+  DeleteMetricFilterCommand: createCmd("DeleteMetricFilterCommand"),
+  TestMetricFilterCommand: createCmd("TestMetricFilterCommand"),
+  StartQueryCommand: createCmd("StartQueryCommand"),
+  StopQueryCommand: createCmd("StopQueryCommand"),
+  GetQueryResultsCommand: createCmd("GetQueryResultsCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -722,6 +738,558 @@ describe("CloudWatch Logs Routes", () => {
       const body = await res.json();
       expect(body.logGroupIdentifier).toBe("/aws/test");
       expect(body.policyDocument).toBe("{\"Name\":\"test-policy\"}");
+    });
+  });
+
+  describe("KMS Key Association", () => {
+    it("POST /log-groups/kms — associates by logGroupName", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/log-groups/kms", { logGroupName: "/aws/test", kmsKeyId: "key-1" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.associated).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("AssociateKmsKeyCommand");
+      expect(mockSend.mock.calls[0][0].logGroupName).toBe("/aws/test");
+      expect(mockSend.mock.calls[0][0].resourceIdentifier).toBeUndefined();
+      expect(mockSend.mock.calls[0][0].kmsKeyId).toBe("key-1");
+    });
+
+    it("POST /log-groups/kms — associates by resourceIdentifier ARN", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/log-groups/kms", {
+        resourceIdentifier: "arn:aws:logs:us-east-1::log-group:/aws/test:*",
+        kmsKeyId: "key-1",
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].resourceIdentifier).toBe(
+        "arn:aws:logs:us-east-1::log-group:/aws/test:*"
+      );
+      expect(mockSend.mock.calls[0][0].logGroupName).toBeUndefined();
+    });
+
+    it("POST /log-groups/kms — 400 when kmsKeyId missing", async () => {
+      const res = await post("/log-groups/kms", { logGroupName: "/aws/test" });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("kmsKeyId");
+    });
+
+    it("POST /log-groups/kms — 400 when neither nor both selectors given", async () => {
+      const neither = await post("/log-groups/kms", { kmsKeyId: "key-1" });
+      expect(neither.status).toBe(400);
+      const both = await post("/log-groups/kms", {
+        logGroupName: "/aws/test",
+        resourceIdentifier: "arn:aws:logs:us-east-1::log-group:/aws/test:*",
+        kmsKeyId: "key-1",
+      });
+      expect(both.status).toBe(400);
+    });
+
+    it("POST /log-groups/kms/disassociate — disassociates by logGroupName", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/log-groups/kms/disassociate", { logGroupName: "/aws/test" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.disassociated).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DisassociateKmsKeyCommand");
+      expect(mockSend.mock.calls[0][0].logGroupName).toBe("/aws/test");
+    });
+
+    it("POST /log-groups/kms/disassociate — disassociates by resourceIdentifier", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/log-groups/kms/disassociate", {
+        resourceIdentifier: "arn:aws:logs:us-east-1::log-group:/aws/test:*",
+      });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].resourceIdentifier).toBe(
+        "arn:aws:logs:us-east-1::log-group:/aws/test:*"
+      );
+    });
+
+    it("POST /log-groups/kms/disassociate — 400 when selectors ambiguous", async () => {
+      const neither = await post("/log-groups/kms/disassociate", {});
+      expect(neither.status).toBe(400);
+      const both = await post("/log-groups/kms/disassociate", {
+        logGroupName: "/aws/test",
+        resourceIdentifier: "arn:test",
+      });
+      expect(both.status).toBe(400);
+    });
+  });
+
+  describe("Deletion Protection", () => {
+    it("PUT /log-groups/:name/deletion-protection — enables", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/log-groups/%2Faws%2Ftest/deletion-protection", {
+        deletionProtectionEnabled: true,
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deletionProtectionEnabled).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("PutLogGroupDeletionProtectionCommand");
+      expect(mockSend.mock.calls[0][0].logGroupIdentifier).toBe("/aws/test");
+      expect(mockSend.mock.calls[0][0].deletionProtectionEnabled).toBe(true);
+    });
+
+    it("PUT /log-groups/:name/deletion-protection — disables", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await put("/log-groups/%2Faws%2Ftest/deletion-protection", {
+        deletionProtectionEnabled: false,
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deletionProtectionEnabled).toBe(false);
+    });
+
+    it("PUT /log-groups/:name/deletion-protection — 400 when flag is not a boolean", async () => {
+      const res = await put("/log-groups/%2Faws%2Ftest/deletion-protection", {});
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("deletionProtectionEnabled");
+    });
+  });
+
+  describe("Account Policies", () => {
+    it("GET /account-policies — lists policies", async () => {
+      mockSend.mockResolvedValueOnce({
+        accountPolicies: [
+          {
+            accountId: "000000000000",
+            policyName: "dp-policy",
+            policyDocument: "{}",
+            policyType: "DATA_PROTECTION",
+            scope: "ACCOUNT",
+            lastUpdatedTime: 1000,
+          },
+        ],
+      });
+      const res = await get("/account-policies");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(body.accountPolicies[0].policyName).toBe("dp-policy");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DescribeAccountPoliciesCommand");
+    });
+
+    it("GET /account-policies — forwards policyType and policyName filters", async () => {
+      mockSend.mockResolvedValueOnce({ accountPolicies: [] });
+      const res = await get("/account-policies?policyType=SUBSCRIPTION_FILTER&policyName=sub");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(mockSend.mock.calls[0][0].policyType).toBe("SUBSCRIPTION_FILTER");
+      expect(mockSend.mock.calls[0][0].policyName).toBe("sub");
+    });
+
+    it("GET /account-policies — sparse response defaults to empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/account-policies");
+      const body = await res.json();
+      expect(body.accountPolicies).toEqual([]);
+      expect(body.total).toBe(0);
+    });
+
+    it("POST /account-policies — creates a policy", async () => {
+      mockSend.mockResolvedValueOnce({
+        accountPolicy: { policyName: "dp-policy", policyType: "DATA_PROTECTION" },
+      });
+      const res = await post("/account-policies", {
+        policyName: "dp-policy",
+        policyDocument: "{}",
+        policyType: "DATA_PROTECTION",
+        scope: "ACCOUNT",
+      });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.accountPolicy.policyName).toBe("dp-policy");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("PutAccountPolicyCommand");
+      expect(mockSend.mock.calls[0][0].scope).toBe("ACCOUNT");
+    });
+
+    it("POST /account-policies — 400 when required fields missing", async () => {
+      const res = await post("/account-policies", { policyName: "x" });
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe("Resource Policies", () => {
+    it("GET /resource-policies — lists policies", async () => {
+      mockSend.mockResolvedValueOnce({
+        resourcePolicies: [
+          { policyName: "r-policy", policyDocument: "{}", lastUpdatedTime: 2000 },
+        ],
+      });
+      const res = await get("/resource-policies");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(body.resourcePolicies[0].policyName).toBe("r-policy");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DescribeResourcePoliciesCommand");
+    });
+
+    it("GET /resource-policies — sparse response defaults to empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/resource-policies");
+      const body = await res.json();
+      expect(body.resourcePolicies).toEqual([]);
+      expect(body.total).toBe(0);
+    });
+
+    it("POST /resource-policies — creates a policy", async () => {
+      mockSend.mockResolvedValueOnce({
+        resourcePolicy: { policyName: "r-policy", policyDocument: "{}" },
+      });
+      const res = await post("/resource-policies", { policyName: "r-policy", policyDocument: "{}" });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.resourcePolicy.policyName).toBe("r-policy");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("PutResourcePolicyCommand");
+    });
+
+    it("POST /resource-policies — 400 when fields missing", async () => {
+      const res = await post("/resource-policies", { policyName: "r-policy" });
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe("Destinations", () => {
+    it("POST /destinations — creates a destination", async () => {
+      mockSend.mockResolvedValueOnce({
+        destination: {
+          destinationName: "dest-1",
+          targetArn: "arn:aws:kinesis:...",
+          arn: "arn:aws:logs:...:destination:dest-1",
+        },
+      });
+      const res = await post("/destinations", {
+        destinationName: "dest-1",
+        targetArn: "arn:aws:kinesis:...",
+        roleArn: "arn:aws:iam::...:role/r",
+      });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.destination.destinationName).toBe("dest-1");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("PutDestinationCommand");
+      expect(mockSend.mock.calls[0][0].roleArn).toBe("arn:aws:iam::...:role/r");
+    });
+
+    it("POST /destinations — omits roleArn when absent", async () => {
+      mockSend.mockResolvedValueOnce({ destination: { destinationName: "dest-1" } });
+      const res = await post("/destinations", { destinationName: "dest-1", targetArn: "arn:x" });
+      expect(res.status).toBe(201);
+      expect(mockSend.mock.calls[0][0].roleArn).toBeUndefined();
+    });
+
+    it("POST /destinations — 400 when fields missing", async () => {
+      const res = await post("/destinations", { destinationName: "dest-1" });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /destinations/:name/policy — attaches access policy", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/destinations/dest-1/policy", { accessPolicy: "{}" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("PutDestinationPolicyCommand");
+      expect(mockSend.mock.calls[0][0].destinationName).toBe("dest-1");
+    });
+
+    it("POST /destinations/:name/policy — 400 when accessPolicy missing", async () => {
+      const res = await post("/destinations/dest-1/policy", {});
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe("Metric Filters", () => {
+    it("GET /log-groups/:name/metric-filters — lists filters", async () => {
+      mockSend.mockResolvedValueOnce({
+        metricFilters: [
+          {
+            filterName: "mf-1",
+            filterPattern: "ERROR",
+            logGroupName: "/aws/test",
+            creationTime: 3000,
+            metricTransformations: [
+              { metricName: "Errors", metricNamespace: "App", metricValue: "1" },
+            ],
+          },
+        ],
+      });
+      const res = await get("/log-groups/%2Faws%2Ftest/metric-filters");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(body.metricFilters[0].filterName).toBe("mf-1");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DescribeMetricFiltersCommand");
+      expect(mockSend.mock.calls[0][0].logGroupName).toBe("/aws/test");
+      expect(mockSend.mock.calls[0][0].metricName).toBeUndefined();
+    });
+
+    it("GET /log-groups/:name/metric-filters — forwards prefix and metric selectors", async () => {
+      mockSend.mockResolvedValueOnce({ metricFilters: [] });
+      const res = await get(
+        "/log-groups/%2Faws%2Ftest/metric-filters?prefix=mf&metricName=Errors&metricNamespace=App&limit=5&nextToken=t1"
+      );
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(0);
+      expect(mockSend.mock.calls[0][0].filterNamePrefix).toBe("mf");
+      expect(mockSend.mock.calls[0][0].metricName).toBe("Errors");
+      expect(mockSend.mock.calls[0][0].metricNamespace).toBe("App");
+      expect(mockSend.mock.calls[0][0].limit).toBe(5);
+      expect(mockSend.mock.calls[0][0].nextToken).toBe("t1");
+    });
+
+    it("GET /log-groups/:name/metric-filters — passes nextToken through", async () => {
+      mockSend.mockResolvedValueOnce({ metricFilters: [], nextToken: "t2" });
+      const res = await get("/log-groups/%2Faws%2Ftest/metric-filters?nextToken=t1");
+      const body = await res.json();
+      expect(body.nextToken).toBe("t2");
+    });
+
+    it("POST /log-groups/:name/metric-filters — creates a filter", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/log-groups/%2Faws%2Ftest/metric-filters", {
+        filterName: "mf-1",
+        filterPattern: "ERROR",
+        metricTransformations: [
+          { metricName: "Errors", metricNamespace: "App", metricValue: "1", defaultValue: 0 },
+        ],
+      });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.created).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("PutMetricFilterCommand");
+      expect(mockSend.mock.calls[0][0].metricTransformations[0].defaultValue).toBe(0);
+    });
+
+    it("POST /log-groups/:name/metric-filters — 400 when fields missing", async () => {
+      const noName = await post("/log-groups/%2Faws%2Ftest/metric-filters", {
+        metricTransformations: [{ metricName: "E", metricNamespace: "App", metricValue: "1" }],
+      });
+      expect(noName.status).toBe(400);
+      const noTransformations = await post("/log-groups/%2Faws%2Ftest/metric-filters", {
+        filterName: "mf-1",
+      });
+      expect(noTransformations.status).toBe(400);
+      const emptyTransformations = await post("/log-groups/%2Faws%2Ftest/metric-filters", {
+        filterName: "mf-1",
+        metricTransformations: [],
+      });
+      expect(emptyTransformations.status).toBe(400);
+    });
+
+    it("POST /log-groups/:name/metric-filters — defaults empty filterPattern when absent", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/log-groups/%2Faws%2Ftest/metric-filters", {
+        filterName: "mf-1",
+        metricTransformations: [{ metricName: "Errors", metricNamespace: "App", metricValue: "1" }],
+      });
+      expect(res.status).toBe(201);
+      expect(mockSend.mock.calls[0][0].filterPattern).toBe("");
+    });
+
+    it("DELETE /log-groups/:name/metric-filters/:filterName — deletes", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await del("/log-groups/%2Faws%2Ftest/metric-filters/mf-1");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.deleted).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteMetricFilterCommand");
+      expect(mockSend.mock.calls[0][0].filterName).toBe("mf-1");
+    });
+
+    it("POST /metric-filters/test — returns matches", async () => {
+      mockSend.mockResolvedValueOnce({
+        matches: [
+          {
+            eventNumber: 1,
+            eventMessage: "ERROR: boom",
+            extractedValues: { msg: "boom" },
+          },
+        ],
+      });
+      const res = await post("/metric-filters/test", {
+        filterPattern: "ERROR",
+        logEventMessages: ["ERROR: boom", "INFO: ok"],
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(body.matches[0].extractedValues).toEqual({ msg: "boom" });
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("TestMetricFilterCommand");
+      expect(mockSend.mock.calls[0][0].logEventMessages).toEqual(["ERROR: boom", "INFO: ok"]);
+    });
+
+    it("POST /metric-filters/test — sparse matches default extractedValues", async () => {
+      mockSend.mockResolvedValueOnce({ matches: [{ eventNumber: 2, eventMessage: "x" }] });
+      const res = await post("/metric-filters/test", {
+        logEventMessages: ["x"],
+      });
+      const body = await res.json();
+      expect(body.matches[0].extractedValues).toEqual({});
+    });
+
+    it("POST /metric-filters/test — 400 when logEventMessages is not an array", async () => {
+      const res = await post("/metric-filters/test", { filterPattern: "ERROR" });
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe("Logs Insights Queries", () => {
+    it("POST /queries — starts a query by logGroupName", async () => {
+      mockSend.mockResolvedValueOnce({ queryId: "q-1" });
+      const res = await post("/queries", {
+        logGroupName: "/aws/test",
+        startTime: 1000,
+        endTime: 2000,
+        queryString: "fields @timestamp, @message | limit 10",
+      });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.queryId).toBe("q-1");
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("StartQueryCommand");
+      expect(mockSend.mock.calls[0][0].logGroupName).toBe("/aws/test");
+      expect(mockSend.mock.calls[0][0].logGroupNames).toBeUndefined();
+    });
+
+    it("POST /queries — starts a query by logGroupNames list", async () => {
+      mockSend.mockResolvedValueOnce({ queryId: "q-2" });
+      const res = await post("/queries", {
+        logGroupNames: ["/aws/a", "/aws/b"],
+        startTime: 1000,
+        endTime: 2000,
+        queryString: "fields @message",
+        limit: 100,
+      });
+      expect(res.status).toBe(201);
+      expect(mockSend.mock.calls[0][0].logGroupNames).toEqual(["/aws/a", "/aws/b"]);
+      expect(mockSend.mock.calls[0][0].limit).toBe(100);
+    });
+
+    it("POST /queries — starts a query by logGroupIdentifiers", async () => {
+      mockSend.mockResolvedValueOnce({ queryId: "q-3" });
+      const res = await post("/queries", {
+        logGroupIdentifiers: ["arn:aws:logs:us-east-1::log-group:/aws/test:*"],
+        startTime: 1000,
+        endTime: 2000,
+        queryString: "fields @message",
+      });
+      expect(res.status).toBe(201);
+      expect(mockSend.mock.calls[0][0].logGroupIdentifiers).toEqual([
+        "arn:aws:logs:us-east-1::log-group:/aws/test:*",
+      ]);
+    });
+
+    it("POST /queries — 400 when required fields missing", async () => {
+      const noQuery = await post("/queries", { logGroupName: "/aws/test", startTime: 1, endTime: 2 });
+      expect(noQuery.status).toBe(400);
+      const noTime = await post("/queries", { logGroupName: "/aws/test", queryString: "fields @message" });
+      expect(noTime.status).toBe(400);
+    });
+
+    it("POST /queries — 400 when selector is ambiguous", async () => {
+      const res = await post("/queries", {
+        logGroupName: "/aws/test",
+        logGroupNames: ["/aws/other"],
+        startTime: 1,
+        endTime: 2,
+        queryString: "fields @message",
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it("POST /queries/:id/stop — stops the query", async () => {
+      mockSend.mockResolvedValueOnce({ success: true });
+      const res = await post("/queries/q-1/stop");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.success).toBe(true);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("StopQueryCommand");
+      expect(mockSend.mock.calls[0][0].queryId).toBe("q-1");
+    });
+
+    it("POST /queries/:id/stop — defaults success true when absent", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/queries/q-1/stop");
+      const body = await res.json();
+      expect(body.success).toBe(true);
+    });
+
+    it("GET /queries/:id — returns results and statistics", async () => {
+      mockSend.mockResolvedValueOnce({
+        status: "Complete",
+        results: [
+          [
+            { field: "@timestamp", value: "2026-01-01 00:00:00" },
+            { field: "@message", value: "hello" },
+          ],
+        ],
+        statistics: { recordsMatched: 1, recordsScanned: 10, bytesScanned: 128 },
+      });
+      const res = await get("/queries/q-1");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.status).toBe("Complete");
+      expect(body.results[0][1]).toEqual({ field: "@message", value: "hello" });
+      expect(body.statistics.recordsScanned).toBe(10);
+      expect(mockSend.mock.calls[0][0].__cmdName).toBe("GetQueryResultsCommand");
+    });
+
+    it("GET /queries/:id — defaults statistics when absent", async () => {
+      mockSend.mockResolvedValueOnce({ status: "Running", results: [] });
+      const res = await get("/queries/q-1");
+      const body = await res.json();
+      expect(body.statistics).toEqual({ recordsMatched: 0, recordsScanned: 0, bytesScanned: 0 });
+    });
+
+    it("GET /queries/:id — sparse response defaults to empty results", async () => {
+      mockSend.mockResolvedValueOnce({ status: "Complete" });
+      const res = await get("/queries/q-1");
+      const body = await res.json();
+      expect(body.results).toEqual([]);
+    });
+
+    it("GET /queries/:id — tolerates a null row entry", async () => {
+      mockSend.mockResolvedValueOnce({ status: "Complete", results: [null] });
+      const res = await get("/queries/q-1");
+      const body = await res.json();
+      expect(body.results).toEqual([[]]);
+    });
+  });
+
+  describe("Sparse response fallbacks", () => {
+    it("GET /log-groups/:name/metric-filters — sparse response defaults to empty list", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/log-groups/%2Faws%2Ftest/metric-filters");
+      const body = await res.json();
+      expect(body.metricFilters).toEqual([]);
+      expect(body.total).toBe(0);
+    });
+
+    it("GET /log-groups/:name/metric-filters — filter without transformations maps to empty list", async () => {
+      mockSend.mockResolvedValueOnce({
+        metricFilters: [{ filterName: "mf-x", logGroupName: "/aws/test" }],
+      });
+      const res = await get("/log-groups/%2Faws%2Ftest/metric-filters");
+      const body = await res.json();
+      expect(body.metricFilters[0].metricTransformations).toEqual([]);
+    });
+
+    it("POST /metric-filters/test — defaults empty filterPattern when absent", async () => {
+      mockSend.mockResolvedValueOnce({ matches: [] });
+      const res = await post("/metric-filters/test", { logEventMessages: ["x"] });
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].filterPattern).toBe("");
+    });
+
+    it("POST /metric-filters/test — sparse response defaults to empty matches", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await post("/metric-filters/test", { logEventMessages: ["x"] });
+      const body = await res.json();
+      expect(body.matches).toEqual([]);
+      expect(body.total).toBe(0);
     });
   });
 });

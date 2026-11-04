@@ -46,6 +46,22 @@ vi.mock("../hooks/useLogs", () => ({
   useLogGroupTags: (...args: any[]) => mockLogGroupTags(...args),
   useTagLogGroup: () => ({ mutate: mockTagLogGroupMutate, isPending: false }),
   useUntagLogGroup: () => ({ mutate: vi.fn(), isPending: false }),
+  useAssociateKmsKey: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
+  useDisassociateKmsKey: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
+  usePutLogGroupDeletionProtection: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null }),
+  useAccountPolicies: () => ({ data: { accountPolicies: [], total: 0 }, isLoading: false, isError: false, error: null }),
+  usePutAccountPolicy: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null }),
+  useMetricFilters: () => ({ data: { metricFilters: [], total: 0 }, isLoading: false, isError: false, error: null }),
+  usePutMetricFilter: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null }),
+  useDeleteMetricFilter: () => ({ mutateAsync: vi.fn(), isPending: false, variables: { filterName: "" } }),
+  useTestMetricFilter: () => ({ mutateAsync: vi.fn().mockResolvedValue({ matches: [], total: 0 }), isPending: false }),
+  usePutDestination: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null }),
+  usePutDestinationPolicy: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null }),
+  useResourcePolicies: () => ({ data: { resourcePolicies: [], total: 0 }, isLoading: false, isError: false, error: null }),
+  usePutResourcePolicy: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false, isError: false, error: null }),
+  useStartQuery: () => ({ mutateAsync: vi.fn().mockResolvedValue({ queryId: "q" }), isPending: false }),
+  useStopQuery: () => ({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
+  useQueryResults: () => ({ data: undefined, isLoading: false, isError: false, error: null, refetch: vi.fn() }),
 }));
 
 vi.mock("../hooks/useRDS", () => ({

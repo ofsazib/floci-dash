@@ -29,6 +29,22 @@ import {
   useTagLogGroup,
   useUntagLogGroup,
   useDataProtectionPolicy,
+  useAssociateKmsKey,
+  useDisassociateKmsKey,
+  usePutLogGroupDeletionProtection,
+  useAccountPolicies,
+  usePutAccountPolicy,
+  useMetricFilters,
+  usePutMetricFilter,
+  useDeleteMetricFilter,
+  useTestMetricFilter,
+  usePutDestination,
+  usePutDestinationPolicy,
+  useResourcePolicies,
+  usePutResourcePolicy,
+  useStartQuery,
+  useStopQuery,
+  useQueryResults,
 } from "./useLogs";
 
 function createWrapper() {
@@ -547,6 +563,320 @@ describe("useDataProtectionPolicy", () => {
 
   it("is disabled when logGroupName is null", () => {
     const { result } = renderHook(() => useDataProtectionPolicy(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Log Management Hooks (E.9 batch 4) ───────────────
+
+describe("useAssociateKmsKey", () => {
+  it("calls api with POST method and serialized body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useAssociateKmsKey(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ logGroupName: "/aws/test", kmsKeyId: "key-1" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/logs/log-groups/kms",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ logGroupName: "/aws/test", kmsKeyId: "key-1" }),
+      })
+    );
+  });
+
+  it("sends resourceIdentifier variant", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useAssociateKmsKey(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({
+      resourceIdentifier: "arn:aws:logs:us-east-1::log-group:/aws/test:*",
+      kmsKeyId: "key-1",
+    });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/logs/log-groups/kms",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          resourceIdentifier: "arn:aws:logs:us-east-1::log-group:/aws/test:*",
+          kmsKeyId: "key-1",
+        }),
+      })
+    );
+  });
+});
+
+describe("useDisassociateKmsKey", () => {
+  it("calls api with POST method and serialized body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useDisassociateKmsKey(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ logGroupName: "/aws/test" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/logs/log-groups/kms/disassociate",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ logGroupName: "/aws/test" }),
+      })
+    );
+  });
+});
+
+describe("usePutLogGroupDeletionProtection", () => {
+  it("calls api with PUT method and enabled flag", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => usePutLogGroupDeletionProtection(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ logGroupIdentifier: "/aws/test", deletionProtectionEnabled: true });
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/logs/log-groups/${encodeURIComponent("/aws/test")}/deletion-protection`,
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({ deletionProtectionEnabled: true }),
+      })
+    );
+  });
+
+  it("sends false to disable", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => usePutLogGroupDeletionProtection(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ logGroupIdentifier: "/aws/test", deletionProtectionEnabled: false });
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/logs/log-groups/${encodeURIComponent("/aws/test")}/deletion-protection`,
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({ deletionProtectionEnabled: false }),
+      })
+    );
+  });
+});
+
+describe("useAccountPolicies", () => {
+  it("calls api without query string when no policyType", async () => {
+    mockApi.mockResolvedValueOnce({ accountPolicies: [], total: 0 });
+    const { result } = renderHook(() => useAccountPolicies(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/logs/account-policies");
+  });
+
+  it("encodes policyType filter when provided", async () => {
+    mockApi.mockResolvedValueOnce({ accountPolicies: [], total: 0 });
+    const { result } = renderHook(() => useAccountPolicies("DATA_PROTECTION"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/logs/account-policies?policyType=DATA_PROTECTION");
+  });
+});
+
+describe("usePutAccountPolicy", () => {
+  it("calls api with POST method and serialized body", async () => {
+    mockApi.mockResolvedValueOnce({ accountPolicy: { policyName: "p" } });
+    const { result } = renderHook(() => usePutAccountPolicy(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({
+      policyName: "p",
+      policyDocument: "{}",
+      policyType: "DATA_PROTECTION",
+      scope: "ACCOUNT",
+    });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/logs/account-policies",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          policyName: "p",
+          policyDocument: "{}",
+          policyType: "DATA_PROTECTION",
+          scope: "ACCOUNT",
+        }),
+      })
+    );
+  });
+});
+
+describe("useMetricFilters", () => {
+  it("calls api with encoded group when provided", async () => {
+    mockApi.mockResolvedValueOnce({ metricFilters: [], total: 0 });
+    const { result } = renderHook(() => useMetricFilters("/aws/test"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(`/aws/logs/log-groups/${encodeURIComponent("/aws/test")}/metric-filters`);
+  });
+
+  it("is disabled when logGroupName is null", () => {
+    const { result } = renderHook(() => useMetricFilters(null), { wrapper: createWrapper() });
+    expect(result.current.fetchStatus).toBe("idle");
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+});
+
+describe("usePutMetricFilter", () => {
+  it("calls api with POST method and transformations body", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => usePutMetricFilter(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({
+      logGroupName: "/aws/test",
+      filterName: "mf-1",
+      filterPattern: "ERROR",
+      metricTransformations: [{ metricName: "Errors", metricNamespace: "App", metricValue: "1" }],
+    });
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/logs/log-groups/${encodeURIComponent("/aws/test")}/metric-filters`,
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          logGroupName: "/aws/test",
+          filterName: "mf-1",
+          filterPattern: "ERROR",
+          metricTransformations: [{ metricName: "Errors", metricNamespace: "App", metricValue: "1" }],
+        }),
+      })
+    );
+  });
+});
+
+describe("useDeleteMetricFilter", () => {
+  it("calls api with DELETE method and encoded filter name", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useDeleteMetricFilter(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ logGroupName: "/aws/test", filterName: "mf-1" });
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/logs/log-groups/${encodeURIComponent("/aws/test")}/metric-filters/${encodeURIComponent("mf-1")}`,
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
+});
+
+describe("useTestMetricFilter", () => {
+  it("calls api with POST method and pattern/messages", async () => {
+    mockApi.mockResolvedValueOnce({ matches: [], total: 0 });
+    const { result } = renderHook(() => useTestMetricFilter(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({
+      filterPattern: "ERROR",
+      logEventMessages: ["ERROR: boom"],
+    });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/logs/metric-filters/test",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ filterPattern: "ERROR", logEventMessages: ["ERROR: boom"] }),
+      })
+    );
+  });
+});
+
+describe("usePutDestination", () => {
+  it("calls api with POST method and destination body", async () => {
+    mockApi.mockResolvedValueOnce({ destination: { destinationName: "d1" } });
+    const { result } = renderHook(() => usePutDestination(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ destinationName: "d1", targetArn: "arn:x", roleArn: "arn:r" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/logs/destinations",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ destinationName: "d1", targetArn: "arn:x", roleArn: "arn:r" }),
+      })
+    );
+  });
+
+  it("omits roleArn when absent", async () => {
+    mockApi.mockResolvedValueOnce({ destination: { destinationName: "d1" } });
+    const { result } = renderHook(() => usePutDestination(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ destinationName: "d1", targetArn: "arn:x" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/logs/destinations",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ destinationName: "d1", targetArn: "arn:x" }),
+      })
+    );
+  });
+});
+
+describe("usePutDestinationPolicy", () => {
+  it("calls api with POST method and encoded destination name", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => usePutDestinationPolicy(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ destinationName: "d1", accessPolicy: "{}" });
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/logs/destinations/${encodeURIComponent("d1")}/policy`,
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ accessPolicy: "{}" }),
+      })
+    );
+  });
+});
+
+describe("useResourcePolicies", () => {
+  it("calls api and returns policies", async () => {
+    mockApi.mockResolvedValueOnce({ resourcePolicies: [{ policyName: "p" }], total: 1 });
+    const { result } = renderHook(() => useResourcePolicies(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/logs/resource-policies");
+  });
+});
+
+describe("usePutResourcePolicy", () => {
+  it("calls api with POST method and serialized body", async () => {
+    mockApi.mockResolvedValueOnce({ resourcePolicy: { policyName: "p" } });
+    const { result } = renderHook(() => usePutResourcePolicy(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ policyName: "p", policyDocument: "{}" });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/logs/resource-policies",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ policyName: "p", policyDocument: "{}" }),
+      })
+    );
+  });
+});
+
+describe("useStartQuery", () => {
+  it("calls api with POST method and query body", async () => {
+    mockApi.mockResolvedValueOnce({ queryId: "q-1" });
+    const { result } = renderHook(() => useStartQuery(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({
+      logGroupName: "/aws/test",
+      startTime: 1000,
+      endTime: 2000,
+      queryString: "fields @message",
+    });
+    expect(mockApi).toHaveBeenCalledWith(
+      "/aws/logs/queries",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          logGroupName: "/aws/test",
+          startTime: 1000,
+          endTime: 2000,
+          queryString: "fields @message",
+        }),
+      })
+    );
+  });
+});
+
+describe("useStopQuery", () => {
+  it("calls api with POST method and encoded query id", async () => {
+    mockApi.mockResolvedValueOnce({ success: true });
+    const { result } = renderHook(() => useStopQuery(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("q-1");
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/logs/queries/${encodeURIComponent("q-1")}/stop`,
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+});
+
+describe("useQueryResults", () => {
+  it("calls api with encoded query id when provided", async () => {
+    mockApi.mockResolvedValueOnce({
+      queryId: "q-1",
+      status: "Complete",
+      results: [],
+      statistics: { recordsMatched: 0, recordsScanned: 0, bytesScanned: 0 },
+    });
+    const { result } = renderHook(() => useQueryResults("q-1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(`/aws/logs/queries/${encodeURIComponent("q-1")}`);
+  });
+
+  it("is disabled when queryId is null", () => {
+    const { result } = renderHook(() => useQueryResults(null), { wrapper: createWrapper() });
     expect(result.current.fetchStatus).toBe("idle");
     expect(mockApi).not.toHaveBeenCalled();
   });

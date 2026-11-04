@@ -20,6 +20,22 @@ import {
   UntagLogGroupCommand,
   ListTagsLogGroupCommand,
   GetDataProtectionPolicyCommand,
+  AssociateKmsKeyCommand,
+  DisassociateKmsKeyCommand,
+  PutLogGroupDeletionProtectionCommand,
+  PutAccountPolicyCommand,
+  DescribeAccountPoliciesCommand,
+  PutResourcePolicyCommand,
+  DescribeResourcePoliciesCommand,
+  PutDestinationCommand,
+  PutDestinationPolicyCommand,
+  PutMetricFilterCommand,
+  DescribeMetricFiltersCommand,
+  DeleteMetricFilterCommand,
+  TestMetricFilterCommand,
+  StartQueryCommand,
+  StopQueryCommand,
+  GetQueryResultsCommand,
 } from "@aws-sdk/client-cloudwatch-logs";
 import { getAwsConfig } from "../../clients/aws";
 
@@ -434,6 +450,366 @@ router.get("/log-groups/:name/data-protection", async (c: Context) => {
     new GetDataProtectionPolicyCommand({ logGroupIdentifier: name })
   );
   return c.json({ logGroupIdentifier: result.logGroupIdentifier, policyDocument: result.policyDocument });
+});
+
+// ──────────────────────────────────────────────
+//  KMS Key Association
+// ──────────────────────────────────────────────
+
+router.post("/log-groups/kms", async (c: Context) => {
+  const body = await c.req.json<{
+    logGroupName?: string;
+    resourceIdentifier?: string;
+    kmsKeyId?: string;
+  }>();
+  if (!body.kmsKeyId) {
+    return c.json({ error: "kmsKeyId is required" }, 400);
+  }
+  if (!!body.logGroupName === !!body.resourceIdentifier) {
+    return c.json(
+      { error: "Exactly one of logGroupName or resourceIdentifier is required" },
+      400
+    );
+  }
+  await logs().send(
+    new AssociateKmsKeyCommand({
+      logGroupName: body.logGroupName,
+      resourceIdentifier: body.resourceIdentifier,
+      kmsKeyId: body.kmsKeyId,
+    } as any)
+  );
+  return c.json({
+    target: body.logGroupName || body.resourceIdentifier,
+    kmsKeyId: body.kmsKeyId,
+    associated: true,
+  });
+});
+
+router.post("/log-groups/kms/disassociate", async (c: Context) => {
+  const body = await c.req.json<{ logGroupName?: string; resourceIdentifier?: string }>();
+  if (!!body.logGroupName === !!body.resourceIdentifier) {
+    return c.json(
+      { error: "Exactly one of logGroupName or resourceIdentifier is required" },
+      400
+    );
+  }
+  await logs().send(
+    new DisassociateKmsKeyCommand({
+      logGroupName: body.logGroupName,
+      resourceIdentifier: body.resourceIdentifier,
+    } as any)
+  );
+  return c.json({
+    target: body.logGroupName || body.resourceIdentifier,
+    disassociated: true,
+  });
+});
+
+// ──────────────────────────────────────────────
+//  Deletion Protection
+// ──────────────────────────────────────────────
+
+router.put("/log-groups/:name/deletion-protection", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<{ deletionProtectionEnabled?: boolean }>();
+  if (typeof body.deletionProtectionEnabled !== "boolean") {
+    return c.json({ error: "deletionProtectionEnabled boolean is required" }, 400);
+  }
+  await logs().send(
+    new PutLogGroupDeletionProtectionCommand({
+      logGroupIdentifier: name,
+      deletionProtectionEnabled: body.deletionProtectionEnabled,
+    })
+  );
+  return c.json({
+    logGroupIdentifier: name,
+    deletionProtectionEnabled: body.deletionProtectionEnabled,
+    updated: true,
+  });
+});
+
+// ──────────────────────────────────────────────
+//  Account Policies
+// ──────────────────────────────────────────────
+
+router.get("/account-policies", async (c: Context) => {
+  const policyType = c.req.query("policyType") || undefined;
+  const policyName = c.req.query("policyName") || undefined;
+  const result = await logs().send(
+    new DescribeAccountPoliciesCommand({ policyType: policyType as any, policyName })
+  );
+  const accountPolicies = (result.accountPolicies || []).map((p: any) => ({
+    accountId: p.accountId,
+    policyName: p.policyName,
+    policyDocument: p.policyDocument,
+    policyType: p.policyType,
+    scope: p.scope,
+    selectionCriteria: p.selectionCriteria,
+    lastUpdatedTime: p.lastUpdatedTime,
+  }));
+  return c.json({ accountPolicies, total: accountPolicies.length });
+});
+
+router.post("/account-policies", async (c: Context) => {
+  const body = await c.req.json<{
+    policyName?: string;
+    policyDocument?: string;
+    policyType?: string;
+    scope?: string;
+    selectionCriteria?: string;
+  }>();
+  if (!body.policyName || !body.policyDocument || !body.policyType) {
+    return c.json({ error: "policyName, policyDocument and policyType are required" }, 400);
+  }
+  const result = await logs().send(
+    new PutAccountPolicyCommand({
+      policyName: body.policyName,
+      policyDocument: body.policyDocument,
+      policyType: body.policyType as any,
+      scope: body.scope as any,
+      selectionCriteria: body.selectionCriteria,
+    })
+  );
+  return c.json({ accountPolicy: result.accountPolicy, created: true }, 201);
+});
+
+// ──────────────────────────────────────────────
+//  Resource Policies
+// ──────────────────────────────────────────────
+
+router.get("/resource-policies", async (c: Context) => {
+  const result = await logs().send(new DescribeResourcePoliciesCommand({}));
+  const resourcePolicies = (result.resourcePolicies || []).map((p: any) => ({
+    policyName: p.policyName,
+    policyDocument: p.policyDocument,
+    lastUpdatedTime: p.lastUpdatedTime,
+  }));
+  return c.json({ resourcePolicies, total: resourcePolicies.length });
+});
+
+router.post("/resource-policies", async (c: Context) => {
+  const body = await c.req.json<{ policyName?: string; policyDocument?: string }>();
+  if (!body.policyName || !body.policyDocument) {
+    return c.json({ error: "policyName and policyDocument are required" }, 400);
+  }
+  const result = await logs().send(
+    new PutResourcePolicyCommand({
+      policyName: body.policyName,
+      policyDocument: body.policyDocument,
+    })
+  );
+  return c.json({ resourcePolicy: result.resourcePolicy, created: true }, 201);
+});
+
+// ──────────────────────────────────────────────
+//  Destinations (cross-account subscription targets)
+// ──────────────────────────────────────────────
+
+router.post("/destinations", async (c: Context) => {
+  const body = await c.req.json<{
+    destinationName?: string;
+    targetArn?: string;
+    roleArn?: string;
+  }>();
+  if (!body.destinationName || !body.targetArn) {
+    return c.json({ error: "destinationName and targetArn are required" }, 400);
+  }
+  const result = await logs().send(
+    new PutDestinationCommand({
+      destinationName: body.destinationName,
+      targetArn: body.targetArn,
+      roleArn: body.roleArn,
+    })
+  );
+  return c.json({ destination: result.destination, created: true }, 201);
+});
+
+router.post("/destinations/:name/policy", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<{ accessPolicy?: string }>();
+  if (!body.accessPolicy) {
+    return c.json({ error: "accessPolicy is required" }, 400);
+  }
+  await logs().send(
+    new PutDestinationPolicyCommand({
+      destinationName: name,
+      accessPolicy: body.accessPolicy,
+    })
+  );
+  return c.json({ destinationName: name, accessPolicy: body.accessPolicy, updated: true });
+});
+
+// ──────────────────────────────────────────────
+//  Metric Filters
+// ──────────────────────────────────────────────
+
+router.get("/log-groups/:name/metric-filters", async (c: Context) => {
+  const name = c.req.param("name");
+  const prefix = c.req.query("prefix");
+  const metricName = c.req.query("metricName");
+  const metricNamespace = c.req.query("metricNamespace");
+  const limit = c.req.query("limit");
+  const nextToken = c.req.query("nextToken") || undefined;
+  // Floci requires metricName and metricNamespace together or not at all.
+  const metricSelector =
+    metricName && metricNamespace ? { metricName, metricNamespace } : {};
+  const result = await logs().send(
+    new DescribeMetricFiltersCommand({
+      logGroupName: name,
+      filterNamePrefix: prefix || undefined,
+      ...metricSelector,
+      limit: limit ? parseInt(limit) : undefined,
+      nextToken,
+    } as any)
+  );
+  const metricFilters = (result.metricFilters || []).map((f: any) => ({
+    filterName: f.filterName,
+    filterPattern: f.filterPattern,
+    logGroupName: f.logGroupName,
+    creationTime: f.creationTime,
+    applyOnTransformedLogs: f.applyOnTransformedLogs,
+    metricTransformations: (f.metricTransformations || []).map((t: any) => ({
+      metricName: t.metricName,
+      metricNamespace: t.metricNamespace,
+      metricValue: t.metricValue,
+      defaultValue: t.defaultValue,
+      dimensions: t.dimensions,
+      unit: t.unit,
+    })),
+  }));
+  return c.json({ metricFilters, total: metricFilters.length, nextToken: result.nextToken });
+});
+
+router.post("/log-groups/:name/metric-filters", async (c: Context) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<{
+    filterName?: string;
+    filterPattern?: string;
+    metricTransformations?: Array<{
+      metricName: string;
+      metricNamespace: string;
+      metricValue: string;
+      defaultValue?: number;
+      dimensions?: Record<string, string>;
+      unit?: string;
+    }>;
+    applyOnTransformedLogs?: boolean;
+  }>();
+  if (!body.filterName || !body.metricTransformations?.length) {
+    return c.json({ error: "filterName and at least one metricTransformations entry are required" }, 400);
+  }
+  await logs().send(
+    new PutMetricFilterCommand({
+      logGroupName: name,
+      filterName: body.filterName,
+      filterPattern: body.filterPattern || "",
+      metricTransformations: body.metricTransformations.map((t) => ({
+        metricName: t.metricName,
+        metricNamespace: t.metricNamespace,
+        metricValue: t.metricValue,
+        defaultValue: t.defaultValue,
+        dimensions: t.dimensions,
+        unit: t.unit,
+      })) as any,
+      applyOnTransformedLogs: body.applyOnTransformedLogs,
+    })
+  );
+  return c.json({ filterName: body.filterName, logGroupName: name, created: true }, 201);
+});
+
+router.delete("/log-groups/:name/metric-filters/:filterName", async (c: Context) => {
+  const name = c.req.param("name");
+  const filterName = c.req.param("filterName");
+  await logs().send(
+    new DeleteMetricFilterCommand({
+      logGroupName: name,
+      filterName,
+    })
+  );
+  return c.json({ filterName, logGroupName: name, deleted: true });
+});
+
+router.post("/metric-filters/test", async (c: Context) => {
+  const body = await c.req.json<{
+    filterPattern?: string;
+    logEventMessages?: string[];
+  }>();
+  if (!Array.isArray(body.logEventMessages)) {
+    return c.json({ error: "logEventMessages array is required" }, 400);
+  }
+  const result = await logs().send(
+    new TestMetricFilterCommand({
+      filterPattern: body.filterPattern || "",
+      logEventMessages: body.logEventMessages,
+    })
+  );
+  const matches = (result.matches || []).map((m: any) => ({
+    eventNumber: m.eventNumber,
+    eventMessage: m.eventMessage,
+    extractedValues: m.extractedValues || {},
+  }));
+  return c.json({ matches, total: matches.length });
+});
+
+// ──────────────────────────────────────────────
+//  Logs Insights Queries
+// ──────────────────────────────────────────────
+
+router.post("/queries", async (c: Context) => {
+  const body = await c.req.json<{
+    logGroupName?: string;
+    logGroupNames?: string[];
+    logGroupIdentifiers?: string[];
+    startTime?: number;
+    endTime?: number;
+    queryString?: string;
+    limit?: number;
+  }>();
+  if (!body.queryString || !body.startTime || !body.endTime) {
+    return c.json({ error: "queryString, startTime and endTime are required" }, 400);
+  }
+  if (!!body.logGroupName === !!(body.logGroupNames?.length || body.logGroupIdentifiers?.length)) {
+    return c.json(
+      { error: "Exactly one of logGroupName, logGroupNames or logGroupIdentifiers may be specified" },
+      400
+    );
+  }
+  const result = await logs().send(
+    new StartQueryCommand({
+      logGroupName: body.logGroupName,
+      logGroupNames: body.logGroupNames,
+      logGroupIdentifiers: body.logGroupIdentifiers,
+      startTime: body.startTime,
+      endTime: body.endTime,
+      queryString: body.queryString,
+      limit: body.limit,
+    } as any)
+  );
+  return c.json({ queryId: result.queryId }, 201);
+});
+
+router.post("/queries/:id/stop", async (c: Context) => {
+  const id = c.req.param("id");
+  const result = await logs().send(new StopQueryCommand({ queryId: id }));
+  return c.json({ queryId: id, success: result.success ?? true });
+});
+
+router.get("/queries/:id", async (c: Context) => {
+  const id = c.req.param("id");
+  const result = await logs().send(new GetQueryResultsCommand({ queryId: id }));
+  const results = (result.results || []).map((row: any[]) =>
+    (row || []).map((f: any) => ({ field: f.field, value: f.value }))
+  );
+  return c.json({
+    queryId: id,
+    status: result.status,
+    results,
+    statistics: {
+      recordsMatched: result.statistics?.recordsMatched ?? 0,
+      recordsScanned: result.statistics?.recordsScanned ?? 0,
+      bytesScanned: result.statistics?.bytesScanned ?? 0,
+    },
+  });
 });
 
 export default router;
