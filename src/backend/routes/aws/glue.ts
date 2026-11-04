@@ -58,6 +58,75 @@ import {
   UpdateSchemaCommand,
   DeleteSchemaVersionsCommand,
   GetSchemaByDefinitionCommand,
+  CreateCrawlerCommand,
+  GetCrawlerCommand,
+  GetCrawlersCommand,
+  UpdateCrawlerCommand,
+  DeleteCrawlerCommand,
+  ListCrawlersCommand,
+  BatchGetCrawlersCommand,
+  StartCrawlerCommand,
+  StopCrawlerCommand,
+  GetCrawlerMetricsCommand,
+  StartCrawlerScheduleCommand,
+  StopCrawlerScheduleCommand,
+  UpdateCrawlerScheduleCommand,
+  CreateJobCommand,
+  GetJobCommand,
+  GetJobsCommand,
+  UpdateJobCommand,
+  DeleteJobCommand,
+  BatchGetJobsCommand,
+  StartJobRunCommand,
+  GetJobRunCommand,
+  GetJobRunsCommand,
+  BatchStopJobRunCommand,
+  CreateTriggerCommand,
+  GetTriggerCommand,
+  GetTriggersCommand,
+  ListTriggersCommand,
+  BatchGetTriggersCommand,
+  UpdateTriggerCommand,
+  DeleteTriggerCommand,
+  StartTriggerCommand,
+  StopTriggerCommand,
+  CreateWorkflowCommand,
+  GetWorkflowCommand,
+  ListWorkflowsCommand,
+  BatchGetWorkflowsCommand,
+  UpdateWorkflowCommand,
+  DeleteWorkflowCommand,
+  StartWorkflowRunCommand,
+  StopWorkflowRunCommand,
+  ResumeWorkflowRunCommand,
+  GetWorkflowRunCommand,
+  GetWorkflowRunsCommand,
+  GetWorkflowRunPropertiesCommand,
+  PutWorkflowRunPropertiesCommand,
+  CreateConnectionCommand,
+  GetConnectionCommand,
+  GetConnectionsCommand,
+  UpdateConnectionCommand,
+  DeleteConnectionCommand,
+  BatchDeleteConnectionCommand,
+  TestConnectionCommand,
+  CreateClassifierCommand,
+  GetClassifierCommand,
+  GetClassifiersCommand,
+  UpdateClassifierCommand,
+  DeleteClassifierCommand,
+  CreateSecurityConfigurationCommand,
+  GetSecurityConfigurationCommand,
+  GetSecurityConfigurationsCommand,
+  DeleteSecurityConfigurationCommand,
+  PutResourcePolicyCommand,
+  GetResourcePolicyCommand,
+  GetResourcePoliciesCommand,
+  DeleteResourcePolicyCommand,
+  GetDataCatalogEncryptionSettingsCommand,
+  PutDataCatalogEncryptionSettingsCommand,
+  ListDataQualityRulesetsCommand,
+  SearchTablesCommand,
 } from "@aws-sdk/client-glue";
 
 const router = new Hono();
@@ -886,6 +955,429 @@ router.post("/schemas/by-definition", async (c: Context) => {
     status: result.Status,
     createdTime: result.CreatedTime,
   });
+});
+
+// ── ETL families: Crawlers / Jobs / Triggers / Workflows / Connections /
+//    Classifiers / Security Configurations ─────────────────
+
+interface GlueFamily {
+  create: any;
+  list: any;
+  listField: string;
+  get: any;
+  getIdField: string;
+  getField: string;
+  update?: any;
+  updateInput?: (id: string, body: any) => any;
+  del: any;
+  delIdField: string;
+  createInput?: (body: any) => any;
+  maxResults?: boolean;
+}
+
+const glueFamilies: Record<string, GlueFamily> = {
+  crawlers: {
+    create: CreateCrawlerCommand,
+    list: GetCrawlersCommand,
+    listField: "Crawlers",
+    get: GetCrawlerCommand,
+    getIdField: "Name",
+    getField: "Crawler",
+    update: UpdateCrawlerCommand,
+    updateInput: (id, body) => ({ Name: id, ...body.update }),
+    del: DeleteCrawlerCommand,
+    delIdField: "Name",
+    createInput: (body) => ({ Name: body.name, Role: body.role, ...body.crawler }),
+  },
+  jobs: {
+    create: CreateJobCommand,
+    list: GetJobsCommand,
+    listField: "Jobs",
+    get: GetJobCommand,
+    getIdField: "JobName",
+    getField: "Job",
+    update: UpdateJobCommand,
+    updateInput: (id, body) => ({ JobName: id, JobUpdate: body.jobUpdate ?? {} }),
+    del: DeleteJobCommand,
+    delIdField: "JobName",
+    createInput: (body) => ({ Name: body.name, Role: body.role, Command: body.command, ...body.job }),
+  },
+  triggers: {
+    create: CreateTriggerCommand,
+    list: GetTriggersCommand,
+    listField: "Triggers",
+    get: GetTriggerCommand,
+    getIdField: "Name",
+    getField: "Trigger",
+    update: UpdateTriggerCommand,
+    updateInput: (id, body) => ({ Name: id, TriggerUpdate: body.triggerUpdate ?? {} }),
+    del: DeleteTriggerCommand,
+    delIdField: "Name",
+    createInput: (body) => ({ Name: body.name, ...body.trigger }),
+  },
+  workflows: {
+    create: CreateWorkflowCommand,
+    list: ListWorkflowsCommand,
+    listField: "Names",
+    get: GetWorkflowCommand,
+    getIdField: "Name",
+    getField: "Workflow",
+    update: UpdateWorkflowCommand,
+    updateInput: (id, body) => ({ Name: id, ...body.update }),
+    del: DeleteWorkflowCommand,
+    delIdField: "Name",
+    createInput: (body) => ({ Name: body.name, ...body.workflow }),
+  },
+  connections: {
+    create: CreateConnectionCommand,
+    list: GetConnectionsCommand,
+    listField: "ConnectionList",
+    get: GetConnectionCommand,
+    getIdField: "Name",
+    getField: "Connection",
+    update: UpdateConnectionCommand,
+    updateInput: (id, body) => ({ Name: id, ConnectionInput: body.connectionInput ?? {} }),
+    del: DeleteConnectionCommand,
+    delIdField: "ConnectionName",
+    createInput: (body) => ({ ConnectionInput: body.connectionInput ?? body.connection ?? { Name: body.name } }),
+  },
+  classifiers: {
+    create: CreateClassifierCommand,
+    list: GetClassifiersCommand,
+    listField: "Classifiers",
+    get: GetClassifierCommand,
+    getIdField: "Name",
+    getField: "Classifier",
+    update: UpdateClassifierCommand,
+    updateInput: (id, body) => ({ ...body.update, Name: body.update?.Name ?? id }),
+    del: DeleteClassifierCommand,
+    delIdField: "Name",
+    createInput: (body) => ({ ...body.classifier }),
+  },
+  "security-configurations": {
+    create: CreateSecurityConfigurationCommand,
+    list: GetSecurityConfigurationsCommand,
+    listField: "SecurityConfigurations",
+    get: GetSecurityConfigurationCommand,
+    getIdField: "Name",
+    getField: "SecurityConfiguration",
+    del: DeleteSecurityConfigurationCommand,
+    delIdField: "Name",
+    createInput: (body) => ({ Name: body.name, EncryptionConfiguration: body.encryptionConfiguration }),
+  },
+};
+
+// batch/list-by-name routes must be registered before :name params
+router.post("/crawlers/batch-get", async (c: Context) => {
+  const body = await c.req.json<{ crawlerNames?: string[] }>();
+  const client = getClient();
+  const result = await client.send(new BatchGetCrawlersCommand({ CrawlerNames: body.crawlerNames }));
+  return c.json({
+    crawlers: result.Crawlers || [],
+    crawlersNotFound: result.CrawlersNotFound || [],
+  });
+});
+
+router.get("/crawler-metrics", async (c: Context) => {
+  const names = c.req.query("names");
+  const client = getClient();
+  const result = await client.send(new GetCrawlerMetricsCommand({
+    CrawlerNameList: names ? names.split(",") : undefined,
+  }));
+  const metrics = result.CrawlerMetricsList || [];
+  return c.json({ metrics, total: metrics.length });
+});
+
+router.post("/crawler-schedule/start", async (c: Context) => {
+  const body = await c.req.json<{ crawlerName?: string }>();
+  if (!body.crawlerName) return c.json({ error: "crawlerName is required" }, 400);
+  const client = getClient();
+  await client.send(new StartCrawlerScheduleCommand({ CrawlerName: body.crawlerName }));
+  return c.json({ started: true });
+});
+
+router.post("/crawler-schedule/stop", async (c: Context) => {
+  const body = await c.req.json<{ crawlerName?: string }>();
+  if (!body.crawlerName) return c.json({ error: "crawlerName is required" }, 400);
+  const client = getClient();
+  await client.send(new StopCrawlerScheduleCommand({ CrawlerName: body.crawlerName }));
+  return c.json({ stopped: true });
+});
+
+router.put("/crawler-schedule", async (c: Context) => {
+  const body = await c.req.json<{ crawlerName?: string; schedule?: string }>();
+  if (!body.crawlerName) return c.json({ error: "crawlerName is required" }, 400);
+  const client = getClient();
+  await client.send(new UpdateCrawlerScheduleCommand({
+    CrawlerName: body.crawlerName,
+    Schedule: body.schedule,
+  }));
+  return c.json({ updated: true });
+});
+
+router.post("/jobs/batch-get", async (c: Context) => {
+  const body = await c.req.json<{ jobNames?: string[] }>();
+  const client = getClient();
+  const result = await client.send(new BatchGetJobsCommand({ JobNames: body.jobNames }));
+  return c.json({ jobs: result.Jobs || [], jobsNotFound: result.JobsNotFound || [] });
+});
+
+router.post("/jobs/batch-stop", async (c: Context) => {
+  const body = await c.req.json<{ jobName?: string; jobRunIds?: string[] }>();
+  if (!body.jobName) return c.json({ error: "jobName is required" }, 400);
+  const client = getClient();
+  const result = await client.send(new BatchStopJobRunCommand({
+    JobName: body.jobName,
+    JobRunIds: body.jobRunIds,
+  }));
+  return c.json({
+    successfulSubmissions: result.SuccessfulSubmissions || [],
+    errors: result.Errors || [],
+  });
+});
+
+router.post("/workflows/batch-get", async (c: Context) => {
+  const body = await c.req.json<{ names?: string[] }>();
+  const client = getClient();
+  const result = await client.send(new BatchGetWorkflowsCommand({ Names: body.names }));
+  return c.json({ workflows: result.Workflows || [], missingWorkflows: result.MissingWorkflows || [] });
+});
+
+router.post("/connections/batch-delete", async (c: Context) => {
+  const body = await c.req.json<{ connectionNames?: string[] }>();
+  const client = getClient();
+  const result = await client.send(new BatchDeleteConnectionCommand({
+    ConnectionNames: body.connectionNames,
+  } as any));
+  return c.json({ succeeded: result.Succeeded || [], errors: result.Errors || [] });
+});
+
+router.post("/connections/test", async (c: Context) => {
+  const body = await c.req.json<any>();
+  const client = getClient();
+  const result = await client.send(new TestConnectionCommand(body));
+  return c.json({ result: result ?? null });
+});
+
+router.get("/search-tables", async (c: Context) => {
+  const searchText = c.req.query("text");
+  const client = getClient();
+  const result = await client.send(new SearchTablesCommand({
+    SearchText: searchText || undefined,
+  }));
+  const tables = result.TableList || [];
+  return c.json({ tables, total: tables.length });
+});
+
+router.get("/data-quality-rulesets", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new ListDataQualityRulesetsCommand({ MaxResults: 100 }));
+  const rulesets = result.Rulesets || [];
+  return c.json({ rulesets, total: rulesets.length });
+});
+
+// ── Resource Policies ──────────────────────────────────
+
+router.get("/resource-policy", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new GetResourcePolicyCommand({}));
+  return c.json({ policyInJson: result.PolicyInJson || null });
+});
+
+router.get("/resource-policies", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new GetResourcePoliciesCommand({}));
+  const policies = (result as any).GetResourcePoliciesResponseList || [];
+  return c.json({ policies, total: policies.length });
+});
+
+router.put("/resource-policy", async (c: Context) => {
+  const body = await c.req.json<{ policyInJson?: string }>();
+  if (!body.policyInJson) return c.json({ error: "policyInJson is required" }, 400);
+  const client = getClient();
+  await client.send(new PutResourcePolicyCommand({ PolicyInJson: body.policyInJson }));
+  return c.json({ updated: true });
+});
+
+router.delete("/resource-policy", async (c: Context) => {
+  const client = getClient();
+  await client.send(new DeleteResourcePolicyCommand({}));
+  return c.json({ deleted: true });
+});
+
+// ── Data Catalog Encryption Settings ───────────────────
+
+router.get("/data-catalog-encryption-settings", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new GetDataCatalogEncryptionSettingsCommand({}));
+  return c.json({ dataCatalogEncryptionSettings: result.DataCatalogEncryptionSettings || null });
+});
+
+router.put("/data-catalog-encryption-settings", async (c: Context) => {
+  const body = await c.req.json<any>();
+  const client = getClient();
+  await client.send(new PutDataCatalogEncryptionSettingsCommand({
+    DataCatalogEncryptionSettings: body.dataCatalogEncryptionSettings ?? {},
+  } as any));
+  return c.json({ updated: true });
+});
+
+for (const [route, fam] of Object.entries(glueFamilies)) {
+  const listRoute = router.get(`/${route}`, async (c: Context) => {
+    const client = getClient();
+    const result = await client.send(new fam.list({ MaxResults: 100 } as any));
+    const items = (result as any)[fam.listField] || [];
+    return c.json({ [route]: items, total: items.length });
+  });
+  router.post(`/${route}`, async (c: Context) => {
+    const body = await c.req.json<any>();
+    const input = fam.createInput!(body);
+    if (!input.Name && !input.ConnectionInput?.Name) {
+      return c.json({ error: "name is required" }, 400);
+    }
+    const client = getClient();
+    await client.send(new fam.create(input as any));
+    return c.json({ created: true }, 201);
+  });
+
+  router.get(`/${route}/:name`, async (c: Context) => {
+    const client = getClient();
+    const result = await client.send(new fam.get({ [fam.getIdField]: c.req.param("name")! } as any));
+    return c.json({ [fam.getField.toLowerCase()]: (result as any)[fam.getField] ?? null });
+  });
+
+  if (fam.update) {
+    router.put(`/${route}/:name`, async (c: Context) => {
+      const body = await c.req.json<any>();
+      const client = getClient();
+      await client.send(new fam.update(fam.updateInput!(c.req.param("name")!, body) as any));
+      return c.json({ updated: true });
+    });
+  }
+
+  router.delete(`/${route}/:name`, async (c: Context) => {
+    const client = getClient();
+    await client.send(new fam.del({ [fam.delIdField]: c.req.param("name")! } as any));
+    return c.json({ deleted: true });
+  });
+}
+
+// ── Crawler lifecycle ──────────────────────────────────
+
+router.post("/crawlers/:name/start", async (c: Context) => {
+  const client = getClient();
+  await client.send(new StartCrawlerCommand({ Name: c.req.param("name")! }));
+  return c.json({ started: true });
+});
+
+router.post("/crawlers/:name/stop", async (c: Context) => {
+  const client = getClient();
+  await client.send(new StopCrawlerCommand({ Name: c.req.param("name")! }));
+  return c.json({ stopped: true });
+});
+
+// ── Job runs ───────────────────────────────────────────
+
+router.post("/jobs/:name/runs", async (c: Context) => {
+  const body = await c.req.json<any>();
+  const client = getClient();
+  const result = await client.send(new StartJobRunCommand({
+    JobName: c.req.param("name")!,
+    ...body,
+  }));
+  return c.json({ runId: (result as any).RunId }, 201);
+});
+
+router.get("/jobs/:name/runs", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new GetJobRunsCommand({ JobName: c.req.param("name")! }));
+  const runs = result.JobRuns || [];
+  return c.json({ runs, total: runs.length });
+});
+
+router.get("/jobs/:name/runs/:runId", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new GetJobRunCommand({
+    JobName: c.req.param("name")!,
+    RunId: c.req.param("runId")!,
+  }));
+  return c.json({ run: result.JobRun ?? null });
+});
+
+// ── Trigger lifecycle ──────────────────────────────────
+
+router.post("/triggers/:name/start", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new StartTriggerCommand({ Name: c.req.param("name")! }));
+  return c.json({ name: (result as any).Name ?? null, state: (result as any).TriggerInfo?.State ?? null });
+});
+
+router.post("/triggers/:name/stop", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new StopTriggerCommand({ Name: c.req.param("name")! }));
+  return c.json({ name: (result as any).Name ?? null, state: (result as any).TriggerInfo?.State ?? null });
+});
+
+// ── Workflow runs ──────────────────────────────────────
+
+router.post("/workflows/:name/runs", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new StartWorkflowRunCommand({ Name: c.req.param("name")! }));
+  return c.json({ runId: (result as any).RunId }, 201);
+});
+
+router.get("/workflows/:name/runs", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new GetWorkflowRunsCommand({ Name: c.req.param("name")! }));
+  const runs = result.Runs || [];
+  return c.json({ runs, total: runs.length });
+});
+
+router.get("/workflows/:name/runs/:runId", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new GetWorkflowRunCommand({
+    Name: c.req.param("name")!,
+    RunId: c.req.param("runId")!,
+  }));
+  return c.json({ run: result.Run ?? null });
+});
+
+router.post("/workflows/:name/runs/:runId/stop", async (c: Context) => {
+  const client = getClient();
+  await client.send(new StopWorkflowRunCommand({
+    Name: c.req.param("name")!,
+    RunId: c.req.param("runId")!,
+  }));
+  return c.json({ stopped: true });
+});
+
+router.post("/workflows/:name/runs/:runId/resume", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new ResumeWorkflowRunCommand({
+    Name: c.req.param("name")!,
+    RunId: c.req.param("runId")!,
+  } as any));
+  return c.json({ runId: (result as any).RunId }, 201);
+});
+
+router.get("/workflows/:name/runs/:runId/properties", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new GetWorkflowRunPropertiesCommand({
+    Name: c.req.param("name")!,
+    RunId: c.req.param("runId")!,
+  }));
+  return c.json({ runProperties: result.RunProperties ?? null });
+});
+
+router.put("/workflows/:name/runs/:runId/properties", async (c: Context) => {
+  const body = await c.req.json<{ runProperties?: Record<string, string> }>();
+  const client = getClient();
+  await client.send(new PutWorkflowRunPropertiesCommand({
+    Name: c.req.param("name")!,
+    RunId: c.req.param("runId")!,
+    RunProperties: body.runProperties ?? {},
+  }));
+  return c.json({ updated: true });
 });
 
 export default router;

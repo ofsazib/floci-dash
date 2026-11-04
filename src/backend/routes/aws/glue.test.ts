@@ -62,6 +62,72 @@ vi.mock("@aws-sdk/client-glue", () => ({
   UpdateDatabaseCommand: createCmd("UpdateDatabaseCommand"),
   GetTableVersionsCommand: createCmd("GetTableVersionsCommand"),
   BatchDeleteTableCommand: createCmd("BatchDeleteTableCommand"),
+  CreateCrawlerCommand: createCmd("CreateCrawlerCommand"),
+  GetCrawlerCommand: createCmd("GetCrawlerCommand"),
+  GetCrawlersCommand: createCmd("GetCrawlersCommand"),
+  UpdateCrawlerCommand: createCmd("UpdateCrawlerCommand"),
+  DeleteCrawlerCommand: createCmd("DeleteCrawlerCommand"),
+  BatchGetCrawlersCommand: createCmd("BatchGetCrawlersCommand"),
+  StartCrawlerCommand: createCmd("StartCrawlerCommand"),
+  StopCrawlerCommand: createCmd("StopCrawlerCommand"),
+  GetCrawlerMetricsCommand: createCmd("GetCrawlerMetricsCommand"),
+  StartCrawlerScheduleCommand: createCmd("StartCrawlerScheduleCommand"),
+  StopCrawlerScheduleCommand: createCmd("StopCrawlerScheduleCommand"),
+  UpdateCrawlerScheduleCommand: createCmd("UpdateCrawlerScheduleCommand"),
+  CreateJobCommand: createCmd("CreateJobCommand"),
+  GetJobCommand: createCmd("GetJobCommand"),
+  GetJobsCommand: createCmd("GetJobsCommand"),
+  UpdateJobCommand: createCmd("UpdateJobCommand"),
+  DeleteJobCommand: createCmd("DeleteJobCommand"),
+  BatchGetJobsCommand: createCmd("BatchGetJobsCommand"),
+  StartJobRunCommand: createCmd("StartJobRunCommand"),
+  GetJobRunCommand: createCmd("GetJobRunCommand"),
+  GetJobRunsCommand: createCmd("GetJobRunsCommand"),
+  BatchStopJobRunCommand: createCmd("BatchStopJobRunCommand"),
+  CreateTriggerCommand: createCmd("CreateTriggerCommand"),
+  GetTriggerCommand: createCmd("GetTriggerCommand"),
+  GetTriggersCommand: createCmd("GetTriggersCommand"),
+  UpdateTriggerCommand: createCmd("UpdateTriggerCommand"),
+  DeleteTriggerCommand: createCmd("DeleteTriggerCommand"),
+  StartTriggerCommand: createCmd("StartTriggerCommand"),
+  StopTriggerCommand: createCmd("StopTriggerCommand"),
+  CreateWorkflowCommand: createCmd("CreateWorkflowCommand"),
+  GetWorkflowCommand: createCmd("GetWorkflowCommand"),
+  ListWorkflowsCommand: createCmd("ListWorkflowsCommand"),
+  BatchGetWorkflowsCommand: createCmd("BatchGetWorkflowsCommand"),
+  UpdateWorkflowCommand: createCmd("UpdateWorkflowCommand"),
+  DeleteWorkflowCommand: createCmd("DeleteWorkflowCommand"),
+  StartWorkflowRunCommand: createCmd("StartWorkflowRunCommand"),
+  StopWorkflowRunCommand: createCmd("StopWorkflowRunCommand"),
+  ResumeWorkflowRunCommand: createCmd("ResumeWorkflowRunCommand"),
+  GetWorkflowRunCommand: createCmd("GetWorkflowRunCommand"),
+  GetWorkflowRunsCommand: createCmd("GetWorkflowRunsCommand"),
+  GetWorkflowRunPropertiesCommand: createCmd("GetWorkflowRunPropertiesCommand"),
+  PutWorkflowRunPropertiesCommand: createCmd("PutWorkflowRunPropertiesCommand"),
+  CreateConnectionCommand: createCmd("CreateConnectionCommand"),
+  GetConnectionCommand: createCmd("GetConnectionCommand"),
+  GetConnectionsCommand: createCmd("GetConnectionsCommand"),
+  UpdateConnectionCommand: createCmd("UpdateConnectionCommand"),
+  DeleteConnectionCommand: createCmd("DeleteConnectionCommand"),
+  BatchDeleteConnectionCommand: createCmd("BatchDeleteConnectionCommand"),
+  TestConnectionCommand: createCmd("TestConnectionCommand"),
+  CreateClassifierCommand: createCmd("CreateClassifierCommand"),
+  GetClassifierCommand: createCmd("GetClassifierCommand"),
+  GetClassifiersCommand: createCmd("GetClassifiersCommand"),
+  UpdateClassifierCommand: createCmd("UpdateClassifierCommand"),
+  DeleteClassifierCommand: createCmd("DeleteClassifierCommand"),
+  CreateSecurityConfigurationCommand: createCmd("CreateSecurityConfigurationCommand"),
+  GetSecurityConfigurationCommand: createCmd("GetSecurityConfigurationCommand"),
+  GetSecurityConfigurationsCommand: createCmd("GetSecurityConfigurationsCommand"),
+  DeleteSecurityConfigurationCommand: createCmd("DeleteSecurityConfigurationCommand"),
+  PutResourcePolicyCommand: createCmd("PutResourcePolicyCommand"),
+  GetResourcePolicyCommand: createCmd("GetResourcePolicyCommand"),
+  GetResourcePoliciesCommand: createCmd("GetResourcePoliciesCommand"),
+  DeleteResourcePolicyCommand: createCmd("DeleteResourcePolicyCommand"),
+  GetDataCatalogEncryptionSettingsCommand: createCmd("GetDataCatalogEncryptionSettingsCommand"),
+  PutDataCatalogEncryptionSettingsCommand: createCmd("PutDataCatalogEncryptionSettingsCommand"),
+  ListDataQualityRulesetsCommand: createCmd("ListDataQualityRulesetsCommand"),
+  SearchTablesCommand: createCmd("SearchTablesCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({ create: (Ctor: any, extra?: any) => new Ctor(extra) }));
@@ -1026,5 +1092,569 @@ describe("Glue Routes", () => {
       const res = await post("/schemas/by-definition", {});
       expect(res.status).toBe(400);
     });
+  });
+});
+
+// ── ETL families ────────────────────────────────────────────
+
+describe.each([
+  ["crawlers", "Crawlers", "crawler", { name: "c1", role: "arn:role" }],
+  ["jobs", "Jobs", "job", { name: "j1", role: "arn:role", command: { Name: "glueetl" } }],
+  ["triggers", "Triggers", "trigger", { name: "t1", type: "ON_DEMAND" }],
+  ["workflows", "Names", "workflow", { name: "w1" }],
+  ["connections", "ConnectionList", "connection", { connectionInput: { Name: "conn1", ConnectionType: "JDBC" } }],
+  ["classifiers", "Classifiers", "classifier", { classifier: { Name: "cls1", Classification: "csv" } }],
+  ["security-configurations", "SecurityConfigurations", "securityconfiguration", { name: "sec1", encryptionConfiguration: { CloudWatchEncryption: {} } }],
+])("Glue family %s", (route, listField, singular, createBody) => {
+  it(`GET /${route} — lists items`, async () => {
+    const items = listField === "Names" ? ["w1", "w2"] : [{ Name: "x" }];
+    mockSend.mockResolvedValueOnce({ [listField]: items });
+    const res = await get(`/${route}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body[route]).toEqual(items);
+    expect(body.total).toBe(items.length);
+  });
+
+  it(`GET /${route} — empty list`, async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get(`/${route}`);
+    const body = await res.json();
+    expect(body[route]).toEqual([]);
+    expect(body.total).toBe(0);
+  });
+
+  it(`POST /${route} — creates`, async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post(`/${route}`, createBody);
+    expect(res.status).toBe(201);
+    expect((await res.json()).created).toBe(true);
+  });
+
+  it(`POST /${route} — 400 without name`, async () => {
+    const res = await post(`/${route}`, {});
+    expect(res.status).toBe(400);
+  });
+
+  it(`GET /${route}/:name — returns item`, async () => {
+    mockSend.mockResolvedValueOnce({ Crawler: { Name: "x" }, Job: { Name: "x" }, Trigger: { Name: "x" }, Workflow: { Name: "x" }, Connection: { Name: "x" }, Classifier: { Name: "x" }, SecurityConfiguration: { Name: "x" } });
+    const res = await get(`/${route}/x`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body[singular].Name).toBe("x");
+    expect(mockSend.mock.calls[0][0].Name ?? mockSend.mock.calls[0][0].JobName).toBe("x");
+  });
+
+  it(`GET /${route}/:name — null when sparse`, async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get(`/${route}/x`);
+    expect((await res.json())[singular]).toBe(null);
+  });
+
+  it(`DELETE /${route}/:name — deletes`, async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await del(`/${route}/x`);
+    expect(res.status).toBe(200);
+    expect((await res.json()).deleted).toBe(true);
+  });
+});
+
+describe("Glue family updates", () => {
+  it("PUT /crawlers/:name — updates crawler", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put("/crawlers/c1", { update: { Role: "arn:r2" } });
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].Name).toBe("c1");
+    expect(mockSend.mock.calls[0][0].Role).toBe("arn:r2");
+  });
+
+  it("PUT /jobs/:name — updates job", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put("/jobs/j1", { jobUpdate: { Description: "d" } });
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].JobName).toBe("j1");
+    expect(mockSend.mock.calls[0][0].JobUpdate.Description).toBe("d");
+  });
+
+  it("PUT /jobs/:name — defaults empty JobUpdate", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put("/jobs/j1", {});
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].JobUpdate).toEqual({});
+  });
+
+  it("PUT /triggers/:name — updates trigger", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put("/triggers/t1", { triggerUpdate: { Name: "t2" } });
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].TriggerUpdate.Name).toBe("t2");
+  });
+
+  it("PUT /workflows/:name — updates workflow", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put("/workflows/w1", { update: { Description: "dw" } });
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].Description).toBe("dw");
+  });
+
+  it("PUT /connections/:name — updates connection", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put("/connections/conn1", { connectionInput: { Name: "conn1", ConnectionType: "S3" } });
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].ConnectionInput.ConnectionType).toBe("S3");
+  });
+
+  it("PUT /connections/:name — defaults empty ConnectionInput", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put("/connections/conn1", {});
+    expect(mockSend.mock.calls[0][0].ConnectionInput).toEqual({});
+  });
+
+  it("PUT /classifiers/:name — updates classifier with Name from body", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put("/classifiers/cls1", { update: { Name: "cls2", Classification: "json" } });
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].Name).toBe("cls2");
+  });
+
+  it("PUT /classifiers/:name — falls back to param name", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put("/classifiers/cls1", { update: { Classification: "json" } });
+    expect(mockSend.mock.calls[0][0].Name).toBe("cls1");
+  });
+});
+
+// ── Crawler lifecycle ───────────────────────────────────────
+
+describe("Crawler lifecycle", () => {
+  it("POST /crawlers/:name/start — starts", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/crawlers/c1/start");
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].Name).toBe("c1");
+  });
+
+  it("POST /crawlers/:name/stop — stops", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/crawlers/c1/stop");
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].Name).toBe("c1");
+  });
+
+  it("POST /crawlers/batch-get — returns crawlers and not-found", async () => {
+    mockSend.mockResolvedValueOnce({ Crawlers: [{ Name: "c1" }], CrawlersNotFound: ["c9"] });
+    const res = await post("/crawlers/batch-get", { crawlerNames: ["c1", "c9"] });
+    const body = await res.json();
+    expect(body.crawlers).toHaveLength(1);
+    expect(body.crawlersNotFound).toEqual(["c9"]);
+  });
+
+  it("POST /crawlers/batch-get — empty defaults", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/crawlers/batch-get", {});
+    const body = await res.json();
+    expect(body.crawlers).toEqual([]);
+    expect(body.crawlersNotFound).toEqual([]);
+  });
+
+  it("GET /crawler-metrics — returns metrics", async () => {
+    mockSend.mockResolvedValueOnce({ CrawlerMetricsList: [{ CrawlerName: "c1" }] });
+    const res = await get("/crawler-metrics");
+    const body = await res.json();
+    expect(body.total).toBe(1);
+  });
+
+  it("GET /crawler-metrics — empty defaults", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/crawler-metrics");
+    expect((await res.json()).total).toBe(0);
+  });
+
+  it("GET /crawler-metrics — passes name filter", async () => {
+    mockSend.mockResolvedValueOnce({});
+    await get("/crawler-metrics?names=c1,c2");
+    expect(mockSend.mock.calls[0][0].CrawlerNameList).toEqual(["c1", "c2"]);
+  });
+
+  it("POST /crawler-schedule/start — 400 without crawlerName", async () => {
+    const res = await post("/crawler-schedule/start", {});
+    expect(res.status).toBe(400);
+  });
+
+  it("POST /crawler-schedule/start — starts schedule", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/crawler-schedule/start", { crawlerName: "c1" });
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].CrawlerName).toBe("c1");
+  });
+
+  it("POST /crawler-schedule/stop — 400 without crawlerName", async () => {
+    const res = await post("/crawler-schedule/stop", {});
+    expect(res.status).toBe(400);
+  });
+
+  it("POST /crawler-schedule/stop — stops schedule", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/crawler-schedule/stop", { crawlerName: "c1" });
+    expect(res.status).toBe(200);
+  });
+
+  it("PUT /crawler-schedule — 400 without crawlerName", async () => {
+    const res = await put("/crawler-schedule", {});
+    expect(res.status).toBe(400);
+  });
+
+  it("PUT /crawler-schedule — updates schedule", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put("/crawler-schedule", { crawlerName: "c1", schedule: "cron(0 1 * * ? *)" });
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].Schedule).toBe("cron(0 1 * * ? *)");
+  });
+});
+
+// ── Job runs ────────────────────────────────────────────────
+
+describe("Job runs", () => {
+  it("POST /jobs/:name/runs — starts run", async () => {
+    mockSend.mockResolvedValueOnce({ RunId: "jr-1" });
+    const res = await post("/jobs/j1/runs", {});
+    expect(res.status).toBe(201);
+    expect((await res.json()).runId).toBe("jr-1");
+    expect(mockSend.mock.calls[0][0].JobName).toBe("j1");
+  });
+
+  it("GET /jobs/:name/runs — lists runs", async () => {
+    mockSend.mockResolvedValueOnce({ JobRuns: [{ Id: "jr-1", JobRunState: "RUNNING" }] });
+    const res = await get("/jobs/j1/runs");
+    const body = await res.json();
+    expect(body.total).toBe(1);
+  });
+
+  it("GET /jobs/:name/runs — empty defaults", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/jobs/j1/runs");
+    expect((await res.json()).total).toBe(0);
+  });
+
+  it("GET /jobs/:name/runs/:runId — returns run", async () => {
+    mockSend.mockResolvedValueOnce({ JobRun: { Id: "jr-1" } });
+    const res = await get("/jobs/j1/runs/jr-1");
+    expect((await res.json()).run.Id).toBe("jr-1");
+    expect(mockSend.mock.calls[0][0].RunId).toBe("jr-1");
+  });
+
+  it("GET /jobs/:name/runs/:runId — null when sparse", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/jobs/j1/runs/jr-1");
+    expect((await res.json()).run).toBe(null);
+  });
+
+  it("POST /jobs/batch-stop — returns submissions and errors", async () => {
+    mockSend.mockResolvedValueOnce({ SuccessfulSubmissions: [{ JobRunId: "jr-1" }], Errors: [] });
+    const res = await post("/jobs/batch-stop", { jobName: "j1", jobRunIds: ["jr-1"] });
+    const body = await res.json();
+    expect(body.successfulSubmissions).toHaveLength(1);
+    expect(body.errors).toEqual([]);
+  });
+
+  it("POST /jobs/batch-stop — empty defaults", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/jobs/batch-stop", { jobName: "j1" });
+    const body = await res.json();
+    expect(body.successfulSubmissions).toEqual([]);
+    expect(body.errors).toEqual([]);
+  });
+
+  it("POST /jobs/batch-stop — 400 without jobName", async () => {
+    const res = await post("/jobs/batch-stop", {});
+    expect(res.status).toBe(400);
+  });
+
+  it("POST /jobs/batch-get — returns jobs and not-found", async () => {
+    mockSend.mockResolvedValueOnce({ Jobs: [{ Name: "j1" }], JobsNotFound: ["j9"] });
+    const res = await post("/jobs/batch-get", { jobNames: ["j1", "j9"] });
+    const body = await res.json();
+    expect(body.jobs).toHaveLength(1);
+    expect(body.jobsNotFound).toEqual(["j9"]);
+  });
+
+  it("POST /jobs/batch-get — empty defaults", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/jobs/batch-get", {});
+    const body = await res.json();
+    expect(body.jobs).toEqual([]);
+    expect(body.jobsNotFound).toEqual([]);
+  });
+});
+
+// ── Trigger lifecycle ───────────────────────────────────────
+
+describe("Trigger lifecycle", () => {
+  it("POST /triggers/:name/start — starts", async () => {
+    mockSend.mockResolvedValueOnce({ Name: "t1", TriggerInfo: { State: "ACTIVATING" } });
+    const res = await post("/triggers/t1/start");
+    const body = await res.json();
+    expect(body.name).toBe("t1");
+    expect(body.state).toBe("ACTIVATING");
+  });
+
+  it("POST /triggers/:name/start — nulls when sparse", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/triggers/t1/start");
+    const body = await res.json();
+    expect(body.name).toBe(null);
+    expect(body.state).toBe(null);
+  });
+
+  it("POST /triggers/:name/stop — stops", async () => {
+    mockSend.mockResolvedValueOnce({ Name: "t1", TriggerInfo: { State: "STOPPING" } });
+    const res = await post("/triggers/t1/stop");
+    expect((await res.json()).state).toBe("STOPPING");
+  });
+});
+
+// ── Workflow runs ───────────────────────────────────────────
+
+describe("Workflow runs", () => {
+  it("POST /workflows/:name/runs — starts run", async () => {
+    mockSend.mockResolvedValueOnce({ RunId: "wr-1" });
+    const res = await post("/workflows/w1/runs");
+    expect(res.status).toBe(201);
+    expect((await res.json()).runId).toBe("wr-1");
+  });
+
+  it("GET /workflows/:name/runs — lists runs", async () => {
+    mockSend.mockResolvedValueOnce({ Runs: [{ RunId: "wr-1" }] });
+    const res = await get("/workflows/w1/runs");
+    expect((await res.json()).total).toBe(1);
+  });
+
+  it("GET /workflows/:name/runs — empty defaults", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/workflows/w1/runs");
+    expect((await res.json()).total).toBe(0);
+  });
+
+  it("GET /workflows/:name/runs/:runId — returns run", async () => {
+    mockSend.mockResolvedValueOnce({ Run: { RunId: "wr-1" } });
+    const res = await get("/workflows/w1/runs/wr-1");
+    expect((await res.json()).run.RunId).toBe("wr-1");
+  });
+
+  it("GET /workflows/:name/runs/:runId — null when sparse", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/workflows/w1/runs/wr-1");
+    expect((await res.json()).run).toBe(null);
+  });
+
+  it("POST /workflows/:name/runs/:runId/stop — stops run", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/workflows/w1/runs/wr-1/stop");
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].RunId).toBe("wr-1");
+  });
+
+  it("POST /workflows/:name/runs/:runId/resume — resumes run", async () => {
+    mockSend.mockResolvedValueOnce({ RunId: "wr-2" });
+    const res = await post("/workflows/w1/runs/wr-1/resume");
+    expect(res.status).toBe(201);
+    expect((await res.json()).runId).toBe("wr-2");
+  });
+
+  it("GET /workflows/:name/runs/:runId/properties — returns properties", async () => {
+    mockSend.mockResolvedValueOnce({ RunProperties: { env: "prod" } });
+    const res = await get("/workflows/w1/runs/wr-1/properties");
+    expect((await res.json()).runProperties.env).toBe("prod");
+  });
+
+  it("GET /workflows/:name/runs/:runId/properties — null when sparse", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/workflows/w1/runs/wr-1/properties");
+    expect((await res.json()).runProperties).toBe(null);
+  });
+
+  it("PUT /workflows/:name/runs/:runId/properties — puts properties", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put("/workflows/w1/runs/wr-1/properties", { runProperties: { env: "prod" } });
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].RunProperties.env).toBe("prod");
+  });
+
+  it("PUT /workflows/:name/runs/:runId/properties — defaults empty properties", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put("/workflows/w1/runs/wr-1/properties", {});
+    expect(mockSend.mock.calls[0][0].RunProperties).toEqual({});
+  });
+
+  it("POST /workflows/batch-get — returns workflows and missing", async () => {
+    mockSend.mockResolvedValueOnce({ Workflows: [{ Name: "w1" }], MissingWorkflows: ["w9"] });
+    const res = await post("/workflows/batch-get", { names: ["w1", "w9"] });
+    const body = await res.json();
+    expect(body.workflows).toHaveLength(1);
+    expect(body.missingWorkflows).toEqual(["w9"]);
+  });
+
+  it("POST /workflows/batch-get — empty defaults", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/workflows/batch-get", {});
+    const body = await res.json();
+    expect(body.workflows).toEqual([]);
+    expect(body.missingWorkflows).toEqual([]);
+  });
+});
+
+// ── Connections extras ──────────────────────────────────────
+
+describe("Connections extras", () => {
+  it("POST /connections/batch-delete — returns succeeded and errors", async () => {
+    mockSend.mockResolvedValueOnce({ Succeeded: ["conn1"], Errors: [] });
+    const res = await post("/connections/batch-delete", { connectionNames: ["conn1"] });
+    const body = await res.json();
+    expect(body.succeeded).toEqual(["conn1"]);
+    expect(body.errors).toEqual([]);
+  });
+
+  it("POST /connections/batch-delete — empty defaults", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/connections/batch-delete", {});
+    const body = await res.json();
+    expect(body.succeeded).toEqual([]);
+    expect(body.errors).toEqual([]);
+  });
+
+  it("POST /connections/test — passes body through", async () => {
+    mockSend.mockResolvedValueOnce({ ConnectionName: "conn1" });
+    const res = await post("/connections/test", { ConnectionName: "conn1" });
+    const body = await res.json();
+    expect(body.result.ConnectionName).toBe("conn1");
+    expect(mockSend.mock.calls[0][0].ConnectionName).toBe("conn1");
+  });
+
+  it("POST /connections/test — null result when sparse", async () => {
+    mockSend.mockResolvedValueOnce(undefined);
+    const res = await post("/connections/test", {});
+    expect((await res.json()).result).toBe(null);
+  });
+});
+
+// ── Policies / catalog / data quality / search ──────────────
+
+describe("Resource policies", () => {
+  it("GET /resource-policy — returns policy", async () => {
+    mockSend.mockResolvedValueOnce({ PolicyInJson: '{"Version":"2012-10-17"}' });
+    const res = await get("/resource-policy");
+    expect((await res.json()).policyInJson).toContain("Version");
+  });
+
+  it("GET /resource-policy — null when sparse", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/resource-policy");
+    expect((await res.json()).policyInJson).toBe(null);
+  });
+
+  it("GET /resource-policies — lists policies", async () => {
+    mockSend.mockResolvedValueOnce({ GetResourcePoliciesResponseList: [{ PolicyInJson: "{}" }] });
+    const res = await get("/resource-policies");
+    const body = await res.json();
+    expect(body.total).toBe(1);
+  });
+
+  it("GET /resource-policies — empty defaults", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/resource-policies");
+    expect((await res.json()).total).toBe(0);
+  });
+
+  it("PUT /resource-policy — updates policy", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put("/resource-policy", { policyInJson: "{}" });
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].PolicyInJson).toBe("{}");
+  });
+
+  it("PUT /resource-policy — 400 without policyInJson", async () => {
+    const res = await put("/resource-policy", {});
+    expect(res.status).toBe(400);
+  });
+
+  it("DELETE /resource-policy — deletes", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await del("/resource-policy");
+    expect((await res.json()).deleted).toBe(true);
+  });
+});
+
+describe("Data catalog encryption settings", () => {
+  it("GET — returns settings", async () => {
+    mockSend.mockResolvedValueOnce({ DataCatalogEncryptionSettings: { DataCatalogEncryptionMode: "SSE-KMS" } });
+    const res = await get("/data-catalog-encryption-settings");
+    expect((await res.json()).dataCatalogEncryptionSettings.DataCatalogEncryptionMode).toBe("SSE-KMS");
+  });
+
+  it("GET — null when sparse", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/data-catalog-encryption-settings");
+    expect((await res.json()).dataCatalogEncryptionSettings).toBe(null);
+  });
+
+  it("PUT — updates settings", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put("/data-catalog-encryption-settings", { dataCatalogEncryptionSettings: { DataCatalogEncryptionMode: "SSE-KMS" } });
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].DataCatalogEncryptionSettings.DataCatalogEncryptionMode).toBe("SSE-KMS");
+  });
+
+  it("PUT — defaults empty settings", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put("/data-catalog-encryption-settings", {});
+    expect(mockSend.mock.calls[0][0].DataCatalogEncryptionSettings).toEqual({});
+  });
+});
+
+describe("Data quality rulesets and search", () => {
+  it("GET /data-quality-rulesets — lists rulesets", async () => {
+    mockSend.mockResolvedValueOnce({ Rulesets: [{ Name: "rs1" }] });
+    const res = await get("/data-quality-rulesets");
+    const body = await res.json();
+    expect(body.total).toBe(1);
+  });
+
+  it("GET /data-quality-rulesets — empty defaults", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/data-quality-rulesets");
+    expect((await res.json()).total).toBe(0);
+  });
+
+  it("GET /search-tables — returns tables", async () => {
+    mockSend.mockResolvedValueOnce({ TableList: [{ Name: "t1" }] });
+    const res = await get("/search-tables?text=t1");
+    const body = await res.json();
+    expect(body.total).toBe(1);
+    expect(mockSend.mock.calls[0][0].SearchText).toBe("t1");
+  });
+
+  it("GET /search-tables — no text filter", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/search-tables");
+    const body = await res.json();
+    expect(body.tables).toEqual([]);
+    expect(mockSend.mock.calls[0][0].SearchText).toBeUndefined();
+  });
+});
+
+describe("Glue advanced route arms", () => {
+  it("PUT /triggers/:name — defaults empty TriggerUpdate", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put("/triggers/t1", {});
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].TriggerUpdate).toEqual({});
+  });
+
+  it("POST /triggers/:name/stop — nulls when sparse", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/triggers/t1/stop");
+    const body = await res.json();
+    expect(body.name).toBe(null);
+    expect(body.state).toBe(null);
   });
 });

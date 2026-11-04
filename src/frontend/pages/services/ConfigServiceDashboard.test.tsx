@@ -37,6 +37,26 @@ const addTagsState = vi.hoisted(() => ({ isPending: false, isError: false, error
 const removeTagsState = vi.hoisted(() => ({ isPending: false, isError: false, error: null as Error | null, variables: null as any }));
 const mockAddTagsReset = vi.hoisted(() => vi.fn());
 const mockRemoveTagsReset = vi.hoisted(() => vi.fn());
+const mockAggAuth = vi.fn();
+const mockPutAgg = vi.fn();
+const mockDeleteAgg = vi.fn();
+const mockRetention = vi.fn();
+const mockPutRetention = vi.fn();
+const mockDeleteRetention = vi.fn();
+const mockComplianceByResource = vi.fn();
+const mockSummaryRule = vi.fn();
+const mockSummaryRT = vi.fn();
+const mockDetailsRule = vi.fn();
+const mockDetailsResource = vi.fn();
+const mockDeleteChannel = vi.fn();
+const mockDeleteEval = vi.fn();
+
+const deleteAggState = vi.hoisted(() => ({ isPending: false, variables: null as any }));
+const deleteRetentionState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
+const putAggState = vi.hoisted(() => ({ isPending: false, isError: false, error: null as Error | null }));
+const putRetentionState = vi.hoisted(() => ({ isPending: false, isError: false, error: null as Error | null }));
+const deleteChannelState = vi.hoisted(() => ({ isPending: false, isError: false, error: null as Error | null }));
+const deleteEvalState = vi.hoisted(() => ({ isPending: false, isError: false, error: null as Error | null }));
 
 vi.mock("../../hooks/useConfigService", () => ({
   useConfigRules: (...args: any[]) => mockRules(...args),
@@ -80,6 +100,49 @@ vi.mock("../../hooks/useConfigService", () => ({
     get isError() { return removeTagsState.isError; },
     get error() { return removeTagsState.error; },
     get variables() { return removeTagsState.variables; },
+  }),
+  useAggregationAuthorizations: (...args: any[]) => mockAggAuth(...args),
+  usePutAggregationAuthorization: () => ({
+    mutate: mockPutAgg,
+    mutateAsync: mockPutAgg,
+    get isPending() { return putAggState.isPending; },
+    get isError() { return putAggState.isError; },
+    get error() { return putAggState.error; },
+  }),
+  useDeleteAggregationAuthorization: () => ({
+    mutateAsync: mockDeleteAgg,
+    get isPending() { return deleteAggState.isPending; },
+    get variables() { return deleteAggState.variables; },
+  }),
+  useRetentionConfigurations: (...args: any[]) => mockRetention(...args),
+  usePutRetentionConfiguration: () => ({
+    mutate: mockPutRetention,
+    mutateAsync: mockPutRetention,
+    get isPending() { return putRetentionState.isPending; },
+    get isError() { return putRetentionState.isError; },
+    get error() { return putRetentionState.error; },
+  }),
+  useDeleteRetentionConfiguration: () => ({
+    mutateAsync: mockDeleteRetention,
+    get isPending() { return deleteRetentionState.isPending; },
+    get variables() { return deleteRetentionState.variables; },
+  }),
+  useComplianceByResource: (...args: any[]) => mockComplianceByResource(...args),
+  useComplianceSummaryByConfigRule: (...args: any[]) => mockSummaryRule(...args),
+  useComplianceSummaryByResourceType: (...args: any[]) => mockSummaryRT(...args),
+  useComplianceDetailsByConfigRule: (...args: any[]) => mockDetailsRule(...args),
+  useComplianceDetailsByResource: (...args: any[]) => mockDetailsResource(...args),
+  useDeleteDeliveryChannel: () => ({
+    mutateAsync: mockDeleteChannel,
+    get isPending() { return deleteChannelState.isPending; },
+    get isError() { return deleteChannelState.isError; },
+    get error() { return deleteChannelState.error; },
+  }),
+  useDeleteEvaluationResults: () => ({
+    mutateAsync: mockDeleteEval,
+    get isPending() { return deleteEvalState.isPending; },
+    get isError() { return deleteEvalState.isError; },
+    get error() { return deleteEvalState.error; },
   }),
 }));
 
@@ -142,6 +205,38 @@ beforeEach(() => {
     isLoading: false,
   });
   mockStartEval.mockResolvedValue({});
+
+  mockAggAuth.mockReturnValue({ data: { authorizations: [], total: 0 }, isLoading: false });
+  mockPutAgg.mockResolvedValue({ created: true });
+  mockPutAgg.mockImplementation((_input: any, opts: any) => opts?.onSuccess?.());
+  mockDeleteAgg.mockResolvedValue({ deleted: true });
+  deleteAggState.isPending = false;
+  deleteAggState.variables = null;
+  putAggState.isPending = false;
+  putAggState.isError = false;
+  putAggState.error = null;
+  mockRetention.mockReturnValue({ data: { retentionConfigurations: [], total: 0 }, isLoading: false });
+  mockPutRetention.mockResolvedValue({ created: true });
+  mockPutRetention.mockImplementation((_input: any, opts: any) => opts?.onSuccess?.());
+  mockDeleteRetention.mockResolvedValue({ deleted: true });
+  deleteRetentionState.isPending = false;
+  deleteRetentionState.variables = null;
+  putRetentionState.isPending = false;
+  putRetentionState.isError = false;
+  putRetentionState.error = null;
+  mockComplianceByResource.mockReturnValue({ data: { compliance: [], total: 0 }, isLoading: false });
+  mockSummaryRule.mockReturnValue({ data: { complianceSummary: null } });
+  mockSummaryRT.mockReturnValue({ data: { summaries: [], total: 0 }, isLoading: false });
+  mockDetailsRule.mockReturnValue({ data: { evaluationResults: [], total: 0 }, isLoading: false });
+  mockDetailsResource.mockReturnValue({ data: { evaluationResults: [], total: 0 }, isLoading: false });
+  mockDeleteChannel.mockResolvedValue({ deleted: true });
+  mockDeleteEval.mockResolvedValue({ deleted: true });
+  deleteChannelState.isPending = false;
+  deleteChannelState.isError = false;
+  deleteChannelState.error = null;
+  deleteEvalState.isPending = false;
+  deleteEvalState.isError = false;
+  deleteEvalState.error = null;
 });
 
 // ─── Tests ──────────────────────────────────────────────
@@ -1127,5 +1222,523 @@ describe("ConfigServiceDashboard — tags modal", () => {
     await user.click(screen.getByRole("tab", { name: /Conformance Packs/i }));
     const btn = (await screen.findAllByRole("button", { name: "Tags" }))[0];
     expect(btn.hasAttribute("disabled")).toBe(true);
+  });
+});
+
+// ─── Governance tab ─────────────────────────────────────────
+
+function openGovernance(user: any) {
+  return user.click(screen.getByRole("tab", { name: "Governance" }));
+}
+
+/** Locate a modal dialog by its header text. */
+function govDialog(headerText: string): HTMLElement {
+  const header = screen.getAllByText(headerText).find((h) => h.closest('[role="dialog"]'));
+  return header!.closest('[role="dialog"]') as HTMLElement;
+}
+
+describe("ConfigServiceDashboard — Governance tab", () => {
+  it("shows all governance sections", async () => {
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    expect(screen.getAllByText("Aggregation Authorizations").length).toBeGreaterThan(1);
+    expect(screen.getAllByText("Retention Configurations").length).toBeGreaterThan(1);
+    expect(screen.getAllByText("Compliance Summary").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Compliance by Resource").length).toBeGreaterThan(1);
+    expect(screen.getAllByText("Compliance Details").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Danger Zone").length).toBeGreaterThan(0);
+  });
+
+  it("lists aggregation authorizations", async () => {
+    mockAggAuth.mockReturnValue({
+      data: { authorizations: [{ AuthorizedAccountId: "111111111111", AuthorizedAwsRegion: "us-east-1", AggregationAuthorizationArn: "arn:auth" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    expect(screen.getByText("111111111111")).toBeTruthy();
+    expect(screen.getByText("arn:auth")).toBeTruthy();
+  });
+
+  it("renders ARN fallback for authorization without ARN", async () => {
+    mockAggAuth.mockReturnValue({
+      data: { authorizations: [{ AuthorizedAccountId: "222222222222", AuthorizedAwsRegion: "eu-west-1" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    expect(screen.getByText("-")).toBeTruthy();
+  });
+
+  it("shows spinner while authorizations load", async () => {
+    mockAggAuth.mockReturnValue({ data: undefined, isLoading: true });
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    expect(screen.getAllByText("Aggregation Authorizations").length).toBeGreaterThan(0);
+  });
+
+  it("creates an aggregation authorization via modal", async () => {
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    await user.click(screen.getByRole("button", { name: "Create Authorization" }));
+    const inputs = screen.getAllByPlaceholderText(/123456789012|us-east-1/);
+    await user.type(inputs[0], "999999999999");
+    await user.type(inputs[1], "us-west-2");
+    await user.click(within(govDialog("Add Aggregation Authorization")).getByRole("button", { name: /Add authorization/i }));
+    console.log("PUT_AGG_CALLS", JSON.stringify(mockPutAgg.mock.calls));
+    await waitFor(() => expect(mockPutAgg).toHaveBeenCalledWith(
+      { authorizedAccountId: "999999999999", authorizedAwsRegion: "us-west-2" },
+      expect.anything(),
+    ));
+  });
+
+  it("shows put error alert for authorization", async () => {
+    putAggState.isError = true;
+    putAggState.error = new Error("create failed");
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    expect(screen.getByText("create failed")).toBeTruthy();
+  });
+
+  it("shows fallback alert text when put error has no message", async () => {
+    putAggState.isError = true;
+    putAggState.error = {} as Error;
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    expect(screen.getAllByText(/Failed to create authorization/i).length).toBeGreaterThan(0);
+  });
+
+  it("deletes an aggregation authorization", async () => {
+    mockAggAuth.mockReturnValue({
+      data: { authorizations: [{ AuthorizedAccountId: "111111111111", AuthorizedAwsRegion: "us-east-1" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    await user.click(screen.getByRole("button", { name: "Delete 111111111111/us-east-1" }));
+    await waitFor(() => expect(mockDeleteAgg).toHaveBeenCalledWith(
+      { authorizedAccountId: "111111111111", authorizedAwsRegion: "us-east-1" },
+    ));
+  });
+
+  it("shows delete loading only for the matching authorization", async () => {
+    mockAggAuth.mockReturnValue({
+      data: {
+        authorizations: [
+          { AuthorizedAccountId: "111111111111", AuthorizedAwsRegion: "us-east-1" },
+          { AuthorizedAccountId: "222222222222", AuthorizedAwsRegion: "us-east-1" },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    deleteAggState.isPending = true;
+    deleteAggState.variables = { authorizedAccountId: "111111111111", authorizedAwsRegion: "us-east-1" };
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    const loadingBtn = screen.getByRole("button", { name: "Delete 111111111111/us-east-1" });
+    expect(loadingBtn.getAttribute("class")).toContain("disabled");
+    const otherBtn = screen.getByRole("button", { name: "Delete 222222222222/us-east-1" });
+    expect(otherBtn.getAttribute("class")).not.toContain("disabled");
+  });
+
+  it("lists retention configurations", async () => {
+    mockRetention.mockReturnValue({
+      data: { retentionConfigurations: [{ Name: "default", RetentionPeriodInDays: 365 }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    expect(screen.getByText("default")).toBeTruthy();
+    expect(screen.getByText("365")).toBeTruthy();
+  });
+
+  it("falls back to default name for retention config without Name", async () => {
+    mockRetention.mockReturnValue({
+      data: { retentionConfigurations: [{ RetentionPeriodInDays: 90 }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    expect(screen.getAllByText("default").length).toBeGreaterThan(0);
+  });
+
+  it("creates a retention configuration via modal", async () => {
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    await user.click(screen.getByRole("button", { name: "Create Retention Configuration" }));
+    const dialog = govDialog("Set Retention Period");
+    await user.type(within(dialog).getByPlaceholderText("365"), "180");
+    await user.click(within(dialog).getByRole("button", { name: /^Save$/i }));
+    await waitFor(() => expect(mockPutRetention).toHaveBeenCalledWith(180, expect.anything()));
+  });
+
+  it("deletes a retention configuration", async () => {
+    mockRetention.mockReturnValue({
+      data: { retentionConfigurations: [{ Name: "default", RetentionPeriodInDays: 365 }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    await user.click(screen.getByRole("button", { name: "Delete default" }));
+    await waitFor(() => expect(mockDeleteRetention).toHaveBeenCalledWith("default"));
+  });
+
+  it("shows retention put error alert", async () => {
+    putRetentionState.isError = true;
+    putRetentionState.error = new Error("retention failed");
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    expect(screen.getByText("retention failed")).toBeTruthy();
+  });
+
+  it("shows em-dash compliance summary counts when no summary", async () => {
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("renders compliance summary counts", async () => {
+    mockSummaryRule.mockReturnValue({
+      data: { complianceSummary: { CompliantConfigRuleCount: 5, NonCompliantConfigRuleCount: 2, CompliantResourceCount: 10, NonCompliantResourceCount: 3 } },
+    });
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    expect(screen.getByText("5")).toBeTruthy();
+    expect(screen.getByText("2")).toBeTruthy();
+    expect(screen.getByText("10")).toBeTruthy();
+    expect(screen.getByText("3")).toBeTruthy();
+  });
+
+  it("fetches compliance summary by resource type", async () => {
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    const fetchBtn = screen.getByRole("button", { name: /Fetch summary/i });
+    expect(fetchBtn.hasAttribute("disabled")).toBe(true);
+    await user.type(screen.getByPlaceholderText("AWS::EC2::Instance,AWS::S3::Bucket"), "AWS::EC2::Instance");
+    expect(fetchBtn.hasAttribute("disabled")).toBe(false);
+    await user.click(fetchBtn);
+    await waitFor(() => expect(mockSummaryRT).toHaveBeenCalledWith("AWS::EC2::Instance"));
+  });
+
+  it("renders resource type summaries with fallbacks", async () => {
+    mockSummaryRT.mockReturnValue({
+      data: {
+        summaries: [
+          { ResourceKey: { ResourceType: "AWS::EC2::Instance" }, ComplianceSummary: { CompliantResourceCount: 4, NonCompliantResourceCount: 1 } },
+          {},
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    expect(screen.getByText("AWS::EC2::Instance")).toBeTruthy();
+    expect(screen.getByText("4")).toBeTruthy();
+    expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("renders compliance by resource with status indicators", async () => {
+    mockComplianceByResource.mockReturnValue({
+      data: {
+        compliance: [
+          { ResourceType: "AWS::EC2::Instance", ResourceId: "i-1", Compliance: { ComplianceType: "COMPLIANT" } },
+          { ResourceType: "AWS::S3::Bucket", ResourceId: "b-1", Compliance: { ComplianceType: "NON_COMPLIANT" } },
+          { ResourceId: "x", Compliance: {} },
+        ],
+        total: 3,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    expect(screen.getByText("AWS::EC2::Instance")).toBeTruthy();
+    expect(screen.getByText("i-1")).toBeTruthy();
+    expect(screen.getAllByText("COMPLIANT").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("NON_COMPLIANT").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("fetches compliance details by rule", async () => {
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    await user.type(screen.getByPlaceholderText("required-tags"), "required-tags");
+    const fetchBtns = screen.getAllByRole("button", { name: /Fetch details/i });
+    await user.click(fetchBtns[0]);
+    await waitFor(() => expect(mockDetailsRule).toHaveBeenCalledWith("required-tags"));
+  });
+
+  it("fetch is disabled without rule name", async () => {
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    const fetchBtns = screen.getAllByRole("button", { name: /Fetch details/i });
+    expect(fetchBtns[0].hasAttribute("disabled")).toBe(true);
+  });
+
+  it("fetches compliance details by resource", async () => {
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    await user.type(screen.getByPlaceholderText("AWS::EC2::Instance"), "AWS::S3::Bucket");
+    await user.type(screen.getByPlaceholderText("i-1234567890"), "my-bucket");
+    const fetchBtns = screen.getAllByRole("button", { name: /Fetch details/i });
+    await user.click(fetchBtns[fetchBtns.length - 1]);
+    await waitFor(() => expect(mockDetailsResource).toHaveBeenCalledWith("AWS::S3::Bucket", "my-bucket"));
+  });
+
+  it("resource fetch is disabled without both inputs", async () => {
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    const fetchBtns = screen.getAllByRole("button", { name: /Fetch details/i });
+    expect(fetchBtns[fetchBtns.length - 1].hasAttribute("disabled")).toBe(true);
+  });
+
+  it("renders evaluation results with fallbacks", async () => {
+    mockDetailsRule.mockReturnValue({
+      data: {
+        evaluationResults: [
+          {
+            EvaluationResultIdentifier: { EvaluationResultQualifier: { ConfigRuleName: "required-tags", ResourceType: "AWS::EC2::Instance", ResourceId: "i-1" } },
+            ComplianceType: "COMPLIANT",
+            Annotation: "ok",
+          },
+          {},
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    expect(screen.getByText("required-tags")).toBeTruthy();
+    expect(screen.getByText("AWS::EC2::Instance/i-1")).toBeTruthy();
+    expect(screen.getByText("ok")).toBeTruthy();
+    expect(screen.getByText("?/?")).toBeTruthy();
+    expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("renders resource evaluation results", async () => {
+    mockDetailsResource.mockReturnValue({
+      data: {
+        evaluationResults: [
+          {
+            EvaluationResultIdentifier: { EvaluationResultQualifier: { ConfigRuleName: "rule-2", ResourceType: "AWS::S3::Bucket", ResourceId: "b-1" } },
+            ComplianceType: "NON_COMPLIANT",
+            Annotation: "missing encryption",
+          },
+        ],
+        total: 1,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    expect(screen.getByText("rule-2")).toBeTruthy();
+    expect(screen.getByText("AWS::S3::Bucket/b-1")).toBeTruthy();
+    expect(screen.getByText("missing encryption")).toBeTruthy();
+  });
+
+  it("deletes a delivery channel from danger zone", async () => {
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    const delBtn = screen.getByRole("button", { name: /Delete delivery channel/i });
+    expect(delBtn.hasAttribute("disabled")).toBe(true);
+    await user.type(screen.getByPlaceholderText("Delivery channel name"), "default");
+    expect(delBtn.hasAttribute("disabled")).toBe(false);
+    await user.click(delBtn);
+    await waitFor(() => expect(mockDeleteChannel).toHaveBeenCalledWith("default"));
+  });
+
+  it("shows delivery channel delete error fallback", async () => {
+    deleteChannelState.isError = true;
+    deleteChannelState.error = {} as Error;
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    expect(screen.getAllByText(/Failed to delete delivery channel/i).length).toBeGreaterThan(0);
+  });
+
+  it("deletes evaluation results from danger zone", async () => {
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    const delBtn = screen.getByRole("button", { name: /Delete evaluation results/i });
+    expect(delBtn.hasAttribute("disabled")).toBe(true);
+    await user.type(screen.getByPlaceholderText("Config rule name"), "required-tags");
+    expect(delBtn.hasAttribute("disabled")).toBe(false);
+    await user.click(delBtn);
+    await waitFor(() => expect(mockDeleteEval).toHaveBeenCalledWith("required-tags"));
+  });
+
+  it("shows evaluation results delete error fallback", async () => {
+    deleteEvalState.isError = true;
+    deleteEvalState.error = {} as Error;
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    expect(screen.getAllByText(/Failed to delete evaluation results/i).length).toBeGreaterThan(0);
+  });
+
+  it("shows evaluation results delete error with message", async () => {
+    deleteEvalState.isError = true;
+    deleteEvalState.error = new Error("clear failed");
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    expect(screen.getByText("clear failed")).toBeTruthy();
+  });
+});
+
+describe("ConfigServiceDashboard — governance coverage extras", () => {
+  it("cancels and escapes the aggregation authorization modal", async () => {
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    await user.click(screen.getByRole("button", { name: "Create Authorization" }));
+    await waitFor(() => expect(screen.getByText("Add Aggregation Authorization")).toBeTruthy());
+    document.querySelectorAll('[class*="awsui_dialog"]').forEach((d) => {
+      fireEvent.keyDown(d as HTMLElement, { keyCode: 27 });
+    });
+    await waitFor(() => expect(govDialog("Add Aggregation Authorization").className).toContain("hidden"));
+    await user.click(screen.getByRole("button", { name: "Create Authorization" }));
+    await waitFor(() => expect(screen.getByText("Add Aggregation Authorization")).toBeTruthy());
+    await user.click(within(govDialog("Add Aggregation Authorization")).getByRole("button", { name: /^Cancel$/i }));
+    await waitFor(() => expect(govDialog("Add Aggregation Authorization").className).toContain("hidden"));
+  });
+
+  it("cancels and escapes the retention modal", async () => {
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    await user.click(screen.getByRole("button", { name: "Create Retention Configuration" }));
+    await waitFor(() => expect(screen.getByText("Set Retention Period")).toBeTruthy());
+    document.querySelectorAll('[class*="awsui_dialog"]').forEach((d) => {
+      fireEvent.keyDown(d as HTMLElement, { keyCode: 27 });
+    });
+    await waitFor(() => expect(govDialog("Set Retention Period").className).toContain("hidden"));
+    await user.click(screen.getByRole("button", { name: "Create Retention Configuration" }));
+    await waitFor(() => expect(screen.getByText("Set Retention Period")).toBeTruthy());
+    await user.click(within(govDialog("Set Retention Period")).getByRole("button", { name: /^Cancel$/i }));
+    await waitFor(() => expect(govDialog("Set Retention Period").className).toContain("hidden"));
+  });
+
+  it("shows messageless retention put error fallback", async () => {
+    putRetentionState.isError = true;
+    putRetentionState.error = {} as Error;
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    expect(screen.getAllByText(/Failed to save retention configuration/i).length).toBeGreaterThan(0);
+  });
+
+  it("renders middle fallbacks for summaries and compliance rows", async () => {
+    mockSummaryRT.mockReturnValue({
+      data: { summaries: [{ ResourceType: "AWS::S3::Bucket" }], total: 1 },
+      isLoading: false,
+    });
+    mockComplianceByResource.mockReturnValue({
+      data: { compliance: [{}], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    expect(screen.getByText("AWS::S3::Bucket")).toBeTruthy();
+    expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("filters compliance by resource table", async () => {
+    mockComplianceByResource.mockReturnValue({
+      data: {
+        compliance: [
+          { ResourceType: "AWS::EC2::Instance", ResourceId: "i-1", Compliance: { ComplianceType: "COMPLIANT" } },
+          { ResourceType: "AWS::S3::Bucket", ResourceId: "bucket-1", Compliance: { ComplianceType: "COMPLIANT" } },
+        ],
+        total: 2,
+      },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    await user.type(screen.getByPlaceholderText("Find resources"), "i-1");
+    await waitFor(() => expect(screen.queryByText("bucket-1")).toBeNull());
+    expect(screen.getByText("i-1")).toBeTruthy();
+  });
+
+  it("renders empty evaluation tables when details data is undefined", async () => {
+    mockDetailsRule.mockReturnValue({ data: undefined, isLoading: false });
+    mockDetailsResource.mockReturnValue({ data: undefined, isLoading: false });
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    expect(screen.getAllByText(/No evaluation results — enter a rule name above and fetch/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/No evaluation results — enter a resource type and ID above and fetch/i).length).toBeGreaterThan(0);
+  });
+});
+
+describe("ConfigServiceDashboard — governance sparse data", () => {
+  it("renders empty retention table when data is undefined", async () => {
+    mockRetention.mockReturnValue({ data: undefined, isLoading: false });
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    expect(screen.getAllByText(/No retention configurations/i).length).toBeGreaterThan(0);
+  });
+
+  it("shows retention delete loading for matching name", async () => {
+    mockRetention.mockReturnValue({
+      data: { retentionConfigurations: [{ Name: "default", RetentionPeriodInDays: 365 }], total: 1 },
+      isLoading: false,
+    });
+    deleteRetentionState.isPending = true;
+    deleteRetentionState.variables = "default";
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    const btn = screen.getByRole("button", { name: "Delete default" });
+    expect(btn.getAttribute("class")).toContain("disabled");
+  });
+
+  it("renders empty summaries table when rtData is undefined", async () => {
+    mockSummaryRT.mockReturnValue({ data: undefined, isLoading: false });
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    expect(screen.getAllByText(/No summaries — enter resource types above and fetch/i).length).toBeGreaterThan(0);
+  });
+
+  it("renders empty compliance-by-resource table when data is undefined", async () => {
+    mockComplianceByResource.mockReturnValue({ data: undefined, isLoading: false });
+    const user = userEvent.setup();
+    render(<ConfigServiceDashboard />, { wrapper: createWrapper() });
+    await openGovernance(user);
+    expect(screen.getAllByText(/No compliance data/i).length).toBeGreaterThan(0);
   });
 });

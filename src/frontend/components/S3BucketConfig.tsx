@@ -46,6 +46,26 @@ import {
   useS3UpdateBucketLogging,
   useS3BucketAcl,
   useS3PutBucketAcl,
+  useS3BucketAccelerate,
+  useS3UpdateBucketAccelerate,
+  useS3BucketOwnershipControls,
+  useS3UpdateBucketOwnershipControls,
+  useS3DeleteBucketOwnershipControls,
+  useS3BucketRequestPayment,
+  useS3UpdateBucketRequestPayment,
+  useS3BucketReplication,
+  useS3UpdateBucketReplication,
+  useS3DeleteBucketReplication,
+  useS3IntelligentTieringConfigs,
+  useS3PutIntelligentTieringConfig,
+  useS3DeleteIntelligentTieringConfig,
+  useS3AnalyticsConfigs,
+  useS3PutAnalyticsConfig,
+  useS3DeleteAnalyticsConfig,
+  useS3InventoryConfigs,
+  useS3PutInventoryConfig,
+  useS3DeleteInventoryConfig,
+  useS3RestoreObject,
   type S3Tag,
 } from "../hooks/useS3Config";
 
@@ -87,6 +107,14 @@ export default function S3BucketConfig({ bucket }: Props) {
     { label: "Public Access", id: "public-access" },
     { label: "Logging", id: "logging" },
     { label: "ACL", id: "acl" },
+    { label: "Ownership", id: "ownership" },
+    { label: "Payments", id: "payments" },
+    { label: "Replication", id: "replication" },
+    { label: "Accelerate", id: "accelerate" },
+    { label: "Tiering", id: "tiering" },
+    { label: "Analytics", id: "analytics" },
+    { label: "Inventory", id: "inventory" },
+    { label: "Restore", id: "restore" },
   ];
 
   return (
@@ -115,6 +143,38 @@ export default function S3BucketConfig({ bucket }: Props) {
       {activeTab === "public-access" && <BucketPublicAccess bucket={bucket} />}
       {activeTab === "logging" && <BucketLogging bucket={bucket} />}
       {activeTab === "acl" && <BucketAcl bucket={bucket} />}
+      {activeTab === "ownership" && <BucketOwnership bucket={bucket} />}
+      {activeTab === "payments" && <BucketPayments bucket={bucket} />}
+      {activeTab === "replication" && <BucketReplication bucket={bucket} />}
+      {activeTab === "accelerate" && <BucketAccelerate bucket={bucket} />}
+      {activeTab === "tiering" && (
+        <NamedConfigsPanel
+          title="Intelligent-Tiering Configurations"
+          bucket={bucket}
+          useList={useS3IntelligentTieringConfigs}
+          usePut={useS3PutIntelligentTieringConfig}
+          useDelete={useS3DeleteIntelligentTieringConfig}
+        />
+      )}
+      {activeTab === "analytics" && (
+        <NamedConfigsPanel
+          title="Analytics Configurations"
+          bucket={bucket}
+          useList={useS3AnalyticsConfigs}
+          usePut={useS3PutAnalyticsConfig}
+          useDelete={useS3DeleteAnalyticsConfig}
+        />
+      )}
+      {activeTab === "inventory" && (
+        <NamedConfigsPanel
+          title="Inventory Configurations"
+          bucket={bucket}
+          useList={useS3InventoryConfigs}
+          usePut={useS3PutInventoryConfig}
+          useDelete={useS3DeleteInventoryConfig}
+        />
+      )}
+      {activeTab === "restore" && <BucketRestore bucket={bucket} />}
     </SpaceBetween>
   );
 }
@@ -1056,6 +1116,495 @@ function BucketAcl({ bucket }: Props) {
             )}
           </SpaceBetween>
         </Container>
+      </SpaceBetween>
+    </Container>
+  );
+}
+
+// ─── Bucket Ownership Controls ────────────────────────────────────
+
+const OWNERSHIP_OPTIONS: SelectProps.Option[] = [
+  { label: "BucketOwnerEnforced", value: "BucketOwnerEnforced" },
+  { label: "BucketOwnerPreferred", value: "BucketOwnerPreferred" },
+  { label: "ObjectWriter", value: "ObjectWriter" },
+];
+
+function BucketOwnership({ bucket }: Props) {
+  const { data, isLoading } = useS3BucketOwnershipControls(bucket);
+  const updateControls = useS3UpdateBucketOwnershipControls(bucket);
+  const deleteControls = useS3DeleteBucketOwnershipControls(bucket);
+  const [selected, setSelected] = useState<SelectProps.Option>(OWNERSHIP_OPTIONS[0]);
+
+  useEffect(() => {
+    const ownership = (data?.rules || [])[0]?.ObjectOwnership;
+    if (ownership) {
+      setSelected(OWNERSHIP_OPTIONS.find((o) => o.value === ownership) || OWNERSHIP_OPTIONS[0]);
+    }
+  }, [data?.rules]);
+
+  if (isLoading) return <Spinner />;
+
+  return (
+    <Container header={<Header variant="h3">Object Ownership</Header>}>
+      <SpaceBetween size="m">
+        <Box variant="p" color="text-body-secondary">
+          Object Ownership controls which account owns objects uploaded to this bucket and how ACLs are enforced.
+        </Box>
+        <Form>
+          <FormField label="Object ownership" description="Applies to all objects uploaded to this bucket.">
+            <Select
+              selectedOption={selected}
+              onChange={({ detail }) => setSelected(detail.selectedOption)}
+              options={OWNERSHIP_OPTIONS}
+            />
+          </FormField>
+          <Button
+            variant="primary"
+            loading={updateControls.isPending}
+            onClick={() => updateControls.mutate([{ ObjectOwnership: selected.value as string }])}
+          >
+            Save changes
+          </Button>
+          <Button
+            variant="normal"
+            loading={deleteControls.isPending}
+            onClick={() => deleteControls.mutate()}
+          >
+            Delete ownership controls
+          </Button>
+          {updateControls.isError && (
+            <Alert type="error" dismissible>
+              {(updateControls.error as Error)?.message || "Failed to update ownership controls"}
+            </Alert>
+          )}
+          {deleteControls.isError && (
+            <Alert type="error" dismissible>
+              {(deleteControls.error as Error)?.message || "Failed to delete ownership controls"}
+            </Alert>
+          )}
+        </Form>
+        {data && data.rules.length > 0 && (
+          <Table
+            header={<Header variant="h3" counter={`(${data.rules.length})`}>Current Rules</Header>}
+            columnDefinitions={[
+              { id: "ownership", header: "Object ownership", cell: (item: any) => item.ObjectOwnership || "—" },
+            ]}
+            items={data.rules}
+          />
+        )}
+      </SpaceBetween>
+    </Container>
+  );
+}
+
+// ─── Bucket Request Payment ───────────────────────────────────────
+
+const PAYER_OPTIONS: SelectProps.Option[] = [
+  { label: "BucketOwner", value: "BucketOwner" },
+  { label: "Requester", value: "Requester" },
+];
+
+function BucketPayments({ bucket }: Props) {
+  const { data, isLoading } = useS3BucketRequestPayment(bucket);
+  const updatePayment = useS3UpdateBucketRequestPayment(bucket);
+  const [selected, setSelected] = useState<SelectProps.Option>(PAYER_OPTIONS[0]);
+
+  useEffect(() => {
+    if (data?.payer) {
+      setSelected(PAYER_OPTIONS.find((o) => o.value === data.payer) || PAYER_OPTIONS[0]);
+    }
+  }, [data?.payer]);
+
+  if (isLoading) return <Spinner />;
+
+  return (
+    <Container header={<Header variant="h3">Request Payment</Header>}>
+      <SpaceBetween size="m">
+        <Box variant="p" color="text-body-secondary">
+          Requester Pays buckets require the requester to pay for data transfer and request costs instead of the bucket owner.
+        </Box>
+        <Form>
+          <FormField label="Payer" description="Who pays for requests and data transfer from this bucket.">
+            <Select
+              selectedOption={selected}
+              onChange={({ detail }) => setSelected(detail.selectedOption)}
+              options={PAYER_OPTIONS}
+            />
+          </FormField>
+          <Button
+            variant="primary"
+            loading={updatePayment.isPending}
+            onClick={() => updatePayment.mutate(selected.value as string)}
+          >
+            Save changes
+          </Button>
+          {updatePayment.isError && (
+            <Alert type="error" dismissible>
+              {(updatePayment.error as Error)?.message || "Failed to update request payment"}
+            </Alert>
+          )}
+        </Form>
+        {data && (
+          <StatusIndicator type={data.payer === "Requester" ? "info" : "success"}>
+            Current payer: {data.payer}
+          </StatusIndicator>
+        )}
+      </SpaceBetween>
+    </Container>
+  );
+}
+
+// ─── Bucket Replication ───────────────────────────────────────────
+
+function BucketReplication({ bucket }: Props) {
+  const { data, isLoading } = useS3BucketReplication(bucket);
+  const updateReplication = useS3UpdateBucketReplication(bucket);
+  const deleteReplication = useS3DeleteBucketReplication(bucket);
+  const [role, setRole] = useState("");
+  const [rulesText, setRulesText] = useState("[]");
+  const [parseError, setParseError] = useState("");
+
+  useEffect(() => {
+    const config = data?.replicationConfiguration;
+    if (config) {
+      setRole(config.Role || "");
+      setRulesText(JSON.stringify(config.Rules || [], null, 2));
+    }
+  }, [data?.replicationConfiguration]);
+
+  if (isLoading) return <Spinner />;
+
+  const handleSave = () => {
+    let rules: any;
+    try {
+      rules = JSON.parse(rulesText);
+    } catch {
+      setParseError("Rules must be valid JSON");
+      return;
+    }
+    setParseError("");
+    updateReplication.mutate({ role, rules });
+  };
+
+  return (
+    <Container header={<Header variant="h3">Replication</Header>}>
+      <SpaceBetween size="m">
+        <Box variant="p" color="text-body-secondary">
+          Replication automatically copies objects from this bucket to a destination bucket, optionally in another Region.
+        </Box>
+        <Form>
+          <FormField label="IAM role ARN" description="Role used by S3 to replicate objects on your behalf.">
+            <Input
+              value={role}
+              onChange={({ detail }) => setRole(detail.value)}
+              placeholder="arn:aws:iam::123456789012:role/replication"
+            />
+          </FormField>
+          <FormField label="Replication rules (JSON)" description="Array of replication rule objects.">
+            <Textarea
+              value={rulesText}
+              onChange={({ detail }) => setRulesText(detail.value)}
+              rows={8}
+            />
+          </FormField>
+          {parseError && <Alert type="error">Invalid JSON in replication rules</Alert>}
+          <Button variant="primary" loading={updateReplication.isPending} onClick={handleSave}>
+            Save changes
+          </Button>
+          <Button
+            variant="normal"
+            loading={deleteReplication.isPending}
+            onClick={() => deleteReplication.mutate()}
+          >
+            Delete replication configuration
+          </Button>
+          {updateReplication.isError && (
+            <Alert type="error" dismissible>
+              {(updateReplication.error as Error)?.message || "Failed to update replication"}
+            </Alert>
+          )}
+          {deleteReplication.isError && (
+            <Alert type="error" dismissible>
+              {(deleteReplication.error as Error)?.message || "Failed to delete replication"}
+            </Alert>
+          )}
+        </Form>
+        {data && (
+          <StatusIndicator type={data.configured ? "success" : "info"}>
+            {data.configured ? "Replication is configured" : "No replication configuration"}
+          </StatusIndicator>
+        )}
+      </SpaceBetween>
+    </Container>
+  );
+}
+
+// ─── Bucket Accelerate ────────────────────────────────────────────
+
+const ACCELERATE_OPTIONS: SelectProps.Option[] = [
+  { label: "Enabled", value: "Enabled" },
+  { label: "Suspended", value: "Suspended" },
+];
+
+function BucketAccelerate({ bucket }: Props) {
+  const { data, isLoading } = useS3BucketAccelerate(bucket);
+  const updateAccelerate = useS3UpdateBucketAccelerate(bucket);
+  const [selected, setSelected] = useState<SelectProps.Option>(ACCELERATE_OPTIONS[0]);
+
+  useEffect(() => {
+    if (data?.status) {
+      setSelected(ACCELERATE_OPTIONS.find((o) => o.value === data.status) || ACCELERATE_OPTIONS[0]);
+    }
+  }, [data?.status]);
+
+  if (isLoading) return <Spinner />;
+
+  return (
+    <Container header={<Header variant="h3">Transfer Acceleration</Header>}>
+      <SpaceBetween size="m">
+        <Box variant="p" color="text-body-secondary">
+          S3 Transfer Acceleration uses edge locations in Amazon CloudFront to accelerate uploads to the bucket over long distances.
+        </Box>
+        <Form>
+          <FormField label="Acceleration status" description="Whether Transfer Acceleration is enabled for this bucket.">
+            <Select
+              selectedOption={selected}
+              onChange={({ detail }) => setSelected(detail.selectedOption)}
+              options={ACCELERATE_OPTIONS}
+            />
+          </FormField>
+          <Button
+            variant="primary"
+            loading={updateAccelerate.isPending}
+            onClick={() => updateAccelerate.mutate(selected.value as string)}
+          >
+            Save changes
+          </Button>
+          {updateAccelerate.isError && (
+            <Alert type="error" dismissible>
+              {(updateAccelerate.error as Error)?.message || "Failed to update acceleration"}
+            </Alert>
+          )}
+        </Form>
+        {data && (
+          <StatusIndicator type={data.status === "Enabled" ? "success" : "info"}>
+            Acceleration is {data.status}
+          </StatusIndicator>
+        )}
+      </SpaceBetween>
+    </Container>
+  );
+}
+
+// ─── Named Configurations (Tiering / Analytics / Inventory) ───────
+
+interface NamedConfigProps {
+  title: string;
+  bucket: string;
+  useList: (bucket: string | null) => { data?: { configurations: any[]; total: number }; isLoading: boolean };
+  usePut: (bucket: string) => { mutate: (input: { id: string; configuration?: any }, opts?: { onSuccess?: () => void }) => void; isPending: boolean; isError: boolean; error: Error | null };
+  useDelete: (bucket: string) => { mutate: (id: string) => void; isPending: boolean; variables: string | undefined };
+}
+
+function NamedConfigsPanel({ title, bucket, useList, usePut, useDelete }: NamedConfigProps) {
+  const { data, isLoading } = useList(bucket);
+  const putConfig = usePut(bucket);
+  const deleteConfig = useDelete(bucket);
+  const [showAdd, setShowAdd] = useState(false);
+  const [id, setId] = useState("");
+  const [configText, setConfigText] = useState("{}");
+  const [parseError, setParseError] = useState("");
+
+  const items = data?.configurations || [];
+
+  const handleCreate = () => {
+    let configuration: any;
+    try {
+      configuration = JSON.parse(configText);
+    } catch {
+      setParseError("Configuration must be valid JSON");
+      return;
+    }
+    setParseError("");
+    putConfig.mutate({ id, configuration }, {
+      onSuccess: () => {
+        setShowAdd(false);
+        setId("");
+        setConfigText("{}");
+      },
+    });
+  };
+
+  return (
+    <Container header={<Header variant="h3">{title}</Header>}>
+      <SpaceBetween size="m">
+        {putConfig.isError && (
+          <Alert type="error" dismissible>
+            {(putConfig.error as Error)?.message || "Failed to save configuration"}
+          </Alert>
+        )}
+        <Table
+          header={
+            <Header
+              variant="h3"
+              counter={`(${items.length})`}
+              actions={
+                <Button variant="primary" onClick={() => setShowAdd(true)}>
+                  Add configuration
+                </Button>
+              }
+            >
+              Configurations
+            </Header>
+          }
+          columnDefinitions={[
+            { id: "id", header: "Configuration ID", cell: (item: any) => item.Id || "—" },
+            { id: "status", header: "Status", cell: (item: any) => item.Status || "—" },
+            {
+              id: "actions",
+              header: "",
+              cell: (item: any) => (
+                <Button
+                  variant="icon"
+                  iconName="remove"
+                  ariaLabel={`Delete configuration ${item.Id}`}
+                  loading={deleteConfig.isPending && deleteConfig.variables === item.Id}
+                  onClick={() => deleteConfig.mutate(item.Id)}
+                />
+              ),
+            },
+          ]}
+          items={items}
+          loading={isLoading}
+          loadingText="Loading configurations..."
+          empty={
+            <Box textAlign="center" padding={{ top: "l", bottom: "l" }}>
+              <Box variant="p" color="text-body-secondary">
+                No {title.toLowerCase()} configured.
+              </Box>
+            </Box>
+          }
+        />
+        <Modal
+          visible={showAdd}
+          onDismiss={() => setShowAdd(false)}
+          header={`Add ${title}`}
+          size="medium"
+          footer={
+            <Box float="right">
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button variant="link" onClick={() => setShowAdd(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  loading={putConfig.isPending}
+                  disabled={!id}
+                  onClick={handleCreate}
+                >
+                  Create
+                </Button>
+              </SpaceBetween>
+            </Box>
+          }
+        >
+          <Form>
+            {parseError && <Alert type="error">Invalid JSON in configuration</Alert>}
+            <FormField label="Configuration ID">
+              <Input
+                value={id}
+                onChange={({ detail }) => setId(detail.value)}
+                placeholder="my-config"
+              />
+            </FormField>
+            <FormField label="Configuration JSON">
+              <Textarea
+                value={configText}
+                onChange={({ detail }) => setConfigText(detail.value)}
+                rows={8}
+              />
+            </FormField>
+          </Form>
+        </Modal>
+      </SpaceBetween>
+    </Container>
+  );
+}
+
+// ─── Object Restore ───────────────────────────────────────────────
+
+const RESTORE_TIER_OPTIONS: SelectProps.Option[] = [
+  { label: "Standard", value: "Standard" },
+  { label: "Expedited", value: "Expedited" },
+  { label: "Bulk", value: "Bulk" },
+];
+
+function BucketRestore({ bucket }: Props) {
+  const restore = useS3RestoreObject(bucket);
+  const [key, setKey] = useState("");
+  const [days, setDays] = useState("");
+  const [tier, setTier] = useState<SelectProps.Option>(RESTORE_TIER_OPTIONS[0]);
+
+  const handleRestore = () => {
+    restore.mutate(
+      {
+        key,
+        days: days ? parseInt(days, 10) : undefined,
+        glacierJobParameters: { Tier: tier.value as string },
+      },
+      {
+        onSuccess: () => {
+          setKey("");
+          setDays("");
+        },
+      },
+    );
+  };
+
+  return (
+    <Container header={<Header variant="h3">Restore Object</Header>}>
+      <SpaceBetween size="m">
+        <Box variant="p" color="text-body-secondary">
+          Restore objects stored in GLACIER, DEEP_ARCHIVE, or INTELLIGENT_TIERING archive tiers. The restore request makes a temporary copy of the object available for the requested number of days.
+        </Box>
+        <Form>
+          {restore.isError && (
+            <Alert type="error" dismissible>
+              {(restore.error as Error)?.message || "Failed to restore object"}
+            </Alert>
+          )}
+          <FormField label="Object key" description="Key of the archived object to restore.">
+            <Input
+              value={key}
+              onChange={({ detail }) => setKey(detail.value)}
+              placeholder="archives/2024/report.zip"
+            />
+          </FormField>
+          <FormField label="Days" description="Number of days the restored copy stays available.">
+            <Input
+              value={days}
+              onChange={({ detail }) => setDays(detail.value)}
+              inputMode="numeric"
+              placeholder="7"
+            />
+          </FormField>
+          <FormField label="Retrieval tier">
+            <Select
+              selectedOption={tier}
+              onChange={({ detail }) => setTier(detail.selectedOption)}
+              options={RESTORE_TIER_OPTIONS}
+            />
+          </FormField>
+          <Button
+            variant="primary"
+            loading={restore.isPending}
+            disabled={!key}
+            onClick={handleRestore}
+          >
+            Restore object
+          </Button>
+        </Form>
+        {restore.isSuccess && <StatusIndicator type="success">Restore request submitted</StatusIndicator>}
       </SpaceBetween>
     </Container>
   );

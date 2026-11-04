@@ -153,3 +153,124 @@ export function useRemoveConfigTags() {
     onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: ["aws", "config", "tags", v.arn] }),
   });
 }
+
+// ── Aggregation Authorizations ──────────────────────────
+
+export interface AggregationAuthorization {
+  AuthorizedAccountId: string;
+  AuthorizedAwsRegion: string;
+  AggregationAuthorizationArn?: string;
+}
+
+export function useAggregationAuthorizations() {
+  return useQuery<{ authorizations: AggregationAuthorization[]; total: number }>({
+    queryKey: ["aws", "config", "aggregation-authorizations"],
+    queryFn: () => api("/aws/config/aggregation-authorizations"),
+  });
+}
+
+export function usePutAggregationAuthorization() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { authorizedAccountId: string; authorizedAwsRegion: string }) =>
+      api("/aws/config/aggregation-authorizations", { method: "POST", body: JSON.stringify(params) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "config", "aggregation-authorizations"] }),
+  });
+}
+
+export function useDeleteAggregationAuthorization() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { authorizedAccountId: string; authorizedAwsRegion: string }) =>
+      api("/aws/config/aggregation-authorizations", { method: "DELETE", body: JSON.stringify(params) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "config", "aggregation-authorizations"] }),
+  });
+}
+
+// ── Retention Configurations ────────────────────────────
+
+export function useRetentionConfigurations() {
+  return useQuery<{ retentionConfigurations: any[]; total: number }>({
+    queryKey: ["aws", "config", "retention-configurations"],
+    queryFn: () => api("/aws/config/retention-configurations"),
+  });
+}
+
+export function usePutRetentionConfiguration() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (retentionPeriodInDays: number) =>
+      api("/aws/config/retention-configurations", { method: "PUT", body: JSON.stringify({ retentionPeriodInDays }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "config", "retention-configurations"] }),
+  });
+}
+
+export function useDeleteRetentionConfiguration() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api(`/aws/config/retention-configurations/${encodeURIComponent(name)}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "config", "retention-configurations"] }),
+  });
+}
+
+// ── Delivery Channel / Evaluation Results (delete) ──────
+
+export function useDeleteDeliveryChannel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api(`/aws/config/delivery-channels/${encodeURIComponent(name)}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "config"] }),
+  });
+}
+
+export function useDeleteEvaluationResults() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ruleName: string) =>
+      api(`/aws/config/rules/${encodeURIComponent(ruleName)}/evaluation-results`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "config", "evaluation-statuses"] }),
+  });
+}
+
+// ── Compliance ──────────────────────────────────────────
+
+export function useComplianceByResource() {
+  return useQuery<{ compliance: any[]; total: number }>({
+    queryKey: ["aws", "config", "compliance-by-resource"],
+    queryFn: () => api("/aws/config/compliance-by-resource"),
+  });
+}
+
+export function useComplianceDetailsByConfigRule(ruleName: string | null) {
+  return useQuery<{ evaluationResults: any[]; total: number }>({
+    queryKey: ["aws", "config", "compliance-details-rule", ruleName],
+    queryFn: () => api(`/aws/config/compliance-details/by-rule/${encodeURIComponent(ruleName!)}`),
+    enabled: !!ruleName,
+  });
+}
+
+export function useComplianceDetailsByResource(resourceType: string | null, resourceId: string | null) {
+  return useQuery<{ evaluationResults: any[]; total: number }>({
+    queryKey: ["aws", "config", "compliance-details-resource", resourceType, resourceId],
+    queryFn: () =>
+      api(`/aws/config/compliance-details/by-resource?resourceType=${encodeURIComponent(resourceType!)}&resourceId=${encodeURIComponent(resourceId!)}`),
+    enabled: !!resourceType && !!resourceId,
+  });
+}
+
+export function useComplianceSummaryByConfigRule() {
+  return useQuery<{ complianceSummary: any | null }>({
+    queryKey: ["aws", "config", "compliance-summary-rule"],
+    queryFn: () => api("/aws/config/compliance-summary/by-config-rule"),
+  });
+}
+
+export function useComplianceSummaryByResourceType(resourceTypes: string | null) {
+  return useQuery<{ summaries: any[]; total: number }>({
+    queryKey: ["aws", "config", "compliance-summary-resource-type", resourceTypes],
+    queryFn: () => api(`/aws/config/compliance-summary/by-resource-type?resourceTypes=${encodeURIComponent(resourceTypes!)}`),
+    enabled: !!resourceTypes,
+  });
+}

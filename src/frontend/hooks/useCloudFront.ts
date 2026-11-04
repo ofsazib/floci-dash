@@ -340,3 +340,132 @@ export function useUntagCFResource() {
       }),
   });
 }
+
+// ── Copy Distribution ────────────────────────────────────
+
+export function useCopyCloudFrontDistribution(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { staging?: boolean; ifMatch?: string }) =>
+      api(`/aws/cloudfront/distributions/${encodeURIComponent(id)}/copy`, {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "cloudfront", "distributions"] }),
+  });
+}
+
+// ── Monitoring Subscriptions ─────────────────────────────
+
+export function useCFMonitoringSubscription(distributionId: string | null) {
+  return useQuery<{ monitoringSubscription: any | null }>({
+    queryKey: ["aws", "cloudfront", "monitoring-subscription", distributionId],
+    queryFn: () =>
+      api(`/aws/cloudfront/distributions/${encodeURIComponent(distributionId!)}/monitoring-subscription`),
+    enabled: !!distributionId,
+  });
+}
+
+export function usePutCFMonitoringSubscription(distributionId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (monitoringSubscription: any) =>
+      api(`/aws/cloudfront/distributions/${encodeURIComponent(distributionId)}/monitoring-subscription`, {
+        method: "PUT",
+        body: JSON.stringify({ monitoringSubscription }),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "cloudfront", "monitoring-subscription", distributionId] }),
+  });
+}
+
+// ── Realtime Log Configs ─────────────────────────────────
+
+export interface CFRealtimeLogConfig {
+  Name?: string;
+  ARN?: string;
+  SamplingRate?: number;
+  Fields?: string[];
+  EndPoints?: any[];
+}
+
+export function useCFRealtimeLogConfigs() {
+  return useQuery<{ realtimeLogConfigs: CFRealtimeLogConfig[]; total: number }>({
+    queryKey: ["aws", "cloudfront", "realtime-log-configs"],
+    queryFn: () => api("/aws/cloudfront/realtime-log-configs"),
+  });
+}
+
+export function useCreateCFRealtimeLogConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { name: string; samplingRate: number }) =>
+      api("/aws/cloudfront/realtime-log-configs", { method: "POST", body: JSON.stringify(params) }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "cloudfront", "realtime-log-configs"] }),
+  });
+}
+
+export function useDeleteCFRealtimeLogConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api(`/aws/cloudfront/realtime-log-configs/${encodeURIComponent(name)}`, { method: "DELETE" }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "cloudfront", "realtime-log-configs"] }),
+  });
+}
+
+// ── Continuous Deployment Policies ───────────────────────
+
+export function useCFContinuousDeploymentPolicies() {
+  return useQuery<{ policies: any[]; total: number }>({
+    queryKey: ["aws", "cloudfront", "continuous-deployment-policies"],
+    queryFn: () => api("/aws/cloudfront/continuous-deployment-policies"),
+  });
+}
+
+export function useDeleteCFContinuousDeploymentPolicy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { id: string; ifMatch?: string }) =>
+      api(`/aws/cloudfront/continuous-deployment-policies/${encodeURIComponent(params.id)}?ifMatch=${encodeURIComponent(params.ifMatch || "")}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "cloudfront", "continuous-deployment-policies"] }),
+  });
+}
+
+// ── Simple families (FLE / FLE profiles / streaming) ─────
+
+export function useCFSimpleFamily(family: string) {
+  return useQuery<{ items: any[]; total: number }>({
+    queryKey: ["aws", "cloudfront", family],
+    queryFn: async () => {
+      const res: any = await api(`/aws/cloudfront/${family}`);
+      return { items: res[family] || [], total: res.total };
+    },
+  });
+}
+
+export function useCreateCFSimpleFamily(family: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (config: any) =>
+      api(`/aws/cloudfront/${family}`, { method: "POST", body: JSON.stringify({ config }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cloudfront", family] }),
+  });
+}
+
+export function useDeleteCFSimpleFamily(family: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { id: string; ifMatch?: string }) =>
+      api(`/aws/cloudfront/${family}/${encodeURIComponent(params.id)}?ifMatch=${encodeURIComponent(params.ifMatch || "")}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "cloudfront", family] }),
+  });
+}

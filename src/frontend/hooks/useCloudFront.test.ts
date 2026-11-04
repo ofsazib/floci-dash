@@ -30,6 +30,17 @@ import {
   useCloudFrontOriginAccessControls,
   useCloudFrontFunctions,
   useCloudFrontTags,
+  useCopyCloudFrontDistribution,
+  useCFMonitoringSubscription,
+  usePutCFMonitoringSubscription,
+  useCFRealtimeLogConfigs,
+  useCreateCFRealtimeLogConfig,
+  useDeleteCFRealtimeLogConfig,
+  useCFContinuousDeploymentPolicies,
+  useDeleteCFContinuousDeploymentPolicy,
+  useCFSimpleFamily,
+  useCreateCFSimpleFamily,
+  useDeleteCFSimpleFamily,
 } from "./useCloudFront";
 
 beforeEach(() => {
@@ -178,5 +189,148 @@ describe("useCloudFront hooks", () => {
       });
       expect(result.current.fetchStatus).toBe("idle");
     });
+  });
+});
+
+  describe("useCopyCloudFrontDistribution", () => {
+    it("posts staging flag to copy endpoint", async () => {
+      mockApi.mockResolvedValueOnce({ distribution: { Id: "E-COPY" } });
+      const { result } = renderHook(() => useCopyCloudFrontDistribution("E123"), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ staging: true, ifMatch: "ETAG" });
+      expect(mockApi).toHaveBeenCalledWith("/aws/cloudfront/distributions/E123/copy", {
+        method: "POST",
+        body: JSON.stringify({ staging: true, ifMatch: "ETAG" }),
+      });
+    });
+  });
+
+  describe("useCFMonitoringSubscription", () => {
+    it("disabled when distribution id is null", async () => {
+      const { result } = renderHook(() => useCFMonitoringSubscription(null), { wrapper: createWrapper() });
+      await waitFor(() => expect(result.current.fetchStatus).toBe("idle"));
+      expect(mockApi).not.toHaveBeenCalled();
+    });
+
+    it("calls correct URL", async () => {
+      mockApi.mockResolvedValueOnce({ monitoringSubscription: null });
+      const { result } = renderHook(() => useCFMonitoringSubscription("E123"), { wrapper: createWrapper() });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockApi).toHaveBeenCalledWith("/aws/cloudfront/distributions/E123/monitoring-subscription");
+    });
+  });
+
+  describe("usePutCFMonitoringSubscription", () => {
+    it("puts monitoring subscription", async () => {
+      mockApi.mockResolvedValueOnce({ monitoringSubscription: {}, updated: true });
+      const { result } = renderHook(() => usePutCFMonitoringSubscription("E123"), { wrapper: createWrapper() });
+      const sub = { RealtimeMetricsSubscriptionConfig: { RealtimeMetricsSubscriptionStatus: "Enabled" } };
+      await result.current.mutateAsync(sub);
+      expect(mockApi).toHaveBeenCalledWith("/aws/cloudfront/distributions/E123/monitoring-subscription", {
+        method: "PUT",
+        body: JSON.stringify({ monitoringSubscription: sub }),
+      });
+    });
+  });
+
+  describe("useCFRealtimeLogConfigs", () => {
+    it("calls correct URL", async () => {
+      mockApi.mockResolvedValueOnce({ realtimeLogConfigs: [], total: 0 });
+      const { result } = renderHook(() => useCFRealtimeLogConfigs(), { wrapper: createWrapper() });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockApi).toHaveBeenCalledWith("/aws/cloudfront/realtime-log-configs");
+    });
+  });
+
+  describe("useCreateCFRealtimeLogConfig", () => {
+    it("posts name and sampling rate", async () => {
+      mockApi.mockResolvedValueOnce({ realtimeLogConfig: {} });
+      const { result } = renderHook(() => useCreateCFRealtimeLogConfig(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ name: "rt", samplingRate: 50000 });
+      expect(mockApi).toHaveBeenCalledWith("/aws/cloudfront/realtime-log-configs", {
+        method: "POST",
+        body: JSON.stringify({ name: "rt", samplingRate: 50000 }),
+      });
+    });
+  });
+
+  describe("useDeleteCFRealtimeLogConfig", () => {
+    it("sends DELETE with encoded name", async () => {
+      mockApi.mockResolvedValueOnce({ deleted: true });
+      const { result } = renderHook(() => useDeleteCFRealtimeLogConfig(), { wrapper: createWrapper() });
+      await result.current.mutateAsync("rt-log");
+      expect(mockApi).toHaveBeenCalledWith("/aws/cloudfront/realtime-log-configs/rt-log", { method: "DELETE" });
+    });
+  });
+
+  describe("useCFContinuousDeploymentPolicies", () => {
+    it("calls correct URL", async () => {
+      mockApi.mockResolvedValueOnce({ policies: [], total: 0 });
+      const { result } = renderHook(() => useCFContinuousDeploymentPolicies(), { wrapper: createWrapper() });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockApi).toHaveBeenCalledWith("/aws/cloudfront/continuous-deployment-policies");
+    });
+  });
+
+  describe("useDeleteCFContinuousDeploymentPolicy", () => {
+    it("sends DELETE with ifMatch query param", async () => {
+      mockApi.mockResolvedValueOnce({ deleted: true });
+      const { result } = renderHook(() => useDeleteCFContinuousDeploymentPolicy(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ id: "CDP1", ifMatch: "ETAG" });
+      expect(mockApi).toHaveBeenCalledWith("/aws/cloudfront/continuous-deployment-policies/CDP1?ifMatch=ETAG", { method: "DELETE" });
+    });
+  });
+
+  describe.each([
+    ["field-level-encryption-configs"],
+    ["field-level-encryption-profiles"],
+    ["streaming-distributions"],
+  ])("simple family %s", (family) => {
+    it("lists family and unwraps dynamic key", async () => {
+      mockApi.mockResolvedValueOnce({ [family]: [{ Id: "X1" }], total: 1 });
+      const { result } = renderHook(() => useCFSimpleFamily(family), { wrapper: createWrapper() });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockApi).toHaveBeenCalledWith(`/aws/cloudfront/${family}`);
+      expect(result.current.data).toEqual({ items: [{ Id: "X1" }], total: 1 });
+    });
+
+    it("unwraps to empty items when key missing", async () => {
+      mockApi.mockResolvedValueOnce({ total: 0 });
+      const { result } = renderHook(() => useCFSimpleFamily(family), { wrapper: createWrapper() });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(result.current.data).toEqual({ items: [], total: 0 });
+    });
+
+    it("creates family config", async () => {
+      mockApi.mockResolvedValueOnce({});
+      const { result } = renderHook(() => useCreateCFSimpleFamily(family), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ Name: "x" });
+      expect(mockApi).toHaveBeenCalledWith(`/aws/cloudfront/${family}`, {
+        method: "POST",
+        body: JSON.stringify({ config: { Name: "x" } }),
+      });
+    });
+
+    it("deletes family item with ifMatch", async () => {
+      mockApi.mockResolvedValueOnce({ deleted: true });
+      const { result } = renderHook(() => useDeleteCFSimpleFamily(family), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ id: "X1", ifMatch: "ETAG" });
+      expect(mockApi).toHaveBeenCalledWith(`/aws/cloudfront/${family}/X1?ifMatch=ETAG`, { method: "DELETE" });
+    });
+  });
+
+// Extra arms (no ifMatch)
+describe("useCloudFront — delete without ifMatch", () => {
+  it("useDeleteCFContinuousDeploymentPolicy sends empty ifMatch param", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useDeleteCFContinuousDeploymentPolicy(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ id: "CDP2" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/cloudfront/continuous-deployment-policies/CDP2?ifMatch=", { method: "DELETE" });
+  });
+
+  it("useDeleteCFSimpleFamily sends empty ifMatch param", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useDeleteCFSimpleFamily("field-level-encryption-configs"), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ id: "FLE9" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/cloudfront/field-level-encryption-configs/FLE9?ifMatch=", { method: "DELETE" });
   });
 });

@@ -41,6 +41,29 @@ import {
   GetBucketMetricsConfigurationCommand,
   ListBucketMetricsConfigurationsCommand,
   DeleteBucketMetricsConfigurationCommand,
+  GetBucketAccelerateConfigurationCommand,
+  PutBucketAccelerateConfigurationCommand,
+  GetBucketOwnershipControlsCommand,
+  PutBucketOwnershipControlsCommand,
+  DeleteBucketOwnershipControlsCommand,
+  GetBucketRequestPaymentCommand,
+  PutBucketRequestPaymentCommand,
+  GetBucketReplicationCommand,
+  PutBucketReplicationCommand,
+  DeleteBucketReplicationCommand,
+  ListBucketIntelligentTieringConfigurationsCommand,
+  GetBucketIntelligentTieringConfigurationCommand,
+  PutBucketIntelligentTieringConfigurationCommand,
+  DeleteBucketIntelligentTieringConfigurationCommand,
+  ListBucketAnalyticsConfigurationsCommand,
+  GetBucketAnalyticsConfigurationCommand,
+  PutBucketAnalyticsConfigurationCommand,
+  DeleteBucketAnalyticsConfigurationCommand,
+  ListBucketInventoryConfigurationsCommand,
+  GetBucketInventoryConfigurationCommand,
+  PutBucketInventoryConfigurationCommand,
+  DeleteBucketInventoryConfigurationCommand,
+  RestoreObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getAwsConfig } from "../../clients/aws";
 import { sanitizeBucketName, sanitizeName, validateJson } from "../../clients/sanitize";
@@ -576,6 +599,294 @@ router.delete("/buckets/:name/metrics/:id", async (c: Context) => {
   const id = c.req.param("id")!;
   await s3().send(new DeleteBucketMetricsConfigurationCommand({ Bucket: name, Id: id }));
   return c.json({ bucket: name, id, deleted: true });
+});
+
+// ─── Bucket Accelerate Configuration ──────────────────────────────
+
+router.get("/buckets/:name/accelerate", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const result = await s3().send(new GetBucketAccelerateConfigurationCommand({ Bucket: name }));
+  return c.json({ bucket: name, status: result.Status || "Suspended" });
+});
+
+router.put("/buckets/:name/accelerate", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const { status } = await c.req.json<{ status: string }>();
+  if (!status || !["Enabled", "Suspended"].includes(status)) {
+    return c.json({ error: "Status must be 'Enabled' or 'Suspended'" }, 400);
+  }
+  await s3().send(new PutBucketAccelerateConfigurationCommand({
+    Bucket: name,
+    AccelerateConfiguration: { Status: status as any },
+  }));
+  return c.json({ bucket: name, status, updated: true });
+});
+
+// ─── Bucket Ownership Controls ────────────────────────────────────
+
+router.get("/buckets/:name/ownership-controls", async (c: Context) => {
+  const name = c.req.param("name")!;
+  try {
+    const result = await s3().send(new GetBucketOwnershipControlsCommand({ Bucket: name }));
+    return c.json({
+      bucket: name,
+      rules: result.OwnershipControls?.Rules || [],
+      configured: true,
+    });
+  } catch (err: any) {
+    if (err.name === "OwnershipControlsNotFoundError" || err.$metadata?.httpStatusCode === 404) {
+      return c.json({ bucket: name, rules: [], configured: false });
+    }
+    throw err;
+  }
+});
+
+router.put("/buckets/:name/ownership-controls", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const { rules } = await c.req.json<{ rules: any[] }>();
+  if (!rules || !Array.isArray(rules)) {
+    return c.json({ error: "Rules array is required" }, 400);
+  }
+  await s3().send(new PutBucketOwnershipControlsCommand({
+    Bucket: name,
+    OwnershipControls: { Rules: rules },
+  }));
+  return c.json({ bucket: name, rules, updated: true });
+});
+
+router.delete("/buckets/:name/ownership-controls", async (c: Context) => {
+  const name = c.req.param("name")!;
+  await s3().send(new DeleteBucketOwnershipControlsCommand({ Bucket: name }));
+  return c.json({ bucket: name, configured: false, deleted: true });
+});
+
+// ─── Bucket Request Payment ───────────────────────────────────────
+
+router.get("/buckets/:name/request-payment", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const result = await s3().send(new GetBucketRequestPaymentCommand({ Bucket: name }));
+  return c.json({ bucket: name, payer: result.Payer || "BucketOwner" });
+});
+
+router.put("/buckets/:name/request-payment", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const { payer } = await c.req.json<{ payer: string }>();
+  if (!payer || !["BucketOwner", "Requester"].includes(payer)) {
+    return c.json({ error: "Payer must be 'BucketOwner' or 'Requester'" }, 400);
+  }
+  await s3().send(new PutBucketRequestPaymentCommand({
+    Bucket: name,
+    RequestPaymentConfiguration: { Payer: payer as any },
+  }));
+  return c.json({ bucket: name, payer, updated: true });
+});
+
+// ─── Bucket Replication ───────────────────────────────────────────
+
+router.get("/buckets/:name/replication", async (c: Context) => {
+  const name = c.req.param("name")!;
+  try {
+    const result = await s3().send(new GetBucketReplicationCommand({ Bucket: name }));
+    return c.json({
+      bucket: name,
+      replicationConfiguration: result.ReplicationConfiguration || null,
+      configured: true,
+    });
+  } catch (err: any) {
+    if (err.name === "ReplicationConfigurationNotFoundError" || err.$metadata?.httpStatusCode === 404) {
+      return c.json({ bucket: name, replicationConfiguration: null, configured: false });
+    }
+    throw err;
+  }
+});
+
+router.put("/buckets/:name/replication", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const { role, rules } = await c.req.json<{ role?: string; rules?: any[] }>();
+  if (!role) return c.json({ error: "role is required" }, 400);
+  if (!rules || !Array.isArray(rules)) {
+    return c.json({ error: "Rules array is required" }, 400);
+  }
+  const replicationConfiguration: any = { Role: role, Rules: rules };
+  await s3().send(new PutBucketReplicationCommand({
+    Bucket: name,
+    ReplicationConfiguration: replicationConfiguration,
+  }));
+  return c.json({ bucket: name, replicationConfiguration, updated: true });
+});
+
+router.delete("/buckets/:name/replication", async (c: Context) => {
+  const name = c.req.param("name")!;
+  await s3().send(new DeleteBucketReplicationCommand({ Bucket: name }));
+  return c.json({ bucket: name, configured: false, deleted: true });
+});
+
+// ─── Bucket Intelligent-Tiering Configurations ────────────────────
+
+router.get("/buckets/:name/intelligent-tiering", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const result = await s3().send(new ListBucketIntelligentTieringConfigurationsCommand({ Bucket: name }));
+  const list = result.IntelligentTieringConfigurationList || [];
+  return c.json({
+    configurations: list,
+    continuationToken: result.ContinuationToken,
+    isTruncated: result.IsTruncated,
+    total: list.length,
+  });
+});
+
+router.get("/buckets/:name/intelligent-tiering/:id", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const id = c.req.param("id")!;
+  const result = await s3().send(new GetBucketIntelligentTieringConfigurationCommand({ Bucket: name, Id: id }));
+  return c.json({ configuration: result.IntelligentTieringConfiguration || null });
+});
+
+router.post("/buckets/:name/intelligent-tiering", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const body = await c.req.json<{ id: string; configuration?: any }>();
+  if (!body.id) return c.json({ error: "id is required" }, 400);
+  await s3().send(new PutBucketIntelligentTieringConfigurationCommand({
+    Bucket: name, Id: body.id, IntelligentTieringConfiguration: body.configuration || {},
+  }));
+  return c.json({ bucket: name, id: body.id, created: true }, 201);
+});
+
+router.put("/buckets/:name/intelligent-tiering/:id", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const id = c.req.param("id")!;
+  const body = await c.req.json<{ configuration?: any }>();
+  await s3().send(new PutBucketIntelligentTieringConfigurationCommand({
+    Bucket: name, Id: id, IntelligentTieringConfiguration: body.configuration || {},
+  }));
+  return c.json({ bucket: name, id, updated: true });
+});
+
+router.delete("/buckets/:name/intelligent-tiering/:id", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const id = c.req.param("id")!;
+  await s3().send(new DeleteBucketIntelligentTieringConfigurationCommand({ Bucket: name, Id: id }));
+  return c.json({ bucket: name, id, deleted: true });
+});
+
+// ─── Bucket Analytics Configurations ──────────────────────────────
+
+router.get("/buckets/:name/analytics", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const result = await s3().send(new ListBucketAnalyticsConfigurationsCommand({ Bucket: name }));
+  const list = result.AnalyticsConfigurationList || [];
+  return c.json({
+    configurations: list,
+    continuationToken: result.ContinuationToken,
+    isTruncated: result.IsTruncated,
+    total: list.length,
+  });
+});
+
+router.get("/buckets/:name/analytics/:id", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const id = c.req.param("id")!;
+  const result = await s3().send(new GetBucketAnalyticsConfigurationCommand({ Bucket: name, Id: id }));
+  return c.json({ configuration: result.AnalyticsConfiguration || null });
+});
+
+router.post("/buckets/:name/analytics", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const body = await c.req.json<{ id: string; configuration?: any }>();
+  if (!body.id) return c.json({ error: "id is required" }, 400);
+  await s3().send(new PutBucketAnalyticsConfigurationCommand({
+    Bucket: name, Id: body.id, AnalyticsConfiguration: body.configuration || {},
+  }));
+  return c.json({ bucket: name, id: body.id, created: true }, 201);
+});
+
+router.put("/buckets/:name/analytics/:id", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const id = c.req.param("id")!;
+  const body = await c.req.json<{ configuration?: any }>();
+  await s3().send(new PutBucketAnalyticsConfigurationCommand({
+    Bucket: name, Id: id, AnalyticsConfiguration: body.configuration || {},
+  }));
+  return c.json({ bucket: name, id, updated: true });
+});
+
+router.delete("/buckets/:name/analytics/:id", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const id = c.req.param("id")!;
+  await s3().send(new DeleteBucketAnalyticsConfigurationCommand({ Bucket: name, Id: id }));
+  return c.json({ bucket: name, id, deleted: true });
+});
+
+// ─── Bucket Inventory Configurations ──────────────────────────────
+
+router.get("/buckets/:name/inventory", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const result = await s3().send(new ListBucketInventoryConfigurationsCommand({ Bucket: name }));
+  const list = result.InventoryConfigurationList || [];
+  return c.json({
+    configurations: list,
+    continuationToken: result.ContinuationToken,
+    isTruncated: result.IsTruncated,
+    total: list.length,
+  });
+});
+
+router.get("/buckets/:name/inventory/:id", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const id = c.req.param("id")!;
+  const result = await s3().send(new GetBucketInventoryConfigurationCommand({ Bucket: name, Id: id }));
+  return c.json({ configuration: result.InventoryConfiguration || null });
+});
+
+router.post("/buckets/:name/inventory", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const body = await c.req.json<{ id: string; configuration?: any }>();
+  if (!body.id) return c.json({ error: "id is required" }, 400);
+  await s3().send(new PutBucketInventoryConfigurationCommand({
+    Bucket: name, Id: body.id, InventoryConfiguration: body.configuration || {},
+  }));
+  return c.json({ bucket: name, id: body.id, created: true }, 201);
+});
+
+router.put("/buckets/:name/inventory/:id", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const id = c.req.param("id")!;
+  const body = await c.req.json<{ configuration?: any }>();
+  await s3().send(new PutBucketInventoryConfigurationCommand({
+    Bucket: name, Id: id, InventoryConfiguration: body.configuration || {},
+  }));
+  return c.json({ bucket: name, id, updated: true });
+});
+
+router.delete("/buckets/:name/inventory/:id", async (c: Context) => {
+  const name = c.req.param("name")!;
+  const id = c.req.param("id")!;
+  await s3().send(new DeleteBucketInventoryConfigurationCommand({ Bucket: name, Id: id }));
+  return c.json({ bucket: name, id, deleted: true });
+});
+
+// ─── Object Restore (RestoreObject) ───────────────────────────────
+
+router.post("/buckets/:name/objects/*/restore", async (c: Context) => {
+  const bucket = c.req.param("name")!;
+  const path = new URL(c.req.url).pathname;
+  const key = decodeURIComponent(path.split("/objects/")[1]!.split("/restore")[0]);
+  const body = await c.req.json<{
+    days?: number;
+    glacierJobParameters?: { Tier?: string };
+    type?: string;
+    description?: string;
+    versionId?: string;
+  }>();
+  const restoreRequest: any = {};
+  if (body.days != null) restoreRequest.Days = body.days;
+  if (body.glacierJobParameters) restoreRequest.GlacierJobParameters = body.glacierJobParameters;
+  if (body.type) restoreRequest.Type = body.type;
+  if (body.description) restoreRequest.Description = body.description;
+  await s3().send(new RestoreObjectCommand({
+    Bucket: bucket, Key: key, VersionId: body.versionId, RestoreRequest: restoreRequest,
+  }));
+  return c.json({ bucket, key, restoring: true });
 });
 
 export default router;

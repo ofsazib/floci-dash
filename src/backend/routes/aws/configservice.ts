@@ -23,6 +23,19 @@ import {
   ListTagsForResourceCommand,
   TagResourceCommand,
   UntagResourceCommand,
+  PutAggregationAuthorizationCommand,
+  DescribeAggregationAuthorizationsCommand,
+  DeleteAggregationAuthorizationCommand,
+  DeleteDeliveryChannelCommand,
+  DeleteEvaluationResultsCommand,
+  PutRetentionConfigurationCommand,
+  DescribeRetentionConfigurationsCommand,
+  DeleteRetentionConfigurationCommand,
+  DescribeComplianceByResourceCommand,
+  GetComplianceDetailsByConfigRuleCommand,
+  GetComplianceDetailsByResourceCommand,
+  GetComplianceSummaryByConfigRuleCommand,
+  GetComplianceSummaryByResourceTypeCommand,
 } from "@aws-sdk/client-config-service";
 
 const router = new Hono();
@@ -248,6 +261,150 @@ router.post("/tags/untag", async (c: Context) => {
     new UntagResourceCommand({ ResourceArn: body.arn, TagKeys: body.tagKeys })
   );
   return c.json({ untagged: true });
+});
+
+// ── Aggregation Authorizations ──────────────────────────
+
+router.get("/aggregation-authorizations", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new DescribeAggregationAuthorizationsCommand({}));
+  const authorizations = result.AggregationAuthorizations || [];
+  return c.json({ authorizations, total: authorizations.length });
+});
+
+router.post("/aggregation-authorizations", async (c: Context) => {
+  const body = await c.req.json<{ authorizedAccountId?: string; authorizedAwsRegion?: string }>();
+  if (!body.authorizedAccountId) return c.json({ error: "authorizedAccountId is required" }, 400);
+  if (!body.authorizedAwsRegion) return c.json({ error: "authorizedAwsRegion is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new PutAggregationAuthorizationCommand({
+      AuthorizedAccountId: body.authorizedAccountId,
+      AuthorizedAwsRegion: body.authorizedAwsRegion,
+    })
+  );
+  return c.json({ created: true }, 201);
+});
+
+router.delete("/aggregation-authorizations", async (c: Context) => {
+  const body = await c.req.json<{ authorizedAccountId?: string; authorizedAwsRegion?: string }>();
+  if (!body.authorizedAccountId) return c.json({ error: "authorizedAccountId is required" }, 400);
+  if (!body.authorizedAwsRegion) return c.json({ error: "authorizedAwsRegion is required" }, 400);
+  const client = getClient();
+  await client.send(
+    new DeleteAggregationAuthorizationCommand({
+      AuthorizedAccountId: body.authorizedAccountId,
+      AuthorizedAwsRegion: body.authorizedAwsRegion,
+    })
+  );
+  return c.json({ deleted: true });
+});
+
+// ── Delivery Channels (delete) ──────────────────────────
+
+router.delete("/delivery-channels/:name", async (c: Context) => {
+  const name = c.req.param("name");
+  const client = getClient();
+  await client.send(new DeleteDeliveryChannelCommand({ DeliveryChannelName: name }));
+  return c.json({ deleted: true });
+});
+
+// ── Retention Configurations ────────────────────────────
+
+router.get("/retention-configurations", async (c: Context) => {
+  const name = c.req.query("name");
+  const client = getClient();
+  const result = await client.send(new DescribeRetentionConfigurationsCommand({
+    ConfigurationName: name || undefined,
+  } as any));
+  const configurations = result.RetentionConfigurations || [];
+  return c.json({ retentionConfigurations: configurations, total: configurations.length });
+});
+
+router.put("/retention-configurations", async (c: Context) => {
+  const body = await c.req.json<{ retentionPeriodInDays?: number }>();
+  if (!body.retentionPeriodInDays || typeof body.retentionPeriodInDays !== "number") {
+    return c.json({ error: "retentionPeriodInDays must be a positive number" }, 400);
+  }
+  const client = getClient();
+  const result = await client.send(
+    new PutRetentionConfigurationCommand({ RetentionPeriodInDays: body.retentionPeriodInDays })
+  );
+  return c.json({ retentionConfiguration: result.RetentionConfiguration || null, created: true }, 201);
+});
+
+router.delete("/retention-configurations/:name", async (c: Context) => {
+  const name = c.req.param("name");
+  const client = getClient();
+  await client.send(new DeleteRetentionConfigurationCommand({ ConfigurationName: name } as any));
+  return c.json({ deleted: true });
+});
+
+// ── Evaluation Results (delete) ─────────────────────────
+
+router.delete("/rules/:name/evaluation-results", async (c: Context) => {
+  const name = c.req.param("name");
+  const client = getClient();
+  await client.send(new DeleteEvaluationResultsCommand({ ConfigRuleName: name }));
+  return c.json({ deleted: true });
+});
+
+// ── Compliance ──────────────────────────────────────────
+
+router.get("/compliance-by-resource", async (c: Context) => {
+  const resourceId = c.req.query("resourceId");
+  const resourceType = c.req.query("resourceType");
+  const complianceTypes = c.req.query("complianceTypes");
+  const client = getClient();
+  const result = await client.send(new DescribeComplianceByResourceCommand({
+    ResourceId: resourceId || undefined,
+    ResourceType: resourceType || undefined,
+    ComplianceTypes: complianceTypes ? complianceTypes.split(",") : undefined,
+  } as any));
+  const compliance = result.ComplianceByResources || [];
+  return c.json({ compliance, total: compliance.length });
+});
+
+router.get("/compliance-details/by-rule/:name", async (c: Context) => {
+  const name = c.req.param("name");
+  const complianceTypes = c.req.query("complianceTypes");
+  const client = getClient();
+  const result = await client.send(new GetComplianceDetailsByConfigRuleCommand({
+    ConfigRuleName: name,
+    ComplianceTypes: complianceTypes ? complianceTypes.split(",") : undefined,
+  } as any));
+  const evaluationResults = result.EvaluationResults || [];
+  return c.json({ evaluationResults, total: evaluationResults.length });
+});
+
+router.get("/compliance-details/by-resource", async (c: Context) => {
+  const resourceId = c.req.query("resourceId");
+  const resourceType = c.req.query("resourceType");
+  if (!resourceId) return c.json({ error: "resourceId query parameter required" }, 400);
+  if (!resourceType) return c.json({ error: "resourceType query parameter required" }, 400);
+  const client = getClient();
+  const result = await client.send(new GetComplianceDetailsByResourceCommand({
+    ResourceId: resourceId,
+    ResourceType: resourceType,
+  }));
+  const evaluationResults = result.EvaluationResults || [];
+  return c.json({ evaluationResults, total: evaluationResults.length });
+});
+
+router.get("/compliance-summary/by-config-rule", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new GetComplianceSummaryByConfigRuleCommand({}));
+  return c.json({ complianceSummary: result.ComplianceSummary || null });
+});
+
+router.get("/compliance-summary/by-resource-type", async (c: Context) => {
+  const resourceTypes = c.req.query("resourceTypes");
+  const client = getClient();
+  const result = await client.send(new GetComplianceSummaryByResourceTypeCommand({
+    ResourceTypes: resourceTypes ? resourceTypes.split(",") : undefined,
+  } as any));
+  const summaries = result.ComplianceSummariesByResourceType || [];
+  return c.json({ summaries, total: summaries.length });
 });
 
 export default router;

@@ -60,6 +60,34 @@ import {
   AssociateAliasCommand,
   TagResourceCommand,
   UntagResourceCommand,
+  CopyDistributionCommand,
+  GetMonitoringSubscriptionCommand,
+  CreateMonitoringSubscriptionCommand,
+  CreateRealtimeLogConfigCommand,
+  ListRealtimeLogConfigsCommand,
+  GetRealtimeLogConfigCommand,
+  UpdateRealtimeLogConfigCommand,
+  DeleteRealtimeLogConfigCommand,
+  CreateContinuousDeploymentPolicyCommand,
+  ListContinuousDeploymentPoliciesCommand,
+  GetContinuousDeploymentPolicyCommand,
+  UpdateContinuousDeploymentPolicyCommand,
+  DeleteContinuousDeploymentPolicyCommand,
+  CreateFieldLevelEncryptionConfigCommand,
+  ListFieldLevelEncryptionConfigsCommand,
+  GetFieldLevelEncryptionCommand,
+  UpdateFieldLevelEncryptionConfigCommand,
+  DeleteFieldLevelEncryptionConfigCommand,
+  CreateFieldLevelEncryptionProfileCommand,
+  ListFieldLevelEncryptionProfilesCommand,
+  GetFieldLevelEncryptionProfileCommand,
+  UpdateFieldLevelEncryptionProfileCommand,
+  DeleteFieldLevelEncryptionProfileCommand,
+  CreateStreamingDistributionCommand,
+  ListStreamingDistributionsCommand,
+  GetStreamingDistributionCommand,
+  UpdateStreamingDistributionCommand,
+  DeleteStreamingDistributionCommand,
 } from "@aws-sdk/client-cloudfront";
 
 const router = new Hono();
@@ -561,5 +589,205 @@ router.delete("/tags", async (c: Context) => {
   await client.send(new UntagResourceCommand({ ResourceARN: arn, TagKeys: tagKeys } as any));
   return c.json({ untagged: true });
 });
+
+// ─── Copy Distribution ───────────────────────────────────
+
+router.post("/distributions/:id/copy", async (c: Context) => {
+  const id = c.req.param("id")!;
+  const body = await c.req.json<{ staging?: boolean; ifMatch?: string }>();
+  const client = getClient();
+  const result = await client.send(new CopyDistributionCommand({
+    SourceDistributionId: id,
+    Staging: body.staging ?? false,
+    IfMatch: body.ifMatch,
+  } as any));
+  return c.json({ distribution: result.Distribution ?? null }, 201);
+});
+
+// ─── Monitoring Subscriptions ────────────────────────────
+
+router.get("/distributions/:id/monitoring-subscription", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new GetMonitoringSubscriptionCommand({
+    DistributionId: c.req.param("id")!,
+  }));
+  return c.json({ monitoringSubscription: result.MonitoringSubscription ?? null });
+});
+
+router.put("/distributions/:id/monitoring-subscription", async (c: Context) => {
+  const body = await c.req.json<any>();
+  const client = getClient();
+  const result = await client.send(new CreateMonitoringSubscriptionCommand({
+    DistributionId: c.req.param("id")!,
+    MonitoringSubscription: body.monitoringSubscription ?? {
+      RealtimeMetricsSubscriptionConfig: { RealtimeMetricsSubscriptionStatus: "Enabled" },
+    },
+  } as any));
+  return c.json({ monitoringSubscription: result.MonitoringSubscription ?? null, updated: true });
+});
+
+// ─── Realtime Log Configs ────────────────────────────────
+
+router.post("/realtime-log-configs", async (c: Context) => {
+  const body = await c.req.json<{ name?: string; endPoints?: any[]; fields?: string[]; samplingRate?: number }>();
+  if (!body.name) return c.json({ error: "name is required" }, 400);
+  const client = getClient();
+  const result = await client.send(new CreateRealtimeLogConfigCommand({
+    Name: body.name,
+    EndPoints: body.endPoints as any,
+    Fields: body.fields,
+    SamplingRate: body.samplingRate ?? 100000,
+  } as any));
+  return c.json({ realtimeLogConfig: result.RealtimeLogConfig ?? null }, 201);
+});
+
+router.get("/realtime-log-configs", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new ListRealtimeLogConfigsCommand({ MaxItems: "100" } as any));
+  const items = result.RealtimeLogConfigs?.Items || [];
+  return c.json({ realtimeLogConfigs: items, total: items.length });
+});
+
+router.get("/realtime-log-configs/:name", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new GetRealtimeLogConfigCommand({ Name: c.req.param("name")! } as any));
+  return c.json({ realtimeLogConfig: result.RealtimeLogConfig ?? null });
+});
+
+router.put("/realtime-log-configs/:arn", async (c: Context) => {
+  const body = await c.req.json<{ endPoints?: any[]; fields?: string[]; samplingRate?: number }>();
+  const client = getClient();
+  const result = await client.send(new UpdateRealtimeLogConfigCommand({
+    ARN: decodeURIComponent(c.req.param("arn")!),
+    EndPoints: body.endPoints as any,
+    Fields: body.fields,
+    SamplingRate: body.samplingRate,
+  } as any));
+  return c.json({ realtimeLogConfig: result.RealtimeLogConfig ?? null, updated: true });
+});
+
+router.delete("/realtime-log-configs/:name", async (c: Context) => {
+  const client = getClient();
+  await client.send(new DeleteRealtimeLogConfigCommand({ Name: c.req.param("name")! } as any));
+  return c.json({ deleted: true });
+});
+
+// ─── Continuous Deployment Policies ──────────────────────
+
+router.post("/continuous-deployment-policies", async (c: Context) => {
+  const body = await c.req.json<any>();
+  if (!body.policy && !body.ContinuousDeploymentPolicy) {
+    return c.json({ error: "policy is required" }, 400);
+  }
+  const client = getClient();
+  const result = await client.send(new CreateContinuousDeploymentPolicyCommand({
+    ContinuousDeploymentPolicy: body.policy ?? body.ContinuousDeploymentPolicy,
+  } as any));
+  return c.json({ policy: result.ContinuousDeploymentPolicy ?? null }, 201);
+});
+
+router.get("/continuous-deployment-policies", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new ListContinuousDeploymentPoliciesCommand({ MaxItems: "100" } as any));
+  const items = result.ContinuousDeploymentPolicyList?.Items || [];
+  return c.json({ policies: items, total: items.length });
+});
+
+router.get("/continuous-deployment-policies/:id", async (c: Context) => {
+  const client = getClient();
+  const result = await client.send(new GetContinuousDeploymentPolicyCommand({ Id: c.req.param("id")! }));
+  return c.json({ policy: result.ContinuousDeploymentPolicy ?? null });
+});
+
+router.put("/continuous-deployment-policies/:id", async (c: Context) => {
+  const body = await c.req.json<any>();
+  const client = getClient();
+  const result = await client.send(new UpdateContinuousDeploymentPolicyCommand({
+    Id: c.req.param("id")!,
+    ContinuousDeploymentPolicy: body.policy ?? body.ContinuousDeploymentPolicy,
+    IfMatch: body.ifMatch,
+  } as any));
+  return c.json({ policy: result.ContinuousDeploymentPolicy ?? null, updated: true });
+});
+
+router.delete("/continuous-deployment-policies/:id", async (c: Context) => {
+  const client = getClient();
+  await client.send(new DeleteContinuousDeploymentPolicyCommand({
+    Id: c.req.param("id")!,
+    IfMatch: c.req.query("ifMatch") || c.req.header("If-Match") || undefined,
+  }));
+  return c.json({ deleted: true });
+});
+
+// ─── FLE / FLE Profiles / Streaming Distributions ────────
+
+const simpleFamilies: Record<string, {
+  singular: string; resultKey: string;
+  list: any; create: any; get: any; update: any; del: any;
+  listField: string; idName: string; configName: string;
+}> = {
+  "field-level-encryption-configs": {
+    singular: "fieldLevelEncryption", resultKey: "FieldLevelEncryption",
+    list: ListFieldLevelEncryptionConfigsCommand, create: CreateFieldLevelEncryptionConfigCommand,
+    get: GetFieldLevelEncryptionCommand, update: UpdateFieldLevelEncryptionConfigCommand, del: DeleteFieldLevelEncryptionConfigCommand,
+    listField: "FieldLevelEncryptionList", idName: "Id", configName: "FieldLevelEncryptionConfig",
+  },
+  "field-level-encryption-profiles": {
+    singular: "fieldLevelEncryptionProfile", resultKey: "FieldLevelEncryptionProfile",
+    list: ListFieldLevelEncryptionProfilesCommand, create: CreateFieldLevelEncryptionProfileCommand,
+    get: GetFieldLevelEncryptionProfileCommand, update: UpdateFieldLevelEncryptionProfileCommand, del: DeleteFieldLevelEncryptionProfileCommand,
+    listField: "FieldLevelEncryptionProfileList", idName: "Id", configName: "FieldLevelEncryptionProfileConfig",
+  },
+  "streaming-distributions": {
+    singular: "streamingDistribution", resultKey: "StreamingDistribution",
+    list: ListStreamingDistributionsCommand, create: CreateStreamingDistributionCommand,
+    get: GetStreamingDistributionCommand, update: UpdateStreamingDistributionCommand, del: DeleteStreamingDistributionCommand,
+    listField: "StreamingDistributionList", idName: "Id", configName: "StreamingDistributionConfig",
+  },
+};
+
+for (const [route, fam] of Object.entries(simpleFamilies)) {
+  router.post(`/${route}`, async (c: Context) => {
+    const body = await c.req.json<any>();
+    let config = body[fam.configName];
+    if (config == null) config = body.config;
+    if (config == null) config = body.policy;
+    if (!config) return c.json({ error: "config is required" }, 400);
+    const client = getClient();
+    const result = await client.send(new fam.create({ [fam.configName]: config } as any));
+    return c.json({ [fam.singular]: (result as any)[fam.resultKey] ?? null }, 201);
+  });
+
+  router.get(`/${route}`, async (c: Context) => {
+    const client = getClient();
+    const result = await client.send(new fam.list({ MaxItems: "100" } as any));
+    const items = (result as any)[fam.listField]?.Items || [];
+    return c.json({ [route]: items, total: items.length });
+  });
+
+  router.get(`/${route}/:id`, async (c: Context) => {
+    const client = getClient();
+    const result = await client.send(new fam.get({ [fam.idName]: c.req.param("id")! } as any));
+    return c.json({ [fam.singular]: (result as any)[fam.resultKey] ?? null });
+  });
+
+  router.put(`/${route}/:id`, async (c: Context) => {
+    const body = await c.req.json<any>();
+    const client = getClient();
+    const result = await client.send(new fam.update({
+      [fam.idName]: c.req.param("id")!,
+      [fam.configName]: body[fam.configName] ?? body.config,
+      IfMatch: body.ifMatch,
+    } as any));
+    return c.json({ [fam.singular]: (result as any)[fam.resultKey] ?? null, updated: true });
+  });
+
+  router.delete(`/${route}/:id`, async (c: Context) => {
+    const ifMatch = c.req.query("ifMatch") || c.req.header("If-Match") || undefined;
+    const client = getClient();
+    await client.send(new fam.del({ [fam.idName]: c.req.param("id")!, IfMatch: ifMatch } as any));
+    return c.json({ deleted: true });
+  });
+}
 
 export default router;

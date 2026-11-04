@@ -272,6 +272,19 @@ import {
   useRemoveConfigTags,
   useConfigRuleEvaluationStatus,
   useStartConfigRulesEvaluation,
+  useAggregationAuthorizations,
+  usePutAggregationAuthorization,
+  useDeleteAggregationAuthorization,
+  useRetentionConfigurations,
+  usePutRetentionConfiguration,
+  useDeleteRetentionConfiguration,
+  useComplianceByResource,
+  useComplianceSummaryByConfigRule,
+  useComplianceSummaryByResourceType,
+  useComplianceDetailsByConfigRule,
+  useComplianceDetailsByResource,
+  useDeleteDeliveryChannel,
+  useDeleteEvaluationResults,
 } from "../../hooks/useConfigService";
 import {
   useAppConfigApplications,
@@ -734,6 +747,11 @@ export function ConfigServiceDashboard() {
           ),
         },
         {
+          id: "governance",
+          label: "Governance",
+          content: <GovernanceTab />,
+        },
+        {
           id: "advanced",
           label: "Advanced",
           content: (
@@ -894,3 +912,482 @@ export function ConfigServiceDashboard() {
 //  AppConfig
 // ────────────────────────────────────────────────────────
 
+
+// ────────────────────────────────────────────────────────
+//  ConfigService — Governance tab
+// ────────────────────────────────────────────────────────
+
+function GovernanceTab() {
+  return (
+    <SpaceBetween size="l">
+      <Container header={<Header variant="h3">Aggregation Authorizations</Header>}>
+        <AggregationAuthorizationsSection />
+      </Container>
+      <Container header={<Header variant="h3">Retention Configurations</Header>}>
+        <RetentionConfigurationsSection />
+      </Container>
+      <Container header={<Header variant="h3">Compliance Summary</Header>}>
+        <ComplianceSummarySection />
+      </Container>
+      <Container header={<Header variant="h3">Compliance by Resource</Header>}>
+        <ComplianceByResourceSection />
+      </Container>
+      <Container header={<Header variant="h3">Compliance Details</Header>}>
+        <ComplianceDetailsSection />
+      </Container>
+      <Container header={<Header variant="h3">Danger Zone</Header>}>
+        <DangerZoneSection />
+      </Container>
+    </SpaceBetween>
+  );
+}
+
+function AggregationAuthorizationsSection() {
+  const { data, isLoading } = useAggregationAuthorizations();
+  const putAuth = usePutAggregationAuthorization();
+  const deleteAuth = useDeleteAggregationAuthorization();
+  const [showAdd, setShowAdd] = useState(false);
+  const [accountId, setAccountId] = useState("");
+  const [region, setRegion] = useState("");
+
+  const items = (data?.authorizations || []).map((a: any) => ({
+    account: a.AuthorizedAccountId,
+    region: a.AuthorizedAwsRegion,
+    arn: a.AggregationAuthorizationArn || "-",
+  }));
+
+  const handleCreate = () => {
+    putAuth.mutate(
+      { authorizedAccountId: accountId, authorizedAwsRegion: region },
+      {
+        onSuccess: () => {
+          setShowAdd(false);
+          setAccountId("");
+          setRegion("");
+        },
+      },
+    );
+  };
+
+  return (
+    <SpaceBetween size="m">
+      {putAuth.isError && (
+        <Alert type="error" dismissible>
+          {(putAuth.error as Error)?.message || "Failed to create authorization"}
+        </Alert>
+      )}
+      <ResourceTable
+        resourceName="Authorization"
+        headerTitle="Aggregation Authorizations"
+        headerCounter={data?.total}
+        items={items}
+        loading={isLoading}
+        emptyMessage="No aggregation authorizations"
+        columns={[
+          { id: "account", header: "Account ID", cell: (i: any) => i.account, isRowHeader: true },
+          { id: "region", header: "Authorized Region", cell: (i: any) => i.region },
+          { id: "arn", header: "ARN", cell: (i: any) => i.arn },
+          {
+            id: "actions",
+            header: "",
+            cell: (i: any) => (
+              <DeleteButton
+                itemName={`${i.account}/${i.region}`}
+                resourceType="aggregation authorization"
+                loading={
+                  deleteAuth.isPending &&
+                  deleteAuth.variables?.authorizedAccountId === i.account &&
+                  deleteAuth.variables?.authorizedAwsRegion === i.region
+                }
+                onDelete={() =>
+                  deleteAuth.mutateAsync({ authorizedAccountId: i.account, authorizedAwsRegion: i.region })
+                }
+              />
+            ),
+          },
+        ]}
+        onCreate={() => setShowAdd(true)}
+      />
+      <Modal
+        visible={showAdd}
+        onDismiss={() => setShowAdd(false)}
+        header="Add Aggregation Authorization"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowAdd(false)}>Cancel</Button>
+              <Button
+                variant="primary"
+                loading={putAuth.isPending}
+                disabled={!accountId || !region}
+                onClick={handleCreate}
+              >
+                Add authorization
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          <FormField label="Authorized account ID">
+            <Input value={accountId} onChange={({ detail }) => setAccountId(detail.value)} placeholder="123456789012" />
+          </FormField>
+          <FormField label="Authorized AWS Region">
+            <Input value={region} onChange={({ detail }) => setRegion(detail.value)} placeholder="us-east-1" />
+          </FormField>
+        </Form>
+      </Modal>
+    </SpaceBetween>
+  );
+}
+
+function RetentionConfigurationsSection() {
+  const { data, isLoading } = useRetentionConfigurations();
+  const putRetention = usePutRetentionConfiguration();
+  const deleteRetention = useDeleteRetentionConfiguration();
+  const [showAdd, setShowAdd] = useState(false);
+  const [days, setDays] = useState("");
+
+  const handleSave = () => {
+    putRetention.mutate(parseInt(days, 10), {
+      onSuccess: () => {
+        setShowAdd(false);
+        setDays("");
+      },
+    });
+  };
+
+  return (
+    <SpaceBetween size="m">
+      {putRetention.isError && (
+        <Alert type="error" dismissible>
+          {(putRetention.error as Error)?.message || "Failed to save retention configuration"}
+        </Alert>
+      )}
+      <ResourceTable
+        resourceName="Retention Configuration"
+        headerTitle="Retention Configurations"
+        headerCounter={data?.total}
+        items={(data?.retentionConfigurations || []).map((r: any) => ({
+          name: r.Name || "default",
+          days: r.RetentionPeriodInDays,
+        }))}
+        loading={isLoading}
+        emptyMessage="No retention configurations"
+        columns={[
+          { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+          { id: "days", header: "Retention Period (days)", cell: (i: any) => i.days },
+          {
+            id: "actions",
+            header: "",
+            cell: (i: any) => (
+              <DeleteButton
+                itemName={i.name}
+                resourceType="retention configuration"
+                loading={deleteRetention.isPending && deleteRetention.variables === i.name}
+                onDelete={() => deleteRetention.mutateAsync(i.name)}
+              />
+            ),
+          },
+        ]}
+        onCreate={() => setShowAdd(true)}
+      />
+      <Modal
+        visible={showAdd}
+        onDismiss={() => setShowAdd(false)}
+        header="Set Retention Period"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowAdd(false)}>Cancel</Button>
+              <Button
+                variant="primary"
+                loading={putRetention.isPending}
+                disabled={!days}
+                onClick={handleSave}
+              >
+                Save
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          <FormField label="Retention period (days)" description="How long AWS Config keeps configuration history.">
+            <Input value={days} onChange={({ detail }) => setDays(detail.value)} inputMode="numeric" placeholder="365" />
+          </FormField>
+        </Form>
+      </Modal>
+    </SpaceBetween>
+  );
+}
+
+function ComplianceSummarySection() {
+  const { data } = useComplianceSummaryByConfigRule();
+  const [resourceTypes, setResourceTypes] = useState("");
+  const [rtQuery, setRtQuery] = useState<string | null>(null);
+  const { data: rtData, isLoading: rtLoading } = useComplianceSummaryByResourceType(rtQuery);
+  const summary = data?.complianceSummary;
+
+  return (
+    <SpaceBetween size="m">
+      <Box variant="p" color="text-body-secondary">
+        Aggregate compliance counts across config rules and resource types.
+      </Box>
+      <ColumnLayout columns={4} variant="text-grid" borders="horizontal">
+        <div>
+          <Box variant="awsui-key-label">Compliant Rules</Box>
+          <Box>{summary?.CompliantConfigRuleCount ?? "—"}</Box>
+        </div>
+        <div>
+          <Box variant="awsui-key-label">Non-compliant Rules</Box>
+          <Box>{summary?.NonCompliantConfigRuleCount ?? "—"}</Box>
+        </div>
+        <div>
+          <Box variant="awsui-key-label">Compliant Resources</Box>
+          <Box>{summary?.CompliantResourceCount ?? "—"}</Box>
+        </div>
+        <div>
+          <Box variant="awsui-key-label">Non-compliant Resources</Box>
+          <Box>{summary?.NonCompliantResourceCount ?? "—"}</Box>
+        </div>
+      </ColumnLayout>
+      <SpaceBetween size="s">
+        <Box variant="h4">By Resource Type</Box>
+        <SpaceBetween direction="horizontal" size="s">
+          <Input
+            value={resourceTypes}
+            onChange={({ detail }) => setResourceTypes(detail.value)}
+            placeholder="AWS::EC2::Instance,AWS::S3::Bucket"
+          />
+          <Button
+            variant="normal"
+            disabled={!resourceTypes}
+            loading={rtLoading}
+            onClick={() => setRtQuery(resourceTypes)}
+          >
+            Fetch summary
+          </Button>
+        </SpaceBetween>
+        <ResourceTable
+          resourceName="Summary"
+          headerTitle="Compliance Summaries by Resource Type"
+          headerCounter={rtData?.total}
+          items={(rtData?.summaries || []).map((sm: any) => ({
+            resourceType: sm.ResourceKey?.ResourceType || sm.ResourceType || "-",
+            compliant: sm.ComplianceSummary?.CompliantResourceCount ?? "-",
+            nonCompliant: sm.ComplianceSummary?.NonCompliantResourceCount ?? "-",
+          }))}
+          loading={false}
+          emptyMessage="No summaries — enter resource types above and fetch"
+          columns={[
+            { id: "resourceType", header: "Resource Type", cell: (i: any) => i.resourceType, isRowHeader: true },
+            { id: "compliant", header: "Compliant", cell: (i: any) => i.compliant },
+            { id: "nonCompliant", header: "Non-compliant", cell: (i: any) => i.nonCompliant },
+          ]}
+        />
+      </SpaceBetween>
+    </SpaceBetween>
+  );
+}
+
+function ComplianceByResourceSection() {
+  const { data, isLoading } = useComplianceByResource();
+  return (
+    <ResourceTable
+      resourceName="Resource"
+      headerTitle="Compliance by Resource"
+      headerCounter={data?.total}
+      items={(data?.compliance || []).map((c: any) => ({
+        resourceType: c.ResourceType || "-",
+        resourceId: c.ResourceId || "-",
+        compliance: c.Compliance?.ComplianceType || "-",
+      }))}
+      loading={isLoading}
+      emptyMessage="No compliance data"
+      columns={[
+        { id: "resourceType", header: "Resource Type", cell: (i: any) => i.resourceType, isRowHeader: true },
+        { id: "resourceId", header: "Resource ID", cell: (i: any) => i.resourceId },
+        {
+          id: "compliance",
+          header: "Compliance",
+          cell: (i: any) => (
+            <StatusIndicator type={i.compliance === "COMPLIANT" ? "success" : i.compliance === "NON_COMPLIANT" ? "error" : "warning"}>
+              {i.compliance}
+            </StatusIndicator>
+          ),
+        },
+      ]}
+      filterEnabled
+      filterPlaceholder="Find resources"
+      filterFunction={(i: any, s: string) => i.resourceId.toLowerCase().includes(s.toLowerCase())}
+    />
+  );
+}
+
+function evaluationResultColumns() {
+  return [
+    {
+      id: "rule",
+      header: "Config Rule",
+      cell: (i: any) => i.rule,
+      isRowHeader: true,
+    },
+    {
+      id: "resource",
+      header: "Resource",
+      cell: (i: any) => i.resource,
+    },
+    {
+      id: "compliance",
+      header: "Compliance",
+      cell: (i: any) => (
+        <StatusIndicator type={i.compliance === "COMPLIANT" ? "success" : i.compliance === "NON_COMPLIANT" ? "error" : "warning"}>
+          {i.compliance}
+        </StatusIndicator>
+      ),
+    },
+    { id: "annotation", header: "Annotation", cell: (i: any) => i.annotation },
+  ];
+}
+
+function mapEvaluationResults(results: any[]) {
+  return results.map((r: any) => ({
+    rule: r.EvaluationResultIdentifier?.EvaluationResultQualifier?.ConfigRuleName || "-",
+    resource: `${r.EvaluationResultIdentifier?.EvaluationResultQualifier?.ResourceType || "?"}/${r.EvaluationResultIdentifier?.EvaluationResultQualifier?.ResourceId || "?"}`,
+    compliance: r.ComplianceType || "-",
+    annotation: r.Annotation || "-",
+  }));
+}
+
+function ComplianceDetailsSection() {
+  const [ruleName, setRuleName] = useState("");
+  const [ruleQuery, setRuleQuery] = useState<string | null>(null);
+  const { data: ruleData, isLoading: ruleLoading } = useComplianceDetailsByConfigRule(ruleQuery);
+  const [resourceType, setResourceType] = useState("");
+  const [resourceId, setResourceId] = useState("");
+  const [resourceQuery, setResourceQuery] = useState<{ type: string; id: string } | null>(null);
+  const { data: resourceData, isLoading: resourceLoading } = useComplianceDetailsByResource(
+    resourceQuery?.type || null,
+    resourceQuery?.id || null,
+  );
+
+  return (
+    <SpaceBetween size="m">
+      <SpaceBetween size="s">
+        <Box variant="h4">By Config Rule</Box>
+        <SpaceBetween direction="horizontal" size="s">
+          <Input
+            value={ruleName}
+            onChange={({ detail }) => setRuleName(detail.value)}
+            placeholder="required-tags"
+          />
+          <Button
+            variant="normal"
+            disabled={!ruleName}
+            loading={ruleLoading}
+            onClick={() => setRuleQuery(ruleName)}
+          >
+            Fetch details
+          </Button>
+        </SpaceBetween>
+        <ResourceTable
+          resourceName="Evaluation"
+          headerTitle="Evaluation Results"
+          items={mapEvaluationResults(ruleData?.evaluationResults || [])}
+          loading={false}
+          emptyMessage="No evaluation results — enter a rule name above and fetch"
+          columns={evaluationResultColumns()}
+        />
+      </SpaceBetween>
+      <SpaceBetween size="s">
+        <Box variant="h4">By Resource</Box>
+        <SpaceBetween direction="horizontal" size="s">
+          <Input
+            value={resourceType}
+            onChange={({ detail }) => setResourceType(detail.value)}
+            placeholder="AWS::EC2::Instance"
+          />
+          <Input
+            value={resourceId}
+            onChange={({ detail }) => setResourceId(detail.value)}
+            placeholder="i-1234567890"
+          />
+          <Button
+            variant="normal"
+            disabled={!resourceType || !resourceId}
+            loading={resourceLoading}
+            onClick={() => setResourceQuery({ type: resourceType, id: resourceId })}
+          >
+            Fetch details
+          </Button>
+        </SpaceBetween>
+        <ResourceTable
+          resourceName="Evaluation"
+          headerTitle="Evaluation Results"
+          items={mapEvaluationResults(resourceData?.evaluationResults || [])}
+          loading={false}
+          emptyMessage="No evaluation results — enter a resource type and ID above and fetch"
+          columns={evaluationResultColumns()}
+        />
+      </SpaceBetween>
+    </SpaceBetween>
+  );
+}
+
+function DangerZoneSection() {
+  const deleteDeliveryChannel = useDeleteDeliveryChannel();
+  const deleteEvalResults = useDeleteEvaluationResults();
+  const [channelName, setChannelName] = useState("");
+  const [ruleName, setRuleName] = useState("");
+
+  return (
+    <SpaceBetween size="m">
+      <Box variant="p" color="text-body-secondary">
+        Permanently delete delivery channels or clear evaluation results.
+      </Box>
+      <SpaceBetween size="s">
+        <SpaceBetween direction="horizontal" size="s">
+          <Input
+            value={channelName}
+            onChange={({ detail }) => setChannelName(detail.value)}
+            placeholder="Delivery channel name"
+          />
+          <Button
+            variant="normal"
+            disabled={!channelName}
+            loading={deleteDeliveryChannel.isPending}
+            onClick={() => deleteDeliveryChannel.mutateAsync(channelName)}
+          >
+            Delete delivery channel
+          </Button>
+        </SpaceBetween>
+        {deleteDeliveryChannel.isError && (
+          <Alert type="error" dismissible>
+            {(deleteDeliveryChannel.error as Error)?.message || "Failed to delete delivery channel"}
+          </Alert>
+        )}
+        <SpaceBetween direction="horizontal" size="s">
+          <Input
+            value={ruleName}
+            onChange={({ detail }) => setRuleName(detail.value)}
+            placeholder="Config rule name"
+          />
+          <Button
+            variant="normal"
+            disabled={!ruleName}
+            loading={deleteEvalResults.isPending}
+            onClick={() => deleteEvalResults.mutateAsync(ruleName)}
+          >
+            Delete evaluation results
+          </Button>
+        </SpaceBetween>
+        {deleteEvalResults.isError && (
+          <Alert type="error" dismissible>
+            {(deleteEvalResults.error as Error)?.message || "Failed to delete evaluation results"}
+          </Alert>
+        )}
+      </SpaceBetween>
+    </SpaceBetween>
+  );
+}

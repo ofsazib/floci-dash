@@ -18,6 +18,7 @@ import {
   Button,
   Alert,
   Tabs,
+  Toggle,
   Textarea,
   ColumnLayout,
   Container,
@@ -198,6 +199,17 @@ import {
   useCreateCloudFrontInvalidation,
   useCloudFrontCachePolicies,
   useCloudFrontFunctions,
+  useCopyCloudFrontDistribution,
+  useCFMonitoringSubscription,
+  usePutCFMonitoringSubscription,
+  useCFRealtimeLogConfigs,
+  useCreateCFRealtimeLogConfig,
+  useDeleteCFRealtimeLogConfig,
+  useCFContinuousDeploymentPolicies,
+  useDeleteCFContinuousDeploymentPolicy,
+  useCFSimpleFamily,
+  useCreateCFSimpleFamily,
+  useDeleteCFSimpleFamily,
 } from "../../hooks/useCloudFront";
 import {
   useKinesisStreams,
@@ -668,6 +680,53 @@ export function CloudFrontDashboard() {
           ),
         },
         {
+          id: "advanced",
+          label: "Advanced",
+          content: (
+            <SpaceBetween size="l">
+              <Container header={<Header variant="h3">Copy Distribution</Header>}>
+                <CopyDistributionSection />
+              </Container>
+              <Container header={<Header variant="h3">Monitoring Subscription</Header>}>
+                <MonitoringSection />
+              </Container>
+              <Container header={<Header variant="h3">Realtime Log Configurations</Header>}>
+                <RealtimeLogConfigsSection />
+              </Container>
+              <Container header={<Header variant="h3">Continuous Deployment Policies</Header>}>
+                <ContinuousDeploymentSection />
+              </Container>
+              <Container header={<Header variant="h3">Field-Level Encryption</Header>}>
+                <SimpleFamilyPanel
+                  title="Field-Level Encryption Configurations"
+                  family="field-level-encryption-configs"
+                  useList={useCFSimpleFamily}
+                  useCreate={useCreateCFSimpleFamily}
+                  useDelete={useDeleteCFSimpleFamily}
+                />
+              </Container>
+              <Container header={<Header variant="h3">Field-Level Encryption Profiles</Header>}>
+                <SimpleFamilyPanel
+                  title="Field-Level Encryption Profiles"
+                  family="field-level-encryption-profiles"
+                  useList={useCFSimpleFamily}
+                  useCreate={useCreateCFSimpleFamily}
+                  useDelete={useDeleteCFSimpleFamily}
+                />
+              </Container>
+              <Container header={<Header variant="h3">Streaming Distributions</Header>}>
+                <SimpleFamilyPanel
+                  title="Streaming Distributions"
+                  family="streaming-distributions"
+                  useList={useCFSimpleFamily}
+                  useCreate={useCreateCFSimpleFamily}
+                  useDelete={useDeleteCFSimpleFamily}
+                />
+              </Container>
+            </SpaceBetween>
+          ),
+        },
+        {
           id: "functions",
           label: "Functions",
           content: (
@@ -707,3 +766,345 @@ export function CloudFrontDashboard() {
 //  Kinesis
 // ────────────────────────────────────────────────────────
 
+
+// ────────────────────────────────────────────────────────
+//  CloudFront — Advanced tab sections
+// ────────────────────────────────────────────────────────
+
+function CopyDistributionSection() {
+  const [distId, setDistId] = useState("");
+  const [staging, setStaging] = useState(false);
+  const copy = useCopyCloudFrontDistribution(distId || "pending");
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  return (
+    <SpaceBetween size="m">
+      <Box variant="p" color="text-body-secondary">
+        Copy a distribution to create a new one with the same configuration. Optionally create a staging distribution for continuous deployment testing.
+      </Box>
+      <SpaceBetween direction="horizontal" size="s">
+        <Input
+          value={distId}
+          onChange={({ detail }) => setDistId(detail.value)}
+          placeholder="Source distribution ID (e.g. E1234567)"
+        />
+        <Button
+          variant="primary"
+          disabled={!distId}
+          loading={copy.isPending}
+          onClick={() =>
+            copy.mutateAsync({ staging }).then((result: any) => {
+              setCopiedId(result?.distribution?.Id || null);
+            })
+          }
+        >
+          Copy distribution
+        </Button>
+      </SpaceBetween>
+      <Toggle checked={staging} onChange={({ detail }) => setStaging(detail.checked)}>
+        Create as staging distribution
+      </Toggle>
+      {copy.isError && (
+        <Alert type="error" dismissible>
+          {(copy.error! as Error).message || "Failed to copy distribution"}
+        </Alert>
+      )}
+      {copiedId && <StatusIndicator type="success">Copied to new distribution {copiedId}</StatusIndicator>}
+    </SpaceBetween>
+  );
+}
+
+function MonitoringSection() {
+  const [distId, setDistId] = useState("");
+  const [queryId, setQueryId] = useState<string | null>(null);
+  const { data, isLoading } = useCFMonitoringSubscription(queryId);
+  const putSub = usePutCFMonitoringSubscription(queryId || "pending");
+
+  return (
+    <SpaceBetween size="m">
+      <Box variant="p" color="text-body-secondary">
+        Real-time metrics subscriptions publish additional CloudFront metrics at one-minute intervals.
+      </Box>
+      <SpaceBetween direction="horizontal" size="s">
+        <Input
+          value={distId}
+          onChange={({ detail }) => setDistId(detail.value)}
+          placeholder="Distribution ID"
+        />
+        <Button variant="normal" disabled={!distId} loading={isLoading} onClick={() => setQueryId(distId)}>
+          Fetch subscription
+        </Button>
+      </SpaceBetween>
+      {data && (
+        <SpaceBetween direction="horizontal" size="s">
+          <StatusIndicator type={data.monitoringSubscription ? "success" : "info"}>
+            {data.monitoringSubscription
+              ? `Real-time metrics: ${data.monitoringSubscription.RealtimeMetricsSubscriptionConfig?.RealtimeMetricsSubscriptionStatus || "Unknown"}`
+              : "No monitoring subscription"}
+          </StatusIndicator>
+          <Button
+            variant="normal"
+            loading={putSub.isPending}
+            disabled={!queryId}
+            onClick={() =>
+              putSub.mutateAsync({
+                RealtimeMetricsSubscriptionConfig: { RealtimeMetricsSubscriptionStatus: "Enabled" },
+              })
+            }
+          >
+            Enable real-time metrics
+          </Button>
+        </SpaceBetween>
+      )}
+      {putSub.isError && (
+        <Alert type="error" dismissible>
+          {(putSub.error! as Error).message || "Failed to update monitoring subscription"}
+        </Alert>
+      )}
+    </SpaceBetween>
+  );
+}
+
+function sampledRate(raw: string): number {
+  const parsed = parseInt(raw, 10);
+  return Number.isNaN(parsed) ? 100000 : parsed;
+}
+
+function RealtimeLogConfigsSection() {
+  const { data, isLoading } = useCFRealtimeLogConfigs();
+  const createConfig = useCreateCFRealtimeLogConfig();
+  const deleteConfig = useDeleteCFRealtimeLogConfig();
+  const [showAdd, setShowAdd] = useState(false);
+  const [name, setName] = useState("");
+  const [samplingRate, setSamplingRate] = useState("100000");
+
+  const items = (data?.realtimeLogConfigs || []).map((cfg: any) => ({
+    name: cfg.Name || "-",
+    arn: cfg.ARN || "-",
+    samplingRate: cfg.SamplingRate,
+    fields: cfg.Fields?.join(", ") || "-",
+  }));
+
+  return (
+    <SpaceBetween size="m">
+      {createConfig.isError && (
+        <Alert type="error" dismissible>
+          {(createConfig.error! as Error).message || "Failed to create realtime log config"}
+        </Alert>
+      )}
+      <ResourceTable
+        resourceName="Realtime Log Config"
+        headerTitle="Realtime Log Configurations"
+        headerCounter={data?.total}
+        items={items}
+        loading={isLoading}
+        emptyMessage="No realtime log configurations"
+        columns={[
+          { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+          { id: "arn", header: "ARN", cell: (i: any) => i.arn },
+          { id: "samplingRate", header: "Sampling Rate", cell: (i: any) => i.samplingRate },
+          { id: "fields", header: "Fields", cell: (i: any) => i.fields },
+          {
+            id: "actions",
+            header: "",
+            cell: (i: any) => (
+              <DeleteButton
+                itemName={i.name}
+                resourceType="realtime log config"
+                loading={deleteConfig.isPending && deleteConfig.variables === i.name}
+                onDelete={() => deleteConfig.mutateAsync(i.name)}
+              />
+            ),
+          },
+        ]}
+        filterEnabled
+        filterPlaceholder="Find realtime log configs"
+        filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+        onCreate={() => setShowAdd(true)}
+      />
+      <Modal
+        visible={showAdd}
+        onDismiss={() => setShowAdd(false)}
+        header="Create realtime log config"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowAdd(false)}>Cancel</Button>
+              <Button
+                variant="primary"
+                loading={createConfig.isPending}
+                disabled={!name}
+                onClick={() =>
+                  createConfig.mutateAsync({ name, samplingRate: sampledRate(samplingRate) }).then(() => {
+                    setShowAdd(false);
+                    setName("");
+                    setSamplingRate("100000");
+                  })
+                }
+              >
+                Create
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          <FormField label="Name">
+            <Input value={name} onChange={({ detail }) => setName(detail.value)} placeholder="my-rt-config" />
+          </FormField>
+          <FormField label="Sampling rate" description="Long-term sampled requests 0-1000000 (100000 = 10%).">
+            <Input value={samplingRate} onChange={({ detail }) => setSamplingRate(detail.value)} inputMode="numeric" placeholder="100000" />
+          </FormField>
+        </Form>
+      </Modal>
+    </SpaceBetween>
+  );
+}
+
+function ContinuousDeploymentSection() {
+  const { data, isLoading } = useCFContinuousDeploymentPolicies();
+  const deletePolicy = useDeleteCFContinuousDeploymentPolicy();
+
+  return (
+    <ResourceTable
+      resourceName="CD Policy"
+      headerTitle="Continuous Deployment Policies"
+      headerCounter={data?.total}
+      items={(data?.policies || []).map((p: any) => ({
+        id: p.Id,
+        arn: p.ARN || p.arn || "-",
+        enabled: p.ContinuousDeploymentPolicy?.Enabled ?? p.Enabled,
+        stagingDns: p.ContinuousDeploymentPolicy?.StagingDistributionDnsNames?.Items?.join(", ") || "-",
+      }))}
+      loading={isLoading}
+      emptyMessage="No continuous deployment policies"
+      columns={[
+        { id: "id", header: "Policy ID", cell: (i: any) => i.id, isRowHeader: true },
+        { id: "arn", header: "ARN", cell: (i: any) => i.arn },
+        { id: "enabled", header: "Enabled", cell: (i: any) => (i.enabled ? "Yes" : "No") },
+        { id: "stagingDns", header: "Staging DNS Names", cell: (i: any) => i.stagingDns },
+        {
+          id: "actions",
+          header: "",
+          cell: (i: any) => (
+            <DeleteButton
+              itemName={i.id}
+              resourceType="CD policy"
+              loading={deletePolicy.isPending && deletePolicy.variables?.id === i.id}
+              onDelete={() => deletePolicy.mutateAsync({ id: i.id, ifMatch: i.arn })}
+            />
+          ),
+        },
+      ]}
+    />
+  );
+}
+
+interface SimpleFamilyProps {
+  title: string;
+  family: string;
+  useList: (family: string) => { data?: { items: any[]; total: number }; isLoading: boolean };
+  useCreate: (family: string) => { mutateAsync: (config: any) => Promise<any>; isPending: boolean; isError: boolean; error: Error | null };
+  useDelete: (family: string) => { mutateAsync: (params: { id: string; ifMatch?: string }) => Promise<any>; isPending: boolean; variables: { id: string } | undefined };
+}
+
+function familyItemName(item: any): string {
+  if (item.Name) return item.Name;
+  if (item.StreamingDistributionConfig?.Name) return item.StreamingDistributionConfig.Name;
+  if (item.FieldLevelEncryptionConfig?.Name) return item.FieldLevelEncryptionConfig.Name;
+  if (item.FieldLevelEncryptionProfileConfig?.Name) return item.FieldLevelEncryptionProfileConfig.Name;
+  return "-";
+}
+
+function SimpleFamilyPanel({ title, family, useList, useCreate, useDelete }: SimpleFamilyProps) {
+  const { data, isLoading } = useList(family);
+  const createItem = useCreate(family);
+  const deleteItem = useDelete(family);
+  const [showAdd, setShowAdd] = useState(false);
+  const [configText, setConfigText] = useState("{}");
+  const [parseError, setParseError] = useState("");
+
+  const handleCreate = () => {
+    let config: any;
+    try {
+      config = JSON.parse(configText);
+    } catch {
+      setParseError("Configuration must be valid JSON");
+      return;
+    }
+    setParseError("");
+    createItem.mutateAsync(config).then(() => {
+      setShowAdd(false);
+      setConfigText("{}");
+    });
+  };
+
+  return (
+    <SpaceBetween size="m">
+      {createItem.isError && (
+        <Alert type="error" dismissible>
+          {(createItem.error! as Error).message || "Failed to create configuration"}
+        </Alert>
+      )}
+      <ResourceTable
+        resourceName={title}
+        headerTitle={title}
+        headerCounter={data?.total}
+        items={(data?.items || []).map((item: any) => ({
+          id: item.Id,
+          name: familyItemName(item),
+          arn: item.ARN || item.arn || "-",
+          lastModified: item.LastModifiedTime ? new Date(item.LastModifiedTime).toLocaleDateString() : "-",
+        }))}
+        loading={isLoading}
+        emptyMessage={`No ${title.toLowerCase()} — use Create to add one`}
+        columns={[
+          { id: "id", header: "ID", cell: (i: any) => i.id, isRowHeader: true },
+          { id: "name", header: "Name", cell: (i: any) => i.name },
+          { id: "arn", header: "ARN", cell: (i: any) => i.arn },
+          { id: "lastModified", header: "Last Modified", cell: (i: any) => i.lastModified },
+          {
+            id: "actions",
+            header: "",
+            cell: (i: any) => (
+              <DeleteButton
+                itemName={i.id}
+                resourceType={title}
+                loading={deleteItem.isPending && deleteItem.variables?.id === i.id}
+                onDelete={() => deleteItem.mutateAsync({ id: i.id })}
+              />
+            ),
+          },
+        ]}
+        onCreate={() => setShowAdd(true)}
+      />
+      <Modal
+        visible={showAdd}
+        onDismiss={() => setShowAdd(false)}
+        header={`Create ${title}`}
+        size="medium"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowAdd(false)}>Cancel</Button>
+              <Button
+                variant="primary"
+                loading={createItem.isPending}
+                onClick={handleCreate}
+              >
+                Create
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          {parseError && <Alert type="error">Invalid JSON in configuration</Alert>}
+          <FormField label="Configuration JSON" description="Must include CallerReference and Name.">
+            <Textarea value={configText} onChange={({ detail }) => setConfigText(detail.value)} rows={8} />
+          </FormField>
+        </Form>
+      </Modal>
+    </SpaceBetween>
+  );
+}

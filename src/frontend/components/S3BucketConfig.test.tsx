@@ -39,6 +39,7 @@ const mkMutation = () => ({
   mutateAsync: vi.fn(),
   isPending: false,
   isError: false,
+  isSuccess: false,
   error: null,
 });
 
@@ -69,7 +70,51 @@ vi.mock("../hooks/useS3Config", () => ({
   useS3UpdateBucketLogging: vi.fn(() => mkMutation()),
   useS3BucketAcl: vi.fn(() => mkQuery(ACL_DATA)),
   useS3PutBucketAcl: vi.fn(() => mkMutation()),
+  useS3BucketAccelerate: vi.fn(() => mkQuery(ACCELERATE_DATA)),
+  useS3UpdateBucketAccelerate: vi.fn(() => mkMutation()),
+  useS3BucketOwnershipControls: vi.fn(() => mkQuery(OWNERSHIP_DATA)),
+  useS3UpdateBucketOwnershipControls: vi.fn(() => mkMutation()),
+  useS3DeleteBucketOwnershipControls: vi.fn(() => mkMutation()),
+  useS3BucketRequestPayment: vi.fn(() => mkQuery(PAYMENTS_DATA)),
+  useS3UpdateBucketRequestPayment: vi.fn(() => mkMutation()),
+  useS3BucketReplication: vi.fn(() => mkQuery(REPLICATION_DATA)),
+  useS3UpdateBucketReplication: vi.fn(() => mkMutation()),
+  useS3DeleteBucketReplication: vi.fn(() => mkMutation()),
+  useS3IntelligentTieringConfigs: vi.fn(() => mkQuery(TIERING_DATA)),
+  useS3PutIntelligentTieringConfig: vi.fn(() => mkMutation()),
+  useS3DeleteIntelligentTieringConfig: vi.fn(() => namedDeleteState.factory()),
+  useS3AnalyticsConfigs: vi.fn(() => mkQuery(ANALYTICS_DATA)),
+  useS3PutAnalyticsConfig: vi.fn(() => mkMutation()),
+  useS3DeleteAnalyticsConfig: vi.fn(() => namedDeleteState.factory()),
+  useS3InventoryConfigs: vi.fn(() => mkQuery(INVENTORY_DATA)),
+  useS3PutInventoryConfig: vi.fn(() => mkMutation()),
+  useS3DeleteInventoryConfig: vi.fn(() => namedDeleteState.factory()),
+  useS3RestoreObject: vi.fn(() => mkMutation()),
 }));
+
+// Hoisted mutable pending-state for the named-config delete loading idiom
+// (`deleteConfig.isPending && deleteConfig.variables === item.Id`)
+const namedDeleteState = vi.hoisted(() => ({
+  isPending: false,
+  variables: undefined as string | undefined,
+  factory: () => ({
+    mutate: vi.fn(),
+    isPending: namedDeleteState.isPending,
+    variables: namedDeleteState.variables,
+  }),
+}));
+
+const ACCELERATE_DATA = { bucket: "my-bucket", status: "Enabled" };
+const OWNERSHIP_DATA = { bucket: "my-bucket", rules: [{ ObjectOwnership: "BucketOwnerEnforced" }], configured: true };
+const PAYMENTS_DATA = { bucket: "my-bucket", payer: "BucketOwner" };
+const REPLICATION_DATA = {
+  bucket: "my-bucket",
+  replicationConfiguration: { Role: "arn:aws:iam::1:role/r", Rules: [{ Status: "Enabled" }] },
+  configured: true,
+};
+const TIERING_DATA = { configurations: [{ Id: "tier-1", Status: "Enabled" }], total: 1 };
+const ANALYTICS_DATA = { configurations: [{ Id: "analytics-1" }], total: 1 };
+const INVENTORY_DATA = { configurations: [], total: 0 };
 
 import S3BucketConfig from "./S3BucketConfig";
 import {
@@ -99,6 +144,26 @@ import {
   useS3UpdateBucketLogging,
   useS3BucketAcl,
   useS3PutBucketAcl,
+  useS3BucketAccelerate,
+  useS3UpdateBucketAccelerate,
+  useS3BucketOwnershipControls,
+  useS3UpdateBucketOwnershipControls,
+  useS3DeleteBucketOwnershipControls,
+  useS3BucketRequestPayment,
+  useS3UpdateBucketRequestPayment,
+  useS3BucketReplication,
+  useS3UpdateBucketReplication,
+  useS3DeleteBucketReplication,
+  useS3IntelligentTieringConfigs,
+  useS3PutIntelligentTieringConfig,
+  useS3DeleteIntelligentTieringConfig,
+  useS3AnalyticsConfigs,
+  useS3PutAnalyticsConfig,
+  useS3DeleteAnalyticsConfig,
+  useS3InventoryConfigs,
+  useS3PutInventoryConfig,
+  useS3DeleteInventoryConfig,
+  useS3RestoreObject,
 } from "../hooks/useS3Config";
 
 function createWrapper() {
@@ -112,9 +177,9 @@ beforeEach(() => {
 });
 
 describe("S3BucketConfig — tab navigation", () => {
-  it("renders all 11 tab buttons", () => {
+  it("renders all 20 tab buttons", () => {
     render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
-    const tabs = ["Overview", "Versioning", "Tags", "Policy", "Encryption", "Lifecycle", "CORS", "Website", "Notifications", "Public Access", "Logging", "ACL"];
+    const tabs = ["Overview", "Versioning", "Tags", "Policy", "Encryption", "Lifecycle", "CORS", "Website", "Notifications", "Public Access", "Logging", "ACL", "Ownership", "Payments", "Replication", "Accelerate", "Tiering", "Analytics", "Inventory", "Restore"];
     for (const tab of tabs) {
       expect(screen.getByRole("button", { name: tab })).toBeTruthy();
     }
@@ -1740,3 +1805,744 @@ function dialogOf(headerText: string): HTMLElement {
   const header = screen.getAllByText(headerText).find((h) => h.closest('[role="dialog"]'));
   return header!.closest('[role="dialog"]') as HTMLElement;
 }
+
+// ─── Ownership tab ────────────────────────────────────────────────
+
+describe("S3BucketConfig — Ownership tab", () => {
+  it("switches to Ownership tab and shows current rules", async () => {
+    const user = userEvent.setup();
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Ownership" }));
+    expect(screen.getByText("Object Ownership")).toBeTruthy();
+    expect(screen.getAllByText("BucketOwnerEnforced").length).toBeGreaterThan(0);
+  });
+
+  it("calls updateControls.mutate with ownership rule on Save changes", async () => {
+    const user = userEvent.setup();
+    const mockMutate = vi.fn();
+    (useS3UpdateBucketOwnershipControls as any).mockReturnValue({ mutate: mockMutate, isPending: false, isError: false, error: null });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Ownership" }));
+    await user.click(screen.getByRole("button", { name: /Save changes/i }));
+    expect(mockMutate).toHaveBeenCalledWith([{ ObjectOwnership: "BucketOwnerEnforced" }]);
+  });
+
+  it("falls back to first option when ownership is unknown", async () => {
+    const user = userEvent.setup();
+    (useS3BucketOwnershipControls as any).mockReturnValue(
+      mkQuery({ bucket: "my-bucket", rules: [{ ObjectOwnership: "Weird" }], configured: true }),
+    );
+    const mockMutate = vi.fn();
+    (useS3UpdateBucketOwnershipControls as any).mockReturnValue({ mutate: mockMutate, isPending: false, isError: false, error: null });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Ownership" }));
+    await user.click(screen.getByRole("button", { name: /Save changes/i }));
+    expect(mockMutate).toHaveBeenCalledWith([{ ObjectOwnership: "BucketOwnerEnforced" }]);
+  });
+
+  it("renders em-dash for rule without ObjectOwnership", async () => {
+    (useS3BucketOwnershipControls as any).mockReturnValue(
+      mkQuery({ bucket: "my-bucket", rules: [{}], configured: true }),
+    );
+    const user = userEvent.setup();
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Ownership" }));
+    expect(screen.getByText("—")).toBeTruthy();
+  });
+
+  it("keeps default selection when rules are empty", async () => {
+    const user = userEvent.setup();
+    (useS3BucketOwnershipControls as any).mockReturnValue(
+      mkQuery({ bucket: "my-bucket", rules: [], configured: false }),
+    );
+    const mockMutate = vi.fn();
+    (useS3UpdateBucketOwnershipControls as any).mockReturnValue({ mutate: mockMutate, isPending: false, isError: false, error: null });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Ownership" }));
+    await user.click(screen.getByRole("button", { name: /Save changes/i }));
+    expect(mockMutate).toHaveBeenCalledWith([{ ObjectOwnership: "BucketOwnerEnforced" }]);
+  });
+
+  it("renders with undefined data", async () => {
+    const user = userEvent.setup();
+    (useS3BucketOwnershipControls as any).mockReturnValue({ data: undefined, isLoading: false, isError: false, error: null });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Ownership" }));
+    expect(screen.getByText("Object Ownership")).toBeTruthy();
+  });
+
+  it("shows spinner while loading", async () => {
+    (useS3BucketOwnershipControls as any).mockReturnValue({ data: undefined, isLoading: true, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Ownership" }));
+    expect(screen.queryByText("Object Ownership")).toBeNull();
+  });
+
+  it("calls deleteControls.mutate on Delete ownership controls", async () => {
+    const user = userEvent.setup();
+    (useS3BucketOwnershipControls as any).mockReturnValue(mkQuery(OWNERSHIP_DATA));
+    const mockMutate = vi.fn();
+    (useS3DeleteBucketOwnershipControls as any).mockReturnValue({ mutate: mockMutate, isPending: false, isError: false, error: null });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Ownership" }));
+    await user.click(screen.getByRole("button", { name: /Delete ownership controls/i }));
+    expect(mockMutate).toHaveBeenCalled();
+  });
+
+  it("shows error alerts when update/delete fail", async () => {
+    (useS3BucketOwnershipControls as any).mockReturnValue(mkQuery(OWNERSHIP_DATA));
+    (useS3UpdateBucketOwnershipControls as any).mockReturnValue({
+      mutate: vi.fn(), isPending: false, isError: true, error: new Error("Failed to update ownership controls"),
+    });
+    (useS3DeleteBucketOwnershipControls as any).mockReturnValue({
+      mutate: vi.fn(), isPending: false, isError: true, error: new Error("Failed to delete ownership controls"),
+    });
+    const user = userEvent.setup();
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Ownership" }));
+    expect(screen.getByText(/Failed to update ownership controls/i)).toBeTruthy();
+    expect(screen.getByText(/Failed to delete ownership controls/i)).toBeTruthy();
+  });
+});
+
+// ─── Payments tab ─────────────────────────────────────────────────
+
+describe("S3BucketConfig — Payments tab", () => {
+  it("switches to Payments tab and shows current payer", async () => {
+    const user = userEvent.setup();
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Payments" }));
+    expect(screen.getByText("Request Payment")).toBeTruthy();
+    expect(screen.getByText(/Current payer: BucketOwner/)).toBeTruthy();
+  });
+
+  it("calls updatePayment.mutate with payer on Save changes", async () => {
+    const user = userEvent.setup();
+    const mockMutate = vi.fn();
+    (useS3UpdateBucketRequestPayment as any).mockReturnValue({ mutate: mockMutate, isPending: false, isError: false, error: null });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Payments" }));
+    await user.click(screen.getByRole("button", { name: /Save changes/i }));
+    expect(mockMutate).toHaveBeenCalledWith("BucketOwner");
+  });
+
+  it("shows Requester payer with info status", async () => {
+    (useS3BucketRequestPayment as any).mockReturnValue(mkQuery({ bucket: "my-bucket", payer: "Requester" }));
+    const user = userEvent.setup();
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Payments" }));
+    expect(screen.getByText(/Current payer: Requester/)).toBeTruthy();
+  });
+
+  it("falls back to first option when payer is unknown", async () => {
+    (useS3BucketRequestPayment as any).mockReturnValue(mkQuery({ bucket: "my-bucket", payer: "Weird" }));
+    const user = userEvent.setup();
+    const mockMutate = vi.fn();
+    (useS3UpdateBucketRequestPayment as any).mockReturnValue({ mutate: mockMutate, isPending: false, isError: false, error: null });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Payments" }));
+    await user.click(screen.getByRole("button", { name: /Save changes/i }));
+    expect(mockMutate).toHaveBeenCalledWith("BucketOwner");
+  });
+
+  it("renders with undefined data and shows spinner while loading", async () => {
+    (useS3BucketRequestPayment as any).mockReturnValue({ data: undefined, isLoading: true, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Payments" }));
+    expect(screen.queryByText("Request Payment")).toBeNull();
+  });
+
+  it("shows error alert when update fails", async () => {
+    (useS3BucketRequestPayment as any).mockReturnValue(mkQuery(PAYMENTS_DATA));
+    (useS3UpdateBucketRequestPayment as any).mockReturnValue({
+      mutate: vi.fn(), isPending: false, isError: true, error: new Error("Failed to update request payment"),
+    });
+    const user = userEvent.setup();
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Payments" }));
+    expect(screen.getByText(/Failed to update request payment/i)).toBeTruthy();
+  });
+});
+
+// ─── Replication tab ──────────────────────────────────────────────
+
+describe("S3BucketConfig — Replication tab", () => {
+  it("switches to Replication tab and prefills from configuration", async () => {
+    const user = userEvent.setup();
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Replication" }));
+    expect(screen.getAllByText("Replication").length).toBeGreaterThan(1);
+    await waitFor(() => expect(screen.getByDisplayValue("arn:aws:iam::1:role/r")).toBeTruthy());
+    expect(screen.getByText(/Replication is configured/)).toBeTruthy();
+  });
+
+  it("calls updateReplication.mutate with parsed rules on Save changes", async () => {
+    const user = userEvent.setup();
+    const mockMutate = vi.fn();
+    (useS3UpdateBucketReplication as any).mockReturnValue({ mutate: mockMutate, isPending: false, isError: false, error: null });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Replication" }));
+    await waitFor(() => expect(screen.getByDisplayValue("arn:aws:iam::1:role/r")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Save changes/i }));
+    expect(mockMutate).toHaveBeenCalledWith({
+      role: "arn:aws:iam::1:role/r",
+      rules: [{ Status: "Enabled" }],
+    });
+  });
+
+  it("shows parse error for invalid JSON rules", async () => {
+    const user = userEvent.setup();
+    const mockMutate = vi.fn();
+    (useS3UpdateBucketReplication as any).mockReturnValue({ mutate: mockMutate, isPending: false, isError: false, error: null });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Replication" }));
+    await waitFor(() => expect(screen.getByDisplayValue(/Status/)).toBeTruthy());
+    const textareas = screen.getAllByRole("textbox");
+    await user.clear(textareas[textareas.length - 1]);
+    await user.type(textareas[textareas.length - 1], "not-json");
+    await user.click(screen.getByRole("button", { name: /Save changes/i }));
+    expect(screen.getByText(/Invalid JSON in replication rules/i)).toBeTruthy();
+    expect(mockMutate).not.toHaveBeenCalled();
+  });
+
+  it("prefills empty role when configuration has no Role", async () => {
+    const user = userEvent.setup();
+    (useS3BucketReplication as any).mockReturnValue(
+      mkQuery({ bucket: "my-bucket", replicationConfiguration: { Rules: [] }, configured: true }),
+    );
+    const mockMutate = vi.fn();
+    (useS3UpdateBucketReplication as any).mockReturnValue({ mutate: mockMutate, isPending: false, isError: false, error: null });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Replication" }));
+    await user.click(screen.getByRole("button", { name: /Save changes/i }));
+    expect(mockMutate).toHaveBeenCalledWith({ role: "", rules: [] });
+  });
+
+  it("shows not-configured status with undefined data", async () => {
+    (useS3BucketReplication as any).mockReturnValue({ data: undefined, isLoading: false, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Replication" }));
+    expect(screen.getAllByText("Replication").length).toBeGreaterThan(1);
+  });
+
+  it("shows spinner while loading", async () => {
+    (useS3BucketReplication as any).mockReturnValue({ data: undefined, isLoading: true, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Replication" }));
+    expect(screen.queryByText("IAM role ARN")).toBeNull();
+  });
+
+  it("calls deleteReplication.mutate on Delete replication configuration", async () => {
+    const user = userEvent.setup();
+    (useS3BucketReplication as any).mockReturnValue(mkQuery(REPLICATION_DATA));
+    const mockMutate = vi.fn();
+    (useS3DeleteBucketReplication as any).mockReturnValue({ mutate: mockMutate, isPending: false, isError: false, error: null });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Replication" }));
+    await user.click(screen.getByRole("button", { name: /Delete replication configuration/i }));
+    expect(mockMutate).toHaveBeenCalled();
+  });
+
+  it("shows error alerts when update/delete fail", async () => {
+    (useS3BucketReplication as any).mockReturnValue(mkQuery(REPLICATION_DATA));
+    (useS3UpdateBucketReplication as any).mockReturnValue({
+      mutate: vi.fn(), isPending: false, isError: true, error: new Error("Failed to update replication"),
+    });
+    (useS3DeleteBucketReplication as any).mockReturnValue({
+      mutate: vi.fn(), isPending: false, isError: true, error: new Error("Failed to delete replication"),
+    });
+    const user = userEvent.setup();
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Replication" }));
+    expect(screen.getByText(/Failed to update replication/i)).toBeTruthy();
+    expect(screen.getByText(/Failed to delete replication/i)).toBeTruthy();
+  });
+});
+
+// ─── Accelerate tab ───────────────────────────────────────────────
+
+describe("S3BucketConfig — Accelerate tab", () => {
+  it("switches to Accelerate tab and shows status", async () => {
+    const user = userEvent.setup();
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Accelerate" }));
+    expect(screen.getByText("Transfer Acceleration")).toBeTruthy();
+    expect(screen.getByText(/Acceleration is Enabled/)).toBeTruthy();
+  });
+
+  it("calls updateAccelerate.mutate with status on Save changes", async () => {
+    const user = userEvent.setup();
+    const mockMutate = vi.fn();
+    (useS3UpdateBucketAccelerate as any).mockReturnValue({ mutate: mockMutate, isPending: false, isError: false, error: null });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Accelerate" }));
+    await user.click(screen.getByRole("button", { name: /Save changes/i }));
+    expect(mockMutate).toHaveBeenCalledWith("Enabled");
+  });
+
+  it("shows info status when Suspended", async () => {
+    (useS3BucketAccelerate as any).mockReturnValue(mkQuery({ bucket: "my-bucket", status: "Suspended" }));
+    const user = userEvent.setup();
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Accelerate" }));
+    expect(screen.getByText(/Acceleration is Suspended/)).toBeTruthy();
+  });
+
+  it("falls back to first option when status is unknown", async () => {
+    (useS3BucketAccelerate as any).mockReturnValue(mkQuery({ bucket: "my-bucket", status: "Weird" }));
+    const user = userEvent.setup();
+    const mockMutate = vi.fn();
+    (useS3UpdateBucketAccelerate as any).mockReturnValue({ mutate: mockMutate, isPending: false, isError: false, error: null });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Accelerate" }));
+    await user.click(screen.getByRole("button", { name: /Save changes/i }));
+    expect(mockMutate).toHaveBeenCalledWith("Enabled");
+  });
+
+  it("shows spinner while loading", async () => {
+    (useS3BucketAccelerate as any).mockReturnValue({ data: undefined, isLoading: true, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Accelerate" }));
+    expect(screen.queryByText("Transfer Acceleration")).toBeNull();
+  });
+
+  it("shows error alert when update fails", async () => {
+    (useS3BucketAccelerate as any).mockReturnValue(mkQuery(ACCELERATE_DATA));
+    (useS3UpdateBucketAccelerate as any).mockReturnValue({
+      mutate: vi.fn(), isPending: false, isError: true, error: new Error("Failed to update acceleration"),
+    });
+    const user = userEvent.setup();
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Accelerate" }));
+    expect(screen.getByText(/Failed to update acceleration/i)).toBeTruthy();
+  });
+});
+
+// ─── Named configs (Tiering / Analytics / Inventory) ─────────────
+
+describe("S3BucketConfig — Tiering tab", () => {
+  it("switches to Tiering tab and lists configurations", async () => {
+    const user = userEvent.setup();
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Tiering" }));
+    expect(screen.getByText("Intelligent-Tiering Configurations")).toBeTruthy();
+    expect(screen.getByText("tier-1")).toBeTruthy();
+    expect(screen.getByText("Enabled")).toBeTruthy();
+  });
+
+  it("renders em-dash for configuration without Id or Status", async () => {
+    const user = userEvent.setup();
+    (useS3IntelligentTieringConfigs as any).mockReturnValue(
+      mkQuery({ configurations: [{}, {}], total: 2 }),
+    );
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Tiering" }));
+    expect(screen.getAllByText("—").length).toBe(4);
+  });
+
+  it("opens Add modal and creates a configuration with parsed JSON", async () => {
+    const user = userEvent.setup();
+    (useS3IntelligentTieringConfigs as any).mockReturnValue(mkQuery(TIERING_DATA));
+    const mockMutate = vi.fn((...args: any[]) => {
+      const onSuccess = args[1]?.onSuccess;
+      if (onSuccess) onSuccess();
+    });
+    (useS3PutIntelligentTieringConfig as any).mockReturnValue({ mutate: mockMutate, isPending: false, isError: false, error: null });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Tiering" }));
+    await user.click(screen.getByRole("button", { name: /Add configuration/i }));
+    expect(screen.getByText("Add Intelligent-Tiering Configurations")).toBeTruthy();
+    await user.type(screen.getByPlaceholderText("my-config"), "new-cfg");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    expect(mockMutate).toHaveBeenCalledWith(
+      { id: "new-cfg", configuration: {} },
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    );
+  });
+
+  it("shows parse error for invalid JSON in Add modal", async () => {
+    const user = userEvent.setup();
+    (useS3IntelligentTieringConfigs as any).mockReturnValue(mkQuery(TIERING_DATA));
+    const mockMutate = vi.fn();
+    (useS3PutIntelligentTieringConfig as any).mockReturnValue({ mutate: mockMutate, isPending: false, isError: false, error: null });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Tiering" }));
+    await user.click(screen.getByRole("button", { name: /Add configuration/i }));
+    await user.type(screen.getByPlaceholderText("my-config"), "x");
+    const textareas = screen.getAllByRole("textbox");
+    await user.type(textareas[textareas.length - 1], "not-json");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    expect(screen.getByText(/Invalid JSON in configuration/i)).toBeTruthy();
+    expect(mockMutate).not.toHaveBeenCalled();
+  });
+
+  it("shows loading spinner for the config table", async () => {
+    (useS3IntelligentTieringConfigs as any).mockReturnValue({ data: undefined, isLoading: true, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Tiering" }));
+    expect(screen.getByText("Loading configurations...")).toBeTruthy();
+  });
+
+  it("renders with undefined data and shows empty message", async () => {
+    (useS3IntelligentTieringConfigs as any).mockReturnValue({ data: undefined, isLoading: false, isError: false, error: null });
+    const user = userEvent.setup();
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Tiering" }));
+    expect(screen.getByText(/No intelligent-tiering configurations configured/i)).toBeTruthy();
+  });
+
+  it("shows delete loading only for the matching config id", async () => {
+    (useS3IntelligentTieringConfigs as any).mockReturnValue(
+      mkQuery({ configurations: [{ Id: "tier-1" }, { Id: "tier-2" }], total: 2 }),
+    );
+    namedDeleteState.isPending = true;
+    namedDeleteState.variables = "tier-1";
+    const user = userEvent.setup();
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Tiering" }));
+    const loadingDelete = screen.getByRole("button", { name: "Delete configuration tier-1" });
+    expect(loadingDelete.getAttribute("class")).toContain("disabled");
+    const otherDelete = screen.getByRole("button", { name: "Delete configuration tier-2" });
+    expect(otherDelete.getAttribute("class")).not.toContain("disabled");
+    namedDeleteState.isPending = false;
+    namedDeleteState.variables = undefined;
+  });
+
+  it("calls deleteConfig.mutate on remove icon click", async () => {
+    const user = userEvent.setup();
+    (useS3IntelligentTieringConfigs as any).mockReturnValue(mkQuery(TIERING_DATA));
+    const mockMutate = vi.fn();
+    (useS3DeleteIntelligentTieringConfig as any).mockReturnValue({ mutate: mockMutate, isPending: false, variables: undefined });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Tiering" }));
+    await user.click(screen.getByRole("button", { name: "Delete configuration tier-1" }));
+    expect(mockMutate).toHaveBeenCalledWith("tier-1");
+  });
+
+  it("shows error alert when put fails", async () => {
+    (useS3PutIntelligentTieringConfig as any).mockReturnValue({
+      mutate: vi.fn(), isPending: false, isError: true, error: new Error("Failed to save configuration"),
+    });
+    const user = userEvent.setup();
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Tiering" }));
+    expect(screen.getByText(/Failed to save configuration/i)).toBeTruthy();
+  });
+});
+
+describe("S3BucketConfig — Analytics tab", () => {
+  it("switches to Analytics tab and lists configurations", async () => {
+    const user = userEvent.setup();
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Analytics" }));
+    expect(screen.getByText("Analytics Configurations")).toBeTruthy();
+    expect(screen.getByText("analytics-1")).toBeTruthy();
+  });
+
+  it("creates a configuration via Add modal", async () => {
+    const user = userEvent.setup();
+    const mockMutate = vi.fn();
+    (useS3PutAnalyticsConfig as any).mockReturnValue({ mutate: mockMutate, isPending: false, isError: false, error: null });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Analytics" }));
+    await user.click(screen.getByRole("button", { name: /Add configuration/i }));
+    expect(screen.getByText("Add Analytics Configurations")).toBeTruthy();
+    await user.type(screen.getByPlaceholderText("my-config"), "a-1");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    expect(mockMutate).toHaveBeenCalledWith(
+      { id: "a-1", configuration: {} },
+      expect.anything(),
+    );
+  });
+});
+
+describe("S3BucketConfig — Inventory tab", () => {
+  it("switches to Inventory tab and shows empty message", async () => {
+    const user = userEvent.setup();
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Inventory" }));
+    expect(screen.getByText("Inventory Configurations")).toBeTruthy();
+    expect(screen.getByText(/No inventory configurations configured/i)).toBeTruthy();
+  });
+
+  it("creates a configuration via Add modal", async () => {
+    const user = userEvent.setup();
+    const mockMutate = vi.fn();
+    (useS3PutInventoryConfig as any).mockReturnValue({ mutate: mockMutate, isPending: false, isError: false, error: null });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Inventory" }));
+    await user.click(screen.getByRole("button", { name: /Add configuration/i }));
+    expect(screen.getByText("Add Inventory Configurations")).toBeTruthy();
+    await user.type(screen.getByPlaceholderText("my-config"), "inv-1");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    expect(mockMutate).toHaveBeenCalledWith(
+      { id: "inv-1", configuration: {} },
+      expect.anything(),
+    );
+  });
+});
+
+// ─── Restore tab ──────────────────────────────────────────────────
+
+describe("S3BucketConfig — Restore tab", () => {
+  it("switches to Restore tab", async () => {
+    const user = userEvent.setup();
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Restore" }));
+    expect(screen.getByText("Restore Object")).toBeTruthy();
+  });
+
+  it("restore button is disabled without key and enabled after typing", async () => {
+    const user = userEvent.setup();
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Restore" }));
+    const restoreBtn = screen.getByRole("button", { name: /Restore object/i });
+    expect(restoreBtn.hasAttribute("disabled")).toBe(true);
+    await user.type(screen.getByPlaceholderText("archives/2024/report.zip"), "file.zip");
+    expect(restoreBtn.hasAttribute("disabled")).toBe(false);
+  });
+
+  it("calls restore.mutate with key, days and tier", async () => {
+    const user = userEvent.setup();
+    const mockMutate = vi.fn((...args: any[]) => {
+      const onSuccess = args[1]?.onSuccess;
+      if (onSuccess) onSuccess();
+    });
+    (useS3RestoreObject as any).mockReturnValue({
+      mutate: mockMutate, isPending: false, isError: false, isSuccess: true, error: null,
+    });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Restore" }));
+    await user.type(screen.getByPlaceholderText("archives/2024/report.zip"), "file.zip");
+    await user.type(screen.getByPlaceholderText("7"), "5");
+    await user.click(screen.getByRole("button", { name: /Restore object/i }));
+    expect(mockMutate).toHaveBeenCalledWith(
+      { key: "file.zip", days: 5, glacierJobParameters: { Tier: "Standard" } },
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    );
+    expect(screen.getByText(/Restore request submitted/)).toBeTruthy();
+    expect(screen.queryByDisplayValue("file.zip")).toBeNull();
+  });
+
+  it("sends undefined days when days input is empty", async () => {
+    const user = userEvent.setup();
+    const mockMutate = vi.fn();
+    (useS3RestoreObject as any).mockReturnValue({ mutate: mockMutate, isPending: false, isError: false, isSuccess: false, error: null });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Restore" }));
+    await user.type(screen.getByPlaceholderText("archives/2024/report.zip"), "file.zip");
+    await user.click(screen.getByRole("button", { name: /Restore object/i }));
+    expect(mockMutate).toHaveBeenCalledWith(
+      { key: "file.zip", days: undefined, glacierJobParameters: { Tier: "Standard" } },
+      expect.anything(),
+    );
+  });
+
+  it("shows error alert when restore fails", async () => {
+    (useS3RestoreObject as any).mockReturnValue({
+      mutate: vi.fn(), isPending: false, isError: true, isSuccess: false, error: new Error("Failed to restore object"),
+    });
+    const user = userEvent.setup();
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Restore" }));
+    expect(screen.getByText(/Failed to restore object/i)).toBeTruthy();
+  });
+});
+
+// ─── Messageless-error fallback arms ─────────────────────────────
+
+describe("S3BucketConfig — error fallbacks without message", () => {
+  it("ownership update/delete errors without message show fallback text", async () => {
+    (useS3BucketOwnershipControls as any).mockReturnValue(mkQuery(OWNERSHIP_DATA));
+    (useS3UpdateBucketOwnershipControls as any).mockReturnValue({
+      mutate: vi.fn(), isPending: false, isError: true, error: {},
+    });
+    (useS3DeleteBucketOwnershipControls as any).mockReturnValue({
+      mutate: vi.fn(), isPending: false, isError: true, error: {},
+    });
+    const user = userEvent.setup();
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Ownership" }));
+    expect(screen.getAllByText(/Failed to update ownership controls/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Failed to delete ownership controls/i).length).toBeGreaterThan(0);
+  });
+
+  it("payments error without message shows fallback text", async () => {
+    (useS3BucketRequestPayment as any).mockReturnValue(mkQuery(PAYMENTS_DATA));
+    (useS3UpdateBucketRequestPayment as any).mockReturnValue({
+      mutate: vi.fn(), isPending: false, isError: true, error: {},
+    });
+    const user = userEvent.setup();
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Payments" }));
+    expect(screen.getAllByText(/Failed to update request payment/i).length).toBeGreaterThan(0);
+  });
+
+  it("replication update/delete errors without message show fallback text", async () => {
+    (useS3BucketReplication as any).mockReturnValue(mkQuery(REPLICATION_DATA));
+    (useS3UpdateBucketReplication as any).mockReturnValue({
+      mutate: vi.fn(), isPending: false, isError: true, error: {},
+    });
+    (useS3DeleteBucketReplication as any).mockReturnValue({
+      mutate: vi.fn(), isPending: false, isError: true, error: {},
+    });
+    const user = userEvent.setup();
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Replication" }));
+    expect(screen.getAllByText(/Failed to update replication/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Failed to delete replication/i).length).toBeGreaterThan(0);
+  });
+
+  it("replication with configured:false shows not-configured status", async () => {
+    (useS3BucketReplication as any).mockReturnValue(
+      mkQuery({ bucket: "my-bucket", replicationConfiguration: null, configured: false }),
+    );
+    const user = userEvent.setup();
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Replication" }));
+    expect(screen.getByText(/No replication configuration/)).toBeTruthy();
+  });
+
+  it("replication configuration without Rules prefills empty rules array", async () => {
+    (useS3BucketReplication as any).mockReturnValue(
+      mkQuery({ bucket: "my-bucket", replicationConfiguration: { Role: "arn:aws:iam::2:role/x" }, configured: true }),
+    );
+    const user = userEvent.setup();
+    const mockMutate = vi.fn();
+    (useS3UpdateBucketReplication as any).mockReturnValue({ mutate: mockMutate, isPending: false, isError: false, error: null });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Replication" }));
+    await waitFor(() => expect(screen.getByDisplayValue("arn:aws:iam::2:role/x")).toBeTruthy());
+    await user.click(screen.getByRole("button", { name: /Save changes/i }));
+    expect(mockMutate).toHaveBeenCalledWith({ role: "arn:aws:iam::2:role/x", rules: [] });
+  });
+
+  it("accelerate error without message shows fallback text", async () => {
+    (useS3BucketAccelerate as any).mockReturnValue(mkQuery(ACCELERATE_DATA));
+    (useS3UpdateBucketAccelerate as any).mockReturnValue({
+      mutate: vi.fn(), isPending: false, isError: true, error: {},
+    });
+    const user = userEvent.setup();
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Accelerate" }));
+    expect(screen.getAllByText(/Failed to update acceleration/i).length).toBeGreaterThan(0);
+  });
+
+  it("named-config put error without message shows fallback text", async () => {
+    (useS3IntelligentTieringConfigs as any).mockReturnValue(mkQuery(TIERING_DATA));
+    (useS3PutIntelligentTieringConfig as any).mockReturnValue({
+      mutate: vi.fn(), isPending: false, isError: true, error: {},
+    });
+    const user = userEvent.setup();
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Tiering" }));
+    expect(screen.getAllByText(/Failed to save configuration/i).length).toBeGreaterThan(0);
+  });
+
+  it("restore error without message shows fallback text", async () => {
+    (useS3RestoreObject as any).mockReturnValue({
+      mutate: vi.fn(), isPending: false, isError: true, isSuccess: false, error: {},
+    });
+    const user = userEvent.setup();
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Restore" }));
+    expect(screen.getAllByText(/Failed to restore object/i).length).toBeGreaterThan(0);
+  });
+});
+
+describe("S3BucketConfig — new tab select/input interactions", () => {
+  it("changes Ownership Select and saves ObjectWriter", async () => {
+    const user = userEvent.setup();
+    const mockMutate = vi.fn();
+    (useS3BucketOwnershipControls as any).mockReturnValue(mkQuery(OWNERSHIP_DATA));
+    (useS3UpdateBucketOwnershipControls as any).mockReturnValue({ mutate: mockMutate, isPending: false, isError: false, error: null });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Ownership" }));
+    await user.click(screen.getByRole("button", { name: /BucketOwnerEnforced/i }));
+    await user.click(screen.getByRole("option", { name: /ObjectWriter/i }));
+    await user.click(screen.getByRole("button", { name: /Save changes/i }));
+    expect(mockMutate).toHaveBeenCalledWith([{ ObjectOwnership: "ObjectWriter" }]);
+  });
+
+  it("changes Payments Select and saves Requester", async () => {
+    const user = userEvent.setup();
+    const mockMutate = vi.fn();
+    (useS3BucketRequestPayment as any).mockReturnValue(mkQuery(PAYMENTS_DATA));
+    (useS3UpdateBucketRequestPayment as any).mockReturnValue({ mutate: mockMutate, isPending: false, isError: false, error: null });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Payments" }));
+    await user.click(screen.getByRole("button", { name: /BucketOwner/i }));
+    await user.click(screen.getByRole("option", { name: /Requester/i }));
+    await user.click(screen.getByRole("button", { name: /Save changes/i }));
+    expect(mockMutate).toHaveBeenCalledWith("Requester");
+  });
+
+  it("edits the replication role input and saves the typed role", async () => {
+    const user = userEvent.setup();
+    const mockMutate = vi.fn();
+    (useS3BucketReplication as any).mockReturnValue(
+      mkQuery({ bucket: "my-bucket", replicationConfiguration: null, configured: false }),
+    );
+    (useS3UpdateBucketReplication as any).mockReturnValue({ mutate: mockMutate, isPending: false, isError: false, error: null });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Replication" }));
+    const input = screen.getByPlaceholderText("arn:aws:iam::123456789012:role/replication");
+    await user.type(input, "arn:aws:iam::9:role/z");
+    await user.click(screen.getByRole("button", { name: /Save changes/i }));
+    expect(mockMutate).toHaveBeenCalledWith({ role: "arn:aws:iam::9:role/z", rules: [] });
+  });
+
+  it("changes Accelerate Select and saves Suspended", async () => {
+    const user = userEvent.setup();
+    const mockMutate = vi.fn();
+    (useS3BucketAccelerate as any).mockReturnValue(mkQuery(ACCELERATE_DATA));
+    (useS3UpdateBucketAccelerate as any).mockReturnValue({ mutate: mockMutate, isPending: false, isError: false, error: null });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Accelerate" }));
+    await user.click(screen.getByRole("button", { name: /Enabled/i }));
+    await user.click(screen.getByRole("option", { name: /Suspended/i }));
+    await user.click(screen.getByRole("button", { name: /Save changes/i }));
+    expect(mockMutate).toHaveBeenCalledWith("Suspended");
+  });
+
+  it("changes Restore tier Select and submits Bulk tier", async () => {
+    const user = userEvent.setup();
+    const mockMutate = vi.fn();
+    (useS3RestoreObject as any).mockReturnValue({ mutate: mockMutate, isPending: false, isError: false, isSuccess: false, error: null });
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Restore" }));
+    await user.type(screen.getByPlaceholderText("archives/2024/report.zip"), "f.zip");
+    await user.click(screen.getByRole("button", { name: /Standard/i }));
+    await user.click(screen.getByRole("option", { name: /Bulk/i }));
+    await user.click(screen.getByRole("button", { name: /Restore object/i }));
+    expect(mockMutate).toHaveBeenCalledWith(
+      { key: "f.zip", days: undefined, glacierJobParameters: { Tier: "Bulk" } },
+      expect.anything(),
+    );
+  });
+
+  it("cancels the Add configuration modal via Escape and Cancel", async () => {
+    const user = userEvent.setup();
+    (useS3IntelligentTieringConfigs as any).mockReturnValue(mkQuery(TIERING_DATA));
+    render(<S3BucketConfig bucket="my-bucket" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole("button", { name: "Tiering" }));
+    await user.click(screen.getByRole("button", { name: /Add configuration/i }));
+    await waitFor(() => expect(screen.getByText("Add Intelligent-Tiering Configurations")).toBeTruthy());
+    // Escape to dismiss (fire on the awsui_dialog element like other tabs)
+    document.querySelectorAll('[class*="awsui_dialog"]').forEach((d) => {
+      fireEvent.keyDown(d as HTMLElement, { keyCode: 27 });
+    });
+    await waitFor(() => expect(dialogOf("Add Intelligent-Tiering Configurations").className).toContain("hidden"));
+    // Reopen and click Cancel
+    await user.click(screen.getByRole("button", { name: /Add configuration/i }));
+    await waitFor(() => expect(screen.getByText("Add Intelligent-Tiering Configurations")).toBeTruthy());
+    await user.click(within(dialogOf("Add Intelligent-Tiering Configurations")).getByRole("button", { name: /^Cancel$/i }));
+    await waitFor(() => expect(dialogOf("Add Intelligent-Tiering Configurations").className).toContain("hidden"));
+  });
+});

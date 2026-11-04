@@ -42,7 +42,42 @@ vi.mock("@aws-sdk/client-s3", () => ({
   GetBucketMetricsConfigurationCommand: vi.fn(function(args) { return args; }),
   ListBucketMetricsConfigurationsCommand: vi.fn(function(args) { return args; }),
   DeleteBucketMetricsConfigurationCommand: vi.fn(function(args) { return args; }),
+  GetBucketAccelerateConfigurationCommand: vi.fn(function(args) { return args; }),
+  PutBucketAccelerateConfigurationCommand: vi.fn(function(args) { return args; }),
+  GetBucketOwnershipControlsCommand: vi.fn(function(args) { return args; }),
+  PutBucketOwnershipControlsCommand: vi.fn(function(args) { return args; }),
+  DeleteBucketOwnershipControlsCommand: vi.fn(function(args) { return args; }),
+  GetBucketRequestPaymentCommand: vi.fn(function(args) { return args; }),
+  PutBucketRequestPaymentCommand: vi.fn(function(args) { return args; }),
+  GetBucketReplicationCommand: vi.fn(function(args) { return args; }),
+  PutBucketReplicationCommand: vi.fn(function(args) { return args; }),
+  DeleteBucketReplicationCommand: vi.fn(function(args) { return args; }),
+  ListBucketIntelligentTieringConfigurationsCommand: vi.fn(function(args) { return args; }),
+  GetBucketIntelligentTieringConfigurationCommand: vi.fn(function(args) { return args; }),
+  PutBucketIntelligentTieringConfigurationCommand: vi.fn(function(args) { return args; }),
+  DeleteBucketIntelligentTieringConfigurationCommand: vi.fn(function(args) { return args; }),
+  ListBucketAnalyticsConfigurationsCommand: vi.fn(function(args) { return args; }),
+  GetBucketAnalyticsConfigurationCommand: vi.fn(function(args) { return args; }),
+  PutBucketAnalyticsConfigurationCommand: vi.fn(function(args) { return args; }),
+  DeleteBucketAnalyticsConfigurationCommand: vi.fn(function(args) { return args; }),
+  ListBucketInventoryConfigurationsCommand: vi.fn(function(args) { return args; }),
+  GetBucketInventoryConfigurationCommand: vi.fn(function(args) { return args; }),
+  PutBucketInventoryConfigurationCommand: vi.fn(function(args) { return args; }),
+  DeleteBucketInventoryConfigurationCommand: vi.fn(function(args) { return args; }),
+  RestoreObjectCommand: vi.fn(function(args) { return args; }),
 }));
+
+const noSuchOwnershipControls = vi.hoisted(() => {
+  const err = new Error("No ownership controls");
+  err.name = "OwnershipControlsNotFoundError";
+  return err;
+});
+
+const noSuchReplication = vi.hoisted(() => {
+  const err = new Error("No replication");
+  err.name = "ReplicationConfigurationNotFoundError";
+  return err;
+});
 
 import router from "./s3-config";
 
@@ -1018,5 +1053,299 @@ describe("Bucket Metrics Configuration", () => {
     const res = await post("/buckets/my-bucket/metrics", { id: "cfg" });
     expect(res.status).toBe(201);
     expect(mockSend.mock.calls[0][0].MetricsConfiguration).toEqual({});
+  });
+
+  describe("Accelerate Configuration", () => {
+    it("GET /buckets/:name/accelerate — returns status", async () => {
+      mockSend.mockResolvedValueOnce({ Status: "Enabled" });
+      const res = await get("/buckets/my-bucket/accelerate");
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ bucket: "my-bucket", status: "Enabled" });
+    });
+
+    it("GET /buckets/:name/accelerate — defaults to Suspended", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/buckets/my-bucket/accelerate");
+      expect(await res.json()).toEqual({ bucket: "my-bucket", status: "Suspended" });
+    });
+
+    it("PUT /buckets/:name/accelerate — enables", async () => {
+      const res = await put("/buckets/my-bucket/accelerate", { status: "Enabled" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+      expect(body.status).toBe("Enabled");
+      expect(mockSend.mock.calls[0][0].AccelerateConfiguration.Status).toBe("Enabled");
+    });
+
+    it("PUT /buckets/:name/accelerate — 400 on invalid status", async () => {
+      const res = await put("/buckets/my-bucket/accelerate", { status: "Invalid" });
+      expect(res.status).toBe(400);
+    });
+
+    it("PUT /buckets/:name/accelerate — 400 on missing status", async () => {
+      const res = await put("/buckets/my-bucket/accelerate", {});
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe("Ownership Controls", () => {
+    it("GET /buckets/:name/ownership-controls — returns rules", async () => {
+      mockSend.mockResolvedValueOnce({
+        OwnershipControls: { Rules: [{ ObjectOwnership: "BucketOwnerEnforced" }] },
+      });
+      const res = await get("/buckets/my-bucket/ownership-controls");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.configured).toBe(true);
+      expect(body.rules).toHaveLength(1);
+    });
+
+    it("GET /buckets/:name/ownership-controls — empty rules when sparse", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/buckets/my-bucket/ownership-controls");
+      const body = await res.json();
+      expect(body.configured).toBe(true);
+      expect(body.rules).toEqual([]);
+    });
+
+    it("GET /buckets/:name/ownership-controls — returns configured:false on OwnershipControlsNotFoundError", async () => {
+      mockSend.mockRejectedValueOnce(noSuchOwnershipControls);
+      const res = await get("/buckets/my-bucket/ownership-controls");
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ bucket: "my-bucket", rules: [], configured: false });
+    });
+
+    it("GET /buckets/:name/ownership-controls — returns configured:false on 404 metadata", async () => {
+      mockSend.mockRejectedValueOnce(Object.assign(new Error("nope"), { $metadata: { httpStatusCode: 404 } }));
+      const res = await get("/buckets/my-bucket/ownership-controls");
+      expect(res.status).toBe(200);
+      expect((await res.json()).configured).toBe(false);
+    });
+
+    it("GET /buckets/:name/ownership-controls — rethrows non-404 errors", async () => {
+      mockSend.mockRejectedValueOnce(Object.assign(new Error("boom"), { $metadata: { httpStatusCode: 500 } }));
+      const res = await get("/buckets/my-bucket/ownership-controls");
+      expect(res.status).toBe(500);
+    });
+
+    it("PUT /buckets/:name/ownership-controls — updates rules", async () => {
+      const res = await put("/buckets/my-bucket/ownership-controls", { rules: [{ ObjectOwnership: "BucketOwnerPreferred" }] });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+      expect(mockSend.mock.calls[0][0].OwnershipControls.Rules).toEqual([{ ObjectOwnership: "BucketOwnerPreferred" }]);
+    });
+
+    it("PUT /buckets/:name/ownership-controls — 400 on missing rules", async () => {
+      const res = await put("/buckets/my-bucket/ownership-controls", {});
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE /buckets/:name/ownership-controls — deletes", async () => {
+      const res = await del("/buckets/my-bucket/ownership-controls");
+      expect(res.status).toBe(200);
+      expect((await res.json()).deleted).toBe(true);
+    });
+  });
+
+  describe("Request Payment", () => {
+    it("GET /buckets/:name/request-payment — returns payer", async () => {
+      mockSend.mockResolvedValueOnce({ Payer: "Requester" });
+      const res = await get("/buckets/my-bucket/request-payment");
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ bucket: "my-bucket", payer: "Requester" });
+    });
+
+    it("GET /buckets/:name/request-payment — defaults to BucketOwner", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/buckets/my-bucket/request-payment");
+      expect(await res.json()).toEqual({ bucket: "my-bucket", payer: "BucketOwner" });
+    });
+
+    it("PUT /buckets/:name/request-payment — sets payer", async () => {
+      const res = await put("/buckets/my-bucket/request-payment", { payer: "Requester" });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+      expect(mockSend.mock.calls[0][0].RequestPaymentConfiguration.Payer).toBe("Requester");
+    });
+
+    it("PUT /buckets/:name/request-payment — 400 on invalid payer", async () => {
+      const res = await put("/buckets/my-bucket/request-payment", { payer: "Invalid" });
+      expect(res.status).toBe(400);
+    });
+
+    it("PUT /buckets/:name/request-payment — 400 on missing payer", async () => {
+      const res = await put("/buckets/my-bucket/request-payment", {});
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe("Replication", () => {
+    it("GET /buckets/:name/replication — returns configuration", async () => {
+      mockSend.mockResolvedValueOnce({ ReplicationConfiguration: { Role: "arn:aws:iam::1:role/r", Rules: [] } });
+      const res = await get("/buckets/my-bucket/replication");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.configured).toBe(true);
+      expect(body.replicationConfiguration.Role).toBe("arn:aws:iam::1:role/r");
+    });
+
+    it("GET /buckets/:name/replication — null configuration when sparse", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get("/buckets/my-bucket/replication");
+      const body = await res.json();
+      expect(body.configured).toBe(true);
+      expect(body.replicationConfiguration).toBe(null);
+    });
+
+    it("GET /buckets/:name/replication — returns configured:false on error name", async () => {
+      mockSend.mockRejectedValueOnce(noSuchReplication);
+      const res = await get("/buckets/my-bucket/replication");
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ bucket: "my-bucket", replicationConfiguration: null, configured: false });
+    });
+
+    it("GET /buckets/:name/replication — returns configured:false on 404 metadata", async () => {
+      mockSend.mockRejectedValueOnce(Object.assign(new Error("nope"), { $metadata: { httpStatusCode: 404 } }));
+      const res = await get("/buckets/my-bucket/replication");
+      expect(res.status).toBe(200);
+      expect((await res.json()).configured).toBe(false);
+    });
+
+    it("GET /buckets/:name/replication — rethrows non-404 errors", async () => {
+      mockSend.mockRejectedValueOnce(Object.assign(new Error("boom"), { $metadata: { httpStatusCode: 500 } }));
+      const res = await get("/buckets/my-bucket/replication");
+      expect(res.status).toBe(500);
+    });
+
+    it("PUT /buckets/:name/replication — updates configuration", async () => {
+      const res = await put("/buckets/my-bucket/replication", { role: "arn:aws:iam::1:role/r", rules: [{ Status: "Enabled" }] });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+      expect(mockSend.mock.calls[0][0].ReplicationConfiguration.Role).toBe("arn:aws:iam::1:role/r");
+    });
+
+    it("PUT /buckets/:name/replication — 400 on missing role", async () => {
+      const res = await put("/buckets/my-bucket/replication", { rules: [] });
+      expect(res.status).toBe(400);
+    });
+
+    it("PUT /buckets/:name/replication — 400 on missing rules", async () => {
+      const res = await put("/buckets/my-bucket/replication", { role: "arn:aws:iam::1:role/r" });
+      expect(res.status).toBe(400);
+    });
+
+    it("DELETE /buckets/:name/replication — deletes", async () => {
+      const res = await del("/buckets/my-bucket/replication");
+      expect(res.status).toBe(200);
+      expect((await res.json()).deleted).toBe(true);
+    });
+  });
+
+  describe.each([
+    ["intelligent-tiering", "IntelligentTieringConfiguration", "IntelligentTieringConfigurationList", "IntelligentTieringConfiguration"],
+    ["analytics", "AnalyticsConfiguration", "AnalyticsConfigurationList", "AnalyticsConfiguration"],
+    ["inventory", "InventoryConfiguration", "InventoryConfigurationList", "InventoryConfiguration"],
+  ])("%s configurations", (sub, cmdPrefix, listKey, configKey) => {
+    it("GET list — returns configurations", async () => {
+      mockSend.mockResolvedValueOnce({ [listKey]: [{ Id: "cfg-1" }], IsTruncated: false });
+      const res = await get(`/buckets/my-bucket/${sub}`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(1);
+      expect(body.configurations).toEqual([{ Id: "cfg-1" }]);
+      expect(body.isTruncated).toBe(false);
+    });
+
+    it("GET list — empty defaults", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get(`/buckets/my-bucket/${sub}`);
+      const body = await res.json();
+      expect(body.configurations).toEqual([]);
+      expect(body.total).toBe(0);
+    });
+
+    it("GET by id — returns configuration", async () => {
+      mockSend.mockResolvedValueOnce({ [configKey]: { Id: "cfg-1" } });
+      const res = await get(`/buckets/my-bucket/${sub}/cfg-1`);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ configuration: { Id: "cfg-1" } });
+    });
+
+    it("GET by id — null when sparse", async () => {
+      mockSend.mockResolvedValueOnce({});
+      const res = await get(`/buckets/my-bucket/${sub}/cfg-1`);
+      expect(await res.json()).toEqual({ configuration: null });
+    });
+
+    it("POST — creates with configuration", async () => {
+      const res = await post(`/buckets/my-bucket/${sub}`, { id: "cfg-2", configuration: { Id: "cfg-2" } });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.created).toBe(true);
+      expect(mockSend.mock.calls[0][0][cmdPrefix]).toEqual({ Id: "cfg-2" });
+    });
+
+    it("POST — defaults configuration when absent", async () => {
+      const res = await post(`/buckets/my-bucket/${sub}`, { id: "cfg-3" });
+      expect(res.status).toBe(201);
+      expect(mockSend.mock.calls[0][0][cmdPrefix]).toEqual({});
+    });
+
+    it("PUT by id — defaults configuration when absent", async () => {
+      const res = await put(`/buckets/my-bucket/${sub}/cfg-1`, {});
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0][cmdPrefix]).toEqual({});
+    });
+
+    it("POST — 400 on missing id", async () => {
+      const res = await post(`/buckets/my-bucket/${sub}`, { configuration: {} });
+      expect(res.status).toBe(400);
+    });
+
+    it("PUT by id — updates configuration", async () => {
+      const res = await put(`/buckets/my-bucket/${sub}/cfg-1`, { configuration: { Id: "cfg-1", Status: "Enabled" } });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.updated).toBe(true);
+      expect(mockSend.mock.calls[0][0].Id).toBe("cfg-1");
+    });
+
+    it("DELETE by id — deletes", async () => {
+      const res = await del(`/buckets/my-bucket/${sub}/cfg-1`);
+      expect(res.status).toBe(200);
+      expect((await res.json()).deleted).toBe(true);
+    });
+  });
+
+  describe("Restore Object", () => {
+    it("POST /buckets/:name/objects/:key/restore — restores with days and tier", async () => {
+      const res = await post("/buckets/my-bucket/objects/file.txt/restore", {
+        days: 7,
+        glacierJobParameters: { Tier: "Standard" },
+        versionId: "v-1",
+        type: "SELECT",
+        description: "restore request",
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.restoring).toBe(true);
+      expect(body.key).toBe("file.txt");
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.RestoreRequest.Days).toBe(7);
+      expect(cmd.RestoreRequest.GlacierJobParameters.Tier).toBe("Standard");
+      expect(cmd.RestoreRequest.Type).toBe("SELECT");
+      expect(cmd.RestoreRequest.Description).toBe("restore request");
+      expect(cmd.VersionId).toBe("v-1");
+    });
+
+    it("POST /buckets/:name/objects/:key/restore — empty restore request when no fields", async () => {
+      const res = await post("/buckets/my-bucket/objects/file.txt/restore", {});
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls[0][0].RestoreRequest).toEqual({});
+    });
   });
 });

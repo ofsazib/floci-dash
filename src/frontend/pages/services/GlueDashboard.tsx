@@ -314,6 +314,26 @@ import {
   useGluePartitions,
   useCreateGluePartitions,
   useDeleteGluePartition,
+  useGlueFamily,
+  useCreateGlueFamily,
+  useDeleteGlueFamily,
+  useStartGlueCrawler,
+  useStopGlueCrawler,
+  useGlueCrawlerMetrics,
+  useStartGlueCrawlerSchedule,
+  useStopGlueCrawlerSchedule,
+  useUpdateGlueCrawlerSchedule,
+  useStartGlueJobRun,
+  useStartGlueTrigger,
+  useStopGlueTrigger,
+  useStartGlueWorkflowRun,
+  useGlueResourcePolicy,
+  usePutGlueResourcePolicy,
+  useDeleteGlueResourcePolicy,
+  useGlueDataCatalogEncryptionSettings,
+  usePutGlueDataCatalogEncryptionSettings,
+  useGlueDataQualityRulesets,
+  useSearchGlueTables,
 } from "../../hooks/useGlue";
 import {
   useFirehoseStreams,
@@ -714,6 +734,13 @@ export function GlueDashboard() {
     { id: "udfs", label: "UDFs", content: <UDFsTab /> },
     { id: "partitions", label: "Partitions", content: <PartitionsTab /> },
     { id: "columnStats", label: "Column Stats", content: <ColumnStatsTab /> },
+    { id: "crawlers", label: "Crawlers", content: <CrawlersTab /> },
+    { id: "jobs", label: "Jobs", content: <JobsTab /> },
+    { id: "triggers", label: "Triggers", content: <TriggersTab /> },
+    { id: "workflows", label: "Workflows", content: <WorkflowsTab /> },
+    { id: "connections", label: "Connections", content: <ConnectionsTab /> },
+    { id: "classifiers", label: "Classifiers", content: <ClassifiersTab /> },
+    { id: "etlOps", label: "ETL Ops", content: <EtlOpsTab /> },
   ];
 
   return <Tabs tabs={tabs} activeTabId={activeTab} onChange={({ detail }) => setActiveTab(detail.activeTabId)} />;
@@ -1389,3 +1416,532 @@ function ColumnStatsTab() {
 //  Firehose
 // ────────────────────────────────────────────────────────
 
+
+// ────────────────────────────────────────────────────────
+//  Glue — ETL tabs (Crawlers / Jobs / Triggers / Workflows /
+//  Connections / Classifiers) and ETL Ops
+// ────────────────────────────────────────────────────────
+
+function glueEtlName(item: any): string {
+  return typeof item === "string" ? item : item.Name || "—";
+}
+
+function glueEtlField(item: any, key: string, fallback = "—"): string {
+  const v = key.split(".").reduce((acc: any, k: string) => (acc == null ? acc : acc[k]), item);
+  return v == null || v === "" ? fallback : String(v);
+}
+
+interface GlueEtlFamilyProps {
+  title: string;
+  family: string;
+  resourceName: string;
+  fields: Array<{ label: string; key: string; placeholder?: string }>;
+  jsonKey: string;
+  columns: Array<{ id: string; header: string; cell: (item: any) => any }>;
+  renderActions?: (name: string) => React.ReactNode;
+}
+
+function GlueEtlFamilyTab({ title, family, resourceName, fields, jsonKey, columns, renderActions }: GlueEtlFamilyProps) {
+  const { showToast } = useToast();
+  const { data, isLoading } = useGlueFamily(family);
+  const createItem = useCreateGlueFamily(family);
+  const deleteItem = useDeleteGlueFamily(family);
+  const [showAdd, setShowAdd] = useState(false);
+  const [name, setName] = useState("");
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+  const [jsonText, setJsonText] = useState("{}");
+  const [parseError, setParseError] = useState("");
+
+  const handleCreate = () => {
+    let parsed: any;
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch {
+      setParseError("Configuration must be valid JSON");
+      return;
+    }
+    setParseError("");
+    createItem
+      .mutateAsync(buildCreateBody({ name, fieldValues, parsed, jsonKey }))
+      .then(() => {
+        setShowAdd(false);
+        setName("");
+        setFieldValues({});
+        setJsonText("{}");
+        showToast("success", `${resourceName} created`);
+      })
+      .catch((e: Error) => showToast("error", e.message || `Failed to create ${resourceName.toLowerCase()}`));
+  };
+
+  const items = (data?.items || []).map((item: any) => ({
+    name: glueEtlName(item),
+    raw: item,
+  }));
+
+  return (
+    <SpaceBetween size="m">
+      {createItem.isError && (
+        <Alert type="error" dismissible>
+          {(createItem.error! as Error).message || `Failed to create ${resourceName.toLowerCase()}`}
+        </Alert>
+      )}
+      <ResourceTable
+        resourceName={resourceName}
+        headerTitle={title}
+        headerCounter={data?.total}
+        items={items}
+        loading={isLoading}
+        emptyMessage={`No ${resourceName.toLowerCase()}s — use Create to add one`}
+        columns={[
+          { id: "name", header: "Name", cell: (i: any) => i.name, isRowHeader: true },
+          ...columns.map((c) => ({ ...c, cell: (i: any) => c.cell(i.raw) })),
+          ...(renderActions
+            ? [
+                {
+                  id: "actions",
+                  header: "Actions",
+                  cell: (i: any) => renderActions(i.name),
+                },
+              ]
+            : []),
+          {
+            id: "delete",
+            header: "",
+            cell: (i: any) => (
+              <DeleteButton
+                itemName={i.name}
+                resourceType={resourceName.toLowerCase()}
+                loading={deleteItem.isPending && deleteItem.variables === i.name}
+                onDelete={() =>
+                  deleteItem.mutateAsync(i.name).then(() => showToast("success", `${resourceName} deleted`))
+                }
+              />
+            ),
+          },
+        ]}
+        filterEnabled
+        filterPlaceholder={`Find ${resourceName.toLowerCase()}s`}
+        filterFunction={(i: any, s: string) => i.name.toLowerCase().includes(s.toLowerCase())}
+        onCreate={() => setShowAdd(true)}
+      />
+      <Modal
+        visible={showAdd}
+        onDismiss={() => setShowAdd(false)}
+        header={`Create ${resourceName}`}
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" onClick={() => setShowAdd(false)}>Cancel</Button>
+              <Button variant="primary" loading={createItem.isPending} disabled={!name} onClick={handleCreate}>
+                Create
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Form>
+          {parseError && <Alert type="error">Invalid JSON in configuration</Alert>}
+          <FormField label="Name">
+            <Input value={name} onChange={({ detail }) => setName(detail.value)} placeholder={`my-${family.replace(/s$/, "")}`} />
+          </FormField>
+          {fields.map((f) => (
+            <FormField key={f.key} label={f.label}>
+              <Input
+                value={fieldValues[f.key] || ""}
+                onChange={({ detail }) => setFieldValues((prev) => ({ ...prev, [f.key]: detail.value }))}
+                placeholder={f.placeholder}
+              />
+            </FormField>
+          ))}
+          <FormField label="Configuration JSON">
+            <Textarea value={jsonText} onChange={({ detail }) => setJsonText(detail.value)} rows={6} />
+          </FormField>
+        </Form>
+      </Modal>
+    </SpaceBetween>
+  );
+}
+
+function buildCreateBody({ name, fieldValues, parsed, jsonKey }: {
+  name: string;
+  fieldValues: Record<string, string>;
+  parsed: any;
+  jsonKey: string;
+}): any {
+  const body: any = { name };
+  Object.keys(fieldValues).forEach((k) => {
+    const v = fieldValues[k];
+    if (v) body[k] = v;
+  });
+  body[jsonKey] = parsed;
+  return body;
+}
+
+function metricRuntime(v: any): string {
+  if (v == null) return "—";
+  return `${Math.round(v)}s`;
+}
+
+function CrawlersTab() {
+  const { showToast } = useToast();
+  const startCrawler = useStartGlueCrawler();
+  const stopCrawler = useStopGlueCrawler();
+
+  const run = (m: typeof startCrawler, name: string, verb: string) =>
+    m.mutateAsync(name).then(() => showToast("success", `Crawler ${name} ${verb}`));
+
+  return (
+    <GlueEtlFamilyTab
+      title="Crawlers"
+      family="crawlers"
+      resourceName="Crawler"
+      fields={[{ label: "IAM Role ARN", key: "role", placeholder: "arn:aws:iam::123456789012:role/glue" }]}
+      jsonKey="crawler"
+      columns={[
+        { id: "state", header: "State", cell: (i: any) => glueEtlField(i, "State", "READY") },
+        { id: "role", header: "Role", cell: (i: any) => glueEtlField(i, "Role") },
+        { id: "schedule", header: "Schedule", cell: (i: any) => glueEtlField(i, "Schedule.ScheduleExpression", "—") },
+      ]}
+      renderActions={(name: string) => (
+        <SpaceBetween direction="horizontal" size="xs">
+          <Button
+            variant="normal"
+            loading={startCrawler.isPending && startCrawler.variables === name}
+            onClick={() => run(startCrawler, name, "started")}
+          >
+            Start
+          </Button>
+          <Button
+            variant="normal"
+            loading={stopCrawler.isPending && stopCrawler.variables === name}
+            onClick={() => run(stopCrawler, name, "stopped")}
+          >
+            Stop
+          </Button>
+        </SpaceBetween>
+      )}
+    />
+  );
+}
+
+function JobsTab() {
+  const { showToast } = useToast();
+  const startRun = useStartGlueJobRun();
+
+  return (
+    <GlueEtlFamilyTab
+      title="Jobs"
+      family="jobs"
+      resourceName="Job"
+      fields={[{ label: "IAM Role ARN", key: "role", placeholder: "arn:aws:iam::123456789012:role/glue" }]}
+      jsonKey="job"
+      columns={[
+        { id: "state", header: "State", cell: (i: any) => glueEtlField(i, "JobState", "—") },
+        { id: "role", header: "Role", cell: (i: any) => glueEtlField(i, "Role") },
+      ]}
+      renderActions={(name: string) => (
+        <Button
+          variant="normal"
+          loading={startRun.isPending && startRun.variables === name}
+          onClick={() =>
+            startRun
+              .mutateAsync(name)
+              .then((r: any) => showToast("success", `Job run started: ${r.runId}`))
+              .catch((e: Error) => showToast("error", e.message))
+          }
+        >
+          Run
+        </Button>
+      )}
+    />
+  );
+}
+
+function TriggersTab() {
+  const { showToast } = useToast();
+  const startTrigger = useStartGlueTrigger();
+  const stopTrigger = useStopGlueTrigger();
+
+  const run = (m: typeof startTrigger, name: string, verb: string) =>
+    m.mutateAsync(name).then(() => showToast("success", `Trigger ${name} ${verb}`));
+
+  return (
+    <GlueEtlFamilyTab
+      title="Triggers"
+      family="triggers"
+      resourceName="Trigger"
+      fields={[]}
+      jsonKey="trigger"
+      columns={[
+        { id: "state", header: "State", cell: (i: any) => glueEtlField(i, "State", "—") },
+        { id: "type", header: "Type", cell: (i: any) => glueEtlField(i, "Type") },
+      ]}
+      renderActions={(name: string) => (
+        <SpaceBetween direction="horizontal" size="xs">
+          <Button
+            variant="normal"
+            loading={startTrigger.isPending && startTrigger.variables === name}
+            onClick={() => run(startTrigger, name, "started")}
+          >
+            Start
+          </Button>
+          <Button
+            variant="normal"
+            loading={stopTrigger.isPending && stopTrigger.variables === name}
+            onClick={() => run(stopTrigger, name, "stopped")}
+          >
+            Stop
+          </Button>
+        </SpaceBetween>
+      )}
+    />
+  );
+}
+
+function WorkflowsTab() {
+  const { showToast } = useToast();
+  const startRun = useStartGlueWorkflowRun();
+
+  return (
+    <GlueEtlFamilyTab
+      title="Workflows"
+      family="workflows"
+      resourceName="Workflow"
+      fields={[]}
+      jsonKey="workflow"
+      columns={[
+        { id: "created", header: "Created", cell: (i: any) => glueEtlField(i, "CreatedOn", "—") },
+      ]}
+      renderActions={(name: string) => (
+        <Button
+          variant="normal"
+          loading={startRun.isPending && startRun.variables === name}
+          onClick={() =>
+            startRun
+              .mutateAsync(name)
+              .then((r: any) => showToast("success", `Workflow run started: ${r.runId}`))
+              .catch((e: Error) => showToast("error", e.message))
+          }
+        >
+          Run
+        </Button>
+      )}
+    />
+  );
+}
+
+function ConnectionsTab() {
+  return (
+    <GlueEtlFamilyTab
+      title="Connections"
+      family="connections"
+      resourceName="Connection"
+      fields={[{ label: "Connection Type", key: "connectionType", placeholder: "JDBC" }]}
+      jsonKey="connectionInput"
+      columns={[
+        { id: "type", header: "Type", cell: (i: any) => glueEtlField(i, "ConnectionType") },
+        { id: "engine", header: "Engine", cell: (i: any) => glueEtlField(i, "ConnectionProperties.KAFKA_CORE_CONNECT_BOOTSTRAP_SERVERS", "—") },
+      ]}
+    />
+  );
+}
+
+function ClassifiersTab() {
+  return (
+    <GlueEtlFamilyTab
+      title="Classifiers"
+      family="classifiers"
+      resourceName="Classifier"
+      fields={[{ label: "Classification", key: "classification", placeholder: "csv" }]}
+      jsonKey="classifier"
+      columns={[
+        { id: "classification", header: "Classification", cell: (i: any) => glueEtlField(i, "Classification", "—") },
+        { id: "type", header: "Type", cell: (i: any) => (i.GrokClassifier ? "GROK" : "CUSTOM") },
+      ]}
+    />
+  );
+}
+
+function EtlOpsTab() {
+  const { showToast } = useToast();
+  const { data: metricsData } = useGlueCrawlerMetrics();
+  const startSchedule = useStartGlueCrawlerSchedule();
+  const stopSchedule = useStopGlueCrawlerSchedule();
+  const updateSchedule = useUpdateGlueCrawlerSchedule();
+  const [scheduleName, setScheduleName] = useState("");
+  const [scheduleExpr, setScheduleExpr] = useState("");
+  const { data: policyData } = useGlueResourcePolicy();
+  const putPolicy = usePutGlueResourcePolicy();
+  const deletePolicy = useDeleteGlueResourcePolicy();
+  const [policyText, setPolicyText] = useState("{}");
+  const { data: encSettings } = useGlueDataCatalogEncryptionSettings();
+  const putEncSettings = usePutGlueDataCatalogEncryptionSettings();
+  const [encText, setEncText] = useState("{}");
+  const { data: rulesetsData } = useGlueDataQualityRulesets();
+  const [searchText, setSearchText] = useState("");
+  const [searchQuery, setSearchQuery] = useState<string | null>(null);
+  const { data: searchData, isLoading: searchLoading } = useSearchGlueTables(searchQuery);
+
+  return (
+    <SpaceBetween size="l">
+      <Container header={<Header variant="h3">Crawler Metrics</Header>}>
+        <ResourceTable
+          resourceName="Metric"
+          headerTitle="Crawler Metrics"
+          headerCounter={metricsData?.total}
+          items={(metricsData?.metrics || []).map((m: any) => ({
+            name: m.CrawlerName || "—",
+            lastRuntime: metricRuntime(m.LastRuntime),
+            median: metricRuntime(m.MedianRuntime),
+            failures: m.StillEstimatingFields,
+          }))}
+          loading={false}
+          emptyMessage="No crawler metrics"
+          columns={[
+            { id: "name", header: "Crawler", cell: (i: any) => i.name, isRowHeader: true },
+            { id: "lastRuntime", header: "Last Runtime", cell: (i: any) => i.lastRuntime },
+            { id: "median", header: "Median Runtime", cell: (i: any) => i.median },
+          ]}
+        />
+      </Container>
+
+      <Container header={<Header variant="h3">Crawler Schedule</Header>}>
+        <SpaceBetween size="s">
+          <SpaceBetween direction="horizontal" size="s">
+            <Input value={scheduleName} onChange={({ detail }) => setScheduleName(detail.value)} placeholder="Crawler name" />
+            <Input value={scheduleExpr} onChange={({ detail }) => setScheduleExpr(detail.value)} placeholder="cron(0 1 * * ? *)" />
+          </SpaceBetween>
+          <SpaceBetween direction="horizontal" size="s">
+            <Button
+              variant="normal"
+              disabled={!scheduleName}
+              loading={startSchedule.isPending}
+              onClick={() =>
+                startSchedule.mutateAsync(scheduleName).then(() => showToast("success", "Crawler schedule started"))
+              }
+            >
+              Start schedule
+            </Button>
+            <Button
+              variant="normal"
+              disabled={!scheduleName}
+              loading={stopSchedule.isPending}
+              onClick={() =>
+                stopSchedule.mutateAsync(scheduleName).then(() => showToast("success", "Crawler schedule stopped"))
+              }
+            >
+              Stop schedule
+            </Button>
+            <Button
+              variant="normal"
+              disabled={!scheduleName}
+              loading={updateSchedule.isPending}
+              onClick={() =>
+                updateSchedule
+                  .mutateAsync({ crawlerName: scheduleName, schedule: scheduleExpr || undefined })
+                  .then(() => showToast("success", "Crawler schedule updated"))
+              }
+            >
+              Update schedule
+            </Button>
+          </SpaceBetween>
+        </SpaceBetween>
+      </Container>
+
+      <Container header={<Header variant="h3">Resource Policy</Header>}>
+        <SpaceBetween size="s">
+          <Box variant="p" color="text-body-secondary">
+            {policyData?.policyInJson ? policyData.policyInJson : "No resource policy set"}
+          </Box>
+          <Textarea value={policyText} onChange={({ detail }) => setPolicyText(detail.value)} rows={6} />
+          <SpaceBetween direction="horizontal" size="s">
+            <Button
+              variant="primary"
+              loading={putPolicy.isPending}
+              onClick={() =>
+                putPolicy.mutateAsync(policyText).then(() => showToast("success", "Resource policy updated"))
+              }
+            >
+              Put policy
+            </Button>
+            <Button
+              variant="normal"
+              loading={deletePolicy.isPending}
+              onClick={() =>
+                deletePolicy.mutateAsync().then(() => showToast("success", "Resource policy deleted"))
+              }
+            >
+              Delete policy
+            </Button>
+          </SpaceBetween>
+        </SpaceBetween>
+      </Container>
+
+      <Container header={<Header variant="h3">Data Catalog Encryption Settings</Header>}>
+        <SpaceBetween size="s">
+          <Box variant="p" color="text-body-secondary">
+            {encSettings
+              ? `Encryption mode: ${encSettings.dataCatalogEncryptionSettings?.DataCatalogEncryptionMode || "not set"}`
+              : "No settings"}
+          </Box>
+          <Textarea value={encText} onChange={({ detail }) => setEncText(detail.value)} rows={4} />
+          <Button
+            variant="primary"
+            loading={putEncSettings.isPending}
+            onClick={() =>
+              putEncSettings
+                .mutateAsync(JSON.parse(encText))
+                .then(() => showToast("success", "Encryption settings updated"))
+                .catch((e: Error) => showToast("error", e.message || "Invalid JSON in settings"))
+            }
+          >
+            Put settings
+          </Button>
+        </SpaceBetween>
+      </Container>
+
+      <Container header={<Header variant="h3">Data Quality Rulesets</Header>}>
+        <ResourceTable
+          resourceName="Ruleset"
+          headerTitle="Data Quality Rulesets"
+          headerCounter={rulesetsData?.total}
+          items={(rulesetsData?.rulesets || []).map((r: any) => ({ name: glueEtlName(r) }))}
+          loading={false}
+          emptyMessage="No data quality rulesets"
+          columns={[{ id: "name", header: "Ruleset", cell: (i: any) => i.name, isRowHeader: true }]}
+        />
+      </Container>
+
+      <Container header={<Header variant="h3">Search Tables</Header>}>
+        <SpaceBetween size="s">
+          <SpaceBetween direction="horizontal" size="s">
+            <Input value={searchText} onChange={({ detail }) => setSearchText(detail.value)} placeholder="Search text" />
+            <Button
+              variant="normal"
+              disabled={!searchText}
+              loading={searchLoading}
+              onClick={() => setSearchQuery(searchText)}
+            >
+              Search
+            </Button>
+          </SpaceBetween>
+          <ResourceTable
+            resourceName="Table"
+            headerTitle="Search Results"
+            headerCounter={searchData?.total}
+            items={(searchData?.tables || []).map((t: any) => ({
+              database: glueEtlField(t, "DatabaseName"),
+              name: glueEtlName(t),
+            }))}
+            loading={false}
+            emptyMessage={searchQuery ? "No tables matched" : "Enter search text above"}
+            columns={[
+              { id: "database", header: "Database", cell: (i: any) => i.database, isRowHeader: true },
+              { id: "name", header: "Table", cell: (i: any) => i.name },
+            ]}
+          />
+        </SpaceBetween>
+      </Container>
+    </SpaceBetween>
+  );
+}

@@ -46,6 +46,26 @@ import {
   useS3PutBucketAcl,
   useS3ObjectAcl,
   useS3PutObjectAcl,
+  useS3BucketAccelerate,
+  useS3UpdateBucketAccelerate,
+  useS3BucketOwnershipControls,
+  useS3UpdateBucketOwnershipControls,
+  useS3DeleteBucketOwnershipControls,
+  useS3BucketRequestPayment,
+  useS3UpdateBucketRequestPayment,
+  useS3BucketReplication,
+  useS3UpdateBucketReplication,
+  useS3DeleteBucketReplication,
+  useS3IntelligentTieringConfigs,
+  useS3PutIntelligentTieringConfig,
+  useS3DeleteIntelligentTieringConfig,
+  useS3AnalyticsConfigs,
+  useS3PutAnalyticsConfig,
+  useS3DeleteAnalyticsConfig,
+  useS3InventoryConfigs,
+  useS3PutInventoryConfig,
+  useS3DeleteInventoryConfig,
+  useS3RestoreObject,
 } from "./useS3Config";
 
 function createWrapper() {
@@ -706,6 +726,247 @@ describe("useS3PutObjectAcl", () => {
     expect(mockApi).toHaveBeenCalledWith(
       `/aws/s3/buckets/${BUCKET}/objects/${ENCODED_KEY}/acl`,
       expect.objectContaining({ method: "PUT", body: JSON.stringify({ cannedAcl: "private" }) }),
+    );
+  });
+});
+
+// ─── Bucket Accelerate Configuration ──────────────────────────────
+
+describe("useS3BucketAccelerate", () => {
+  it("does not call api when bucket is null", async () => {
+    const { result } = renderHook(() => useS3BucketAccelerate(null), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.fetchStatus).toBe("idle"));
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api with correct URL when bucket is provided", async () => {
+    mockApi.mockResolvedValueOnce({ bucket: BUCKET, status: "Enabled" });
+    const { result } = renderHook(() => useS3BucketAccelerate(BUCKET), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(`/aws/s3/buckets/${BUCKET}/accelerate`);
+  });
+});
+
+describe("useS3UpdateBucketAccelerate", () => {
+  it("calls api with PUT method and serialized status", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useS3UpdateBucketAccelerate(BUCKET), { wrapper: createWrapper() });
+    await result.current.mutateAsync("Enabled");
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/s3/buckets/${BUCKET}/accelerate`,
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ status: "Enabled" }) }),
+    );
+  });
+});
+
+// ─── Bucket Ownership Controls ────────────────────────────────────
+
+describe("useS3BucketOwnershipControls", () => {
+  it("does not call api when bucket is null", async () => {
+    const { result } = renderHook(() => useS3BucketOwnershipControls(null), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.fetchStatus).toBe("idle"));
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api with correct URL when bucket is provided", async () => {
+    mockApi.mockResolvedValueOnce({ bucket: BUCKET, rules: [], configured: false });
+    const { result } = renderHook(() => useS3BucketOwnershipControls(BUCKET), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(`/aws/s3/buckets/${BUCKET}/ownership-controls`);
+  });
+});
+
+describe("useS3UpdateBucketOwnershipControls", () => {
+  it("calls api with PUT method and wrapped rules", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useS3UpdateBucketOwnershipControls(BUCKET), { wrapper: createWrapper() });
+    await result.current.mutateAsync([{ ObjectOwnership: "BucketOwnerEnforced" }]);
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/s3/buckets/${BUCKET}/ownership-controls`,
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ rules: [{ ObjectOwnership: "BucketOwnerEnforced" }] }) }),
+    );
+  });
+});
+
+describe("useS3DeleteBucketOwnershipControls", () => {
+  it("calls api with DELETE method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useS3DeleteBucketOwnershipControls(BUCKET), { wrapper: createWrapper() });
+    await result.current.mutateAsync();
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/s3/buckets/${BUCKET}/ownership-controls`,
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+});
+
+// ─── Bucket Request Payment ───────────────────────────────────────
+
+describe("useS3BucketRequestPayment", () => {
+  it("does not call api when bucket is null", async () => {
+    const { result } = renderHook(() => useS3BucketRequestPayment(null), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.fetchStatus).toBe("idle"));
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api with correct URL when bucket is provided", async () => {
+    mockApi.mockResolvedValueOnce({ bucket: BUCKET, payer: "BucketOwner" });
+    const { result } = renderHook(() => useS3BucketRequestPayment(BUCKET), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(`/aws/s3/buckets/${BUCKET}/request-payment`);
+  });
+});
+
+describe("useS3UpdateBucketRequestPayment", () => {
+  it("calls api with PUT method and serialized payer", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useS3UpdateBucketRequestPayment(BUCKET), { wrapper: createWrapper() });
+    await result.current.mutateAsync("Requester");
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/s3/buckets/${BUCKET}/request-payment`,
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ payer: "Requester" }) }),
+    );
+  });
+});
+
+// ─── Bucket Replication ───────────────────────────────────────────
+
+describe("useS3BucketReplication", () => {
+  it("does not call api when bucket is null", async () => {
+    const { result } = renderHook(() => useS3BucketReplication(null), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.fetchStatus).toBe("idle"));
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api with correct URL when bucket is provided", async () => {
+    mockApi.mockResolvedValueOnce({ bucket: BUCKET, replicationConfiguration: null, configured: false });
+    const { result } = renderHook(() => useS3BucketReplication(BUCKET), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(`/aws/s3/buckets/${BUCKET}/replication`);
+  });
+});
+
+describe("useS3UpdateBucketReplication", () => {
+  it("calls api with PUT method and role/rules", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useS3UpdateBucketReplication(BUCKET), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ role: "arn:aws:iam::1:role/r", rules: [] });
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/s3/buckets/${BUCKET}/replication`,
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ role: "arn:aws:iam::1:role/r", rules: [] }) }),
+    );
+  });
+});
+
+describe("useS3DeleteBucketReplication", () => {
+  it("calls api with DELETE method", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useS3DeleteBucketReplication(BUCKET), { wrapper: createWrapper() });
+    await result.current.mutateAsync();
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/s3/buckets/${BUCKET}/replication`,
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+});
+
+// ─── Intelligent-Tiering / Analytics / Inventory Configurations ───
+
+describe.each([
+  ["useS3IntelligentTieringConfigs", "intelligent-tiering"],
+  ["useS3AnalyticsConfigs", "analytics"],
+  ["useS3InventoryConfigs", "inventory"],
+] as const)("%s", (hookName, family) => {
+  const hooks: Record<string, any> = {
+    useS3IntelligentTieringConfigs,
+    useS3AnalyticsConfigs,
+    useS3InventoryConfigs,
+  };
+  const hook = hooks[hookName];
+
+  it("does not call api when bucket is null", async () => {
+    const { result } = renderHook(() => hook(null), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.fetchStatus).toBe("idle"));
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("calls api with correct URL when bucket is provided", async () => {
+    mockApi.mockResolvedValueOnce({ configurations: [], total: 0 });
+    const { result } = renderHook(() => hook(BUCKET), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(`/aws/s3/buckets/${BUCKET}/${family}`);
+  });
+});
+
+describe.each([
+  ["useS3PutIntelligentTieringConfig", "intelligent-tiering"],
+  ["useS3PutAnalyticsConfig", "analytics"],
+  ["useS3PutInventoryConfig", "inventory"],
+] as const)("%s", (hookName, family) => {
+  const hooks: Record<string, any> = {
+    useS3PutIntelligentTieringConfig,
+    useS3PutAnalyticsConfig,
+    useS3PutInventoryConfig,
+  };
+  const hook = hooks[hookName];
+
+  it("calls api with POST method and id/configuration", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => hook(BUCKET), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ id: "cfg-1", configuration: { Id: "cfg-1" } });
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/s3/buckets/${BUCKET}/${family}`,
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ id: "cfg-1", configuration: { Id: "cfg-1" } }) }),
+    );
+  });
+});
+
+describe.each([
+  ["useS3DeleteIntelligentTieringConfig", "intelligent-tiering"],
+  ["useS3DeleteAnalyticsConfig", "analytics"],
+  ["useS3DeleteInventoryConfig", "inventory"],
+] as const)("%s", (hookName, family) => {
+  const hooks: Record<string, any> = {
+    useS3DeleteIntelligentTieringConfig,
+    useS3DeleteAnalyticsConfig,
+    useS3DeleteInventoryConfig,
+  };
+  const hook = hooks[hookName];
+
+  it("calls api with DELETE method and id in URL", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => hook(BUCKET), { wrapper: createWrapper() });
+    await result.current.mutateAsync("cfg-1");
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/s3/buckets/${BUCKET}/${family}/cfg-1`,
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+});
+
+// ─── Object Restore ───────────────────────────────────────────────
+
+describe("useS3RestoreObject", () => {
+  it("calls api with POST method, encoded key and restore body", async () => {
+    mockApi.mockResolvedValueOnce({ bucket: BUCKET, key: KEY, restoring: true });
+    const { result } = renderHook(() => useS3RestoreObject(BUCKET), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ key: KEY, days: 7, glacierJobParameters: { Tier: "Standard" } });
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/s3/buckets/${BUCKET}/objects/${ENCODED_KEY}/restore`,
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ days: 7, glacierJobParameters: { Tier: "Standard" } }),
+      }),
+    );
+  });
+
+  it("sends empty body fields when only key is provided", async () => {
+    mockApi.mockResolvedValueOnce({ bucket: BUCKET, key: KEY, restoring: true });
+    const { result } = renderHook(() => useS3RestoreObject(BUCKET), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ key: "file.txt" });
+    expect(mockApi).toHaveBeenCalledWith(
+      `/aws/s3/buckets/${BUCKET}/objects/file.txt/restore`,
+      expect.objectContaining({ method: "POST", body: JSON.stringify({}) }),
     );
   });
 });

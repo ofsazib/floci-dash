@@ -29,6 +29,19 @@ vi.mock("@aws-sdk/client-config-service", () => ({
   ListTagsForResourceCommand: createCmd("ListTagsForResourceCommand"),
   TagResourceCommand: createCmd("TagResourceCommand"),
   UntagResourceCommand: createCmd("UntagResourceCommand"),
+  PutAggregationAuthorizationCommand: createCmd("PutAggregationAuthorizationCommand"),
+  DescribeAggregationAuthorizationsCommand: createCmd("DescribeAggregationAuthorizationsCommand"),
+  DeleteAggregationAuthorizationCommand: createCmd("DeleteAggregationAuthorizationCommand"),
+  DeleteDeliveryChannelCommand: createCmd("DeleteDeliveryChannelCommand"),
+  DeleteEvaluationResultsCommand: createCmd("DeleteEvaluationResultsCommand"),
+  PutRetentionConfigurationCommand: createCmd("PutRetentionConfigurationCommand"),
+  DescribeRetentionConfigurationsCommand: createCmd("DescribeRetentionConfigurationsCommand"),
+  DeleteRetentionConfigurationCommand: createCmd("DeleteRetentionConfigurationCommand"),
+  DescribeComplianceByResourceCommand: createCmd("DescribeComplianceByResourceCommand"),
+  GetComplianceDetailsByConfigRuleCommand: createCmd("GetComplianceDetailsByConfigRuleCommand"),
+  GetComplianceDetailsByResourceCommand: createCmd("GetComplianceDetailsByResourceCommand"),
+  GetComplianceSummaryByConfigRuleCommand: createCmd("GetComplianceSummaryByConfigRuleCommand"),
+  GetComplianceSummaryByResourceTypeCommand: createCmd("GetComplianceSummaryByResourceTypeCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({ create: (Ctor: any, extra?: any) => new Ctor(extra) }));
@@ -38,6 +51,12 @@ import router from "./configservice";
 async function get(p: string) { return router.request(p, { method: "GET" }); }
 async function post(p: string, b?: any) {
   return router.request(p, { method: "POST", body: b != null ? JSON.stringify(b) : undefined, headers: b != null ? { "content-type": "application/json" } : undefined });
+}
+async function put(p: string, b?: any) {
+  return router.request(p, { method: "PUT", body: b != null ? JSON.stringify(b) : undefined, headers: b != null ? { "content-type": "application/json" } : undefined });
+}
+async function delWithBody(p: string, b?: any) {
+  return router.request(p, { method: "DELETE", body: b != null ? JSON.stringify(b) : undefined, headers: b != null ? { "content-type": "application/json" } : undefined });
 }
 async function del(p: string) { return router.request(p, { method: "DELETE" }); }
 
@@ -333,5 +352,256 @@ describe("Config Service Routes", () => {
       const res = await post("/tags/untag", { arn: "arn:x" });
       expect(res.status).toBe(400);
     });
+  });
+});
+
+// ── Aggregation Authorizations ──────────────────────────────
+
+describe("Aggregation Authorizations", () => {
+  it("GET /aggregation-authorizations — lists authorizations", async () => {
+    mockSend.mockResolvedValueOnce({ AggregationAuthorizations: [{ AuthorizedAccountId: "111", AuthorizedAwsRegion: "us-east-1" }] });
+    const res = await get("/aggregation-authorizations");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.total).toBe(1);
+    expect(body.authorizations[0].AuthorizedAccountId).toBe("111");
+  });
+
+  it("GET /aggregation-authorizations — empty list", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/aggregation-authorizations");
+    const body = await res.json();
+    expect(body.authorizations).toEqual([]);
+    expect(body.total).toBe(0);
+  });
+
+  it("POST /aggregation-authorizations — creates authorization", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/aggregation-authorizations", { authorizedAccountId: "111", authorizedAwsRegion: "us-west-2" });
+    expect(res.status).toBe(201);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("PutAggregationAuthorizationCommand");
+    expect(mockSend.mock.calls[0][0].AuthorizedAccountId).toBe("111");
+    expect(mockSend.mock.calls[0][0].AuthorizedAwsRegion).toBe("us-west-2");
+  });
+
+  it("POST /aggregation-authorizations — 400 without account id", async () => {
+    const res = await post("/aggregation-authorizations", { authorizedAwsRegion: "us-west-2" });
+    expect(res.status).toBe(400);
+  });
+
+  it("POST /aggregation-authorizations — 400 without region", async () => {
+    const res = await post("/aggregation-authorizations", { authorizedAccountId: "111" });
+    expect(res.status).toBe(400);
+  });
+
+  it("DELETE /aggregation-authorizations — deletes authorization", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await delWithBody("/aggregation-authorizations", { authorizedAccountId: "111", authorizedAwsRegion: "us-west-2" });
+    expect(res.status).toBe(200);
+    expect((await res.json()).deleted).toBe(true);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteAggregationAuthorizationCommand");
+  });
+
+  it("DELETE /aggregation-authorizations — 400 without account id", async () => {
+    const res = await delWithBody("/aggregation-authorizations", { authorizedAwsRegion: "us-west-2" });
+    expect(res.status).toBe(400);
+  });
+
+  it("DELETE /aggregation-authorizations — 400 without region", async () => {
+    const res = await delWithBody("/aggregation-authorizations", { authorizedAccountId: "111" });
+    expect(res.status).toBe(400);
+  });
+});
+
+// ── Delivery Channel delete ─────────────────────────────────
+
+describe("Delivery Channel delete", () => {
+  it("DELETE /delivery-channels/:name — deletes", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await del("/delivery-channels/default");
+    expect(res.status).toBe(200);
+    expect((await res.json()).deleted).toBe(true);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteDeliveryChannelCommand");
+    expect(mockSend.mock.calls[0][0].DeliveryChannelName).toBe("default");
+  });
+});
+
+// ── Retention Configurations ────────────────────────────────
+
+describe("Retention Configurations", () => {
+  it("GET /retention-configurations — lists configurations", async () => {
+    mockSend.mockResolvedValueOnce({ RetentionConfigurations: [{ Name: "default", RetentionPeriodInDays: 30 }] });
+    const res = await get("/retention-configurations");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.total).toBe(1);
+    expect(body.retentionConfigurations[0].RetentionPeriodInDays).toBe(30);
+  });
+
+  it("GET /retention-configurations — empty list", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/retention-configurations");
+    const body = await res.json();
+    expect(body.total).toBe(0);
+  });
+
+  it("GET /retention-configurations?name=x — passes ConfigurationName", async () => {
+    mockSend.mockResolvedValueOnce({ RetentionConfigurations: [{ Name: "x" }] });
+    const res = await get("/retention-configurations?name=x");
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].ConfigurationName).toBe("x");
+  });
+
+  it("PUT /retention-configurations — creates configuration", async () => {
+    mockSend.mockResolvedValueOnce({ RetentionConfiguration: { Name: "default", RetentionPeriodInDays: 365 } });
+    const res = await put("/retention-configurations", { retentionPeriodInDays: 365 });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.created).toBe(true);
+    expect(body.retentionConfiguration.RetentionPeriodInDays).toBe(365);
+    expect(mockSend.mock.calls[0][0].RetentionPeriodInDays).toBe(365);
+  });
+
+  it("PUT /retention-configurations — sparse response returns null configuration", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put("/retention-configurations", { retentionPeriodInDays: 90 });
+    expect(res.status).toBe(201);
+    expect((await res.json()).retentionConfiguration).toBe(null);
+  });
+
+  it("PUT /retention-configurations — 400 without days", async () => {
+    const res = await put("/retention-configurations", {});
+    expect(res.status).toBe(400);
+  });
+
+  it("PUT /retention-configurations — 400 with non-number days", async () => {
+    const res = await put("/retention-configurations", { retentionPeriodInDays: "abc" });
+    expect(res.status).toBe(400);
+  });
+
+  it("DELETE /retention-configurations/:name — deletes", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await del("/retention-configurations/default");
+    expect(res.status).toBe(200);
+    expect((await res.json()).deleted).toBe(true);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteRetentionConfigurationCommand");
+  });
+});
+
+// ── Evaluation Results delete ───────────────────────────────
+
+describe("Evaluation Results delete", () => {
+  it("DELETE /rules/:name/evaluation-results — deletes", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await del("/rules/rule-1/evaluation-results");
+    expect(res.status).toBe(200);
+    expect((await res.json()).deleted).toBe(true);
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("DeleteEvaluationResultsCommand");
+    expect(mockSend.mock.calls[0][0].ConfigRuleName).toBe("rule-1");
+  });
+});
+
+// ── Compliance ──────────────────────────────────────────────
+
+describe("Compliance routes", () => {
+  it("GET /compliance-by-resource — returns compliance items", async () => {
+    mockSend.mockResolvedValueOnce({ ComplianceByResources: [{ ResourceId: "i-1", Compliance: { ComplianceType: "COMPLIANT" } }] });
+    const res = await get("/compliance-by-resource");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.total).toBe(1);
+  });
+
+  it("GET /compliance-by-resource — empty list", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/compliance-by-resource");
+    const body = await res.json();
+    expect(body.compliance).toEqual([]);
+  });
+
+  it("GET /compliance-by-resource — passes filters", async () => {
+    mockSend.mockResolvedValueOnce({});
+    await get("/compliance-by-resource?resourceId=i-1&resourceType=AWS::EC2::Instance&complianceTypes=COMPLIANT,NON_COMPLIANT");
+    expect(mockSend.mock.calls[0][0].ResourceId).toBe("i-1");
+    expect(mockSend.mock.calls[0][0].ResourceType).toBe("AWS::EC2::Instance");
+    expect(mockSend.mock.calls[0][0].ComplianceTypes).toEqual(["COMPLIANT", "NON_COMPLIANT"]);
+  });
+
+  it("GET /compliance-details/by-rule/:name — returns evaluation results", async () => {
+    mockSend.mockResolvedValueOnce({ EvaluationResults: [{ ComplianceType: "COMPLIANT" }] });
+    const res = await get("/compliance-details/by-rule/rule-1");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.total).toBe(1);
+    expect(mockSend.mock.calls[0][0].ConfigRuleName).toBe("rule-1");
+  });
+
+  it("GET /compliance-details/by-rule/:name — empty results", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/compliance-details/by-rule/rule-1");
+    expect((await res.json()).total).toBe(0);
+  });
+
+  it("GET /compliance-details/by-rule/:name — passes ComplianceTypes", async () => {
+    mockSend.mockResolvedValueOnce({});
+    await get("/compliance-details/by-rule/rule-1?complianceTypes=COMPLIANT");
+    expect(mockSend.mock.calls[0][0].ComplianceTypes).toEqual(["COMPLIANT"]);
+  });
+
+  it("GET /compliance-details/by-resource — returns evaluation results", async () => {
+    mockSend.mockResolvedValueOnce({ EvaluationResults: [{ ComplianceType: "NON_COMPLIANT" }] });
+    const res = await get("/compliance-details/by-resource?resourceId=i-1&resourceType=AWS::EC2::Instance");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.total).toBe(1);
+    expect(mockSend.mock.calls[0][0].ResourceId).toBe("i-1");
+    expect(mockSend.mock.calls[0][0].ResourceType).toBe("AWS::EC2::Instance");
+  });
+
+  it("GET /compliance-details/by-resource — empty results", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/compliance-details/by-resource?resourceId=i-1&resourceType=AWS::EC2::Instance");
+    expect((await res.json()).total).toBe(0);
+  });
+
+  it("GET /compliance-details/by-resource — 400 without resourceId", async () => {
+    const res = await get("/compliance-details/by-resource?resourceType=AWS::EC2::Instance");
+    expect(res.status).toBe(400);
+  });
+
+  it("GET /compliance-details/by-resource — 400 without resourceType", async () => {
+    const res = await get("/compliance-details/by-resource?resourceId=i-1");
+    expect(res.status).toBe(400);
+  });
+
+  it("GET /compliance-summary/by-config-rule — returns summary", async () => {
+    mockSend.mockResolvedValueOnce({ ComplianceSummary: { CompliantConfigRuleCount: 3, NonCompliantConfigRuleCount: 1 } });
+    const res = await get("/compliance-summary/by-config-rule");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.complianceSummary.CompliantConfigRuleCount).toBe(3);
+  });
+
+  it("GET /compliance-summary/by-config-rule — null when sparse", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/compliance-summary/by-config-rule");
+    expect((await res.json()).complianceSummary).toBe(null);
+  });
+
+  it("GET /compliance-summary/by-resource-type — returns summaries", async () => {
+    mockSend.mockResolvedValueOnce({ ComplianceSummariesByResourceType: [{ ResourceType: "AWS::EC2::Instance" }] });
+    const res = await get("/compliance-summary/by-resource-type?resourceTypes=AWS::EC2::Instance");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.total).toBe(1);
+    expect(mockSend.mock.calls[0][0].ResourceTypes).toEqual(["AWS::EC2::Instance"]);
+  });
+
+  it("GET /compliance-summary/by-resource-type — empty list", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/compliance-summary/by-resource-type");
+    const body = await res.json();
+    expect(body.summaries).toEqual([]);
+    expect(body.total).toBe(0);
   });
 });

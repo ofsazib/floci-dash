@@ -516,3 +516,326 @@ export function useGetGlueSchemaByDefinition() {
       api("/aws/glue/schemas/by-definition", { method: "POST", body: JSON.stringify(params) }),
   });
 }
+
+// ─── ETL families (generic CRUD) ─────────────────────────
+
+export function useGlueFamily(family: string) {
+  return useQuery<{ items: any[]; total: number }>({
+    queryKey: ["aws", "glue", family],
+    queryFn: async () => {
+      const res: any = await api(`/aws/glue/${family}`);
+      return { items: res[family] || [], total: res.total };
+    },
+  });
+}
+
+export function useCreateGlueFamily(family: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: any) =>
+      api(`/aws/glue/${family}`, { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "glue", family] }),
+  });
+}
+
+export function useDeleteGlueFamily(family: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api(`/aws/glue/${family}/${encodeURIComponent(name)}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "glue", family] }),
+  });
+}
+
+export function useUpdateGlueFamily(family: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { name: string; [k: string]: any }) =>
+      api(`/aws/glue/${family}/${encodeURIComponent(params.name)}`, {
+        method: "PUT",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "glue", family] }),
+  });
+}
+
+// ─── Crawler lifecycle ──────────────────────────────────
+
+export function useStartGlueCrawler() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api(`/aws/glue/crawlers/${encodeURIComponent(name)}/start`, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "glue", "crawlers"] }),
+  });
+}
+
+export function useStopGlueCrawler() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api(`/aws/glue/crawlers/${encodeURIComponent(name)}/stop`, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "glue", "crawlers"] }),
+  });
+}
+
+export function useGlueCrawlerMetrics() {
+  return useQuery<{ metrics: any[]; total: number }>({
+    queryKey: ["aws", "glue", "crawler-metrics"],
+    queryFn: () => api("/aws/glue/crawler-metrics"),
+  });
+}
+
+export function useStartGlueCrawlerSchedule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (crawlerName: string) =>
+      api("/aws/glue/crawler-schedule/start", { method: "POST", body: JSON.stringify({ crawlerName }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "glue"] }),
+  });
+}
+
+export function useStopGlueCrawlerSchedule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (crawlerName: string) =>
+      api("/aws/glue/crawler-schedule/stop", { method: "POST", body: JSON.stringify({ crawlerName }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "glue"] }),
+  });
+}
+
+export function useUpdateGlueCrawlerSchedule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { crawlerName: string; schedule?: string }) =>
+      api("/aws/glue/crawler-schedule", { method: "PUT", body: JSON.stringify(params) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "glue"] }),
+  });
+}
+
+// ─── Job runs ───────────────────────────────────────────
+
+export function useStartGlueJobRun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (jobName: string) =>
+      api(`/aws/glue/jobs/${encodeURIComponent(jobName)}/runs`, { method: "POST", body: JSON.stringify({}) }),
+    onSuccess: (_d, jobName: string) => qc.invalidateQueries({ queryKey: ["aws", "glue", "job-runs", jobName] }),
+  });
+}
+
+export function useGlueJobRuns(jobName: string | null) {
+  return useQuery<{ runs: any[]; total: number }>({
+    queryKey: ["aws", "glue", "job-runs", jobName],
+    queryFn: () => api(`/aws/glue/jobs/${encodeURIComponent(jobName!)}/runs`),
+    enabled: !!jobName,
+  });
+}
+
+export function useGlueJobRun(jobName: string | null, runId: string | null) {
+  return useQuery<{ run: any | null }>({
+    queryKey: ["aws", "glue", "job-run", jobName, runId],
+    queryFn: () => api(`/aws/glue/jobs/${encodeURIComponent(jobName!)}/runs/${encodeURIComponent(runId!)}`),
+    enabled: !!jobName && !!runId,
+  });
+}
+
+export function useGlueBatchGetJobs() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (jobNames: string[]) =>
+      api("/aws/glue/jobs/batch-get", { method: "POST", body: JSON.stringify({ jobNames }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "glue", "jobs"] }),
+  });
+}
+
+export function useGlueBatchStopJobRun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { jobName: string; jobRunIds?: string[] }) =>
+      api("/aws/glue/jobs/batch-stop", { method: "POST", body: JSON.stringify(params) }),
+    onSuccess: (_d, v: { jobName: string; jobRunIds?: string[] }) =>
+      qc.invalidateQueries({ queryKey: ["aws", "glue", "job-runs", v.jobName] }),
+  });
+}
+
+// ─── Trigger lifecycle ──────────────────────────────────
+
+export function useStartGlueTrigger() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api(`/aws/glue/triggers/${encodeURIComponent(name)}/start`, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "glue", "triggers"] }),
+  });
+}
+
+export function useStopGlueTrigger() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api(`/aws/glue/triggers/${encodeURIComponent(name)}/stop`, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "glue", "triggers"] }),
+  });
+}
+
+// ─── Workflow runs ──────────────────────────────────────
+
+export function useStartGlueWorkflowRun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api(`/aws/glue/workflows/${encodeURIComponent(name)}/runs`, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "glue", "workflow-runs", name] }),
+  });
+}
+
+export function useGlueWorkflowRuns(name: string | null) {
+  return useQuery<{ runs: any[]; total: number }>({
+    queryKey: ["aws", "glue", "workflow-runs", name],
+    queryFn: () => api(`/aws/glue/workflows/${encodeURIComponent(name!)}/runs`),
+    enabled: !!name,
+  });
+}
+
+export function useGlueWorkflowRun(name: string | null, runId: string | null) {
+  return useQuery<{ run: any | null }>({
+    queryKey: ["aws", "glue", "workflow-run", name, runId],
+    queryFn: () => api(`/aws/glue/workflows/${encodeURIComponent(name!)}/runs/${encodeURIComponent(runId!)}`),
+    enabled: !!name && !!runId,
+  });
+}
+
+export function useStopGlueWorkflowRun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { name: string; runId: string }) =>
+      api(`/aws/glue/workflows/${encodeURIComponent(params.name)}/runs/${encodeURIComponent(params.runId)}/stop`, { method: "POST" }),
+    onSuccess: (_d, v: { name: string; runId: string }) => qc.invalidateQueries({ queryKey: ["aws", "glue", "workflow-runs", v.name] }),
+  });
+}
+
+export function useResumeGlueWorkflowRun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { name: string; runId: string }) =>
+      api(`/aws/glue/workflows/${encodeURIComponent(params.name)}/runs/${encodeURIComponent(params.runId)}/resume`, { method: "POST" }),
+    onSuccess: (_d, v: { name: string; runId: string }) => qc.invalidateQueries({ queryKey: ["aws", "glue", "workflow-runs", v.name] }),
+  });
+}
+
+export function useGlueWorkflowRunProperties(name: string | null, runId: string | null) {
+  return useQuery<{ runProperties: Record<string, string> | null }>({
+    queryKey: ["aws", "glue", "workflow-run-properties", name, runId],
+    queryFn: () => api(`/aws/glue/workflows/${encodeURIComponent(name!)}/runs/${encodeURIComponent(runId!)}/properties`),
+    enabled: !!name && !!runId,
+  });
+}
+
+export function usePutGlueWorkflowRunProperties(name: string, runId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (runProperties: Record<string, string>) =>
+      api(`/aws/glue/workflows/${encodeURIComponent(name)}/runs/${encodeURIComponent(runId)}/properties`, {
+        method: "PUT",
+        body: JSON.stringify({ runProperties }),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "glue", "workflow-run-properties", name, runId] }),
+  });
+}
+
+export function useGlueBatchGetWorkflows() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (names: string[]) =>
+      api("/aws/glue/workflows/batch-get", { method: "POST", body: JSON.stringify({ names }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "glue", "workflows"] }),
+  });
+}
+
+// ─── Connection extras ──────────────────────────────────
+
+export function useGlueBatchDeleteConnections() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (connectionNames: string[]) =>
+      api("/aws/glue/connections/batch-delete", { method: "POST", body: JSON.stringify({ connectionNames }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "glue", "connections"] }),
+  });
+}
+
+export function useTestGlueConnection() {
+  return useMutation({
+    mutationFn: (body: any) =>
+      api("/aws/glue/connections/test", { method: "POST", body: JSON.stringify(body) }),
+  });
+}
+
+// ─── Resource policies / catalog / data quality / search ──
+
+export function useGlueResourcePolicy() {
+  return useQuery<{ policyInJson: string | null }>({
+    queryKey: ["aws", "glue", "resource-policy"],
+    queryFn: () => api("/aws/glue/resource-policy"),
+  });
+}
+
+export function useGlueResourcePolicies() {
+  return useQuery<{ policies: any[]; total: number }>({
+    queryKey: ["aws", "glue", "resource-policies"],
+    queryFn: () => api("/aws/glue/resource-policies"),
+  });
+}
+
+export function usePutGlueResourcePolicy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (policyInJson: string) =>
+      api("/aws/glue/resource-policy", { method: "PUT", body: JSON.stringify({ policyInJson }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "glue", "resource-policy"] }),
+  });
+}
+
+export function useDeleteGlueResourcePolicy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api("/aws/glue/resource-policy", { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "glue", "resource-policy"] }),
+  });
+}
+
+export function useGlueDataCatalogEncryptionSettings() {
+  return useQuery<{ dataCatalogEncryptionSettings: any | null }>({
+    queryKey: ["aws", "glue", "data-catalog-encryption-settings"],
+    queryFn: () => api("/aws/glue/data-catalog-encryption-settings"),
+  });
+}
+
+export function usePutGlueDataCatalogEncryptionSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (dataCatalogEncryptionSettings: any) =>
+      api("/aws/glue/data-catalog-encryption-settings", {
+        method: "PUT",
+        body: JSON.stringify({ dataCatalogEncryptionSettings }),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["aws", "glue", "data-catalog-encryption-settings"] }),
+  });
+}
+
+export function useGlueDataQualityRulesets() {
+  return useQuery<{ rulesets: any[]; total: number }>({
+    queryKey: ["aws", "glue", "data-quality-rulesets"],
+    queryFn: () => api("/aws/glue/data-quality-rulesets"),
+  });
+}
+
+export function useSearchGlueTables(searchText: string | null) {
+  return useQuery<{ tables: any[]; total: number }>({
+    queryKey: ["aws", "glue", "search-tables", searchText],
+    queryFn: () => api(`/aws/glue/search-tables?text=${encodeURIComponent(searchText!)}`),
+    enabled: !!searchText,
+  });
+}

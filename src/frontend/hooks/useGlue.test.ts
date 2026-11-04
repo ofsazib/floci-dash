@@ -46,6 +46,41 @@ import {
   useUpdateGlueSchema,
   useDeleteGlueSchemaVersions,
   useGetGlueSchemaByDefinition,
+  useGlueFamily,
+  useCreateGlueFamily,
+  useDeleteGlueFamily,
+  useUpdateGlueFamily,
+  useStartGlueCrawler,
+  useStopGlueCrawler,
+  useGlueCrawlerMetrics,
+  useStartGlueCrawlerSchedule,
+  useStopGlueCrawlerSchedule,
+  useUpdateGlueCrawlerSchedule,
+  useStartGlueJobRun,
+  useGlueJobRuns,
+  useGlueJobRun,
+  useGlueBatchGetJobs,
+  useGlueBatchStopJobRun,
+  useStartGlueTrigger,
+  useStopGlueTrigger,
+  useStartGlueWorkflowRun,
+  useGlueWorkflowRuns,
+  useGlueWorkflowRun,
+  useStopGlueWorkflowRun,
+  useResumeGlueWorkflowRun,
+  useGlueWorkflowRunProperties,
+  usePutGlueWorkflowRunProperties,
+  useGlueBatchGetWorkflows,
+  useGlueBatchDeleteConnections,
+  useTestGlueConnection,
+  useGlueResourcePolicy,
+  useGlueResourcePolicies,
+  usePutGlueResourcePolicy,
+  useDeleteGlueResourcePolicy,
+  useGlueDataCatalogEncryptionSettings,
+  usePutGlueDataCatalogEncryptionSettings,
+  useGlueDataQualityRulesets,
+  useSearchGlueTables,
 } from "./useGlue";
 
 beforeEach(() => mockApi.mockReset());
@@ -412,5 +447,372 @@ describe("Glue update/version hooks", () => {
       method: "POST",
       body: JSON.stringify({ definition: "{}" }),
     });
+  });
+});
+
+// ─── ETL family generic hooks ──────────────────────────────
+
+describe.each([
+  ["crawlers"],
+  ["jobs"],
+  ["triggers"],
+  ["workflows"],
+  ["connections"],
+  ["classifiers"],
+  ["security-configurations"],
+])("glue family %s", (family) => {
+  it("useGlueFamily lists and unwraps dynamic key", async () => {
+    mockApi.mockResolvedValueOnce({ [family]: [{ Name: "x" }], total: 1 });
+    const { result } = renderHook(() => useGlueFamily(family), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith(`/aws/glue/${family}`);
+    expect(result.current.data).toEqual({ items: [{ Name: "x" }], total: 1 });
+  });
+
+  it("useGlueFamily unwraps to empty items when key missing", async () => {
+    mockApi.mockResolvedValueOnce({ total: 0 });
+    const { result } = renderHook(() => useGlueFamily(family), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual({ items: [], total: 0 });
+  });
+
+  it("useCreateGlueFamily posts body", async () => {
+    mockApi.mockResolvedValueOnce({ created: true });
+    const { result } = renderHook(() => useCreateGlueFamily(family), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ name: "x" });
+    expect(mockApi).toHaveBeenCalledWith(`/aws/glue/${family}`, {
+      method: "POST",
+      body: JSON.stringify({ name: "x" }),
+    });
+  });
+
+  it("useDeleteGlueFamily sends DELETE with encoded name", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useDeleteGlueFamily(family), { wrapper: createWrapper() });
+    await result.current.mutateAsync("my name");
+    expect(mockApi).toHaveBeenCalledWith(`/aws/glue/${family}/my%20name`, { method: "DELETE" });
+  });
+
+  it("useUpdateGlueFamily sends PUT with params", async () => {
+    mockApi.mockResolvedValueOnce({ updated: true });
+    const { result } = renderHook(() => useUpdateGlueFamily(family), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ name: "x", update: { Role: "r" } });
+    expect(mockApi).toHaveBeenCalledWith(`/aws/glue/${family}/x`, {
+      method: "PUT",
+      body: JSON.stringify({ name: "x", update: { Role: "r" } }),
+    });
+  });
+});
+
+// ─── Crawler lifecycle ─────────────────────────────────────
+
+describe("crawler lifecycle hooks", () => {
+  it("useStartGlueCrawler starts crawler", async () => {
+    mockApi.mockResolvedValueOnce({ started: true });
+    const { result } = renderHook(() => useStartGlueCrawler(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("c1");
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/crawlers/c1/start", { method: "POST" });
+  });
+
+  it("useStopGlueCrawler stops crawler", async () => {
+    mockApi.mockResolvedValueOnce({ stopped: true });
+    const { result } = renderHook(() => useStopGlueCrawler(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("c1");
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/crawlers/c1/stop", { method: "POST" });
+  });
+
+  it("useGlueCrawlerMetrics calls correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ metrics: [], total: 0 });
+    const { result } = renderHook(() => useGlueCrawlerMetrics(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/crawler-metrics");
+  });
+
+  it("useStartGlueCrawlerSchedule posts crawler name", async () => {
+    mockApi.mockResolvedValueOnce({ started: true });
+    const { result } = renderHook(() => useStartGlueCrawlerSchedule(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("c1");
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/crawler-schedule/start", {
+      method: "POST",
+      body: JSON.stringify({ crawlerName: "c1" }),
+    });
+  });
+
+  it("useStopGlueCrawlerSchedule posts crawler name", async () => {
+    mockApi.mockResolvedValueOnce({ stopped: true });
+    const { result } = renderHook(() => useStopGlueCrawlerSchedule(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("c1");
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/crawler-schedule/stop", {
+      method: "POST",
+      body: JSON.stringify({ crawlerName: "c1" }),
+    });
+  });
+
+  it("useUpdateGlueCrawlerSchedule puts schedule", async () => {
+    mockApi.mockResolvedValueOnce({ updated: true });
+    const { result } = renderHook(() => useUpdateGlueCrawlerSchedule(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ crawlerName: "c1", schedule: "cron(0 1 * * ? *)" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/crawler-schedule", {
+      method: "PUT",
+      body: JSON.stringify({ crawlerName: "c1", schedule: "cron(0 1 * * ? *)" }),
+    });
+  });
+});
+
+// ─── Job runs ──────────────────────────────────────────────
+
+describe("job run hooks", () => {
+  it("useStartGlueJobRun posts to runs", async () => {
+    mockApi.mockResolvedValueOnce({ runId: "jr-1" });
+    const { result } = renderHook(() => useStartGlueJobRun(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("j1");
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/jobs/j1/runs", { method: "POST", body: JSON.stringify({}) });
+  });
+
+  it("useGlueJobRuns disabled when job name null", async () => {
+    const { result } = renderHook(() => useGlueJobRuns(null), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.fetchStatus).toBe("idle"));
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("useGlueJobRuns calls correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ runs: [], total: 0 });
+    const { result } = renderHook(() => useGlueJobRuns("j1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/jobs/j1/runs");
+  });
+
+  it("useGlueJobRun disabled when runId null", async () => {
+    const { result } = renderHook(() => useGlueJobRun("j1", null), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.fetchStatus).toBe("idle"));
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("useGlueJobRun calls correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ run: { Id: "jr-1" } });
+    const { result } = renderHook(() => useGlueJobRun("j1", "jr-1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/jobs/j1/runs/jr-1");
+  });
+
+  it("useGlueBatchGetJobs posts job names", async () => {
+    mockApi.mockResolvedValueOnce({ jobs: [], jobsNotFound: [] });
+    const { result } = renderHook(() => useGlueBatchGetJobs(), { wrapper: createWrapper() });
+    await result.current.mutateAsync(["j1"]);
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/jobs/batch-get", {
+      method: "POST",
+      body: JSON.stringify({ jobNames: ["j1"] }),
+    });
+  });
+
+  it("useGlueBatchStopJobRun posts batch stop", async () => {
+    mockApi.mockResolvedValueOnce({ successfulSubmissions: [], errors: [] });
+    const { result } = renderHook(() => useGlueBatchStopJobRun(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ jobName: "j1", jobRunIds: ["jr-1"] });
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/jobs/batch-stop", {
+      method: "POST",
+      body: JSON.stringify({ jobName: "j1", jobRunIds: ["jr-1"] }),
+    });
+  });
+});
+
+// ─── Trigger lifecycle ─────────────────────────────────────
+
+describe("trigger lifecycle hooks", () => {
+  it("useStartGlueTrigger starts trigger", async () => {
+    mockApi.mockResolvedValueOnce({ name: "t1", state: "ACTIVATING" });
+    const { result } = renderHook(() => useStartGlueTrigger(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("t1");
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/triggers/t1/start", { method: "POST" });
+  });
+
+  it("useStopGlueTrigger stops trigger", async () => {
+    mockApi.mockResolvedValueOnce({ name: "t1", state: "STOPPING" });
+    const { result } = renderHook(() => useStopGlueTrigger(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("t1");
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/triggers/t1/stop", { method: "POST" });
+  });
+});
+
+// ─── Workflow runs ─────────────────────────────────────────
+
+describe("workflow run hooks", () => {
+  it("useStartGlueWorkflowRun posts to runs", async () => {
+    mockApi.mockResolvedValueOnce({ runId: "wr-1" });
+    const { result } = renderHook(() => useStartGlueWorkflowRun(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("w1");
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/workflows/w1/runs", { method: "POST" });
+  });
+
+  it("useGlueWorkflowRuns disabled when name null", async () => {
+    const { result } = renderHook(() => useGlueWorkflowRuns(null), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.fetchStatus).toBe("idle"));
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("useGlueWorkflowRuns calls correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ runs: [], total: 0 });
+    const { result } = renderHook(() => useGlueWorkflowRuns("w1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/workflows/w1/runs");
+  });
+
+  it("useGlueWorkflowRun disabled when runId null", async () => {
+    const { result } = renderHook(() => useGlueWorkflowRun("w1", null), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.fetchStatus).toBe("idle"));
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("useGlueWorkflowRun calls correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ run: { RunId: "wr-1" } });
+    const { result } = renderHook(() => useGlueWorkflowRun("w1", "wr-1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/workflows/w1/runs/wr-1");
+  });
+
+  it("useStopGlueWorkflowRun posts stop", async () => {
+    mockApi.mockResolvedValueOnce({ stopped: true });
+    const { result } = renderHook(() => useStopGlueWorkflowRun(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ name: "w1", runId: "wr-1" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/workflows/w1/runs/wr-1/stop", { method: "POST" });
+  });
+
+  it("useResumeGlueWorkflowRun posts resume", async () => {
+    mockApi.mockResolvedValueOnce({ runId: "wr-2" });
+    const { result } = renderHook(() => useResumeGlueWorkflowRun(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ name: "w1", runId: "wr-1" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/workflows/w1/runs/wr-1/resume", { method: "POST" });
+  });
+
+  it("useGlueWorkflowRunProperties disabled when runId null", async () => {
+    const { result } = renderHook(() => useGlueWorkflowRunProperties("w1", null), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.fetchStatus).toBe("idle"));
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("useGlueWorkflowRunProperties calls correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ runProperties: {} });
+    const { result } = renderHook(() => useGlueWorkflowRunProperties("w1", "wr-1"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/workflows/w1/runs/wr-1/properties");
+  });
+
+  it("usePutGlueWorkflowRunProperties puts properties", async () => {
+    mockApi.mockResolvedValueOnce({ updated: true });
+    const { result } = renderHook(() => usePutGlueWorkflowRunProperties("w1", "wr-1"), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ env: "prod" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/workflows/w1/runs/wr-1/properties", {
+      method: "PUT",
+      body: JSON.stringify({ runProperties: { env: "prod" } }),
+    });
+  });
+
+  it("useGlueBatchGetWorkflows posts names", async () => {
+    mockApi.mockResolvedValueOnce({ workflows: [], missingWorkflows: [] });
+    const { result } = renderHook(() => useGlueBatchGetWorkflows(), { wrapper: createWrapper() });
+    await result.current.mutateAsync(["w1"]);
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/workflows/batch-get", {
+      method: "POST",
+      body: JSON.stringify({ names: ["w1"] }),
+    });
+  });
+});
+
+// ─── Connection extras ─────────────────────────────────────
+
+describe("connection extras hooks", () => {
+  it("useGlueBatchDeleteConnections posts names", async () => {
+    mockApi.mockResolvedValueOnce({ succeeded: [], errors: [] });
+    const { result } = renderHook(() => useGlueBatchDeleteConnections(), { wrapper: createWrapper() });
+    await result.current.mutateAsync(["conn1"]);
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/connections/batch-delete", {
+      method: "POST",
+      body: JSON.stringify({ connectionNames: ["conn1"] }),
+    });
+  });
+
+  it("useTestGlueConnection posts body", async () => {
+    mockApi.mockResolvedValueOnce({ result: {} });
+    const { result } = renderHook(() => useTestGlueConnection(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ ConnectionName: "conn1" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/connections/test", {
+      method: "POST",
+      body: JSON.stringify({ ConnectionName: "conn1" }),
+    });
+  });
+});
+
+// ─── Policies / catalog / data quality / search ────────────
+
+describe("glue policy hooks", () => {
+  it("useGlueResourcePolicy calls correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ policyInJson: null });
+    const { result } = renderHook(() => useGlueResourcePolicy(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/resource-policy");
+  });
+
+  it("useGlueResourcePolicies calls correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ policies: [], total: 0 });
+    const { result } = renderHook(() => useGlueResourcePolicies(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/resource-policies");
+  });
+
+  it("usePutGlueResourcePolicy puts policy", async () => {
+    mockApi.mockResolvedValueOnce({ updated: true });
+    const { result } = renderHook(() => usePutGlueResourcePolicy(), { wrapper: createWrapper() });
+    await result.current.mutateAsync("{}");
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/resource-policy", {
+      method: "PUT",
+      body: JSON.stringify({ policyInJson: "{}" }),
+    });
+  });
+
+  it("useDeleteGlueResourcePolicy sends DELETE", async () => {
+    mockApi.mockResolvedValueOnce({ deleted: true });
+    const { result } = renderHook(() => useDeleteGlueResourcePolicy(), { wrapper: createWrapper() });
+    await result.current.mutateAsync();
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/resource-policy", { method: "DELETE" });
+  });
+});
+
+describe("glue catalog and data quality hooks", () => {
+  it("useGlueDataCatalogEncryptionSettings calls correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ dataCatalogEncryptionSettings: null });
+    const { result } = renderHook(() => useGlueDataCatalogEncryptionSettings(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/data-catalog-encryption-settings");
+  });
+
+  it("usePutGlueDataCatalogEncryptionSettings puts settings", async () => {
+    mockApi.mockResolvedValueOnce({ updated: true });
+    const { result } = renderHook(() => usePutGlueDataCatalogEncryptionSettings(), { wrapper: createWrapper() });
+    const settings = { DataCatalogEncryptionMode: "SSE-KMS" };
+    await result.current.mutateAsync(settings);
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/data-catalog-encryption-settings", {
+      method: "PUT",
+      body: JSON.stringify({ dataCatalogEncryptionSettings: settings }),
+    });
+  });
+
+  it("useGlueDataQualityRulesets calls correct URL", async () => {
+    mockApi.mockResolvedValueOnce({ rulesets: [], total: 0 });
+    const { result } = renderHook(() => useGlueDataQualityRulesets(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/data-quality-rulesets");
+  });
+
+  it("useSearchGlueTables disabled when searchText null", async () => {
+    const { result } = renderHook(() => useSearchGlueTables(null), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.fetchStatus).toBe("idle"));
+    expect(mockApi).not.toHaveBeenCalled();
+  });
+
+  it("useSearchGlueTables calls correct URL with encoded text", async () => {
+    mockApi.mockResolvedValueOnce({ tables: [], total: 0 });
+    const { result } = renderHook(() => useSearchGlueTables("my table"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/glue/search-tables?text=my%20table");
   });
 });

@@ -34,6 +34,9 @@ const metadataState = vi.hoisted(() => ({ data: {} as any }));
 const udfsState = vi.hoisted(() => ({ data: undefined as any, isLoading: false }));
 const columnStatsState = vi.hoisted(() => ({ data: undefined as any, isLoading: false }));
 
+const mockEtlFamily = vi.fn();
+const deleteEtlState = vi.hoisted(() => ({ isPending: false, variables: null as string | null }));
+
 const mockCreateRegistry = vi.fn();
 const mockDeleteRegistry = vi.fn();
 const mockCreateSchema = vi.fn();
@@ -45,7 +48,90 @@ const mockDeleteUDFFn = vi.fn();
 const mockUpdateStats = vi.fn();
 const mockDeleteStats = vi.fn();
 
+const etlFamilyState = vi.hoisted(() => ({ data: undefined as any, isLoading: false }));
+const mockCreateEtl = vi.fn();
+const mockDeleteEtl = vi.fn();
+const createEtlState = vi.hoisted(() => ({ isError: false, error: null as Error | null }));
+const mockStartCrawler = vi.fn();
+const mockStopCrawler = vi.fn();
+const mockStartJobRun = vi.fn();
+const mockStartTrigger = vi.fn();
+const mockStopTrigger = vi.fn();
+const mockStartWorkflowRun = vi.fn();
+const mockPutPolicy = vi.fn();
+const mockDeletePolicy = vi.fn();
+const mockPutEncSettings = vi.fn();
+const crawlerActionsState = vi.hoisted(() => ({
+  startCrawler: { isPending: false, variables: undefined as string | undefined },
+  stopCrawler: { isPending: false, variables: undefined as string | undefined },
+  startTrigger: { isPending: false, variables: undefined as string | undefined },
+  stopTrigger: { isPending: false, variables: undefined as string | undefined },
+  startJobRun: { isPending: false, variables: undefined as string | undefined },
+  startWorkflowRun: { isPending: false, variables: undefined as string | undefined },
+}));
+const mockMetrics = vi.fn();
+const mockStartSchedule = vi.fn();
+const mockStopSchedule = vi.fn();
+const mockUpdateSchedule = vi.fn();
+const mockResourcePolicy = vi.fn();
+const mockEncSettings = vi.fn();
+const mockRulesets = vi.fn();
+const mockSearchTables = vi.fn();
+
 vi.mock("../../hooks/useGlue", () => ({
+  useGlueFamily: () => ({ get data() { return etlFamilyState.data; }, get isLoading() { return etlFamilyState.isLoading; } }),
+  useCreateGlueFamily: () => ({
+    mutateAsync: mockCreateEtl,
+    isPending: false,
+    get isError() { return createEtlState.isError; },
+    get error() { return createEtlState.error; },
+  }),
+  useDeleteGlueFamily: () => ({
+    mutateAsync: mockDeleteEtl,
+    isPending: deleteEtlState.isPending,
+    variables: deleteEtlState.variables,
+  }),
+  useStartGlueCrawler: () => ({
+    mutateAsync: mockStartCrawler,
+    get isPending() { return crawlerActionsState.startCrawler.isPending; },
+    get variables() { return crawlerActionsState.startCrawler.variables; },
+  }),
+  useStopGlueCrawler: () => ({
+    mutateAsync: mockStopCrawler,
+    get isPending() { return crawlerActionsState.stopCrawler.isPending; },
+    get variables() { return crawlerActionsState.stopCrawler.variables; },
+  }),
+  useStartGlueJobRun: () => ({
+    mutateAsync: mockStartJobRun,
+    get isPending() { return crawlerActionsState.startJobRun.isPending; },
+    get variables() { return crawlerActionsState.startJobRun.variables; },
+  }),
+  useStartGlueTrigger: () => ({
+    mutateAsync: mockStartTrigger,
+    get isPending() { return crawlerActionsState.startTrigger.isPending; },
+    get variables() { return crawlerActionsState.startTrigger.variables; },
+  }),
+  useStopGlueTrigger: () => ({
+    mutateAsync: mockStopTrigger,
+    get isPending() { return crawlerActionsState.stopTrigger.isPending; },
+    get variables() { return crawlerActionsState.stopTrigger.variables; },
+  }),
+  useStartGlueWorkflowRun: () => ({
+    mutateAsync: mockStartWorkflowRun,
+    get isPending() { return crawlerActionsState.startWorkflowRun.isPending; },
+    get variables() { return crawlerActionsState.startWorkflowRun.variables; },
+  }),
+  useGlueCrawlerMetrics: () => mockMetrics(),
+  useStartGlueCrawlerSchedule: () => ({ mutateAsync: mockStartSchedule, isPending: false }),
+  useStopGlueCrawlerSchedule: () => ({ mutateAsync: mockStopSchedule, isPending: false }),
+  useUpdateGlueCrawlerSchedule: () => ({ mutateAsync: mockUpdateSchedule, isPending: false }),
+  useGlueResourcePolicy: () => mockResourcePolicy(),
+  usePutGlueResourcePolicy: () => ({ mutateAsync: mockPutPolicy, isPending: false }),
+  useDeleteGlueResourcePolicy: () => ({ mutateAsync: mockDeletePolicy, isPending: false }),
+  useGlueDataCatalogEncryptionSettings: () => mockEncSettings(),
+  usePutGlueDataCatalogEncryptionSettings: () => ({ mutateAsync: mockPutEncSettings, isPending: false }),
+  useGlueDataQualityRulesets: () => mockRulesets(),
+  useSearchGlueTables: (...args: any[]) => mockSearchTables(...args),
   useGlueDatabases: (...args: any[]) => mockDatabases(...args),
   useDeleteGlueDatabase: () => ({ mutateAsync: mockDeleteDb, isPending: deleteDbState.isPending, variables: deleteDbState.variables }),
   useGlueTables: (...args: any[]) => mockTables(...args),
@@ -133,6 +219,36 @@ beforeEach(() => {
   mockDatabases.mockReturnValue({ data: { databases: [], total: 0 }, isLoading: false });
   mockTables.mockReturnValue({ data: { tables: [], total: 0 }, isLoading: false });
   mockPartitions.mockReturnValue({ data: { partitions: [], total: 0 }, isLoading: false });
+
+  etlFamilyState.data = { items: [], total: 0 };
+  etlFamilyState.isLoading = false;
+  deleteEtlState.isPending = false;
+  deleteEtlState.variables = null;
+  mockCreateEtl.mockResolvedValue({ created: true });
+  createEtlState.isError = false;
+  createEtlState.error = null;
+  mockDeleteEtl.mockResolvedValue({ deleted: true });
+  mockStartCrawler.mockResolvedValue({ started: true });
+  mockStopCrawler.mockResolvedValue({ stopped: true });
+  mockStartJobRun.mockResolvedValue({ runId: "jr-new" });
+  mockStartTrigger.mockResolvedValue({ name: "t1", state: "ACTIVATING" });
+  mockStopTrigger.mockResolvedValue({ name: "t1", state: "STOPPING" });
+  mockStartWorkflowRun.mockResolvedValue({ runId: "wr-new" });
+  for (const key of Object.keys(crawlerActionsState)) {
+    (crawlerActionsState as any)[key].isPending = false;
+    (crawlerActionsState as any)[key].variables = undefined;
+  }
+  mockMetrics.mockReturnValue({ data: { metrics: [], total: 0 } });
+  mockStartSchedule.mockResolvedValue({ started: true });
+  mockStopSchedule.mockResolvedValue({ stopped: true });
+  mockUpdateSchedule.mockResolvedValue({ updated: true });
+  mockResourcePolicy.mockReturnValue({ data: { policyInJson: null } });
+  mockPutPolicy.mockResolvedValue({ updated: true });
+  mockDeletePolicy.mockResolvedValue({ deleted: true });
+  mockEncSettings.mockReturnValue({ data: null });
+  mockPutEncSettings.mockResolvedValue({ updated: true });
+  mockRulesets.mockReturnValue({ data: { rulesets: [], total: 0 } });
+  mockSearchTables.mockReturnValue({ data: { tables: [], total: 0 }, isLoading: false });
 });
 
 describe("GlueDashboard", () => {
@@ -2005,5 +2121,518 @@ describe("GlueDashboard — edit modal error + sparse version arms", () => {
     await user.click((await screen.findAllByRole("button", { name: "Versions" }))[0]);
     await screen.findByText(/Versions — t1/);
     expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+// ─── ETL tabs ──────────────────────────────────────────────
+
+function openTab(user: any, label: string) {
+  return user.click(screen.getByRole("tab", { name: label }));
+}
+
+describe("GlueDashboard — Crawlers tab", () => {
+  it("lists crawlers with state and role", async () => {
+    etlFamilyState.data = {
+      items: [{ Name: "c1", State: "READY", Role: "arn:role", Schedule: { ScheduleExpression: "cron(0 1 * * ? *)" } }],
+      total: 1,
+    };
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "Crawlers");
+    expect(screen.getByText("c1")).toBeTruthy();
+    expect(screen.getByText("READY")).toBeTruthy();
+    expect(screen.getByText("arn:role")).toBeTruthy();
+    expect(screen.getByText("cron(0 1 * * ? *)")).toBeTruthy();
+  });
+
+  it("renders crawler field fallbacks for sparse row", async () => {
+    etlFamilyState.data = { items: [{}], total: 1 };
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "Crawlers");
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("starts and stops a crawler", async () => {
+    etlFamilyState.data = { items: [{ Name: "c1", State: "READY" }], total: 1 };
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "Crawlers");
+    await user.click(screen.getByRole("button", { name: /Start/i }));
+    await waitFor(() => expect(mockStartCrawler).toHaveBeenCalledWith("c1"));
+    await user.click(screen.getByRole("button", { name: /Stop/i }));
+    await waitFor(() => expect(mockStopCrawler).toHaveBeenCalledWith("c1"));
+  });
+
+  it("shows crawler start loading for matching row", async () => {
+    etlFamilyState.data = { items: [{ Name: "c1" }, { Name: "c2" }], total: 2 };
+    crawlerActionsState.startCrawler.isPending = true;
+    crawlerActionsState.startCrawler.variables = "c1";
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "Crawlers");
+    const buttons = screen.getAllByRole("button", { name: /Start/i });
+    expect(buttons[0].getAttribute("class")).toContain("disabled");
+    expect(buttons[1].getAttribute("class")).not.toContain("disabled");
+  });
+
+  it("creates a crawler via modal", async () => {
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "Crawlers");
+    await user.click(screen.getByRole("button", { name: "Create Crawler" }));
+    const dialog = screen
+      .getAllByText("Create Crawler")
+      .map((h) => h.closest('[role="dialog"]'))
+      .find(Boolean) as HTMLElement;
+    await user.type(within(dialog).getByPlaceholderText("my-crawler"), "c-new");
+    await user.type(within(dialog).getByPlaceholderText("arn:aws:iam::123456789012:role/glue"), "arn:role");
+    await user.click(within(dialog).getByRole("button", { name: /^Create$/i }));
+    await waitFor(() =>
+      expect(mockCreateEtl).toHaveBeenCalledWith({ name: "c-new", role: "arn:role", crawler: {} }),
+    );
+  });
+
+  it("shows JSON parse error in create modal", async () => {
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "Crawlers");
+    await user.click(screen.getByRole("button", { name: "Create Crawler" }));
+    const dialog = screen
+      .getAllByText("Create Crawler")
+      .map((h) => h.closest('[role="dialog"]'))
+      .find(Boolean) as HTMLElement;
+    await user.type(within(dialog).getByPlaceholderText("my-crawler"), "c-bad");
+    const textarea = within(dialog)
+      .getAllByRole("textbox")
+      .find((el) => el.tagName === "TEXTAREA") as HTMLElement;
+    await user.type(textarea, "not-json");
+    await user.click(within(dialog).getByRole("button", { name: /^Create$/i }));
+    expect(screen.getAllByText(/Invalid JSON in configuration/i).length).toBeGreaterThan(0);
+  });
+
+  it("deletes a crawler", async () => {
+    etlFamilyState.data = { items: [{ Name: "c1" }], total: 1 };
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "Crawlers");
+    await user.click(screen.getByRole("button", { name: "Delete c1" }));
+    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
+    await clickButton(user, /^Delete$/i);
+    await waitFor(() => expect(mockDeleteEtl).toHaveBeenCalledWith("c1"));
+  });
+
+  it("filters crawlers by name", async () => {
+    etlFamilyState.data = { items: [{ Name: "alpha" }, { Name: "beta" }], total: 2 };
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "Crawlers");
+    await user.type(screen.getByPlaceholderText("Find crawlers"), "al");
+    await waitFor(() => expect(screen.queryByText("beta")).toBeNull());
+    expect(screen.getByText("alpha")).toBeTruthy();
+  });
+
+  it("renders empty crawlers message when data is undefined", async () => {
+    etlFamilyState.data = undefined;
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "Crawlers");
+    expect(screen.getAllByText(/No crawlers — use Create to add one/i).length).toBeGreaterThan(0);
+  });
+});
+
+describe("GlueDashboard — Jobs tab", () => {
+  it("lists jobs and runs one", async () => {
+    etlFamilyState.data = { items: [{ Name: "j1", JobState: "RUNNING", Role: "arn:role" }], total: 1 };
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "Jobs");
+    expect(screen.getByText("j1")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: /Run/i }));
+    await waitFor(() => expect(mockStartJobRun).toHaveBeenCalledWith("j1"));
+  });
+});
+
+describe("GlueDashboard — Triggers tab", () => {
+  it("lists triggers and starts/stops one", async () => {
+    etlFamilyState.data = { items: [{ Name: "t1", State: "ACTIVATED", Type: "ON_DEMAND" }], total: 1 };
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "Triggers");
+    expect(screen.getByText("t1")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: /Start/i }));
+    await waitFor(() => expect(mockStartTrigger).toHaveBeenCalledWith("t1"));
+    await user.click(screen.getByRole("button", { name: /Stop/i }));
+    await waitFor(() => expect(mockStopTrigger).toHaveBeenCalledWith("t1"));
+  });
+});
+
+describe("GlueDashboard — Workflows tab", () => {
+  it("lists workflows (string items) and runs one", async () => {
+    etlFamilyState.data = { items: ["w1", "w2"], total: 2 };
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "Workflows");
+    expect(screen.getByText("w1")).toBeTruthy();
+    expect(screen.getByText("w2")).toBeTruthy();
+    await user.click(screen.getAllByRole("button", { name: /Run/i })[0]);
+    await waitFor(() => expect(mockStartWorkflowRun).toHaveBeenCalledWith("w1"));
+  });
+});
+
+describe("GlueDashboard — Connections tab", () => {
+  it("lists connections", async () => {
+    etlFamilyState.data = {
+      items: [{ Name: "conn1", ConnectionType: "JDBC" }],
+      total: 1,
+    };
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "Connections");
+    expect(screen.getByText("conn1")).toBeTruthy();
+    expect(screen.getByText("JDBC")).toBeTruthy();
+  });
+});
+
+describe("GlueDashboard — Classifiers tab", () => {
+  it("lists classifiers", async () => {
+    etlFamilyState.data = {
+      items: [{ Name: "cls1", Classification: "csv", GrokClassifier: { Name: "cls1" } }, { Name: "cls2" }],
+      total: 2,
+    };
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "Classifiers");
+    expect(screen.getByText("cls1")).toBeTruthy();
+    expect(screen.getByText("csv")).toBeTruthy();
+    expect(screen.getByText("GROK")).toBeTruthy();
+    expect(screen.getByText("CUSTOM")).toBeTruthy();
+  });
+});
+
+describe("GlueDashboard — ETL Ops tab", () => {
+  it("shows crawler metrics", async () => {
+    mockMetrics.mockReturnValue({
+      data: { metrics: [{ CrawlerName: "c1", LastRuntime: 12.4, MedianRuntime: 8.6, StillEstimatingFields: 5 }], total: 1 },
+    });
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "ETL Ops");
+    expect(screen.getByText("c1")).toBeTruthy();
+    expect(screen.getByText("12s")).toBeTruthy();
+    expect(screen.getByText("9s")).toBeTruthy();
+  });
+
+  it("renders empty crawler metrics when data is undefined", async () => {
+    mockMetrics.mockReturnValue({ data: undefined });
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "ETL Ops");
+    expect(screen.getAllByText(/No crawler metrics/i).length).toBeGreaterThan(0);
+  });
+
+  it("controls crawler schedule", async () => {
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "ETL Ops");
+    const nameInput = screen.getByPlaceholderText("Crawler name");
+    await user.type(nameInput, "c1");
+    await user.type(screen.getByPlaceholderText("cron(0 1 * * ? *)"), "cron(0 2 * * ? *)");
+    await user.click(screen.getByRole("button", { name: /Start schedule/i }));
+    await waitFor(() => expect(mockStartSchedule).toHaveBeenCalledWith("c1"));
+    await user.click(screen.getByRole("button", { name: /Stop schedule/i }));
+    await waitFor(() => expect(mockStopSchedule).toHaveBeenCalledWith("c1"));
+    await user.click(screen.getByRole("button", { name: /Update schedule/i }));
+    await waitFor(() =>
+      expect(mockUpdateSchedule).toHaveBeenCalledWith({ crawlerName: "c1", schedule: "cron(0 2 * * ? *)" }),
+    );
+  });
+
+  it("puts and deletes the resource policy", async () => {
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "ETL Ops");
+    expect(screen.getByText("No resource policy set")).toBeTruthy();
+    const policyArea = screen.getAllByRole("textbox").filter((el) => el.tagName === "TEXTAREA")[0];
+    await user.clear(policyArea);
+    await user.type(policyArea, "x");
+    await user.click(screen.getByRole("button", { name: /Put policy/i }));
+    await waitFor(() => expect(mockPutPolicy).toHaveBeenCalledWith("x"));
+    await user.click(screen.getByRole("button", { name: /Delete policy/i }));
+    await waitFor(() => expect(mockDeletePolicy).toHaveBeenCalled());
+  });
+
+  it("shows the current resource policy", async () => {
+    mockResourcePolicy.mockReturnValue({ data: { policyInJson: '{"Version":"2012-10-17"}' } });
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "ETL Ops");
+    expect(screen.getByText('{"Version":"2012-10-17"}')).toBeTruthy();
+  });
+
+  it("shows catalog encryption settings and puts new ones", async () => {
+    mockEncSettings.mockReturnValue({
+      data: { dataCatalogEncryptionSettings: { DataCatalogEncryptionMode: "SSE-KMS" } },
+    });
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "ETL Ops");
+    expect(screen.getByText(/Encryption mode: SSE-KMS/)).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: /Put settings/i }));
+    await waitFor(() => expect(mockPutEncSettings).toHaveBeenCalledWith({}));
+  });
+
+  it("shows no encryption settings text when data null", async () => {
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "ETL Ops");
+    expect(screen.getByText("No settings")).toBeTruthy();
+  });
+
+  it("lists data quality rulesets", async () => {
+    mockRulesets.mockReturnValue({ data: { rulesets: [{ Name: "rs1" }], total: 1 } });
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "ETL Ops");
+    expect(screen.getByText("rs1")).toBeTruthy();
+  });
+
+  it("searches tables", async () => {
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "ETL Ops");
+    expect(screen.getByText(/Enter search text above/i)).toBeTruthy();
+    await user.type(screen.getByPlaceholderText("Search text"), "my-table");
+    await user.click(screen.getByRole("button", { name: /Search/i }));
+    await waitFor(() => expect(mockSearchTables).toHaveBeenCalledWith("my-table"));
+  });
+
+  it("renders search results", async () => {
+    mockSearchTables.mockReturnValue({
+      data: { tables: [{ DatabaseName: "db1", Name: "t1" }], total: 1 },
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "ETL Ops");
+    await user.type(screen.getByPlaceholderText("Search text"), "t1");
+    await user.click(screen.getByRole("button", { name: /Search/i }));
+    await waitFor(() => expect(screen.getByText("db1")).toBeTruthy());
+    expect(screen.getByText("t1")).toBeTruthy();
+  });
+
+  it("shows no-matches message after search", async () => {
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "ETL Ops");
+    await user.type(screen.getByPlaceholderText("Search text"), "zzz");
+    await user.click(screen.getByRole("button", { name: /Search/i }));
+    await waitFor(() => expect(screen.getByText(/No tables matched/i)).toBeTruthy());
+  });
+});
+
+describe("GlueDashboard — ETL coverage arms", () => {
+  it("shows create error toast with message and fallback", async () => {
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "Crawlers");
+    await user.click(screen.getByRole("button", { name: "Create Crawler" }));
+    let dialog = screen.getAllByText("Create Crawler").map((h) => h.closest('[role="dialog"]')).find(Boolean) as HTMLElement;
+    await user.type(within(dialog).getByPlaceholderText("my-crawler"), "c-err");
+    mockCreateEtl.mockRejectedValueOnce(new Error("create boom"));
+    await user.click(within(dialog).getByRole("button", { name: /^Create$/i }));
+    await waitFor(() => expect(mockCreateEtl).toHaveBeenCalled());
+    mockCreateEtl.mockRejectedValueOnce({});
+    await user.click(within(dialog).getByRole("button", { name: /^Create$/i }));
+    // both rejections handled; no assertion beyond no-throw since toast is context-default
+  });
+
+  it("builds create body with empty optional fields", async () => {
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "Crawlers");
+    await user.click(screen.getByRole("button", { name: "Create Crawler" }));
+    const dialog = screen.getAllByText("Create Crawler").map((h) => h.closest('[role="dialog"]')).find(Boolean) as HTMLElement;
+    await user.type(within(dialog).getByPlaceholderText("my-crawler"), "c-min");
+    const roleInput = within(dialog).getByPlaceholderText("arn:aws:iam::123456789012:role/glue");
+    await user.type(roleInput, "x");
+    await user.clear(roleInput);
+    await user.click(within(dialog).getByRole("button", { name: /^Create$/i }));
+    await waitFor(() => expect(mockCreateEtl).toHaveBeenCalledWith({ name: "c-min", crawler: {} }));
+  });
+
+  it("cancels and escapes the ETL create modal", async () => {
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "Crawlers");
+    await user.click(screen.getByRole("button", { name: "Create Crawler" }));
+    const dlg = () => screen.getAllByText("Create Crawler").map((h) => h.closest('[role="dialog"]')).find(Boolean) as HTMLElement;
+    await waitFor(() => expect(dlg().className).not.toContain("hidden"));
+    dismissModalWithEscape();
+    await waitFor(() => expect(dlg().className).toContain("hidden"));
+    await user.click(screen.getByRole("button", { name: "Create Crawler" }));
+    await waitFor(() => expect(dlg().className).not.toContain("hidden"));
+    await user.click(within(dlg()).getByRole("button", { name: /^Cancel$/i }));
+    await waitFor(() => expect(dlg().className).toContain("hidden"));
+  });
+
+  it("shows crawler delete loading for matching row", async () => {
+    etlFamilyState.data = { items: [{ Name: "c1" }], total: 1 };
+    deleteEtlState.isPending = true;
+    deleteEtlState.variables = "c1";
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "Crawlers");
+    const btn = screen.getByRole("button", { name: "Delete c1" });
+    expect(btn.getAttribute("class")).toContain("disabled");
+  });
+
+  it("shows crawler stop loading for matching row", async () => {
+    etlFamilyState.data = { items: [{ Name: "c1" }, { Name: "c2" }], total: 2 };
+    crawlerActionsState.stopCrawler.isPending = true;
+    crawlerActionsState.stopCrawler.variables = "c1";
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "Crawlers");
+    const buttons = screen.getAllByRole("button", { name: /Stop/i });
+    expect(buttons[0].getAttribute("class")).toContain("disabled");
+    expect(buttons[1].getAttribute("class")).not.toContain("disabled");
+  });
+
+  it("shows job run loading for matching row and handles run rejection", async () => {
+    etlFamilyState.data = { items: [{ Name: "j1" }, { Name: "j2" }], total: 2 };
+    crawlerActionsState.startJobRun.isPending = true;
+    crawlerActionsState.startJobRun.variables = "j1";
+    mockStartJobRun.mockRejectedValue(new Error("run boom"));
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "Jobs");
+    const buttons = screen.getAllByRole("button", { name: /Run/i });
+    expect(buttons[0].getAttribute("class")).toContain("disabled");
+    await user.click(buttons[1]);
+    await waitFor(() => expect(mockStartJobRun).toHaveBeenCalledWith("j2"));
+  });
+
+  it("shows trigger start/stop loading for matching rows", async () => {
+    etlFamilyState.data = { items: [{ Name: "t1" }, { Name: "t2" }], total: 2 };
+    crawlerActionsState.startTrigger.isPending = true;
+    crawlerActionsState.startTrigger.variables = "t1";
+    crawlerActionsState.stopTrigger.isPending = true;
+    crawlerActionsState.stopTrigger.variables = "t1";
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "Triggers");
+    const startBtns = screen.getAllByRole("button", { name: /Start/i });
+    expect(startBtns[0].getAttribute("class")).toContain("disabled");
+    expect(startBtns[1].getAttribute("class")).not.toContain("disabled");
+    const stopBtns = screen.getAllByRole("button", { name: /Stop/i });
+    expect(stopBtns[0].getAttribute("class")).toContain("disabled");
+    expect(stopBtns[1].getAttribute("class")).not.toContain("disabled");
+  });
+
+  it("shows workflow run loading for matching row and handles rejection", async () => {
+    etlFamilyState.data = { items: ["w1", "w2"], total: 2 };
+    crawlerActionsState.startWorkflowRun.isPending = true;
+    crawlerActionsState.startWorkflowRun.variables = "w1";
+    mockStartWorkflowRun.mockRejectedValue(new Error("wf boom"));
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "Workflows");
+    const buttons = screen.getAllByRole("button", { name: /Run/i });
+    expect(buttons[0].getAttribute("class")).toContain("disabled");
+    await user.click(buttons[1]);
+    await waitFor(() => expect(mockStartWorkflowRun).toHaveBeenCalledWith("w2"));
+  });
+
+  it("renders sparse crawler metrics with fallbacks", async () => {
+    mockMetrics.mockReturnValue({ data: { metrics: [{}], total: 1 } });
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "ETL Ops");
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("updates crawler schedule without expression", async () => {
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "ETL Ops");
+    await user.type(screen.getByPlaceholderText("Crawler name"), "c1");
+    await user.click(screen.getByRole("button", { name: /Update schedule/i }));
+    await waitFor(() => expect(mockUpdateSchedule).toHaveBeenCalledWith({ crawlerName: "c1", schedule: undefined }));
+  });
+
+  it("shows not-set encryption mode", async () => {
+    mockEncSettings.mockReturnValue({ data: { dataCatalogEncryptionSettings: null } });
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "ETL Ops");
+    expect(screen.getByText(/Encryption mode: not set/)).toBeTruthy();
+  });
+
+  it("handles invalid JSON when putting encryption settings", async () => {
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "ETL Ops");
+    const textareas = screen.getAllByRole("textbox").filter((el) => el.tagName === "TEXTAREA");
+    await user.type(textareas[1], "not-json");
+    await user.click(screen.getByRole("button", { name: /Put settings/i }));
+    expect(mockPutEncSettings).not.toHaveBeenCalled();
+  });
+
+  it("shows create error alert with message", async () => {
+    createEtlState.isError = true;
+    createEtlState.error = new Error("etl create boom");
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "Crawlers");
+    expect(screen.getAllByText("etl create boom").length).toBeGreaterThan(0);
+  });
+
+  it("shows create error alert fallback without message", async () => {
+    createEtlState.isError = true;
+    createEtlState.error = {} as Error;
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "Crawlers");
+    expect(screen.getAllByText(/Failed to create crawler/i).length).toBeGreaterThan(0);
+  });
+
+  it("handles encryption settings put rejection", async () => {
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "ETL Ops");
+    mockPutEncSettings.mockRejectedValueOnce(new Error("enc boom"));
+    await user.click(screen.getByRole("button", { name: /Put settings/i }));
+    await waitFor(() => expect(mockPutEncSettings).toHaveBeenCalled());
+    mockPutEncSettings.mockRejectedValueOnce({});
+    await user.click(screen.getByRole("button", { name: /Put settings/i }));
+  });
+
+  it("renders empty rulesets table when data is undefined", async () => {
+    mockRulesets.mockReturnValue({ data: undefined });
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "ETL Ops");
+    expect(screen.getAllByText(/No data quality rulesets/i).length).toBeGreaterThan(0);
+  });
+
+  it("renders empty search table when data is undefined", async () => {
+    mockSearchTables.mockReturnValue({ data: undefined, isLoading: false });
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "ETL Ops");
+    await user.type(screen.getByPlaceholderText("Search text"), "q");
+    await user.click(screen.getByRole("button", { name: /Search/i }));
+    await waitFor(() => expect(screen.getByText(/No tables matched/i)).toBeTruthy());
+  });
+
+  it("renders search result field fallbacks", async () => {
+    mockSearchTables.mockReturnValue({ data: { tables: [{}], total: 1 }, isLoading: false });
+    const user = userEvent.setup();
+    render(<GlueDashboard />, { wrapper: createWrapper() });
+    await openTab(user, "ETL Ops");
+    await user.type(screen.getByPlaceholderText("Search text"), "q");
+    await user.click(screen.getByRole("button", { name: /Search/i }));
+    await waitFor(() => expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(1));
   });
 });

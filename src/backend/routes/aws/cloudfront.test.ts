@@ -70,6 +70,34 @@ vi.mock("@aws-sdk/client-cloudfront", () => ({
   UntagResourceCommand: createCmd("UntagResourceCommand"),
   CreateOriginAccessControlCommand: createCmd("CreateOriginAccessControlCommand"),
   CreateFunctionCommand: createCmd("CreateFunctionCommand"),
+  CopyDistributionCommand: createCmd("CopyDistributionCommand"),
+  GetMonitoringSubscriptionCommand: createCmd("GetMonitoringSubscriptionCommand"),
+  CreateMonitoringSubscriptionCommand: createCmd("CreateMonitoringSubscriptionCommand"),
+  CreateRealtimeLogConfigCommand: createCmd("CreateRealtimeLogConfigCommand"),
+  ListRealtimeLogConfigsCommand: createCmd("ListRealtimeLogConfigsCommand"),
+  GetRealtimeLogConfigCommand: createCmd("GetRealtimeLogConfigCommand"),
+  UpdateRealtimeLogConfigCommand: createCmd("UpdateRealtimeLogConfigCommand"),
+  DeleteRealtimeLogConfigCommand: createCmd("DeleteRealtimeLogConfigCommand"),
+  CreateContinuousDeploymentPolicyCommand: createCmd("CreateContinuousDeploymentPolicyCommand"),
+  ListContinuousDeploymentPoliciesCommand: createCmd("ListContinuousDeploymentPoliciesCommand"),
+  GetContinuousDeploymentPolicyCommand: createCmd("GetContinuousDeploymentPolicyCommand"),
+  UpdateContinuousDeploymentPolicyCommand: createCmd("UpdateContinuousDeploymentPolicyCommand"),
+  DeleteContinuousDeploymentPolicyCommand: createCmd("DeleteContinuousDeploymentPolicyCommand"),
+  CreateFieldLevelEncryptionConfigCommand: createCmd("CreateFieldLevelEncryptionConfigCommand"),
+  ListFieldLevelEncryptionConfigsCommand: createCmd("ListFieldLevelEncryptionConfigsCommand"),
+  GetFieldLevelEncryptionCommand: createCmd("GetFieldLevelEncryptionCommand"),
+  UpdateFieldLevelEncryptionConfigCommand: createCmd("UpdateFieldLevelEncryptionConfigCommand"),
+  DeleteFieldLevelEncryptionConfigCommand: createCmd("DeleteFieldLevelEncryptionConfigCommand"),
+  CreateFieldLevelEncryptionProfileCommand: createCmd("CreateFieldLevelEncryptionProfileCommand"),
+  ListFieldLevelEncryptionProfilesCommand: createCmd("ListFieldLevelEncryptionProfilesCommand"),
+  GetFieldLevelEncryptionProfileCommand: createCmd("GetFieldLevelEncryptionProfileCommand"),
+  UpdateFieldLevelEncryptionProfileCommand: createCmd("UpdateFieldLevelEncryptionProfileCommand"),
+  DeleteFieldLevelEncryptionProfileCommand: createCmd("DeleteFieldLevelEncryptionProfileCommand"),
+  CreateStreamingDistributionCommand: createCmd("CreateStreamingDistributionCommand"),
+  ListStreamingDistributionsCommand: createCmd("ListStreamingDistributionsCommand"),
+  GetStreamingDistributionCommand: createCmd("GetStreamingDistributionCommand"),
+  UpdateStreamingDistributionCommand: createCmd("UpdateStreamingDistributionCommand"),
+  DeleteStreamingDistributionCommand: createCmd("DeleteStreamingDistributionCommand"),
 }));
 
 vi.mock("../../clients/aws", () => ({
@@ -497,5 +525,366 @@ describe("CloudFront distribution helpers + tags", () => {
     expect((await del("/tags?resourceArn=arn%3Ad&tagKeys=a")).status).toBe(200);
     expect((await post("/tags", {})).status).toBe(400);
     expect((await del("/tags")).status).toBe(400);
+  });
+});
+
+// ─── Copy Distribution ──────────────────────────────────────
+
+describe("Copy Distribution", () => {
+  it("POST /distributions/:id/copy — copies with staging flag", async () => {
+    mockSend.mockResolvedValueOnce({ Distribution: { Id: "E-COPY" } });
+    const res = await post("/distributions/E1234567/copy", { staging: true, ifMatch: "ETAG1" });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.distribution.Id).toBe("E-COPY");
+    expect(mockSend.mock.calls[0][0].__cmdName).toBe("CopyDistributionCommand");
+    expect(mockSend.mock.calls[0][0].SourceDistributionId).toBe("E1234567");
+    expect(mockSend.mock.calls[0][0].Staging).toBe(true);
+    expect(mockSend.mock.calls[0][0].IfMatch).toBe("ETAG1");
+  });
+
+  it("POST /distributions/:id/copy — defaults staging to false", async () => {
+    mockSend.mockResolvedValueOnce({ Distribution: { Id: "E-COPY" } });
+    const res = await post("/distributions/E1234567/copy", {});
+    expect(res.status).toBe(201);
+    expect(mockSend.mock.calls[0][0].Staging).toBe(false);
+  });
+
+  it("POST /distributions/:id/copy — null distribution when sparse", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/distributions/E1234567/copy", {});
+    expect(res.status).toBe(201);
+    expect((await res.json()).distribution).toBe(null);
+  });
+});
+
+// ─── Monitoring Subscriptions ───────────────────────────────
+
+describe("Monitoring Subscriptions", () => {
+  it("GET /distributions/:id/monitoring-subscription — returns subscription", async () => {
+    mockSend.mockResolvedValueOnce({ MonitoringSubscription: { RealtimeMetricsSubscriptionConfig: { RealtimeMetricsSubscriptionStatus: "Enabled" } } });
+    const res = await get("/distributions/E1234567/monitoring-subscription");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.monitoringSubscription.RealtimeMetricsSubscriptionConfig.RealtimeMetricsSubscriptionStatus).toBe("Enabled");
+    expect(mockSend.mock.calls[0][0].DistributionId).toBe("E1234567");
+  });
+
+  it("GET /distributions/:id/monitoring-subscription — null when sparse", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/distributions/E1234567/monitoring-subscription");
+    expect((await res.json()).monitoringSubscription).toBe(null);
+  });
+
+  it("PUT /distributions/:id/monitoring-subscription — updates with provided config", async () => {
+    mockSend.mockResolvedValueOnce({ MonitoringSubscription: { RealtimeMetricsSubscriptionConfig: { RealtimeMetricsSubscriptionStatus: "Disabled" } } });
+    const res = await put("/distributions/E1234567/monitoring-subscription", {
+      monitoringSubscription: { RealtimeMetricsSubscriptionConfig: { RealtimeMetricsSubscriptionStatus: "Disabled" } },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.updated).toBe(true);
+    expect(mockSend.mock.calls[0][0].MonitoringSubscription.RealtimeMetricsSubscriptionConfig.RealtimeMetricsSubscriptionStatus).toBe("Disabled");
+  });
+
+  it("PUT /distributions/:id/monitoring-subscription — defaults to enabled config", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put("/distributions/E1234567/monitoring-subscription", {});
+    expect(res.status).toBe(200);
+    expect(mockSend.mock.calls[0][0].MonitoringSubscription.RealtimeMetricsSubscriptionConfig.RealtimeMetricsSubscriptionStatus).toBe("Enabled");
+    expect((await res.json()).monitoringSubscription).toBe(null);
+  });
+});
+
+// ─── Realtime Log Configs ───────────────────────────────────
+
+describe("Realtime Log Configs", () => {
+  it("POST /realtime-log-configs — creates config", async () => {
+    mockSend.mockResolvedValueOnce({ RealtimeLogConfig: { Name: "rt", SamplingRate: 50 } });
+    const res = await post("/realtime-log-configs", { name: "rt", samplingRate: 50 });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.realtimeLogConfig.Name).toBe("rt");
+    expect(mockSend.mock.calls[0][0].SamplingRate).toBe(50);
+    expect(mockSend.mock.calls[0][0].Name).toBe("rt");
+  });
+
+  it("POST /realtime-log-configs — defaults sampling rate", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/realtime-log-configs", { name: "rt" });
+    expect(res.status).toBe(201);
+    expect(mockSend.mock.calls[0][0].SamplingRate).toBe(100000);
+    expect((await res.json()).realtimeLogConfig).toBe(null);
+  });
+
+  it("POST /realtime-log-configs — 400 without name", async () => {
+    const res = await post("/realtime-log-configs", {});
+    expect(res.status).toBe(400);
+  });
+
+  it("GET /realtime-log-configs — lists configs", async () => {
+    mockSend.mockResolvedValueOnce({ RealtimeLogConfigs: { Items: [{ Name: "rt", ARN: "arn:rt" }] } });
+    const res = await get("/realtime-log-configs");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.total).toBe(1);
+    expect(body.realtimeLogConfigs[0].Name).toBe("rt");
+  });
+
+  it("GET /realtime-log-configs — empty list", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/realtime-log-configs");
+    const body = await res.json();
+    expect(body.realtimeLogConfigs).toEqual([]);
+    expect(body.total).toBe(0);
+  });
+
+  it("GET /realtime-log-configs/:name — returns config", async () => {
+    mockSend.mockResolvedValueOnce({ RealtimeLogConfig: { Name: "rt" } });
+    const res = await get("/realtime-log-configs/rt");
+    expect(res.status).toBe(200);
+    expect((await res.json()).realtimeLogConfig.Name).toBe("rt");
+    expect(mockSend.mock.calls[0][0].Name).toBe("rt");
+  });
+
+  it("GET /realtime-log-configs/:name — null when sparse", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/realtime-log-configs/rt");
+    expect((await res.json()).realtimeLogConfig).toBe(null);
+  });
+
+  it("PUT /realtime-log-configs/:arn — updates config", async () => {
+    mockSend.mockResolvedValueOnce({ RealtimeLogConfig: { ARN: "arn:rt", SamplingRate: 75 } });
+    const res = await put("/realtime-log-configs/arn%3Art", { samplingRate: 75 });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.updated).toBe(true);
+    expect(body.realtimeLogConfig.SamplingRate).toBe(75);
+    expect(mockSend.mock.calls[0][0].ARN).toBe("arn:rt");
+  });
+
+  it("PUT /realtime-log-configs/:arn — null config when sparse", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put("/realtime-log-configs/arn%3Art", {});
+    expect((await res.json()).realtimeLogConfig).toBe(null);
+  });
+
+  it("DELETE /realtime-log-configs/:name — deletes", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await del("/realtime-log-configs/rt");
+    expect(res.status).toBe(200);
+    expect((await res.json()).deleted).toBe(true);
+    expect(mockSend.mock.calls[0][0].Name).toBe("rt");
+  });
+});
+
+// ─── Continuous Deployment Policies ─────────────────────────
+
+describe("Continuous Deployment Policies", () => {
+  it("POST /continuous-deployment-policies — creates policy", async () => {
+    mockSend.mockResolvedValueOnce({ ContinuousDeploymentPolicy: { Id: "CDP1", Enabled: true } });
+    const res = await post("/continuous-deployment-policies", { policy: { Enabled: true } });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.policy.Id).toBe("CDP1");
+    expect(mockSend.mock.calls[0][0].ContinuousDeploymentPolicy.Enabled).toBe(true);
+  });
+
+  it("POST /continuous-deployment-policies — accepts ContinuousDeploymentPolicy key", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/continuous-deployment-policies", { ContinuousDeploymentPolicy: { Enabled: false } });
+    expect(res.status).toBe(201);
+    expect(mockSend.mock.calls[0][0].ContinuousDeploymentPolicy.Enabled).toBe(false);
+    expect((await res.json()).policy).toBe(null);
+  });
+
+  it("POST /continuous-deployment-policies — 400 without policy", async () => {
+    const res = await post("/continuous-deployment-policies", {});
+    expect(res.status).toBe(400);
+  });
+
+  it("GET /continuous-deployment-policies — lists policies", async () => {
+    mockSend.mockResolvedValueOnce({ ContinuousDeploymentPolicyList: { Items: [{ Id: "CDP1" }] } });
+    const res = await get("/continuous-deployment-policies");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.total).toBe(1);
+    expect(body.policies[0].Id).toBe("CDP1");
+  });
+
+  it("GET /continuous-deployment-policies — empty list", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/continuous-deployment-policies");
+    expect((await res.json()).total).toBe(0);
+  });
+
+  it("GET /continuous-deployment-policies/:id — returns policy", async () => {
+    mockSend.mockResolvedValueOnce({ ContinuousDeploymentPolicy: { Id: "CDP1" } });
+    const res = await get("/continuous-deployment-policies/CDP1");
+    expect((await res.json()).policy.Id).toBe("CDP1");
+    expect(mockSend.mock.calls[0][0].Id).toBe("CDP1");
+  });
+
+  it("GET /continuous-deployment-policies/:id — null when sparse", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get("/continuous-deployment-policies/CDP1");
+    expect((await res.json()).policy).toBe(null);
+  });
+
+  it("PUT /continuous-deployment-policies/:id — updates policy", async () => {
+    mockSend.mockResolvedValueOnce({ ContinuousDeploymentPolicy: { Id: "CDP1", Enabled: false } });
+    const res = await put("/continuous-deployment-policies/CDP1", { policy: { Enabled: false }, ifMatch: "ETAG" });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.updated).toBe(true);
+    expect(mockSend.mock.calls[0][0].IfMatch).toBe("ETAG");
+  });
+
+  it("PUT /continuous-deployment-policies/:id — null policy when sparse", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put("/continuous-deployment-policies/CDP1", {});
+    expect((await res.json()).policy).toBe(null);
+  });
+
+  it("DELETE /continuous-deployment-policies/:id — deletes with IfMatch header", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await del("/continuous-deployment-policies/CDP1", { "If-Match": "ETAG-HDR" });
+    expect(res.status).toBe(200);
+    expect((await res.json()).deleted).toBe(true);
+    expect(mockSend.mock.calls[0][0].IfMatch).toBe("ETAG-HDR");
+  });
+
+  it("DELETE /continuous-deployment-policies/:id — uses query ifMatch", async () => {
+    mockSend.mockResolvedValueOnce({});
+    await del("/continuous-deployment-policies/CDP1?ifMatch=ETAG-Q");
+    expect(mockSend.mock.calls[0][0].IfMatch).toBe("ETAG-Q");
+  });
+});
+
+// ─── FLE / FLE Profiles / Streaming Distributions ───────────
+
+describe.each([
+  ["field-level-encryption-configs", "fieldLevelEncryption", "FieldLevelEncryption", "FieldLevelEncryptionList", "FieldLevelEncryptionConfig"],
+  ["field-level-encryption-profiles", "fieldLevelEncryptionProfile", "FieldLevelEncryptionProfile", "FieldLevelEncryptionProfileList", "FieldLevelEncryptionProfileConfig"],
+  ["streaming-distributions", "streamingDistribution", "StreamingDistribution", "StreamingDistributionList", "StreamingDistributionConfig"],
+])("%s", (route, singular, resultKey, listField, configName) => {
+  it("POST — creates from config key", async () => {
+    mockSend.mockResolvedValueOnce({ [resultKey]: { Id: "X1" } });
+    const res = await post(`/${route}`, { [configName]: { Name: "x" } });
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body[singular].Id).toBe("X1");
+    expect(mockSend.mock.calls[0][0][configName].Name).toBe("x");
+  });
+
+  it("POST — creates from config shorthand", async () => {
+    mockSend.mockResolvedValueOnce({ [resultKey]: { Id: "X1" } });
+    const res = await post(`/${route}`, { config: { Name: "y" } });
+    expect(res.status).toBe(201);
+    expect(mockSend.mock.calls[0][0][configName].Name).toBe("y");
+  });
+
+  it("POST — 400 without config", async () => {
+    const res = await post(`/${route}`, {});
+    expect(res.status).toBe(400);
+  });
+
+  it("GET — lists items", async () => {
+    mockSend.mockResolvedValueOnce({ [listField]: { Items: [{ Id: "X1" }] } });
+    const res = await get(`/${route}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body[route]).toEqual([{ Id: "X1" }]);
+    expect(body.total).toBe(1);
+  });
+
+  it("GET — empty list", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get(`/${route}`);
+    expect((await res.json()).total).toBe(0);
+  });
+
+  it("GET :id — returns resource", async () => {
+    mockSend.mockResolvedValueOnce({ [resultKey]: { Id: "X1" } });
+    const res = await get(`/${route}/X1`);
+    expect(res.status).toBe(200);
+    expect((await res.json())[singular].Id).toBe("X1");
+    expect(mockSend.mock.calls[0][0].Id).toBe("X1");
+  });
+
+  it("GET :id — null when sparse", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await get(`/${route}/X1`);
+    expect((await res.json())[singular]).toBe(null);
+  });
+
+  it("PUT :id — updates config", async () => {
+    mockSend.mockResolvedValueOnce({ [resultKey]: { Id: "X1" } });
+    const res = await put(`/${route}/X1`, { [configName]: { Name: "z" }, ifMatch: "ETAG" });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.updated).toBe(true);
+    expect(mockSend.mock.calls[0][0].IfMatch).toBe("ETAG");
+    expect(mockSend.mock.calls[0][0].Id).toBe("X1");
+  });
+
+  it("PUT :id — accepts config shorthand", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await put(`/${route}/X1`, { config: { Name: "w" } });
+    expect(mockSend.mock.calls[0][0][configName].Name).toBe("w");
+    expect((await res.json())[singular]).toBe(null);
+  });
+
+  it("DELETE :id — deletes with query ifMatch", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await del(`/${route}/X1?ifMatch=ETAG-Q`);
+    expect(res.status).toBe(200);
+    expect((await res.json()).deleted).toBe(true);
+    expect(mockSend.mock.calls[0][0].IfMatch).toBe("ETAG-Q");
+  });
+});
+
+describe("Advanced routes — extra arms", () => {
+  it("DELETE /continuous-deployment-policies/:id — uses If-Match header when query missing", async () => {
+    mockSend.mockResolvedValueOnce({});
+    await del("/continuous-deployment-policies/CDP1", { "If-Match": "ETAG-HDR" });
+    expect(mockSend.mock.calls[0][0].IfMatch).toBe("ETAG-HDR");
+  });
+
+  it("POST simple family — accepts policy shorthand", async () => {
+    mockSend.mockResolvedValueOnce({ StreamingDistribution: { Id: "S1" } });
+    const res = await post("/streaming-distributions", { policy: { Name: "p" } });
+    expect(res.status).toBe(201);
+    expect(mockSend.mock.calls[0][0].StreamingDistributionConfig.Name).toBe("p");
+    expect((await res.json()).streamingDistribution.Id).toBe("S1");
+  });
+
+  it("DELETE simple family — uses If-Match header when query missing", async () => {
+    mockSend.mockResolvedValueOnce({});
+    await del("/streaming-distributions/S1", { "If-Match": "ETAG-HDR" });
+    expect(mockSend.mock.calls[0][0].IfMatch).toBe("ETAG-HDR");
+  });
+});
+
+describe("Advanced routes — no-IfMatch deletes", () => {
+  it("DELETE /continuous-deployment-policies/:id — undefined IfMatch when none given", async () => {
+    mockSend.mockResolvedValueOnce({});
+    await del("/continuous-deployment-policies/CDP1");
+    expect(mockSend.mock.calls[0][0].IfMatch).toBeUndefined();
+  });
+
+  it("DELETE simple family — undefined IfMatch when none given", async () => {
+    mockSend.mockResolvedValueOnce({});
+    await del("/field-level-encryption-configs/F1");
+    expect(mockSend.mock.calls[0][0].IfMatch).toBeUndefined();
+  });
+});
+
+describe("Advanced routes — sparse create results", () => {
+  it("POST simple family — null singular when result sparse", async () => {
+    mockSend.mockResolvedValueOnce({});
+    const res = await post("/field-level-encryption-configs", { config: { Name: "x" } });
+    expect(res.status).toBe(201);
+    expect((await res.json()).fieldLevelEncryption).toBe(null);
   });
 });

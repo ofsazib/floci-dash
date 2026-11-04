@@ -311,7 +311,7 @@ src/
       Toast.tsx            Toast notification component
       DynamoDBTableDetail.tsx  DynamoDB item browser
       DynamoDBAdvanced.tsx DynamoDB advanced features (GSIs, TTL, tags, PartiQL)
-      S3BucketConfig.tsx   S3 bucket configuration (11 tabs)
+      S3BucketConfig.tsx   S3 bucket configuration (20 tabs)
       EC2Terminal.tsx       EC2 web terminal (xterm.js + WebSocket)
     pages/                 Route pages
       DashboardHome.tsx    Home with stats + service grid
@@ -415,7 +415,7 @@ These services have full CRUD operations in both backend and frontend:
 
 | Service | Operations |
 |---------|------------|
-| **S3** | List buckets, create/delete bucket, list objects, upload (multipart), download, delete objects, **multi-select batch delete**, **recursive folder delete**, bucket configuration |
+| **S3** | List buckets, create/delete bucket, list objects, upload (multipart), download, delete objects, **multi-select batch delete**, **recursive folder delete**, bucket configuration, **advanced bucket configs** (transfer acceleration, ownership controls, request payment, replication, intelligent-tiering/analytics/inventory configurations, **object restore**) |
 | **DynamoDB** | Table resource policies (get/put/delete), S3 imports (start/describe/list),  List tables, create/delete table, scan items, query, filter, put item, delete item |
 | **RDS** | List/create/delete/modify/reboot DB instances, list/create/delete DB clusters, list/create/delete parameter groups & cluster parameter groups, view/modify parameters, manage DB subnet groups, resource tags (list/add/remove) |
 | **EC2** | 16 resource types: Instances (run/start/stop/reboot/terminate, **web terminal** via Docker Engine API with PTY), VPCs (CIDR association, endpoints), Subnets, Security Groups (ingress/egress rules), Key Pairs (import), AMIs (create/copy/deregister), Tags, Internet Gateways (attach/detach), Route Tables (routes, subnet association), NAT Gateways, Elastic IPs (associate/disassociate), Launch Templates (versions), Volumes (create/delete/**modify** with modification tracking), Regions/AZs, Instance Types, Network Interfaces, **Transit Gateways** (create/list/modify/delete), **Managed Prefix Lists** (create/list/entries/modify/delete), **TGW route tables/VPC attachments/static routes**, **Snapshots tab** (snapshot list, snapshot block public access toggle, instance credit specifications, egress-only internet gateways, spot price history), instance monitor/unmonitor |
@@ -442,7 +442,7 @@ These services have full CRUD operations in both backend and frontend:
 | **EKS** | Clusters (list, create, delete, describe with status/version/endpoint), node groups (list, create, delete, describe with scaling config/instance types/subnets) |
 | **Auto Scaling** | Auto Scaling Groups (list, create, update, delete, set desired capacity), launch configurations (list), scaling policies (list per ASG), scaling activities (list per ASG), instance refresh (start/list), ASG tags (create/delete), LB target groups (attach/detach/list), classic load balancers (attach/detach/list), describe types (notification types, termination policies, adjustment types, account limits, lifecycle hook types, metric collection types) |
 | **App Auto Scaling** | Scalable targets (register/list/deregister per service namespace), scaling policies (create/list/delete), resource tags (list/put/untag) |
-| **CloudFront** | Distributions (list, get, create, update, delete with ETag), invalidations (list, create, get per distribution), cache policies (list), origin access controls (list), functions (list), tags (list per resource) |
+| **CloudFront** | Distributions (list, get, create, update, delete with ETag, **copy**), invalidations (list, create, get per distribution), cache policies (list), origin access controls (list), functions (list), tags (list per resource), **monitoring subscriptions**, **realtime log configs**, **continuous deployment policies**, **field-level encryption (+profiles)**, **streaming distributions** |
 | **Kinesis** | Streams (list with summaries, describe, create, delete), shards (list per stream, split, merge), consumers (list per stream, register/deregister, describe), records (put single, put batch, get via shard iterator), subscribe to shard (enhanced fan-out), stream settings tab (increase/decrease retention, start/stop KMS encryption, enable/disable enhanced shard-level metrics, switch stream mode PROVISIONED/ON_DEMAND), tags (list, add, remove) |
 | **Neptune** | Clusters (list, describe, create, delete, modify, IAM role attach/detach, resource tags), instances (list, describe, create with cluster attachment, delete), global clusters (list) |
 | **EventBridge Pipes** | Pipes (list, describe, create, update, delete, start, stop with state management) |
@@ -484,11 +484,11 @@ These services have full CRUD operations in both backend and frontend:
 
 **SES v2 extras (E.1 — needs a Floci build newer than 2.1.0):** the SES page gained a "SES v2 extras" panel — export jobs (create CSV export, list, cancel), import jobs (create suppression-list import, list), VDM metrics (BatchGetMetricData SEND query) and message insights (GetMessageInsights by message ID), dedicated IP listing + pool scaling mode, tenants (create/list/delete), and tenant resource associations (associate/disassociate/list). Plus the v1 receipt surface: receipt filters (create/list/delete) and receipt rule-set clone/reorder (available on the 2.1.0 image).
 | **CloudTrail** | Trails (list, create, update, delete), start/stop logging, get trail status, trail tags (add/list/remove), lookup events, event selectors |
-| **AWS Config** | Config rules (list, create, delete, tags), configuration recorders (list, create, start/stop, status), delivery channels (list, create), conformance packs (list, create, delete, tags), compliance by rule, rule evaluation status, pack status |
+| **AWS Config** | Config rules (list, create, delete, tags), configuration recorders (list, create, start/stop, status), delivery channels (list, create, **delete**), conformance packs (list, create, delete, tags), compliance by rule, rule evaluation status, pack status, **governance ops** (aggregation authorizations CRUD, retention configurations, compliance by resource, compliance details by rule/resource, compliance summaries by rule/resource type, delete evaluation results) |
 | **AppConfig** | Applications (list, get, create, delete), environments (list, create, delete per app), configuration profiles (list, create, delete per app), hosted config versions (list per profile) |
 | **Cloud Map** | Namespaces (list, get, create HTTP, delete), services (list filtered by namespace, get, create, delete), instances (list per service) with drill-down navigation |
 | **Athena** | Work groups (list, create, delete), query executions (list, get, stop), data catalogs (list, get, create, update, delete, tags), databases (list), table metadata (list per database), run query |
-| **Glue** | Databases (list, get, create, delete), tables (list, get, create, delete per database) with drill-down navigation |
+| **Glue** | Databases (list, get, create, delete), tables (list, get, create, delete per database) with drill-down navigation, **ETL ops** — crawlers (CRUD + start/stop + batch-get + metrics + schedule start/stop/update), jobs (CRUD + batch-get + start job run + get run(s) + batch-stop), triggers (CRUD + start/stop), workflows (CRUD + batch-get + start/stop/resume runs + run(s) + run properties), connections (CRUD + batch-delete + test connection), classifiers (CRUD), security configurations (CRUD), resource policies (get/put/delete + get policies), data catalog encryption settings (get/put), data quality rulesets (list), SearchTables |
 | **Firehose** | Delivery streams (list with describe, get, create, delete), put record/batch, tags (list per stream) |
 | **Step Functions** | State machine aliases (create/list/describe/update/delete), Map run details,  State machines (list, describe, create, update definition/role, delete), executions (list, describe, start, stop, history), activities (list) with drill-down per state machine |
 | **OpenSearch** | Domains (list, describe, create, delete, update config, upgrade check), versions (list), tags (list, add) |
@@ -595,7 +595,7 @@ The dashboard includes several features that go beyond what Floci directly expos
 | **EC2 Web Terminal** | Interactive bash shell inside running EC2 instances via xterm.js + Docker Engine API |
 | **EC2 Messages** | Message relay for EC2 instance communication |
 | **AppConfig Data** | Data plane operations (get configuration, get latest version) |
-| **S3 Config** | Bucket configuration UI (CORS, encryption, lifecycle, versioning, static website, logging, notifications, policies, tags, object lock, ACLs — 11 tabs) |
+| **S3 Config** | Bucket configuration UI (CORS, encryption, lifecycle, versioning, static website, logging, notifications, policies, tags, object lock, ACLs, ownership, request payment, replication, transfer acceleration, intelligent-tiering/analytics/inventory, object restore — 20 tabs) |
 | **DynamoDB Advanced** | GSIs, TTL management, PartiQL queries, tags |
 | **CloudWatch Logs + Metrics** | Separate dedicated pages for logs (live viewer) and metrics (statistics, alarms) with richer UIs |
 | **Service dashboards** | Dedicated per-service dashboards (57 services) with drill-down navigation, resource tables, stat cards, and action buttons |
